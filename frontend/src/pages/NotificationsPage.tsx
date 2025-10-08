@@ -57,6 +57,13 @@ export default function NotificationsPage() {
   const [showInstanceModal, setShowInstanceModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   
+  // Notificações toast
+  const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({
+    show: false,
+    message: '',
+    type: 'success'
+  })
+  
   // Form data para SMTP
   const [smtpForm, setSMTPForm] = useState({
     name: '',
@@ -73,6 +80,14 @@ export default function NotificationsPage() {
   useEffect(() => {
     fetchData()
   }, [activeTab])
+
+  // Função para mostrar toast
+  const showToast = (message: string, type: 'success' | 'error') => {
+    setToast({ show: true, message, type })
+    setTimeout(() => {
+      setToast({ show: false, message: '', type: 'success' })
+    }, 4000) // Auto-hide após 4 segundos
+  }
 
   const fetchData = async () => {
     setIsLoading(true)
@@ -104,16 +119,16 @@ export default function NotificationsPage() {
       })
       
       if (response.data.success) {
-        alert('✅ Email de teste enviado com sucesso!')
+        showToast('✅ Email de teste enviado com sucesso!', 'success')
       } else {
-        alert(`❌ Erro: ${response.data.message}`)
+        showToast(`❌ Erro: ${response.data.message}`, 'error')
       }
       
       setTestEmailModal({ show: false, smtpId: null })
       setTestEmail('')
       fetchData()
     } catch (error: any) {
-      alert(`❌ Erro ao enviar email de teste: ${error.response?.data?.message || error.message}`)
+      showToast(`❌ Erro ao enviar email de teste: ${error.response?.data?.message || error.message}`, 'error')
     } finally {
       setIsTesting(false)
     }
@@ -122,30 +137,35 @@ export default function NotificationsPage() {
   const handleSaveSMTP = async () => {
     // Validação dos campos obrigatórios
     if (!smtpForm.name.trim()) {
-      alert('❌ Nome da configuração é obrigatório')
+      showToast('❌ Nome da configuração é obrigatório', 'error')
       return
     }
     if (!smtpForm.host.trim()) {
-      alert('❌ Servidor SMTP é obrigatório')
+      showToast('❌ Servidor SMTP é obrigatório', 'error')
       return
     }
     if (!smtpForm.username.trim()) {
-      alert('❌ Usuário/Email é obrigatório')
+      showToast('❌ Usuário/Email é obrigatório', 'error')
       return
     }
     if (!smtpForm.password.trim()) {
-      alert('❌ Senha é obrigatória')
+      showToast('❌ Senha é obrigatória', 'error')
       return
     }
     if (!smtpForm.from_email.trim()) {
-      alert('❌ Email remetente é obrigatório')
+      showToast('❌ Email remetente é obrigatório', 'error')
       return
     }
 
     setIsSaving(true)
     try {
-      await api.post('/notifications/smtp-configs/', smtpForm)
-      alert('✅ Servidor SMTP cadastrado com sucesso!')
+      const response = await api.post('/notifications/smtp-configs/', smtpForm)
+      console.log('✅ SMTP config criado:', response.data)
+      
+      // Mostrar toast de sucesso
+      showToast('✅ Servidor SMTP cadastrado com sucesso!', 'success')
+      
+      // Fechar modal e limpar formulário
       setShowSMTPModal(false)
       setSMTPForm({
         name: '',
@@ -158,21 +178,24 @@ export default function NotificationsPage() {
         from_email: '',
         from_name: '',
       })
-      fetchData()
+      
+      // Atualizar lista de configurações SMTP
+      await fetchData()
+      
     } catch (error: any) {
       console.error('❌ Erro ao salvar SMTP:', error)
       if (error.response?.data) {
         // Mostrar erros específicos do backend
         const errors = error.response.data
-        let errorMessage = '❌ Erro ao salvar:\n'
+        let errorMessage = '❌ Erro ao salvar: '
         Object.keys(errors).forEach(field => {
           if (Array.isArray(errors[field])) {
-            errorMessage += `• ${field}: ${errors[field][0]}\n`
+            errorMessage += `${field}: ${errors[field][0]} `
           }
         })
-        alert(errorMessage)
+        showToast(errorMessage, 'error')
       } else {
-        alert(`❌ Erro ao salvar: ${error.message}`)
+        showToast(`❌ Erro ao salvar: ${error.message}`, 'error')
       }
     } finally {
       setIsSaving(false)
@@ -670,6 +693,44 @@ export default function NotificationsPage() {
                     </>
                   )}
                 </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification */}
+      {toast.show && (
+        <div className={`fixed top-4 right-4 z-50 max-w-sm w-full bg-white rounded-lg shadow-lg border-l-4 ${
+          toast.type === 'success' ? 'border-green-500' : 'border-red-500'
+        }`}>
+          <div className="p-4">
+            <div className="flex items-start">
+              <div className="flex-shrink-0">
+                {toast.type === 'success' ? (
+                  <Check className="h-5 w-5 text-green-500" />
+                ) : (
+                  <XIcon className="h-5 w-5 text-red-500" />
+                )}
+              </div>
+              <div className="ml-3 w-0 flex-1">
+                <p className={`text-sm font-medium ${
+                  toast.type === 'success' ? 'text-green-800' : 'text-red-800'
+                }`}>
+                  {toast.message}
+                </p>
+              </div>
+              <div className="ml-4 flex-shrink-0 flex">
+                <button
+                  className={`inline-flex rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                    toast.type === 'success' 
+                      ? 'text-green-500 hover:text-green-600 focus:ring-green-500' 
+                      : 'text-red-500 hover:text-red-600 focus:ring-red-500'
+                  }`}
+                  onClick={() => setToast({ show: false, message: '', type: 'success' })}
+                >
+                  <XIcon className="h-5 w-5" />
+                </button>
               </div>
             </div>
           </div>
