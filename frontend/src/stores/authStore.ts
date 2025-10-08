@@ -91,8 +91,9 @@ export const useAuthStore = create<AuthState>()(
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`
           const response = await api.get('/auth/me/')
           set({ user: response.data, isLoading: false })
-        } catch (error) {
+        } catch (error: any) {
           // Token is invalid, clear auth state
+          console.error('Auth check failed:', error)
           delete api.defaults.headers.common['Authorization']
           set({ user: null, token: null, isLoading: false })
         }

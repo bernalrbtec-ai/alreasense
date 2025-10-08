@@ -26,13 +26,9 @@ api.interceptors.response.use(
   },
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired or invalid
-      const authStore = useAuthStore.getState()
-      authStore.logout()
+      // Token expired or invalid - we'll handle this in the auth store
+      console.log('401 Unauthorized - token expired')
     }
     return Promise.reject(error)
   }
 )
-
-// Import useAuthStore here to avoid circular dependency
-import { useAuthStore } from '../stores/authStore'

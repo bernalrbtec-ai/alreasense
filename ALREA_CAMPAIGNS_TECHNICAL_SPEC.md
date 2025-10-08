@@ -2219,6 +2219,416 @@ def aggregate_metrics_task():
 
 ## 🎨 FRONTEND COMPONENTS
 
+### Modal de Criação/Edição de Mensagens
+
+**Layout Split: Editor à esquerda + Preview WhatsApp à direita**
+
+```tsx
+// components/campaigns/MessageEditorModal.tsx
+
+interface MessageEditorModalProps {
+  isOpen: boolean;
+  messageText: string;
+  onSave: (text: string) => void;
+  onClose: () => void;
+  sampleContacts: Contact[];  // 3 contatos para preview
+}
+
+export function MessageEditorModal({ 
+  isOpen, 
+  messageText, 
+  onSave, 
+  onClose, 
+  sampleContacts 
+}: MessageEditorModalProps) {
+  
+  const [text, setText] = useState(messageText);
+  const [currentContactIndex, setCurrentContactIndex] = useState(0);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  
+  // Inserir variável na posição do cursor
+  const insertVariable = (variable: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    
+    const newText = text.substring(0, start) + variable + text.substring(end);
+    setText(newText);
+    
+    // Reposicionar cursor após variável
+    setTimeout(() => {
+      textarea.selectionStart = start + variable.length;
+      textarea.selectionEnd = start + variable.length;
+      textarea.focus();
+    }, 10);
+  };
+  
+  return (
+    <Dialog open={isOpen} onClose={onClose} maxWidth="5xl" fullWidth>
+      <DialogTitle className="flex items-center gap-2">
+        <PencilIcon className="w-5 h-5" />
+        Criar/Editar Mensagem
+      </DialogTitle>
+      
+      <DialogContent className="p-6">
+        <div className="grid grid-cols-2 gap-6 h-[650px]">
+          
+          {/* ════════════════════════════════════════════ */}
+          {/* LADO ESQUERDO: Editor                        */}
+          {/* ════════════════════════════════════════════ */}
+          <div className="flex flex-col space-y-4">
+            
+            {/* Textarea da mensagem */}
+            <div className="flex-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mensagem
+              </label>
+              
+              <textarea
+                ref={textareaRef}
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className="w-full h-full p-4 border-2 border-gray-300 rounded-lg font-sans text-base focus:border-green-500 focus:ring-2 focus:ring-green-200 resize-none transition-colors"
+                placeholder="Digite sua mensagem aqui... Use variáveis para personalizar!"
+              />
+            </div>
+            
+            {/* Contador de caracteres */}
+            <div className="flex justify-between items-center text-sm">
+              <span className={text.length > 1000 ? 'text-red-600 font-semibold' : 'text-gray-600'}>
+                {text.length} / 1000 caracteres
+              </span>
+              
+              {text.includes('{{') && (
+                <span className="text-green-600 flex items-center gap-1 animate-pulse">
+                  <SparklesIcon className="w-4 h-4" />
+                  Variáveis detectadas
+                </span>
+              )}
+            </div>
+            
+            {/* Painel de variáveis */}
+            <div className="bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 rounded-lg p-4 border border-blue-200 shadow-sm">
+              <h4 className="text-sm font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                <CodeBracketIcon className="w-4 h-4 text-blue-600" />
+                Variáveis Disponíveis
+              </h4>
+              
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'nome', label: 'Nome do contato', example: 'João Silva', icon: UserIcon },
+                  { key: 'saudacao', label: 'Saudação automática', example: 'Bom dia', icon: SunIcon },
+                  { key: 'quem_indicou', label: 'Quem indicou', example: 'Maria Santos', icon: UserGroupIcon },
+                  { key: 'dia_semana', label: 'Dia da semana', example: 'Segunda-feira', icon: CalendarIcon },
+                ].map(({ key, label, example, icon: Icon }) => (
+                  <button
+                    key={key}
+                    onClick={() => insertVariable(`{{${key}}}`)}
+                    className="group bg-white hover:bg-blue-50 rounded-lg p-3 text-left transition-all hover:shadow-md hover:scale-105 border border-blue-100 hover:border-blue-300"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <Icon className="w-4 h-4 text-blue-500 group-hover:text-blue-700" />
+                      <div className="font-mono text-sm text-blue-600 font-semibold group-hover:text-blue-800">
+                        {`{{${key}}}`}
+                      </div>
+                    </div>
+                    <div className="text-xs text-gray-600 mb-1">{label}</div>
+                    <div className="text-xs text-gray-400 italic">ex: "{example}"</div>
+                  </button>
+                ))}
+              </div>
+              
+              <div className="mt-3 text-xs text-blue-600 text-center font-medium">
+                💡 Clique para inserir na posição do cursor
+              </div>
+            </div>
+          </div>
+          
+          {/* ════════════════════════════════════════════ */}
+          {/* LADO DIREITO: Preview WhatsApp               */}
+          {/* ════════════════════════════════════════════ */}
+          <div className="flex flex-col">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              📱 Preview em Tempo Real
+            </label>
+            
+            <WhatsAppSimulator
+              message={text}
+              contact={sampleContacts[currentContactIndex]}
+            />
+            
+            {/* Navegação entre contatos */}
+            <div className="mt-4 flex justify-center gap-2">
+              {sampleContacts.map((contact, index) => (
+                <button
+                  key={index}
+                  onClick={() => setCurrentContactIndex(index)}
+                  className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                    index === currentContactIndex
+                      ? 'bg-green-500 text-white shadow-lg scale-110'
+                      : 'bg-gray-200 text-gray-600 hover:bg-gray-300 hover:scale-105'
+                  }`}
+                >
+                  {contact.name.split(' ')[0]}
+                </button>
+              ))}
+            </div>
+            
+            {/* Info do contato atual */}
+            <div className="mt-3 bg-gray-50 rounded-lg p-3 text-xs text-gray-600">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <span className="font-semibold">Nome:</span> {sampleContacts[currentContactIndex].name}
+                </div>
+                <div>
+                  <span className="font-semibold">Tel:</span> {sampleContacts[currentContactIndex].phone}
+                </div>
+                {sampleContacts[currentContactIndex].quem_indicou && (
+                  <div className="col-span-2">
+                    <span className="font-semibold">Indicado por:</span> {sampleContacts[currentContactIndex].quem_indicou}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+      
+      <DialogFooter className="bg-gray-50 px-6 py-4">
+        <Button variant="outline" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button 
+          onClick={() => onSave(text)} 
+          disabled={text.trim().length === 0}
+          className="bg-green-600 hover:bg-green-700"
+        >
+          💾 Salvar Mensagem
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  );
+}
+```
+
+### Componente: WhatsApp Simulator (Fiel ao Original)
+
+```tsx
+// components/campaigns/WhatsAppSimulator.tsx
+
+export function WhatsAppSimulator({ message, contact }: WhatsAppSimulatorProps) {
+  const now = new Date();
+  const renderedMessage = renderVariables(message, contact, now);
+  const timestamp = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const dateLabel = now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' });
+  
+  return (
+    <div className="flex flex-col h-full rounded-lg overflow-hidden shadow-2xl border-2 border-gray-400">
+      
+      {/* HEADER WHATSAPP */}
+      <div className="bg-[#075e54] text-white px-4 py-3.5 flex items-center gap-3 shadow-md">
+        <button className="text-white hover:opacity-80 transition-opacity">
+          <ChevronLeftIcon className="w-6 h-6" />
+        </button>
+        
+        {/* Avatar com indicador online */}
+        <div className="relative">
+          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+            {contact.name.charAt(0).toUpperCase()}
+          </div>
+          <div className="absolute bottom-0 right-0 w-3 h-3 bg-[#25d366] rounded-full border-2 border-[#075e54]"></div>
+        </div>
+        
+        <div className="flex-1 min-w-0">
+          <div className="font-semibold text-base truncate">{contact.name}</div>
+          <div className="text-xs opacity-90">online</div>
+        </div>
+        
+        <div className="flex gap-5 text-white/90">
+          <VideoCameraIcon className="w-5 h-5 cursor-pointer hover:text-white transition-colors" />
+          <PhoneIcon className="w-5 h-5 cursor-pointer hover:text-white transition-colors" />
+          <EllipsisVerticalIcon className="w-5 h-5 cursor-pointer hover:text-white transition-colors" />
+        </div>
+      </div>
+      
+      {/* ÁREA DE CONVERSA */}
+      <div 
+        className="flex-1 p-4 overflow-y-auto"
+        style={{
+          backgroundColor: '#e5ddd5',
+          backgroundImage: `repeating-linear-gradient(
+            45deg, transparent, transparent 10px,
+            rgba(255,255,255,.03) 10px, rgba(255,255,255,.03) 20px
+          )`
+        }}
+      >
+        {/* Badge de data */}
+        <div className="flex justify-center mb-4">
+          <div className="bg-white/90 backdrop-blur-sm rounded-md px-3 py-1 text-xs text-gray-600 shadow-sm">
+            {dateLabel}
+          </div>
+        </div>
+        
+        {/* BALÃO DE MENSAGEM ENVIADA */}
+        <div className="flex justify-end">
+          <div className="max-w-[85%]">
+            <div 
+              className="bg-[#dcf8c6] rounded-lg px-3 py-2.5 shadow-md relative"
+              style={{ borderTopRightRadius: '2px' }}
+            >
+              {/* Triângulo (tail do balão) */}
+              <div 
+                className="absolute -right-2 top-0"
+                style={{
+                  width: 0, height: 0,
+                  borderLeft: '10px solid #dcf8c6',
+                  borderTop: '10px solid transparent'
+                }}
+              />
+              
+              {/* Texto */}
+              <p className="text-[15px] leading-[1.4] text-[#303030] whitespace-pre-wrap break-words">
+                {renderedMessage || (
+                  <span className="text-gray-400 italic text-sm">
+                    Digite a mensagem no editor ao lado...
+                  </span>
+                )}
+              </p>
+              
+              {/* Hora + Check marks */}
+              <div className="flex items-end justify-end gap-1 mt-1.5 select-none">
+                <span className="text-[11px] text-gray-600 font-normal">
+                  {timestamp}
+                </span>
+                {/* Check marks azuis (lido) */}
+                <svg className="w-4 h-4 text-[#53bdeb]" viewBox="0 0 16 15" fill="currentColor">
+                  <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.319.319 0 0 0-.484.032l-.378.483a.418.418 0 0 0 .036.541l1.32 1.266c.143.14.361.125.484-.033l6.272-8.048a.366.366 0 0 0-.064-.512zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Info sobre variáveis */}
+        {message.includes('{{') && renderedMessage && (
+          <div className="flex justify-center mt-4 animate-fade-in">
+            <div className="bg-yellow-50 border border-yellow-200 rounded-md px-3 py-1.5 text-xs text-yellow-800 shadow-sm">
+              <SparklesIcon className="w-3 h-3 inline mr-1" />
+              As variáveis serão substituídas para cada contato
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* INPUT BAR (apenas visual) */}
+      <div className="bg-[#f0f0f0] px-3 py-2.5 flex items-center gap-2.5 border-t border-gray-300">
+        <button className="text-[#54656f] hover:opacity-70">
+          <FaceSmileIcon className="w-6 h-6" />
+        </button>
+        
+        <button className="text-[#54656f] hover:opacity-70">
+          <PlusCircleIcon className="w-6 h-6" />
+        </button>
+        
+        <div className="flex-1 bg-white rounded-full px-4 py-2.5 shadow-sm">
+          <span className="text-sm text-gray-400">Mensagem</span>
+        </div>
+        
+        <button className="text-[#54656f] hover:opacity-70">
+          <PaperClipIcon className="w-6 h-6" />
+        </button>
+        
+        <button className="bg-[#00a884] hover:bg-[#008f6f] text-white rounded-full p-2.5 shadow-md transition-colors">
+          <MicrophoneIcon className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// Visual ASCII do Modal:
+┌──────────────────────────────────────────────────────────────────┐
+│ 📝 Criar/Editar Mensagem                                 [X]     │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│ ┌─────────────────────────┬──────────────────────────────────┐ │
+│ │ EDITOR                  │ 📱 PREVIEW WHATSAPP              │ │
+│ │                         │                                  │ │
+│ │ Mensagem:               │ ┌────────────────────────────┐   │ │
+│ │ ┌─────────────────────┐ │ │ ◄ 🟢 João Silva      ⋮    │   │ │
+│ │ │{{saudacao}}, {{nome}}│ │ ├────────────────────────────┤   │ │
+│ │ │                      │ │ │   8 de outubro             │   │ │
+│ │ │Vi que {{quem_indicou │ │ │                            │   │ │
+│ │ │}} te indicou para    │ │ │      ┌──────────────────┐  │   │ │
+│ │ │conhecer nossa        │ │ │      │ Bom dia, João!   │  │   │ │
+│ │ │solução...            │ │ │      │                  │  │   │ │
+│ │ │                      │ │ │      │ Vi que Maria     │  │   │ │
+│ │ │Podemos conversar?    │ │ │      │ Santos te indi-  │  │   │ │
+│ │ └─────────────────────┘ │ │      │ cou para conhe-  │  │   │ │
+│ │                         │ │      │ cer nossa solu-  │  │   │ │
+│ │ 156 / 1000 caracteres   │ │      │ ção...           │  │   │ │
+│ │                         │ │      │                  │  │   │ │
+│ │ 📝 Variáveis:           │ │      │ Podemos conver-  │  │   │ │
+│ │ ┌──────────┬─────────┐  │ │      │ sar?             │  │   │ │
+│ │ │👤 {{nome}}│Inserir  │  │ │      │                  │  │   │ │
+│ │ │Nome       │         │  │ │      │   14:23      ✓✓  │  │   │ │
+│ │ └──────────┴─────────┘  │ │      └──────────────────┘  │   │ │
+│ │ ┌──────────┬─────────┐  │ │                            │   │ │
+│ │ │☀️ {{saudacao}}│Inserir│ │ │ ┌──────────────────────┐  │   │ │
+│ │ │Bom dia... │         │  │ │ │ 😊 Mensagem       🎤│  │   │ │
+│ │ └──────────┴─────────┘  │ │ └──────────────────────┘  │   │ │
+│ │                         │ └────────────────────────────┘   │ │
+│ │ [✨ Gerar com IA]       │                                  │ │
+│ │                         │ Testar preview com:              │ │
+│ │                         │ [João] [Maria] [Pedro]           │ │
+│ └─────────────────────────┴──────────────────────────────────┘ │
+│                                                                │
+│                           [Cancelar] [💾 Salvar Mensagem]      │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Tailwind Config para WhatsApp
+
+```javascript
+// tailwind.config.js
+
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        whatsapp: {
+          green: '#075e54',        // Header
+          greenDark: '#064e47',    // Header hover
+          greenLight: '#dcf8c6',   // Balão enviado
+          greenOnline: '#25d366',  // Indicador online
+          bg: '#e5ddd5',           // Background chat
+          blue: '#53bdeb',         // Check marks
+          gray: '#54656f',         // Ícones input
+          inputBg: '#f0f0f0',      // Background input
+        }
+      },
+      fontFamily: {
+        whatsapp: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          'Segoe UI',
+          'Roboto',
+          'Helvetica Neue',
+          'Arial',
+          'sans-serif'
+        ],
+      }
+    }
+  }
+}
+```
+
+---
+
+## 🎨 FRONTEND COMPONENTS
+
 ### Estrutura de Pastas
 
 ```

@@ -66,6 +66,15 @@ export default function ProfilePage() {
       setIsSaving(true)
       setMessage(null)
 
+      console.log('🔍 Updating profile with data:', {
+        first_name: profileData.first_name,
+        last_name: profileData.last_name,
+        email: profileData.email,
+        display_name: profileData.display_name,
+        phone: profileData.phone,
+        birth_date: profileData.birth_date,
+      })
+
       const response = await api.patch('/auth/profile/', {
         first_name: profileData.first_name,
         last_name: profileData.last_name,
@@ -75,13 +84,20 @@ export default function ProfilePage() {
         birth_date: profileData.birth_date,
       })
 
+      console.log('✅ Profile update response:', response.data)
+
       // Update user in store
       setUser(response.data)
 
       setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' })
       handleCloseEditModal()
     } catch (error: any) {
-      console.error('Error updating profile:', error)
+      console.error('❌ Error updating profile:', error)
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status
+      })
       setMessage({ 
         type: 'error', 
         text: error.response?.data?.detail || 'Erro ao atualizar perfil' 

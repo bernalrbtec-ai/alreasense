@@ -64,17 +64,23 @@ def update_profile(request):
     """Update user profile information."""
     user = request.user
     
+    print(f"🔍 Updating profile for user: {user.username}")
+    print(f"📝 Request data: {request.data}")
+    
     # Update allowed fields
     allowed_fields = ['first_name', 'last_name', 'email', 'display_name', 'phone', 'birth_date']
     for field in allowed_fields:
         if field in request.data:
+            print(f"📝 Updating field {field}: {request.data[field]}")
             setattr(user, field, request.data[field])
     
     try:
         user.save()
+        print(f"✅ Profile updated successfully for user: {user.username}")
         serializer = UserSerializer(user)
         return Response(serializer.data)
     except Exception as e:
+        print(f"❌ Error updating profile: {str(e)}")
         return Response(
             {'detail': f'Erro ao atualizar perfil: {str(e)}'}, 
             status=status.HTTP_400_BAD_REQUEST

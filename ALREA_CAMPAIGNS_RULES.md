@@ -1327,7 +1327,7 @@ class MessageRotationService:
         }
 ```
 
-### Integração com IA (N8N)
+### Integração com IA (N8N) - FASE 2 ⭐
 
 ```python
 # campaigns/services.py
@@ -1336,12 +1336,17 @@ class AIMessageGeneratorService:
     """
     Serviço para gerar variações de mensagens via IA
     
-    Integração com N8N Webhook
+    ⚠️ IMPLEMENTAÇÃO FUTURA (Fase 2)
+    Por enquanto, UI mostra botão desabilitado com "Em breve"
+    
+    Integração com N8N Webhook (quando implementado)
     """
     
     def generate_message_variations(self, original_message, tenant, count=4):
         """
         Gera variações de uma mensagem original
+        
+        ⭐ FASE 2: Por enquanto retorna mensagem de "não disponível"
         
         Args:
             original_message: Mensagem base fornecida pelo usuário
@@ -1351,49 +1356,42 @@ class AIMessageGeneratorService:
         Returns:
             list[str]: Lista de mensagens geradas
         """
-        import httpx
         
-        # Construir prompt
-        prompt = self._build_prompt(original_message)
+        # ⭐ IMPLEMENTAÇÃO TEMPORÁRIA (MVP)
+        # TODO: Implementar integração N8N na Fase 2
+        raise NotImplementedError(
+            "Geração de mensagens com IA será implementada em breve. "
+            "Por enquanto, cadastre as mensagens manualmente."
+        )
         
-        # Chamar N8N webhook
-        n8n_url = settings.N8N_AI_WEBHOOK_URL
-        
-        try:
-            response = httpx.post(
-                n8n_url,
-                json={
-                    'prompt': prompt,
-                    'original_message': original_message,
-                    'variations_count': count,
-                    'tenant_id': str(tenant.id),
-                    'preserve_variables': True,  # Manter {{nome}}, {{saudacao}}
-                },
-                timeout=30.0
-            )
-            
-            response.raise_for_status()
-            data = response.json()
-            
-            # N8N retorna: { "variations": ["msg1", "msg2", ...] }
-            variations = data.get('variations', [])
-            
-            logger.info(
-                f"IA gerou {len(variations)} variações",
-                extra={'tenant_id': str(tenant.id)}
-            )
-            
-            return variations
-            
-        except Exception as e:
-            logger.exception(f"Erro ao gerar mensagens: {str(e)}")
-            raise ValidationError(
-                "Erro ao gerar mensagens com IA. Tente novamente."
-            )
+        # ════════════════════════════════════════════════════════════
+        # IMPLEMENTAÇÃO FUTURA (Fase 2 - com N8N):
+        # ════════════════════════════════════════════════════════════
+        # import httpx
+        # 
+        # prompt = self._build_prompt(original_message)
+        # n8n_url = settings.N8N_AI_WEBHOOK_URL
+        # 
+        # response = httpx.post(
+        #     n8n_url,
+        #     json={
+        #         'prompt': prompt,
+        #         'original_message': original_message,
+        #         'variations_count': count,
+        #         'tenant_id': str(tenant.id),
+        #         'preserve_variables': True,
+        #     },
+        #     timeout=30.0
+        # )
+        # 
+        # variations = response.json().get('variations', [])
+        # return variations
     
     def _build_prompt(self, original_message):
         """
         Constrói prompt otimizado para gerar variações
+        
+        ⭐ USAR NA FASE 2
         """
         return f"""
         Você é um especialista em copywriting para WhatsApp.
@@ -1432,28 +1430,52 @@ const [aiVariations, setAiVariations] = useState<string[]>([]);
   onDone={() => setStep('ai_offer')}
 />
 
-// PASSO 2: Oferecer geração IA
+// PASSO 2: Oferecer geração IA (MVP: Botão desabilitado)
 {step === 'ai_offer' && (
   <AIOfferDialog
     onGenerateWithAI={handleGenerateAI}
     onManual={handleManualCreation}
+    aiEnabled={false}  // ⭐ MVP: IA desabilitada
   />
 )}
 
-// Interface:
+// Interface MVP (botão IA desabilitado):
 ┌─────────────────────────────────────────┐
-│ 💡 Geração Inteligente de Mensagens     │
+│ 💡 Adicionar Mais Mensagens             │
 ├─────────────────────────────────────────┤
 │                                         │
-│ Quer que a IA gere 4 variações desta    │
-│ mensagem? Isso ajuda a:                 │
+│ Você pode adicionar até 4 mensagens     │
+│ adicionais. Isso ajuda a:               │
 │                                         │
 │ ✓ Evitar bloqueios do WhatsApp          │
 │ ✓ Aumentar engajamento                  │
 │ ✓ Testar diferentes abordagens          │
 │                                         │
-│ [✨ Sim, gerar com IA] [✏️ Criar manualmente] │
+│ [✨ Gerar com IA] 🔒 Em breve           │
+│ [✏️ Criar manualmente]                  │
 └─────────────────────────────────────────┘
+
+// Componente com estado desabilitado:
+<Button
+  variant="outline"
+  onClick={handleGenerateAI}
+  disabled={!aiEnabled}  // ⭐ Desabilitado no MVP
+  className="relative"
+>
+  <SparklesIcon className="w-4 h-4 mr-2" />
+  Gerar com IA
+  
+  {!aiEnabled && (
+    <span className="absolute -top-2 -right-2 bg-yellow-500 text-white text-xs px-2 py-0.5 rounded-full">
+      Em breve
+    </span>
+  )}
+</Button>
+
+// Tooltip ao passar mouse:
+<Tooltip content="Funcionalidade de IA será disponibilizada em breve!">
+  <Button disabled>...</Button>
+</Tooltip>
 
 // PASSO 3: Gerar com IA
 const handleGenerateAI = async () => {
