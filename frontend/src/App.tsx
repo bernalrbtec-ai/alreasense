@@ -14,6 +14,7 @@ import TenantsPage from './pages/TenantsPage'
 import PlansPage from './pages/PlansPage'
 import SystemStatusPage from './pages/SystemStatusPage'
 import EvolutionConfigPage from './pages/EvolutionConfigPage'
+import ProfilePage from './pages/ProfilePage'
 
 // Components
 import Layout from './components/Layout'
@@ -60,6 +61,7 @@ function App() {
         <Route path="/connections" element={<ConnectionsPage />} />
         <Route path="/experiments" element={<ExperimentsPage />} />
         <Route path="/billing" element={<BillingPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
         
         {/* Super Admin Routes */}
         {isSuperAdmin && (

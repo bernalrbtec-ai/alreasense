@@ -1,14 +1,28 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import PaymentAccount, BillingEvent
-from .serializers import PaymentAccountSerializer, BillingInfoSerializer
+from .models import Plan, PaymentAccount, BillingEvent
+from .serializers import PlanSerializer, PaymentAccountSerializer, BillingInfoSerializer
 from .service import BillingService
 from apps.common.permissions import IsTenantMember
+
+
+class PlanViewSet(viewsets.ModelViewSet):
+    """ViewSet for managing subscription plans."""
+    
+    queryset = Plan.objects.all()
+    serializer_class = PlanSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_permissions(self):
+        # Only admins can create, update, or delete plans
+        if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            return [IsAuthenticated(), IsAdminUser()]
+        return [IsAuthenticated()]
 
 
 class PaymentAccountView(generics.RetrieveAPIView):

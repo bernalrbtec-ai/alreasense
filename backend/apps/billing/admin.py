@@ -1,5 +1,32 @@
 from django.contrib import admin
-from .models import PaymentAccount, BillingEvent
+from .models import Plan, PaymentAccount, BillingEvent
+
+
+@admin.register(Plan)
+class PlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'price', 'billing_cycle_days', 'is_free', 'is_active', 'max_connections', 'max_messages_per_month']
+    list_filter = ['is_active', 'is_free']
+    search_fields = ['name', 'description']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Basic Information', {
+            'fields': ('name', 'description', 'is_active')
+        }),
+        ('Pricing', {
+            'fields': ('price', 'billing_cycle_days', 'is_free', 'stripe_price_id')
+        }),
+        ('Limits', {
+            'fields': ('max_connections', 'max_messages_per_month')
+        }),
+        ('Features', {
+            'fields': ('features',)
+        }),
+        ('Metadata', {
+            'fields': ('id', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
 
 
 @admin.register(PaymentAccount)

@@ -11,6 +11,7 @@ interface User {
   role: 'admin' | 'operator'
   is_superuser?: boolean
   is_staff?: boolean
+  avatar?: string
   tenant: {
     id: string
     name: string
@@ -26,6 +27,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>
   logout: () => void
   checkAuth: () => Promise<void>
+  setUser: (user: any) => void
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -91,6 +93,10 @@ export const useAuthStore = create<AuthState>()(
           delete api.defaults.headers.common['Authorization']
           set({ user: null, token: null, isLoading: false })
         }
+      },
+
+      setUser: (user: any) => {
+        set({ user })
       },
     }),
     {

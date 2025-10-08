@@ -40,59 +40,11 @@ export default function PlansPage() {
   const fetchPlans = async () => {
     try {
       setIsLoading(true)
-      // TODO: Criar endpoint de planos no backend
-      // const response = await api.get('/billing/plans/')
-      // setPlans(response.data.results || response.data)
-      
-      // Mock data for now
-      setPlans([
-        {
-          id: '1',
-          name: 'Free',
-          price: 0,
-          billing_cycle_days: 30,
-          is_free: true,
-          max_connections: 1,
-          max_messages_per_month: 1000,
-          features: ['1 conexão', '1.000 mensagens/mês', 'Suporte por email'],
-          is_active: true,
-        },
-        {
-          id: '2',
-          name: 'Starter',
-          price: 49.90,
-          billing_cycle_days: 30,
-          is_free: false,
-          max_connections: 3,
-          max_messages_per_month: 10000,
-          features: ['3 conexões', '10.000 mensagens/mês', 'Suporte prioritário', 'Análise de sentimento'],
-          is_active: true,
-        },
-        {
-          id: '3',
-          name: 'Pro',
-          price: 149.90,
-          billing_cycle_days: 30,
-          is_free: false,
-          max_connections: 10,
-          max_messages_per_month: 50000,
-          features: ['10 conexões', '50.000 mensagens/mês', 'Suporte 24/7', 'Análise completa', 'API access'],
-          is_active: true,
-        },
-        {
-          id: '4',
-          name: 'Enterprise',
-          price: 499.90,
-          billing_cycle_days: 30,
-          is_free: false,
-          max_connections: -1,
-          max_messages_per_month: -1,
-          features: ['Conexões ilimitadas', 'Mensagens ilimitadas', 'Suporte dedicado', 'SLA garantido', 'Custom features'],
-          is_active: false,
-        },
-      ])
+      const response = await api.get('/billing/plans/')
+      setPlans(response.data)
     } catch (error) {
       console.error('Error fetching plans:', error)
+      setPlans([])
     } finally {
       setIsLoading(false)
     }
@@ -101,26 +53,32 @@ export default function PlansPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      // TODO: Implementar no backend
-      // if (editingPlan) {
-      //   await api.patch(`/billing/plans/${editingPlan.id}/`, formData)
-      // } else {
-      //   await api.post('/billing/plans/', formData)
-      // }
-      fetchPlans()
+      setIsSaving(true)
+      if (editingPlan) {
+        await api.patch(`/billing/plans/${editingPlan.id}/`, formData)
+      } else {
+        await api.post('/billing/plans/', formData)
+      }
+      await fetchPlans()
       handleCloseModal()
-    } catch (error) {
+      alert(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!')
+    } catch (error: any) {
       console.error('Error saving plan:', error)
+      alert(error.response?.data?.detail || 'Erro ao salvar plano')
+    } finally {
+      setIsSaving(false)
     }
   }
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este plano?')) return
     try {
-      // await api.delete(`/billing/plans/${id}/`)
-      fetchPlans()
-    } catch (error) {
+      await api.delete(`/billing/plans/${id}/`)
+      await fetchPlans()
+      alert('Plano excluído com sucesso!')
+    } catch (error: any) {
       console.error('Error deleting plan:', error)
+      alert(error.response?.data?.detail || 'Erro ao excluir plano')
     }
   }
 

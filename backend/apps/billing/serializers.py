@@ -1,5 +1,18 @@
 from rest_framework import serializers
-from .models import PaymentAccount, BillingEvent
+from .models import Plan, PaymentAccount, BillingEvent
+
+
+class PlanSerializer(serializers.ModelSerializer):
+    """Serializer for Plan model."""
+    
+    class Meta:
+        model = Plan
+        fields = [
+            'id', 'name', 'description', 'price', 'billing_cycle_days', 'is_free',
+            'max_connections', 'max_messages_per_month', 'features', 'is_active',
+            'stripe_price_id', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class PaymentAccountSerializer(serializers.ModelSerializer):

@@ -6,10 +6,13 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
+from apps.common.health import get_system_health
 
 def health_check(request):
-    """Health check endpoint."""
-    return JsonResponse({"status": "healthy", "service": "alrea_sense"})
+    """Comprehensive health check endpoint."""
+    health_data = get_system_health()
+    status_code = 200 if health_data['status'] in ['healthy', 'degraded'] else 503
+    return JsonResponse(health_data, status=status_code)
 
 urlpatterns = [
     path('admin/', admin.site.urls),
