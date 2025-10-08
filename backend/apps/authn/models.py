@@ -11,6 +11,12 @@ class User(AbstractUser):
         ('operator', 'Operator'),
     ]
     
+    # Override email to make it unique (required for USERNAME_FIELD)
+    email = models.EmailField(
+        unique=True,
+        help_text="Email address (used for login)"
+    )
+    
     # Use email as username
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
