@@ -19,7 +19,15 @@ RUN ls -la src/lib/ || echo "lib directory not found!"
 
 RUN npm install
 
-# Build the application
+# Build the application with environment variables
+ARG VITE_API_BASE_URL
+ARG VITE_WS_BASE_URL
+ARG VITE_APP_NAME
+ARG VITE_APP_VERSION
+ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
+ENV VITE_WS_BASE_URL=$VITE_WS_BASE_URL
+ENV VITE_APP_NAME=$VITE_APP_NAME
+ENV VITE_APP_VERSION=$VITE_APP_VERSION
 RUN npm run build
 
 # Expose port
