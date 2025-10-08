@@ -92,10 +92,17 @@ def update_profile(request):
 def change_password(request):
     """Change user password."""
     user = request.user
+    print(f"🔍 Changing password for user: {user.username}")
+    print(f"🔍 Request data: {request.data}")
+    
     current_password = request.data.get('current_password')
     new_password = request.data.get('new_password')
     
+    print(f"🔍 Current password provided: {bool(current_password)}")
+    print(f"🔍 New password provided: {bool(new_password)}")
+    
     if not current_password or not new_password:
+        print(f"❌ Missing required fields")
         return Response(
             {'detail': 'Senha atual e nova senha são obrigatórias'}, 
             status=status.HTTP_400_BAD_REQUEST
@@ -103,6 +110,7 @@ def change_password(request):
     
     # Verify current password
     if not user.check_password(current_password):
+        print(f"❌ Current password is incorrect")
         return Response(
             {'detail': 'Senha atual incorreta'}, 
             status=status.HTTP_400_BAD_REQUEST
@@ -111,6 +119,7 @@ def change_password(request):
     # Set new password
     user.set_password(new_password)
     user.save()
+    print(f"✅ Password changed successfully for user: {user.username}")
     
     return Response({'detail': 'Senha alterada com sucesso'})
 
@@ -120,17 +129,22 @@ def change_password(request):
 def upload_avatar(request):
     """Upload user avatar."""
     user = request.user
+    print(f"🔍 Uploading avatar for user: {user.username}")
+    print(f"🔍 Files in request: {list(request.FILES.keys())}")
     
     if 'avatar' not in request.FILES:
+        print(f"❌ No avatar file in request")
         return Response(
             {'detail': 'Nenhum arquivo enviado'}, 
             status=status.HTTP_400_BAD_REQUEST
         )
     
     avatar_file = request.FILES['avatar']
+    print(f"🔍 Avatar file: {avatar_file.name}, size: {avatar_file.size}, type: {avatar_file.content_type}")
     
     # Validate file size (max 2MB)
     if avatar_file.size > 2 * 1024 * 1024:
+        print(f"❌ File too large: {avatar_file.size} bytes")
         return Response(
             {'detail': 'Arquivo muito grande. Máximo 2MB.'}, 
             status=status.HTTP_400_BAD_REQUEST
@@ -138,6 +152,7 @@ def upload_avatar(request):
     
     # Validate file type
     if not avatar_file.content_type.startswith('image/'):
+        print(f"❌ Invalid file type: {avatar_file.content_type}")
         return Response(
             {'detail': 'Por favor, envie uma imagem válida.'}, 
             status=status.HTTP_400_BAD_REQUEST
@@ -147,20 +162,27 @@ def upload_avatar(request):
         # Generate unique filename
         file_extension = avatar_file.name.split('.')[-1]
         filename = f"avatars/{user.id}_{uuid.uuid4().hex[:8]}.{file_extension}"
+        print(f"🔍 Generated filename: {filename}")
         
         # Save file
         file_path = default_storage.save(filename, ContentFile(avatar_file.read()))
+        print(f"🔍 File saved to: {file_path}")
         
         # Update user avatar
         user.avatar = file_path
         user.save()
+        print(f"✅ Avatar updated for user: {user.username}, path: {user.avatar}")
+        
+        avatar_url = user.avatar.url if user.avatar else None
+        print(f"🔍 Avatar URL: {avatar_url}")
         
         return Response({
-            'avatar': user.avatar.url if user.avatar else None,
+            'avatar': avatar_url,
             'detail': 'Avatar atualizado com sucesso'
         })
         
     except Exception as e:
+        print(f"❌ Error uploading avatar: {str(e)}")
         return Response(
             {'detail': f'Erro ao fazer upload: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR

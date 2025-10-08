@@ -26,6 +26,7 @@ class UserSerializer(serializers.ModelSerializer):
     tenant = TenantSerializer(read_only=True)
     is_admin = serializers.ReadOnlyField()
     is_operator = serializers.ReadOnlyField()
+    avatar = serializers.SerializerMethodField()
     
     class Meta:
         model = User
@@ -36,6 +37,15 @@ class UserSerializer(serializers.ModelSerializer):
             'avatar', 'display_name', 'phone', 'birth_date'
         ]
         read_only_fields = ['id', 'date_joined', 'is_superuser', 'is_staff']
+    
+    def get_avatar(self, obj):
+        """Return the full URL for the avatar."""
+        if obj.avatar:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.avatar.url)
+            return obj.avatar.url
+        return None
 
 
 class UserCreateSerializer(serializers.ModelSerializer):

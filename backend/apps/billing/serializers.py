@@ -16,6 +16,26 @@ class PlanSerializer(serializers.ModelSerializer):
             'stripe_price_id', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        print(f"🔍 PlanSerializer.create called with: {validated_data}")
+        try:
+            instance = super().create(validated_data)
+            print(f"✅ Plan created: {instance}")
+            return instance
+        except Exception as e:
+            print(f"❌ Error in PlanSerializer.create: {str(e)}")
+            raise
+    
+    def update(self, instance, validated_data):
+        print(f"🔍 PlanSerializer.update called with: {validated_data}")
+        try:
+            instance = super().update(instance, validated_data)
+            print(f"✅ Plan updated: {instance}")
+            return instance
+        except Exception as e:
+            print(f"❌ Error in PlanSerializer.update: {str(e)}")
+            raise
 
 
 class PaymentAccountSerializer(serializers.ModelSerializer):

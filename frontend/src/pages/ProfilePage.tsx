@@ -500,33 +500,35 @@ export default function ProfilePage() {
                       />
                     </div>
 
-                    <div>
-                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
-                        <Phone className="h-4 w-4 inline mr-1" />
-                        Telefone
-                      </label>
-                      <input
-                        type="tel"
-                        id="phone"
-                        value={profileData.phone}
-                        onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="(11) 99999-9999"
-                      />
-                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                          <Phone className="h-4 w-4 inline mr-1" />
+                          Telefone
+                        </label>
+                        <input
+                          type="tel"
+                          id="phone"
+                          value={profileData.phone}
+                          onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          placeholder="(11) 99999-9999"
+                        />
+                      </div>
 
-                    <div>
-                      <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700">
-                        <Calendar className="h-4 w-4 inline mr-1" />
-                        Data de Nascimento
-                      </label>
-                      <input
-                        type="date"
-                        id="birth_date"
-                        value={profileData.birth_date}
-                        onChange={(e) => setProfileData({ ...profileData, birth_date: e.target.value })}
-                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      />
+                      <div>
+                        <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700">
+                          <Calendar className="h-4 w-4 inline mr-1" />
+                          Data de Nascimento
+                        </label>
+                        <input
+                          type="date"
+                          id="birth_date"
+                          value={profileData.birth_date}
+                          onChange={(e) => setProfileData({ ...profileData, birth_date: e.target.value })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
