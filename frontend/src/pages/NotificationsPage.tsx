@@ -50,6 +50,25 @@ export default function NotificationsPage() {
   const [testEmailModal, setTestEmailModal] = useState<{ show: boolean, smtpId: string | null }>({ show: false, smtpId: null })
   const [testEmail, setTestEmail] = useState('')
   const [isTesting, setIsTesting] = useState(false)
+  
+  // Modals de cadastro
+  const [showSMTPModal, setShowSMTPModal] = useState(false)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [showInstanceModal, setShowInstanceModal] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+  
+  // Form data para SMTP
+  const [smtpForm, setSMTPForm] = useState({
+    name: '',
+    host: '',
+    port: 587,
+    username: '',
+    password: '',
+    use_tls: true,
+    use_ssl: false,
+    from_email: '',
+    from_name: '',
+  })
 
   useEffect(() => {
     fetchData()
@@ -97,6 +116,31 @@ export default function NotificationsPage() {
       alert(`❌ Erro ao enviar email de teste: ${error.response?.data?.message || error.message}`)
     } finally {
       setIsTesting(false)
+    }
+  }
+
+  const handleSaveSMTP = async () => {
+    setIsSaving(true)
+    try {
+      await api.post('/notifications/smtp-configs/', smtpForm)
+      alert('✅ Servidor SMTP cadastrado com sucesso!')
+      setShowSMTPModal(false)
+      setSMTPForm({
+        name: '',
+        host: '',
+        port: 587,
+        username: '',
+        password: '',
+        use_tls: true,
+        use_ssl: false,
+        from_email: '',
+        from_name: '',
+      })
+      fetchData()
+    } catch (error: any) {
+      alert(`❌ Erro ao salvar: ${error.response?.data?.detail || error.message}`)
+    } finally {
+      setIsSaving(false)
     }
   }
 
@@ -180,7 +224,7 @@ export default function NotificationsPage() {
       {activeTab === 'templates' && (
         <>
           <div className="flex justify-end">
-            <Button>
+            <Button onClick={() => setShowTemplateModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Template
             </Button>
@@ -240,7 +284,7 @@ export default function NotificationsPage() {
       {activeTab === 'instances' && (
         <>
           <div className="flex justify-end">
-            <Button>
+            <Button onClick={() => setShowInstanceModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Nova Instância WhatsApp
             </Button>
@@ -303,7 +347,7 @@ export default function NotificationsPage() {
       {activeTab === 'smtp' && (
         <>
           <div className="flex justify-end">
-            <Button>
+            <Button onClick={() => setShowSMTPModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
               Novo Servidor SMTP
             </Button>
@@ -383,6 +427,142 @@ export default function NotificationsPage() {
           <p className="mt-1 text-sm text-gray-500">
             Em desenvolvimento
           </p>
+        </div>
+      )}
+
+      {/* SMTP Config Modal */}
+      {showSMTPModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Novo Servidor SMTP</h3>
+              <button
+                onClick={() => setShowSMTPModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XIcon className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label htmlFor="smtp_name">Nome da Configuração</Label>
+                  <Input
+                    id="smtp_name"
+                    value={smtpForm.name}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, name: e.target.value })}
+                    placeholder="Ex: Gmail Principal"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="smtp_host">Servidor SMTP</Label>
+                  <Input
+                    id="smtp_host"
+                    value={smtpForm.host}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, host: e.target.value })}
+                    placeholder="smtp.gmail.com"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="smtp_port">Porta</Label>
+                  <Input
+                    id="smtp_port"
+                    type="number"
+                    value={smtpForm.port}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, port: parseInt(e.target.value) })}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="smtp_username">Usuário/Email</Label>
+                  <Input
+                    id="smtp_username"
+                    value={smtpForm.username}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, username: e.target.value })}
+                    placeholder="seu@email.com"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="smtp_password">Senha</Label>
+                  <Input
+                    id="smtp_password"
+                    type="password"
+                    value={smtpForm.password}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, password: e.target.value })}
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="smtp_from_email">Email Remetente</Label>
+                  <Input
+                    id="smtp_from_email"
+                    type="email"
+                    value={smtpForm.from_email}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, from_email: e.target.value })}
+                    placeholder="noreply@alreasense.com"
+                  />
+                </div>
+                
+                <div>
+                  <Label htmlFor="smtp_from_name">Nome Remetente</Label>
+                  <Input
+                    id="smtp_from_name"
+                    value={smtpForm.from_name}
+                    onChange={(e) => setSMTPForm({ ...smtpForm, from_name: e.target.value })}
+                    placeholder="Alrea Sense"
+                  />
+                </div>
+                
+                <div className="col-span-2 flex gap-4">
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={smtpForm.use_tls}
+                      onChange={(e) => setSMTPForm({ ...smtpForm, use_tls: e.target.checked, use_ssl: false })}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Usar TLS (porta 587)</span>
+                  </label>
+                  
+                  <label className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={smtpForm.use_ssl}
+                      onChange={(e) => setSMTPForm({ ...smtpForm, use_ssl: e.target.checked, use_tls: false })}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                    />
+                    <span className="text-sm text-gray-700">Usar SSL (porta 465)</span>
+                  </label>
+                </div>
+              </div>
+              
+              <div className="flex justify-end gap-3 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowSMTPModal(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSaveSMTP}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Salvando...
+                    </>
+                  ) : (
+                    'Salvar Configuração'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
