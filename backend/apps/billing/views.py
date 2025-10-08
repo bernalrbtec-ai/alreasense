@@ -40,12 +40,30 @@ class PlanViewSet(viewsets.ModelViewSet):
     
     def update(self, request, *args, **kwargs):
         print(f"🔍 Updating plan {kwargs.get('pk')} with data: {request.data}")
+        print(f"🔍 Request method: {request.method}")
+        print(f"🔍 Content type: {request.content_type}")
+        print(f"🔍 User: {request.user.username}")
+        
         try:
+            # Get the instance first
+            instance = self.get_object()
+            print(f"🔍 Plan instance: {instance}")
+            print(f"🔍 Current plan data: {PlanSerializer(instance).data}")
+            
+            # Validate the data
+            serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+            print(f"🔍 Serializer is valid: {serializer.is_valid()}")
+            if not serializer.is_valid():
+                print(f"❌ Serializer errors: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+            
             response = super().update(request, *args, **kwargs)
             print(f"✅ Plan updated successfully: {response.data}")
             return response
         except Exception as e:
             print(f"❌ Error updating plan: {str(e)}")
+            import traceback
+            print(f"❌ Traceback: {traceback.format_exc()}")
             raise
 
 

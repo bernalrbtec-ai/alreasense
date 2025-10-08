@@ -182,7 +182,7 @@ export default function Layout({ children }: LayoutProps) {
                   <User className="h-5 w-5 text-white" />
                 </div>
                 <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium text-gray-700">{user?.username}</p>
+                  <p className="text-sm font-medium text-gray-700">{user?.display_name || user?.username}</p>
                   <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
                 </div>
               </Link>
@@ -222,7 +222,7 @@ export default function Layout({ children }: LayoutProps) {
                     <User className="h-5 w-5 text-white" />
                   </div>
                   <span className="hidden lg:block text-sm font-medium text-gray-700">
-                    {user?.username}
+                    {user?.display_name || user?.username}
                   </span>
                 </Link>
               </div>

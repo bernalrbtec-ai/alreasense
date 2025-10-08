@@ -87,7 +87,9 @@ export default function ProfilePage() {
       console.log('✅ Profile update response:', response.data)
 
       // Update user in store
+      console.log('🔍 Updating user in store with:', response.data)
       setUser(response.data)
+      console.log('✅ User updated in store')
 
       setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' })
       handleCloseEditModal()

@@ -56,16 +56,25 @@ export default function PlansPage() {
     e.preventDefault()
     try {
       setIsSaving(true)
+      console.log('🔍 Submitting plan data:', formData)
+      console.log('🔍 Editing plan:', editingPlan)
+      
       if (editingPlan) {
-        await api.patch(`/billing/plans/${editingPlan.id}/`, formData)
+        console.log(`🔍 Updating plan ${editingPlan.id} with PATCH`)
+        const response = await api.patch(`/billing/plans/${editingPlan.id}/`, formData)
+        console.log('✅ Update response:', response.data)
       } else {
-        await api.post('/billing/plans/', formData)
+        console.log('🔍 Creating new plan with POST')
+        const response = await api.post('/billing/plans/', formData)
+        console.log('✅ Create response:', response.data)
       }
       await fetchPlans()
       handleCloseModal()
       alert(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!')
     } catch (error: any) {
-      console.error('Error saving plan:', error)
+      console.error('❌ Error saving plan:', error)
+      console.error('❌ Error response:', error.response?.data)
+      console.error('❌ Error status:', error.response?.status)
       alert(error.response?.data?.detail || 'Erro ao salvar plano')
     } finally {
       setIsSaving(false)
