@@ -137,7 +137,7 @@ export default function ExperimentsPage() {
             </Card>
           ) : (
             <div className="grid gap-4">
-              {prompts.map((prompt) => (
+              {Array.isArray(prompts) && prompts.map((prompt) => (
                 <Card key={prompt.id}>
                   <CardHeader>
                     <div className="flex items-center justify-between">
@@ -201,7 +201,7 @@ export default function ExperimentsPage() {
             </Card>
           ) : (
             <div className="grid gap-4">
-              {experiments.map((experiment) => (
+              {Array.isArray(experiments) && experiments.map((experiment) => (
                 <Card key={experiment.id}>
                   <CardHeader>
                     <div className="flex items-center justify-between">

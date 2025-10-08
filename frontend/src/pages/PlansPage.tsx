@@ -179,7 +179,7 @@ export default function PlansPage() {
               <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
               <div className="mt-2">
                 <p className="text-3xl font-bold text-blue-600">
-                  {plan.is_free ? 'Grátis' : `R$ ${plan.price.toFixed(2)}`}
+                  {plan.is_free ? 'Grátis' : `R$ ${Number(plan.price).toFixed(2)}`}
                 </p>
                 {!plan.is_free && (
                   <p className="text-xs text-gray-500 mt-1">

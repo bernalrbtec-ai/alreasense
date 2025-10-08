@@ -104,10 +104,10 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className={`text-2xl font-bold ${getSentimentColor(metrics.avg_sentiment)}`}>
-              {metrics.avg_sentiment.toFixed(2)}
+              {Number(metrics.avg_sentiment).toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {metrics.positive_messages_pct.toFixed(1)}% positivas
+              {Number(metrics.positive_messages_pct).toFixed(1)}% positivas
             </p>
           </CardContent>
         </Card>
@@ -118,7 +118,7 @@ export default function DashboardPage() {
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{metrics.avg_satisfaction.toFixed(0)}%</div>
+            <div className="text-2xl font-bold">{Number(metrics.avg_satisfaction).toFixed(0)}%</div>
             <p className="text-xs text-muted-foreground">
               Baseado em {metrics.total_messages} mensagens
             </p>
@@ -133,7 +133,7 @@ export default function DashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{metrics.active_connections}</div>
             <p className="text-xs text-muted-foreground">
-              Latência média: {metrics.avg_latency_ms.toFixed(0)}ms
+              Latência média: {Number(metrics.avg_latency_ms).toFixed(0)}ms
             </p>
           </CardContent>
         </Card>

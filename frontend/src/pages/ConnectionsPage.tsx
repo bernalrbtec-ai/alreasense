@@ -87,7 +87,7 @@ export default function ConnectionsPage() {
             </CardContent>
           </Card>
         ) : (
-          connections.map((connection) => (
+          Array.isArray(connections) && connections.map((connection) => (
             <Card key={connection.id}>
               <CardHeader>
                 <div className="flex items-center justify-between">

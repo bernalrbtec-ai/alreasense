@@ -112,7 +112,7 @@ export default function MessagesPage() {
             </CardContent>
           </Card>
         ) : (
-          messages.map((message) => (
+          Array.isArray(messages) && messages.map((message) => (
             <Card key={message.id}>
               <CardContent className="p-6">
                 <div className="flex items-start justify-between">
@@ -133,7 +133,7 @@ export default function MessagesPage() {
                         <div className="flex items-center gap-1">
                           <span>Sentimento:</span>
                           <span className={getSentimentColor(message.sentiment)}>
-                            {getSentimentEmoji(message.sentiment)} {message.sentiment.toFixed(2)}
+                            {getSentimentEmoji(message.sentiment)} {Number(message.sentiment).toFixed(2)}
                           </span>
                         </div>
                         

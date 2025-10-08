@@ -205,7 +205,7 @@ export default function BillingPage() {
       <div>
         <h2 className="text-lg font-semibold mb-4">Planos Disponíveis</h2>
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {plans.map((plan) => {
+          {Array.isArray(plans) && plans.map((plan) => {
             const isCurrentPlan = plan.id === billingInfo.current_plan
             const isEnterprise = plan.id === 'enterprise'
             
@@ -235,7 +235,7 @@ export default function BillingPage() {
                       <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
                       Retenção de {plan.retention}
                     </li>
-                    {plan.features.slice(2).map((feature, index) => (
+                    {Array.isArray(plan.features) && plan.features.slice(2).map((feature, index) => (
                       <li key={index} className="flex items-center text-sm">
                         <CheckCircle className="h-4 w-4 text-green-600 mr-2" />
                         {feature}

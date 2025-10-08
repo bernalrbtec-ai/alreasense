@@ -5,6 +5,9 @@ from .models import Plan, PaymentAccount, BillingEvent
 class PlanSerializer(serializers.ModelSerializer):
     """Serializer for Plan model."""
     
+    # Ensure price is returned as float, not string
+    price = serializers.FloatField()
+    
     class Meta:
         model = Plan
         fields = [
