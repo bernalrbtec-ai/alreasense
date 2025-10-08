@@ -15,7 +15,13 @@ from apps.billing.models import Plan
 
 
 def seed_plans():
-    """Create default subscription plans."""
+    """Create default subscription plans only if they don't exist."""
+    
+    # Check if any plans already exist
+    if Plan.objects.exists():
+        print('📋 Plans already exist, skipping seed...')
+        print(f'   Total: {Plan.objects.count()} plans in database')
+        return
     
     plans_data = [
         {
