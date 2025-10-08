@@ -19,11 +19,26 @@ class PlanViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_permissions(self):
+        print(f"🔍 PlanViewSet action: {self.action}")
+        print(f"🔍 User: {self.request.user.username}")
+        print(f"🔍 Is superuser: {self.request.user.is_superuser}")
+        print(f"🔍 Is staff: {self.request.user.is_staff}")
+        
         # Only admins can create, update, or delete plans
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
+            print(f"🔍 Requiring admin permissions for action: {self.action}")
             return [IsAuthenticated(), IsAdminUser()]
         # Regular users can list and retrieve plans
+        print(f"🔍 Allowing regular user access for action: {self.action}")
         return [IsAuthenticated()]
+    
+    def create(self, request, *args, **kwargs):
+        print(f"🔍 Creating plan with data: {request.data}")
+        return super().create(request, *args, **kwargs)
+    
+    def update(self, request, *args, **kwargs):
+        print(f"🔍 Updating plan {kwargs.get('pk')} with data: {request.data}")
+        return super().update(request, *args, **kwargs)
 
 
 class PaymentAccountView(generics.RetrieveAPIView):

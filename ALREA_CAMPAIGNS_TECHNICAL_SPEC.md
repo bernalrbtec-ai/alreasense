@@ -12,15 +12,16 @@
 ## 📋 ÍNDICE
 
 1. [Visão Geral](#visão-geral)
-2. [Arquitetura do Sistema](#arquitetura-do-sistema)
-3. [Modelagem de Dados](#modelagem-de-dados)
-4. [API REST Endpoints](#api-rest-endpoints)
-5. [Celery Tasks](#celery-tasks)
-6. [Frontend Components](#frontend-components)
-7. [Fluxos de Negócio](#fluxos-de-negócio)
-8. [Sistema de Métricas](#sistema-de-métricas)
-9. [Segurança e Performance](#segurança-e-performance)
-10. [Deploy e Infraestrutura](#deploy-e-infraestrutura)
+2. [Arquitetura de Produtos e Planos](#arquitetura-de-produtos-e-planos)
+3. [Arquitetura do Sistema](#arquitetura-do-sistema)
+4. [Modelagem de Dados](#modelagem-de-dados)
+5. [API REST Endpoints](#api-rest-endpoints)
+6. [Celery Tasks](#celery-tasks)
+7. [Frontend Components](#frontend-components)
+8. [Fluxos de Negócio](#fluxos-de-negócio)
+9. [Sistema de Métricas](#sistema-de-métricas)
+10. [Segurança e Performance](#segurança-e-performance)
+11. [Deploy e Infraestrutura](#deploy-e-infraestrutura)
 
 ---
 
@@ -47,6 +48,598 @@ O módulo **ALREA Campaigns** permite aos clientes criar e gerenciar campanhas d
 4. **Cada instância tem configurações próprias** (horários, delays)
 5. **Sistema respeita rigorosamente** pausas, horários e feriados
 6. **Logs auditáveis** de todas as ações
+
+---
+
+## 🏢 ARQUITETURA DE PRODUTOS E PLANOS
+
+### Visão Geral
+
+A plataforma ALREA é **multi-produto** com sistema de billing flexível:
+
+- **Produtos base** incluídos nos planos
+- **Add-ons** que podem ser contratados separadamente
+- **API Pública** como produto premium/add-on
+- **Preços customizáveis** via admin/settings
+
+### Produtos da Plataforma
+
+```
+ALREA (Plataforma SaaS)
+│
+├── 1. ALREA Flow 📤
+│   ├── Descrição: Campanhas de disparo WhatsApp
+│   ├── Features: Múltiplas mensagens, rotação, agendamento
+│   ├── Acesso: UI Web + API Interna
+│   └── Billing: Incluído em planos (Starter+)
+│
+├── 2. ALREA Sense 🧠
+│   ├── Descrição: Análise de sentimento e satisfação
+│   ├── Features: IA, embeddings, busca semântica
+│   ├── Acesso: UI Web + API Interna
+│   └── Billing: Incluído em planos (Pro+)
+│
+├── 3. ALREA API Pública 🔌 (Premium/Add-on)
+│   ├── Descrição: Integração programática externa
+│   ├── Features: REST endpoints, webhooks, docs Swagger
+│   ├── Acesso: API Key (sem UI)
+│   └── Billing: 
+│       ├── Plano "API Only": R$ 99/mês
+│       ├── Add-on para Starter/Pro: +R$ 79/mês
+│       └── Enterprise: Incluído
+│
+└── 4. Futuros (Roadmap)
+    ├── ALREA Reports 📊 (Relatórios avançados)
+    ├── ALREA CRM 🤝 (Integração CRM)
+    └── ALREA Automations ⚡ (Workflows)
+```
+
+### Diferença: API Interna vs API Pública
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ API INTERNA (Básica) - TODOS os planos têm             │
+├─────────────────────────────────────────────────────────┤
+│ Autenticação: JWT (usuário faz login)                  │
+│ Uso: Frontend ALREA → Backend ALREA                    │
+│ Endpoints: /api/campaigns/, /api/contacts/, etc        │
+│ Propósito: Suportar interface web                      │
+│ Documentação: Não exposta publicamente                 │
+│ ✅ Incluído em TODOS os planos (sem custo adicional)   │
+└─────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────┐
+│ API PÚBLICA (Avançada) - Apenas planos específicos     │
+├─────────────────────────────────────────────────────────┤
+│ Autenticação: API Key (sem login)                      │
+│ Uso: Sistema Externo do Cliente → ALREA                │
+│ Endpoints: /api/v1/public/*                            │
+│ Propósito: Integrações, revenda, white-label           │
+│ Documentação: Swagger/OpenAPI público                  │
+│ Rate Limiting: Por tenant                              │
+│ Webhooks: Callbacks de eventos                         │
+│ 💰 PAGO:                                               │
+│   • Plano "API Only": R$ 99/mês                        │
+│   • Enterprise: Incluído                               │
+│   • Add-on para outros: +R$ 79/mês                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Modelagem de Produtos
+
+```python
+# apps/billing/models.py
+
+class Product(models.Model):
+    """
+    Produtos/Módulos da plataforma ALREA
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    slug = models.SlugField(unique=True)  # 'flow', 'sense', 'api_public'
+    name = models.CharField(max_length=100)
+    description = models.TextField()
+    
+    # Add-on configuration
+    is_addon = models.BooleanField(
+        default=False,
+        help_text="Produto pode ser adicionado a qualquer plano como extra"
+    )
+    addon_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Preço mensal se contratado como add-on (customizável)"
+    )
+    
+    # Apps Django relacionados
+    django_apps = models.JSONField(
+        default=list,
+        help_text="Ex: ['apps.campaigns', 'apps.messages']"
+    )
+    
+    # URL prefixes controlados
+    url_prefixes = models.JSONField(
+        default=list,
+        help_text="Ex: ['/api/campaigns/', '/campaigns/']"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'billing_product'
+        verbose_name = 'Produto'
+        verbose_name_plural = 'Produtos'
+    
+    def __str__(self):
+        return self.name
+
+
+class Plan(models.Model):
+    """
+    Planos de assinatura
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(unique=True)
+    description = models.TextField()
+    
+    price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        help_text="Preço base mensal (customizável)"
+    )
+    
+    # Relacionamento com produtos
+    products = models.ManyToManyField(
+        Product,
+        through='PlanProduct',
+        related_name='plans'
+    )
+    
+    # Configurações especiais
+    ui_access = models.BooleanField(
+        default=True,
+        help_text="Se False, tenant só acessa via API (ex: plano API Only)"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'billing_plan'
+        ordering = ['price']
+    
+    def __str__(self):
+        return f"{self.name} - R$ {self.price}"
+    
+    def has_product(self, product_slug):
+        """Verifica se plano inclui produto"""
+        return self.plan_products.filter(
+            product__slug=product_slug,
+            is_included=True
+        ).exists()
+    
+    def get_product_limits(self, product_slug):
+        """Retorna limites do produto neste plano"""
+        try:
+            pp = self.plan_products.get(product__slug=product_slug)
+            return pp.limits
+        except PlanProduct.DoesNotExist:
+            return {}
+
+
+class PlanProduct(models.Model):
+    """
+    Relacionamento N:N entre Plano e Produto
+    Define se produto está incluído e seus limites
+    """
+    
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.CASCADE,
+        related_name='plan_products'
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE
+    )
+    
+    is_included = models.BooleanField(
+        default=True,
+        help_text="Produto incluído no plano base"
+    )
+    
+    limits = models.JSONField(
+        default=dict,
+        help_text="Limites específicos deste produto neste plano (customizável)"
+    )
+    # Exemplos:
+    # Flow: {"max_campaigns": 20, "max_contacts": 5000, "max_instances": 10}
+    # Sense: {"max_analyses_per_month": 5000, "retention_days": 180}
+    # API: {"requests_per_day": 10000, "rate_limit_per_minute": 100}
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'billing_plan_product'
+        unique_together = ['plan', 'product']
+    
+    def __str__(self):
+        return f"{self.plan.name} → {self.product.name}"
+
+
+class TenantProduct(models.Model):
+    """
+    Produtos ativos de um tenant específico
+    
+    Pode vir de:
+    - Plano base (is_addon=False)
+    - Add-on contratado (is_addon=True)
+    """
+    
+    tenant = models.ForeignKey(
+        'tenancy.Tenant',
+        on_delete=models.CASCADE,
+        related_name='tenant_products'
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE
+    )
+    
+    is_addon = models.BooleanField(
+        default=False,
+        help_text="True se foi contratado separadamente (não do plano base)"
+    )
+    addon_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text="Valor adicional mensal (se add-on)"
+    )
+    
+    # Limites customizados (sobrescreve do plano se necessário)
+    custom_limits = models.JSONField(
+        default=dict,
+        blank=True
+    )
+    
+    # API Key (gerada se produto = api_public)
+    api_key = models.CharField(
+        max_length=255,
+        blank=True,
+        unique=True,
+        help_text="API Key para autenticação (se aplicável)"
+    )
+    
+    is_active = models.BooleanField(default=True)
+    activated_at = models.DateTimeField(auto_now_add=True)
+    deactivated_at = models.DateTimeField(null=True, blank=True)
+    
+    class Meta:
+        db_table = 'billing_tenant_product'
+        unique_together = ['tenant', 'product']
+    
+    def __str__(self):
+        addon_label = " (Add-on)" if self.is_addon else ""
+        return f"{self.tenant.name} - {self.product.name}{addon_label}"
+```
+
+### Seed de Produtos e Planos
+
+```python
+# apps/billing/management/commands/seed_products.py
+
+PRODUCTS = [
+    {
+        'slug': 'flow',
+        'name': 'ALREA Flow',
+        'description': 'Sistema de campanhas de disparo WhatsApp',
+        'is_addon': False,
+        'django_apps': ['apps.campaigns', 'apps.contacts', 'apps.connections'],
+        'url_prefixes': ['/api/campaigns/', '/api/contacts/', '/campaigns/']
+    },
+    {
+        'slug': 'sense',
+        'name': 'ALREA Sense',
+        'description': 'Análise de sentimento e satisfação com IA',
+        'is_addon': False,
+        'django_apps': ['apps.ai', 'apps.chat_messages'],
+        'url_prefixes': ['/api/analyses/', '/api/messages/', '/analyses/']
+    },
+    {
+        'slug': 'api_public',
+        'name': 'ALREA API Pública',
+        'description': 'Integração programática para sistemas externos',
+        'is_addon': True,  # ⭐ Pode ser add-on
+        'addon_price': 79.00,  # ⭐ Valor customizável
+        'url_prefixes': ['/api/v1/public/']
+    }
+]
+
+PLANS = [
+    {
+        'slug': 'starter',
+        'name': 'Starter',
+        'description': 'Ideal para pequenas empresas',
+        'price': 49.90,  # ⭐ Valor customizável
+        'ui_access': True,
+        'products': {
+            'flow': {
+                'included': True,
+                'limits': {
+                    'max_campaigns': 5,
+                    'max_contacts_per_campaign': 500,
+                    'max_messages_per_campaign': 1000,
+                    'max_instances': 2
+                }
+            },
+            'sense': {'included': False},
+            'api_public': {'included': False}  # Disponível como add-on
+        }
+    },
+    {
+        'slug': 'pro',
+        'name': 'Pro',
+        'description': 'Para empresas em crescimento',
+        'price': 149.90,  # ⭐ Valor customizável
+        'ui_access': True,
+        'products': {
+            'flow': {
+                'included': True,
+                'limits': {
+                    'max_campaigns': 20,
+                    'max_contacts_per_campaign': 5000,
+                    'max_instances': 10
+                }
+            },
+            'sense': {
+                'included': True,
+                'limits': {
+                    'max_analyses_per_month': 5000,
+                    'retention_days': 180
+                }
+            },
+            'api_public': {'included': False}  # Disponível como add-on
+        }
+    },
+    {
+        'slug': 'api_only',
+        'name': 'API Only',
+        'description': 'Para desenvolvedores e integrações',
+        'price': 99.00,  # ⭐ Valor customizável
+        'ui_access': False,  # ⭐ Sem acesso ao frontend
+        'products': {
+            'flow': {'included': False},
+            'sense': {'included': False},
+            'api_public': {
+                'included': True,
+                'limits': {
+                    'requests_per_day': 50000,
+                    'messages_per_day': 5000,
+                    'rate_limit_per_minute': 100,
+                    'webhooks_enabled': True
+                }
+            }
+        }
+    },
+    {
+        'slug': 'enterprise',
+        'name': 'Enterprise',
+        'description': 'Solução completa para grandes empresas',
+        'price': 499.00,  # ⭐ Valor customizável
+        'ui_access': True,
+        'products': {
+            'flow': {
+                'included': True,
+                'limits': {'unlimited': True}
+            },
+            'sense': {
+                'included': True,
+                'limits': {'unlimited': True}
+            },
+            'api_public': {
+                'included': True,  # ✅ Incluído (não é add-on)
+                'limits': {'unlimited': True}
+            }
+        }
+    }
+]
+
+# ⚠️ NOTA: Todos os valores de preços e limites são CUSTOMIZÁVEIS
+# Ajuste via Admin Django ou settings.py conforme necessário
+```
+
+### Controle de Acesso aos Produtos
+
+```python
+# apps/tenancy/models.py
+
+class Tenant(models.Model):
+    # ... campos existentes ...
+    
+    current_plan = models.ForeignKey(
+        'billing.Plan',
+        on_delete=models.PROTECT,
+        related_name='tenants'
+    )
+    
+    @cached_property
+    def active_products(self):
+        """
+        Lista de slugs de produtos ativos
+        
+        Inclui:
+        - Produtos do plano base
+        - Add-ons contratados
+        """
+        products = set()
+        
+        # Produtos do plano base
+        base_products = self.current_plan.plan_products.filter(
+            is_included=True
+        ).values_list('product__slug', flat=True)
+        products.update(base_products)
+        
+        # Add-ons contratados
+        addon_products = self.tenant_products.filter(
+            is_addon=True,
+            is_active=True
+        ).values_list('product__slug', flat=True)
+        products.update(addon_products)
+        
+        return list(products)
+    
+    def has_product(self, product_slug):
+        """
+        Verifica se tenant tem acesso ao produto
+        
+        Usa cache Redis (5 min TTL) para performance
+        """
+        cache_key = f'tenant:{self.id}:product:{product_slug}'
+        
+        has_it = cache.get(cache_key)
+        if has_it is not None:
+            return has_it
+        
+        has_it = product_slug in self.active_products
+        cache.set(cache_key, has_it, timeout=300)
+        
+        return has_it
+    
+    def get_product_limits(self, product_slug):
+        """Retorna limites do produto para este tenant"""
+        
+        # Verificar se tem limit customizado (add-on ou override)
+        try:
+            tp = self.tenant_products.get(
+                product__slug=product_slug,
+                is_active=True
+            )
+            if tp.custom_limits:
+                return tp.custom_limits
+        except TenantProduct.DoesNotExist:
+            pass
+        
+        # Usar limites do plano
+        return self.current_plan.get_product_limits(product_slug)
+    
+    def has_public_api(self):
+        """Verifica se tem acesso à API Pública"""
+        return self.has_product('api_public')
+    
+    def get_public_api_key(self):
+        """Retorna API Key para API Pública"""
+        try:
+            tp = self.tenant_products.get(
+                product__slug='api_public',
+                is_active=True
+            )
+            return tp.api_key or self.generate_api_key()
+        except TenantProduct.DoesNotExist:
+            return None
+    
+    def generate_api_key(self):
+        """Gera API Key única para tenant"""
+        import secrets
+        api_key = f"alr_{secrets.token_urlsafe(32)}"
+        
+        # Salvar no TenantProduct
+        tp = self.tenant_products.get(product__slug='api_public')
+        tp.api_key = api_key
+        tp.save(update_fields=['api_key'])
+        
+        return api_key
+    
+    @property
+    def monthly_total(self):
+        """Valor total mensal (plano + add-ons)"""
+        total = self.current_plan.price
+        
+        # Somar add-ons ativos
+        addons = self.tenant_products.filter(is_addon=True, is_active=True)
+        for addon in addons:
+            total += addon.addon_price
+        
+        return total
+```
+
+### Middleware de Controle de Acesso
+
+```python
+# apps/common/middleware.py
+
+class ProductAccessMiddleware:
+    """
+    Middleware que valida acesso a produtos baseado em URL
+    """
+    
+    PRODUCT_URL_MAP = {
+        '/api/campaigns/': 'flow',
+        '/api/contacts/': 'flow',
+        '/campaigns/': 'flow',
+        
+        '/api/analyses/': 'sense',
+        '/api/messages/': 'sense',
+        '/analyses/': 'sense',
+        
+        '/api/v1/public/': 'api_public',
+    }
+    
+    def __init__(self, get_response):
+        self.get_response = get_response
+    
+    def __call__(self, request):
+        # Apenas para requests autenticados
+        if not hasattr(request, 'tenant'):
+            return self.get_response(request)
+        
+        # Verificar se URL requer produto específico
+        for url_prefix, product_slug in self.PRODUCT_URL_MAP.items():
+            if request.path.startswith(url_prefix):
+                
+                if not request.tenant.has_product(product_slug):
+                    return JsonResponse({
+                        'error': 'PRODUCT_NOT_AVAILABLE',
+                        'product': product_slug,
+                        'message': f'Produto {product_slug.upper()} não disponível no seu plano',
+                        'current_plan': request.tenant.current_plan.name,
+                        'upgrade_url': '/billing/upgrade',
+                        'addon_available': Product.objects.get(slug=product_slug).is_addon,
+                        'addon_price': Product.objects.get(slug=product_slug).addon_price
+                    }, status=403)
+        
+        return self.get_response(request)
+```
+
+### Comparação de Planos (Tabela Visual)
+
+```
+┌────────────────┬─────────┬──────┬──────────┬────────────┐
+│ Feature/Produto│ Starter │ Pro  │ API Only │ Enterprise │
+├────────────────┼─────────┼──────┼──────────┼────────────┤
+│ Preço Base     │ R$ 49   │ R$149│ R$ 99    │ R$ 499     │
+├────────────────┼─────────┼──────┼──────────┼────────────┤
+│ ALREA Flow     │ ✅ 5    │ ✅ 20│ ❌       │ ✅ ∞       │
+│ (Campanhas)    │ camp.   │ camp.│          │            │
+├────────────────┼─────────┼──────┼──────────┼────────────┤
+│ ALREA Sense    │ ❌      │ ✅   │ ❌       │ ✅ ∞       │
+│ (IA/Análises)  │         │ 5k/mês│         │            │
+├────────────────┼─────────┼──────┼──────────┼────────────┤
+│ API Pública    │ +R$ 79  │+R$ 79│ ✅ Inc.  │ ✅ Inc.    │
+│ (Integração)   │ (add-on)│(add-on)│        │            │
+├────────────────┼─────────┼──────┼──────────┼────────────┤
+│ UI Web Access  │ ✅      │ ✅   │ ❌       │ ✅         │
+├────────────────┼─────────┼──────┼──────────┼────────────┤
+│ Total c/ API   │ R$ 128  │ R$228│ R$ 99    │ R$ 499     │
+└────────────────┴─────────┴──────┴──────────┴────────────┘
+
+⚠️ NOTA: Valores são EXEMPLOS e totalmente customizáveis
+         Ajuste via Admin Django conforme estratégia de pricing
+```
 
 ---
 

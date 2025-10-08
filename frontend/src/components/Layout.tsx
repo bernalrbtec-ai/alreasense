@@ -177,15 +177,15 @@ export default function Layout({ children }: LayoutProps) {
           {/* User info */}
           <div className="border-t border-gray-200 p-4">
             <div className="flex items-center">
-              <div className="flex-shrink-0">
+              <Link to="/profile" className="flex-shrink-0 flex items-center hover:bg-gray-50 rounded-md px-2 py-1 transition-colors">
                 <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
                   <User className="h-5 w-5 text-white" />
                 </div>
-              </div>
-              <div className="ml-3 flex-1">
-                <p className="text-sm font-medium text-gray-700">{user?.username}</p>
-                <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
-              </div>
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-medium text-gray-700">{user?.username}</p>
+                  <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
+                </div>
+              </Link>
               <Button
                 variant="ghost"
                 size="icon"
@@ -217,12 +217,14 @@ export default function Layout({ children }: LayoutProps) {
             <div className="flex items-center gap-x-4 lg:gap-x-6">
               <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" />
               <div className="flex items-center gap-x-2">
-                <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
-                  <User className="h-5 w-5 text-white" />
-                </div>
-                <span className="hidden lg:block text-sm font-medium text-gray-700">
-                  {user?.username}
-                </span>
+                <Link to="/profile" className="flex items-center gap-x-2 hover:bg-gray-50 rounded-md px-2 py-1 transition-colors">
+                  <div className="h-8 w-8 rounded-full bg-blue-500 flex items-center justify-center">
+                    <User className="h-5 w-5 text-white" />
+                  </div>
+                  <span className="hidden lg:block text-sm font-medium text-gray-700">
+                    {user?.username}
+                  </span>
+                </Link>
               </div>
             </div>
           </div>
