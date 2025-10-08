@@ -19,6 +19,7 @@ import ProfilePage from './pages/ProfilePage'
 // Components
 import Layout from './components/Layout'
 import LoadingSpinner from './components/ui/LoadingSpinner'
+import ErrorBoundary from './components/ErrorBoundary'
 
 function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
@@ -53,29 +54,31 @@ function App() {
   const isSuperAdmin = user?.is_superuser || user?.is_staff
 
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/messages" element={<MessagesPage />} />
-        <Route path="/connections" element={<ConnectionsPage />} />
-        <Route path="/experiments" element={<ExperimentsPage />} />
-        <Route path="/billing" element={<BillingPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
-        
-        {/* Super Admin Routes */}
-        {isSuperAdmin && (
-          <>
-            <Route path="/admin/tenants" element={<TenantsPage />} />
-            <Route path="/admin/plans" element={<PlansPage />} />
-            <Route path="/admin/system" element={<SystemStatusPage />} />
-            <Route path="/admin/evolution" element={<EvolutionConfigPage />} />
-          </>
-        )}
-        
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Layout>
+    <ErrorBoundary>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
+          <Route path="/connections" element={<ConnectionsPage />} />
+          <Route path="/experiments" element={<ExperimentsPage />} />
+          <Route path="/billing" element={<BillingPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+          
+          {/* Super Admin Routes */}
+          {isSuperAdmin && (
+            <>
+              <Route path="/admin/tenants" element={<TenantsPage />} />
+              <Route path="/admin/plans" element={<PlansPage />} />
+              <Route path="/admin/system" element={<SystemStatusPage />} />
+              <Route path="/admin/evolution" element={<EvolutionConfigPage />} />
+            </>
+          )}
+          
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </Layout>
+    </ErrorBoundary>
   )
 }
 

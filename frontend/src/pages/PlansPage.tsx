@@ -127,7 +127,7 @@ export default function PlansPage() {
     setFormData({ ...formData, features: newFeatures })
   }
 
-  if (isLoading) {
+  if (isLoading && plans.length === 0) {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner size="lg" />
@@ -232,10 +232,34 @@ export default function PlansPage() {
         ))}
       </div>
 
-      {plans.length === 0 && (
-        <div className="text-center py-12">
-          <p className="text-gray-500">Nenhum plano cadastrado</p>
-        </div>
+      {plans.length === 0 && !isLoading && (
+        <Card className="p-12">
+          <div className="text-center">
+            <svg
+              className="mx-auto h-12 w-12 text-gray-400"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+              />
+            </svg>
+            <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum plano cadastrado</h3>
+            <p className="mt-1 text-sm text-gray-500">
+              Comece criando um novo plano de assinatura
+            </p>
+            <div className="mt-6">
+              <Button onClick={() => setIsModalOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Primeiro Plano
+              </Button>
+            </div>
+          </div>
+        </Card>
       )}
 
       {/* Modal */}
