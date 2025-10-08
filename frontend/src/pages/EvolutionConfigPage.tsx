@@ -36,21 +36,19 @@ export default function EvolutionConfigPage() {
   const fetchConfig = async () => {
     try {
       setIsLoading(true)
-      // TODO: Criar endpoint de configuração no backend
-      // const response = await api.get('/admin/evolution-config/')
-      // setConfig(response.data)
-      
-      // Mock data for now
+      const response = await api.get('/connections/evolution/config/')
+      setConfig(response.data)
+    } catch (error) {
+      console.error('Error fetching config:', error)
+      // Fallback to default values if API fails
       setConfig({
         base_url: 'https://evo.rbtec.com.br',
         api_key: '584B4A4A-0815-AC86-DC39-C38FC27E8E17',
         webhook_url: `${window.location.origin}/api/webhooks/evolution/`,
         is_active: true,
-        last_check: new Date().toISOString(),
-        status: 'online',
+        last_check: null,
+        status: 'offline',
       })
-    } catch (error) {
-      console.error('Error fetching config:', error)
     } finally {
       setIsLoading(false)
     }
@@ -60,12 +58,8 @@ export default function EvolutionConfigPage() {
     e.preventDefault()
     try {
       setIsSaving(true)
-      // TODO: Implementar no backend
-      // await api.post('/admin/evolution-config/', config)
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
+      const response = await api.post('/connections/evolution/config/', config)
+      setConfig(response.data)
       alert('Configuração salva com sucesso!')
     } catch (error) {
       console.error('Error saving config:', error)
@@ -80,20 +74,29 @@ export default function EvolutionConfigPage() {
       setIsTesting(true)
       setTestResult(null)
       
-      // TODO: Implementar no backend
-      // const response = await api.post('/admin/evolution-config/test/', config)
-      
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      setTestResult({
-        success: true,
-        message: 'Conexão com Evolution API estabelecida com sucesso!',
+      const response = await api.post('/connections/evolution/test/', {
+        base_url: config.base_url,
+        api_key: config.api_key,
       })
+      
+      if (response.data.success) {
+        setTestResult({
+          success: true,
+          message: response.data.message,
+        })
+        // Update config with the response data
+        setConfig(response.data.config)
+      } else {
+        setTestResult({
+          success: false,
+          message: response.data.message,
+        })
+      }
     } catch (error) {
+      console.error('Error testing connection:', error)
       setTestResult({
         success: false,
-        message: 'Falha ao conectar com Evolution API. Verifique as credenciais.',
+        message: error.response?.data?.message || 'Falha ao conectar com Evolution API. Verifique as credenciais.',
       })
     } finally {
       setIsTesting(false)
