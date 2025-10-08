@@ -133,7 +133,7 @@ export default function TenantsPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {tenants.map((tenant) => (
+        {Array.isArray(tenants) && tenants.map((tenant) => (
           <Card key={tenant.id} className="p-6">
             <div className="flex items-start justify-between">
               <div className="flex-1">
@@ -174,7 +174,7 @@ export default function TenantsPage() {
         ))}
       </div>
 
-      {tenants.length === 0 && (
+      {(!Array.isArray(tenants) || tenants.length === 0) && (
         <div className="text-center py-12">
           <p className="text-gray-500">Nenhum cliente cadastrado</p>
         </div>

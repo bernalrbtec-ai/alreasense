@@ -59,8 +59,8 @@ export default function SystemStatusPage() {
   const fetchStatus = async () => {
     try {
       setIsLoading(true)
-      console.log('🔍 Fetching system status from /api/health/')
-      const response = await api.get('/api/health/')
+      console.log('🔍 Fetching system status from /health/')
+      const response = await api.get('/health/')
       console.log('✅ Health check response:', response.data)
       setStatus(response.data)
       setLastUpdate(new Date())

@@ -127,7 +127,7 @@ export default function PlansPage() {
     setFormData({ ...formData, features: newFeatures })
   }
 
-  if (isLoading && plans.length === 0) {
+  if (isLoading && (!Array.isArray(plans) || plans.length === 0)) {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner size="lg" />
@@ -151,7 +151,7 @@ export default function PlansPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {plans.map((plan) => (
+        {Array.isArray(plans) && plans.map((plan) => (
           <Card key={plan.id} className={`p-6 relative ${!plan.is_active ? 'opacity-60 border-gray-300' : 'border-blue-200'}`}>
             {/* Status Badge */}
             <div className="absolute top-4 right-4 flex gap-2">
@@ -199,7 +199,7 @@ export default function PlansPage() {
               
               <div className="pt-3 border-t border-gray-200">
                 <ul className="space-y-2">
-                  {plan.features.map((feature, index) => (
+                  {Array.isArray(plan.features) && plan.features.map((feature, index) => (
                     <li key={index} className="flex items-start text-sm text-gray-600">
                       <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
                       {feature}
@@ -232,7 +232,7 @@ export default function PlansPage() {
         ))}
       </div>
 
-      {plans.length === 0 && !isLoading && (
+      {(!Array.isArray(plans) || plans.length === 0) && !isLoading && (
         <Card className="p-12">
           <div className="text-center">
             <svg
@@ -387,7 +387,7 @@ export default function PlansPage() {
                         Funcionalidades
                       </label>
                       <div className="space-y-2">
-                        {formData.features.map((feature, index) => (
+                        {Array.isArray(formData.features) && formData.features.map((feature, index) => (
                           <div key={index} className="flex gap-2">
                             <input
                               type="text"
