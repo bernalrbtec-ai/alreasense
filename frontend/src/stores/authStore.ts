@@ -1,0 +1,104 @@
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+import { api } from '../lib/api'
+
+interface User {
+  id: number
+  username: string
+  email: string
+  first_name: string
+  last_name: string
+  role: 'admin' | 'operator'
+  is_superuser?: boolean
+  is_staff?: boolean
+  tenant: {
+    id: string
+    name: string
+    plan: string
+    status: string
+  }
+}
+
+interface AuthState {
+  user: User | null
+  token: string | null
+  isLoading: boolean
+  login: (username: string, password: string) => Promise<void>
+  logout: () => void
+  checkAuth: () => Promise<void>
+}
+
+export const useAuthStore = create<AuthState>()(
+  persist(
+    (set, get) => ({
+      user: null,
+      token: null,
+      isLoading: false,
+
+      login: async (username: string, password: string) => {
+        set({ isLoading: true })
+        try {
+          const response = await api.post('/auth/login/', {
+            username,
+            password,
+          })
+          
+          const { access, refresh } = response.data
+          
+          // Set token in API client
+          api.defaults.headers.common['Authorization'] = `Bearer ${access}`
+          
+          // Get user info
+          const userResponse = await api.get('/auth/me/')
+          
+          set({
+            user: userResponse.data,
+            token: access,
+            isLoading: false,
+          })
+        } catch (error) {
+          set({ isLoading: false })
+          throw error
+        }
+      },
+
+      logout: () => {
+        delete api.defaults.headers.common['Authorization']
+        set({ user: null, token: null })
+      },
+
+      checkAuth: async () => {
+        const { token, user } = get()
+        
+        // If already have user, skip check
+        if (user) {
+          set({ isLoading: false })
+          return
+        }
+        
+        if (!token) {
+          set({ isLoading: false })
+          return
+        }
+
+        set({ isLoading: true })
+        try {
+          api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+          const response = await api.get('/auth/me/')
+          set({ user: response.data, isLoading: false })
+        } catch (error) {
+          // Token is invalid, clear auth state
+          delete api.defaults.headers.common['Authorization']
+          set({ user: null, token: null, isLoading: false })
+        }
+      },
+    }),
+    {
+      name: 'auth-storage',
+      partialize: (state) => ({ 
+        token: state.token,
+        user: state.user 
+      }),
+    }
+  )
+)

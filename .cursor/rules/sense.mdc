@@ -1,0 +1,213 @@
+# 🧩 EVO SENSE — PROJECT INITIALIZATION PROMPT (Django + React)
+
+Você é um **arquiteto fullstack sênior**. Gere um **monorepo produção-ready** para um SaaS multi-tenant chamado **EvoSense**, com:
+
+- **Backend:** Django 5, Django REST Framework, Django Channels (WebSockets), Celery (jobs), Python 3.11+
+- **Frontend:** React + TypeScript + Vite + TailwindCSS + shadcn/ui
+- **Banco:** PostgreSQL (Railway) com **pgvector** para busca semântica
+- **Infra:** Docker + Railway
+- **Mensageria:** Evolution API via WebSocket (ingestão de mensagens WhatsApp)
+- **IA:** via MCP (n8n HTTP webhook) **ou** HTTP direto para modelo local (Qwen/Ollama)
+- **Multi-tenancy:** por linha (`tenant_id`) + RBAC (admin/operator)
+- **Billing:** Stripe mensal (ciclos de 30 dias), planos por quantidade de números conectados
+- **Experimentos:** versionamento de prompts e *shadow inference* (champion/challenger)
+- **Observabilidade:** logs estruturados e métricas básicas
+
+## 🎯 Objetivos
+1) **Ingestão**: consumir mensagens da Evolution API (por tenant/connection), persistir, enviar à IA e armazenar resultados.
+2) **IA**: classificar `sentiment` (-1..1), `emotion`, `satisfaction` (0..100), `tone`, `summary`.
+3) **Busca semântica**: indexar embeddings em `pgvector` e expor endpoint de semantic search.
+4) **Multi-tenant**: isolar dados por tenant; impor limites por plano (nº de connections, retenção, exports/dia).
+5) **Billing**: Stripe (planos Starter/Pro/Scale/Enterprise), cron diário, suspensão ao falhar cobrança.
+6) **Experimentos**: registrar `prompt_version`, rodar replay/backfill, shadow online e métricas comparativas.
+7) **Frontend**: autenticação, dashboard de KPIs, lista de conversas, detalhe, conexões, billing, experimentos; realtime via Channels.
+
+## 🧱 Estrutura esperada do monorepo
+```
+/evosense
+  /backend
+    manage.py
+    evosense/settings.py
+    evosense/asgi.py
+    evosense/celery.py
+    /apps
+      /tenancy
+      /authn
+      /connections
+      /messages
+      /ai
+      /billing
+      /experiments
+    /ingestion
+      evolution_ws.py
+    /common
+      utils.py
+      permissions.py
+    requirements.txt
+    Dockerfile
+  /frontend
+    src/...
+    index.html
+    package.json
+    vite.config.ts
+    Dockerfile
+  /docs
+    ARCHITECTURE.md
+    DB_SCHEMA.md
+    DEPLOYMENT.md
+  /rules.md
+  docker-compose.yml
+  README.md
+```
+
+## 🔐 Autenticação & Multi-tenant
+- Custom User (extensão de AbstractUser) com `tenant` (FK) e `role` (`admin`/`operator`).
+- Todo endpoint DRF filtra por `request.user.tenant_id`. Forneça um `BaseTenantViewSet`/`TenantFilterBackend`.
+- Permissões: `IsAuthenticated` + `IsTenantMember` + `RoleRequired`.
+
+## 🗃️ Modelos (Django ORM)
+Crie modelos e migrations:
+
+**tenancy.Tenant**
+- `id (UUID, PK)`, `name`, `plan (starter|pro|scale|enterprise)`, `next_billing_date (date)`, `status (active|suspended)`, `created_at`
+
+**authn.User** (extends AbstractUser)
+- `tenant (FK)`, `role (admin|operator)`
+
+**connections.EvolutionConnection**
+- `tenant (FK)`, `name`, `evo_ws_url`, `evo_token` (armazenar de forma segura), `is_active`, `created_at`
+
+**messages.Message**
+- `tenant (FK)`, `connection (FK)`, `chat_id`, `sender` (hash do número), `text`, `created_at`
+- resultados IA: `sentiment (float -1..1)`, `emotion (str)`, `satisfaction (int 0..100)`, `tone (str)`, `summary (str)`
+- `embedding` (coluna pgvector) — **implementar via SQL raw helper** (ver DAO)
+- índices: `created_at`, `chat_id` e GIN em `text`
+
+**experiments.PromptTemplate**
+- `version (unique)`, `body (Text)`, `created_at`
+
+**experiments.Inference**
+- `tenant (FK)`, `message (FK)`, `model_name`, `prompt_version`, `template_hash`, `latency_ms`, `sentiment`, `emotion`, `satisfaction`, `is_shadow (bool)`, `run_id`, `created_at`
+
+**billing.PaymentAccount**
+- `tenant (FK)`, `stripe_customer_id`, `status (active|expired|pending)`
+
+## 🗄️ pgvector
+- Migration para `CREATE EXTENSION IF NOT EXISTS vector;`
+- Adicionar coluna `embedding vector(768)` em `messages_message` (ajuste dimensões conforme seu encoder).
+- Criar índice IVFFLAT: `USING ivfflat (embedding vector_cosine) WITH (lists = 100)`.
+- DAO helpers:
+  - `write_embedding(message_id, list[float])` → SQL `UPDATE ... SET embedding = %s::vector`
+  - `semantic_search(tenant_id, query_emb, limit)` → `ORDER BY embedding <-> %s::vector`
+
+## 📡 Ingestão Evolution (WebSocket)
+- `ingestion/evolution_ws.py` com asyncio + websockets.
+- Iniciar um listener por `EvolutionConnection` ativa (multi-tenant).
+- Ao receber `type=message`:
+  1) persistir `Message`
+  2) **Celery task** `analyze_message_async(tenant_id, message_id, prompt_version=None, is_shadow=False, run_id='prod')`
+
+## 🧠 IA via MCP (n8n HTTP) / HTTP local
+- Configurar **N8N_AI_WEBHOOK** no `.env`.
+- `apps/ai/tasks.py`:
+  - montar payload:
+    ```json
+    {
+      "tenant_id": "...",
+      "message": "texto",
+      "context": { "chat_id": "...", "sender": "..." },
+      "prompt_version": "<versão ativa ou fornecida>"
+    }
+    ```
+  - timeout + retries (3x) com backoff.
+  - parse do JSON de resposta:
+    ```json
+    { "sentiment": 0.72, "emotion": "positivo", "satisfaction": 85, "tone": "...", "summary": "..." }
+    ```
+  - salvar no `Message` (se não shadow), registrar em `Inference`, gerar embedding e `write_embedding`.
+- Expor também `/api/ai/analyze` (admin) p/ reprocessar uma mensagem.
+
+## 🔁 Experimentos (replay & shadow)
+- Endpoint admin `POST /api/experiments/replay` com `{ tenant_id, start, end, prompt_version, run_id }` → Celery `replay_window(...)` chamando `analyze_message_async(..., is_shadow=True)`.
+- Em produção: `champion/challenger` (90/10) controlado por tabela `PromptTemplate` e feature flag:
+  - O *campeão* preenche `Message`.
+  - O *challenger* grava só em `Inference`.
+
+## 🧾 Billing (Stripe)
+- `billing.service`: criar/associar `stripe_customer_id`.
+- Webhook Stripe: eventos de pagamento (invoice.paid/failed).
+- Cron diário (Celery beat ou `cron` do sistema) para:
+  - checar `next_billing_date` e criar cobrança
+  - se falhar, `status = suspended` no tenant
+- Planos e limites:
+  - Starter: 1 número, retain 30d
+  - Pro: 3 números, retain 180d
+  - Scale: 6 números, retain 365d
+  - Enterprise: custom
+- Middleware/Service de verificação de limites (ex.: `connections.count <= plan_limit`).
+
+## 🌐 API (DRF) — endpoints mínimos
+- `POST /api/auth/login` | `GET /api/me`
+- `GET /api/tenants/:id/metrics` (médias, volumes, p95 latência)
+- `GET /api/messages?chat_id=&q=&page=...` (páginação + FTS)
+- `POST /api/messages/semantic-search` { query } → top-K via pgvector
+- `GET/POST /api/connections`
+- `GET/POST /api/prompts` (registrar novas versões)
+- `POST /api/experiments/replay` (admin)
+- `POST /api/ai/analyze` (admin)
+- `POST /api/webhooks/stripe`
+- (Opcional) `POST /api/webhooks/evolution` como fallback HTTP
+
+## 🔌 WebSockets (Channels)
+- Rota: `ws/tenant/<tenant_id>/`
+- Consumer agrupa por `tenant_<id>`.
+- Após análise IA, emitir evento `message_analyzed` com `{ message_id, sentiment, satisfaction, emotion, tone }`.
+
+## 🧰 Frontend (React)
+- Páginas: Login, Dashboard, Conversas, Detalhe, Conexões, Experimentos, Billing
+- Tailwind + shadcn para UI; Zustand para estado global
+- Conectar WS: `ws://<backend>/ws/tenant/<tenant_id>/`
+- Semantic search: chamar `/api/messages/semantic-search`
+- Billing: página com plano atual, próximas cobranças, upgrade (Stripe Checkout/Portal)
+
+## ⚙️ Configuração & Deploy (Railway)
+- `.env.example`:
+  ```
+  DJANGO_SECRET_KEY=
+  DATABASE_URL=postgresql://user:pass@host:port/db
+  REDIS_URL=redis://host:port/0
+  STRIPE_SECRET_KEY=
+  N8N_AI_WEBHOOK=https://<n8n>/webhook/ai-analysis
+  EVO_BASE_URL=
+  ALLOWED_HOSTS=*
+  ```
+- Railway Postgres: rodar `CREATE EXTENSION IF NOT EXISTS vector;` uma única vez.
+- Backend start: `python manage.py migrate && daphne -b 0.0.0.0 -p 8000 evosense.asgi:application`
+- Celery: `celery -A evosense worker -l info` e (se usar beat) `celery -A evosense beat -l info`
+- Frontend: `npm run build && npm run preview -- --host 0.0.0.0 --port 5173`
+
+## 🧪 Qualidade & Observabilidade
+- Linters (ruff/flake8), Black, isort.
+- Logs estruturados (json) com request-id/tenant-id.
+- Healthchecks: `/health` backend; WS ping/pong.
+- Testes: unit de services/DAO e e2e básicos de API.
+
+## 📄 Docs & Rules (gerar arquivos)
+- `rules.md`: convenções de código, módulos, segurança, limites de plano, versionamento de prompt, políticas de PII.
+- `docs/ARCHITECTURE.md`: diagrama, fluxos ingestão→IA→persistência→WS.
+- `docs/DB_SCHEMA.md`: tabelas, chaves, índices (incluindo pgvector).
+- `docs/DEPLOYMENT.md`: Railway (serviços, envs, comandos), migrações e inicialização.
+
+## ✅ Entregáveis
+1) Monorepo com **backend e frontend** prontos para build.
+2) Migrations incluindo **pgvector**.
+3) Ingestion WebSocket funcional (arquivo `ingestion/evolution_ws.py`) e Celery tasks de análise.
+4) DAO pgvector (write/search).
+5) Endpoints DRF e Consumer Channels mínimos.
+6) Páginas React e hook WS.
+7) Scripts de deploy Railway.
+8) Seeds opcionais (um `PromptTemplate` default e criação de planos).
+
+> Objetivo: **código pronto para subir no Railway**, com ingestão Evolution, IA via MCP/HTTP, busca semântica, multi-tenant, billing e experimentos de prompt.---
+alwaysApply: true
+---
