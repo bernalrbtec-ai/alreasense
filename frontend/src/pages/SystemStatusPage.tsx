@@ -59,11 +59,18 @@ export default function SystemStatusPage() {
   const fetchStatus = async () => {
     try {
       setIsLoading(true)
+      console.log('🔍 Fetching system status from /api/health/')
       const response = await api.get('/api/health/')
+      console.log('✅ Health check response:', response.data)
       setStatus(response.data)
       setLastUpdate(new Date())
-    } catch (error) {
-      console.error('Error fetching system status:', error)
+    } catch (error: any) {
+      console.error('❌ Error fetching system status:', error)
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+      })
       // Set default error status
       setStatus({
         status: 'error',
