@@ -119,17 +119,11 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sistema de Notificações</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Gerencie templates de email e WhatsApp, instâncias e histórico de envios
-          </p>
-        </div>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Novo Template
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">Sistema de Notificações</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          Gerencie templates de email e WhatsApp, instâncias e histórico de envios
+        </p>
       </div>
 
       {/* Tabs */}
@@ -184,7 +178,14 @@ export default function NotificationsPage() {
 
       {/* Templates Tab */}
       {activeTab === 'templates' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <>
+          <div className="flex justify-end">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Template
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.isArray(templates) && templates.map((template) => (
             <Card key={template.id} className="p-4">
               <div className="flex items-start justify-between">
@@ -231,12 +232,20 @@ export default function NotificationsPage() {
               </p>
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Instances Tab */}
       {activeTab === 'instances' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <>
+          <div className="flex justify-end">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Nova Instância WhatsApp
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(instances) && instances.map((instance) => (
             <Card key={instance.id} className="p-4">
               <div className="flex items-start justify-between">
@@ -286,12 +295,20 @@ export default function NotificationsPage() {
               </p>
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* SMTP Tab */}
       {activeTab === 'smtp' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <>
+          <div className="flex justify-end">
+            <Button>
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Servidor SMTP
+            </Button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(smtpConfigs) && smtpConfigs.map((smtp) => (
             <Card key={smtp.id} className="p-4">
               <div className="flex items-start justify-between">
@@ -354,7 +371,8 @@ export default function NotificationsPage() {
               </p>
             </div>
           )}
-        </div>
+          </div>
+        </>
       )}
 
       {/* Logs Tab */}
