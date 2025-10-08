@@ -248,7 +248,8 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True
+    # Disable SSL redirect for Railway (handled by Railway's load balancer)
+    SECURE_SSL_REDIRECT = False
     SECURE_HSTS_SECONDS = 31536000
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
