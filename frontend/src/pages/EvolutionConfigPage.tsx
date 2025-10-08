@@ -116,16 +116,16 @@ export default function EvolutionConfigPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Configuração Evolution API</h1>
+        <h1 className="text-xl font-bold text-gray-900">Servidor de Instância</h1>
         <p className="mt-1 text-sm text-gray-500">
           Configure a integração com o servidor Evolution API para ingestion de mensagens do WhatsApp
         </p>
       </div>
 
       {/* Status Card */}
-      <Card className="p-6">
+      <Card className="p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className={`h-4 w-4 rounded-full animate-pulse ${
@@ -201,8 +201,8 @@ export default function EvolutionConfigPage() {
       </Card>
 
       {/* Configuration Form */}
-      <Card className="p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
+      <Card className="p-4">
+        <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label htmlFor="base_url" className="block text-sm font-medium text-gray-700">
               URL Base da Evolution API
@@ -284,7 +284,7 @@ export default function EvolutionConfigPage() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="outline" onClick={fetchConfig}>
               Cancelar
             </Button>
@@ -296,42 +296,6 @@ export default function EvolutionConfigPage() {
         </form>
       </Card>
 
-      {/* Documentation Links */}
-      <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Recursos Úteis</h3>
-        <div className="space-y-2 text-sm text-gray-600">
-          <p>
-            <a 
-              href="https://github.com/EvolutionAPI/evolution-api" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 hover:underline"
-            >
-              📚 Documentação oficial da Evolution API
-            </a>
-          </p>
-          <p>
-            <a 
-              href="https://doc.evolution-api.com/" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 hover:underline"
-            >
-              🚀 Guia de início rápido
-            </a>
-          </p>
-          <p>
-            <a 
-              href="https://doc.evolution-api.com/v2/pt/integrations/webhook" 
-              target="_blank" 
-              rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-700 hover:underline"
-            >
-              🔗 Configuração de Webhooks
-            </a>
-          </p>
-        </div>
-      </Card>
     </div>
   )
 }
