@@ -16,7 +16,8 @@ def create_superuser():
     tenant, created = Tenant.objects.get_or_create(
         name='Default Tenant',
         defaults={
-            'is_active': True,
+            'plan': 'starter',
+            'status': 'active',
         }
     )
     
