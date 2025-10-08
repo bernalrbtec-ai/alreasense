@@ -14,10 +14,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL(
-            "CREATE EXTENSION IF NOT EXISTS vector;",
-            reverse_sql="DROP EXTENSION IF EXISTS vector;"
-        ),
         migrations.CreateModel(
             name='Message',
             fields=[
@@ -41,9 +37,5 @@ class Migration(migrations.Migration):
                 'db_table': 'messages_message',
                 'ordering': ['-created_at'],
             },
-        ),
-        migrations.RunSQL(
-            "CREATE INDEX IF NOT EXISTS idx_message_embedding ON messages_message USING ivfflat (embedding vector_cosine) WITH (lists = 100);",
-            reverse_sql="DROP INDEX IF EXISTS idx_message_embedding;"
         ),
     ]
