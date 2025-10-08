@@ -12,9 +12,11 @@ export const api = axios.create({
 // Request interceptor
 api.interceptors.request.use(
   (config) => {
+    console.log('🔍 API Request:', config.method?.toUpperCase(), config.url, config.data)
     return config
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error)
     return Promise.reject(error)
   }
 )
@@ -22,9 +24,11 @@ api.interceptors.request.use(
 // Response interceptor
 api.interceptors.response.use(
   (response) => {
+    console.log('✅ API Response:', response.status, response.config.url, response.data)
     return response
   },
   (error) => {
+    console.error('❌ API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status, error.response?.data)
     if (error.response?.status === 401) {
       // Token expired or invalid - we'll handle this in the auth store
       console.log('401 Unauthorized - token expired')

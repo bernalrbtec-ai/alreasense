@@ -73,9 +73,23 @@ export default function PlansPage() {
       alert(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!')
     } catch (error: any) {
       console.error('❌ Error saving plan:', error)
-      console.error('❌ Error response:', error.response?.data)
+      console.error('❌ Error type:', typeof error)
+      console.error('❌ Error message:', error.message)
+      console.error('❌ Error response:', error.response)
+      console.error('❌ Error response data:', error.response?.data)
       console.error('❌ Error status:', error.response?.status)
-      alert(error.response?.data?.detail || 'Erro ao salvar plano')
+      console.error('❌ Full error object:', JSON.stringify(error, null, 2))
+      
+      let errorMessage = 'Erro ao salvar plano'
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail
+      } else if (error.message) {
+        errorMessage = error.message
+      } else if (error.response?.data) {
+        errorMessage = JSON.stringify(error.response.data)
+      }
+      
+      alert(errorMessage)
     } finally {
       setIsSaving(false)
     }
