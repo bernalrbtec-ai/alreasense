@@ -4,17 +4,21 @@ from .models import EvolutionConnection
 
 @admin.register(EvolutionConnection)
 class EvolutionConnectionAdmin(admin.ModelAdmin):
-    list_display = ['name', 'tenant', 'is_active', 'created_at']
-    list_filter = ['is_active', 'created_at', 'tenant']
-    search_fields = ['name', 'tenant__name']
-    readonly_fields = ['created_at', 'updated_at']
+    list_display = ['name', 'base_url', 'status', 'is_active', 'created_at']
+    list_filter = ['is_active', 'status', 'created_at']
+    search_fields = ['name', 'base_url']
+    readonly_fields = ['created_at', 'updated_at', 'last_check']
     
     fieldsets = (
         ('Basic Information', {
-            'fields': ('tenant', 'name', 'is_active')
+            'fields': ('name', 'is_active', 'status')
         }),
-        ('Evolution API', {
-            'fields': ('evo_ws_url', 'evo_token')
+        ('Evolution API Configuration', {
+            'fields': ('base_url', 'api_key', 'webhook_url')
+        }),
+        ('Status Information', {
+            'fields': ('last_check', 'last_error'),
+            'classes': ('collapse',)
         }),
         ('Timestamps', {
             'fields': ('created_at', 'updated_at'),
