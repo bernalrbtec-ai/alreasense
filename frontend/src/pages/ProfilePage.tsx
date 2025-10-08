@@ -151,11 +151,22 @@ export default function ProfilePage() {
   if (!user) return null
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="bg-white rounded-lg shadow-lg">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={handleCloseModal}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-900">Meu Perfil</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-xl font-bold text-gray-900">Meu Perfil</h1>
+            <Button variant="ghost" size="icon" onClick={handleCloseModal}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
 
         <div className="p-4 space-y-4">
