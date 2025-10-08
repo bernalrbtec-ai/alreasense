@@ -98,6 +98,11 @@ export const useAuthStore = create<AuthState>()(
           console.error('Auth check failed:', error)
           delete api.defaults.headers.common['Authorization']
           set({ user: null, token: null, isLoading: false })
+          
+          // Redirect to login if not already there
+          if (window.location.pathname !== '/login') {
+            window.location.href = '/login'
+          }
         }
       },
 

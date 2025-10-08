@@ -30,8 +30,17 @@ api.interceptors.response.use(
   (error) => {
     console.error('❌ API Error:', error.config?.method?.toUpperCase(), error.config?.url, error.response?.status, error.response?.data)
     if (error.response?.status === 401) {
-      // Token expired or invalid - we'll handle this in the auth store
-      console.log('401 Unauthorized - token expired')
+      // Token expired or invalid - redirect to login
+      console.log('401 Unauthorized - token expired, redirecting to login')
+      delete api.defaults.headers.common['Authorization']
+      
+      // Clear localStorage
+      localStorage.removeItem('auth-storage')
+      
+      // Redirect to login if not already there
+      if (window.location.pathname !== '/login') {
+        window.location.href = '/login'
+      }
     }
     return Promise.reject(error)
   }
