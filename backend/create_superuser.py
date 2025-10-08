@@ -44,8 +44,8 @@ def create_superuser():
     else:
         print(f"Using existing tenant: {tenant.name}")
     
-    # Create superuser if it doesn't exist
-    if not User.objects.filter(email='admin@alreasense.com').exists():
+    # Create superuser if it doesn't exist (check by role, not by specific email)
+    if not User.objects.filter(is_superuser=True).exists():
         user = User.objects.create_superuser(
             username='admin@alreasense.com',  # Use email as username
             email='admin@alreasense.com',
@@ -54,7 +54,8 @@ def create_superuser():
         )
         print(f"Created superuser: {user.email}")
     else:
-        print("Superuser already exists")
+        existing_superuser = User.objects.filter(is_superuser=True).first()
+        print(f"Superuser already exists: {existing_superuser.email}")
 
 if __name__ == '__main__':
     create_superuser()
