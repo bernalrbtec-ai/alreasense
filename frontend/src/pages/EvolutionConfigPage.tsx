@@ -42,8 +42,8 @@ export default function EvolutionConfigPage() {
       
       // Mock data for now
       setConfig({
-        base_url: 'https://evolution-api.example.com',
-        api_key: '********************************',
+        base_url: 'https://evo.rbtec.com.br',
+        api_key: '584B4A4A-0815-AC86-DC39-C38FC27E8E17',
         webhook_url: `${window.location.origin}/api/webhooks/evolution/`,
         is_active: true,
         last_check: new Date().toISOString(),
@@ -178,7 +178,7 @@ export default function EvolutionConfigPage() {
               required
               value={config.base_url}
               onChange={(e) => setConfig({ ...config, base_url: e.target.value })}
-              placeholder="https://evolution-api.example.com"
+              placeholder="https://evo.rbtec.com.br"
               className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
             />
             <p className="mt-1 text-sm text-gray-500">
