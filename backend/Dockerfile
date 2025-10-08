@@ -34,4 +34,4 @@ RUN python manage.py collectstatic --noinput --clear
 EXPOSE 8000
 
 # Default command
-CMD ["sh", "-c", "python manage.py migrate && python create_superuser.py && daphne -b 0.0.0.0 -p 8000 alrea_sense.asgi:application"]
+CMD ["sh", "-c", "python manage.py migrate && python create_superuser.py && python seed_plans.py && daphne -b 0.0.0.0 -p 8000 alrea_sense.asgi:application"]
