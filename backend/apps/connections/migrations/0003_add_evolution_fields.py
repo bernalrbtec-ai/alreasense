@@ -1,7 +1,49 @@
 # Generated manually to fix migration issues
 
-from django.db import migrations, models
-import uuid
+from django.db import migrations, models, connection
+
+
+def check_column_exists(table_name, column_name):
+    """Check if a column exists in the table"""
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name=%s AND column_name=%s
+        """, [table_name, column_name])
+        return cursor.fetchone() is not None
+
+
+def add_columns_if_not_exist(apps, schema_editor):
+    """Add columns only if they don't exist"""
+    table_name = 'connections_evolutionconnection'
+    
+    # List of columns to add with their definitions
+    columns_to_add = [
+        ('base_url', 'ALTER TABLE connections_evolutionconnection ADD COLUMN base_url VARCHAR(200)'),
+        ('api_key', 'ALTER TABLE connections_evolutionconnection ADD COLUMN api_key VARCHAR(255)'),
+        ('webhook_url', 'ALTER TABLE connections_evolutionconnection ADD COLUMN webhook_url VARCHAR(200)'),
+        ('is_active', 'ALTER TABLE connections_evolutionconnection ADD COLUMN is_active BOOLEAN DEFAULT TRUE'),
+        ('status', 'ALTER TABLE connections_evolutionconnection ADD COLUMN status VARCHAR(20) DEFAULT \'inactive\''),
+        ('last_check', 'ALTER TABLE connections_evolutionconnection ADD COLUMN last_check TIMESTAMP WITH TIME ZONE'),
+        ('last_error', 'ALTER TABLE connections_evolutionconnection ADD COLUMN last_error TEXT'),
+    ]
+    
+    with connection.cursor() as cursor:
+        for column_name, sql in columns_to_add:
+            if not check_column_exists(table_name, column_name):
+                cursor.execute(sql)
+
+
+def remove_columns_if_exist(apps, schema_editor):
+    """Remove columns if they exist (for reverse migration)"""
+    table_name = 'connections_evolutionconnection'
+    columns_to_remove = ['base_url', 'api_key', 'webhook_url', 'is_active', 'status', 'last_check', 'last_error']
+    
+    with connection.cursor() as cursor:
+        for column_name in columns_to_remove:
+            if check_column_exists(table_name, column_name):
+                cursor.execute(f'ALTER TABLE {table_name} DROP COLUMN IF EXISTS {column_name}')
 
 
 class Migration(migrations.Migration):
@@ -11,39 +53,8 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='base_url',
-            field=models.URLField(help_text="URL base da Evolution API", null=True, blank=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='api_key',
-            field=models.CharField(max_length=255, help_text="API Key da Evolution API", null=True, blank=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='webhook_url',
-            field=models.URLField(help_text="URL do webhook para receber eventos", null=True, blank=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='is_active',
-            field=models.BooleanField(default=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='status',
-            field=models.CharField(max_length=20, choices=[('active', 'Active'), ('inactive', 'Inactive'), ('error', 'Error')], default='inactive'),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='last_check',
-            field=models.DateTimeField(null=True, blank=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='last_error',
-            field=models.TextField(blank=True, null=True),
+        migrations.RunPython(
+            add_columns_if_not_exist,
+            remove_columns_if_exist,
         ),
     ]
