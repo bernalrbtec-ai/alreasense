@@ -9,7 +9,7 @@ from .serializers import EvolutionConnectionSerializer
 
 
 @api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated, IsAdminUser])
+@permission_classes([IsAuthenticated])
 def evolution_config(request):
     """Get or update Evolution API configuration."""
     
@@ -78,7 +78,7 @@ def evolution_config(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated, IsAdminUser])
+@permission_classes([IsAuthenticated])
 def test_evolution_connection(request):
     """Test connection with Evolution API."""
     
