@@ -7,33 +7,8 @@ from apps.tenancy.serializers import TenantSerializer
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Custom JWT serializer with tenant and role info."""
     
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        # Use email field instead of username
-        self.fields['email'] = serializers.EmailField()
-        self.fields['password'] = serializers.CharField()
-        # Remove username field
-        if 'username' in self.fields:
-            del self.fields['username']
-    
-    def validate(self, attrs):
-        # Use email instead of username for authentication
-        email = attrs.get('email')
-        password = attrs.get('password')
-        
-        if email and password:
-            # Try to authenticate with email
-            try:
-                user = User.objects.get(email=email)
-                if user.check_password(password):
-                    attrs['user'] = user
-                    return attrs
-                else:
-                    raise serializers.ValidationError('Credenciais inválidas')
-            except User.DoesNotExist:
-                raise serializers.ValidationError('Usuário não encontrado')
-        else:
-            raise serializers.ValidationError('Email e senha são obrigatórios')
+    # Override the username field to use email
+    username_field = User.USERNAME_FIELD
     
     @classmethod
     def get_token(cls, user):
