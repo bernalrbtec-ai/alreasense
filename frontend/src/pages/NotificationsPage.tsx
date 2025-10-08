@@ -540,26 +540,31 @@ export default function NotificationsPage() {
                 </div>
               </div>
               
-              <div className="flex justify-end gap-3 pt-4 border-t">
-                <Button
-                  variant="outline"
-                  onClick={() => setShowSMTPModal(false)}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleSaveSMTP}
-                  disabled={isSaving}
-                >
-                  {isSaving ? (
-                    <>
-                      <LoadingSpinner size="sm" className="mr-2" />
-                      Salvando...
-                    </>
-                  ) : (
-                    'Salvar Configuração'
-                  )}
-                </Button>
+              <div className="flex justify-between items-center pt-4 border-t">
+                <p className="text-xs text-gray-500">
+                  💡 Dica: Após salvar, use o botão "Testar Email" para verificar se está funcionando
+                </p>
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowSMTPModal(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    onClick={handleSaveSMTP}
+                    disabled={isSaving}
+                  >
+                    {isSaving ? (
+                      <>
+                        <LoadingSpinner size="sm" className="mr-2" />
+                        Salvando...
+                      </>
+                    ) : (
+                      'Salvar Configuração'
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
