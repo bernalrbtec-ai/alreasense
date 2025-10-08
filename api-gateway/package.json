@@ -1,0 +1,21 @@
+{
+  "name": "alrea-sense-api-gateway",
+  "version": "1.0.0",
+  "description": "API Gateway for Alrea Sense",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.5",
+    "http-proxy-middleware": "^2.0.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
