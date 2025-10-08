@@ -12,6 +12,11 @@ RUN npm ci --only=production
 # Copy source code (excluding node_modules)
 COPY . .
 RUN rm -rf node_modules
+
+# Debug: List files to verify lib directory exists
+RUN ls -la src/
+RUN ls -la src/lib/ || echo "lib directory not found!"
+
 RUN npm install
 
 # Build the application
