@@ -99,8 +99,13 @@ export default function NotificationsPage() {
         const response = await api.get('/notifications/whatsapp-instances/')
         setInstances(Array.isArray(response.data) ? response.data : [])
       } else if (activeTab === 'smtp') {
+        console.log('🔍 Fetching SMTP configs...')
         const response = await api.get('/notifications/smtp-configs/')
-        setSmtpConfigs(Array.isArray(response.data) ? response.data : [])
+        console.log('📧 SMTP response:', response.data)
+        const smtpData = Array.isArray(response.data) ? response.data : response.data?.results || []
+        console.log('📧 SMTP data to set:', smtpData)
+        setSmtpConfigs(smtpData)
+        console.log('📧 SMTP configs state updated')
       }
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -180,7 +185,27 @@ export default function NotificationsPage() {
       })
       
       // Atualizar lista de configurações SMTP
-      await fetchData()
+      console.log('🔄 Atualizando lista SMTP após salvar...')
+      
+      // Forçar busca específica de SMTP configs
+      try {
+        const smtpResponse = await api.get('/notifications/smtp-configs/')
+        console.log('📧 SMTP response após salvar:', smtpResponse.data)
+        const smtpData = Array.isArray(smtpResponse.data) ? smtpResponse.data : smtpResponse.data?.results || []
+        console.log('📧 SMTP data após salvar:', smtpData)
+        
+        // Forçar atualização do estado
+        setSmtpConfigs([...smtpData])
+        console.log('✅ SMTP configs atualizados no estado com spread operator')
+        
+        // Aguardar um pouco e verificar se o estado foi atualizado
+        setTimeout(() => {
+          console.log('🔍 Verificando estado após timeout:', smtpConfigs)
+        }, 100)
+        
+      } catch (error) {
+        console.error('❌ Erro ao buscar SMTP configs:', error)
+      }
       
     } catch (error: any) {
       console.error('❌ Erro ao salvar SMTP:', error)
@@ -401,16 +426,17 @@ export default function NotificationsPage() {
         </>
       )}
 
-      {/* SMTP Tab */}
-      {activeTab === 'smtp' && (
-        <>
-          <div className="flex justify-end">
-            <Button onClick={() => setShowSMTPModal(true)}>
-              <Plus className="h-4 w-4 mr-2" />
-              Novo Servidor SMTP
-            </Button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+               {/* SMTP Tab */}
+               {activeTab === 'smtp' && (
+                 <>
+                   <div className="flex justify-end">
+                     <Button onClick={() => setShowSMTPModal(true)}>
+                       <Plus className="h-4 w-4 mr-2" />
+                       Novo Servidor SMTP
+                     </Button>
+                   </div>
+                   {console.log('🔍 Renderizando SMTP tab, smtpConfigs:', smtpConfigs, 'length:', smtpConfigs?.length)}
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(smtpConfigs) && smtpConfigs.map((smtp) => (
             <Card key={smtp.id} className="p-4">
               <div className="flex items-start justify-between">
