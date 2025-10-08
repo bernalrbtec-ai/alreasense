@@ -1,7 +1,7 @@
 # 📋 ALREA CAMPAIGNS - Regras de Desenvolvimento
 
 > **Projeto:** ALREA - Sistema Multi-Produto de Marketing e Analytics  
-> **Módulo:** Campaigns (Disparos WhatsApp via Evolution API)  
+> **Módulo:** Campaigns (Disparos WhatsApp)  
 > **Stack:** Django 5 + DRF + Celery + PostgreSQL + React + TypeScript  
 > **Última Atualização:** 2025-10-08
 

@@ -1,11 +1,22 @@
 import requests
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from django.utils import timezone
 from .models import EvolutionConnection
 from .serializers import EvolutionConnectionSerializer
+
+
+class ConnectionListView(generics.ListAPIView):
+    """List all connections for the current tenant."""
+    
+    serializer_class = EvolutionConnectionSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        # Return connections for the current user's tenant
+        return EvolutionConnection.objects.filter(tenant=self.request.user.tenant)
 
 
 @api_view(['GET', 'POST'])

@@ -21,6 +21,12 @@ class User(AbstractUser):
         choices=ROLE_CHOICES, 
         default='operator'
     )
+    avatar = models.ImageField(
+        upload_to='avatars/', 
+        null=True, 
+        blank=True,
+        help_text="Avatar do usuário"
+    )
     
     class Meta:
         db_table = 'authn_user'

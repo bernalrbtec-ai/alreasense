@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.utils import timezone
 from django_cryptography.fields import encrypt
+from apps.tenancy.models import Tenant
 
 
 class EvolutionConnection(models.Model):
@@ -14,6 +15,7 @@ class EvolutionConnection(models.Model):
     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='evolution_connections')
     name = models.CharField(max_length=100)
     base_url = models.URLField(help_text="URL base da Evolution API")
     api_key = encrypt(models.CharField(max_length=255, help_text="API Key da Evolution API"))

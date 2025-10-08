@@ -1,6 +1,6 @@
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from django.db.models import Avg, Count, Q
 from django.utils import timezone
@@ -11,6 +11,14 @@ from .serializers import TenantSerializer, TenantMetricsSerializer
 from apps.connections.models import EvolutionConnection
 from apps.chat_messages.models import Message
 from apps.experiments.models import Inference
+
+
+class TenantListView(generics.ListAPIView):
+    """List all tenants (admin only)."""
+    
+    queryset = Tenant.objects.all()
+    serializer_class = TenantSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
 
 
 class TenantDetailView(generics.RetrieveAPIView):

@@ -4,6 +4,9 @@ from . import webhook_views
 from . import test_views
 
 urlpatterns = [
+    # Connections list
+    path('', views.ConnectionListView.as_view(), name='connection-list'),
+    
     # Test endpoint
     path('test/', test_views.TestView.as_view(), name='test'),
     
