@@ -31,7 +31,7 @@ const adminNavigation = [
   { name: 'Clientes', href: '/admin/tenants', icon: Users },
   { name: 'Planos', href: '/admin/plans', icon: Package },
   { name: 'Status do Sistema', href: '/admin/system', icon: Activity },
-  { name: 'Evolution API', href: '/admin/evolution', icon: Server },
+  { name: 'Servidor de Instância', href: '/admin/evolution', icon: Server },
 ]
 
 interface LayoutProps {
