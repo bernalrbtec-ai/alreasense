@@ -26,7 +26,7 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 @permission_classes([IsAuthenticated])
 def me(request):
     """Get current user info."""
-    serializer = UserSerializer(request.user)
+    serializer = UserSerializer(request.user, context={'request': request})
     return Response(serializer.data)
 
 
@@ -77,7 +77,7 @@ def update_profile(request):
     try:
         user.save()
         print(f"✅ Profile updated successfully for user: {user.username}")
-        serializer = UserSerializer(user)
+        serializer = UserSerializer(user, context={'request': request})
         return Response(serializer.data)
     except Exception as e:
         print(f"❌ Error updating profile: {str(e)}")
