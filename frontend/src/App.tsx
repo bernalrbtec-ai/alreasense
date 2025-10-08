@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useEffect } from 'react'
-import { api } from './lib/api'
+import { api } from '@/lib/api'
 
 // Pages
 import LoginPage from './pages/LoginPage'
