@@ -11,7 +11,9 @@ interface EvolutionConfig {
   webhook_url: string
   is_active: boolean
   last_check?: string
-  status?: 'online' | 'offline' | 'error'
+  status?: 'active' | 'inactive' | 'error'
+  last_error?: string | null
+  instance_count?: number
 }
 
 export default function EvolutionConfigPage() {
@@ -46,8 +48,10 @@ export default function EvolutionConfigPage() {
         api_key: '584B4A4A-0815-AC86-DC39-C38FC27E8E17',
         webhook_url: `${window.location.origin}/api/webhooks/evolution/`,
         is_active: true,
-        last_check: null,
-        status: 'offline',
+        last_check: undefined,
+        status: 'inactive',
+        last_error: 'Não foi possível carregar configuração',
+        instance_count: 0,
       })
     } finally {
       setIsLoading(false)
@@ -122,33 +126,61 @@ export default function EvolutionConfigPage() {
 
       {/* Status Card */}
       <Card className="p-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
-            <div className={`h-3 w-3 rounded-full ${
-              config.status === 'online' ? 'bg-green-500' : 
-              config.status === 'offline' ? 'bg-gray-400' : 
+            <div className={`h-4 w-4 rounded-full animate-pulse ${
+              config.status === 'active' ? 'bg-green-500' : 
+              config.status === 'inactive' ? 'bg-gray-400' : 
               'bg-red-500'
             }`} />
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                Status: {
-                  config.status === 'online' ? 'Online' : 
-                  config.status === 'offline' ? 'Offline' : 
-                  'Erro'
-                }
+                {config.status === 'active' ? '🟢 Conectado' : 
+                 config.status === 'inactive' ? '⚪ Desconectado' : 
+                 '🔴 Erro de Conexão'}
               </h3>
               {config.last_check && (
                 <p className="text-sm text-gray-500">
-                  Última verificação: {new Date(config.last_check).toLocaleString()}
+                  Verificado em: {new Date(config.last_check).toLocaleString('pt-BR')}
                 </p>
               )}
             </div>
           </div>
-          <Button onClick={handleTest} disabled={isTesting}>
-            <TestTube className={`h-4 w-4 mr-2 ${isTesting ? 'animate-pulse' : ''}`} />
-            {isTesting ? 'Testando...' : 'Testar Conexão'}
+          <Button onClick={handleTest} disabled={isTesting} variant="outline">
+            <TestTube className={`h-4 w-4 mr-2 ${isTesting ? 'animate-spin' : ''}`} />
+            {isTesting ? 'Testando...' : 'Testar Novamente'}
           </Button>
         </div>
+
+        {/* Connection Info */}
+        {config.status === 'active' && config.instance_count !== undefined && (
+          <div className="bg-green-50 border border-green-200 rounded-md p-4">
+            <div className="flex items-center gap-2">
+              <Check className="h-5 w-5 text-green-600" />
+              <p className="text-sm text-green-800 font-medium">
+                Conexão estabelecida com sucesso! 
+                {config.instance_count > 0 && (
+                  <span className="ml-1">
+                    {config.instance_count} instância{config.instance_count !== 1 ? 's' : ''} encontrada{config.instance_count !== 1 ? 's' : ''}.
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Error Info */}
+        {config.status === 'error' && config.last_error && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+            <div className="flex items-start gap-2">
+              <X className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-red-800 font-medium">Falha na conexão</p>
+                <p className="text-sm text-red-700 mt-1">{config.last_error}</p>
+              </div>
+            </div>
+          </div>
+        )}
         
         {testResult && (
           <div className={`mt-4 p-4 rounded-md ${

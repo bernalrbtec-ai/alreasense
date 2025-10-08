@@ -14,17 +14,53 @@ def evolution_config(request):
     """Get or update Evolution API configuration."""
     
     if request.method == 'GET':
-        # Return default configuration (without database dependency)
+        # Get configuration
+        base_url = 'https://evo.rbtec.com.br'
+        api_key = '584B4A4A-0815-AC86-DC39-C38FC27E8E17'
+        
+        # Auto-test connection
+        connection_status = 'inactive'
+        last_error = None
+        instance_count = 0
+        
+        try:
+            headers = {
+                'apikey': api_key,
+                'Content-Type': 'application/json'
+            }
+            
+            test_url = f"{base_url}/instance/fetchInstances"
+            response = requests.get(test_url, headers=headers, timeout=5)
+            
+            if response.status_code == 200:
+                instances = response.json()
+                instance_count = len(instances)
+                connection_status = 'active'
+            else:
+                connection_status = 'error'
+                last_error = f'HTTP {response.status_code}: {response.text[:100]}'
+                
+        except requests.exceptions.Timeout:
+            connection_status = 'error'
+            last_error = 'Timeout na conexão'
+        except requests.exceptions.ConnectionError:
+            connection_status = 'error'
+            last_error = 'Erro de conexão - servidor não alcançável'
+        except Exception as e:
+            connection_status = 'error'
+            last_error = str(e)[:100]
+        
         return Response({
             'id': None,
             'name': 'Default Evolution API',
-            'base_url': 'https://evo.rbtec.com.br',
-            'api_key': '584B4A4A-0815-AC86-DC39-C38FC27E8E17',
+            'base_url': base_url,
+            'api_key': api_key,
             'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
             'is_active': True,
-            'status': 'inactive',
-            'last_check': None,
-            'last_error': None,
+            'status': connection_status,
+            'last_check': timezone.now().isoformat(),
+            'last_error': last_error,
+            'instance_count': instance_count,
             'created_at': None,
             'updated_at': None,
         })
