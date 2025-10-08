@@ -13,7 +13,8 @@ import {
   Users,
   Package,
   Activity,
-  Server
+  Server,
+  Bell
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { Button } from './ui/Button'
@@ -32,6 +33,7 @@ const adminNavigation = [
   { name: 'Planos', href: '/admin/plans', icon: Package },
   { name: 'Status do Sistema', href: '/admin/system', icon: Activity },
   { name: 'Servidor de Instância', href: '/admin/evolution', icon: Server },
+  { name: 'Notificações', href: '/admin/notifications', icon: Bell },
 ]
 
 interface LayoutProps {

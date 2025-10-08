@@ -1,0 +1,301 @@
+from django.db import models
+from django.contrib.auth import get_user_model
+from apps.tenancy.models import Tenant
+import uuid
+
+User = get_user_model()
+
+
+class NotificationTemplate(models.Model):
+    """Template for email and WhatsApp notifications."""
+    
+    TYPE_CHOICES = [
+        ('email', 'Email'),
+        ('whatsapp', 'WhatsApp'),
+    ]
+    
+    CATEGORY_CHOICES = [
+        ('welcome', 'Boas-vindas'),
+        ('plan_change', 'Alteração de Plano'),
+        ('payment_due', 'Vencimento de Pagamento'),
+        ('payment_success', 'Pagamento Confirmado'),
+        ('payment_failed', 'Falha no Pagamento'),
+        ('trial_ending', 'Fim do Período Trial'),
+        ('account_suspended', 'Conta Suspensa'),
+        ('account_reactivated', 'Conta Reativada'),
+        ('password_reset', 'Redefinição de Senha'),
+        ('custom', 'Personalizado'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='notification_templates',
+        null=True,
+        blank=True,
+        help_text="Tenant específico (null = template global)"
+    )
+    name = models.CharField(max_length=100, help_text="Nome identificador do template")
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    category = models.CharField(max_length=50, choices=CATEGORY_CHOICES)
+    
+    # Email fields
+    subject = models.CharField(max_length=200, blank=True, help_text="Assunto do email")
+    
+    # Content (supports both email and WhatsApp)
+    content = models.TextField(
+        help_text="Conteúdo do template. Use {{variavel}} para variáveis dinâmicas"
+    )
+    
+    # HTML content (only for emails)
+    html_content = models.TextField(
+        blank=True,
+        help_text="Conteúdo HTML do email (opcional)"
+    )
+    
+    # Metadata
+    is_active = models.BooleanField(default=True)
+    is_global = models.BooleanField(
+        default=False,
+        help_text="Template global (disponível para todos os tenants)"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_templates'
+    )
+    
+    class Meta:
+        db_table = 'notifications_template'
+        verbose_name = 'Notification Template'
+        verbose_name_plural = 'Notification Templates'
+        ordering = ['-created_at']
+        unique_together = [['tenant', 'name', 'type']]
+    
+    def __str__(self):
+        tenant_name = self.tenant.name if self.tenant else 'Global'
+        return f"{self.name} ({self.get_type_display()}) - {tenant_name}"
+    
+    def render(self, context):
+        """Render template with context variables."""
+        import re
+        content = self.content
+        html_content = self.html_content
+        
+        # Replace {{variable}} with context values
+        for key, value in context.items():
+            pattern = r'\{\{\s*' + key + r'\s*\}\}'
+            content = re.sub(pattern, str(value), content)
+            if html_content:
+                html_content = re.sub(pattern, str(value), html_content)
+        
+        return {
+            'subject': self.subject,
+            'content': content,
+            'html_content': html_content
+        }
+
+
+class WhatsAppInstance(models.Model):
+    """WhatsApp instance configuration for notifications."""
+    
+    STATUS_CHOICES = [
+        ('active', 'Ativa'),
+        ('inactive', 'Inativa'),
+        ('error', 'Erro'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='whatsapp_instances',
+        null=True,
+        blank=True,
+        help_text="Tenant específico (null = instância global)"
+    )
+    
+    name = models.CharField(max_length=100, help_text="Nome identificador da instância")
+    instance_name = models.CharField(
+        max_length=100,
+        help_text="Nome da instância no Evolution API"
+    )
+    
+    # Evolution API config
+    api_url = models.URLField(help_text="URL da Evolution API")
+    api_key = models.CharField(max_length=255, help_text="API Key da Evolution API")
+    
+    # Connection info
+    phone_number = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Número do WhatsApp conectado"
+    )
+    qr_code = models.TextField(
+        blank=True,
+        help_text="QR Code para conexão (se necessário)"
+    )
+    
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='inactive')
+    last_check = models.DateTimeField(null=True, blank=True)
+    last_error = models.TextField(blank=True)
+    
+    # Settings
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Instância padrão para notificações"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_whatsapp_instances'
+    )
+    
+    class Meta:
+        db_table = 'notifications_whatsapp_instance'
+        verbose_name = 'WhatsApp Instance'
+        verbose_name_plural = 'WhatsApp Instances'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        tenant_name = self.tenant.name if self.tenant else 'Global'
+        return f"{self.name} ({self.instance_name}) - {tenant_name}"
+    
+    def check_status(self):
+        """Check instance status via Evolution API."""
+        import requests
+        
+        try:
+            response = requests.get(
+                f"{self.api_url}/instance/connectionState/{self.instance_name}",
+                headers={'apikey': self.api_key},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                state = data.get('state', 'close')
+                
+                if state == 'open':
+                    self.status = 'active'
+                    self.last_error = ''
+                else:
+                    self.status = 'inactive'
+                    self.last_error = f"Connection state: {state}"
+            else:
+                self.status = 'error'
+                self.last_error = f"HTTP {response.status_code}"
+        
+        except Exception as e:
+            self.status = 'error'
+            self.last_error = str(e)
+        
+        from django.utils import timezone
+        self.last_check = timezone.now()
+        self.save()
+
+
+class NotificationLog(models.Model):
+    """Log of sent notifications."""
+    
+    TYPE_CHOICES = [
+        ('email', 'Email'),
+        ('whatsapp', 'WhatsApp'),
+    ]
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('sent', 'Enviado'),
+        ('failed', 'Falhou'),
+        ('delivered', 'Entregue'),
+        ('read', 'Lido'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='notification_logs'
+    )
+    template = models.ForeignKey(
+        NotificationTemplate,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='logs'
+    )
+    whatsapp_instance = models.ForeignKey(
+        WhatsAppInstance,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='logs'
+    )
+    
+    # Recipient
+    recipient = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='received_notifications'
+    )
+    recipient_email = models.EmailField(blank=True)
+    recipient_phone = models.CharField(max_length=20, blank=True)
+    
+    # Notification details
+    type = models.CharField(max_length=20, choices=TYPE_CHOICES)
+    subject = models.CharField(max_length=200, blank=True)
+    content = models.TextField()
+    
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    error_message = models.TextField(blank=True)
+    
+    # External IDs (for tracking)
+    external_id = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="ID externo (Evolution message ID, etc.)"
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    # Metadata
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text="Dados adicionais (context, tracking, etc.)"
+    )
+    
+    class Meta:
+        db_table = 'notifications_log'
+        verbose_name = 'Notification Log'
+        verbose_name_plural = 'Notification Logs'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'status']),
+            models.Index(fields=['recipient', 'created_at']),
+            models.Index(fields=['type', 'status']),
+        ]
+    
+    def __str__(self):
+        return f"{self.get_type_display()} to {self.recipient.email} - {self.get_status_display()}"
+

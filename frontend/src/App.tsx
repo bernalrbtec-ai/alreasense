@@ -15,6 +15,7 @@ import PlansPage from './pages/PlansPage'
 import SystemStatusPage from './pages/SystemStatusPage'
 import EvolutionConfigPage from './pages/EvolutionConfigPage'
 import ProfilePage from './pages/ProfilePage'
+import NotificationsPage from './pages/NotificationsPage'
 
 // Components
 import Layout from './components/Layout'
@@ -72,6 +73,7 @@ function App() {
               <Route path="/admin/plans" element={<PlansPage />} />
               <Route path="/admin/system" element={<SystemStatusPage />} />
               <Route path="/admin/evolution" element={<EvolutionConfigPage />} />
+              <Route path="/admin/notifications" element={<NotificationsPage />} />
             </>
           )}
           

@@ -34,6 +34,7 @@ urlpatterns = [
     path('api/ai/', include('apps.ai.urls')),
     path('api/experiments/', include('apps.experiments.urls')),
     path('api/billing/', include('apps.billing.urls')),
+    path('api/notifications/', include('apps.notifications.urls')),
     path('api/webhooks/', include('apps.billing.webhook_urls')),
     path('api/webhooks/evolution/', include('apps.connections.urls')),
 ]
