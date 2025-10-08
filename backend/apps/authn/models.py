@@ -42,6 +42,14 @@ class User(AbstractUser):
         blank=True,
         help_text="Data de nascimento"
     )
+    notify_email = models.BooleanField(
+        default=True,
+        help_text="Receber notificações por e-mail"
+    )
+    notify_whatsapp = models.BooleanField(
+        default=True,
+        help_text="Receber notificações por WhatsApp"
+    )
     
     class Meta:
         db_table = 'authn_user'

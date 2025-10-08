@@ -68,7 +68,7 @@ def update_profile(request):
     print(f"📝 Request data: {request.data}")
     
     # Update allowed fields
-    allowed_fields = ['first_name', 'last_name', 'email', 'display_name', 'phone', 'birth_date']
+    allowed_fields = ['first_name', 'last_name', 'email', 'display_name', 'phone', 'birth_date', 'notify_email', 'notify_whatsapp']
     for field in allowed_fields:
         if field in request.data:
             print(f"📝 Updating field {field}: {request.data[field]}")

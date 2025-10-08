@@ -13,7 +13,9 @@ import {
   Save, 
   Lock, 
   X,
-  Crown
+  Crown,
+  Bell,
+  MessageSquare
 } from 'lucide-react'
 
 interface ProfileData {
@@ -23,6 +25,8 @@ interface ProfileData {
   last_name: string
   phone: string
   birth_date: string
+  notify_email: boolean
+  notify_whatsapp: boolean
 }
 
 interface PasswordData {
@@ -45,6 +49,8 @@ export default function ProfilePage() {
     last_name: '',
     phone: '',
     birth_date: '',
+    notify_email: true,
+    notify_whatsapp: true,
   })
 
   const [passwordData, setPasswordData] = useState<PasswordData>({
@@ -63,6 +69,8 @@ export default function ProfilePage() {
         last_name: user.last_name || '',
         phone: user.phone || '',
         birth_date: user.birth_date || '',
+        notify_email: user.notify_email ?? true,
+        notify_whatsapp: user.notify_whatsapp ?? true,
       })
     }
   }, [user])
@@ -80,6 +88,8 @@ export default function ProfilePage() {
         email: profileData.email,
         phone: profileData.phone,
         birth_date: profileData.birth_date,
+        notify_email: profileData.notify_email,
+        notify_whatsapp: profileData.notify_whatsapp,
       })
       
       console.log('✅ Profile update response:', response.data)
@@ -141,8 +151,14 @@ export default function ProfilePage() {
   if (!user) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl">
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+      onClick={handleCloseModal}
+    >
+      <div 
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="p-4 border-b border-gray-200">
           <div className="flex items-center justify-between">
@@ -243,7 +259,7 @@ export default function ProfilePage() {
                 />
               </div>
 
-              <div className="md:col-span-2">
+              <div>
                 <Label htmlFor="birth_date">Data de Nascimento</Label>
                 <Input
                   id="birth_date"
@@ -251,6 +267,36 @@ export default function ProfilePage() {
                   value={profileData.birth_date}
                   onChange={(e) => setProfileData({ ...profileData, birth_date: e.target.value })}
                 />
+              </div>
+            </div>
+
+            {/* Notification Settings */}
+            <div className="grid grid-cols-2 gap-3 pt-2">
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="notify_email"
+                  checked={profileData.notify_email}
+                  onChange={(e) => setProfileData({ ...profileData, notify_email: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <Label htmlFor="notify_email" className="!mb-0 flex items-center gap-1">
+                  <Mail className="h-4 w-4 text-gray-500" />
+                  Notificar via Email
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="notify_whatsapp"
+                  checked={profileData.notify_whatsapp}
+                  onChange={(e) => setProfileData({ ...profileData, notify_whatsapp: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <Label htmlFor="notify_whatsapp" className="!mb-0 flex items-center gap-1">
+                  <MessageSquare className="h-4 w-4 text-gray-500" />
+                  Notificar via WhatsApp
+                </Label>
               </div>
             </div>
           </form>

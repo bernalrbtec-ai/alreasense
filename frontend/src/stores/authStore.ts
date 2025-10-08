@@ -11,6 +11,8 @@ interface User {
   display_name?: string
   phone?: string
   birth_date?: string
+  notify_email?: boolean
+  notify_whatsapp?: boolean
   role: 'admin' | 'operator'
   is_superuser?: boolean
   is_staff?: boolean
