@@ -120,6 +120,28 @@ export default function NotificationsPage() {
   }
 
   const handleSaveSMTP = async () => {
+    // Validação dos campos obrigatórios
+    if (!smtpForm.name.trim()) {
+      alert('❌ Nome da configuração é obrigatório')
+      return
+    }
+    if (!smtpForm.host.trim()) {
+      alert('❌ Servidor SMTP é obrigatório')
+      return
+    }
+    if (!smtpForm.username.trim()) {
+      alert('❌ Usuário/Email é obrigatório')
+      return
+    }
+    if (!smtpForm.password.trim()) {
+      alert('❌ Senha é obrigatória')
+      return
+    }
+    if (!smtpForm.from_email.trim()) {
+      alert('❌ Email remetente é obrigatório')
+      return
+    }
+
     setIsSaving(true)
     try {
       await api.post('/notifications/smtp-configs/', smtpForm)
@@ -138,7 +160,20 @@ export default function NotificationsPage() {
       })
       fetchData()
     } catch (error: any) {
-      alert(`❌ Erro ao salvar: ${error.response?.data?.detail || error.message}`)
+      console.error('❌ Erro ao salvar SMTP:', error)
+      if (error.response?.data) {
+        // Mostrar erros específicos do backend
+        const errors = error.response.data
+        let errorMessage = '❌ Erro ao salvar:\n'
+        Object.keys(errors).forEach(field => {
+          if (Array.isArray(errors[field])) {
+            errorMessage += `• ${field}: ${errors[field][0]}\n`
+          }
+        })
+        alert(errorMessage)
+      } else {
+        alert(`❌ Erro ao salvar: ${error.message}`)
+      }
     } finally {
       setIsSaving(false)
     }
@@ -445,77 +480,82 @@ export default function NotificationsPage() {
             </div>
             
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label htmlFor="smtp_name">Nome da Configuração</Label>
-                  <Input
-                    id="smtp_name"
-                    value={smtpForm.name}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, name: e.target.value })}
-                    placeholder="Ex: Gmail Principal"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="smtp_host">Servidor SMTP</Label>
-                  <Input
-                    id="smtp_host"
-                    value={smtpForm.host}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, host: e.target.value })}
-                    placeholder="smtp.gmail.com"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="smtp_port">Porta</Label>
-                  <Input
-                    id="smtp_port"
-                    type="number"
-                    value={smtpForm.port}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, port: parseInt(e.target.value) })}
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="smtp_username">Usuário/Email</Label>
-                  <Input
-                    id="smtp_username"
-                    value={smtpForm.username}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, username: e.target.value })}
-                    placeholder="seu@email.com"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="smtp_password">Senha</Label>
-                  <Input
-                    id="smtp_password"
-                    type="password"
-                    value={smtpForm.password}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, password: e.target.value })}
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="smtp_from_email">Email Remetente</Label>
-                  <Input
-                    id="smtp_from_email"
-                    type="email"
-                    value={smtpForm.from_email}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, from_email: e.target.value })}
-                    placeholder="noreply@alreasense.com"
-                  />
-                </div>
-                
-                <div>
-                  <Label htmlFor="smtp_from_name">Nome Remetente</Label>
-                  <Input
-                    id="smtp_from_name"
-                    value={smtpForm.from_name}
-                    onChange={(e) => setSMTPForm({ ...smtpForm, from_name: e.target.value })}
-                    placeholder="Alrea Sense"
-                  />
-                </div>
+                       <div className="grid grid-cols-2 gap-4">
+                         <div className="col-span-2">
+                           <Label htmlFor="smtp_name">Nome da Configuração *</Label>
+                           <Input
+                             id="smtp_name"
+                             value={smtpForm.name}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, name: e.target.value })}
+                             placeholder="Ex: Gmail Principal"
+                             required
+                           />
+                         </div>
+                         
+                         <div>
+                           <Label htmlFor="smtp_host">Servidor SMTP *</Label>
+                           <Input
+                             id="smtp_host"
+                             value={smtpForm.host}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, host: e.target.value })}
+                             placeholder="smtp.gmail.com"
+                             required
+                           />
+                         </div>
+                         
+                         <div>
+                           <Label htmlFor="smtp_port">Porta</Label>
+                           <Input
+                             id="smtp_port"
+                             type="number"
+                             value={smtpForm.port}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, port: parseInt(e.target.value) })}
+                           />
+                         </div>
+                         
+                         <div>
+                           <Label htmlFor="smtp_username">Usuário/Email *</Label>
+                           <Input
+                             id="smtp_username"
+                             value={smtpForm.username}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, username: e.target.value })}
+                             placeholder="seu@email.com"
+                             required
+                           />
+                         </div>
+                         
+                         <div>
+                           <Label htmlFor="smtp_password">Senha *</Label>
+                           <Input
+                             id="smtp_password"
+                             type="password"
+                             value={smtpForm.password}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, password: e.target.value })}
+                             required
+                           />
+                         </div>
+                         
+                         <div>
+                           <Label htmlFor="smtp_from_email">Email Remetente *</Label>
+                           <Input
+                             id="smtp_from_email"
+                             type="email"
+                             value={smtpForm.from_email}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, from_email: e.target.value })}
+                             placeholder="noreply@alreasense.com"
+                             required
+                           />
+                         </div>
+                         
+                         <div>
+                           <Label htmlFor="smtp_from_name">Nome Remetente</Label>
+                           <Input
+                             id="smtp_from_name"
+                             value={smtpForm.from_name}
+                             onChange={(e) => setSMTPForm({ ...smtpForm, from_name: e.target.value })}
+                             placeholder="Alrea Sense"
+                           />
+                         </div>
                 
                 <div className="col-span-2 flex gap-4">
                   <label className="flex items-center gap-2">
