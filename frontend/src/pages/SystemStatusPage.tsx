@@ -59,11 +59,18 @@ export default function SystemStatusPage() {
   const fetchStatus = async () => {
     try {
       setIsLoading(true)
-      const response = await api.get('/health/')
+      const response = await api.get('/api/health/')
       setStatus(response.data)
       setLastUpdate(new Date())
     } catch (error) {
       console.error('Error fetching system status:', error)
+      // Set default error status
+      setStatus({
+        status: 'error',
+        database: { status: 'unhealthy' },
+        redis: { status: 'unhealthy' },
+        celery: { status: 'unhealthy' },
+      })
     } finally {
       setIsLoading(false)
     }

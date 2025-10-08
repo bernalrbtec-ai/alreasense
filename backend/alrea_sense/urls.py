@@ -6,17 +6,27 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from apps.common.health import get_system_health
 
+@csrf_exempt
+@require_http_methods(["GET"])
 def health_check(request):
     """Comprehensive health check endpoint."""
     health_data = get_system_health()
     status_code = 200 if health_data['status'] in ['healthy', 'degraded'] else 503
-    return JsonResponse(health_data, status=status_code)
+    
+    response = JsonResponse(health_data, status=status_code)
+    # Add CORS headers explicitly
+    response['Access-Control-Allow-Origin'] = '*'
+    response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+    return response
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('health/', health_check, name='health'),
+    path('api/health/', health_check, name='health'),
     path('api/auth/', include('apps.authn.urls')),
     path('api/tenants/', include('apps.tenancy.urls')),
     path('api/messages/', include('apps.chat_messages.urls')),
