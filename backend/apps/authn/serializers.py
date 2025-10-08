@@ -7,6 +7,34 @@ from apps.tenancy.serializers import TenantSerializer
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Custom JWT serializer with tenant and role info."""
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Use email field instead of username
+        self.fields['email'] = serializers.EmailField()
+        self.fields['password'] = serializers.CharField()
+        # Remove username field
+        if 'username' in self.fields:
+            del self.fields['username']
+    
+    def validate(self, attrs):
+        # Use email instead of username for authentication
+        email = attrs.get('email')
+        password = attrs.get('password')
+        
+        if email and password:
+            # Try to authenticate with email
+            try:
+                user = User.objects.get(email=email)
+                if user.check_password(password):
+                    attrs['user'] = user
+                    return attrs
+                else:
+                    raise serializers.ValidationError('Credenciais inválidas')
+            except User.DoesNotExist:
+                raise serializers.ValidationError('Usuário não encontrado')
+        else:
+            raise serializers.ValidationError('Email e senha são obrigatórios')
+    
     @classmethod
     def get_token(cls, user):
         token = super().get_token(user)
@@ -16,6 +44,7 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
         token['tenant_name'] = user.tenant.name
         token['role'] = user.role
         token['username'] = user.username
+        token['email'] = user.email
         
         return token
 
@@ -65,6 +94,11 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
             raise serializers.ValidationError("Passwords don't match")
+        
+        # Set username to email if not provided
+        if not attrs.get('username'):
+            attrs['username'] = attrs['email']
+        
         return attrs
     
     def create(self, validated_data):
@@ -73,6 +107,10 @@ class UserCreateSerializer(serializers.ModelSerializer):
         
         # Get tenant from context
         tenant = self.context['request'].user.tenant
+        
+        # Ensure username is set to email
+        if not validated_data.get('username'):
+            validated_data['username'] = validated_data['email']
         
         user = User.objects.create(
             tenant=tenant,

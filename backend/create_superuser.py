@@ -45,14 +45,14 @@ def create_superuser():
         print(f"Using existing tenant: {tenant.name}")
     
     # Create superuser if it doesn't exist
-    if not User.objects.filter(username='admin').exists():
+    if not User.objects.filter(email='admin@alreasense.com').exists():
         user = User.objects.create_superuser(
-            username='admin',
+            username='admin@alreasense.com',  # Use email as username
             email='admin@alreasense.com',
             password='admin123',
             tenant=tenant
         )
-        print(f"Created superuser: {user.username}")
+        print(f"Created superuser: {user.email}")
     else:
         print("Superuser already exists")
 

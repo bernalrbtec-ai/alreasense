@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 
 export default function LoginPage() {
-  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const { login, isLoading } = useAuthStore()
@@ -15,7 +15,7 @@ export default function LoginPage() {
     setError('')
 
     try {
-      await login(username, password)
+      await login(email, password)
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Erro ao fazer login')
     }
@@ -47,17 +47,17 @@ export default function LoginPage() {
               )}
 
               <div>
-                <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                  Usuário
+                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                  Email
                 </label>
                 <input
-                  id="username"
-                  type="text"
+                  id="email"
+                  type="email"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Digite seu usuário"
+                  placeholder="Digite seu email"
                 />
               </div>
 

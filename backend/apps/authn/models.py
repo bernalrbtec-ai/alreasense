@@ -11,6 +11,10 @@ class User(AbstractUser):
         ('operator', 'Operator'),
     ]
     
+    # Use email as username
+    USERNAME_FIELD = 'email'
+    REQUIRED_FIELDS = ['username']
+    
     tenant = models.ForeignKey(
         Tenant, 
         on_delete=models.CASCADE, 
