@@ -56,6 +56,7 @@ export default function NotificationsPage() {
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [showInstanceModal, setShowInstanceModal] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [editingSMTP, setEditingSMTP] = useState<SMTPConfig | null>(null)
   
   // Notificações toast
   const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({
@@ -164,14 +165,22 @@ export default function NotificationsPage() {
 
     setIsSaving(true)
     try {
-      const response = await api.post('/notifications/smtp-configs/', smtpForm)
-      console.log('✅ SMTP config criado:', response.data)
-      
-      // Mostrar toast de sucesso
-      showToast('✅ Servidor SMTP cadastrado com sucesso!', 'success')
+      let response
+      if (editingSMTP) {
+        // Editando servidor existente
+        response = await api.patch(`/notifications/smtp-configs/${editingSMTP.id}/`, smtpForm)
+        console.log('✅ SMTP config atualizado:', response.data)
+        showToast('✅ Servidor SMTP atualizado com sucesso!', 'success')
+      } else {
+        // Criando novo servidor
+        response = await api.post('/notifications/smtp-configs/', smtpForm)
+        console.log('✅ SMTP config criado:', response.data)
+        showToast('✅ Servidor SMTP cadastrado com sucesso!', 'success')
+      }
       
       // Fechar modal e limpar formulário
       setShowSMTPModal(false)
+      setEditingSMTP(null)
       setSMTPForm({
         name: '',
         host: '',
@@ -185,27 +194,7 @@ export default function NotificationsPage() {
       })
       
       // Atualizar lista de configurações SMTP
-      console.log('🔄 Atualizando lista SMTP após salvar...')
-      
-      // Forçar busca específica de SMTP configs
-      try {
-        const smtpResponse = await api.get('/notifications/smtp-configs/')
-        console.log('📧 SMTP response após salvar:', smtpResponse.data)
-        const smtpData = Array.isArray(smtpResponse.data) ? smtpResponse.data : smtpResponse.data?.results || []
-        console.log('📧 SMTP data após salvar:', smtpData)
-        
-        // Forçar atualização do estado
-        setSmtpConfigs([...smtpData])
-        console.log('✅ SMTP configs atualizados no estado com spread operator')
-        
-        // Aguardar um pouco e verificar se o estado foi atualizado
-        setTimeout(() => {
-          console.log('🔍 Verificando estado após timeout:', smtpConfigs)
-        }, 100)
-        
-      } catch (error) {
-        console.error('❌ Erro ao buscar SMTP configs:', error)
-      }
+      await fetchData()
       
     } catch (error: any) {
       console.error('❌ Erro ao salvar SMTP:', error)
@@ -235,6 +224,39 @@ export default function NotificationsPage() {
       console.error('Error checking status:', error)
     }
   }
+
+  // Função para excluir servidor SMTP
+  const handleDeleteSMTP = async (smtpId: string) => {
+    if (!confirm('Tem certeza que deseja excluir este servidor SMTP?')) {
+      return
+    }
+
+    try {
+      await api.delete(`/notifications/smtp-configs/${smtpId}/`)
+      showToast('✅ Servidor SMTP excluído com sucesso!', 'success')
+      fetchData()
+    } catch (error: any) {
+      showToast(`❌ Erro ao excluir servidor: ${error.response?.data?.detail || error.message}`, 'error')
+    }
+  }
+
+  // Função para editar servidor SMTP
+  const handleEditSMTP = (smtp: SMTPConfig) => {
+    setSMTPForm({
+      name: smtp.name,
+      host: smtp.host,
+      port: smtp.port,
+      username: smtp.username,
+      password: '', // Não preencher senha por segurança
+      use_tls: smtp.use_tls,
+      use_ssl: smtp.use_ssl,
+      from_email: smtp.from_email,
+      from_name: smtp.from_name,
+    })
+    setEditingSMTP(smtp)
+    setShowSMTPModal(true)
+  }
+
 
   if (isLoading) {
     return (
@@ -483,8 +505,20 @@ export default function NotificationsPage() {
                   <Send className="h-4 w-4 mr-2" />
                   Testar Email
                 </Button>
-                <Button variant="ghost" size="sm">
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => handleEditSMTP(smtp)}
+                >
                   <Edit className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => handleDeleteSMTP(smtp.id)}
+                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </div>
             </Card>
@@ -518,15 +552,20 @@ export default function NotificationsPage() {
       {showSMTPModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-semibold text-gray-900">Novo Servidor SMTP</h3>
-              <button
-                onClick={() => setShowSMTPModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <XIcon className="h-5 w-5" />
-              </button>
-            </div>
+                   <div className="flex items-center justify-between mb-4">
+                     <h3 className="text-lg font-semibold text-gray-900">
+                       {editingSMTP ? 'Editar Servidor SMTP' : 'Novo Servidor SMTP'}
+                     </h3>
+                     <button
+                       onClick={() => {
+                         setShowSMTPModal(false)
+                         setEditingSMTP(null)
+                       }}
+                       className="text-gray-400 hover:text-gray-600"
+                     >
+                       <XIcon className="h-5 w-5" />
+                     </button>
+                   </div>
             
             <div className="space-y-4">
                        <div className="grid grid-cols-2 gap-4">
@@ -640,19 +679,19 @@ export default function NotificationsPage() {
                   >
                     Cancelar
                   </Button>
-                  <Button
-                    onClick={handleSaveSMTP}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <LoadingSpinner size="sm" className="mr-2" />
-                        Salvando...
-                      </>
-                    ) : (
-                      'Salvar Configuração'
-                    )}
-                  </Button>
+                         <Button
+                           onClick={handleSaveSMTP}
+                           disabled={isSaving}
+                         >
+                           {isSaving ? (
+                             <>
+                               <LoadingSpinner size="sm" className="mr-2" />
+                               {editingSMTP ? 'Atualizando...' : 'Salvando...'}
+                             </>
+                           ) : (
+                             editingSMTP ? 'Atualizar Configuração' : 'Salvar Configuração'
+                           )}
+                         </Button>
                 </div>
               </div>
             </div>
