@@ -40,10 +40,12 @@ export default function PlansPage() {
   const fetchPlans = async () => {
     try {
       setIsLoading(true)
+      console.log('🔍 Fetching plans from /billing/plans/')
       const response = await api.get('/billing/plans/')
-      setPlans(response.data)
+      console.log('✅ Plans response:', response.data)
+      setPlans(response.data.results || response.data)
     } catch (error) {
-      console.error('Error fetching plans:', error)
+      console.error('❌ Error fetching plans:', error)
       setPlans([])
     } finally {
       setIsLoading(false)

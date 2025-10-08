@@ -27,6 +27,21 @@ class User(AbstractUser):
         blank=True,
         help_text="Avatar do usuário"
     )
+    display_name = models.CharField(
+        max_length=100, 
+        blank=True,
+        help_text="Nome de exibição"
+    )
+    phone = models.CharField(
+        max_length=20, 
+        blank=True,
+        help_text="Telefone do usuário"
+    )
+    birth_date = models.DateField(
+        null=True, 
+        blank=True,
+        help_text="Data de nascimento"
+    )
     
     class Meta:
         db_table = 'authn_user'

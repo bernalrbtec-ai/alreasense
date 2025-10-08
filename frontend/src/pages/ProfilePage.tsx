@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Save, User, Mail, Lock, Camera } from 'lucide-react'
+import { Save, User, Mail, Lock, Camera, Edit, Phone, Calendar } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -11,6 +11,9 @@ interface ProfileData {
   email: string
   first_name: string
   last_name: string
+  display_name: string
+  phone: string
+  birth_date: string
   avatar?: string
 }
 
@@ -29,6 +32,9 @@ export default function ProfilePage() {
     email: '',
     first_name: '',
     last_name: '',
+    display_name: '',
+    phone: '',
+    birth_date: '',
     avatar: '',
   })
   const [passwordData, setPasswordData] = useState<PasswordData>({
@@ -37,6 +43,7 @@ export default function ProfilePage() {
     confirm_password: '',
   })
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false)
 
   useEffect(() => {
     if (user) {
@@ -45,6 +52,9 @@ export default function ProfilePage() {
         email: user.email || '',
         first_name: user.first_name || '',
         last_name: user.last_name || '',
+        display_name: user.display_name || '',
+        phone: user.phone || '',
+        birth_date: user.birth_date || '',
         avatar: user.avatar || '',
       })
     }
@@ -60,12 +70,16 @@ export default function ProfilePage() {
         first_name: profileData.first_name,
         last_name: profileData.last_name,
         email: profileData.email,
+        display_name: profileData.display_name,
+        phone: profileData.phone,
+        birth_date: profileData.birth_date,
       })
 
       // Update user in store
       setUser(response.data)
 
       setMessage({ type: 'success', text: 'Perfil atualizado com sucesso!' })
+      handleCloseEditModal()
     } catch (error: any) {
       console.error('Error updating profile:', error)
       setMessage({ 
@@ -154,6 +168,14 @@ export default function ProfilePage() {
     }
   }
 
+  const handleOpenEditModal = () => {
+    setIsEditModalOpen(true)
+  }
+
+  const handleCloseEditModal = () => {
+    setIsEditModalOpen(false)
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -213,74 +235,76 @@ export default function ProfilePage() {
               />
             </label>
           </div>
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">
-              {profileData.first_name} {profileData.last_name}
-            </h2>
-            <p className="text-sm text-gray-500">{profileData.email}</p>
-            {user?.is_superuser && (
-              <span className="inline-flex items-center mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                Super Administrador
-              </span>
-            )}
+          <div className="flex-1">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {profileData.display_name || `${profileData.first_name} ${profileData.last_name}`}
+                </h2>
+                <p className="text-sm text-gray-500">{profileData.email}</p>
+                {user?.is_superuser && (
+                  <span className="inline-flex items-center mt-2 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                    Super Administrador
+                  </span>
+                )}
+              </div>
+              <Button onClick={handleOpenEditModal} variant="outline">
+                <Edit className="h-4 w-4 mr-2" />
+                Editar Perfil
+              </Button>
+            </div>
           </div>
         </div>
 
-        <form onSubmit={handleProfileSubmit} className="space-y-4">
+        {/* Profile information display */}
+        <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700">
                 <User className="h-4 w-4 inline mr-1" />
                 Nome
               </label>
-              <input
-                type="text"
-                id="first_name"
-                value={profileData.first_name}
-                onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="Seu nome"
-              />
+              <p className="mt-1 text-sm text-gray-900">{profileData.first_name}</p>
             </div>
-
             <div>
-              <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
+              <label className="block text-sm font-medium text-gray-700">
                 <User className="h-4 w-4 inline mr-1" />
                 Sobrenome
               </label>
-              <input
-                type="text"
-                id="last_name"
-                value={profileData.last_name}
-                onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
-                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                placeholder="Seu sobrenome"
-              />
+              <p className="mt-1 text-sm text-gray-900">{profileData.last_name}</p>
             </div>
           </div>
-
+          
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+            <label className="block text-sm font-medium text-gray-700">
               <Mail className="h-4 w-4 inline mr-1" />
               Email
             </label>
-            <input
-              type="email"
-              id="email"
-              value={profileData.email}
-              onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              placeholder="seu@email.com"
-            />
+            <p className="mt-1 text-sm text-gray-900">{profileData.email}</p>
           </div>
-
-          <div className="flex justify-end">
-            <Button type="submit" disabled={isSaving}>
-              <Save className={`h-4 w-4 mr-2 ${isSaving ? 'animate-pulse' : ''}`} />
-              {isSaving ? 'Salvando...' : 'Salvar Alterações'}
-            </Button>
-          </div>
-        </form>
+          
+          {profileData.phone && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                <Phone className="h-4 w-4 inline mr-1" />
+                Telefone
+              </label>
+              <p className="mt-1 text-sm text-gray-900">{profileData.phone}</p>
+            </div>
+          )}
+          
+          {profileData.birth_date && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                <Calendar className="h-4 w-4 inline mr-1" />
+                Data de Nascimento
+              </label>
+              <p className="mt-1 text-sm text-gray-900">
+                {new Date(profileData.birth_date).toLocaleDateString('pt-BR')}
+              </p>
+            </div>
+          )}
+        </div>
       </Card>
 
       {/* Change Password */}
@@ -380,6 +404,131 @@ export default function ProfilePage() {
           </div>
         </div>
       </Card>
+
+      {/* Edit Profile Modal */}
+      {isEditModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseEditModal} />
+            
+            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+              <form onSubmit={handleProfileSubmit}>
+                <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                  <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                    Editar Perfil
+                  </h3>
+                  
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">
+                          <User className="h-4 w-4 inline mr-1" />
+                          Nome
+                        </label>
+                        <input
+                          type="text"
+                          id="first_name"
+                          required
+                          value={profileData.first_name}
+                          onChange={(e) => setProfileData({ ...profileData, first_name: e.target.value })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          placeholder="Seu nome"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="last_name" className="block text-sm font-medium text-gray-700">
+                          <User className="h-4 w-4 inline mr-1" />
+                          Sobrenome
+                        </label>
+                        <input
+                          type="text"
+                          id="last_name"
+                          required
+                          value={profileData.last_name}
+                          onChange={(e) => setProfileData({ ...profileData, last_name: e.target.value })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          placeholder="Seu sobrenome"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="display_name" className="block text-sm font-medium text-gray-700">
+                        <User className="h-4 w-4 inline mr-1" />
+                        Nome de Exibição
+                      </label>
+                      <input
+                        type="text"
+                        id="display_name"
+                        value={profileData.display_name}
+                        onChange={(e) => setProfileData({ ...profileData, display_name: e.target.value })}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="Como você quer ser chamado"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="email" className="block text-sm font-medium text-gray-700">
+                        <Mail className="h-4 w-4 inline mr-1" />
+                        Email
+                      </label>
+                      <input
+                        type="email"
+                        id="email"
+                        required
+                        value={profileData.email}
+                        onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="seu@email.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="phone" className="block text-sm font-medium text-gray-700">
+                        <Phone className="h-4 w-4 inline mr-1" />
+                        Telefone
+                      </label>
+                      <input
+                        type="tel"
+                        id="phone"
+                        value={profileData.phone}
+                        onChange={(e) => setProfileData({ ...profileData, phone: e.target.value })}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="(11) 99999-9999"
+                      />
+                    </div>
+
+                    <div>
+                      <label htmlFor="birth_date" className="block text-sm font-medium text-gray-700">
+                        <Calendar className="h-4 w-4 inline mr-1" />
+                        Data de Nascimento
+                      </label>
+                      <input
+                        type="date"
+                        id="birth_date"
+                        value={profileData.birth_date}
+                        onChange={(e) => setProfileData({ ...profileData, birth_date: e.target.value })}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                  <Button type="submit" disabled={isSaving}>
+                    <Save className={`h-4 w-4 mr-2 ${isSaving ? 'animate-pulse' : ''}`} />
+                    {isSaving ? 'Salvando...' : 'Salvar Alterações'}
+                  </Button>
+                  <Button type="button" variant="outline" onClick={handleCloseEditModal}>
+                    Cancelar
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

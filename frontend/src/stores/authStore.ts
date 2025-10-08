@@ -8,6 +8,9 @@ interface User {
   email: string
   first_name: string
   last_name: string
+  display_name?: string
+  phone?: string
+  birth_date?: string
   role: 'admin' | 'operator'
   is_superuser?: boolean
   is_staff?: boolean

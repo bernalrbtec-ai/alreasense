@@ -1107,7 +1107,7 @@ GET /api/v1/campaigns/{id}/contacts/
   Response: PaginatedResponse<CampaignContact[]>
 ```
 
-#### 2. **Mensagens**
+#### 2. **Mensagens (até 5 por campanha)**
 
 ```yaml
 GET /api/v1/campaigns/{campaign_id}/messages/
@@ -1115,7 +1115,7 @@ GET /api/v1/campaigns/{campaign_id}/messages/
   Response: CampaignMessage[]
 
 POST /api/v1/campaigns/{campaign_id}/messages/
-  Descrição: Adiciona mensagem à campanha
+  Descrição: Adiciona mensagem à campanha manualmente
   Body:
     {
       "message_text": "string",
@@ -1123,27 +1123,112 @@ POST /api/v1/campaigns/{campaign_id}/messages/
     }
   Response: 201 Created (CampaignMessage)
 
-PATCH /api/v1/campaigns/{campaign_id}/messages/{id}/
-  Descrição: Atualiza mensagem
-  Response: 200 OK (CampaignMessage)
-
-DELETE /api/v1/campaigns/{campaign_id}/messages/{id}/
-  Descrição: Remove mensagem
-  Response: 204 No Content
-
-POST /api/v1/campaigns/{campaign_id}/messages/{id}/preview/
-  Descrição: Preview da mensagem renderizada
+POST /api/v1/campaigns/{campaign_id}/messages/generate_variations/
+  Descrição: Gera variações de mensagem via IA (N8N)
   Body:
     {
-      "contact_id": "uuid",  // opcional, usa sample se não informado
-      "datetime": "2025-10-08T14:30:00Z"  // opcional
+      "original_message": "Olá {{nome}}! Vi que {{quem_indicou}}..."
     }
   Response:
     {
-      "original": "{{saudacao}}, {{nome}}!",
-      "rendered": "Boa tarde, João Silva!",
-      "variables_used": ["saudacao", "nome"]
+      "original": "Olá {{nome}}!...",
+      "variations": [
+        "{{saudacao}}, {{nome}}! Como vai?...",
+        "Oi {{nome}}! Espero que esteja bem...",
+        "Olá! Tudo certo, {{nome}}?...",
+        "E aí, {{nome}}! Tudo tranquilo?..."
+      ],
+      "generated_count": 4
     }
+  Nota: Variações NÃO são salvas ainda, retornam para aprovação
+
+POST /api/v1/campaigns/{campaign_id}/messages/save_messages/
+  Descrição: Salva mensagens aprovadas pelo usuário
+  Body:
+    {
+      "messages": [
+        {
+          "text": "Mensagem 1",
+          "order": 1,
+          "generated_by_ai": false
+        },
+        {
+          "text": "Mensagem 2",
+          "order": 2,
+          "generated_by_ai": true
+        }
+      ]
+    }
+  Response: 201 Created (CampaignMessage[])
+
+GET /api/v1/campaigns/{campaign_id}/messages/{id}/preview/
+  Descrição: Preview com 3 contatos reais da campanha
+  Query Params:
+    - datetime: opcional (default: NOW)
+  Response:
+    {
+      "original_message": "{{saudacao}}, {{nome}}!",
+      "previews": [
+        {
+          "contact_name": "João Silva",
+          "contact_phone": "+5511999999999",
+          "rendered_message": "Bom dia, João Silva!"
+        },
+        {
+          "contact_name": "Maria Santos",
+          "rendered_message": "Bom dia, Maria Santos!"
+        },
+        {
+          "contact_name": "Pedro Costa",
+          "rendered_message": "Bom dia, Pedro Costa!"
+        }
+      ]
+    }
+
+GET /api/v1/campaigns/{id}/message_performance/
+  Descrição: Análise de performance das mensagens (após campanha rodar)
+  Response:
+    {
+      "performance": [
+        {
+          "rank": 1,
+          "emoji": "🥇",
+          "order": 3,
+          "message_preview": "Oi {{nome}}! Espero que...",
+          "times_sent": 100,
+          "response_count": 42,
+          "response_rate": 42.0,
+          "generated_by_ai": true
+        }
+      ],
+      "best_message": { ... },
+      "recommendation": "A Mensagem 3 teve excelente performance (42% de resposta)..."
+    }
+
+GET /api/v1/campaigns/suggested_messages/
+  Descrição: Mensagens de campanhas anteriores com boa performance
+  Response:
+    {
+      "suggestions": [
+        {
+          "id": "uuid",
+          "campaign_name": "Black Friday 2024",
+          "message_text": "Olá {{nome}}!...",
+          "times_sent": 250,
+          "response_rate": 38.5,
+          "response_count": 96
+        }
+      ]
+    }
+
+PATCH /api/v1/campaigns/{campaign_id}/messages/{id}/
+  Descrição: Atualiza mensagem (apenas se campanha=draft)
+  Body: Partial<CampaignMessage>
+  Response: 200 OK (CampaignMessage)
+
+DELETE /api/v1/campaigns/{campaign_id}/messages/{id}/
+  Descrição: Remove mensagem (apenas se campanha=draft)
+  Response: 204 No Content
 ```
 
 #### 3. **Instâncias**

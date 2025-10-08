@@ -65,7 +65,7 @@ def update_profile(request):
     user = request.user
     
     # Update allowed fields
-    allowed_fields = ['first_name', 'last_name', 'email']
+    allowed_fields = ['first_name', 'last_name', 'email', 'display_name', 'phone', 'birth_date']
     for field in allowed_fields:
         if field in request.data:
             setattr(user, field, request.data[field])

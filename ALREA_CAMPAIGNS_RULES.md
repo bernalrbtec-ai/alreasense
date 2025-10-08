@@ -1180,6 +1180,1520 @@ Holiday.objects.bulk_create([
 
 ---
 
+## 🤖 SISTEMA DE MENSAGENS E ROTAÇÃO
+
+### Modelo de Mensagens
+
+```python
+class CampaignMessage(models.Model):
+    """
+    Mensagens da campanha (até 5 por campanha)
+    
+    Sistema permite:
+    - Cadastro manual
+    - Geração automática via IA (N8N)
+    - Rotação automática entre mensagens
+    """
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4)
+    campaign = models.ForeignKey(
+        Campaign,
+        on_delete=models.CASCADE,
+        related_name='messages'
+    )
+    
+    message_text = models.TextField(
+        help_text="Mensagem com variáveis: {{nome}}, {{saudacao}}, {{quem_indicou}}"
+    )
+    
+    order = models.PositiveIntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+        help_text="Ordem da mensagem (1-5)"
+    )
+    
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Se False, não será enviada"
+    )
+    
+    # Tracking de uso
+    times_sent = models.IntegerField(
+        default=0,
+        help_text="Quantas vezes esta mensagem foi enviada"
+    )
+    
+    # ⭐ Geração por IA
+    generated_by_ai = models.BooleanField(
+        default=False,
+        help_text="Se foi gerada por IA"
+    )
+    approved_by_user = models.BooleanField(
+        default=True,
+        help_text="Se usuário aprovou (mensagens manuais = True por padrão)"
+    )
+    ai_generation_prompt = models.TextField(
+        blank=True,
+        help_text="Prompt usado para gerar esta mensagem"
+    )
+    
+    # Métricas (para análise de performance)
+    response_count = models.IntegerField(
+        default=0,
+        help_text="Quantas respostas esta mensagem gerou"
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'campaigns_message'
+        ordering = ['campaign', 'order']
+        
+        constraints = [
+            models.UniqueConstraint(
+                fields=['campaign', 'order'],
+                name='unique_message_order_per_campaign'
+            )
+        ]
+    
+    @property
+    def response_rate(self):
+        """Taxa de resposta desta mensagem específica"""
+        if self.times_sent == 0:
+            return 0
+        return round((self.response_count / self.times_sent) * 100, 1)
+```
+
+### Rotação de Mensagens (Round-Robin)
+
+```python
+# campaigns/services.py
+
+class MessageRotationService:
+    """
+    Serviço para rotação inteligente de mensagens
+    
+    Objetivo: Evitar bloqueios do WhatsApp enviando mensagens variadas
+    """
+    
+    def select_next_message(self, campaign):
+        """
+        Seleciona próxima mensagem usando round-robin
+        
+        Algoritmo:
+        1. Busca mensagens ativas
+        2. Ordena por 'times_sent' (menos enviada primeiro)
+        3. Retorna a menos enviada
+        4. Em caso de empate, usa 'order'
+        """
+        messages = campaign.messages.filter(
+            is_active=True,
+            approved_by_user=True  # ⭐ Só envia se aprovada
+        ).order_by('times_sent', 'order')
+        
+        if not messages.exists():
+            raise ValidationError("Campanha não tem mensagens aprovadas")
+        
+        # Retorna a menos enviada
+        next_message = messages.first()
+        
+        logger.debug(
+            f"Mensagem {next_message.order} selecionada "
+            f"(enviada {next_message.times_sent}x)",
+            extra={'campaign_id': str(campaign.id)}
+        )
+        
+        return next_message
+    
+    def get_rotation_stats(self, campaign):
+        """
+        Estatísticas de rotação
+        
+        Útil para debug e dashboard
+        """
+        messages = campaign.messages.filter(is_active=True)
+        
+        return {
+            'total_messages': messages.count(),
+            'distribution': [
+                {
+                    'order': msg.order,
+                    'times_sent': msg.times_sent,
+                    'response_rate': msg.response_rate,
+                    'text_preview': msg.message_text[:50] + '...'
+                }
+                for msg in messages.order_by('order')
+            ]
+        }
+```
+
+### Integração com IA (N8N)
+
+```python
+# campaigns/services.py
+
+class AIMessageGeneratorService:
+    """
+    Serviço para gerar variações de mensagens via IA
+    
+    Integração com N8N Webhook
+    """
+    
+    def generate_message_variations(self, original_message, tenant, count=4):
+        """
+        Gera variações de uma mensagem original
+        
+        Args:
+            original_message: Mensagem base fornecida pelo usuário
+            tenant: Tenant para billing/limits
+            count: Quantidade de variações (padrão: 4)
+        
+        Returns:
+            list[str]: Lista de mensagens geradas
+        """
+        import httpx
+        
+        # Construir prompt
+        prompt = self._build_prompt(original_message)
+        
+        # Chamar N8N webhook
+        n8n_url = settings.N8N_AI_WEBHOOK_URL
+        
+        try:
+            response = httpx.post(
+                n8n_url,
+                json={
+                    'prompt': prompt,
+                    'original_message': original_message,
+                    'variations_count': count,
+                    'tenant_id': str(tenant.id),
+                    'preserve_variables': True,  # Manter {{nome}}, {{saudacao}}
+                },
+                timeout=30.0
+            )
+            
+            response.raise_for_status()
+            data = response.json()
+            
+            # N8N retorna: { "variations": ["msg1", "msg2", ...] }
+            variations = data.get('variations', [])
+            
+            logger.info(
+                f"IA gerou {len(variations)} variações",
+                extra={'tenant_id': str(tenant.id)}
+            )
+            
+            return variations
+            
+        except Exception as e:
+            logger.exception(f"Erro ao gerar mensagens: {str(e)}")
+            raise ValidationError(
+                "Erro ao gerar mensagens com IA. Tente novamente."
+            )
+    
+    def _build_prompt(self, original_message):
+        """
+        Constrói prompt otimizado para gerar variações
+        """
+        return f"""
+        Você é um especialista em copywriting para WhatsApp.
+        
+        Mensagem original:
+        {original_message}
+        
+        Tarefa: Crie 4 variações desta mensagem mantendo:
+        1. O mesmo objetivo e tom
+        2. As mesmas variáveis ({{nome}}, {{saudacao}}, {{quem_indicou}})
+        3. Tamanho similar (±20%)
+        
+        Importante:
+        - Varie a estrutura, ordem das frases, palavras
+        - Mantenha naturalidade e cordialidade
+        - Evite repetir palavras-chave da original
+        - Não use emojis em excesso
+        
+        Retorne APENAS as 4 mensagens, separadas por "---"
+        """
+```
+
+### Fluxo Completo de Criação (Frontend)
+
+```typescript
+// PASSO 1: Usuário escreve primeira mensagem
+
+const [step, setStep] = useState<'write' | 'ai_offer' | 'ai_generating' | 'ai_review'>('write');
+const [message1, setMessage1] = useState('');
+const [aiVariations, setAiVariations] = useState<string[]>([]);
+
+// Usuário termina de escrever
+<MessageEditor
+  value={message1}
+  onChange={setMessage1}
+  onDone={() => setStep('ai_offer')}
+/>
+
+// PASSO 2: Oferecer geração IA
+{step === 'ai_offer' && (
+  <AIOfferDialog
+    onGenerateWithAI={handleGenerateAI}
+    onManual={handleManualCreation}
+  />
+)}
+
+// Interface:
+┌─────────────────────────────────────────┐
+│ 💡 Geração Inteligente de Mensagens     │
+├─────────────────────────────────────────┤
+│                                         │
+│ Quer que a IA gere 4 variações desta    │
+│ mensagem? Isso ajuda a:                 │
+│                                         │
+│ ✓ Evitar bloqueios do WhatsApp          │
+│ ✓ Aumentar engajamento                  │
+│ ✓ Testar diferentes abordagens          │
+│                                         │
+│ [✨ Sim, gerar com IA] [✏️ Criar manualmente] │
+└─────────────────────────────────────────┘
+
+// PASSO 3: Gerar com IA
+const handleGenerateAI = async () => {
+  setStep('ai_generating');
+  
+  try {
+    const response = await api.post(
+      `/campaigns/${campaignId}/messages/generate_variations/`,
+      { original_message: message1 }
+    );
+    
+    setAiVariations(response.data.variations);
+    setStep('ai_review');
+  } catch (error) {
+    toast.error('Erro ao gerar variações');
+    setStep('write');
+  }
+};
+
+// PASSO 4: Revisar e aprovar
+{step === 'ai_review' && (
+  <AIVariationsReview
+    original={message1}
+    variations={aiVariations}
+    onApprove={handleApproveVariations}
+    onRegenerate={handleGenerateAI}
+  />
+)}
+```
+
+### Interface de Criação/Edição (Modal com Preview WhatsApp)
+
+```tsx
+// Componente: MessageEditorModal
+
+interface MessageEditorModalProps {
+  isOpen: boolean;
+  messageText: string;
+  onSave: (text: string) => void;
+  onClose: () => void;
+  sampleContacts: Contact[];
+}
+
+function MessageEditorModal({ isOpen, messageText, onSave, onClose, sampleContacts }: MessageEditorModalProps) {
+  const [text, setText] = useState(messageText);
+  const [currentPreviewIndex, setCurrentPreviewIndex] = useState(0);
+  
+  return (
+    <Dialog open={isOpen} onClose={onClose} maxWidth="5xl" fullWidth>
+      <DialogTitle>
+        Criar/Editar Mensagem
+      </DialogTitle>
+      
+      <DialogContent>
+        {/* Layout: Editor (esquerda) + Preview WhatsApp (direita) */}
+        <div className="grid grid-cols-2 gap-6 h-[600px]">
+          
+          {/* LADO ESQUERDO: Editor */}
+          <div className="flex flex-col">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Mensagem
+              </label>
+              
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className="w-full h-64 p-3 border rounded-lg font-sans resize-none"
+                placeholder="Digite sua mensagem aqui..."
+              />
+              
+              <div className="mt-2 text-sm text-gray-500">
+                {text.length} caracteres
+              </div>
+            </div>
+            
+            {/* Variáveis disponíveis */}
+            <div className="bg-gray-50 rounded-lg p-3">
+              <h4 className="text-sm font-semibold mb-2">
+                📝 Variáveis Disponíveis
+              </h4>
+              
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { var: '{{nome}}', desc: 'Nome do contato' },
+                  { var: '{{saudacao}}', desc: 'Bom dia/Boa tarde/Boa noite' },
+                  { var: '{{quem_indicou}}', desc: 'Quem indicou' },
+                  { var: '{{dia_semana}}', desc: 'Segunda/Terça/etc' },
+                ].map(item => (
+                  <button
+                    key={item.var}
+                    onClick={() => setText(text + item.var)}
+                    className="text-left p-2 bg-white rounded hover:bg-blue-50 text-xs"
+                  >
+                    <div className="font-mono text-blue-600">{item.var}</div>
+                    <div className="text-gray-500">{item.desc}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+          
+          {/* LADO DIREITO: Preview WhatsApp */}
+          <div className="flex flex-col">
+            <div className="mb-2 flex items-center justify-between">
+              <label className="text-sm font-medium text-gray-700">
+                📱 Preview WhatsApp
+              </label>
+              
+              {/* Navegação entre contatos */}
+              <div className="flex gap-1">
+                {sampleContacts.map((contact, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setCurrentPreviewIndex(index)}
+                    className={`px-3 py-1 text-xs rounded ${
+                      index === currentPreviewIndex
+                        ? 'bg-green-500 text-white'
+                        : 'bg-gray-200 text-gray-600'
+                    }`}
+                  >
+                    {contact.name.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            {/* Simulador WhatsApp */}
+            <WhatsAppSimulator
+              message={text}
+              contact={sampleContacts[currentPreviewIndex]}
+            />
+          </div>
+        </div>
+      </DialogContent>
+      
+      <DialogFooter>
+        <Button variant="outline" onClick={onClose}>
+          Cancelar
+        </Button>
+        <Button onClick={() => onSave(text)} disabled={text.trim().length === 0}>
+          Salvar Mensagem
+        </Button>
+      </DialogFooter>
+    </Dialog>
+  );
+}
+```
+
+### Componente: Simulador WhatsApp
+
+```tsx
+// components/campaigns/WhatsAppSimulator.tsx
+
+interface WhatsAppSimulatorProps {
+  message: string;
+  contact: Contact;
+}
+
+function WhatsAppSimulator({ message, contact }: WhatsAppSimulatorProps) {
+  const now = new Date();
+  const renderedMessage = renderVariables(message, contact, now);
+  const timestamp = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  
+  return (
+    <div className="flex flex-col h-full bg-[#e5ddd5] rounded-lg overflow-hidden border-2 border-gray-300">
+      {/* Header estilo WhatsApp */}
+      <div className="bg-[#075e54] text-white px-4 py-3 flex items-center gap-3">
+        {/* Avatar */}
+        <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 font-semibold">
+          {contact.name.charAt(0).toUpperCase()}
+        </div>
+        
+        {/* Nome e status */}
+        <div className="flex-1">
+          <div className="font-semibold">{contact.name}</div>
+          <div className="text-xs opacity-80">online</div>
+        </div>
+        
+        {/* Ícones */}
+        <div className="flex gap-4">
+          <VideoIcon className="w-5 h-5" />
+          <PhoneIcon className="w-5 h-5" />
+          <EllipsisVerticalIcon className="w-5 h-5" />
+        </div>
+      </div>
+      
+      {/* Background de conversa */}
+      <div 
+        className="flex-1 p-4 overflow-y-auto"
+        style={{
+          backgroundImage: `url("data:image/svg+xml,%3Csvg width='100' height='100' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M10 10 L20 20 M20 10 L10 20' stroke='%23d9d9d9' stroke-width='0.5' opacity='0.3'/%3E%3C/svg%3E")`,
+          backgroundSize: '40px 40px'
+        }}
+      >
+        {/* Mensagem enviada (balão verde) */}
+        <div className="flex justify-end mb-2">
+          <div className="max-w-[75%]">
+            <div className="bg-[#dcf8c6] rounded-lg p-3 shadow-sm">
+              <p className="text-sm whitespace-pre-wrap text-gray-800">
+                {renderedMessage || (
+                  <span className="text-gray-400 italic">
+                    Digite a mensagem para ver o preview...
+                  </span>
+                )}
+              </p>
+              
+              <div className="flex items-center justify-end gap-1 mt-1">
+                <span className="text-[10px] text-gray-600">
+                  {timestamp}
+                </span>
+                <CheckCheckIcon className="w-3 h-3 text-blue-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Info sobre variáveis */}
+        {message.includes('{{') && (
+          <div className="flex justify-center mt-4">
+            <div className="bg-white/90 rounded-lg px-3 py-2 text-xs text-gray-600 shadow-sm">
+              ℹ️ Variáveis serão substituídas no envio
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Input de mensagem (desabilitado, apenas visual) */}
+      <div className="bg-[#f0f0f0] px-4 py-2 flex items-center gap-2">
+        <div className="flex-1 bg-white rounded-full px-4 py-2 text-sm text-gray-400">
+          Mensagem
+        </div>
+        <button className="bg-[#075e54] text-white rounded-full p-2">
+          <MicrophoneIcon className="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+```
+
+### Interface Completa: Modal de Criação
+
+```
+Visual do Modal (Layout Split):
+
+┌────────────────────────────────────────────────────────────────┐
+│ Criar Mensagem                                         [X]     │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│ ┌─────────────────────────┬────────────────────────────────┐  │
+│ │ EDITOR                  │ PREVIEW WHATSAPP               │  │
+│ │                         │                                │  │
+│ │ Mensagem:               │ ┌──────────────────────────┐   │  │
+│ │ ┌─────────────────────┐ │ │ 🟢 João Silva    ⚫⚫⚫  │   │  │
+│ │ │{{saudacao}}, {{nome}}│ │ ├──────────────────────────┤   │  │
+│ │ │                      │ │ │                          │   │  │
+│ │ │Vi que {{quem_indicou │ │ │                          │   │  │
+│ │ │}} te indicou para    │ │ │                          │   │  │
+│ │ │conhecer nossa solução│ │ │                          │   │  │
+│ │ │                      │ │ │                          │   │  │
+│ │ │Podemos conversar?    │ │ │      ┌─────────────────┐ │   │  │
+│ │ └─────────────────────┘ │ │      │ Bom dia, João!  │ │   │  │
+│ │ 156 caracteres          │ │      │                 │ │   │  │
+│ │                         │ │      │ Vi que Maria    │ │   │  │
+│ │ 📝 Variáveis:           │ │      │ Santos te indi- │ │   │  │
+│ │ [{{nome}}]              │ │      │ cou para conhe- │ │   │  │
+│ │ [{{saudacao}}]          │ │      │ cer nossa solu- │ │   │  │
+│ │ [{{quem_indicou}}]      │ │      │ ção             │ │   │  │
+│ │ [{{dia_semana}}]        │ │      │                 │ │   │  │
+│ │                         │ │      │ Podemos conver- │ │   │  │
+│ │                         │ │      │ sar?            │ │   │  │
+│ │ [✨ Gerar com IA]       │ │      │                 │ │   │  │
+│ │                         │ │      │ 14:23      ✓✓   │ │   │  │
+│ │                         │ │      └─────────────────┘ │   │  │
+│ │                         │ │                          │   │  │
+│ │                         │ │ ┌─────────────────────┐  │   │  │
+│ │                         │ │ │ Mensagem          🎤│  │   │  │
+│ │                         │ │ └─────────────────────┘  │   │  │
+│ │                         │ └──────────────────────────┘   │  │
+│ │                         │                                │  │
+│ │                         │ Preview com:                   │  │
+│ │                         │ [João] [Maria] [Pedro]         │  │
+│ └─────────────────────────┴────────────────────────────────┘  │
+│                                                                │
+│                              [Cancelar] [Salvar Mensagem]      │
+└────────────────────────────────────────────────────────────────┘
+
+Características:
+- ✅ Editor à esquerda com variáveis
+- ✅ Simulador WhatsApp à direita (tempo real)
+- ✅ Troca entre 3 contatos no preview
+- ✅ Balão verde estilo WhatsApp
+- ✅ Timestamp e check marks
+- ✅ Atualização instantânea ao digitar
+```
+
+### Componente Detalhado: WhatsApp Preview
+
+```tsx
+// components/campaigns/WhatsAppPreview.tsx
+
+interface WhatsAppPreviewProps {
+  message: string;
+  contacts: Contact[];
+  currentContactIndex: number;
+  onContactChange: (index: number) => void;
+}
+
+export function WhatsAppPreview({ 
+  message, 
+  contacts, 
+  currentContactIndex,
+  onContactChange 
+}: WhatsAppPreviewProps) {
+  
+  const contact = contacts[currentContactIndex];
+  const now = new Date();
+  const renderedMessage = renderVariables(message, contact, now);
+  const timestamp = now.toLocaleTimeString('pt-BR', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  
+  return (
+    <div className="flex flex-col h-full">
+      {/* Tabs para trocar de contato */}
+      <div className="flex gap-2 mb-3">
+        {contacts.map((c, index) => (
+          <button
+            key={index}
+            onClick={() => onContactChange(index)}
+            className={`px-4 py-2 rounded-t-lg text-sm font-medium transition-colors ${
+              index === currentContactIndex
+                ? 'bg-green-500 text-white'
+                : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+            }`}
+          >
+            {c.name.split(' ')[0]}
+          </button>
+        ))}
+      </div>
+      
+      {/* Simulador WhatsApp */}
+      <div className="flex-1 flex flex-col bg-white rounded-lg shadow-xl overflow-hidden border border-gray-300">
+        
+        {/* Header WhatsApp */}
+        <div className="bg-[#075e54] text-white px-4 py-3 flex items-center gap-3 shadow-md">
+          <button className="text-white">
+            <ChevronLeftIcon className="w-6 h-6" />
+          </button>
+          
+          {/* Avatar circular */}
+          <div className="relative">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white font-bold text-lg shadow-md">
+              {contact.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="absolute bottom-0 right-0 w-3 h-3 bg-green-400 rounded-full border-2 border-[#075e54]" />
+          </div>
+          
+          {/* Info do contato */}
+          <div className="flex-1">
+            <div className="font-semibold text-base">{contact.name}</div>
+            <div className="text-xs opacity-90">online</div>
+          </div>
+          
+          {/* Ícones de ação */}
+          <div className="flex gap-5">
+            <VideoCameraIcon className="w-5 h-5 cursor-pointer hover:opacity-80" />
+            <PhoneIcon className="w-5 h-5 cursor-pointer hover:opacity-80" />
+            <EllipsisVerticalIcon className="w-5 h-5 cursor-pointer hover:opacity-80" />
+          </div>
+        </div>
+        
+        {/* Área de conversa com background WhatsApp */}
+        <div 
+          className="flex-1 p-4 overflow-y-auto"
+          style={{
+            backgroundColor: '#e5ddd5',
+            backgroundImage: `
+              repeating-linear-gradient(
+                45deg,
+                transparent,
+                transparent 10px,
+                rgba(255,255,255,.03) 10px,
+                rgba(255,255,255,.03) 20px
+              )
+            `
+          }}
+        >
+          {/* Data */}
+          <div className="flex justify-center mb-4">
+            <div className="bg-white/90 rounded-md px-3 py-1 text-xs text-gray-600 shadow-sm">
+              {now.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long' })}
+            </div>
+          </div>
+          
+          {/* Balão de mensagem enviada */}
+          <div className="flex justify-end">
+            <div className="max-w-[85%]">
+              {/* Balão verde */}
+              <div 
+                className="bg-[#dcf8c6] rounded-lg px-3 py-2 shadow-md relative"
+                style={{
+                  borderTopRightRadius: '2px'  // Detalhe WhatsApp
+                }}
+              >
+                {/* Triângulo (tail) */}
+                <div 
+                  className="absolute -right-2 top-0 w-0 h-0"
+                  style={{
+                    borderLeft: '8px solid #dcf8c6',
+                    borderTop: '8px solid transparent'
+                  }}
+                />
+                
+                {/* Texto da mensagem */}
+                <p className="text-[15px] leading-relaxed text-gray-800 whitespace-pre-wrap break-words">
+                  {renderedMessage || (
+                    <span className="text-gray-400 italic">
+                      Digite a mensagem no editor...
+                    </span>
+                  )}
+                </p>
+                
+                {/* Timestamp e checks */}
+                <div className="flex items-center justify-end gap-1 mt-1">
+                  <span className="text-[11px] text-gray-600">
+                    {timestamp}
+                  </span>
+                  <CheckCheckIcon className="w-4 h-4 text-[#53bdeb]" />
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Info sobre variáveis (se houver) */}
+          {message.includes('{{') && renderedMessage && (
+            <div className="flex justify-center mt-3">
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg px-3 py-2 text-xs text-yellow-800 shadow-sm max-w-xs text-center">
+                💡 As variáveis destacadas serão personalizadas para cada contato
+              </div>
+            </div>
+          )}
+        </div>
+        
+        {/* Input de mensagem (apenas visual, desabilitado) */}
+        <div className="bg-[#f0f0f0] px-3 py-2 flex items-center gap-2 border-t border-gray-300">
+          <button className="text-gray-600 hover:text-gray-800">
+            <FaceSmileIcon className="w-6 h-6" />
+          </button>
+          
+          <div className="flex-1 bg-white rounded-full px-4 py-2.5">
+            <span className="text-sm text-gray-400">Mensagem</span>
+          </div>
+          
+          <button className="text-gray-600 hover:text-gray-800">
+            <PaperClipIcon className="w-6 h-6" />
+          </button>
+          
+          <button className="bg-[#075e54] text-white rounded-full p-2 hover:bg-[#064e47]">
+            <MicrophoneIcon className="w-5 h-5" />
+          </button>
+        </div>
+      </div>
+      
+      {/* Info do contato (abaixo do simulador) */}
+      <div className="mt-3 text-xs text-gray-600 bg-gray-50 rounded p-2">
+        <div className="grid grid-cols-2 gap-2">
+          <div>
+            <span className="font-semibold">Nome:</span> {contact.name}
+          </div>
+          <div>
+            <span className="font-semibold">Telefone:</span> {contact.phone}
+          </div>
+          {contact.quem_indicou && (
+            <div className="col-span-2">
+              <span className="font-semibold">Indicado por:</span> {contact.quem_indicou}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+### Interface de Aprovação com Preview WhatsApp
+
+```tsx
+// Componente: AIVariationsReview (Atualizado)
+
+┌──────────────────────────────────────────────────────────────────┐
+│ ✨ Variações Geradas pela IA                              [X]   │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│ ┌────────────────────────┬─────────────────────────────────────┐│
+│ │ MENSAGENS GERADAS      │ PREVIEW WHATSAPP                    ││
+│ │                        │                                     ││
+│ │ ✅ Mensagem 1 (Sua)    │ ┌───────────────────────────────┐  ││
+│ │ Olá {{nome}}!...       │ │ 🟢 João Silva         ⚫⚫⚫  │  ││
+│ │                        │ ├───────────────────────────────┤  ││
+│ │ ☑ Mensagem 2 (IA)      │ │                               │  ││
+│ │ {{saudacao}}, {{nome}} │ │    ┌─────────────────────┐    │  ││
+│ │ Como vai?...           │ │    │ Bom dia, João!    │    │  ││
+│ │ [✏️ Editar Preview]     │ │    │ Como vai?         │    │  ││
+│ │                        │ │    │ Soube através de  │    │  ││
+│ │ ☑ Mensagem 3 (IA)      │ │    │ Maria Santos...   │    │  ││
+│ │ Oi {{nome}}!...        │ │    │                   │    │  ││
+│ │ [✏️ Editar Preview]     │ │    │        14:23  ✓✓  │    │  ││
+│ │                        │ │    └─────────────────────┘    │  ││
+│ │ ☐ Mensagem 4 (IA)      │ │                               │  ││
+│ │ E aí, {{nome}}!...     │ │  Preview: [João] [Maria] [Ana] │  ││
+│ │ [✏️ Editar Preview]     │ └───────────────────────────────┘  ││
+│ │                        │                                     ││
+│ │ ☐ Mensagem 5 (IA)      │ ⭐ Ao clicar em uma mensagem:      ││
+│ │ Olá! Tudo certo?...    │ Preview atualiza automaticamente   ││
+│ │ [✏️ Editar Preview]     │                                     ││
+│ │                        │ Ao clicar "Editar Preview":        ││
+│ │                        │ Abre modal de edição com preview   ││
+│ └────────────────────────┴─────────────────────────────────────┘│
+│                                                                  │
+│ ℹ️ 3 de 5 mensagens selecionadas                                │
+│                                                                  │
+│ [🔄 Gerar Novamente] [✅ Aprovar e Salvar (3 mensagens)]        │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Componente Reutilizável: MessageEditorWithPreview
+
+```typescript
+// components/campaigns/MessageEditorWithPreview.tsx
+
+interface MessageEditorWithPreviewProps {
+  initialMessage?: string;
+  onSave: (message: string) => void;
+  onCancel: () => void;
+  sampleContacts: Contact[];
+  availableVariables?: Variable[];
+}
+
+export function MessageEditorWithPreview({
+  initialMessage = '',
+  onSave,
+  onCancel,
+  sampleContacts,
+  availableVariables = DEFAULT_VARIABLES
+}: MessageEditorWithPreviewProps) {
+  
+  const [message, setMessage] = useState(initialMessage);
+  const [currentContactIndex, setCurrentContactIndex] = useState(0);
+  const [showVariables, setShowVariables] = useState(true);
+  
+  const handleInsertVariable = (variable: string) => {
+    const textarea = textareaRef.current;
+    const cursorPos = textarea.selectionStart;
+    const newText = 
+      message.substring(0, cursorPos) + 
+      variable + 
+      message.substring(cursorPos);
+    
+    setText(newText);
+    
+    // Reposicionar cursor
+    setTimeout(() => {
+      textarea.selectionStart = cursorPos + variable.length;
+      textarea.focus();
+    }, 0);
+  };
+  
+  return (
+    <div className="grid grid-cols-2 gap-6 h-[650px]">
+      
+      {/* LADO ESQUERDO: Editor */}
+      <div className="flex flex-col space-y-4">
+        
+        {/* Área de texto */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Mensagem
+          </label>
+          
+          <textarea
+            ref={textareaRef}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            className="w-full h-80 p-4 border-2 border-gray-300 rounded-lg font-sans text-base focus:border-green-500 focus:ring-2 focus:ring-green-200 resize-none"
+            placeholder="Digite sua mensagem aqui... Use variáveis para personalizar!"
+          />
+          
+          {/* Contador e info */}
+          <div className="flex justify-between items-center mt-2 text-sm">
+            <span className={`${
+              message.length > 1000 ? 'text-red-600' : 'text-gray-600'
+            }`}>
+              {message.length} / 1000 caracteres
+            </span>
+            
+            {message.includes('{{') && (
+              <span className="text-green-600 flex items-center gap-1">
+                <SparklesIcon className="w-4 h-4" />
+                Variáveis detectadas
+              </span>
+            )}
+          </div>
+        </div>
+        
+        {/* Painel de variáveis */}
+        <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-lg p-4 border border-blue-200">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <CodeBracketIcon className="w-4 h-4" />
+              Variáveis Disponíveis
+            </h4>
+            
+            <button
+              onClick={() => setShowVariables(!showVariables)}
+              className="text-xs text-blue-600 hover:text-blue-800"
+            >
+              {showVariables ? 'Ocultar' : 'Mostrar'}
+            </button>
+          </div>
+          
+          {showVariables && (
+            <div className="grid grid-cols-2 gap-2">
+              {availableVariables.map(({ key, label, example }) => (
+                <button
+                  key={key}
+                  onClick={() => handleInsertVariable(`{{${key}}}`)}
+                  className="text-left p-3 bg-white rounded-lg hover:bg-blue-100 hover:shadow-md transition-all group"
+                >
+                  <div className="font-mono text-sm text-blue-600 font-semibold group-hover:text-blue-800">
+                    {`{{${key}}}`}
+                  </div>
+                  <div className="text-xs text-gray-600 mt-1">
+                    {label}
+                  </div>
+                  <div className="text-xs text-gray-400 italic mt-1">
+                    ex: "{example}"
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* Botão IA */}
+        <Button
+          variant="outline"
+          className="border-purple-300 text-purple-700 hover:bg-purple-50"
+          onClick={onGenerateWithAI}
+        >
+          <SparklesIcon className="w-4 h-4 mr-2" />
+          Gerar Variações com IA
+        </Button>
+      </div>
+      
+      {/* LADO DIREITO: Preview WhatsApp */}
+      <div className="flex flex-col">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          📱 Preview em Tempo Real
+        </label>
+        
+        <WhatsAppSimulator
+          message={message}
+          contact={contact}
+          timestamp={now}
+        />
+        
+        {/* Navegação entre contatos */}
+        <div className="mt-3 flex justify-center gap-2">
+          {contacts.map((c, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentContactIndex(index)}
+              className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                index === currentContactIndex
+                  ? 'bg-green-500 text-white shadow-md scale-105'
+                  : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
+              }`}
+            >
+              Ver como {c.name.split(' ')[0]}
+            </button>
+          ))}
+        </div>
+      </div>
+      
+    </div>
+  );
+}
+
+// Variáveis padrão
+const DEFAULT_VARIABLES = [
+  { key: 'nome', label: 'Nome do contato', example: 'João Silva' },
+  { key: 'saudacao', label: 'Saudação automática', example: 'Bom dia' },
+  { key: 'quem_indicou', label: 'Quem indicou', example: 'Maria Santos' },
+  { key: 'dia_semana', label: 'Dia da semana', example: 'Segunda-feira' },
+];
+```
+
+### Estilos CSS Específicos (Tailwind Config)
+
+```javascript
+// tailwind.config.js
+
+module.exports = {
+  theme: {
+    extend: {
+      colors: {
+        whatsapp: {
+          green: '#075e54',      // Header
+          lightGreen: '#dcf8c6', // Balão enviado
+          bg: '#e5ddd5',         // Background chat
+          blue: '#53bdeb',       // Check marks
+        }
+      },
+      fontFamily: {
+        'whatsapp': ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'],
+      }
+    }
+  }
+}
+```
+
+### Preview com Múltiplos Contatos
+
+```typescript
+// Componente: MessagePreview
+
+interface MessagePreviewProps {
+  messageText: string;
+  sampleContacts: Contact[];  // 3 contatos reais da campanha
+}
+
+function MessagePreview({ messageText, sampleContacts }: MessagePreviewProps) {
+  const now = new Date();
+  
+  return (
+    <div className="space-y-3">
+      <h4 className="font-semibold text-sm text-gray-700">
+        Preview com contatos reais:
+      </h4>
+      
+      {sampleContacts.slice(0, 3).map((contact, index) => {
+        const rendered = renderVariables(messageText, contact, now);
+        
+        return (
+          <div key={index} className="bg-green-50 rounded-lg p-3 border border-green-200">
+            <div className="text-xs text-gray-600 mb-1">
+              Para: {contact.name}
+            </div>
+            <div className="text-sm whitespace-pre-wrap">
+              {rendered}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// Renderização de variáveis
+function renderVariables(text: string, contact: Contact, datetime: Date): string {
+  const hour = datetime.getHours();
+  const saudacao = hour < 12 ? 'Bom dia' : hour < 18 ? 'Boa tarde' : 'Boa noite';
+  
+  return text
+    .replace(/\{\{nome\}\}/g, contact.name)
+    .replace(/\{\{quem_indicou\}\}/g, contact.quem_indicou || 'um amigo')
+    .replace(/\{\{saudacao\}\}/g, saudacao);
+}
+```
+
+### Rotação Balanceada (Implementação)
+
+```python
+# campaigns/services.py
+
+class MessageRotationService:
+    """
+    Rotação balanceada dinâmica
+    
+    Estratégia: Sempre escolhe a mensagem MENOS enviada
+    Garante distribuição equilibrada automaticamente
+    """
+    
+    def select_next_message(self, campaign):
+        """
+        Seleciona próxima mensagem (menos enviada primeiro)
+        
+        Exemplo com 5 mensagens:
+        
+        Envio 1: Todas 0x → Seleciona Msg 1 (order=1)
+        Envio 2: Msg1=1x, resto=0x → Seleciona Msg 2
+        Envio 3: Msg1=1x, Msg2=1x, resto=0x → Seleciona Msg 3
+        Envio 4: Msg1-3=1x, Msg4-5=0x → Seleciona Msg 4
+        Envio 5: Msg1-4=1x, Msg5=0x → Seleciona Msg 5
+        Envio 6: Todas=1x → Seleciona Msg 1 (volta ao início)
+        
+        Resultado: Distribuição perfeitamente equilibrada
+        """
+        messages = campaign.messages.filter(
+            is_active=True,
+            approved_by_user=True
+        ).order_by('times_sent', 'order')  # ⭐ Chave: ordena por times_sent
+        
+        if not messages.exists():
+            raise ValidationError("Sem mensagens aprovadas para enviar")
+        
+        selected = messages.first()  # A menos enviada
+        
+        logger.debug(
+            f"📝 Rotação: Msg {selected.order} selecionada "
+            f"(enviada {selected.times_sent}x de {campaign.sent_messages} total)",
+            extra={'campaign_id': str(campaign.id)}
+        )
+        
+        return selected
+    
+    def get_distribution_stats(self, campaign):
+        """
+        Estatísticas de distribuição para dashboard
+        """
+        messages = campaign.messages.filter(is_active=True).order_by('order')
+        
+        total_sent = sum(msg.times_sent for msg in messages)
+        
+        return [
+            {
+                'order': msg.order,
+                'text_preview': msg.message_text[:60] + '...',
+                'times_sent': msg.times_sent,
+                'percentage': round((msg.times_sent / total_sent * 100), 1) if total_sent > 0 else 0,
+                'response_count': msg.response_count,
+                'response_rate': msg.response_rate,
+                'generated_by_ai': msg.generated_by_ai
+            }
+            for msg in messages
+        ]
+```
+
+### Dashboard de Performance
+
+```python
+# campaigns/views.py
+
+class CampaignViewSet(viewsets.ModelViewSet):
+    
+    @action(detail=True, methods=['get'])
+    def message_performance(self, request, pk=None):
+        """
+        Análise de performance das mensagens
+        
+        GET /campaigns/{id}/message_performance/
+        
+        Retorna:
+        - Ranking de mensagens por taxa de resposta
+        - Recomendações para próximas campanhas
+        """
+        campaign = self.get_object()
+        
+        messages = campaign.messages.filter(
+            is_active=True,
+            times_sent__gt=0  # Só mensagens já enviadas
+        ).order_by('-response_count')  # Mais respondidas primeiro
+        
+        # Calcular métricas
+        performance_data = []
+        
+        for index, msg in enumerate(messages):
+            performance_data.append({
+                'rank': index + 1,
+                'emoji': ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'][index],
+                'order': msg.order,
+                'message_preview': msg.message_text[:100],
+                'times_sent': msg.times_sent,
+                'response_count': msg.response_count,
+                'response_rate': msg.response_rate,
+                'generated_by_ai': msg.generated_by_ai
+            })
+        
+        # Melhor mensagem
+        best_message = performance_data[0] if performance_data else None
+        
+        # Recomendação
+        recommendation = None
+        if best_message and best_message['response_rate'] > 30:
+            recommendation = (
+                f"A Mensagem {best_message['order']} teve excelente performance "
+                f"({best_message['response_rate']}% de resposta). "
+                f"Use mensagens com tom similar em futuras campanhas."
+            )
+        
+        return Response({
+            'performance': performance_data,
+            'best_message': best_message,
+            'recommendation': recommendation,
+            'total_sent': campaign.sent_messages,
+            'total_responded': campaign.responded_count,
+            'overall_response_rate': campaign.response_rate
+        })
+```
+
+### Reutilização de Mensagens de Sucesso
+
+```python
+# campaigns/views.py
+
+class CampaignViewSet(viewsets.ModelViewSet):
+    
+    @action(detail=False, methods=['get'])
+    def suggested_messages(self, request):
+        """
+        Sugere mensagens baseadas em campanhas anteriores
+        
+        GET /campaigns/suggested_messages/
+        
+        Retorna mensagens com melhor performance de campanhas concluídas
+        """
+        # Buscar campanhas concluídas do tenant
+        completed_campaigns = Campaign.objects.filter(
+            tenant=request.tenant,
+            status=Campaign.Status.COMPLETED
+        ).order_by('-completed_at')[:10]  # Últimas 10
+        
+        # Buscar mensagens com melhor performance
+        top_messages = CampaignMessage.objects.filter(
+            campaign__in=completed_campaigns,
+            times_sent__gte=50,  # Mínimo 50 envios para ser estatisticamente relevante
+            response_count__gt=0
+        ).order_by('-response_count')[:5]  # Top 5
+        
+        suggestions = [
+            {
+                'id': str(msg.id),
+                'campaign_name': msg.campaign.name,
+                'message_text': msg.message_text,
+                'times_sent': msg.times_sent,
+                'response_rate': msg.response_rate,
+                'response_count': msg.response_count
+            }
+            for msg in top_messages
+        ]
+        
+        return Response({
+            'suggestions': suggestions,
+            'message': f'{len(suggestions)} mensagens de alta performance encontradas'
+        })
+```
+
+### Interface de Reutilização (Frontend)
+
+```tsx
+// Ao criar nova campanha, mostrar sugestões
+
+<Card className="mb-6 border-blue-200 bg-blue-50">
+  <CardHeader>
+    <h3 className="text-lg font-semibold text-blue-900">
+      💡 Mensagens de Alta Performance
+    </h3>
+    <p className="text-sm text-blue-700">
+      Baseadas em campanhas anteriores com bons resultados
+    </p>
+  </CardHeader>
+  
+  <CardContent>
+    {suggestedMessages.map(suggestion => (
+      <div key={suggestion.id} className="bg-white rounded p-3 mb-2">
+        <div className="flex justify-between items-start">
+          <div className="flex-1">
+            <div className="text-xs text-gray-500 mb-1">
+              Campanha: {suggestion.campaign_name}
+            </div>
+            <div className="text-sm mb-2">
+              {suggestion.message_text.substring(0, 100)}...
+            </div>
+            <div className="flex gap-4 text-xs text-gray-600">
+              <span>✅ {suggestion.response_rate}% resposta</span>
+              <span>📤 {suggestion.times_sent} envios</span>
+            </div>
+          </div>
+          
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => useAsBase(suggestion.message_text)}
+          >
+            📋 Usar como Base
+          </Button>
+        </div>
+      </div>
+    ))}
+  </CardContent>
+</Card>
+```
+
+### Exemplo de Rotação em Ação
+
+```
+CAMPANHA: "Black Friday"
+MENSAGENS CADASTRADAS: 5
+
+Estado Inicial:
+┌─────┬──────────────────┬────────────┐
+│ Msg │ times_sent       │ Próxima?   │
+├─────┼──────────────────┼────────────┤
+│ 1   │ 0                │ ✅ SIM     │
+│ 2   │ 0                │            │
+│ 3   │ 0                │            │
+│ 4   │ 0                │            │
+│ 5   │ 0                │            │
+└─────┴──────────────────┴────────────┘
+
+Envio 1 → Seleciona Msg 1 (0 envios)
+Após envio:
+┌─────┬──────────────────┬────────────┐
+│ Msg │ times_sent       │ Próxima?   │
+├─────┼──────────────────┼────────────┤
+│ 1   │ 1                │            │
+│ 2   │ 0                │ ✅ SIM     │
+│ 3   │ 0                │            │
+│ 4   │ 0                │            │
+│ 5   │ 0                │            │
+└─────┴──────────────────┴────────────┘
+
+Envio 2 → Seleciona Msg 2 (0 envios)
+
+...
+
+Envio 6 → Todas com 1 envio, seleciona Msg 1
+┌─────┬──────────────────┬────────────┐
+│ Msg │ times_sent       │ Próxima?   │
+├─────┼──────────────────┼────────────┤
+│ 1   │ 1                │ ✅ SIM     │
+│ 2   │ 1                │            │
+│ 3   │ 1                │            │
+│ 4   │ 1                │            │
+│ 5   │ 1                │            │
+└─────┴──────────────────┴────────────┘
+
+Distribuição após 500 envios:
+Msg 1: 100 envios (20%)
+Msg 2: 100 envios (20%)
+Msg 3: 100 envios (20%)
+Msg 4: 100 envios (20%)
+Msg 5: 100 envios (20%)
+
+✅ Perfeitamente equilibrado!
+```
+
+### API Endpoints Completos
+
+```python
+# campaigns/views.py
+
+class CampaignMessageViewSet(viewsets.ModelViewSet):
+    
+    @action(detail=False, methods=['post'])
+    def generate_variations(self, request, campaign_pk=None):
+        """
+        POST /campaigns/{id}/messages/generate_variations/
+        Body: { "original_message": "Olá {{nome}}..." }
+        
+        Retorna variações para aprovação (NÃO salva ainda)
+        """
+        campaign = get_object_or_404(Campaign, pk=campaign_pk, tenant=request.tenant)
+        
+        # Verificar limite de mensagens
+        current_count = campaign.messages.count()
+        if current_count >= 5:
+            return Response(
+                {'error': 'Campanha já tem 5 mensagens (máximo)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        original = request.data.get('original_message')
+        to_generate = min(4, 5 - current_count)
+        
+        # Chamar IA
+        ai_service = AIMessageGeneratorService()
+        variations = ai_service.generate_message_variations(
+            original_message=original,
+            tenant=request.tenant,
+            count=to_generate
+        )
+        
+        return Response({
+            'original': original,
+            'variations': variations,
+            'generated_count': len(variations)
+        })
+    
+    @action(detail=False, methods=['post'])
+    def save_messages(self, request, campaign_pk=None):
+        """
+        POST /campaigns/{id}/messages/save_messages/
+        Body: {
+            "messages": [
+                {
+                    "text": "Mensagem 1",
+                    "order": 1,
+                    "generated_by_ai": false
+                },
+                {
+                    "text": "Mensagem 2", 
+                    "order": 2,
+                    "generated_by_ai": true
+                }
+            ]
+        }
+        
+        Salva mensagens aprovadas pelo usuário
+        """
+        campaign = get_object_or_404(Campaign, pk=campaign_pk, tenant=request.tenant)
+        
+        messages_data = request.data.get('messages', [])
+        
+        # Validações
+        if len(messages_data) > 5:
+            return Response(
+                {'error': 'Máximo 5 mensagens'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if len(messages_data) == 0:
+            return Response(
+                {'error': 'Adicione pelo menos 1 mensagem'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Criar mensagens
+        created = []
+        
+        with transaction.atomic():
+            for msg_data in messages_data:
+                message = CampaignMessage.objects.create(
+                    campaign=campaign,
+                    message_text=msg_data['text'],
+                    order=msg_data['order'],
+                    generated_by_ai=msg_data.get('generated_by_ai', False),
+                    approved_by_user=True,
+                    is_active=True
+                )
+                created.append(message)
+            
+            # Log
+            CampaignLog.objects.create(
+                campaign=campaign,
+                user=request.user,
+                event_type='messages_created',
+                message=f'{len(created)} mensagens adicionadas',
+                metadata={
+                    'manual': sum(1 for m in created if not m.generated_by_ai),
+                    'ai_generated': sum(1 for m in created if m.generated_by_ai)
+                }
+            )
+        
+        return Response(
+            CampaignMessageSerializer(created, many=True).data,
+            status=status.HTTP_201_CREATED
+        )
+    
+    @action(detail=True, methods=['get'])
+    def preview(self, request, pk=None, campaign_pk=None):
+        """
+        GET /campaigns/{id}/messages/{msg_id}/preview/
+        
+        Preview com 3 contatos reais da campanha
+        """
+        message = self.get_object()
+        campaign = message.campaign
+        
+        # Pegar 3 contatos aleatórios da campanha
+        sample_contacts = Contact.objects.filter(
+            campaigns_participated__campaign=campaign
+        ).order_by('?')[:3]  # Random
+        
+        # Renderizar para cada contato
+        previews = []
+        now = timezone.now()
+        
+        for contact in sample_contacts:
+            rendered = message.render_variables(contact, now)
+            previews.append({
+                'contact_name': contact.name,
+                'contact_phone': contact.phone,
+                'rendered_message': rendered
+            })
+        
+        return Response({
+            'original_message': message.message_text,
+            'previews': previews
+        })
+```
+
+### Regras de Mensagens
+
+```python
+# ✅ SEMPRE FAZER
+
+# 1. Validar limite de 5 mensagens
+if campaign.messages.count() >= 5:
+    raise ValidationError("Máximo 5 mensagens por campanha")
+
+# 2. Só rotacionar mensagens aprovadas
+messages = campaign.messages.filter(
+    is_active=True,
+    approved_by_user=True  # ⭐ CRÍTICO
+)
+
+# 3. Usar ORDER BY para rotação balanceada
+.order_by('times_sent', 'order')  # Menos enviada primeiro
+
+# 4. Incrementar contador atomicamente
+CampaignMessage.objects.filter(id=message_id).update(
+    times_sent=F('times_sent') + 1
+)
+
+# 5. Preservar variáveis ao gerar com IA
+# N8N deve retornar mensagens COM {{nome}}, {{saudacao}}
+
+# ❌ NUNCA FAZER
+
+# 1. Rotação aleatória pura
+message = random.choice(messages)  # ❌ Distribuição desigual
+
+# 2. Enviar mensagens não aprovadas
+# ❌ Não verificar approved_by_user
+
+# 3. Hard-coded order
+message = messages[current_index % 5]  # ❌ Não considera desativadas
+
+# 4. Gerar variações sem aprovação
+variations = generate_variations(...)
+for var in variations:
+    CampaignMessage.objects.create(...)  # ❌ Salva sem aprovação!
+```
+
+---
+
 ## 🎨 UI/UX GUIDELINES
 
 ### Princípios de Design
