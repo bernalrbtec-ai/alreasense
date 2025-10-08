@@ -1170,6 +1170,606 @@ GET /api/v1/instances/{id}/availability/
 
 ---
 
+---
+
+## 🔄 WORKERS E PROCESSAMENTO ASSÍNCRONO
+
+### Arquitetura de Processos
+
+O backend Django é composto por **múltiplos processos** trabalhando em conjunto:
+
+```
+┌────────────────────────────────────────────────────────┐
+│                    BACKEND (Django)                    │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │ Processo 1: Django Web (Gunicorn/Runserver)     │ │
+│  │ - Recebe requests HTTP do frontend               │ │
+│  │ - API REST (DRF ViewSets)                        │ │
+│  │ - Autenticação, validação                        │ │
+│  │ ❌ NÃO envia mensagens                           │ │
+│  │ ✅ Apenas atualiza banco e retorna 200 OK        │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │ Processo 2: Celery Beat (Scheduler)             │ │
+│  │ - Roda a cada 10 segundos                        │ │
+│  │ - Busca campanhas prontas                        │ │
+│  │ - Valida horários e condições                    │ │
+│  │ ❌ NÃO envia mensagens                           │ │
+│  │ ✅ Enfileira tasks no Redis                      │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                        │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │ Processos 3-N: Celery Workers (Dispatchers)     │ │
+│  │                                                  │ │
+│  │  Worker 1 │ Worker 2 │ Worker 3 │ ... │ Worker N│ │
+│  │     ↓     │    ↓     │    ↓     │     │    ↓    │ │
+│  │  Task A   │  Task B  │  Task C  │     │  Task N │ │
+│  │           │          │          │     │         │ │
+│  │ ⭐ AQUI que mensagens são ENVIADAS ⭐           │ │
+│  │ - Pega tasks da fila Redis                      │ │
+│  │ - Valida estado da campanha                      │ │
+│  │ - Envia via WhatsApp Gateway API                 │ │
+│  │ - Atualiza banco de dados                        │ │
+│  │ - Cria logs                                      │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                        │
+└────────────────────────────────────────────────────────┘
+                         │
+                         ▼
+          ┌──────────────────────────────┐
+          │ PostgreSQL + Redis            │
+          └──────────────────────────────┘
+```
+
+### Comandos de Execução
+
+```bash
+# Desenvolvimento Local
+
+# Terminal 1: Django API
+python manage.py runserver
+
+# Terminal 2: Celery Beat (Scheduler)
+celery -A alrea_sense beat -l info
+
+# Terminal 3: Celery Workers (Dispatchers)
+celery -A alrea_sense worker -c 4 -l info
+#                                ↑
+#                                └─ 4 workers simultâneos
+```
+
+```bash
+# Produção
+
+# Processo 1: Django com Gunicorn
+gunicorn alrea_sense.wsgi:application --workers 4 --bind 0.0.0.0:8000
+
+# Processo 2: Celery Beat (APENAS 1 instância)
+celery -A alrea_sense beat -l info
+
+# Processo 3+: Celery Workers (escalável)
+celery -A alrea_sense worker -c 10 -l info
+```
+
+### Escalabilidade
+
+**Throughput por número de workers:**
+
+```
+ 1 worker  → ~20 mensagens/minuto
+ 3 workers → ~60 mensagens/minuto
+ 5 workers → ~100 mensagens/minuto
+10 workers → ~200 mensagens/minuto
+20 workers → ~400 mensagens/minuto
+
+⭐ "Adicionar workers" = aumentar o parâmetro -c (concurrency)
+```
+
+**Limitações:**
+- Gateway API externa (rate limits)
+- Conexões PostgreSQL (max_connections)
+- Throughput Redis
+
+---
+
+## 🔄 MÚLTIPLAS CAMPANHAS SIMULTÂNEAS
+
+### Separação e Isolamento
+
+Cada campanha é **completamente isolada** no banco de dados:
+
+```sql
+-- Campanha A: Black Friday
+campaigns_campaign:
+  id: uuid-A
+  name: 'Black Friday'
+  instance_id: inst-1
+  status: 'active'
+  is_paused: FALSE
+
+campaigns_campaigncontact:
+  campaign_id: uuid-A, contact_id: joao, status: 'pending'
+  campaign_id: uuid-A, contact_id: maria, status: 'sent'
+
+-- Campanha B: Natal (pode ter os mesmos contatos)
+campaigns_campaign:
+  id: uuid-B
+  name: 'Natal'
+  instance_id: inst-2
+  status: 'active'
+  is_paused: FALSE
+
+campaigns_campaigncontact:
+  campaign_id: uuid-B, contact_id: joao, status: 'pending' ✅
+  campaign_id: uuid-B, contact_id: carlos, status: 'pending'
+
+-- ✅ João pode estar em ambas (campanhas diferentes)
+-- ❌ João não pode estar 2x na mesma campanha (constraint)
+```
+
+**Constraint importante:**
+
+```python
+class CampaignContact(models.Model):
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['campaign', 'contact'],
+                name='unique_contact_per_campaign'
+            )
+        ]
+```
+
+### Processamento em Loop
+
+O scheduler processa **TODAS** as campanhas prontas em um único loop:
+
+```python
+@shared_task
+def campaign_scheduler():
+    """Roda a cada 10 segundos"""
+    now = timezone.now()
+    
+    # Busca TODAS as campanhas prontas
+    ready_campaigns = Campaign.objects.filter(
+        status=Campaign.Status.ACTIVE,
+        is_paused=False,
+        next_scheduled_send__lte=now
+    ).select_related('instance', 'tenant')
+    
+    logger.info(f"📊 {ready_campaigns.count()} campanhas prontas")
+    
+    # Processa cada uma independentemente
+    for campaign in ready_campaigns:
+        try:
+            # Valida horário
+            can_send, reason = is_allowed_to_send(campaign, now)
+            
+            if not can_send:
+                # Calcula próxima janela válida
+                next_time = calculate_next_send_time(campaign, now)
+                Campaign.objects.filter(id=campaign.id).update(
+                    next_scheduled_send=next_time
+                )
+                continue
+            
+            # Pega próximo contato DESTA campanha
+            contact = get_next_contact(campaign)
+            
+            # Enfileira task
+            send_message_task.apply_async(
+                kwargs={'campaign_id': campaign.id, ...}
+            )
+            
+            # Atualiza next_scheduled_send DESTA campanha
+            delay = random.randint(20, 50)
+            Campaign.objects.filter(id=campaign.id).update(
+                next_scheduled_send=now + timedelta(seconds=delay)
+            )
+            
+        except Exception as e:
+            # ⭐ Erro em 1 campanha NÃO afeta outras
+            logger.exception(f"Erro em {campaign.name}")
+            continue  # Pula para próxima
+```
+
+### Pausar Uma Campanha Específica
+
+```python
+# API Endpoint: POST /campaigns/{id}/pause/
+Campaign.objects.filter(id='uuid-B').update(is_paused=True)
+
+# Próxima execução do scheduler (10s):
+ready = Campaign.objects.filter(
+    status='active',
+    is_paused=False,  # ⭐ Campanha B não aparece
+    next_scheduled_send__lte=now
+)
+
+# Resultado: [Campanha A, Campanha C]
+# ✅ Apenas Campanha B pausada
+# ✅ Campanhas A e C continuam normalmente
+```
+
+---
+
+## 🛡️ PROTEÇÃO ANTI-SPAM (Lock por Telefone)
+
+### Problema
+
+```
+João Silva está em 3 campanhas ativas:
+- Campanha A (Black Friday)
+- Campanha B (Natal)  
+- Campanha C (Ano Novo)
+
+Sem proteção:
+  T=0s → Recebe mensagem da Campanha A
+  T=0s → Recebe mensagem da Campanha B
+  T=0s → Recebe mensagem da Campanha C
+  
+❌ 3 mensagens ao mesmo tempo = SPAM!
+```
+
+### Solução: Redis Lock
+
+```python
+@shared_task
+def send_message_task(self, campaign_id, contact_relation_id, message_id, rendered_message):
+    
+    contact = get_contact(contact_relation_id)
+    
+    # ⭐ Tentar adquirir lock exclusivo no número
+    lock_key = f'phone_lock:{contact.phone}'
+    lock_acquired = redis_client.set(
+        lock_key,
+        campaign_id,  # Qual campanha está usando
+        nx=True,      # Só seta se NÃO existir (atômico)
+        ex=60         # TTL: 60 segundos (segurança)
+    )
+    
+    if not lock_acquired:
+        # ⭐ Outro worker está usando este número AGORA
+        other_campaign = redis_client.get(lock_key).decode()
+        
+        logger.warning(
+            f"⏸ {contact.phone} em uso por {other_campaign}, "
+            f"reagendando {campaign.name} para +20s"
+        )
+        
+        # Reagendar esta task para 20s depois
+        send_message_task.apply_async(
+            kwargs={
+                'campaign_id': campaign_id,
+                'contact_relation_id': contact_relation_id,
+                'message_id': message_id,
+                'rendered_message': rendered_message
+            },
+            countdown=20  # Retry em 20 segundos
+        )
+        
+        return {'status': 'deferred', 'reason': 'phone_in_use'}
+    
+    # ✅ Lock adquirido com sucesso, pode enviar
+    try:
+        # Enviar mensagem
+        response = whatsapp_gateway.send_text_message(
+            instance=campaign.instance,
+            phone=contact.phone,
+            message=rendered_message
+        )
+        
+        # Atualizar status
+        CampaignContact.objects.filter(id=contact_relation_id).update(
+            status='sent',
+            sent_at=timezone.now()
+        )
+        
+        return {'status': 'success'}
+        
+    finally:
+        # ⭐ SEMPRE liberar o lock (mesmo em caso de erro)
+        redis_client.delete(lock_key)
+```
+
+### Timeline com Lock
+
+```
+T=0s - Scheduler enfileira tasks
+
+Campanha A → Task: Enviar para João (+5511999999999)
+Campanha B → Task: Enviar para João (+5511999999999)
+
+───────────────────────────────────────────────────────
+
+T=0.5s - Workers processam (quase simultâneo)
+
+Worker 1 (Campanha A):
+  ↓ SET phone_lock:+5511999999999 = "camp-A" NX EX 60
+  ↓ ✅ Sucesso! Lock adquirido
+  ↓ Envia mensagem (demora ~3s)
+
+Worker 2 (Campanha B) - 0.2s depois:
+  ↓ SET phone_lock:+5511999999999 = "camp-B" NX EX 60
+  ↓ ❌ Falhou! Chave já existe (Worker 1 tem o lock)
+  ↓ GET phone_lock:+5511999999999 → "camp-A"
+  ↓ Log: "Número em uso por camp-A"
+  ↓ apply_async(..., countdown=20)  # Reagenda
+  ↓ return 'deferred'
+
+───────────────────────────────────────────────────────
+
+T=3.5s - Worker 1 finaliza
+
+Worker 1:
+  ↓ Mensagem enviada com sucesso
+  ↓ DELETE phone_lock:+5511999999999
+  ↓ 🔓 Lock liberado
+
+───────────────────────────────────────────────────────
+
+T=20.5s - Task reagendada executa
+
+Worker 2 (retry):
+  ↓ SET phone_lock:+5511999999999 = "camp-B" NX EX 60
+  ↓ ✅ Sucesso! Lock adquirido (Worker 1 já liberou)
+  ↓ Envia mensagem
+  ↓ DELETE lock
+  ↓ ✅ Concluído
+
+───────────────────────────────────────────────────────
+
+RESULTADO:
+João recebeu 2 mensagens com 20 segundos de intervalo ✅
+```
+
+---
+
+## 🕐 SISTEMA DE JANELAS E HORÁRIOS
+
+### Tipos de Agendamento
+
+```python
+class Campaign(models.Model):
+    class ScheduleType(models.TextChoices):
+        IMMEDIATE = 'immediate', 'Imediato'
+        BUSINESS_DAYS = 'business_days', 'Apenas Dias Úteis (9h-18h)'
+        BUSINESS_HOURS = 'business_hours', 'Horário Comercial (9h-18h)'
+        CUSTOM_PERIOD = 'custom_period', 'Período Personalizado'
+    
+    schedule_type = models.CharField(
+        max_length=20,
+        choices=ScheduleType.choices
+    )
+    
+    # Campos para CUSTOM_PERIOD
+    morning_start = models.TimeField(default='09:00')
+    morning_end = models.TimeField(default='12:00')
+    afternoon_start = models.TimeField(default='14:00')
+    afternoon_end = models.TimeField(default='17:00')
+    skip_weekends = models.BooleanField(default=True)
+    skip_holidays = models.BooleanField(default=True)
+```
+
+### Validação com Múltiplas Condições
+
+**Todas as condições ativas devem passar simultaneamente:**
+
+```python
+# campaigns/services.py
+
+def is_allowed_to_send(campaign, current_datetime):
+    """
+    Valida se campanha pode enviar AGORA
+    
+    Valida MÚLTIPLAS condições:
+    1. Dia da semana (útil ou não)
+    2. Feriado
+    3. Horário do dia (janelas)
+    
+    TODAS devem passar para retornar True
+    """
+    hour = current_datetime.hour
+    weekday = current_datetime.weekday()  # 0=seg, 6=dom
+    today = current_datetime.date()
+    current_time = current_datetime.time()
+    
+    # ════════════════════════════════════════════════════════
+    # TIPO 1: IMEDIATO
+    # ════════════════════════════════════════════════════════
+    if campaign.schedule_type == Campaign.ScheduleType.IMMEDIATE:
+        return True, "OK"
+    
+    # ════════════════════════════════════════════════════════
+    # TIPO 2: DIAS ÚTEIS (seg-sex 9h-18h)
+    # ════════════════════════════════════════════════════════
+    if campaign.schedule_type == Campaign.ScheduleType.BUSINESS_DAYS:
+        
+        # ⭐ CONDIÇÃO 1: Dia útil (seg-sex)
+        if weekday >= 5:
+            return False, "fim_de_semana"
+        
+        # ⭐ CONDIÇÃO 2: Não é feriado
+        if Holiday.is_holiday(today, campaign.tenant):
+            return False, "feriado"
+        
+        # ⭐ CONDIÇÃO 3: Horário comercial (9h-18h)
+        if not (9 <= hour < 18):
+            return False, "fora_horario_comercial"
+        
+        # ✅ Todas as 3 condições passaram
+        return True, "OK"
+    
+    # ════════════════════════════════════════════════════════
+    # TIPO 3: HORÁRIO COMERCIAL (9h-18h qualquer dia)
+    # ════════════════════════════════════════════════════════
+    if campaign.schedule_type == Campaign.ScheduleType.BUSINESS_HOURS:
+        if not (9 <= hour < 18):
+            return False, "fora_horario_comercial"
+        return True, "OK"
+    
+    # ════════════════════════════════════════════════════════
+    # TIPO 4: PERÍODO PERSONALIZADO
+    # ════════════════════════════════════════════════════════
+    if campaign.schedule_type == Campaign.ScheduleType.CUSTOM_PERIOD:
+        
+        # ⭐ CONDIÇÃO 1: Fim de semana (se configurado)
+        if campaign.skip_weekends and weekday >= 5:
+            return False, "fim_de_semana"
+        
+        # ⭐ CONDIÇÃO 2: Feriado (se configurado)
+        if campaign.skip_holidays and Holiday.is_holiday(today, campaign.tenant):
+            return False, "feriado"
+        
+        # ⭐ CONDIÇÃO 3: Janela manhã OU tarde
+        in_morning = (
+            campaign.morning_start <= current_time < campaign.morning_end
+        )
+        in_afternoon = (
+            campaign.afternoon_start <= current_time < campaign.afternoon_end
+        )
+        
+        if not (in_morning or in_afternoon):
+            return False, "fora_janela_horario"
+        
+        # ✅ Todas as condições configuradas passaram
+        return True, "OK"
+    
+    return False, "configuracao_invalida"
+```
+
+### Retomada Automática
+
+```python
+def calculate_next_send_time(campaign, current_datetime):
+    """
+    Calcula próxima janela válida considerando TODAS as restrições
+    
+    Exemplo: Sexta 18h com BUSINESS_DAYS
+             → Próximo envio: Segunda 9h
+    """
+    
+    can_send, reason = is_allowed_to_send(campaign, current_datetime)
+    
+    if can_send:
+        # Pode enviar agora, delay normal
+        delay = random.randint(
+            campaign.instance.delay_min_seconds,
+            campaign.instance.delay_max_seconds
+        )
+        return current_datetime + timedelta(seconds=delay)
+    
+    # ⭐ NÃO pode enviar, calcular próxima janela
+    
+    # 1. Buscar próximo DIA válido
+    next_day = current_datetime.date() + timedelta(days=1)
+    
+    for attempt in range(30):  # Máximo 30 dias no futuro
+        weekday = next_day.weekday()
+        
+        # Validar fim de semana (se requerido)
+        if campaign.skip_weekends and weekday >= 5:
+            next_day += timedelta(days=1)
+            continue
+        
+        # Validar feriado (se requerido)
+        if campaign.skip_holidays and Holiday.is_holiday(next_day, campaign.tenant):
+            next_day += timedelta(days=1)
+            continue
+        
+        # ✅ Dia válido encontrado
+        break
+    
+    # 2. Determinar HORÁRIO de início
+    if campaign.schedule_type == Campaign.ScheduleType.CUSTOM_PERIOD:
+        start_hour = campaign.morning_start or time(9, 0)
+    else:
+        start_hour = time(9, 0)
+    
+    # 3. Combinar data + hora
+    next_send = datetime.combine(next_day, start_hour)
+    next_send = timezone.make_aware(next_send)
+    
+    logger.info(
+        f"🌅 {campaign.name}: Próximo envio {next_send.strftime('%A %d/%m às %H:%M')}",
+        extra={'campaign_id': str(campaign.id)}
+    )
+    
+    return next_send
+```
+
+### Exemplo Prático: Sexta 18h → Segunda 9h
+
+```
+CENÁRIO:
+Campanha: "Black Friday VIP"
+Configuração: BUSINESS_DAYS (seg-sex 9h-18h, pula feriados)
+Total: 500 contatos
+
+═══════════════════════════════════════════════════════════
+
+SEXTA-FEIRA 17:45
+  ↓ is_allowed_to_send(sexta 17:45)
+    ├─ weekday = 4 (sexta) ✅ < 5
+    ├─ is_holiday = False ✅
+    ├─ hour = 17 ✅ < 18
+    └─ RETORNA: True, "OK"
+  
+  ✅ PODE ENVIAR
+  → Enfileira contato #450
+  → next_scheduled_send = 17:45:30
+
+SEXTA-FEIRA 18:00
+  ↓ is_allowed_to_send(sexta 18:00)
+    ├─ weekday = 4 ✅
+    ├─ is_holiday = False ✅
+    ├─ hour = 18 ❌ (18 não é < 18)
+    └─ RETORNA: False, "fora_horario_comercial"
+  
+  ❌ NÃO PODE ENVIAR
+  
+  ↓ calculate_next_send_time(sexta 18:00)
+    ├─ Buscar próximo dia:
+    │   Sábado 16/11:
+    │   ├─ weekday = 5 ❌ >= 5 (fim de semana)
+    │   └─ PULA
+    │   
+    │   Domingo 17/11:
+    │   ├─ weekday = 6 ❌ >= 5 (fim de semana)
+    │   └─ PULA
+    │   
+    │   Segunda 18/11:
+    │   ├─ weekday = 0 ✅ < 5 (dia útil)
+    │   ├─ is_holiday = False ✅
+    │   └─ ✅ DIA VÁLIDO!
+    │
+    ├─ Horário: 09:00
+    └─ RETORNA: Segunda 18/11 09:00
+  
+  → UPDATE next_scheduled_send = Segunda 09:00
+
+SÁBADO/DOMINGO (Scheduler roda mas...)
+  ↓ WHERE next_scheduled_send <= NOW()
+  ❌ Campanha não aparece (next_send = Segunda 09:00)
+
+SEGUNDA-FEIRA 09:00 ⭐ RETOMA
+  ↓ WHERE next_scheduled_send <= NOW()
+  ✅ Campanha aparece!
+  
+  ↓ is_allowed_to_send(segunda 09:00)
+    ├─ weekday = 0 ✅ Dia útil
+    ├─ is_holiday = False ✅
+    ├─ hour = 9 ✅
+    └─ RETORNA: True, "OK"
+  
+  ✅ RETOMA!
+  → Contato #451 (continua de onde parou)
+```
+
+---
+
 ## ⚙️ CELERY TASKS
 
 ### Configuração

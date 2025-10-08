@@ -57,11 +57,10 @@ def check_redis():
 
 
 def check_celery():
-    """Check Celery worker status."""
+    """Check Celery worker status (optimized)."""
     try:
-        inspect = current_app.control.inspect()
+        inspect = current_app.control.inspect(timeout=1)  # Reduced timeout
         stats = inspect.stats()
-        active = inspect.active()
         
         if not stats:
             return {
@@ -69,6 +68,8 @@ def check_celery():
                 'error': 'No workers available'
             }
         
+        # Get active tasks with timeout
+        active = inspect.active()
         active_tasks = 0
         if active:
             for worker_tasks in active.values():
@@ -80,14 +81,15 @@ def check_celery():
             'active_tasks': active_tasks,
         }
     except Exception as e:
+        # If Celery is not running, return unhealthy but don't crash
         return {
             'status': 'unhealthy',
-            'error': str(e)
+            'error': 'Celery not available (expected in Railway)'
         }
 
 
 def check_evolution_api():
-    """Check Evolution API connectivity."""
+    """Check Evolution API connectivity (optimized)."""
     try:
         from apps.connections.models import EvolutionConnection
         
@@ -100,14 +102,14 @@ def check_evolution_api():
             'Content-Type': 'application/json'
         }
         
+        # Use a faster endpoint or reduce timeout
         test_url = f"{base_url}/instance/fetchInstances"
-        response = requests.get(test_url, headers=headers, timeout=5)
+        response = requests.get(test_url, headers=headers, timeout=2)  # Reduced timeout
         
         if response.status_code == 200:
             instances = response.json()
             
             # Count registered instances in our database
-            # For now, we'll just return 0 since we haven't implemented instance registration yet
             registered_count = 0
             active_count = 0
             inactive_count = 0
@@ -127,6 +129,11 @@ def check_evolution_api():
                 'error': f'HTTP {response.status_code}'
             }
             
+    except requests.exceptions.Timeout:
+        return {
+            'status': 'timeout',
+            'error': 'Connection timeout (optimized)'
+        }
     except Exception as e:
         return {
             'status': 'error',

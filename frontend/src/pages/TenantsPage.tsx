@@ -33,7 +33,7 @@ export default function TenantsPage() {
   const fetchTenants = async () => {
     try {
       setIsLoading(true)
-      const response = await api.get('/tenancy/tenants/')
+      const response = await api.get('/tenants/tenants/')
       setTenants(response.data.results || response.data)
     } catch (error) {
       console.error('Error fetching tenants:', error)
@@ -46,9 +46,9 @@ export default function TenantsPage() {
     e.preventDefault()
     try {
       if (editingTenant) {
-        await api.patch(`/tenancy/tenants/${editingTenant.id}/`, formData)
+        await api.patch(`/tenants/tenants/${editingTenant.id}/`, formData)
       } else {
-        await api.post('/tenancy/tenants/', formData)
+        await api.post('/tenants/tenants/', formData)
       }
       fetchTenants()
       handleCloseModal()
@@ -60,7 +60,7 @@ export default function TenantsPage() {
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este cliente?')) return
     try {
-      await api.delete(`/tenancy/tenants/${id}/`)
+      await api.delete(`/tenants/tenants/${id}/`)
       fetchTenants()
     } catch (error) {
       console.error('Error deleting tenant:', error)

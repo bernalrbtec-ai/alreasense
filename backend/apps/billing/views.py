@@ -22,6 +22,7 @@ class PlanViewSet(viewsets.ModelViewSet):
         # Only admins can create, update, or delete plans
         if self.action in ['create', 'update', 'partial_update', 'destroy']:
             return [IsAuthenticated(), IsAdminUser()]
+        # Regular users can list and retrieve plans
         return [IsAuthenticated()]
 
 
