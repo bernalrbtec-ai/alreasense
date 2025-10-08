@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Database, Server, Activity, HardDrive } from 'lucide-react'
+import { RefreshCw, Database, Server, Activity, HardDrive, MessageSquare } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -33,6 +33,15 @@ interface SystemStatus {
     used?: string
     free?: string
     percent?: number
+  }
+  evolution_api?: {
+    status: 'active' | 'inactive' | 'error'
+    instance_count?: number
+    registered_instances?: {
+      total: number
+      active: number
+      inactive: number
+    }
   }
 }
 
@@ -187,6 +196,49 @@ export default function SystemStatusPage() {
               )}
               {status.celery.processed_tasks !== undefined && (
                 <p>Tarefas processadas: {status.celery.processed_tasks}</p>
+              )}
+            </div>
+          )}
+        </Card>
+
+        {/* Evolution API */}
+        <Card className="p-6">
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-3">
+              <MessageSquare className={`h-8 w-8 ${
+                status?.evolution_api?.status === 'active' ? 'text-green-600' : 
+                status?.evolution_api?.status === 'inactive' ? 'text-gray-400' : 
+                'text-red-600'
+              }`} />
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Evolution API</h3>
+                <p className="text-sm text-gray-500">WhatsApp Integration</p>
+              </div>
+            </div>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
+              status?.evolution_api?.status === 'active' ? 'bg-green-100 text-green-800' : 
+              status?.evolution_api?.status === 'inactive' ? 'bg-gray-100 text-gray-800' : 
+              'bg-red-100 text-red-800'
+            }`}>
+              {status?.evolution_api?.status === 'active' ? 'Conectado' : 
+               status?.evolution_api?.status === 'inactive' ? 'Inativo' : 
+               'Erro'}
+            </span>
+          </div>
+          {status?.evolution_api && (
+            <div className="mt-4 space-y-2 text-sm text-gray-600">
+              {status.evolution_api.instance_count !== undefined && (
+                <p>Total de instâncias no Evo: {status.evolution_api.instance_count}</p>
+              )}
+              {status.evolution_api.registered_instances && (
+                <>
+                  <p className="font-medium text-blue-700">Instâncias cadastradas no Sense:</p>
+                  <div className="ml-4 space-y-1">
+                    <p>📊 Total: {status.evolution_api.registered_instances.total}</p>
+                    <p>🟢 Ativas: {status.evolution_api.registered_instances.active}</p>
+                    <p>⚪ Inativas: {status.evolution_api.registered_instances.inactive}</p>
+                  </div>
+                </>
               )}
             </div>
           )}

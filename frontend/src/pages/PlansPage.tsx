@@ -9,6 +9,8 @@ interface Plan {
   id: string
   name: string
   price: number
+  billing_cycle_days: number
+  is_free: boolean
   max_connections: number
   max_messages_per_month: number
   features: string[]
@@ -23,6 +25,8 @@ export default function PlansPage() {
   const [formData, setFormData] = useState({
     name: '',
     price: 0,
+    billing_cycle_days: 30,
+    is_free: false,
     max_connections: 1,
     max_messages_per_month: 1000,
     features: [''],
@@ -46,6 +50,8 @@ export default function PlansPage() {
           id: '1',
           name: 'Free',
           price: 0,
+          billing_cycle_days: 30,
+          is_free: true,
           max_connections: 1,
           max_messages_per_month: 1000,
           features: ['1 conexão', '1.000 mensagens/mês', 'Suporte por email'],
@@ -55,6 +61,8 @@ export default function PlansPage() {
           id: '2',
           name: 'Starter',
           price: 49.90,
+          billing_cycle_days: 30,
+          is_free: false,
           max_connections: 3,
           max_messages_per_month: 10000,
           features: ['3 conexões', '10.000 mensagens/mês', 'Suporte prioritário', 'Análise de sentimento'],
@@ -64,6 +72,8 @@ export default function PlansPage() {
           id: '3',
           name: 'Pro',
           price: 149.90,
+          billing_cycle_days: 30,
+          is_free: false,
           max_connections: 10,
           max_messages_per_month: 50000,
           features: ['10 conexões', '50.000 mensagens/mês', 'Suporte 24/7', 'Análise completa', 'API access'],
@@ -73,10 +83,12 @@ export default function PlansPage() {
           id: '4',
           name: 'Enterprise',
           price: 499.90,
+          billing_cycle_days: 30,
+          is_free: false,
           max_connections: -1,
           max_messages_per_month: -1,
           features: ['Conexões ilimitadas', 'Mensagens ilimitadas', 'Suporte dedicado', 'SLA garantido', 'Custom features'],
-          is_active: true,
+          is_active: false,
         },
       ])
     } catch (error) {
@@ -117,6 +129,8 @@ export default function PlansPage() {
     setFormData({
       name: plan.name,
       price: plan.price,
+      billing_cycle_days: plan.billing_cycle_days,
+      is_free: plan.is_free,
       max_connections: plan.max_connections,
       max_messages_per_month: plan.max_messages_per_month,
       features: plan.features,
@@ -131,6 +145,8 @@ export default function PlansPage() {
     setFormData({
       name: '',
       price: 0,
+      billing_cycle_days: 30,
+      is_free: false,
       max_connections: 1,
       max_messages_per_month: 1000,
       features: [''],
@@ -178,43 +194,52 @@ export default function PlansPage() {
 
       <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((plan) => (
-          <Card key={plan.id} className={`p-6 ${!plan.is_active ? 'opacity-50' : ''}`}>
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
-                <p className="mt-1 text-3xl font-bold text-blue-600">
-                  R$ {plan.price.toFixed(2)}
-                  <span className="text-sm font-normal text-gray-500">/mês</span>
+          <Card key={plan.id} className={`p-6 relative ${!plan.is_active ? 'opacity-60 border-gray-300' : 'border-blue-200'}`}>
+            {/* Status Badge */}
+            <div className="absolute top-4 right-4 flex gap-2">
+              {plan.is_active ? (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                  <span className="w-2 h-2 rounded-full bg-green-500 mr-1.5 animate-pulse"></span>
+                  Ativo
+                </span>
+              ) : (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                  <span className="w-2 h-2 rounded-full bg-gray-500 mr-1.5"></span>
+                  Inativo
+                </span>
+              )}
+              {plan.is_free && (
+                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                  Gratuito
+                </span>
+              )}
+            </div>
+
+            <div className="mb-4 pr-24">
+              <h3 className="text-lg font-bold text-gray-900">{plan.name}</h3>
+              <div className="mt-2">
+                <p className="text-3xl font-bold text-blue-600">
+                  {plan.is_free ? 'Grátis' : `R$ ${plan.price.toFixed(2)}`}
                 </p>
-              </div>
-              <div className="flex gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleEdit(plan)}
-                >
-                  <Edit className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => handleDelete(plan.id)}
-                  className="text-red-600 hover:text-red-700"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {!plan.is_free && (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Cobrança a cada {plan.billing_cycle_days} dias
+                  </p>
+                )}
               </div>
             </div>
             
-            <div className="space-y-2">
-              <div className="text-sm text-gray-600">
-                <p className="font-medium">Conexões: {plan.max_connections === -1 ? 'Ilimitadas' : plan.max_connections}</p>
+            <div className="space-y-3">
+              <div className="text-sm text-gray-600 space-y-1">
                 <p className="font-medium">
-                  Mensagens: {plan.max_messages_per_month === -1 ? 'Ilimitadas' : plan.max_messages_per_month.toLocaleString()}/mês
+                  📱 Conexões: {plan.max_connections === -1 ? 'Ilimitadas' : plan.max_connections}
+                </p>
+                <p className="font-medium">
+                  💬 Mensagens: {plan.max_messages_per_month === -1 ? 'Ilimitadas' : plan.max_messages_per_month.toLocaleString()}/{plan.billing_cycle_days} dias
                 </p>
               </div>
               
-              <div className="pt-4 border-t border-gray-200">
+              <div className="pt-3 border-t border-gray-200">
                 <ul className="space-y-2">
                   {plan.features.map((feature, index) => (
                     <li key={index} className="flex items-start text-sm text-gray-600">
@@ -226,11 +251,25 @@ export default function PlansPage() {
               </div>
             </div>
             
-            {!plan.is_active && (
-              <div className="mt-4 text-xs text-red-600 font-medium">
-                Plano inativo
-              </div>
-            )}
+            <div className="mt-4 pt-4 border-t border-gray-200 flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleEdit(plan)}
+                className="flex-1"
+              >
+                <Edit className="h-3 w-3 mr-1" />
+                Editar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleDelete(plan.id)}
+                className="text-red-600 hover:text-red-700 hover:border-red-300"
+              >
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </div>
           </Card>
         ))}
       </div>
@@ -283,7 +322,49 @@ export default function PlansPage() {
                           value={formData.price}
                           onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          disabled={formData.is_free}
                         />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="billing_cycle_days" className="block text-sm font-medium text-gray-700">
+                          Ciclo de Cobrança (dias)
+                        </label>
+                        <input
+                          type="number"
+                          id="billing_cycle_days"
+                          min="1"
+                          required
+                          value={formData.billing_cycle_days}
+                          onChange={(e) => setFormData({ ...formData, billing_cycle_days: parseInt(e.target.value) })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                          disabled={formData.is_free}
+                        />
+                        <p className="mt-1 text-xs text-gray-500">
+                          Padrão: 30 dias (mensal)
+                        </p>
+                      </div>
+
+                      <div className="flex items-center pt-6">
+                        <input
+                          type="checkbox"
+                          id="is_free"
+                          checked={formData.is_free}
+                          onChange={(e) => {
+                            const isFree = e.target.checked
+                            setFormData({ 
+                              ...formData, 
+                              is_free: isFree,
+                              price: isFree ? 0 : formData.price,
+                            })
+                          }}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="is_free" className="ml-2 block text-sm text-gray-900">
+                          Plano Gratuito (não gera cobrança)
+                        </label>
                       </div>
                     </div>
 
