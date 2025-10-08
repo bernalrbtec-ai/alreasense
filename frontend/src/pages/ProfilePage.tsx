@@ -260,43 +260,98 @@ export default function ProfilePage() {
               </div>
 
               <div>
-                <Label htmlFor="birth_date">Data de Nascimento</Label>
-                <Input
-                  id="birth_date"
-                  type="date"
-                  value={profileData.birth_date}
-                  onChange={(e) => setProfileData({ ...profileData, birth_date: e.target.value })}
-                />
+                <Label>Data de Nascimento</Label>
+                <div className="grid grid-cols-3 gap-2">
+                  <select
+                    value={profileData.birth_date ? new Date(profileData.birth_date).getDate() : ''}
+                    onChange={(e) => {
+                      const day = e.target.value
+                      const currentDate = profileData.birth_date ? new Date(profileData.birth_date) : new Date()
+                      const month = currentDate.getMonth() + 1
+                      const year = currentDate.getFullYear()
+                      const newDate = `${year}-${month.toString().padStart(2, '0')}-${day.padStart(2, '0')}`
+                      setProfileData({ ...profileData, birth_date: newDate })
+                    }}
+                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Dia</option>
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map(day => (
+                      <option key={day} value={day}>{day}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={profileData.birth_date ? new Date(profileData.birth_date).getMonth() + 1 : ''}
+                    onChange={(e) => {
+                      const month = e.target.value
+                      const currentDate = profileData.birth_date ? new Date(profileData.birth_date) : new Date()
+                      const day = currentDate.getDate()
+                      const year = currentDate.getFullYear()
+                      const newDate = `${year}-${month.padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+                      setProfileData({ ...profileData, birth_date: newDate })
+                    }}
+                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Mês</option>
+                    {[
+                      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+                    ].map((month, index) => (
+                      <option key={index} value={index + 1}>{month}</option>
+                    ))}
+                  </select>
+                  
+                  <select
+                    value={profileData.birth_date ? new Date(profileData.birth_date).getFullYear() : ''}
+                    onChange={(e) => {
+                      const year = e.target.value
+                      const currentDate = profileData.birth_date ? new Date(profileData.birth_date) : new Date()
+                      const day = currentDate.getDate()
+                      const month = currentDate.getMonth() + 1
+                      const newDate = `${year}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`
+                      setProfileData({ ...profileData, birth_date: newDate })
+                    }}
+                    className="flex h-10 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  >
+                    <option value="">Ano</option>
+                    {Array.from({ length: 100 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                      <option key={year} value={year}>{year}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
 
-            {/* Notification Settings */}
-            <div className="grid grid-cols-2 gap-3 pt-2">
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="notify_email"
-                  checked={profileData.notify_email}
-                  onChange={(e) => setProfileData({ ...profileData, notify_email: e.target.checked })}
-                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <Label htmlFor="notify_email" className="!mb-0 flex items-center gap-1">
-                  <Mail className="h-4 w-4 text-gray-500" />
-                  Notificar via Email
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="notify_whatsapp"
-                  checked={profileData.notify_whatsapp}
-                  onChange={(e) => setProfileData({ ...profileData, notify_whatsapp: e.target.checked })}
-                  className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <Label htmlFor="notify_whatsapp" className="!mb-0 flex items-center gap-1">
-                  <MessageSquare className="h-4 w-4 text-gray-500" />
-                  Notificar via WhatsApp
-                </Label>
+              {/* Notification Settings - Vertical */}
+              <div className="space-y-3">
+                <Label>Notificações</Label>
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="notify_email"
+                      checked={profileData.notify_email}
+                      onChange={(e) => setProfileData({ ...profileData, notify_email: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <Label htmlFor="notify_email" className="!mb-0 flex items-center gap-1">
+                      <Mail className="h-4 w-4 text-gray-500" />
+                      Notificar via Email
+                    </Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="checkbox"
+                      id="notify_whatsapp"
+                      checked={profileData.notify_whatsapp}
+                      onChange={(e) => setProfileData({ ...profileData, notify_whatsapp: e.target.checked })}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <Label htmlFor="notify_whatsapp" className="!mb-0 flex items-center gap-1">
+                      <MessageSquare className="h-4 w-4 text-gray-500" />
+                      Notificar via WhatsApp
+                    </Label>
+                  </div>
+                </div>
               </div>
             </div>
           </form>

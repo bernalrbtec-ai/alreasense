@@ -22,6 +22,42 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     serializer_class = CustomTokenObtainPairSerializer
 
 
+@api_view(['POST'])
+def login_with_email(request):
+    """Login with email instead of username."""
+    email = request.data.get('email')
+    password = request.data.get('password')
+    
+    if not email or not password:
+        return Response(
+            {'detail': 'Email e senha são obrigatórios'}, 
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Try to find user by email
+    try:
+        user = User.objects.get(email=email)
+        # Authenticate using the username (which might be different from email)
+        authenticated_user = authenticate(username=user.username, password=password)
+        
+        if authenticated_user:
+            refresh = RefreshToken.for_user(authenticated_user)
+            return Response({
+                'refresh': str(refresh),
+                'access': str(refresh.access_token),
+            })
+        else:
+            return Response(
+                {'detail': 'Credenciais inválidas'}, 
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+    except User.DoesNotExist:
+        return Response(
+            {'detail': 'Usuário não encontrado'}, 
+            status=status.HTTP_401_UNAUTHORIZED
+        )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def me(request):
