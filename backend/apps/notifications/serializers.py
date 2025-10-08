@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog
+from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig
 
 
 class NotificationTemplateSerializer(serializers.ModelSerializer):
@@ -133,4 +133,52 @@ class SendNotificationSerializer(serializers.Serializer):
         except User.DoesNotExist:
             raise serializers.ValidationError("Usuário não encontrado")
         return value
+
+
+class SMTPConfigSerializer(serializers.ModelSerializer):
+    """Serializer for SMTPConfig."""
+    
+    created_by_name = serializers.SerializerMethodField()
+    tenant_name = serializers.SerializerMethodField()
+    last_test_status_display = serializers.CharField(source='get_last_test_status_display', read_only=True)
+    
+    class Meta:
+        model = SMTPConfig
+        fields = [
+            'id', 'tenant', 'tenant_name', 'name',
+            'host', 'port', 'username', 'password',
+            'use_tls', 'use_ssl', 'from_email', 'from_name',
+            'is_active', 'is_default',
+            'last_test', 'last_test_status', 'last_test_status_display', 'last_test_error',
+            'created_at', 'updated_at', 'created_by', 'created_by_name'
+        ]
+        read_only_fields = ['id', 'last_test', 'last_test_status', 'last_test_error', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'password': {'write_only': True}  # Don't expose password in responses
+        }
+    
+    def get_created_by_name(self, obj):
+        if obj.created_by:
+            return f"{obj.created_by.first_name} {obj.created_by.last_name}".strip() or obj.created_by.username
+        return None
+    
+    def get_tenant_name(self, obj):
+        return obj.tenant.name if obj.tenant else 'Global'
+    
+    def create(self, validated_data):
+        # Set created_by from request user
+        request = self.context.get('request')
+        if request and request.user:
+            validated_data['created_by'] = request.user
+            # Set tenant from user if not provided
+            if not validated_data.get('tenant'):
+                validated_data['tenant'] = request.user.tenant
+        
+        return super().create(validated_data)
+
+
+class TestSMTPSerializer(serializers.Serializer):
+    """Serializer for testing SMTP configuration."""
+    
+    test_email = serializers.EmailField(required=True, help_text="Email para receber o teste")
 

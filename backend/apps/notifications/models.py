@@ -299,3 +299,123 @@ class NotificationLog(models.Model):
     def __str__(self):
         return f"{self.get_type_display()} to {self.recipient.email} - {self.get_status_display()}"
 
+
+class SMTPConfig(models.Model):
+    """SMTP server configuration for sending emails."""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='smtp_configs',
+        null=True,
+        blank=True,
+        help_text="Tenant específico (null = configuração global)"
+    )
+    
+    name = models.CharField(max_length=100, help_text="Nome identificador da configuração")
+    
+    # SMTP Settings
+    host = models.CharField(max_length=255, help_text="Servidor SMTP (ex: smtp.gmail.com)")
+    port = models.IntegerField(default=587, help_text="Porta SMTP (587 para TLS, 465 para SSL)")
+    username = models.CharField(max_length=255, help_text="Usuário/Email para autenticação")
+    password = models.CharField(max_length=255, help_text="Senha do email")
+    use_tls = models.BooleanField(default=True, help_text="Usar TLS (Transport Layer Security)")
+    use_ssl = models.BooleanField(default=False, help_text="Usar SSL (Secure Sockets Layer)")
+    
+    # Email Settings
+    from_email = models.EmailField(help_text="Email do remetente")
+    from_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Nome do remetente (ex: Alrea Sense)"
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True)
+    is_default = models.BooleanField(
+        default=False,
+        help_text="Configuração padrão para envio de emails"
+    )
+    
+    # Test info
+    last_test = models.DateTimeField(null=True, blank=True)
+    last_test_status = models.CharField(
+        max_length=20,
+        blank=True,
+        choices=[
+            ('success', 'Sucesso'),
+            ('failed', 'Falhou'),
+        ]
+    )
+    last_test_error = models.TextField(blank=True)
+    
+    # Timestamps
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_smtp_configs'
+    )
+    
+    class Meta:
+        db_table = 'notifications_smtp_config'
+        verbose_name = 'SMTP Configuration'
+        verbose_name_plural = 'SMTP Configurations'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        tenant_name = self.tenant.name if self.tenant else 'Global'
+        return f"{self.name} ({self.host}) - {tenant_name}"
+    
+    def test_connection(self, test_email):
+        """Test SMTP connection by sending a test email."""
+        from django.core.mail import send_mail
+        from django.core.mail import get_connection
+        from django.utils import timezone
+        
+        try:
+            # Create email connection with these settings
+            connection = get_connection(
+                backend='django.core.mail.backends.smtp.EmailBackend',
+                host=self.host,
+                port=self.port,
+                username=self.username,
+                password=self.password,
+                use_tls=self.use_tls,
+                use_ssl=self.use_ssl,
+                fail_silently=False,
+            )
+            
+            # Send test email
+            from_address = f"{self.from_name} <{self.from_email}>" if self.from_name else self.from_email
+            
+            send_mail(
+                subject='Teste de Configuração SMTP - Alrea Sense',
+                message='Este é um email de teste para verificar a configuração do servidor SMTP.\n\nSe você recebeu esta mensagem, a configuração está funcionando corretamente!',
+                from_email=from_address,
+                recipient_list=[test_email],
+                connection=connection,
+                fail_silently=False,
+            )
+            
+            # Update test status
+            self.last_test = timezone.now()
+            self.last_test_status = 'success'
+            self.last_test_error = ''
+            self.save()
+            
+            return True, 'Email de teste enviado com sucesso!'
+        
+        except Exception as e:
+            # Update test status with error
+            self.last_test = timezone.now()
+            self.last_test_status = 'failed'
+            self.last_test_error = str(e)
+            self.save()
+            
+            return False, str(e)
+

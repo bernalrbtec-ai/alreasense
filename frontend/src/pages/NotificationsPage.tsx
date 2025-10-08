@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
+import { Input } from '../components/ui/Input'
+import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit } from 'lucide-react'
+import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon } from 'lucide-react'
 import { api } from '../lib/api'
 
 interface NotificationTemplate {
@@ -26,11 +28,28 @@ interface WhatsAppInstance {
   is_default: boolean
 }
 
+interface SMTPConfig {
+  id: string
+  name: string
+  host: string
+  port: number
+  from_email: string
+  from_name: string
+  is_active: boolean
+  is_default: boolean
+  last_test_status: string
+  last_test: string
+}
+
 export default function NotificationsPage() {
-  const [activeTab, setActiveTab] = useState<'templates' | 'instances' | 'logs'>('templates')
+  const [activeTab, setActiveTab] = useState<'templates' | 'instances' | 'smtp' | 'logs'>('templates')
   const [templates, setTemplates] = useState<NotificationTemplate[]>([])
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
+  const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [testEmailModal, setTestEmailModal] = useState<{ show: boolean, smtpId: string | null }>({ show: false, smtpId: null })
+  const [testEmail, setTestEmail] = useState('')
+  const [isTesting, setIsTesting] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -45,11 +64,39 @@ export default function NotificationsPage() {
       } else if (activeTab === 'instances') {
         const response = await api.get('/notifications/whatsapp-instances/')
         setInstances(Array.isArray(response.data) ? response.data : [])
+      } else if (activeTab === 'smtp') {
+        const response = await api.get('/notifications/smtp-configs/')
+        setSmtpConfigs(Array.isArray(response.data) ? response.data : [])
       }
     } catch (error) {
       console.error('Error fetching data:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleTestSMTP = async () => {
+    if (!testEmailModal.smtpId || !testEmail) return
+    
+    setIsTesting(true)
+    try {
+      const response = await api.post(`/notifications/smtp-configs/${testEmailModal.smtpId}/test/`, {
+        test_email: testEmail
+      })
+      
+      if (response.data.success) {
+        alert('✅ Email de teste enviado com sucesso!')
+      } else {
+        alert(`❌ Erro: ${response.data.message}`)
+      }
+      
+      setTestEmailModal({ show: false, smtpId: null })
+      setTestEmail('')
+      fetchData()
+    } catch (error: any) {
+      alert(`❌ Erro ao enviar email de teste: ${error.response?.data?.message || error.message}`)
+    } finally {
+      setIsTesting(false)
     }
   }
 
@@ -109,6 +156,17 @@ export default function NotificationsPage() {
           >
             <Server className="h-4 w-4" />
             Instâncias WhatsApp
+          </button>
+          <button
+            onClick={() => setActiveTab('smtp')}
+            className={`${
+              activeTab === 'smtp'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+          >
+            <Mail className="h-4 w-4" />
+            Servidor SMTP
           </button>
           <button
             onClick={() => setActiveTab('logs')}
@@ -231,6 +289,74 @@ export default function NotificationsPage() {
         </div>
       )}
 
+      {/* SMTP Tab */}
+      {activeTab === 'smtp' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {Array.isArray(smtpConfigs) && smtpConfigs.map((smtp) => (
+            <Card key={smtp.id} className="p-4">
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-semibold text-gray-900">{smtp.name}</h3>
+                  <p className="text-sm text-gray-500">{smtp.host}:{smtp.port}</p>
+                  <p className="text-sm text-gray-600 mt-1">{smtp.from_email}</p>
+                  {smtp.from_name && (
+                    <p className="text-xs text-gray-500">{smtp.from_name}</p>
+                  )}
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                    smtp.is_active ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                  }`}>
+                    {smtp.is_active ? 'Ativo' : 'Inativo'}
+                  </span>
+                  {smtp.is_default && (
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      Padrão
+                    </span>
+                  )}
+                  {smtp.last_test_status && (
+                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                      smtp.last_test_status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                    }`}>
+                      {smtp.last_test_status === 'success' ? (
+                        <><Check className="h-3 w-3 mr-1" /> Teste OK</>
+                      ) : (
+                        <><XIcon className="h-3 w-3 mr-1" /> Falhou</>
+                      )}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTestEmailModal({ show: true, smtpId: smtp.id })
+                  }}
+                >
+                  <Send className="h-4 w-4 mr-2" />
+                  Testar Email
+                </Button>
+                <Button variant="ghost" size="sm">
+                  <Edit className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          ))}
+          
+          {(!Array.isArray(smtpConfigs) || smtpConfigs.length === 0) && (
+            <div className="col-span-full text-center py-12">
+              <Mail className="mx-auto h-12 w-12 text-gray-400" />
+              <h3 className="mt-2 text-sm font-medium text-gray-900">Nenhum servidor SMTP cadastrado</h3>
+              <p className="mt-1 text-sm text-gray-500">
+                Configure um servidor SMTP para enviar notificações por email
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Logs Tab */}
       {activeTab === 'logs' && (
         <div className="text-center py-12">
@@ -239,6 +365,71 @@ export default function NotificationsPage() {
           <p className="mt-1 text-sm text-gray-500">
             Em desenvolvimento
           </p>
+        </div>
+      )}
+
+      {/* Test Email Modal */}
+      {testEmailModal.show && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Testar Envio de Email</h3>
+              <button
+                onClick={() => {
+                  setTestEmailModal({ show: false, smtpId: null })
+                  setTestEmail('')
+                }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <XIcon className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="test_email">Email para Teste</Label>
+                <Input
+                  id="test_email"
+                  type="email"
+                  value={testEmail}
+                  onChange={(e) => setTestEmail(e.target.value)}
+                  placeholder="seu@email.com"
+                  className="mt-1"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Um email de teste será enviado para este endereço
+                </p>
+              </div>
+              
+              <div className="flex justify-end gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setTestEmailModal({ show: false, smtpId: null })
+                    setTestEmail('')
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleTestSMTP}
+                  disabled={isTesting || !testEmail}
+                >
+                  {isTesting ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4 mr-2" />
+                      Enviar Teste
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

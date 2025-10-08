@@ -5,12 +5,14 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.db import models
 
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog
+from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig
 from .serializers import (
     NotificationTemplateSerializer,
     WhatsAppInstanceSerializer,
     NotificationLogSerializer,
-    SendNotificationSerializer
+    SendNotificationSerializer,
+    SMTPConfigSerializer,
+    TestSMTPSerializer
 )
 
 User = get_user_model()
@@ -231,4 +233,70 @@ class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):
             'pending': pending,
             'by_type': by_type
         })
+
+
+class SMTPConfigViewSet(viewsets.ModelViewSet):
+    """ViewSet for SMTP Configuration."""
+    
+    serializer_class = SMTPConfigSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Superadmin can see all configs
+        if user.is_superuser or user.is_staff:
+            return SMTPConfig.objects.all()
+        
+        # Regular users see only their tenant configs
+        return SMTPConfig.objects.filter(tenant=user.tenant)
+    
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+    
+    @action(detail=True, methods=['post'])
+    def test(self, request, pk=None):
+        """Test SMTP configuration by sending a test email."""
+        smtp_config = self.get_object()
+        serializer = TestSMTPSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        test_email = serializer.validated_data['test_email']
+        
+        try:
+            success, message = smtp_config.test_connection(test_email)
+            
+            # Refresh the object to get updated test status
+            smtp_config.refresh_from_db()
+            
+            response_serializer = self.get_serializer(smtp_config)
+            
+            return Response({
+                'success': success,
+                'message': message,
+                'smtp_config': response_serializer.data
+            }, status=status.HTTP_200_OK if success else status.HTTP_400_BAD_REQUEST)
+        
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def set_default(self, request, pk=None):
+        """Set this SMTP config as default for the tenant."""
+        smtp_config = self.get_object()
+        
+        # Remove default from other configs of same tenant
+        SMTPConfig.objects.filter(
+            tenant=smtp_config.tenant,
+            is_default=True
+        ).update(is_default=False)
+        
+        smtp_config.is_default = True
+        smtp_config.save()
+        
+        serializer = self.get_serializer(smtp_config)
+        return Response(serializer.data)
 

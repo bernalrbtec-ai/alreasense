@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog
+from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig
 
 
 @admin.register(NotificationTemplate)
@@ -80,6 +80,33 @@ class NotificationLogAdmin(admin.ModelAdmin):
         }),
         ('Metadata', {
             'fields': ('metadata',),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(SMTPConfig)
+class SMTPConfigAdmin(admin.ModelAdmin):
+    list_display = ['name', 'host', 'port', 'from_email', 'is_active', 'is_default', 'last_test_status', 'last_test']
+    list_filter = ['is_active', 'is_default', 'use_tls', 'use_ssl', 'last_test_status', 'created_at']
+    search_fields = ['name', 'host', 'from_email', 'username']
+    readonly_fields = ['id', 'last_test', 'last_test_status', 'last_test_error', 'created_at', 'updated_at']
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('id', 'tenant', 'name', 'is_active', 'is_default')
+        }),
+        ('Configuração SMTP', {
+            'fields': ('host', 'port', 'username', 'password', 'use_tls', 'use_ssl')
+        }),
+        ('Configuração de Email', {
+            'fields': ('from_email', 'from_name')
+        }),
+        ('Status de Teste', {
+            'fields': ('last_test', 'last_test_status', 'last_test_error'),
+            'classes': ('collapse',)
+        }),
+        ('Metadados', {
+            'fields': ('created_by', 'created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
