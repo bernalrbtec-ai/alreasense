@@ -177,9 +177,11 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
                     'message': 'QR code gerado com sucesso'
                 })
             else:
+                # Mostrar o erro detalhado que está no last_error da instância
+                error_message = instance.last_error or 'Falha ao gerar QR code'
                 return Response({
                     'success': False,
-                    'error': 'Falha ao gerar QR code'
+                    'error': error_message
                 }, status=status.HTTP_400_BAD_REQUEST)
                 
         except Exception as e:
