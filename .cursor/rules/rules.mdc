@@ -959,6 +959,12 @@ Repositório de experimentos versionado (prompt_vN).
 
 ✅ Regras finais
 
+sempre teste local, simule e homologue as alterações.
+
+haja com um dev senior.
+
+use as melhores praticas de desenvolmimento, presando usabilidade segurança e desempenho.
+
 Nenhum dado cru de cliente fora do banco.
 
 Cada Tenant isolado em queries e permissões.

@@ -14,7 +14,7 @@ class EvolutionConnection(models.Model):
         ('error', 'Error'),
     ]
     
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    id = models.AutoField(primary_key=True)
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='evolution_connections')
     name = models.CharField(max_length=100)
     base_url = models.URLField(help_text="URL base da Evolution API", blank=True, null=True)
