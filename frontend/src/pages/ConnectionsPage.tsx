@@ -33,6 +33,7 @@ export default function ConnectionsPage() {
   const [editingInstance, setEditingInstance] = useState<WhatsAppInstance | null>(null)
   const [showQRModal, setShowQRModal] = useState(false)
   const [qrCodeData, setQrCodeData] = useState<{qr_code: string, expires_at: string} | null>(null)
+  const [qrInstance, setQrInstance] = useState<WhatsAppInstance | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(new Set())
   
@@ -157,6 +158,7 @@ export default function ConnectionsPage() {
 
   const handleGenerateQR = async (instance: WhatsAppInstance) => {
     setIsGeneratingQR(true)
+    setQrInstance(instance) // Salvar instância para usar no modal
     try {
       const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/generate_qr/`)
       if (response.data.success) {
@@ -497,13 +499,16 @@ export default function ConnectionsPage() {
               <div className="flex gap-2 justify-center">
                 <Button
                   variant="outline"
-                  onClick={() => handleGenerateQR(editingInstance!)}
-                  disabled={isGeneratingQR}
+                  onClick={() => qrInstance && handleGenerateQR(qrInstance)}
+                  disabled={isGeneratingQR || !qrInstance}
                 >
                   {isGeneratingQR ? 'Gerando...' : 'Atualizar QR'}
                 </Button>
                 <Button
-                  onClick={() => setShowQRModal(false)}
+                  onClick={() => {
+                    setShowQRModal(false)
+                    setQrInstance(null)
+                  }}
                 >
                   Fechar
                 </Button>
