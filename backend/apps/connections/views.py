@@ -102,43 +102,57 @@ def evolution_config(request):
     
     elif request.method == 'POST':
         # Atualizar configuração no banco de dados
-        data = request.data
-        
-        # Buscar ou criar conexão
-        connection = EvolutionConnection.objects.filter(is_active=True).first()
-        
-        if not connection:
-            from apps.tenancy.models import Tenant
-            tenant = Tenant.objects.first()
-            connection = EvolutionConnection.objects.create(
-                tenant=tenant,
-                name=data.get('name', 'Evolution RBTec'),
-                base_url=data.get('base_url', 'https://evo.rbtec.com.br'),
-                api_key=data.get('api_key', ''),
-                is_active=data.get('is_active', True),
-                status='inactive'
-            )
-        else:
-            # Atualizar existente
-            connection.name = data.get('name', connection.name)
-            connection.base_url = data.get('base_url', connection.base_url)
-            connection.api_key = data.get('api_key', connection.api_key)
-            connection.is_active = data.get('is_active', connection.is_active)
-            connection.save()
-        
-        return Response({
-            'id': str(connection.id),
-            'name': connection.name,
-            'base_url': connection.base_url,
-            'api_key': connection.api_key,
-            'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
-            'is_active': connection.is_active,
-            'status': connection.status,
-            'last_check': connection.last_check.isoformat() if connection.last_check else None,
-            'last_error': connection.last_error,
-            'created_at': connection.created_at.isoformat() if connection.created_at else None,
-            'updated_at': connection.updated_at.isoformat() if connection.updated_at else None,
-        }, status=status.HTTP_200_OK)
+        try:
+            data = request.data
+            
+            # Buscar ou criar conexão
+            connection = EvolutionConnection.objects.filter(is_active=True).first()
+            
+            if not connection:
+                from apps.tenancy.models import Tenant
+                tenant = Tenant.objects.first()
+                
+                if not tenant:
+                    return Response({
+                        'error': 'Nenhum tenant encontrado no sistema'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                connection = EvolutionConnection.objects.create(
+                    tenant=tenant,
+                    name=data.get('name', 'Evolution RBTec'),
+                    base_url=data.get('base_url', 'https://evo.rbtec.com.br'),
+                    api_key=data.get('api_key', ''),
+                    is_active=data.get('is_active', True),
+                    status='inactive'
+                )
+            else:
+                # Atualizar existente
+                connection.name = data.get('name', connection.name)
+                connection.base_url = data.get('base_url', connection.base_url)
+                connection.api_key = data.get('api_key', connection.api_key)
+                connection.is_active = data.get('is_active', connection.is_active)
+                connection.save()
+            
+            return Response({
+                'id': str(connection.id),
+                'name': connection.name,
+                'base_url': connection.base_url,
+                'api_key': connection.api_key,
+                'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
+                'is_active': connection.is_active,
+                'status': connection.status,
+                'last_check': connection.last_check.isoformat() if connection.last_check else None,
+                'last_error': connection.last_error,
+                'created_at': connection.created_at.isoformat() if connection.created_at else None,
+                'updated_at': connection.updated_at.isoformat() if connection.updated_at else None,
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'error': f'Erro ao salvar configuração: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 @api_view(['POST'])
