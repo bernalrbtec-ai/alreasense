@@ -340,43 +340,10 @@ export default function ConnectionsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(instances) && instances.map((instance) => (
             <Card key={instance.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
-                  {instance.phone_number && (
-                    <p className="text-sm text-gray-600 mt-1">📱 {formatPhone(instance.phone_number)}</p>
-                  )}
-                  {instance.api_key && (
-                    <div className="flex items-center gap-1 mt-1">
-                      <span className="text-xs">🔑</span>
-                      <p className="text-xs text-gray-600 font-mono truncate flex-1">
-                        {visibleApiKeys.has(instance.id) ? instance.api_key : '••••••••••••••••••••••••••••••'}
-                      </p>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setVisibleApiKeys(prev => {
-                            const next = new Set(prev)
-                            if (next.has(instance.id)) {
-                              next.delete(instance.id)
-                            } else {
-                              next.add(instance.id)
-                            }
-                            return next
-                          })
-                        }}
-                        className="text-gray-400 hover:text-gray-600 flex-shrink-0"
-                        title={visibleApiKeys.has(instance.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
-                      >
-                        {visibleApiKeys.has(instance.id) ? '👁️' : '👁️‍🗨️'}
-                      </button>
-                    </div>
-                  )}
-                  {!instance.api_key && instance.instance_name && (
-                    <p className="text-xs text-gray-400 mt-1 italic">API Key será gerada ao conectar</p>
-                  )}
-                </div>
-                <div className="flex items-center gap-2">
+              {/* Header com nome e badges - sempre no topo */}
+              <div className="flex items-start justify-between mb-3">
+                <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
+                <div className="flex items-center gap-2 flex-shrink-0">
                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                     instance.connection_state === 'open' 
                       ? 'bg-green-100 text-green-800' 
@@ -393,6 +360,42 @@ export default function ConnectionsPage() {
                     </span>
                   )}
                 </div>
+              </div>
+              
+              {/* Conteúdo principal - telefone e API key */}
+              <div className="space-y-2">
+                {instance.phone_number && (
+                  <p className="text-sm text-gray-600">📱 {formatPhone(instance.phone_number)}</p>
+                )}
+                {instance.api_key && (
+                  <div className="flex items-center gap-1">
+                    <span className="text-xs">🔑</span>
+                    <p className="text-xs text-gray-600 font-mono break-all">
+                      {visibleApiKeys.has(instance.id) ? instance.api_key : '••••••••••••••••••••••••••••••'}
+                    </p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setVisibleApiKeys(prev => {
+                          const next = new Set(prev)
+                          if (next.has(instance.id)) {
+                            next.delete(instance.id)
+                          } else {
+                            next.add(instance.id)
+                          }
+                          return next
+                        })
+                      }}
+                      className="text-gray-400 hover:text-gray-600 flex-shrink-0 ml-1"
+                      title={visibleApiKeys.has(instance.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
+                    >
+                      {visibleApiKeys.has(instance.id) ? '👁️' : '👁️‍🗨️'}
+                    </button>
+                  </div>
+                )}
+                {!instance.api_key && instance.instance_name && (
+                  <p className="text-xs text-gray-400 italic">API Key será gerada ao conectar</p>
+                )}
               </div>
               <div className="mt-4 flex gap-2">
                 <Button 
