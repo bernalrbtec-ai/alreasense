@@ -8,7 +8,7 @@ import Toast from '../components/ui/Toast'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
-import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon } from 'lucide-react'
+import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon, QrCode, WifiOff } from 'lucide-react'
 import { api } from '../lib/api'
 
 interface NotificationTemplate {
@@ -24,12 +24,15 @@ interface NotificationTemplate {
 
 interface WhatsAppInstance {
   id: string
-  name: string
+  friendly_name: string
   instance_name: string
   phone_number: string
   status: string
   is_active: boolean
   is_default: boolean
+  connection_state: string
+  qr_code?: string
+  qr_code_expires_at?: string
 }
 
 interface SMTPConfig {
@@ -62,6 +65,9 @@ export default function NotificationsPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [editingSMTP, setEditingSMTP] = useState<SMTPConfig | null>(null)
   const [editingInstance, setEditingInstance] = useState<WhatsAppInstance | null>(null)
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [qrCodeData, setQrCodeData] = useState<{qr_code: string, expires_at: string} | null>(null)
+  const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   
   // Notificações toast
   const { toast, showToast, hideToast } = useToast()
@@ -83,7 +89,7 @@ export default function NotificationsPage() {
 
   // Form data para WhatsApp Instance
   const [instanceForm, setInstanceForm] = useState({
-    name: '',
+    friendly_name: '',
     instance_name: '',
     api_url: '',
     api_key: '',
@@ -232,6 +238,49 @@ export default function NotificationsPage() {
     }
   }
 
+  const handleGenerateQR = async (instance: WhatsAppInstance) => {
+    setIsGeneratingQR(true)
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/generate_qr/`)
+      if (response.data.success) {
+        setQrCodeData({
+          qr_code: response.data.qr_code,
+          expires_at: response.data.expires_at
+        })
+        setShowQRModal(true)
+        showToast('✅ QR code gerado com sucesso!', 'success')
+      } else {
+        showToast(`❌ Erro ao gerar QR code: ${response.data.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao gerar QR code:', error)
+      showToast(`❌ Erro ao gerar QR code: ${error.response?.data?.error || error.message}`, 'error')
+    } finally {
+      setIsGeneratingQR(false)
+    }
+  }
+
+  const handleDisconnect = async (instance: WhatsAppInstance) => {
+    showConfirm(
+      'Desconectar Instância',
+      `Tem certeza que deseja desconectar a instância "${instance.friendly_name}"?`,
+      async () => {
+        try {
+          const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/disconnect/`)
+          if (response.data.success) {
+            showToast('✅ Instância desconectada com sucesso!', 'success')
+            fetchData()
+          } else {
+            showToast(`❌ Erro ao desconectar: ${response.data.error}`, 'error')
+          }
+        } catch (error: any) {
+          console.error('❌ Erro ao desconectar:', error)
+          showToast(`❌ Erro ao desconectar: ${error.response?.data?.error || error.message}`, 'error')
+        }
+      }
+    )
+  }
+
   // Função para excluir servidor SMTP
   const handleDeleteSMTP = async (smtpId: string) => {
     showConfirm(
@@ -274,8 +323,8 @@ export default function NotificationsPage() {
   
   const handleSaveInstance = async () => {
     // Validação dos campos obrigatórios
-    if (!instanceForm.name.trim()) {
-      showToast('❌ Nome da instância é obrigatório', 'error')
+    if (!instanceForm.friendly_name.trim()) {
+      showToast('❌ Nome amigável é obrigatório', 'error')
       return
     }
     if (!instanceForm.instance_name.trim()) {
@@ -350,7 +399,7 @@ export default function NotificationsPage() {
 
   const handleEditInstance = (instance: WhatsAppInstance) => {
     setInstanceForm({
-      name: instance.name,
+      friendly_name: instance.friendly_name,
       instance_name: instance.instance_name,
       api_url: '', // Não preencher por segurança
       api_key: '', // Não preencher por segurança
@@ -510,7 +559,7 @@ export default function NotificationsPage() {
             <Card key={instance.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
-                  <h3 className="font-semibold text-gray-900">{instance.name}</h3>
+                  <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
                   <p className="text-sm text-gray-500">{instance.instance_name}</p>
                   {instance.phone_number && (
                     <p className="text-sm text-gray-600 mt-1">{instance.phone_number}</p>
@@ -538,6 +587,25 @@ export default function NotificationsPage() {
                   onClick={() => handleCheckStatus(instance.id)}
                 >
                   Verificar Status
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => handleGenerateQR(instance)}
+                  disabled={isGeneratingQR}
+                  className="text-accent-600 hover:text-accent-700 hover:bg-accent-50"
+                  title="Gerar QR Code"
+                >
+                  <QrCode className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => handleDisconnect(instance)}
+                  className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
+                  title="Desconectar"
+                >
+                  <WifiOff className="h-4 w-4" />
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -865,15 +933,15 @@ export default function NotificationsPage() {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label htmlFor="instance_name_label">Nome da Instância *</Label>
+                  <Label htmlFor="instance_name_label">Nome Amigável *</Label>
                   <Input
                     id="instance_name_label"
-                    value={instanceForm.name}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, name: e.target.value })}
+                    value={instanceForm.friendly_name}
+                    onChange={(e) => setInstanceForm({ ...instanceForm, friendly_name: e.target.value })}
                     placeholder="Ex: WhatsApp Suporte"
                     required
                   />
-                  <p className="text-xs text-gray-500 mt-1">Nome para identificar esta instância no sistema</p>
+                  <p className="text-xs text-gray-500 mt-1">Nome amigável para o cliente (pode repetir entre clientes)</p>
                 </div>
                 
                 <div className="col-span-2">
@@ -882,10 +950,10 @@ export default function NotificationsPage() {
                     id="instance_name_evolution"
                     value={instanceForm.instance_name}
                     onChange={(e) => setInstanceForm({ ...instanceForm, instance_name: e.target.value })}
-                    placeholder="Ex: alreasense-suporte"
+                    placeholder="Ex: 550e8400-e29b-41d4-a716-446655440000"
                     required
                   />
-                  <p className="text-xs text-gray-500 mt-1">Nome da instância configurada no Evolution API</p>
+                  <p className="text-xs text-gray-500 mt-1">UUID interno para controle no Evolution API</p>
                 </div>
                 
                 <div className="col-span-2">
@@ -1045,6 +1113,59 @@ export default function NotificationsPage() {
       />
 
       {/* Confirm Dialog */}
+      {/* QR Code Modal */}
+      {showQRModal && qrCodeData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">Conectar WhatsApp</h3>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowQRModal(false)}
+              >
+                <XIcon className="h-4 w-4" />
+              </Button>
+            </div>
+            
+            <div className="text-center">
+              <div className="mb-4">
+                <img 
+                  src={`data:image/png;base64,${qrCodeData.qr_code}`}
+                  alt="QR Code para conectar WhatsApp"
+                  className="mx-auto border border-gray-200 rounded-lg"
+                />
+              </div>
+              
+              <p className="text-sm text-gray-600 mb-4">
+                Escaneie o QR Code com seu WhatsApp para conectar a instância
+              </p>
+              
+              {qrCodeData.expires_at && (
+                <p className="text-xs text-gray-500 mb-4">
+                  Expira em: {new Date(qrCodeData.expires_at).toLocaleString()}
+                </p>
+              )}
+              
+              <div className="flex gap-2 justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => handleGenerateQR(editingInstance!)}
+                  disabled={isGeneratingQR}
+                >
+                  {isGeneratingQR ? 'Gerando...' : 'Atualizar QR'}
+                </Button>
+                <Button
+                  onClick={() => setShowQRModal(false)}
+                >
+                  Fechar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog
         show={confirm.show}
         title={confirm.title}
