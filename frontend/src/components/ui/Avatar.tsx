@@ -29,14 +29,7 @@ export default function Avatar({ name, size = 'md', className = '' }: AvatarProp
   return (
     <div className={`${getSizeClasses()} rounded-full flex items-center justify-center shadow-lg ${className}`}>
       <div 
-        className="w-full h-full rounded-full flex items-center justify-center bg-gradient-to-br from-brand-500 via-brand-400 to-accent-500"
-        style={{
-          background: `
-            radial-gradient(circle at 30% 30%, #26BC6D 0%, transparent 50%),
-            radial-gradient(circle at 70% 70%, #3C82F6 0%, transparent 50%),
-            linear-gradient(135deg, #26BC6D 0%, #4ade80 25%, #3C82F6 75%, #2563eb 100%)
-          `
-        }}
+        className="w-full h-full rounded-full flex items-center justify-center bg-brand-500"
       >
         <span className="font-bold text-white drop-shadow-sm">
           {getInitials()}
