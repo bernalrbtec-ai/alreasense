@@ -14,7 +14,9 @@ import {
   Package,
   Activity,
   Server,
-  Bell
+  Bell,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { Button } from './ui/Button'
@@ -45,6 +47,7 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const location = useLocation()
   const { user, logout } = useAuthStore()
   
@@ -107,8 +110,8 @@ export default function Layout({ children }: LayoutProps) {
                       className={cn(
                         "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
                         isActive
-                          ? "bg-blue-100 text-blue-700"
-                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                          ? "bg-brand-100 text-brand-700"
+                          : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
                       )}
                       onClick={() => setSidebarOpen(false)}
                     >
@@ -124,10 +127,25 @@ export default function Layout({ children }: LayoutProps) {
       </div>
 
       {/* Desktop sidebar */}
-      <div className="hidden lg:fixed lg:inset-y-0 lg:flex lg:w-64 lg:flex-col">
+      <div className={cn(
+        "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col transition-all duration-300",
+        sidebarCollapsed ? "lg:w-16" : "lg:w-64"
+      )}>
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
-          <div className="flex h-16 items-center px-4">
-            <Logo size="sm" />
+          <div className="flex h-16 items-center justify-between px-4">
+            {!sidebarCollapsed && <Logo size="sm" />}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              className="ml-auto"
+            >
+              {sidebarCollapsed ? (
+                <ChevronRight className="h-5 w-5" />
+              ) : (
+                <ChevronLeft className="h-5 w-5" />
+              )}
+            </Button>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4 overflow-y-auto">
             {navigation.map((item) => {
@@ -142,9 +160,10 @@ export default function Layout({ children }: LayoutProps) {
                       ? "bg-brand-100 text-brand-700"
                       : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
                   )}
+                  title={sidebarCollapsed ? item.name : undefined}
                 >
-                  <item.icon className="mr-3 h-5 w-5" />
-                  {item.name}
+                  <item.icon className={cn("h-5 w-5", !sidebarCollapsed && "mr-3")} />
+                  {!sidebarCollapsed && item.name}
                 </Link>
               )
             })}
@@ -166,8 +185,8 @@ export default function Layout({ children }: LayoutProps) {
                       className={cn(
                         "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
                         isActive
-                          ? "bg-blue-100 text-blue-700"
-                          : "text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                          ? "bg-brand-100 text-brand-700"
+                          : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
                       )}
                     >
                       <item.icon className="mr-3 h-5 w-5" />
@@ -181,32 +200,52 @@ export default function Layout({ children }: LayoutProps) {
           
           {/* User info */}
           <div className="border-t border-gray-200 p-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center">
+            {sidebarCollapsed ? (
+              <div className="flex flex-col items-center space-y-2">
                 <Avatar 
                   name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
                   size="md" 
                 />
-                <div className="ml-3 flex-1">
-                  <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
-                  <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={logout}
+                  title="Sair"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={logout}
-                className="ml-2"
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <Avatar 
+                    name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
+                    size="md" 
+                  />
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
+                    <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={logout}
+                  className="ml-2"
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Main content */}
-      <div className="lg:pl-64">
+      <div className={cn(
+        "transition-all duration-300",
+        sidebarCollapsed ? "lg:pl-16" : "lg:pl-64"
+      )}>
         {/* Top bar */}
         <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
           <Button

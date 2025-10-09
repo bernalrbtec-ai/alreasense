@@ -3,9 +3,11 @@ import { Link } from 'react-router-dom'
 import { User, LogOut, Lock, ChevronDown } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import Avatar from './ui/Avatar'
+import ChangePasswordModal from './modals/ChangePasswordModal'
 
 export default function UserDropdown() {
   const [isOpen, setIsOpen] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
   const { user, logout } = useAuthStore()
 
@@ -71,14 +73,16 @@ export default function UserDropdown() {
           </Link>
 
           {/* Alterar Senha */}
-          <Link
-            to="/change-password"
-            className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
-            onClick={() => setIsOpen(false)}
+          <button
+            onClick={() => {
+              setIsOpen(false)
+              setShowPasswordModal(true)
+            }}
+            className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
           >
             <Lock className="h-4 w-4 mr-3 text-gray-400" />
             Alterar Senha
-          </Link>
+          </button>
 
           {/* Divisor */}
           <div className="border-t border-gray-100 my-1" />
@@ -93,6 +97,12 @@ export default function UserDropdown() {
           </button>
         </div>
       )}
+
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+      />
     </div>
   )
 }

@@ -15,7 +15,6 @@ import PlansPage from './pages/PlansPage'
 import SystemStatusPage from './pages/SystemStatusPage'
 import EvolutionConfigPage from './pages/EvolutionConfigPage'
 import ProfilePage from './pages/ProfilePage'
-import ChangePasswordPage from './pages/ChangePasswordPage'
 import NotificationsPage from './pages/NotificationsPage'
 
 // Components
@@ -66,7 +65,6 @@ function App() {
           <Route path="/experiments" element={<ExperimentsPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/change-password" element={<ChangePasswordPage />} />
           
           {/* Super Admin Routes */}
           {isSuperAdmin && (
