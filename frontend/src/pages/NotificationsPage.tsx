@@ -90,10 +90,6 @@ export default function NotificationsPage() {
   // Form data para WhatsApp Instance
   const [instanceForm, setInstanceForm] = useState({
     friendly_name: '',
-    instance_name: '',
-    api_url: '',
-    api_key: '',
-    phone_number: '',
     is_default: false,
   })
 
@@ -322,21 +318,9 @@ export default function NotificationsPage() {
   // ==================== WhatsApp Instance Functions ====================
   
   const handleSaveInstance = async () => {
-    // Validação dos campos obrigatórios
+    // Validação
     if (!instanceForm.friendly_name.trim()) {
-      showToast('❌ Nome amigável é obrigatório', 'error')
-      return
-    }
-    if (!instanceForm.instance_name.trim()) {
-      showToast('❌ Nome da instância no Evolution API é obrigatório', 'error')
-      return
-    }
-    if (!instanceForm.api_url.trim()) {
-      showToast('❌ URL da Evolution API é obrigatória', 'error')
-      return
-    }
-    if (!instanceForm.api_key.trim()) {
-      showToast('❌ API Key é obrigatória', 'error')
+      showToast('❌ Nome é obrigatório', 'error')
       return
     }
 
@@ -344,34 +328,21 @@ export default function NotificationsPage() {
 
     try {
       if (editingInstance) {
-        // Editar instância existente
-        const response = await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceForm)
-        console.log('✅ WhatsApp instance atualizada:', response.data)
-        showToast('✅ Instância WhatsApp atualizada com sucesso!', 'success')
+        await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceForm)
+        showToast('✅ Instância atualizada com sucesso!', 'success')
       } else {
-        // Criar nova instância
-        const response = await api.post('/notifications/whatsapp-instances/', instanceForm)
-        console.log('✅ WhatsApp instance criada:', response.data)
-        showToast('✅ Instância WhatsApp criada com sucesso!', 'success')
+        await api.post('/notifications/whatsapp-instances/', instanceForm)
+        showToast('✅ Instância criada! Use "Gerar QR Code" para conectar.', 'success')
       }
 
-      // Resetar form e fechar modal
-      setInstanceForm({
-        name: '',
-        instance_name: '',
-        api_url: '',
-        api_key: '',
-        phone_number: '',
-        is_default: false,
-      })
+      // Resetar e fechar
+      setInstanceForm({ friendly_name: '', is_default: false })
       setEditingInstance(null)
       setShowInstanceModal(false)
-
-      // Recarregar lista
-      fetchData()
+      await fetchData()
     } catch (error: any) {
-      console.error('❌ Erro ao salvar instância WhatsApp:', error)
-      showToast(`❌ Erro ao salvar instância: ${error.response?.data?.detail || error.message}`, 'error')
+      console.error('❌ Erro ao salvar instância:', error)
+      showToast(`❌ ${error.response?.data?.detail || error.message}`, 'error')
     } finally {
       setIsSaving(false)
     }
@@ -930,109 +901,88 @@ export default function NotificationsPage() {
               </button>
             </div>
             
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label htmlFor="instance_name_label">Nome Amigável *</Label>
-                  <Input
-                    id="instance_name_label"
-                    value={instanceForm.friendly_name}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, friendly_name: e.target.value })}
-                    placeholder="Ex: WhatsApp Suporte"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Nome amigável para o cliente (pode repetir entre clientes)</p>
-                </div>
-                
-                <div className="col-span-2">
-                  <Label htmlFor="instance_name_evolution">Nome no Evolution API *</Label>
-                  <Input
-                    id="instance_name_evolution"
-                    value={instanceForm.instance_name}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, instance_name: e.target.value })}
-                    placeholder="Ex: 550e8400-e29b-41d4-a716-446655440000"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">UUID interno para controle no Evolution API</p>
-                </div>
-                
-                <div className="col-span-2">
-                  <Label htmlFor="api_url">URL da Evolution API *</Label>
-                  <Input
-                    id="api_url"
-                    value={instanceForm.api_url}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, api_url: e.target.value })}
-                    placeholder="https://evolution-api.alrea.ai"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">URL base da sua instalação do Evolution API</p>
-                </div>
-                
-                <div className="col-span-2">
-                  <Label htmlFor="api_key">API Key *</Label>
-                  <Input
-                    id="api_key"
-                    type="password"
-                    value={instanceForm.api_key}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, api_key: e.target.value })}
-                    placeholder="Sua chave de API"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Chave de autenticação da Evolution API</p>
-                </div>
-                
-                <div className="col-span-2">
-                  <Label htmlFor="phone_number">Número de Telefone</Label>
-                  <Input
-                    id="phone_number"
-                    value={instanceForm.phone_number}
-                    onChange={(e) => setInstanceForm({ ...instanceForm, phone_number: e.target.value })}
-                    placeholder="5517991234567"
-                    />
-                  <p className="text-xs text-gray-500 mt-1">Número do WhatsApp (opcional, será preenchido automaticamente ao conectar)</p>
-                </div>
-                
-                <div className="col-span-2">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={instanceForm.is_default}
-                      onChange={(e) => setInstanceForm({ ...instanceForm, is_default: e.target.checked })}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Definir como instância padrão</span>
+            <div className="space-y-6">
+              {/* Nome da Instância */}
+              <div>
+                <Label htmlFor="instance_friendly_name" className="text-sm font-medium text-gray-700">
+                  Nome da Instância *
+                </Label>
+                <Input
+                  id="instance_friendly_name"
+                  value={instanceForm.friendly_name}
+                  onChange={(e) => setInstanceForm({ ...instanceForm, friendly_name: e.target.value })}
+                  placeholder="Ex: WhatsApp Atendimento"
+                  className="mt-1.5"
+                  required
+                />
+                <p className="text-xs text-gray-500 mt-1.5">
+                  Nome para identificar esta conexão WhatsApp
+                </p>
+              </div>
+              
+              {/* Instância Padrão */}
+              <div className="flex items-start gap-3 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                <input
+                  type="checkbox"
+                  id="instance_is_default"
+                  checked={instanceForm.is_default}
+                  onChange={(e) => setInstanceForm({ ...instanceForm, is_default: e.target.checked })}
+                  className="h-4 w-4 text-blue-600 border-gray-300 rounded mt-0.5"
+                />
+                <div>
+                  <label htmlFor="instance_is_default" className="text-sm font-medium text-gray-900 cursor-pointer">
+                    Definir como instância padrão
                   </label>
+                  <p className="text-xs text-gray-600 mt-1">
+                    Esta instância será usada automaticamente para envio de notificações
+                  </p>
                 </div>
               </div>
               
-              <div className="flex justify-between items-center pt-4 border-t">
-                <p className="text-xs text-gray-500">
-                  💡 Dica: Após salvar, use "Verificar Status" para confirmar a conexão
-                </p>
-                <div className="flex gap-3">
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setShowInstanceModal(false)
-                      setEditingInstance(null)
-                    }}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleSaveInstance}
-                    disabled={isSaving}
-                  >
-                    {isSaving ? (
-                      <>
-                        <LoadingSpinner size="sm" className="mr-2" />
-                        {editingInstance ? 'Atualizando...' : 'Salvando...'}
-                      </>
-                    ) : (
-                      editingInstance ? 'Atualizar Instância' : 'Salvar Instância'
-                    )}
-                  </Button>
+              {/* Informação */}
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <Bell className="h-5 w-5 text-yellow-600 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium text-yellow-900">Como funciona?</p>
+                    <p className="text-xs text-yellow-700 mt-1">
+                      Após salvar, clique em "Gerar QR Code" para conectar seu WhatsApp. 
+                      A instância será criada automaticamente no servidor Evolution API.
+                    </p>
+                  </div>
                 </div>
+              </div>
+            </div>
+              
+              <div className="flex justify-end gap-3 pt-6 border-t mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowInstanceModal(false)
+                    setEditingInstance(null)
+                    setInstanceForm({ friendly_name: '', is_default: false })
+                  }}
+                  disabled={isSaving}
+                >
+                  <XIcon className="h-4 w-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSaveInstance}
+                  disabled={isSaving || !instanceForm.friendly_name.trim()}
+                >
+                  {isSaving ? (
+                    <>
+                      <LoadingSpinner size="sm" className="mr-2" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      {editingInstance ? 'Atualizar' : 'Criar Instância'}
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
           </div>
