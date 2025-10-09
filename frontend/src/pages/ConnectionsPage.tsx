@@ -339,12 +339,12 @@ export default function ConnectionsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(instances) && instances.map((instance) => (
-            <Card key={instance.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
-              {/* Header com nome e badges - sempre no topo */}
-              <div className="flex items-start justify-between mb-3">
+            <Card key={instance.id} className="p-4 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
+              {/* Header com nome e badges - mais compacto */}
+              <div className="flex items-center justify-between mb-2">
                 <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
-                <div className="flex items-center gap-2 flex-shrink-0">
-                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
                     instance.connection_state === 'open' 
                       ? 'bg-green-100 text-green-800' 
                       : instance.connection_state === 'connecting'
@@ -355,7 +355,7 @@ export default function ConnectionsPage() {
                      instance.connection_state === 'connecting' ? 'Conectando' : 'Desconectado'}
                   </span>
                   {instance.is_default && (
-                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       Padrão
                     </span>
                   )}
@@ -363,7 +363,7 @@ export default function ConnectionsPage() {
               </div>
               
               {/* Conteúdo principal - telefone e API key */}
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 {instance.phone_number && (
                   <p className="text-sm text-gray-600">📱 {formatPhone(instance.phone_number)}</p>
                 )}
@@ -397,7 +397,7 @@ export default function ConnectionsPage() {
                   <p className="text-xs text-gray-400 italic">API Key será gerada ao conectar</p>
                 )}
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-3 flex gap-2">
                 <Button 
                   variant="ghost" 
                   size="sm"
