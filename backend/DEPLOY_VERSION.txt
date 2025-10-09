@@ -1,0 +1,11 @@
+Deploy Version: 2025-10-09-11:30
+Changes:
+- Removed encryption from api_key fields
+- Implemented whatsapp-orchestrator pattern
+- API Master for admin operations
+- Fixed database structure (bytea → varchar)
+- Safe migrations with RunPython
+- Complete database verification and fix scripts
+
+Ready to deploy and test!
+
