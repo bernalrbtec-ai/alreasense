@@ -16,8 +16,10 @@ from .serializers import (
 )
 from .tasks import replay_window
 from apps.common.permissions import IsTenantMember, IsAdminUser
+from apps.billing.decorators import require_product
 
 
+@require_product('sense')
 class PromptTemplateListCreateView(generics.ListCreateAPIView):
     """List and create prompt templates."""
     
@@ -32,6 +34,7 @@ class PromptTemplateListCreateView(generics.ListCreateAPIView):
         return PromptTemplateSerializer
 
 
+@require_product('sense')
 class PromptTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Get, update or delete a prompt template."""
     
@@ -42,6 +45,7 @@ class PromptTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
         return PromptTemplate.objects.all()
 
 
+@require_product('sense')
 class InferenceListView(generics.ListAPIView):
     """List inferences for the tenant."""
     

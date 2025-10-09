@@ -1,192 +1,216 @@
-from rest_framework import generics, status, viewsets
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+"""
+Views para o sistema de billing
+"""
+
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.utils import timezone
-from datetime import timedelta
+from django.db.models import Q
 
-from .models import Plan, PaymentAccount, BillingEvent
-from .serializers import PlanSerializer, PaymentAccountSerializer, BillingInfoSerializer
-from .service import BillingService
-from apps.common.permissions import IsTenantMember
+from .models import Product, Plan, TenantProduct, BillingHistory
+from .serializers import (
+    ProductSerializer,
+    PlanSerializer,
+    TenantProductSerializer,
+    BillingHistorySerializer,
+    TenantBillingInfoSerializer
+)
+from apps.common.permissions import IsTenantMember, IsAdminUser
 
 
-class PlanViewSet(viewsets.ModelViewSet):
-    """ViewSet for managing subscription plans."""
+class ProductViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet para produtos (somente leitura)"""
     
-    queryset = Plan.objects.all()
+    serializer_class = ProductSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Product.objects.filter(is_active=True)
+    
+    @action(detail=False, methods=['get'])
+    def available(self, request):
+        """Lista produtos disponíveis para o tenant"""
+        tenant = request.user.tenant
+        
+        # Produtos já ativos
+        active_product_ids = tenant.active_products.values_list('product_id', flat=True)
+        
+        # Produtos disponíveis como add-on
+        available_products = Product.objects.filter(
+            is_active=True,
+            is_addon_available=True
+        ).exclude(id__in=active_product_ids)
+        
+        serializer = self.get_serializer(available_products, many=True)
+        return Response(serializer.data)
+
+
+class PlanViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet para planos (somente leitura)"""
+    
     serializer_class = PlanSerializer
     permission_classes = [IsAuthenticated]
+    queryset = Plan.objects.filter(is_active=True).order_by('sort_order')
     
-    def get_permissions(self):
-        print(f"🔍 PlanViewSet action: {self.action}")
-        print(f"🔍 User: {self.request.user.username}")
-        print(f"🔍 Is superuser: {self.request.user.is_superuser}")
-        print(f"🔍 Is staff: {self.request.user.is_staff}")
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTenantMember, IsAdminUser])
+    def select(self, request, pk=None):
+        """Seleciona um plano para o tenant"""
+        plan = self.get_object()
+        tenant = request.user.tenant
         
-        # Temporarily allow all authenticated users to manage plans for testing
-        print(f"🔍 Allowing authenticated user access for action: {self.action}")
-        return [IsAuthenticated()]
-    
-    def create(self, request, *args, **kwargs):
-        print(f"🔍 Creating plan with data: {request.data}")
-        try:
-            response = super().create(request, *args, **kwargs)
-            print(f"✅ Plan created successfully: {response.data}")
-            return response
-        except Exception as e:
-            print(f"❌ Error creating plan: {str(e)}")
-            raise
-    
-    def update(self, request, *args, **kwargs):
-        print(f"🔍 Updating plan {kwargs.get('pk')} with data: {request.data}")
-        print(f"🔍 Request method: {request.method}")
-        print(f"🔍 Content type: {request.content_type}")
-        print(f"🔍 User: {request.user.username}")
+        # Validar se o tenant pode mudar de plano
+        if not tenant.is_active:
+            return Response(
+                {'error': 'Tenant não está ativo'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
-        try:
-            # Get the instance first
-            instance = self.get_object()
-            print(f"🔍 Plan instance: {instance}")
-            print(f"🔍 Current plan data: {PlanSerializer(instance).data}")
-            
-            # Validate the data
-            serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
-            print(f"🔍 Serializer is valid: {serializer.is_valid()}")
-            if not serializer.is_valid():
-                print(f"❌ Serializer errors: {serializer.errors}")
-                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-            
-            response = super().update(request, *args, **kwargs)
-            print(f"✅ Plan updated successfully: {response.data}")
-            return response
-        except Exception as e:
-            print(f"❌ Error updating plan: {str(e)}")
-            import traceback
-            print(f"❌ Traceback: {traceback.format_exc()}")
-            raise
+        old_plan = tenant.current_plan
+        
+        # Atualizar plano
+        tenant.current_plan = plan
+        tenant.save()
+        
+        # Registrar no histórico
+        BillingHistory.objects.create(
+            tenant=tenant,
+            action='plan_change',
+            amount=plan.price,
+            description=f'Mudança de plano: {old_plan.name if old_plan else "Nenhum"} → {plan.name}'
+        )
+        
+        # Sincronizar produtos do plano
+        self._sync_plan_products(tenant, plan)
+        
+        return Response({
+            'success': True,
+            'message': f'Plano alterado para {plan.name}'
+        })
+    
+    def _sync_plan_products(self, tenant, plan):
+        """Sincroniza produtos do plano com o tenant"""
+        # Desativar produtos que não estão mais no plano
+        tenant.tenant_products.exclude(
+            product__in=plan.plan_products.values_list('product', flat=True)
+        ).filter(is_addon=False).update(is_active=False)
+        
+        # Ativar produtos do plano
+        for plan_product in plan.plan_products.all():
+            TenantProduct.objects.update_or_create(
+                tenant=tenant,
+                product=plan_product.product,
+                defaults={
+                    'is_addon': False,
+                    'is_active': True
+                }
+            )
 
 
-class PaymentAccountView(generics.RetrieveAPIView):
-    """Get payment account information."""
+class TenantProductViewSet(viewsets.ModelViewSet):
+    """ViewSet para produtos do tenant"""
     
-    serializer_class = PaymentAccountSerializer
+    serializer_class = TenantProductSerializer
     permission_classes = [IsAuthenticated, IsTenantMember]
     
-    def get_object(self):
-        account, created = PaymentAccount.objects.get_or_create(
+    def get_queryset(self):
+        return TenantProduct.objects.filter(
             tenant=self.request.user.tenant
+        ).select_related('product')
+    
+    def perform_create(self, serializer):
+        """Adiciona um produto (add-on) ao tenant"""
+        tenant = self.request.user.tenant
+        product = serializer.validated_data['product']
+        
+        # Validar se o produto pode ser add-on
+        if not product.is_addon_available:
+            raise serializers.ValidationError('Este produto não está disponível como add-on')
+        
+        # Criar tenant_product
+        tenant_product = serializer.save(
+            tenant=tenant,
+            is_addon=True,
+            addon_price=product.addon_price
         )
-        return account
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, IsTenantMember])
-def billing_info(request):
-    """Get comprehensive billing information."""
-    
-    tenant = request.user.tenant
-    
-    # Get or create payment account
-    account, created = PaymentAccount.objects.get_or_create(
-        tenant=tenant
-    )
-    
-    # Get plan limits
-    plan_limits = tenant.plan_limits
-    
-    # Calculate next billing date
-    if account.current_period_end:
-        next_billing_date = account.current_period_end.date()
-    else:
-        next_billing_date = tenant.next_billing_date
-    
-    billing_info_data = {
-        'current_plan': tenant.plan,
-        'plan_limits': plan_limits,
-        'next_billing_date': next_billing_date,
-        'status': account.status,
-        'has_payment_method': bool(account.stripe_customer_id),
-        'current_period_end': account.current_period_end,
-    }
-    
-    serializer = BillingInfoSerializer(billing_info_data)
-    return Response(serializer.data)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated, IsTenantMember])
-def create_checkout_session(request):
-    """Create Stripe checkout session for plan upgrade."""
-    
-    plan = request.data.get('plan')
-    if not plan:
-        return Response(
-            {'error': 'Plan is required'}, 
-            status=status.HTTP_400_BAD_REQUEST
+        
+        # Registrar no histórico
+        BillingHistory.objects.create(
+            tenant=tenant,
+            action='addon_add',
+            amount=product.addon_price or 0,
+            description=f'Add-on adicionado: {product.name}'
         )
     
-    if plan not in ['starter', 'pro', 'scale', 'enterprise']:
-        return Response(
-            {'error': 'Invalid plan'}, 
-            status=status.HTTP_400_BAD_REQUEST
+    @action(detail=True, methods=['post'])
+    def deactivate(self, request, pk=None):
+        """Desativa um produto/add-on"""
+        tenant_product = self.get_object()
+        
+        if not tenant_product.is_addon:
+            return Response(
+                {'error': 'Não é possível desativar produtos incluídos no plano'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        tenant_product.is_active = False
+        tenant_product.save()
+        
+        # Registrar no histórico
+        BillingHistory.objects.create(
+            tenant=tenant_product.tenant,
+            action='addon_remove',
+            amount=0,
+            description=f'Add-on removido: {tenant_product.product.name}'
         )
+        
+        return Response({'success': True, 'message': 'Produto desativado'})
+
+
+class BillingHistoryViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet para histórico de billing"""
     
-    try:
-        billing_service = BillingService()
-        checkout_session = billing_service.create_checkout_session(
-            tenant=request.user.tenant,
-            plan=plan
-        )
+    serializer_class = BillingHistorySerializer
+    permission_classes = [IsAuthenticated, IsTenantMember]
+    
+    def get_queryset(self):
+        return BillingHistory.objects.filter(
+            tenant=self.request.user.tenant
+        ).order_by('-created_at')
+
+
+class TenantBillingViewSet(viewsets.ViewSet):
+    """ViewSet para informações de billing do tenant"""
+    
+    permission_classes = [IsAuthenticated, IsTenantMember]
+    
+    def list(self, request):
+        """Retorna informações de billing do tenant"""
+        tenant = request.user.tenant
+        serializer = TenantBillingInfoSerializer(tenant)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def summary(self, request):
+        """Resumo de billing"""
+        tenant = request.user.tenant
+        
+        # Contar produtos ativos
+        active_products_count = tenant.active_products.count()
+        
+        # Calcular total mensal
+        monthly_total = tenant.monthly_total
+        
+        # Histórico recente
+        recent_history = BillingHistory.objects.filter(
+            tenant=tenant
+        ).order_by('-created_at')[:5]
         
         return Response({
-            'checkout_url': checkout_session.url,
-            'session_id': checkout_session.id
+            'plan': {
+                'name': tenant.current_plan.name if tenant.current_plan else 'Nenhum',
+                'price': tenant.current_plan.price if tenant.current_plan else 0
+            },
+            'active_products_count': active_products_count,
+            'monthly_total': monthly_total,
+            'next_billing_date': tenant.next_billing_date,
+            'recent_history': BillingHistorySerializer(recent_history, many=True).data
         })
-        
-    except Exception as e:
-        return Response(
-            {'error': f'Failed to create checkout session: {str(e)}'}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated, IsTenantMember])
-def create_portal_session(request):
-    """Create Stripe customer portal session."""
-    
-    try:
-        billing_service = BillingService()
-        portal_session = billing_service.create_portal_session(
-            tenant=request.user.tenant
-        )
-        
-        return Response({
-            'portal_url': portal_session.url
-        })
-        
-    except Exception as e:
-        return Response(
-            {'error': f'Failed to create portal session: {str(e)}'}, 
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, IsTenantMember])
-def billing_history(request):
-    """Get billing history for the tenant."""
-    
-    # Get recent billing events
-    events = BillingEvent.objects.filter(
-        tenant=request.user.tenant
-    ).order_by('-created_at')[:50]
-    
-    from .serializers import BillingEventSerializer
-    serializer = BillingEventSerializer(events, many=True)
-    
-    return Response({
-        'events': serializer.data,
-        'total_events': events.count()
-    })

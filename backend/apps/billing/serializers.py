@@ -1,74 +1,83 @@
+"""
+Serializers para o sistema de billing
+"""
+
 from rest_framework import serializers
-from .models import Plan, PaymentAccount, BillingEvent
+from .models import Product, Plan, PlanProduct, TenantProduct, BillingHistory
 
 
-class PlanSerializer(serializers.ModelSerializer):
-    """Serializer for Plan model."""
-    
-    # Ensure price is returned as float, not string
-    price = serializers.FloatField()
+class ProductSerializer(serializers.ModelSerializer):
+    """Serializer para produtos"""
     
     class Meta:
-        model = Plan
+        model = Product
         fields = [
-            'id', 'name', 'description', 'price', 'billing_cycle_days', 'is_free',
-            'max_connections', 'max_messages_per_month', 'features', 'is_active',
-            'stripe_price_id', 'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-    
-    def create(self, validated_data):
-        print(f"🔍 PlanSerializer.create called with: {validated_data}")
-        try:
-            instance = super().create(validated_data)
-            print(f"✅ Plan created: {instance}")
-            return instance
-        except Exception as e:
-            print(f"❌ Error in PlanSerializer.create: {str(e)}")
-            raise
-    
-    def update(self, instance, validated_data):
-        print(f"🔍 PlanSerializer.update called with: {validated_data}")
-        try:
-            instance = super().update(instance, validated_data)
-            print(f"✅ Plan updated: {instance}")
-            return instance
-        except Exception as e:
-            print(f"❌ Error in PlanSerializer.update: {str(e)}")
-            raise
-
-
-class PaymentAccountSerializer(serializers.ModelSerializer):
-    """Serializer for PaymentAccount model."""
-    
-    class Meta:
-        model = PaymentAccount
-        fields = [
-            'id', 'stripe_customer_id', 'status', 
-            'current_period_start', 'current_period_end',
+            'id', 'slug', 'name', 'description', 'is_active',
+            'requires_ui_access', 'addon_price', 'icon', 'color',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
 
-class BillingEventSerializer(serializers.ModelSerializer):
-    """Serializer for BillingEvent model."""
+class PlanProductSerializer(serializers.ModelSerializer):
+    """Serializer para produtos de um plano"""
+    product = ProductSerializer(read_only=True)
     
     class Meta:
-        model = BillingEvent
+        model = PlanProduct
+        fields = ['id', 'product', 'is_included', 'limit_value', 'limit_unit']
+
+
+class PlanSerializer(serializers.ModelSerializer):
+    """Serializer para planos"""
+    products = PlanProductSerializer(source='plan_products', many=True, read_only=True)
+    product_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Plan
         fields = [
-            'id', 'event_type', 'stripe_event_id', 
-            'processed', 'data', 'created_at'
+            'id', 'slug', 'name', 'description', 'price', 
+            'is_active', 'sort_order', 'products', 'product_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_product_count(self, obj):
+        return obj.plan_products.count()
+
+
+class TenantProductSerializer(serializers.ModelSerializer):
+    """Serializer para produtos ativos do tenant"""
+    product = ProductSerializer(read_only=True)
+    product_id = serializers.UUIDField(write_only=True)
+    
+    class Meta:
+        model = TenantProduct
+        fields = [
+            'id', 'product', 'product_id', 'is_addon', 'addon_price',
+            'api_key', 'is_active', 'activated_at', 'deactivated_at',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'activated_at', 'deactivated_at', 'created_at', 'updated_at']
+
+
+class BillingHistorySerializer(serializers.ModelSerializer):
+    """Serializer para histórico de billing"""
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    
+    class Meta:
+        model = BillingHistory
+        fields = [
+            'id', 'action', 'action_display', 'amount', 'description',
+            'created_at'
         ]
         read_only_fields = ['id', 'created_at']
 
 
-class BillingInfoSerializer(serializers.Serializer):
-    """Serializer for billing information."""
-    
-    current_plan = serializers.CharField()
-    plan_limits = serializers.DictField()
-    next_billing_date = serializers.DateField()
-    status = serializers.CharField()
-    has_payment_method = serializers.BooleanField()
-    current_period_end = serializers.DateTimeField(allow_null=True)
+class TenantBillingInfoSerializer(serializers.Serializer):
+    """Informações de billing do tenant"""
+    plan = PlanSerializer(source='current_plan', read_only=True)
+    active_products = TenantProductSerializer(many=True, read_only=True)
+    monthly_total = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True)
+    next_billing_date = serializers.DateField(read_only=True)
+    ui_access = serializers.BooleanField(read_only=True)

@@ -1,76 +1,124 @@
+"""
+Admin para o app billing
+"""
+
 from django.contrib import admin
-from .models import Plan, PaymentAccount, BillingEvent
+from django.utils.html import format_html
+from .models import Product, Plan, PlanProduct, TenantProduct, BillingHistory
 
 
-@admin.register(Plan)
-class PlanAdmin(admin.ModelAdmin):
-    list_display = ['name', 'price', 'billing_cycle_days', 'is_free', 'is_active', 'max_connections', 'max_messages_per_month']
-    list_filter = ['is_active', 'is_free']
-    search_fields = ['name', 'description']
+@admin.register(Product)
+class ProductAdmin(admin.ModelAdmin):
+    list_display = ['icon', 'name', 'slug', 'addon_price', 'is_active', 'requires_ui_access']
+    list_filter = ['is_active', 'requires_ui_access']
+    search_fields = ['name', 'slug', 'description']
     readonly_fields = ['id', 'created_at', 'updated_at']
     
     fieldsets = (
-        ('Basic Information', {
-            'fields': ('name', 'description', 'is_active')
+        ('Identificação', {
+            'fields': ('id', 'slug', 'name', 'description')
         }),
-        ('Pricing', {
-            'fields': ('price', 'billing_cycle_days', 'is_free', 'stripe_price_id')
+        ('Configurações', {
+            'fields': ('icon', 'color', 'is_active', 'requires_ui_access')
         }),
-        ('Limits', {
-            'fields': ('max_connections', 'max_messages_per_month')
+        ('Preços', {
+            'fields': ('addon_price',)
         }),
-        ('Features', {
-            'fields': ('features',)
-        }),
-        ('Metadata', {
-            'fields': ('id', 'created_at', 'updated_at'),
-            'classes': ('collapse',)
-        }),
-    )
-
-
-@admin.register(PaymentAccount)
-class PaymentAccountAdmin(admin.ModelAdmin):
-    list_display = ['tenant', 'status', 'current_period_end', 'created_at']
-    list_filter = ['status', 'created_at']
-    search_fields = ['tenant__name', 'stripe_customer_id']
-    readonly_fields = ['created_at', 'updated_at']
-    
-    fieldsets = (
-        ('Basic Information', {
-            'fields': ('tenant', 'status')
-        }),
-        ('Stripe Information', {
-            'fields': ('stripe_customer_id', 'stripe_subscription_id')
-        }),
-        ('Billing Period', {
-            'fields': ('current_period_start', 'current_period_end')
-        }),
-        ('Timestamps', {
+        ('Metadados', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
 
 
-@admin.register(BillingEvent)
-class BillingEventAdmin(admin.ModelAdmin):
-    list_display = ['tenant', 'event_type', 'processed', 'created_at']
-    list_filter = ['event_type', 'processed', 'created_at']
-    search_fields = ['tenant__name', 'stripe_event_id']
-    readonly_fields = ['created_at']
-    date_hierarchy = 'created_at'
+@admin.register(Plan)
+class PlanAdmin(admin.ModelAdmin):
+    list_display = ['name', 'slug', 'price', 'is_active', 'is_enterprise', 'sort_order']
+    list_filter = ['is_active', 'is_enterprise']
+    search_fields = ['name', 'slug', 'description']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    ordering = ['sort_order', 'price']
     
     fieldsets = (
-        ('Event Information', {
-            'fields': ('tenant', 'event_type', 'stripe_event_id', 'processed')
+        ('Identificação', {
+            'fields': ('id', 'slug', 'name', 'description')
         }),
-        ('Event Data', {
-            'fields': ('data',),
-            'classes': ('collapse',)
+        ('Preços e Configurações', {
+            'fields': ('price', 'is_active', 'is_enterprise', 'sort_order')
         }),
-        ('Timestamps', {
-            'fields': ('created_at',),
+        ('Aparência', {
+            'fields': ('color',)
+        }),
+        ('Metadados', {
+            'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
+
+
+class PlanProductInline(admin.TabularInline):
+    model = PlanProduct
+    extra = 0
+    fields = ['product', 'is_included', 'limit_value', 'limit_unit', 'is_addon_available']
+    readonly_fields = []
+
+
+@admin.register(PlanProduct)
+class PlanProductAdmin(admin.ModelAdmin):
+    list_display = ['plan', 'product', 'is_included', 'limit_display', 'is_addon_available']
+    list_filter = ['is_included', 'is_addon_available', 'plan', 'product']
+    search_fields = ['plan__name', 'product__name']
+    readonly_fields = ['created_at']
+    
+    def limit_display(self, obj):
+        if obj.limit_value:
+            return f"{obj.limit_value} {obj.limit_unit or ''}"
+        return "Ilimitado"
+    limit_display.short_description = 'Limite'
+
+
+@admin.register(TenantProduct)
+class TenantProductAdmin(admin.ModelAdmin):
+    list_display = ['tenant', 'product', 'is_addon', 'addon_price', 'is_active', 'activated_at']
+    list_filter = ['is_addon', 'is_active', 'product', 'activated_at']
+    search_fields = ['tenant__name', 'product__name']
+    readonly_fields = ['id', 'activated_at', 'deactivated_at', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Relacionamentos', {
+            'fields': ('id', 'tenant', 'product')
+        }),
+        ('Configurações', {
+            'fields': ('is_addon', 'addon_price', 'api_key', 'is_active')
+        }),
+        ('Datas', {
+            'fields': ('activated_at', 'deactivated_at', 'created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(BillingHistory)
+class BillingHistoryAdmin(admin.ModelAdmin):
+    list_display = ['tenant', 'action', 'description', 'old_monthly_total', 'new_monthly_total', 'created_at', 'created_by']
+    list_filter = ['action', 'created_at', 'tenant']
+    search_fields = ['tenant__name', 'description', 'created_by__username']
+    readonly_fields = ['id', 'created_at']
+    date_hierarchy = 'created_at'
+    
+    fieldsets = (
+        ('Ação', {
+            'fields': ('id', 'tenant', 'action', 'description')
+        }),
+        ('Valores', {
+            'fields': ('old_value', 'new_value', 'old_monthly_total', 'new_monthly_total')
+        }),
+        ('Metadados', {
+            'fields': ('created_at', 'created_by'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+# Adicionar inline no PlanAdmin
+PlanAdmin.inlines = [PlanProductInline]

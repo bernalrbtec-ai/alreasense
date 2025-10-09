@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { 
   LayoutDashboard, 
@@ -19,17 +19,26 @@ import {
   ChevronRight
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
+import { useTenantProducts } from '../hooks/useTenantProducts'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import UserDropdown from './UserDropdown'
 import { cn } from '@/lib/utils'
 
-const navigation = [
+// Mapeamento de produtos para itens do menu
+const productMenuItems = {
+  flow: [
+    { name: 'Mensagens', href: '/messages', icon: MessageSquare },
+    { name: 'Conexões', href: '/connections', icon: Wifi },
+  ],
+  sense: [
+    { name: 'Experimentos', href: '/experiments', icon: FlaskConical },
+  ],
+}
+
+const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Mensagens', href: '/messages', icon: MessageSquare },
-  { name: 'Conexões', href: '/connections', icon: Wifi },
-  { name: 'Experimentos', href: '/experiments', icon: FlaskConical },
   { name: 'Billing', href: '/billing', icon: CreditCard },
 ]
 
@@ -50,8 +59,24 @@ export default function Layout({ children }: LayoutProps) {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const location = useLocation()
   const { user, logout } = useAuthStore()
+  const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
+  
+  // Gerar navegação dinâmica baseada nos produtos ativos
+  const navigation = useMemo(() => {
+    const items = [...baseNavigation]
+    
+    // Adicionar itens de menu dos produtos ativos
+    activeProductSlugs.forEach((productSlug) => {
+      const productItems = productMenuItems[productSlug as keyof typeof productMenuItems]
+      if (productItems) {
+        items.push(...productItems)
+      }
+    })
+    
+    return items
+  }, [activeProductSlugs])
 
   return (
     <div className="min-h-screen bg-gray-50">
