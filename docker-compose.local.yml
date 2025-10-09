@@ -69,11 +69,9 @@ services:
     command: >
       sh -c "
         echo '🔧 Aguardando banco de dados...' &&
-        python manage.py migrate &&
-        echo '👤 Criando superusuário...' &&
-        python create_superuser.py &&
-        echo '📦 Coletando arquivos estáticos...' &&
-        python manage.py collectstatic --noinput &&
+        sleep 3 &&
+        chmod +x setup_fresh_database.sh &&
+        bash setup_fresh_database.sh &&
         echo '🚀 Iniciando servidor Django...' &&
         python manage.py runserver 0.0.0.0:8000
       "

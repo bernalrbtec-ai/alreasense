@@ -173,6 +173,21 @@ class WhatsAppInstance(models.Model):
         help_text="Instância padrão para notificações"
     )
     
+    # Campaign settings
+    delay_min_seconds = models.IntegerField(
+        default=20,
+        help_text="Delay mínimo entre envios de campanha (segundos)"
+    )
+    delay_max_seconds = models.IntegerField(
+        default=50,
+        help_text="Delay máximo entre envios de campanha (segundos)"
+    )
+    evolution_instance_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text="Nome da instância no Evolution (geralmente igual a instance_name)"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

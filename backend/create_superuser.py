@@ -31,11 +31,16 @@ def create_superuser():
         print(f'❌ Database connection failed: {e}\n')
         raise
     # Create default tenant if it doesn't exist
+    from apps.billing.models import Plan
+    
+    # Pegar plano Starter
+    starter_plan = Plan.objects.filter(slug='starter').first()
+    
     tenant, created = Tenant.objects.get_or_create(
         name='Default Tenant',
         defaults={
-            'plan': 'starter',
-            'status': 'active',
+            'current_plan': starter_plan,
+            'ui_access': True,
         }
     )
     

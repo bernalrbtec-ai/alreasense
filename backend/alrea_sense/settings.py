@@ -33,6 +33,7 @@ THIRD_PARTY_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'channels',
+    'django_celery_beat',
 ]
 
 LOCAL_APPS = [
@@ -44,6 +45,8 @@ LOCAL_APPS = [
     'apps.billing',
     'apps.experiments',
     'apps.notifications',
+    'apps.contacts',
+    'apps.campaigns',
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -208,6 +211,15 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
+
+# Celery Beat Schedule
+from celery.schedules import crontab
+CELERY_BEAT_SCHEDULE = {
+    'campaign-scheduler': {
+        'task': 'apps.campaigns.tasks.campaign_scheduler',
+        'schedule': 10.0,  # A cada 10 segundos
+    },
+}
 
 # Stripe
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')

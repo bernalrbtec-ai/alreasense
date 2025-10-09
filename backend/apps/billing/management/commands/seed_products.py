@@ -114,7 +114,6 @@ class Command(BaseCommand):
                 'price': 49.00,
                 'color': '#3B82F6',
                 'sort_order': 1,
-                'is_enterprise': False,
             },
             {
                 'slug': 'pro',
@@ -123,7 +122,6 @@ class Command(BaseCommand):
                 'price': 149.00,
                 'color': '#8B5CF6',
                 'sort_order': 2,
-                'is_enterprise': False,
             },
             {
                 'slug': 'api_only',
@@ -132,7 +130,6 @@ class Command(BaseCommand):
                 'price': 99.00,
                 'color': '#F59E0B',
                 'sort_order': 3,
-                'is_enterprise': False,
             },
             {
                 'slug': 'enterprise',
@@ -141,7 +138,6 @@ class Command(BaseCommand):
                 'price': 499.00,
                 'color': '#EF4444',
                 'sort_order': 4,
-                'is_enterprise': True,
             },
         ]
         
