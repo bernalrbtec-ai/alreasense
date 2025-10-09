@@ -374,6 +374,11 @@ class WhatsAppInstance(models.Model):
                 instances_data = response.json()
                 print(f"   📋 Total de instâncias retornadas: {len(instances_data)}")
                 
+                # Mostrar TODAS as instâncias para debug
+                all_names = [inst.get('instance', {}).get('instanceName', 'N/A') for inst in instances_data]
+                print(f"   📝 Instâncias na Evolution API: {all_names}")
+                print(f"   🔍 Procurando por: {self.instance_name}")
+                
                 # Buscar nossa instância na lista
                 found = False
                 for instance_info in instances_data:
