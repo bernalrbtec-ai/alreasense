@@ -130,18 +130,22 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             import requests
             from apps.connections.models import EvolutionConnection
             
-            # Usar api_url da instância ou buscar do servidor global do sistema
-            api_url = instance.api_url
-            if not api_url:
-                evolution_server = EvolutionConnection.objects.filter(
-                    is_active=True
-                ).first()
-                if evolution_server:
-                    api_url = evolution_server.base_url
+            # Buscar servidor Evolution global
+            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+            if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
+                return Response({
+                    'success': False,
+                    'error': 'Servidor Evolution não configurado'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            api_url = evolution_server.base_url
+            
+            # Para ENVIAR mensagens: usar API key específica da instância se disponível, senão API Master
+            api_key_to_use = instance.api_key or evolution_server.api_key
             
             response = requests.post(
                 f"{api_url}/message/sendText/{instance.instance_name}",
-                headers={'apikey': instance.api_key},
+                headers={'apikey': api_key_to_use},  # API específica > API Master
                 json={
                     'number': phone,
                     'text': message

@@ -135,8 +135,9 @@ class WhatsAppInstance(models.Model):
     )
     
     # Evolution API config
-    api_url = models.URLField(help_text="URL da Evolution API")
-    api_key = encrypt(models.CharField(max_length=255, blank=True, help_text="API Key da Evolution API"))
+    api_url = models.URLField(blank=True, null=True, help_text="URL da Evolution API (geralmente usa servidor global)")
+    # API key específica da instância (retornada pela Evolution API ao criar)
+    api_key = models.CharField(max_length=255, blank=True, null=True, help_text="API Key específica da instância")
     
     # Connection info
     phone_number = models.CharField(
@@ -264,32 +265,42 @@ class WhatsAppInstance(models.Model):
                 
                 if create_response.status_code in [200, 201]:
                     create_data = create_response.json()
-                    api_key = create_data.get('apikey')
+                    print(f"📋 Resposta criar instância: {create_data}")
                     
-                    if api_key:
-                        self.api_key = api_key
+                    # Capturar API key específica (múltiplas possibilidades - padrão whatsapp-orchestrator)
+                    instance_api_key = (
+                        create_data.get('instance', {}).get('apikey') or
+                        create_data.get('instance', {}).get('apiKey') or
+                        create_data.get('apikey') or
+                        create_data.get('apiKey') or
+                        create_data.get('key')
+                    )
+                    
+                    if instance_api_key:
+                        self.api_key = instance_api_key
                         self.save()
+                        print(f"✅ API key específica capturada: {instance_api_key[:20]}...")
                         
-                        # Log the instance creation
+                        # Log
                         WhatsAppConnectionLog.objects.create(
                             instance=self,
                             action='created',
-                            details='Instância criada no Evolution API',
+                            details=f'Instância criada com API key específica',
                             user=self.created_by
                         )
                     else:
-                        self.last_error = f'API key não retornada na criação da instância. Resposta: {create_response.text}'
-                        self.save()
-                        return None
+                        print(f"⚠️  API key não retornada, continuando sem ela...")
+                        # Continuar mesmo sem API key (será buscada depois se necessário)
                 else:
                     self.last_error = f'Erro ao criar instância (Status {create_response.status_code}): {create_response.text}'
                     self.save()
                     return None
             
-            # Agora gerar o QR code
+            # ETAPA 2: Gerar QR code usando API MASTER (padrão whatsapp-orchestrator)
+            # IMPORTANTE: Usar API MASTER, não API da instância!
             response = requests.get(
                 f"{api_url}/instance/connect/{self.instance_name}",
-                headers={'apikey': self.api_key},
+                headers={'apikey': system_api_key},  # ← API MASTER
                 timeout=30
             )
             
@@ -328,28 +339,27 @@ class WhatsAppInstance(models.Model):
             return None
     
     def check_connection_status(self):
-        """Check connection status and update phone number if connected."""
+        """
+        Check connection status and update phone number if connected.
+        Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
+        """
         import requests
         from apps.connections.models import EvolutionConnection
         
-        if not self.api_key:
-            self.last_error = 'API key não configurada. Gere um QR code primeiro.'
-            self.save()
-            return False
-        
         # Buscar servidor Evolution global
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url:
-            self.last_error = 'Servidor Evolution não configurado no sistema'
+        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
+            self.last_error = 'Servidor Evolution não configurado'
             self.save()
             return False
         
         api_url = evolution_server.base_url
+        api_master = evolution_server.api_key  # ← API MASTER
             
         try:
             response = requests.get(
                 f"{api_url}/instance/connectionState/{self.instance_name}",
-                headers={'apikey': self.api_key},
+                headers={'apikey': api_master},  # ← API MASTER (não da instância!)
                 timeout=10
             )
             
@@ -362,9 +372,10 @@ class WhatsAppInstance(models.Model):
                     self.status = 'active'
                     
                     # Tentar obter informações da instância para pegar o número
+                    # Usar API MASTER (padrão whatsapp-orchestrator)
                     info_response = requests.get(
                         f"{api_url}/instance/fetchInstances",
-                        headers={'apikey': self.api_key},
+                        headers={'apikey': api_master},  # ← API MASTER
                         timeout=10
                     )
                     
@@ -402,23 +413,27 @@ class WhatsAppInstance(models.Model):
             return False
     
     def disconnect(self, user=None):
-        """Disconnect the instance."""
+        """
+        Disconnect the instance.
+        Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
+        """
         import requests
         from apps.connections.models import EvolutionConnection
         
         # Buscar servidor Evolution global
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url:
-            self.last_error = 'Servidor Evolution não configurado no sistema'
+        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
+            self.last_error = 'Servidor Evolution não configurado'
             self.save()
             return False
         
         api_url = evolution_server.base_url
+        api_master = evolution_server.api_key  # ← API MASTER
         
         try:
             response = requests.delete(
                 f"{api_url}/instance/logout/{self.instance_name}",
-                headers={'apikey': self.api_key},
+                headers={'apikey': api_master},  # ← API MASTER (não da instância!)
                 timeout=10
             )
             
@@ -448,24 +463,28 @@ class WhatsAppInstance(models.Model):
             return False
     
     def check_status(self):
-        """Check instance status via Evolution API (for Celery tasks)."""
+        """
+        Check instance status via Evolution API (for Celery tasks).
+        Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
+        """
         import requests
         from apps.connections.models import EvolutionConnection
         
         # Buscar servidor Evolution global
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-        if not evolution_server or not evolution_server.base_url:
-            self.last_error = 'Servidor Evolution não configurado no sistema'
+        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
+            self.last_error = 'Servidor Evolution não configurado'
             self.status = 'error'
             self.save()
             return
         
         api_url = evolution_server.base_url
+        api_master = evolution_server.api_key  # ← API MASTER
         
         try:
             response = requests.get(
                 f"{api_url}/instance/connectionState/{self.instance_name}",
-                headers={'apikey': self.api_key},
+                headers={'apikey': api_master},  # ← API MASTER (não da instância!)
                 timeout=5
             )
             

@@ -156,20 +156,24 @@ def send_whatsapp_notification(self, log_id):
         # Format phone number (remove non-digits)
         phone = ''.join(filter(str.isdigit, log.recipient_phone))
         
-        # Usar api_url da instância ou buscar do servidor global do sistema
+        # Buscar servidor Evolution global
         from apps.connections.models import EvolutionConnection
-        api_url = instance.api_url
-        if not api_url:
-            evolution_server = EvolutionConnection.objects.filter(
-                is_active=True
-            ).first()
-            if evolution_server:
-                api_url = evolution_server.base_url
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
+            log.status = 'failed'
+            log.error_message = 'Servidor Evolution não configurado'
+            log.save()
+            return {'success': False, 'error': 'Evolution server not configured'}
+        
+        api_url = evolution_server.base_url
+        
+        # Para ENVIAR mensagens: usar API key específica da instância se disponível, senão API Master
+        api_key_to_use = instance.api_key or evolution_server.api_key
         
         # Send message via Evolution API
         response = requests.post(
             f"{api_url}/message/sendText/{instance.instance_name}",
-            headers={'apikey': instance.api_key},
+            headers={'apikey': api_key_to_use},  # API específica > API Master
             json={
                 'number': phone,
                 'text': log.content
