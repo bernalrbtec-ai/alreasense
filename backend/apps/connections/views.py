@@ -94,11 +94,17 @@ def evolution_config(request):
             base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
             webhook_url = f"{base_url}/api/webhooks/evolution/"
         
+        # Tentar obter api_key, se falhar retornar string vazia
+        try:
+            api_key_value = connection.api_key or ''
+        except Exception:
+            api_key_value = ''
+        
         return Response({
             'id': str(connection.id),
             'name': connection.name,
             'base_url': connection.base_url,
-            'api_key': connection.api_key,
+            'api_key': api_key_value,
             'webhook_url': webhook_url,
             'is_active': connection.is_active,
             'status': connection_status,
@@ -138,7 +144,12 @@ def evolution_config(request):
                 # Atualizar existente
                 connection.name = data.get('name', connection.name)
                 connection.base_url = data.get('base_url', connection.base_url)
-                connection.api_key = data.get('api_key', connection.api_key)
+                
+                # API Key: só atualizar se vier nova (não vazia)
+                new_api_key = data.get('api_key', '')
+                if new_api_key and new_api_key.strip():
+                    connection.api_key = new_api_key
+                
                 connection.is_active = data.get('is_active', connection.is_active)
                 connection.save()
             
@@ -150,11 +161,17 @@ def evolution_config(request):
                 base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
                 webhook_url = f"{base_url}/api/webhooks/evolution/"
             
+            # Tentar obter api_key, se falhar (criptografia corrompida) retornar string vazia
+            try:
+                api_key_value = connection.api_key or ''
+            except Exception:
+                api_key_value = ''
+            
             return Response({
                 'id': str(connection.id),
                 'name': connection.name,
                 'base_url': connection.base_url,
-                'api_key': connection.api_key,
+                'api_key': api_key_value,
                 'webhook_url': webhook_url,
                 'is_active': connection.is_active,
                 'status': connection.status,
