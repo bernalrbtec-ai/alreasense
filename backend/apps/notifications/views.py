@@ -87,6 +87,52 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
     
+    def perform_destroy(self, instance):
+        """
+        Override destroy to also delete from Evolution API.
+        Padrão whatsapp-orchestrator: deletar da Evolution API antes de deletar do banco.
+        """
+        import requests
+        from apps.connections.models import EvolutionConnection
+        
+        # Buscar servidor Evolution global
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        
+        if evolution_server and evolution_server.base_url and evolution_server.api_key:
+            try:
+                # Deletar instância da Evolution API usando API MASTER
+                api_url = evolution_server.base_url
+                api_master = evolution_server.api_key
+                
+                print(f"🗑️  Deletando instância {instance.instance_name} da Evolution API...")
+                
+                delete_response = requests.delete(
+                    f"{api_url}/instance/delete/{instance.instance_name}",
+                    headers={'apikey': api_master},
+                    timeout=10
+                )
+                
+                if delete_response.status_code in [200, 204]:
+                    print(f"✅ Instância deletada da Evolution API")
+                    
+                    # Log da deleção
+                    WhatsAppConnectionLog.objects.create(
+                        instance=instance,
+                        action='deleted',
+                        details='Instância deletada da Evolution API e do sistema',
+                        user=self.request.user
+                    )
+                else:
+                    print(f"⚠️  Erro ao deletar da Evolution API (Status {delete_response.status_code}): {delete_response.text[:200]}")
+                    # Continuar mesmo se falhar na Evolution API
+                    
+            except Exception as e:
+                print(f"⚠️  Exceção ao deletar da Evolution API: {str(e)}")
+                # Continuar mesmo se falhar
+        
+        # Deletar do banco de dados
+        instance.delete()
+    
     @action(detail=True, methods=['post'])
     def check_status(self, request, pk=None):
         """Check instance status."""

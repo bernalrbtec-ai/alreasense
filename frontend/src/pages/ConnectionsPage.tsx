@@ -474,7 +474,11 @@ export default function ConnectionsPage() {
             <div className="text-center">
               <div className="mb-4">
                 <img 
-                  src={`data:image/png;base64,${qrCodeData.qr_code}`}
+                  src={
+                    qrCodeData.qr_code.startsWith('data:') 
+                      ? qrCodeData.qr_code 
+                      : `data:image/png;base64,${qrCodeData.qr_code}`
+                  }
                   alt="QR Code para conectar WhatsApp"
                   className="mx-auto border border-gray-200 rounded-lg"
                 />
