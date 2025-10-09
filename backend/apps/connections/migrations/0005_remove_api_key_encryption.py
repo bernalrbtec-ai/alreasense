@@ -4,6 +4,44 @@ from django.db import migrations, models
 import django.db.models.deletion
 
 
+def safe_alter_api_key(apps, schema_editor):
+    """Safely alter api_key column type from bytea to varchar."""
+    with schema_editor.connection.cursor() as cursor:
+        # Verificar se a coluna existe e qual é o tipo
+        cursor.execute("""
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'connections_evolutionconnection'
+            AND column_name = 'api_key'
+            AND table_schema = 'public';
+        """)
+        result = cursor.fetchone()
+        
+        if result:
+            current_type = result[0]
+            print(f"   📋 Tipo atual de api_key: {current_type}")
+            
+            if current_type == 'bytea':
+                # Limpar dados criptografados e alterar tipo
+                print("   🔄 Alterando tipo de bytea para varchar...")
+                cursor.execute("""
+                    ALTER TABLE connections_evolutionconnection 
+                    ALTER COLUMN api_key TYPE VARCHAR(255) USING NULL;
+                """)
+                print("   ✅ Tipo alterado de bytea para varchar")
+            elif current_type.startswith('character varying'):
+                print("   ⏭️  api_key já é varchar, nada a fazer")
+            else:
+                print(f"   ⚠️  Tipo inesperado: {current_type}")
+        else:
+            print("   ℹ️  Coluna api_key não existe (será criada depois)")
+
+
+def reverse_alter_api_key(apps, schema_editor):
+    """Reverse operation."""
+    pass  # Não reverter - deixar como varchar
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -12,57 +50,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='evolutionconnection',
-            name='evo_token',
-        ),
-        migrations.RemoveField(
-            model_name='evolutionconnection',
-            name='evo_ws_url',
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='api_key',
-            field=models.CharField(blank=True, help_text='API Key da Evolution API', max_length=255, null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='base_url',
-            field=models.URLField(blank=True, help_text='URL base da Evolution API', null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='last_check',
-            field=models.DateTimeField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='last_error',
-            field=models.TextField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='status',
-            field=models.CharField(choices=[('active', 'Active'), ('inactive', 'Inactive'), ('error', 'Error')], default='inactive', max_length=20),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='webhook_url',
-            field=models.URLField(blank=True, help_text='URL do webhook para receber eventos', null=True),
-        ),
-        migrations.AlterField(
-            model_name='evolutionconnection',
-            name='id',
-            field=models.AutoField(primary_key=True, serialize=False),
-        ),
-        migrations.AlterField(
-            model_name='evolutionconnection',
-            name='name',
-            field=models.CharField(max_length=100),
-        ),
-        migrations.AlterField(
-            model_name='evolutionconnection',
-            name='tenant',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='evolution_connections', to='tenancy.tenant'),
-        ),
+        migrations.RunPython(safe_alter_api_key, reverse_alter_api_key),
     ]

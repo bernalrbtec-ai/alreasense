@@ -3,6 +3,44 @@
 from django.db import migrations, models
 
 
+def safe_alter_whatsapp_api_key(apps, schema_editor):
+    """Safely alter api_key column type from bytea to varchar."""
+    with schema_editor.connection.cursor() as cursor:
+        # Verificar se a coluna api_key existe
+        cursor.execute("""
+            SELECT data_type 
+            FROM information_schema.columns 
+            WHERE table_name = 'notifications_whatsapp_instance'
+            AND column_name = 'api_key'
+            AND table_schema = 'public';
+        """)
+        result = cursor.fetchone()
+        
+        if result:
+            current_type = result[0]
+            print(f"   📋 Tipo atual de WhatsApp api_key: {current_type}")
+            
+            if current_type == 'bytea':
+                # Limpar dados criptografados e alterar tipo
+                print("   🔄 Alterando tipo de bytea para varchar...")
+                cursor.execute("""
+                    ALTER TABLE notifications_whatsapp_instance 
+                    ALTER COLUMN api_key TYPE VARCHAR(255) USING NULL;
+                """)
+                print("   ✅ Tipo alterado de bytea para varchar")
+            elif current_type.startswith('character varying'):
+                print("   ⏭️  api_key já é varchar, nada a fazer")
+            else:
+                print(f"   ⚠️  Tipo inesperado: {current_type}")
+        else:
+            print("   ℹ️  Coluna api_key não existe (será criada depois)")
+
+
+def reverse_alter_whatsapp_api_key(apps, schema_editor):
+    """Reverse operation."""
+    pass  # Não reverter - deixar como varchar
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,11 +48,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AlterField(
-            model_name='whatsappinstance',
-            name='api_key',
-            field=models.CharField(blank=True, help_text='API Key específica da instância', max_length=255, null=True),
-        ),
+        migrations.RunPython(safe_alter_whatsapp_api_key, reverse_alter_whatsapp_api_key),
         migrations.AlterField(
             model_name='whatsappinstance',
             name='api_url',
