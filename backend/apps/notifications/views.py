@@ -137,10 +137,26 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     def check_status(self, request, pk=None):
         """Check instance status."""
         instance = self.get_object()
-        instance.check_status()
         
-        serializer = self.get_serializer(instance)
-        return Response(serializer.data)
+        try:
+            success = instance.check_connection_status()
+            serializer = self.get_serializer(instance)
+            
+            return Response({
+                'success': success,
+                'instance': serializer.data,
+                'connection_state': instance.connection_state,
+                'phone_number': instance.phone_number,
+                'status': instance.status
+            })
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response({
+                'success': False,
+                'error': f'Erro ao verificar status: {str(e)}',
+                'details': instance.last_error
+            }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=True, methods=['post'])
     def set_default(self, request, pk=None):

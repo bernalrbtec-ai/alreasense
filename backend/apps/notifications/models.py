@@ -355,6 +355,9 @@ class WhatsAppInstance(models.Model):
         
         api_url = evolution_server.base_url
         api_master = evolution_server.api_key  # ← API MASTER
+        
+        print(f"🔍 Verificando status da instância {self.instance_name}")
+        print(f"   URL: {api_url}/instance/connectionState/{self.instance_name}")
             
         try:
             response = requests.get(
@@ -362,6 +365,9 @@ class WhatsAppInstance(models.Model):
                 headers={'apikey': api_master},  # ← API MASTER (não da instância!)
                 timeout=10
             )
+            
+            print(f"   Status Code: {response.status_code}")
+            print(f"   Response: {response.text[:200]}")
             
             if response.status_code == 200:
                 data = response.json()
@@ -404,10 +410,16 @@ class WhatsAppInstance(models.Model):
                 self.last_check = timezone.now()
                 self.save()
                 return True
-            
-            return False
+            else:
+                print(f"   ❌ Erro ao verificar status: {response.status_code} - {response.text[:200]}")
+                self.last_error = f'Erro {response.status_code}: {response.text[:200]}'
+                self.save()
+                return False
             
         except Exception as e:
+            print(f"   ⚠️  Exceção ao verificar status: {str(e)}")
+            import traceback
+            traceback.print_exc()
             self.last_error = str(e)
             self.save()
             return False
