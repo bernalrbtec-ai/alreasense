@@ -3,6 +3,8 @@ import { Save, TestTube, Check, X, AlertCircle } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import Toast from '../components/ui/Toast'
+import { useToast } from '../hooks/useToast'
 import { api } from '../lib/api'
 
 interface EvolutionConfig {
@@ -26,6 +28,7 @@ export default function EvolutionConfigPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isTesting, setIsTesting] = useState(false)
+  const { toast, showToast, hideToast } = useToast()
   const [testResult, setTestResult] = useState<{
     success: boolean
     message: string
@@ -64,10 +67,10 @@ export default function EvolutionConfigPage() {
       setIsSaving(true)
       const response = await api.post('/connections/evolution/config/', config)
       setConfig(response.data)
-      alert('Configuração salva com sucesso!')
+      showToast('Configuração salva com sucesso!', 'success')
     } catch (error) {
       console.error('Error saving config:', error)
-      alert('Erro ao salvar configuração')
+      showToast('Erro ao salvar configuração', 'error')
     } finally {
       setIsSaving(false)
     }
@@ -296,6 +299,13 @@ export default function EvolutionConfigPage() {
         </form>
       </Card>
 
+      {/* Toast Notification */}
+      <Toast
+        show={toast.show}
+        message={toast.message}
+        type={toast.type}
+        onClose={hideToast}
+      />
     </div>
   )
 }

@@ -5,7 +5,9 @@ import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Toast from '../components/ui/Toast'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useToast } from '../hooks/useToast'
+import { useConfirm } from '../hooks/useConfirm'
 import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon } from 'lucide-react'
 import { api } from '../lib/api'
 
@@ -63,6 +65,7 @@ export default function NotificationsPage() {
   
   // Notificações toast
   const { toast, showToast, hideToast } = useToast()
+  const { confirm, showConfirm, hideConfirm, handleConfirm } = useConfirm()
   
   // Form data para SMTP
   const [smtpForm, setSMTPForm] = useState({
@@ -231,9 +234,14 @@ export default function NotificationsPage() {
 
   // Função para excluir servidor SMTP
   const handleDeleteSMTP = async (smtpId: string) => {
-    if (!confirm('Tem certeza que deseja excluir este servidor SMTP?')) {
-      return
-    }
+    showConfirm(
+      'Excluir Servidor SMTP',
+      'Tem certeza que deseja excluir este servidor SMTP? Esta ação não pode ser desfeita.',
+      () => deleteSMTPConfig(smtpId)
+    )
+  }
+
+  const deleteSMTPConfig = async (smtpId: string) => {
 
     try {
       await api.delete(`/notifications/smtp-configs/${smtpId}/`)
@@ -321,9 +329,14 @@ export default function NotificationsPage() {
   }
 
   const handleDeleteInstance = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta instância WhatsApp?')) {
-      return
-    }
+    showConfirm(
+      'Excluir Instância WhatsApp',
+      'Tem certeza que deseja excluir esta instância WhatsApp? Esta ação não pode ser desfeita.',
+      () => deleteInstanceConfig(id)
+    )
+  }
+
+  const deleteInstanceConfig = async (id: string) => {
 
     try {
       await api.delete(`/notifications/whatsapp-instances/${id}/`)
@@ -1029,6 +1042,18 @@ export default function NotificationsPage() {
         message={toast.message}
         type={toast.type}
         onClose={hideToast}
+      />
+
+      {/* Confirm Dialog */}
+      <ConfirmDialog
+        show={confirm.show}
+        title={confirm.title}
+        message={confirm.message}
+        confirmText={confirm.confirmText}
+        cancelText={confirm.cancelText}
+        variant={confirm.variant}
+        onConfirm={handleConfirm}
+        onCancel={hideConfirm}
       />
     </div>
   )

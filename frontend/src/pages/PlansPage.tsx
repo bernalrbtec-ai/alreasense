@@ -3,6 +3,8 @@ import { Plus, Edit, Trash2, Check, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import Toast from '../components/ui/Toast'
+import { useToast } from '../hooks/useToast'
 import { api } from '../lib/api'
 
 interface Plan {
@@ -22,6 +24,7 @@ export default function PlansPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
+  const { toast, showToast, hideToast } = useToast()
   const [formData, setFormData] = useState({
     name: '',
     price: 0,
@@ -70,7 +73,7 @@ export default function PlansPage() {
       }
       await fetchPlans()
       handleCloseModal()
-      alert(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!')
+      showToast(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!', 'success')
     } catch (error: any) {
       console.error('❌ Error saving plan:', error)
       console.error('❌ Error type:', typeof error)
@@ -89,7 +92,7 @@ export default function PlansPage() {
         errorMessage = JSON.stringify(error.response.data)
       }
       
-      alert(errorMessage)
+      showToast(errorMessage, 'error')
     } finally {
       setIsSaving(false)
     }
@@ -100,10 +103,10 @@ export default function PlansPage() {
     try {
       await api.delete(`/billing/plans/${id}/`)
       await fetchPlans()
-      alert('Plano excluído com sucesso!')
+      showToast('Plano excluído com sucesso!', 'success')
     } catch (error: any) {
       console.error('Error deleting plan:', error)
-      alert(error.response?.data?.detail || 'Erro ao excluir plano')
+      showToast(error.response?.data?.detail || 'Erro ao excluir plano', 'error')
     }
   }
 
@@ -468,6 +471,14 @@ export default function PlansPage() {
           </div>
         </div>
       )}
+
+      {/* Toast Notification */}
+      <Toast
+        show={toast.show}
+        message={toast.message}
+        type={toast.type}
+        onClose={hideToast}
+      />
     </div>
   )
 }
