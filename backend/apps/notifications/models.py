@@ -197,9 +197,21 @@ class WhatsAppInstance(models.Model):
         import requests
         from django.utils import timezone
         from datetime import timedelta
+        from apps.connections.models import EvolutionConnection
         
-        # Usar api_url da instância ou do settings
-        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        # Buscar servidor Evolution ativo do tenant
+        evolution_server = EvolutionConnection.objects.filter(
+            tenant=self.tenant,
+            is_active=True
+        ).first()
+        
+        if not evolution_server:
+            self.last_error = 'Nenhum servidor Evolution API ativo encontrado para este tenant'
+            self.save()
+            return None
+        
+        # Usar URL do servidor cadastrado ou da instância
+        api_url = self.api_url or evolution_server.base_url
         
         if not api_url:
             self.last_error = 'URL da Evolution API não configurada'
@@ -209,10 +221,10 @@ class WhatsAppInstance(models.Model):
         try:
             # Se não tem API key, primeiro criar a instância no Evolution API
             if not self.api_key:
-                # Usar a API key padrão do sistema para criar a instância
-                system_api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
+                # Usar a API key do servidor cadastrado no sistema
+                system_api_key = evolution_server.api_key
                 if not system_api_key:
-                    self.last_error = 'API key do sistema não configurada'
+                    self.last_error = f'API key do servidor Evolution "{evolution_server.name}" não configurada'
                     self.save()
                     return None
                 
@@ -302,14 +314,22 @@ class WhatsAppInstance(models.Model):
     def check_connection_status(self):
         """Check connection status and update phone number if connected."""
         import requests
+        from apps.connections.models import EvolutionConnection
         
         if not self.api_key:
             self.last_error = 'API key não configurada'
             self.save()
             return False
         
-        # Usar api_url da instância ou do settings
-        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        # Usar api_url da instância ou buscar do servidor cadastrado
+        api_url = self.api_url
+        if not api_url:
+            evolution_server = EvolutionConnection.objects.filter(
+                tenant=self.tenant,
+                is_active=True
+            ).first()
+            if evolution_server:
+                api_url = evolution_server.base_url
         
         if not api_url:
             self.last_error = 'URL da Evolution API não configurada'
@@ -374,9 +394,17 @@ class WhatsAppInstance(models.Model):
     def disconnect(self, user=None):
         """Disconnect the instance."""
         import requests
+        from apps.connections.models import EvolutionConnection
         
-        # Usar api_url da instância ou do settings
-        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        # Usar api_url da instância ou buscar do servidor cadastrado
+        api_url = self.api_url
+        if not api_url:
+            evolution_server = EvolutionConnection.objects.filter(
+                tenant=self.tenant,
+                is_active=True
+            ).first()
+            if evolution_server:
+                api_url = evolution_server.base_url
         
         try:
             response = requests.delete(
@@ -452,9 +480,17 @@ class WhatsAppConnectionLog(models.Model):
     def check_status(self):
         """Check instance status via Evolution API."""
         import requests
+        from apps.connections.models import EvolutionConnection
         
-        # Usar api_url da instância ou do settings
-        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        # Usar api_url da instância ou buscar do servidor cadastrado
+        api_url = self.api_url
+        if not api_url:
+            evolution_server = EvolutionConnection.objects.filter(
+                tenant=self.tenant,
+                is_active=True
+            ).first()
+            if evolution_server:
+                api_url = evolution_server.base_url
         
         try:
             response = requests.get(

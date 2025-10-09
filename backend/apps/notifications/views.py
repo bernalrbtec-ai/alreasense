@@ -128,10 +128,17 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         
         try:
             import requests
-            from django.conf import settings
+            from apps.connections.models import EvolutionConnection
             
-            # Usar api_url da instância ou do settings
-            api_url = instance.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+            # Usar api_url da instância ou buscar do servidor cadastrado
+            api_url = instance.api_url
+            if not api_url:
+                evolution_server = EvolutionConnection.objects.filter(
+                    tenant=instance.tenant,
+                    is_active=True
+                ).first()
+                if evolution_server:
+                    api_url = evolution_server.base_url
             
             response = requests.post(
                 f"{api_url}/message/sendText/{instance.instance_name}",

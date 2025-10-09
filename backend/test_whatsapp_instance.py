@@ -66,19 +66,35 @@ def test_whatsapp_instance():
         traceback.print_exc()
         return
     
-    # 3. Testar generate_qr_code
+    # 3. Verificar servidor Evolution cadastrado
+    print("\n" + "=" * 60)
+    print("🔍 VERIFICANDO SERVIDOR EVOLUTION CADASTRADO")
+    print("=" * 60)
+    
+    from apps.connections.models import EvolutionConnection
+    
+    evolution_server = EvolutionConnection.objects.filter(
+        tenant=tenant,
+        is_active=True
+    ).first()
+    
+    if evolution_server:
+        print(f"✅ Servidor Evolution encontrado:")
+        print(f"   - Nome: {evolution_server.name}")
+        print(f"   - URL: {evolution_server.base_url}")
+        print(f"   - API Key: {'CONFIGURADA' if evolution_server.api_key else 'NÃO CONFIGURADA'}")
+        print(f"   - Status: {evolution_server.status}")
+    else:
+        print(f"❌ Nenhum servidor Evolution ativo encontrado!")
+        print(f"   Configure um servidor em: Admin → Servidor de Instância")
+    
+    # 4. Testar generate_qr_code
     print("\n" + "=" * 60)
     print("🔍 TESTANDO generate_qr_code()")
     print("=" * 60)
     
     try:
-        from django.conf import settings
-        
-        print(f"📋 Configurações:")
-        print(f"   - EVOLUTION_API_URL: {getattr(settings, 'EVOLUTION_API_URL', 'NÃO CONFIGURADO')}")
-        print(f"   - EVOLUTION_API_KEY: {'CONFIGURADO' if getattr(settings, 'EVOLUTION_API_KEY', None) else 'NÃO CONFIGURADO'}")
-        
-        print(f"\n🔄 Chamando generate_qr_code()...")
+        print(f"🔄 Chamando generate_qr_code()...")
         qr_code = instance.generate_qr_code()
         
         if qr_code:
@@ -95,7 +111,7 @@ def test_whatsapp_instance():
         import traceback
         traceback.print_exc()
     
-    # 4. Limpar instância de teste
+    # 5. Limpar instância de teste
     print("\n" + "=" * 60)
     print("🧹 LIMPANDO INSTÂNCIA DE TESTE")
     print("=" * 60)
