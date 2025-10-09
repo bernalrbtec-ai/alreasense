@@ -23,6 +23,10 @@ def require_product(product_slug):
         
         @wraps(original_dispatch)
         def new_dispatch(self, request, *args, **kwargs):
+            # Superusers e staff têm acesso a tudo (admin/configuração)
+            if request.user and (request.user.is_superuser or request.user.is_staff):
+                return original_dispatch(self, request, *args, **kwargs)
+            
             # Verificar se o tenant tem acesso ao produto
             if not hasattr(request, 'tenant') or not request.tenant:
                 raise PermissionDenied('Tenant não encontrado')
