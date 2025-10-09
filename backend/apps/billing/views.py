@@ -28,16 +28,16 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=False, methods=['get'])
     def available(self, request):
-        """Lista produtos disponíveis para o tenant"""
+        """Lista produtos disponíveis para o tenant como add-on"""
         tenant = request.user.tenant
         
         # Produtos já ativos
         active_product_ids = tenant.active_products.values_list('product_id', flat=True)
         
-        # Produtos disponíveis como add-on
+        # Produtos disponíveis como add-on (têm addon_price definido)
         available_products = Product.objects.filter(
             is_active=True,
-            is_addon_available=True
+            addon_price__isnull=False
         ).exclude(id__in=active_product_ids)
         
         serializer = self.get_serializer(available_products, many=True)
