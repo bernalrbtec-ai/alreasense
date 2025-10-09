@@ -135,7 +135,7 @@ class WhatsAppInstance(models.Model):
     
     # Evolution API config
     api_url = models.URLField(help_text="URL da Evolution API")
-    api_key = encrypt(models.CharField(max_length=255, help_text="API Key da Evolution API"))
+    api_key = encrypt(models.CharField(max_length=255, blank=True, help_text="API Key da Evolution API"))
     
     # Connection info
     phone_number = models.CharField(
