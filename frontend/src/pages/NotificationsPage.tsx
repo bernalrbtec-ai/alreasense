@@ -4,6 +4,8 @@ import { Button } from '../components/ui/Button'
 import { Input } from '../components/ui/Input'
 import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import Toast from '../components/ui/Toast'
+import { useToast } from '../hooks/useToast'
 import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon } from 'lucide-react'
 import { api } from '../lib/api'
 
@@ -60,11 +62,7 @@ export default function NotificationsPage() {
   const [editingInstance, setEditingInstance] = useState<WhatsAppInstance | null>(null)
   
   // Notificações toast
-  const [toast, setToast] = useState<{ show: boolean, message: string, type: 'success' | 'error' }>({
-    show: false,
-    message: '',
-    type: 'success'
-  })
+  const { toast, showToast, hideToast } = useToast()
   
   // Form data para SMTP
   const [smtpForm, setSMTPForm] = useState({
@@ -95,12 +93,6 @@ export default function NotificationsPage() {
   }, [activeTab])
 
   // Função para mostrar toast
-  const showToast = (message: string, type: 'success' | 'error') => {
-    setToast({ show: true, message, type })
-    setTimeout(() => {
-      setToast({ show: false, message: '', type: 'success' })
-    }, 4000) // Auto-hide após 4 segundos
-  }
 
   const fetchData = async () => {
     setIsLoading(true)
@@ -367,23 +359,30 @@ export default function NotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Sistema de Notificações</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Gerencie templates de email e WhatsApp, instâncias e histórico de envios
-        </p>
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="p-2 bg-blue-100 rounded-lg">
+            <Bell className="h-6 w-6 text-blue-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">Sistema de Notificações</h1>
+            <p className="text-sm text-gray-500 mt-1">
+              Gerencie templates de email e WhatsApp, instâncias e histórico de envios
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
-        <nav className="-mb-px flex space-x-8">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-1">
+        <nav className="flex space-x-1">
           <button
             onClick={() => setActiveTab('templates')}
             className={`${
               activeTab === 'templates'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
             <FileText className="h-4 w-4" />
             Templates
@@ -392,9 +391,9 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('instances')}
             className={`${
               activeTab === 'instances'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
             <Server className="h-4 w-4" />
             Instâncias WhatsApp
@@ -403,9 +402,9 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('smtp')}
             className={`${
               activeTab === 'smtp'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
             <Mail className="h-4 w-4" />
             Servidor SMTP
@@ -414,9 +413,9 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('logs')}
             className={`${
               activeTab === 'logs'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+            } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
             <Eye className="h-4 w-4" />
             Histórico
@@ -435,7 +434,7 @@ export default function NotificationsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {Array.isArray(templates) && templates.map((template) => (
-            <Card key={template.id} className="p-4">
+            <Card key={template.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
               <div className="flex items-start justify-between">
                 <div className="flex items-center gap-2">
                   {template.type === 'email' ? (
@@ -495,7 +494,7 @@ export default function NotificationsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(instances) && instances.map((instance) => (
-            <Card key={instance.id} className="p-4">
+            <Card key={instance.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900">{instance.name}</h3>
@@ -571,7 +570,7 @@ export default function NotificationsPage() {
                    {console.log('🔍 Renderizando SMTP tab, smtpConfigs:', smtpConfigs, 'length:', smtpConfigs?.length)}
                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(smtpConfigs) && smtpConfigs.map((smtp) => (
-            <Card key={smtp.id} className="p-4">
+            <Card key={smtp.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
               <div className="flex items-start justify-between">
                 <div>
                   <h3 className="font-semibold text-gray-900">{smtp.name}</h3>
@@ -1025,42 +1024,12 @@ export default function NotificationsPage() {
       )}
 
       {/* Toast Notification */}
-      {toast.show && (
-        <div className={`fixed top-4 right-4 z-50 max-w-sm w-full bg-white rounded-lg shadow-lg border-l-4 ${
-          toast.type === 'success' ? 'border-green-500' : 'border-red-500'
-        }`}>
-          <div className="p-4">
-            <div className="flex items-start">
-              <div className="flex-shrink-0">
-                {toast.type === 'success' ? (
-                  <Check className="h-5 w-5 text-green-500" />
-                ) : (
-                  <XIcon className="h-5 w-5 text-red-500" />
-                )}
-              </div>
-              <div className="ml-3 w-0 flex-1">
-                <p className={`text-sm font-medium ${
-                  toast.type === 'success' ? 'text-green-800' : 'text-red-800'
-                }`}>
-                  {toast.message}
-                </p>
-              </div>
-              <div className="ml-4 flex-shrink-0 flex">
-                <button
-                  className={`inline-flex rounded-md focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    toast.type === 'success' 
-                      ? 'text-green-500 hover:text-green-600 focus:ring-green-500' 
-                      : 'text-red-500 hover:text-red-600 focus:ring-red-500'
-                  }`}
-                  onClick={() => setToast({ show: false, message: '', type: 'success' })}
-                >
-                  <XIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <Toast
+        show={toast.show}
+        message={toast.message}
+        type={toast.type}
+        onClose={hideToast}
+      />
     </div>
   )
 }
