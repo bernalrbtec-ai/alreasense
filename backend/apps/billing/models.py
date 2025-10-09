@@ -245,38 +245,16 @@ class BillingHistory(models.Model):
         ('product_deactivate', 'Produto Desativado'),
     ]
     
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
-    description = models.TextField(help_text="Descrição da ação")
-    
-    # Valores
-    old_value = models.JSONField(null=True, blank=True, help_text="Valor anterior")
-    new_value = models.JSONField(null=True, blank=True, help_text="Novo valor")
-    
-    # Preços
-    old_monthly_total = models.DecimalField(
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    description = models.TextField(blank=True, help_text="Descrição da ação")
+    amount = models.DecimalField(
         max_digits=10, 
-        decimal_places=2, 
-        null=True, 
-        blank=True,
-        help_text="Total mensal anterior"
-    )
-    new_monthly_total = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        null=True, 
-        blank=True,
-        help_text="Novo total mensal"
+        decimal_places=2,
+        help_text="Valor da ação"
     )
     
     # Metadados
     created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(
-        User, 
-        on_delete=models.SET_NULL, 
-        null=True, 
-        blank=True,
-        help_text="Usuário que realizou a ação"
-    )
     
     class Meta:
         db_table = 'billing_history'

@@ -33,8 +33,8 @@ class ProductAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'price', 'is_active', 'is_enterprise', 'sort_order']
-    list_filter = ['is_active', 'is_enterprise']
+    list_display = ['name', 'slug', 'price', 'is_active', 'sort_order']
+    list_filter = ['is_active']
     search_fields = ['name', 'slug', 'description']
     readonly_fields = ['id', 'created_at', 'updated_at']
     ordering = ['sort_order', 'price']
@@ -44,7 +44,7 @@ class PlanAdmin(admin.ModelAdmin):
             'fields': ('id', 'slug', 'name', 'description')
         }),
         ('Preços e Configurações', {
-            'fields': ('price', 'is_active', 'is_enterprise', 'sort_order')
+            'fields': ('price', 'is_active', 'sort_order')
         }),
         ('Aparência', {
             'fields': ('color',)
@@ -100,9 +100,9 @@ class TenantProductAdmin(admin.ModelAdmin):
 
 @admin.register(BillingHistory)
 class BillingHistoryAdmin(admin.ModelAdmin):
-    list_display = ['tenant', 'action', 'description', 'old_monthly_total', 'new_monthly_total', 'created_at', 'created_by']
+    list_display = ['tenant', 'action', 'description', 'amount', 'created_at']
     list_filter = ['action', 'created_at', 'tenant']
-    search_fields = ['tenant__name', 'description', 'created_by__username']
+    search_fields = ['tenant__name', 'description']
     readonly_fields = ['id', 'created_at']
     date_hierarchy = 'created_at'
     
@@ -111,10 +111,10 @@ class BillingHistoryAdmin(admin.ModelAdmin):
             'fields': ('id', 'tenant', 'action', 'description')
         }),
         ('Valores', {
-            'fields': ('old_value', 'new_value', 'old_monthly_total', 'new_monthly_total')
+            'fields': ('amount',)
         }),
         ('Metadados', {
-            'fields': ('created_at', 'created_by'),
+            'fields': ('created_at',),
             'classes': ('collapse',)
         }),
     )
