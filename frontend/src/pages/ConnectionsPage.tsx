@@ -9,7 +9,7 @@ import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check } from 'lucide-react'
 
 interface WhatsAppInstance {
   id: string
@@ -196,6 +196,21 @@ export default function ConnectionsPage() {
     )
   }
 
+  const handleCheckStatus = async (instance: WhatsAppInstance) => {
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
+      if (response.data.success) {
+        showToast('✅ Status verificado com sucesso!', 'success')
+        fetchData()
+      } else {
+        showToast(`❌ Erro ao verificar status: ${response.data.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao verificar status:', error)
+      showToast(`❌ Erro ao verificar status: ${error.response?.data?.error || error.message}`, 'error')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -227,7 +242,10 @@ export default function ConnectionsPage() {
                 <div>
                   <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
                   {instance.phone_number && (
-                    <p className="text-sm text-gray-600 mt-1">{instance.phone_number}</p>
+                    <p className="text-sm text-gray-600 mt-1">📱 {instance.phone_number}</p>
+                  )}
+                  {instance.instance_name && (
+                    <p className="text-xs text-gray-500 mt-1">ID: {instance.instance_name.substring(0, 8)}...</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -258,6 +276,15 @@ export default function ConnectionsPage() {
                   title="Gerar QR Code"
                 >
                   <QrCode className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  onClick={() => handleCheckStatus(instance)}
+                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                  title="Verificar Status"
+                >
+                  <Check className="h-4 w-4" />
                 </Button>
                 <Button 
                   variant="ghost" 

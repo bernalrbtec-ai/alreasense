@@ -217,6 +217,33 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         
         serializer = WhatsAppConnectionLogSerializer(logs, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def check_status(self, request, pk=None):
+        """Check connection status and update phone number if connected."""
+        instance = self.get_object()
+        
+        try:
+            success = instance.check_connection_status()
+            
+            if success:
+                serializer = self.get_serializer(instance)
+                return Response({
+                    'success': True,
+                    'message': 'Status verificado com sucesso',
+                    'instance': serializer.data
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Falha ao verificar status da conexão'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 
 class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):

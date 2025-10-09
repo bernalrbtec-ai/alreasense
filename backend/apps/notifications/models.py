@@ -198,6 +198,43 @@ class WhatsAppInstance(models.Model):
         from datetime import timedelta
         
         try:
+            # Se não tem API key, primeiro criar a instância no Evolution API
+            if not self.api_key:
+                create_response = requests.post(
+                    f"{self.api_url}/instance/create",
+                    json={
+                        'instanceName': self.instance_name,
+                        'qrcode': True,
+                        'integration': 'WHATSAPP-BAILEYS'
+                    },
+                    timeout=10
+                )
+                
+                if create_response.status_code in [200, 201]:
+                    create_data = create_response.json()
+                    api_key = create_data.get('apikey')
+                    
+                    if api_key:
+                        self.api_key = api_key
+                        self.save()
+                        
+                        # Log the instance creation
+                        WhatsAppConnectionLog.objects.create(
+                            instance=self,
+                            action='created',
+                            details='Instância criada no Evolution API',
+                            user=self.created_by
+                        )
+                    else:
+                        self.last_error = 'API key não retornada na criação da instância'
+                        self.save()
+                        return None
+                else:
+                    self.last_error = f'Erro ao criar instância: {create_response.text}'
+                    self.save()
+                    return None
+            
+            # Agora gerar o QR code
             response = requests.get(
                 f"{self.api_url}/instance/connect/{self.instance_name}",
                 headers={'apikey': self.api_key},
@@ -231,6 +268,68 @@ class WhatsAppInstance(models.Model):
             self.last_error = str(e)
             self.save()
             return None
+    
+    def check_connection_status(self):
+        """Check connection status and update phone number if connected."""
+        import requests
+        
+        if not self.api_key:
+            return False
+            
+        try:
+            response = requests.get(
+                f"{self.api_url}/instance/connectionState/{self.instance_name}",
+                headers={'apikey': self.api_key},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                state = data.get('state', 'close')
+                
+                if state == 'open':
+                    self.connection_state = 'open'
+                    self.status = 'active'
+                    
+                    # Tentar obter informações da instância para pegar o número
+                    info_response = requests.get(
+                        f"{self.api_url}/instance/fetchInstances",
+                        headers={'apikey': self.api_key},
+                        timeout=10
+                    )
+                    
+                    if info_response.status_code == 200:
+                        instances_data = info_response.json()
+                        for instance_info in instances_data:
+                            if instance_info.get('instance', {}).get('instanceName') == self.instance_name:
+                                phone = instance_info.get('instance', {}).get('owner')
+                                if phone and not self.phone_number:
+                                    self.phone_number = phone
+                                    
+                                    # Log the connection
+                                    WhatsAppConnectionLog.objects.create(
+                                        instance=self,
+                                        action='connected',
+                                        details=f'Instância conectada com número {phone}',
+                                        user=self.created_by
+                                    )
+                                break
+                    
+                    self.last_error = ''
+                else:
+                    self.connection_state = 'close'
+                    self.status = 'inactive'
+                
+                self.last_check = timezone.now()
+                self.save()
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.last_error = str(e)
+            self.save()
+            return False
     
     def disconnect(self, user=None):
         """Disconnect the instance."""
