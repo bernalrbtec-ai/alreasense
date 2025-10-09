@@ -342,6 +342,7 @@ class WhatsAppInstance(models.Model):
         """
         Check connection status and update phone number if connected.
         Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
+        Usa /instance/fetchInstances para obter TODOS os dados de uma vez.
         """
         import requests
         from apps.connections.models import EvolutionConnection
@@ -357,61 +358,82 @@ class WhatsAppInstance(models.Model):
         api_master = evolution_server.api_key  # ← API MASTER
         
         print(f"🔍 Verificando status da instância {self.instance_name}")
-        print(f"   URL: {api_url}/instance/connectionState/{self.instance_name}")
+        print(f"   URL: {api_url}/instance/fetchInstances")
             
         try:
+            # Buscar TODAS as instâncias de uma vez (mais eficiente!)
             response = requests.get(
-                f"{api_url}/instance/connectionState/{self.instance_name}",
-                headers={'apikey': api_master},  # ← API MASTER (não da instância!)
+                f"{api_url}/instance/fetchInstances",
+                headers={'apikey': api_master},  # ← API MASTER
                 timeout=10
             )
             
             print(f"   Status Code: {response.status_code}")
-            print(f"   Response: {response.text[:200]}")
             
             if response.status_code == 200:
-                data = response.json()
-                state = data.get('state', 'close')
+                instances_data = response.json()
+                print(f"   📋 Total de instâncias retornadas: {len(instances_data)}")
                 
-                if state == 'open':
-                    self.connection_state = 'open'
-                    self.status = 'active'
-                    
-                    # Tentar obter informações da instância para pegar o número
-                    # Usar API MASTER (padrão whatsapp-orchestrator)
-                    info_response = requests.get(
-                        f"{api_url}/instance/fetchInstances",
-                        headers={'apikey': api_master},  # ← API MASTER
-                        timeout=10
-                    )
-                    
-                    if info_response.status_code == 200:
-                        instances_data = info_response.json()
-                        for instance_info in instances_data:
-                            if instance_info.get('instance', {}).get('instanceName') == self.instance_name:
-                                phone = instance_info.get('instance', {}).get('owner')
-                                if phone and not self.phone_number:
-                                    self.phone_number = phone
-                                    
-                                    # Log the connection
+                # Buscar nossa instância na lista
+                found = False
+                for instance_info in instances_data:
+                    instance_data = instance_info.get('instance', {})
+                    if instance_data.get('instanceName') == self.instance_name:
+                        found = True
+                        print(f"   ✅ Instância encontrada!")
+                        
+                        # Pegar estado da conexão
+                        state = instance_data.get('state', 'close')
+                        print(f"   📱 State: {state}")
+                        
+                        # Pegar número de telefone
+                        phone = instance_data.get('owner', '')
+                        print(f"   📞 Phone: {phone}")
+                        
+                        # Atualizar dados
+                        if state == 'open':
+                            self.connection_state = 'open'
+                            self.status = 'active'
+                            
+                            if phone:
+                                old_phone = self.phone_number
+                                self.phone_number = phone
+                                
+                                if not old_phone:
+                                    # Log da conexão (só primeira vez)
                                     WhatsAppConnectionLog.objects.create(
                                         instance=self,
                                         action='connected',
                                         details=f'Instância conectada com número {phone}',
                                         user=self.created_by
                                     )
-                                break
-                    
-                    self.last_error = ''
-                else:
+                                    print(f"   ✅ Número salvo: {phone}")
+                            
+                            self.last_error = ''
+                        elif state == 'connecting':
+                            self.connection_state = 'connecting'
+                            self.status = 'inactive'
+                            print(f"   ⏳ Instância ainda conectando...")
+                        else:
+                            self.connection_state = 'close'
+                            self.status = 'inactive'
+                            print(f"   ❌ Instância desconectada")
+                        
+                        self.last_check = timezone.now()
+                        self.save()
+                        return True
+                
+                if not found:
+                    print(f"   ⚠️  Instância {self.instance_name} NÃO encontrada na Evolution API")
+                    self.last_error = 'Instância não encontrada na Evolution API'
                     self.connection_state = 'close'
                     self.status = 'inactive'
+                    self.save()
+                    return False
                 
-                self.last_check = timezone.now()
-                self.save()
-                return True
             else:
-                print(f"   ❌ Erro ao verificar status: {response.status_code} - {response.text[:200]}")
+                print(f"   ❌ Erro ao buscar instâncias: {response.status_code}")
+                print(f"   Response: {response.text[:200]}")
                 self.last_error = f'Erro {response.status_code}: {response.text[:200]}'
                 self.save()
                 return False
