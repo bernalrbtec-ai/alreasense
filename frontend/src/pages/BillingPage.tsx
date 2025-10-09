@@ -92,7 +92,7 @@ export default function BillingPage() {
       )}
 
       {/* Produtos Ativos */}
-      {products && products.length > 0 && (
+      {Array.isArray(products) && products.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-4">Seus Produtos Ativos</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -129,7 +129,7 @@ export default function BillingPage() {
       )}
 
       {/* Planos Disponíveis */}
-      {availablePlans && availablePlans.length > 0 && (
+      {Array.isArray(availablePlans) && availablePlans.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold mb-4">Planos Disponíveis</h2>
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
