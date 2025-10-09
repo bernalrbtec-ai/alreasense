@@ -401,24 +401,28 @@ class WhatsAppInstance(models.Model):
                         print(f"   🔍 Total retornado: {len(instances_data)}")
                         
                         found_in_fetch = False
-                        for instance_info in instances_data:
-                            inst_data = instance_info.get('instance', {})
-                            inst_name = inst_data.get('instanceName', 'N/A')
+                        for instance_data in instances_data:
+                            # Evolution API retorna objeto direto, não dentro de 'instance'
+                            inst_name = instance_data.get('name', 'N/A')
                             
                             if inst_name == self.instance_name:
                                 found_in_fetch = True
                                 print(f"   ✅ Encontrada em fetchInstances!")
-                                print(f"   📋 Dados completos: {inst_data}")
-                                # Pegar número de telefone
-                                phone = inst_data.get('owner', '')
-                                print(f"   📞 Phone encontrado: {phone}")
+                                print(f"   📋 Dados completos: {instance_data}")
                                 
-                                # Pegar API key específica (se ainda não tiver)
+                                # Pegar número de telefone (ownerJid)
+                                owner_jid = instance_data.get('ownerJid', '')
+                                # Extrair número (remover @s.whatsapp.net)
+                                phone = owner_jid.replace('@s.whatsapp.net', '') if owner_jid else ''
+                                print(f"   📞 ownerJid: {owner_jid}")
+                                print(f"   📞 Phone extraído: {phone}")
+                                
+                                # Pegar API key (token)
                                 if not self.api_key:
-                                    api_key = inst_data.get('apikey') or inst_data.get('apiKey')
+                                    api_key = instance_data.get('token')
                                     if api_key:
                                         self.api_key = api_key
-                                        print(f"   🔑 API Key capturada: {api_key[:20]}...")
+                                        print(f"   🔑 API Key (token) capturada: {api_key[:20]}...")
                                 
                                 if phone:
                                     old_phone = self.phone_number
