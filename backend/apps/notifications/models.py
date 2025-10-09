@@ -398,10 +398,17 @@ class WhatsAppInstance(models.Model):
                     if fetch_response.status_code == 200:
                         instances_data = fetch_response.json()
                         print(f"   📋 Buscando dados completos em fetchInstances...")
+                        print(f"   🔍 Total retornado: {len(instances_data)}")
                         
+                        found_in_fetch = False
                         for instance_info in instances_data:
                             inst_data = instance_info.get('instance', {})
-                            if inst_data.get('instanceName') == self.instance_name:
+                            inst_name = inst_data.get('instanceName', 'N/A')
+                            
+                            if inst_name == self.instance_name:
+                                found_in_fetch = True
+                                print(f"   ✅ Encontrada em fetchInstances!")
+                                print(f"   📋 Dados completos: {inst_data}")
                                 # Pegar número de telefone
                                 phone = inst_data.get('owner', '')
                                 print(f"   📞 Phone encontrado: {phone}")
@@ -426,7 +433,12 @@ class WhatsAppInstance(models.Model):
                                             user=self.created_by
                                         )
                                         print(f"   ✅ Número salvo: {phone}")
+                                else:
+                                    print(f"   ℹ️  Número já estava salvo: {old_phone}")
                                 break
+                        
+                        if not found_in_fetch:
+                            print(f"   ⚠️  Instância não encontrada em fetchInstances (pode demorar alguns segundos para indexar)")
                     
                     self.last_error = ''
                 elif state == 'connecting':
