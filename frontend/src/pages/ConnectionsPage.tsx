@@ -347,9 +347,10 @@ export default function ConnectionsPage() {
                     <p className="text-sm text-gray-600 mt-1">📱 {formatPhone(instance.phone_number)}</p>
                   )}
                   {instance.api_key && (
-                    <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs text-gray-600 font-mono">
-                        API Key: {visibleApiKeys.has(instance.id) ? instance.api_key : '••••••••••••••••'}
+                    <div className="flex items-center gap-1 mt-1">
+                      <span className="text-xs">🔑</span>
+                      <p className="text-xs text-gray-600 font-mono truncate flex-1">
+                        {visibleApiKeys.has(instance.id) ? instance.api_key : '••••••••••••••••••••••••••••••'}
                       </p>
                       <button
                         onClick={(e) => {
@@ -364,7 +365,7 @@ export default function ConnectionsPage() {
                             return next
                           })
                         }}
-                        className="text-gray-400 hover:text-gray-600"
+                        className="text-gray-400 hover:text-gray-600 flex-shrink-0"
                         title={visibleApiKeys.has(instance.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
                       >
                         {visibleApiKeys.has(instance.id) ? '👁️' : '👁️‍🗨️'}
