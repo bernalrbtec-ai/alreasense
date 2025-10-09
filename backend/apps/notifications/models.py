@@ -200,14 +200,29 @@ class WhatsAppInstance(models.Model):
         try:
             # Se não tem API key, primeiro criar a instância no Evolution API
             if not self.api_key:
+                # Usar a API key padrão do sistema para criar a instância
+                system_api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
+                if not system_api_key:
+                    self.last_error = 'API key do sistema não configurada'
+                    self.save()
+                    return None
+                
                 create_response = requests.post(
                     f"{self.api_url}/instance/create",
+                    headers={
+                        'Content-Type': 'application/json',
+                        'apikey': system_api_key,
+                    },
                     json={
                         'instanceName': self.instance_name,
                         'qrcode': True,
-                        'integration': 'WHATSAPP-BAILEYS'
+                        'integration': 'WHATSAPP-BAILEYS',
+                        'webhook': {
+                            'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
+                            'events': ['messages.upsert', 'connection.update']
+                        }
                     },
-                    timeout=10
+                    timeout=30
                 )
                 
                 if create_response.status_code in [200, 201]:
@@ -226,11 +241,11 @@ class WhatsAppInstance(models.Model):
                             user=self.created_by
                         )
                     else:
-                        self.last_error = 'API key não retornada na criação da instância'
+                        self.last_error = f'API key não retornada na criação da instância. Resposta: {create_response.text}'
                         self.save()
                         return None
                 else:
-                    self.last_error = f'Erro ao criar instância: {create_response.text}'
+                    self.last_error = f'Erro ao criar instância (Status {create_response.status_code}): {create_response.text}'
                     self.save()
                     return None
             
@@ -238,7 +253,7 @@ class WhatsAppInstance(models.Model):
             response = requests.get(
                 f"{self.api_url}/instance/connect/{self.instance_name}",
                 headers={'apikey': self.api_key},
-                timeout=10
+                timeout=30
             )
             
             if response.status_code == 200:
@@ -261,11 +276,17 @@ class WhatsAppInstance(models.Model):
                     )
                     
                     return qr_code
-            
-            return None
+                else:
+                    self.last_error = f'QR code não retornado. Resposta: {response.text}'
+                    self.save()
+                    return None
+            else:
+                self.last_error = f'Erro ao gerar QR code (Status {response.status_code}): {response.text}'
+                self.save()
+                return None
             
         except Exception as e:
-            self.last_error = str(e)
+            self.last_error = f'Exceção ao gerar QR code: {str(e)}'
             self.save()
             return None
     

@@ -222,6 +222,9 @@ AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings'
 # Evolution API
 EVO_BASE_URL = config('EVO_BASE_URL', default='')
 EVO_API_KEY = config('EVO_API_KEY', default='')
+EVOLUTION_API_URL = config('EVOLUTION_API_URL', default='https://evo.rbtec.com.br')
+EVOLUTION_API_KEY = config('EVOLUTION_API_KEY', default='')
+BASE_URL = config('BASE_URL', default='https://alreasense-backend-production.up.railway.app')
 
 # Logging
 LOGGING = {

@@ -9,7 +9,7 @@ import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff } from 'lucide-react'
 
 interface WhatsAppInstance {
   id: string
@@ -22,6 +22,7 @@ interface WhatsAppInstance {
   connection_state: string
   qr_code?: string
   qr_code_expires_at?: string
+  api_key?: string
 }
 
 export default function ConnectionsPage() {
@@ -33,6 +34,7 @@ export default function ConnectionsPage() {
   const [showQRModal, setShowQRModal] = useState(false)
   const [qrCodeData, setQrCodeData] = useState<{qr_code: string, expires_at: string} | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
+  const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(new Set())
   
   // Form data para WhatsApp Instance
   const [instanceForm, setInstanceForm] = useState({
@@ -246,6 +248,34 @@ export default function ConnectionsPage() {
                   )}
                   {instance.instance_name && (
                     <p className="text-xs text-gray-500 mt-1">ID: {instance.instance_name.substring(0, 8)}...</p>
+                  )}
+                  {instance.api_key && (
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="text-xs text-gray-500">
+                        API Key: {visibleApiKeys.has(instance.id) 
+                          ? instance.api_key 
+                          : '•'.repeat(20)}
+                      </p>
+                      <button
+                        onClick={() => {
+                          const newSet = new Set(visibleApiKeys)
+                          if (newSet.has(instance.id)) {
+                            newSet.delete(instance.id)
+                          } else {
+                            newSet.add(instance.id)
+                          }
+                          setVisibleApiKeys(newSet)
+                        }}
+                        className="text-gray-400 hover:text-gray-600"
+                        title={visibleApiKeys.has(instance.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
+                      >
+                        {visibleApiKeys.has(instance.id) ? (
+                          <EyeOff className="h-3 w-3" />
+                        ) : (
+                          <Eye className="h-3 w-3" />
+                        )}
+                      </button>
+                    </div>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
