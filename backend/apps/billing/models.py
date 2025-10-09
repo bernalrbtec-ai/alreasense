@@ -90,7 +90,6 @@ class Plan(models.Model):
     
     # Configurações
     is_active = models.BooleanField(default=True, help_text="Plano ativo para venda")
-    is_enterprise = models.BooleanField(default=False, help_text="Plano enterprise (sem limites)")
     
     # Metadados
     color = models.CharField(max_length=7, default="#3B82F6", help_text="Cor hex do plano")
