@@ -295,11 +295,21 @@ class WhatsAppInstance(models.Model):
         import requests
         
         if not self.api_key:
+            self.last_error = 'API key não configurada'
+            self.save()
+            return False
+        
+        # Usar api_url da instância ou do settings
+        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        
+        if not api_url:
+            self.last_error = 'URL da Evolution API não configurada'
+            self.save()
             return False
             
         try:
             response = requests.get(
-                f"{self.api_url}/instance/connectionState/{self.instance_name}",
+                f"{api_url}/instance/connectionState/{self.instance_name}",
                 headers={'apikey': self.api_key},
                 timeout=10
             )
@@ -314,7 +324,7 @@ class WhatsAppInstance(models.Model):
                     
                     # Tentar obter informações da instância para pegar o número
                     info_response = requests.get(
-                        f"{self.api_url}/instance/fetchInstances",
+                        f"{api_url}/instance/fetchInstances",
                         headers={'apikey': self.api_key},
                         timeout=10
                     )
@@ -356,9 +366,12 @@ class WhatsAppInstance(models.Model):
         """Disconnect the instance."""
         import requests
         
+        # Usar api_url da instância ou do settings
+        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        
         try:
             response = requests.delete(
-                f"{self.api_url}/instance/logout/{self.instance_name}",
+                f"{api_url}/instance/logout/{self.instance_name}",
                 headers={'apikey': self.api_key},
                 timeout=10
             )
@@ -431,9 +444,12 @@ class WhatsAppConnectionLog(models.Model):
         """Check instance status via Evolution API."""
         import requests
         
+        # Usar api_url da instância ou do settings
+        api_url = self.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        
         try:
             response = requests.get(
-                f"{self.api_url}/instance/connectionState/{self.instance_name}",
+                f"{api_url}/instance/connectionState/{self.instance_name}",
                 headers={'apikey': self.api_key},
                 timeout=5
             )
