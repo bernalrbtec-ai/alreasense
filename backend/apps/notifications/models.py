@@ -123,10 +123,14 @@ class WhatsAppInstance(models.Model):
         help_text="Tenant específico (null = instância global)"
     )
     
-    name = models.CharField(max_length=100, help_text="Nome identificador da instância")
+    friendly_name = models.CharField(
+        max_length=100,
+        default='Instância WhatsApp',
+        help_text="Nome amigável para o cliente (pode repetir entre clientes)"
+    )
     instance_name = models.CharField(
         max_length=100,
-        help_text="Nome da instância no Evolution API"
+        help_text="Nome da instância no Evolution API (UUID interno)"
     )
     
     # Evolution API config
@@ -142,6 +146,16 @@ class WhatsAppInstance(models.Model):
     qr_code = models.TextField(
         blank=True,
         help_text="QR Code para conexão (se necessário)"
+    )
+    qr_code_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Quando o QR code expira"
+    )
+    connection_state = models.CharField(
+        max_length=20,
+        default='close',
+        help_text="Estado da conexão (open, close, connecting)"
     )
     
     # Status
@@ -175,7 +189,123 @@ class WhatsAppInstance(models.Model):
     
     def __str__(self):
         tenant_name = self.tenant.name if self.tenant else 'Global'
-        return f"{self.name} ({self.instance_name}) - {tenant_name}"
+        return f"{self.friendly_name} ({self.instance_name}) - {tenant_name}"
+    
+    def generate_qr_code(self):
+        """Generate QR code for connection."""
+        import requests
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        try:
+            response = requests.get(
+                f"{self.api_url}/instance/connect/{self.instance_name}",
+                headers={'apikey': self.api_key},
+                timeout=10
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                qr_code = data.get('base64', '')
+                
+                if qr_code:
+                    self.qr_code = qr_code
+                    # QR code expires in 5 minutes
+                    self.qr_code_expires_at = timezone.now() + timedelta(minutes=5)
+                    self.connection_state = 'connecting'
+                    self.save()
+                    
+                    # Log the QR code generation
+                    WhatsAppConnectionLog.objects.create(
+                        instance=self,
+                        action='qr_generated',
+                        details='QR code gerado para conexão',
+                        user=self.created_by
+                    )
+                    
+                    return qr_code
+            
+            return None
+            
+        except Exception as e:
+            self.last_error = str(e)
+            self.save()
+            return None
+    
+    def disconnect(self, user=None):
+        """Disconnect the instance."""
+        import requests
+        
+        try:
+            response = requests.delete(
+                f"{self.api_url}/instance/logout/{self.instance_name}",
+                headers={'apikey': self.api_key},
+                timeout=10
+            )
+            
+            if response.status_code in [200, 204]:
+                self.connection_state = 'close'
+                self.phone_number = ''
+                self.qr_code = ''
+                self.qr_code_expires_at = None
+                self.status = 'inactive'
+                self.save()
+                
+                # Log the disconnection
+                WhatsAppConnectionLog.objects.create(
+                    instance=self,
+                    action='disconnected',
+                    details='Instância desconectada',
+                    user=user
+                )
+                
+                return True
+            
+            return False
+            
+        except Exception as e:
+            self.last_error = str(e)
+            self.save()
+            return False
+
+
+class WhatsAppConnectionLog(models.Model):
+    """Log of WhatsApp instance connection events."""
+    
+    ACTION_CHOICES = [
+        ('created', 'Criada'),
+        ('qr_generated', 'QR Code Gerado'),
+        ('qr_scanned', 'QR Code Escaneado'),
+        ('connected', 'Conectada'),
+        ('disconnected', 'Desconectada'),
+        ('error', 'Erro'),
+    ]
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    instance = models.ForeignKey(
+        WhatsAppInstance,
+        on_delete=models.CASCADE,
+        related_name='connection_logs'
+    )
+    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
+    details = models.TextField(blank=True)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="Usuário que executou a ação"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'notifications_whatsapp_connection_log'
+        verbose_name = 'WhatsApp Connection Log'
+        verbose_name_plural = 'WhatsApp Connection Logs'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.instance.friendly_name} - {self.get_action_display()} ({self.created_at})"
     
     def check_status(self):
         """Check instance status via Evolution API."""

@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig
+from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, WhatsAppConnectionLog
 
 
 class NotificationTemplateSerializer(serializers.ModelSerializer):
@@ -48,9 +48,9 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
     class Meta:
         model = WhatsAppInstance
         fields = [
-            'id', 'tenant', 'tenant_name', 'name', 'instance_name',
-            'api_url', 'api_key', 'phone_number', 'qr_code',
-            'status', 'status_display', 'last_check', 'last_error',
+            'id', 'tenant', 'tenant_name', 'friendly_name', 'instance_name',
+            'api_url', 'api_key', 'phone_number', 'qr_code', 'qr_code_expires_at',
+            'connection_state', 'status', 'status_display', 'last_check', 'last_error',
             'is_active', 'is_default',
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
@@ -77,6 +77,27 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
                 validated_data['tenant'] = request.user.tenant
         
         return super().create(validated_data)
+
+
+class WhatsAppConnectionLogSerializer(serializers.ModelSerializer):
+    """Serializer for WhatsAppConnectionLog."""
+    
+    instance_name = serializers.CharField(source='instance.friendly_name', read_only=True)
+    user_name = serializers.SerializerMethodField()
+    action_display = serializers.CharField(source='get_action_display', read_only=True)
+    
+    class Meta:
+        model = WhatsAppConnectionLog
+        fields = [
+            'id', 'instance', 'instance_name', 'action', 'action_display',
+            'details', 'user', 'user_name', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+    
+    def get_user_name(self, obj):
+        if obj.user:
+            return f"{obj.user.first_name} {obj.user.last_name}".strip() or obj.user.username
+        return None
 
 
 class NotificationLogSerializer(serializers.ModelSerializer):

@@ -5,14 +5,15 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.db import models
 
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig
+from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, WhatsAppConnectionLog
 from .serializers import (
     NotificationTemplateSerializer,
     WhatsAppInstanceSerializer,
     NotificationLogSerializer,
     SendNotificationSerializer,
     SMTPConfigSerializer,
-    TestSMTPSerializer
+    TestSMTPSerializer,
+    WhatsAppConnectionLogSerializer
 )
 
 User = get_user_model()
@@ -155,6 +156,67 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def generate_qr(self, request, pk=None):
+        """Generate QR code for connection."""
+        instance = self.get_object()
+        
+        try:
+            qr_code = instance.generate_qr_code()
+            
+            if qr_code:
+                return Response({
+                    'success': True,
+                    'qr_code': qr_code,
+                    'expires_at': instance.qr_code_expires_at,
+                    'message': 'QR code gerado com sucesso'
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Falha ao gerar QR code'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def disconnect(self, request, pk=None):
+        """Disconnect the instance."""
+        instance = self.get_object()
+        
+        try:
+            success = instance.disconnect(user=request.user)
+            
+            if success:
+                return Response({
+                    'success': True,
+                    'message': 'Instância desconectada com sucesso'
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'error': 'Falha ao desconectar instância'
+                }, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['get'])
+    def logs(self, request, pk=None):
+        """Get connection logs for this instance."""
+        instance = self.get_object()
+        logs = instance.connection_logs.all()[:50]  # Last 50 logs
+        
+        serializer = WhatsAppConnectionLogSerializer(logs, many=True)
+        return Response(serializer.data)
 
 
 class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):

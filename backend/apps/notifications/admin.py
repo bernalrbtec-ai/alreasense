@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig
+from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, WhatsAppConnectionLog
 
 
 @admin.register(NotificationTemplate)
@@ -25,13 +25,13 @@ class NotificationTemplateAdmin(admin.ModelAdmin):
 
 @admin.register(WhatsAppInstance)
 class WhatsAppInstanceAdmin(admin.ModelAdmin):
-    list_display = ['name', 'instance_name', 'phone_number', 'status', 'is_active', 'is_default', 'last_check']
+    list_display = ['friendly_name', 'instance_name', 'phone_number', 'status', 'is_active', 'is_default', 'last_check']
     list_filter = ['status', 'is_active', 'is_default', 'created_at']
-    search_fields = ['name', 'instance_name', 'phone_number']
+    search_fields = ['friendly_name', 'instance_name', 'phone_number']
     readonly_fields = ['id', 'status', 'last_check', 'last_error', 'qr_code', 'created_at', 'updated_at']
     fieldsets = (
         ('Informações Básicas', {
-            'fields': ('id', 'tenant', 'name', 'instance_name', 'is_active', 'is_default')
+            'fields': ('id', 'tenant', 'friendly_name', 'instance_name', 'is_active', 'is_default')
         }),
         ('Configuração Evolution API', {
             'fields': ('api_url', 'api_key')
@@ -53,6 +53,25 @@ class WhatsAppInstanceAdmin(admin.ModelAdmin):
             instance.check_status()
         self.message_user(request, f"{queryset.count()} instâncias verificadas.")
     check_status.short_description = "Verificar status das instâncias"
+
+
+@admin.register(WhatsAppConnectionLog)
+class WhatsAppConnectionLogAdmin(admin.ModelAdmin):
+    list_display = ['instance', 'action', 'user', 'created_at']
+    list_filter = ['action', 'created_at']
+    search_fields = ['instance__friendly_name', 'instance__instance_name', 'user__username', 'details']
+    readonly_fields = ['id', 'created_at']
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('id', 'instance', 'action', 'user')
+        }),
+        ('Detalhes', {
+            'fields': ('details',)
+        }),
+        ('Timestamp', {
+            'fields': ('created_at',)
+        }),
+    )
 
 
 @admin.register(NotificationLog)
