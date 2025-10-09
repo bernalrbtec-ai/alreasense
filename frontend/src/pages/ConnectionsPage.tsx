@@ -337,14 +337,14 @@ export default function ConnectionsPage() {
         ) : (
           <>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3">
           {Array.isArray(instances) && instances.map((instance) => (
-            <Card key={instance.id} className="p-4 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
+            <Card key={instance.id} className="p-3 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
               {/* Header com nome e badges - mais compacto */}
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              <div className="flex items-center justify-between mb-1.5">
+                <h3 className="font-semibold text-gray-900 text-sm">{instance.friendly_name}</h3>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
                     instance.connection_state === 'open' 
                       ? 'bg-green-100 text-green-800' 
                       : instance.connection_state === 'connecting'
@@ -355,7 +355,7 @@ export default function ConnectionsPage() {
                      instance.connection_state === 'connecting' ? 'Conectando' : 'Desconectado'}
                   </span>
                   {instance.is_default && (
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
                       Padrão
                     </span>
                   )}
@@ -363,9 +363,9 @@ export default function ConnectionsPage() {
               </div>
               
               {/* Conteúdo principal - telefone e API key */}
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 {instance.phone_number && (
-                  <p className="text-sm text-gray-600">📱 {formatPhone(instance.phone_number)}</p>
+                  <p className="text-xs text-gray-600">📱 {formatPhone(instance.phone_number)}</p>
                 )}
                 {instance.api_key && (
                   <div className="flex items-center gap-1">
@@ -397,7 +397,7 @@ export default function ConnectionsPage() {
                   <p className="text-xs text-gray-400 italic">API Key será gerada ao conectar</p>
                 )}
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="mt-2 flex gap-1">
                 <Button 
                   variant="ghost" 
                   size="sm"
@@ -406,7 +406,7 @@ export default function ConnectionsPage() {
                   className="text-accent-600 hover:text-accent-700 hover:bg-accent-50"
                   title="Gerar QR Code"
                 >
-                  <QrCode className="h-4 w-4" />
+                  <QrCode className="h-3 w-3" />
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -415,7 +415,7 @@ export default function ConnectionsPage() {
                   className="text-green-600 hover:text-green-700 hover:bg-green-50"
                   title="Verificar Status"
                 >
-                  <Check className="h-4 w-4" />
+                  <Check className="h-3 w-3" />
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -429,7 +429,7 @@ export default function ConnectionsPage() {
                   }`}
                   title={instance.connection_state === 'open' ? 'Enviar Mensagem de Teste' : 'Conecte a instância primeiro'}
                 >
-                  <MessageSquare className="h-4 w-4" />
+                  <MessageSquare className="h-3 w-3" />
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -443,14 +443,14 @@ export default function ConnectionsPage() {
                   }`}
                   title={instance.connection_state === 'open' ? 'Desconectar' : 'Instância não conectada'}
                 >
-                  <WifiOff className="h-4 w-4" />
+                  <WifiOff className="h-3 w-3" />
                 </Button>
                 <Button 
                   variant="ghost" 
                   size="sm"
                   onClick={() => handleEditInstance(instance)}
                 >
-                  <Edit className="h-4 w-4" />
+                  <Edit className="h-3 w-3" />
                 </Button>
                 <Button 
                   variant="ghost" 
@@ -458,7 +458,7 @@ export default function ConnectionsPage() {
                   onClick={() => handleDeleteInstance(instance.id)}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
                 >
-                  <Trash2 className="h-4 w-4" />
+                  <Trash2 className="h-3 w-3" />
                 </Button>
               </div>
             </Card>
