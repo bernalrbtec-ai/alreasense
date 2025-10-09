@@ -381,14 +381,22 @@ class WhatsAppInstance(models.Model):
                     if instance_data.get('instanceName') == self.instance_name:
                         found = True
                         print(f"   ✅ Instância encontrada!")
+                        print(f"   📋 Dados: {instance_data}")
                         
-                        # Pegar estado da conexão
-                        state = instance_data.get('state', 'close')
-                        print(f"   📱 State: {state}")
+                        # Pegar estado da conexão (Evolution API v2 usa 'status', não 'state')
+                        state = instance_data.get('status') or instance_data.get('state', 'close')
+                        print(f"   📱 Status/State: {state}")
                         
                         # Pegar número de telefone
                         phone = instance_data.get('owner', '')
                         print(f"   📞 Phone: {phone}")
+                        
+                        # Pegar API key específica da instância (se ainda não tiver)
+                        if not self.api_key:
+                            api_key = instance_data.get('apikey') or instance_data.get('apiKey')
+                            if api_key:
+                                self.api_key = api_key
+                                print(f"   🔑 API Key capturada: {api_key[:20]}...")
                         
                         # Atualizar dados
                         if state == 'open':
