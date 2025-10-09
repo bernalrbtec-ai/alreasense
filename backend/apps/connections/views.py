@@ -85,12 +85,21 @@ def evolution_config(request):
             connection_status = 'inactive'
             last_error = 'Configuração incompleta - adicione URL e API Key'
         
+        # Webhook URL seguro (não usa request.get_host que pode dar erro)
+        try:
+            webhook_url = f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/"
+        except Exception:
+            # Fallback para Railway ou localhost
+            from django.conf import settings
+            base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
+            webhook_url = f"{base_url}/api/webhooks/evolution/"
+        
         return Response({
             'id': str(connection.id),
             'name': connection.name,
             'base_url': connection.base_url,
             'api_key': connection.api_key,
-            'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
+            'webhook_url': webhook_url,
             'is_active': connection.is_active,
             'status': connection_status,
             'last_check': timezone.now().isoformat(),
@@ -133,12 +142,20 @@ def evolution_config(request):
                 connection.is_active = data.get('is_active', connection.is_active)
                 connection.save()
             
+            # Webhook URL seguro
+            try:
+                webhook_url = f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/"
+            except Exception:
+                from django.conf import settings
+                base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
+                webhook_url = f"{base_url}/api/webhooks/evolution/"
+            
             return Response({
                 'id': str(connection.id),
                 'name': connection.name,
                 'base_url': connection.base_url,
                 'api_key': connection.api_key,
-                'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
+                'webhook_url': webhook_url,
                 'is_active': connection.is_active,
                 'status': connection.status,
                 'last_check': connection.last_check.isoformat() if connection.last_check else None,
