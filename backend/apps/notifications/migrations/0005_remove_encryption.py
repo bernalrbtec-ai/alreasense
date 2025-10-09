@@ -7,13 +7,37 @@ def clear_corrupted_data(apps, schema_editor):
     """Limpar dados corrompidos e resetar campos"""
     
     with connection.cursor() as cursor:
+        # Verificar se a tabela notifications_smtpconfig existe
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'notifications_smtpconfig'
+            )
+        """)
+        smtp_table_exists = cursor.fetchone()[0]
+        
+        # Verificar se a tabela notifications_whatsappinstance existe
+        cursor.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'notifications_whatsappinstance'
+            )
+        """)
+        whatsapp_table_exists = cursor.fetchone()[0]
+        
+        if not smtp_table_exists and not whatsapp_table_exists:
+            print("ℹ️ Tabelas ainda não existem, pulando limpeza de dados")
+            return
+        
         # Limpar senhas SMTP corrompidas
-        print("🧹 Limpando senhas SMTP corrompidas...")
-        cursor.execute("UPDATE notifications_smtpconfig SET password = '' WHERE password IS NOT NULL")
+        if smtp_table_exists:
+            print("🧹 Limpando senhas SMTP corrompidas...")
+            cursor.execute("UPDATE notifications_smtpconfig SET password = '' WHERE password IS NOT NULL")
         
         # Limpar API keys WhatsApp corrompidas
-        print("🧹 Limpando API keys WhatsApp corrompidas...")
-        cursor.execute("UPDATE notifications_whatsappinstance SET api_key = '' WHERE api_key IS NOT NULL")
+        if whatsapp_table_exists:
+            print("🧹 Limpando API keys WhatsApp corrompidas...")
+            cursor.execute("UPDATE notifications_whatsappinstance SET api_key = '' WHERE api_key IS NOT NULL")
         
         print("✅ Dados corrompidos limpos com sucesso")
 
