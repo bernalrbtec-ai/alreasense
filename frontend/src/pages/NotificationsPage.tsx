@@ -374,8 +374,8 @@ export default function NotificationsPage() {
     <div className="space-y-6">
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-blue-100 rounded-lg">
-            <Bell className="h-6 w-6 text-blue-600" />
+          <div className="p-2 bg-brand-100 rounded-lg">
+            <Bell className="h-6 w-6 text-brand-600" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Sistema de Notificações</h1>
@@ -393,7 +393,7 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('templates')}
             className={`${
               activeTab === 'templates'
-                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                ? 'bg-brand-50 text-brand-600 border-brand-200'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
@@ -404,7 +404,7 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('instances')}
             className={`${
               activeTab === 'instances'
-                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                ? 'bg-brand-50 text-brand-600 border-brand-200'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
@@ -415,7 +415,7 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('smtp')}
             className={`${
               activeTab === 'smtp'
-                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                ? 'bg-brand-50 text-brand-600 border-brand-200'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
@@ -426,7 +426,7 @@ export default function NotificationsPage() {
             onClick={() => setActiveTab('logs')}
             className={`${
               activeTab === 'logs'
-                ? 'bg-blue-50 text-blue-600 border-blue-200'
+                ? 'bg-brand-50 text-brand-600 border-brand-200'
                 : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
             } whitespace-nowrap py-3 px-4 rounded-lg font-medium text-sm flex items-center gap-2 transition-all duration-200`}
           >
@@ -525,7 +525,7 @@ export default function NotificationsPage() {
                     {instance.status}
                   </span>
                   {instance.is_default && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-brand-100 text-brand-800">
                       Padrão
                     </span>
                   )}
@@ -600,7 +600,7 @@ export default function NotificationsPage() {
                     {smtp.is_active ? 'Ativo' : 'Inativo'}
                   </span>
                   {smtp.is_default && (
-                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-brand-100 text-brand-800">
                       Padrão
                     </span>
                   )}

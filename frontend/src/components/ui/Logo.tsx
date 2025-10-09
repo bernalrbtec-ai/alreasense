@@ -43,20 +43,20 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
           fill="none" 
           xmlns="http://www.w3.org/2000/svg"
         >
-          {/* Onda inferior (azul escuro) */}
+          {/* Onda inferior (verde escuro) */}
           <path 
             d="M0 15C12 5 24 5 36 15C48 5 60 5 72 15C84 5 96 5 96 15V20H0V15Z" 
-            fill="#1e40af" 
+            fill="#15803d" 
           />
-          {/* Onda superior (azul claro) */}
+          {/* Onda superior (verde vibrante) */}
           <path 
             d="M0 10C12 2 24 2 36 10C48 2 60 2 72 10C84 2 96 2 96 10V15H0V10Z" 
-            fill="#3b82f6" 
+            fill="#26BC6D" 
           />
-          {/* Onda mais clara (ciano) */}
+          {/* Onda mais clara (azul claro) */}
           <path 
             d="M0 6C12 0 24 0 36 6C48 0 60 0 72 6C84 0 96 0 96 6V10H0V6Z" 
-            fill="#06b6d4" 
+            fill="#3C82F6" 
           />
         </svg>
         
@@ -70,11 +70,11 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
           >
             <path 
               d="M0 8C3 4 6 4 9 8C12 4 15 4 18 8C21 4 24 4 24 8V12H0V8Z" 
-              fill="#60a5fa" 
+              fill="#4ade80" 
             />
             <path 
               d="M0 5C3 2 6 2 9 5C12 2 15 2 18 5C21 2 24 2 24 5V8H0V5Z" 
-              fill="#06b6d4" 
+              fill="#3C82F6" 
             />
           </svg>
         </div>

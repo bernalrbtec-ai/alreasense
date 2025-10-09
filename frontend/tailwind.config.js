@@ -51,6 +51,31 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Cores personalizadas baseadas no gradiente verde-azul
+        brand: {
+          50: '#f0fdf4',   // Verde muito claro
+          100: '#dcfce7',  // Verde claro
+          200: '#bbf7d0',  // Verde médio-claro
+          300: '#86efac',  // Verde médio
+          400: '#4ade80',  // Verde vibrante
+          500: '#26BC6D',  // Verde principal (da imagem)
+          600: '#16a34a',  // Verde escuro
+          700: '#15803d',  // Verde mais escuro
+          800: '#166534',  // Verde muito escuro
+          900: '#14532d',  // Verde mais escuro ainda
+        },
+        accent: {
+          50: '#eff6ff',   // Azul muito claro
+          100: '#dbeafe',  // Azul claro
+          200: '#bfdbfe',  // Azul médio-claro
+          300: '#93c5fd',  // Azul médio
+          400: '#60a5fa',  // Azul vibrante
+          500: '#3C82F6',  // Azul principal (da imagem)
+          600: '#2563eb',  // Azul escuro
+          700: '#1d4ed8',  // Azul mais escuro
+          800: '#1e40af',  // Azul muito escuro
+          900: '#1e3a8a',  // Azul mais escuro ainda
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
