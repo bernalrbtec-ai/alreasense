@@ -156,9 +156,13 @@ def send_whatsapp_notification(self, log_id):
         # Format phone number (remove non-digits)
         phone = ''.join(filter(str.isdigit, log.recipient_phone))
         
+        # Usar api_url da instância ou do settings
+        from django.conf import settings
+        api_url = instance.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
+        
         # Send message via Evolution API
         response = requests.post(
-            f"{instance.api_url}/message/sendText/{instance.instance_name}",
+            f"{api_url}/message/sendText/{instance.instance_name}",
             headers={'apikey': instance.api_key},
             json={
                 'number': phone,

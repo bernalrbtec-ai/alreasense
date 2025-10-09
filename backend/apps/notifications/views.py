@@ -128,9 +128,13 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         
         try:
             import requests
+            from django.conf import settings
+            
+            # Usar api_url da instância ou do settings
+            api_url = instance.api_url or getattr(settings, 'EVOLUTION_API_URL', 'https://evo.rbtec.com.br')
             
             response = requests.post(
-                f"{instance.api_url}/message/sendText/{instance.instance_name}",
+                f"{api_url}/message/sendText/{instance.instance_name}",
                 headers={'apikey': instance.api_key},
                 json={
                     'number': phone,
