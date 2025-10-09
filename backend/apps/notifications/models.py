@@ -1,6 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
-# from django_cryptography.fields import encrypt  # Temporariamente desabilitado
+from django_cryptography.fields import encrypt
 from apps.tenancy.models import Tenant
 import uuid
 
@@ -131,7 +131,7 @@ class WhatsAppInstance(models.Model):
     
     # Evolution API config
     api_url = models.URLField(help_text="URL da Evolution API")
-    api_key = models.CharField(max_length=255, help_text="API Key da Evolution API")  # Temporariamente sem criptografia
+    api_key = encrypt(models.CharField(max_length=255, help_text="API Key da Evolution API"))
     
     # Connection info
     phone_number = models.CharField(
@@ -320,7 +320,7 @@ class SMTPConfig(models.Model):
     host = models.CharField(max_length=255, help_text="Servidor SMTP (ex: smtp.gmail.com)")
     port = models.IntegerField(default=587, help_text="Porta SMTP (587 para TLS, 465 para SSL)")
     username = models.CharField(max_length=255, help_text="Usuário/Email para autenticação")
-    password = models.CharField(max_length=255, help_text="Senha do email")  # Temporariamente sem criptografia
+    password = encrypt(models.CharField(max_length=255, help_text="Senha do email"))
     use_tls = models.BooleanField(default=True, help_text="Usar TLS (Transport Layer Security)")
     use_ssl = models.BooleanField(default=False, help_text="Usar SSL (Secure Sockets Layer)")
     
