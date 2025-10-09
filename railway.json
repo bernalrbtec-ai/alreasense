@@ -7,6 +7,7 @@
     "numReplicas": 1,
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 10
-  }
+  },
+  "version": "2025-10-09-11:30-whatsapp-orchestrator-pattern"
 }
 
