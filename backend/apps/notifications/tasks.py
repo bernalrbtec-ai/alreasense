@@ -156,12 +156,11 @@ def send_whatsapp_notification(self, log_id):
         # Format phone number (remove non-digits)
         phone = ''.join(filter(str.isdigit, log.recipient_phone))
         
-        # Usar api_url da instância ou buscar do servidor cadastrado
+        # Usar api_url da instância ou buscar do servidor global do sistema
         from apps.connections.models import EvolutionConnection
         api_url = instance.api_url
         if not api_url:
             evolution_server = EvolutionConnection.objects.filter(
-                tenant=instance.tenant,
                 is_active=True
             ).first()
             if evolution_server:

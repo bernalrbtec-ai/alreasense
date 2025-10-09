@@ -199,14 +199,13 @@ class WhatsAppInstance(models.Model):
         from datetime import timedelta
         from apps.connections.models import EvolutionConnection
         
-        # Buscar servidor Evolution ativo do tenant
+        # Buscar servidor Evolution ativo do sistema (configuração global do admin)
         evolution_server = EvolutionConnection.objects.filter(
-            tenant=self.tenant,
             is_active=True
         ).first()
         
         if not evolution_server:
-            self.last_error = 'Nenhum servidor Evolution API ativo encontrado para este tenant'
+            self.last_error = 'Nenhum servidor Evolution API ativo encontrado. Configure em Admin → Servidor de Instância'
             self.save()
             return None
         
@@ -321,11 +320,10 @@ class WhatsAppInstance(models.Model):
             self.save()
             return False
         
-        # Usar api_url da instância ou buscar do servidor cadastrado
+        # Usar api_url da instância ou buscar do servidor global do sistema
         api_url = self.api_url
         if not api_url:
             evolution_server = EvolutionConnection.objects.filter(
-                tenant=self.tenant,
                 is_active=True
             ).first()
             if evolution_server:
@@ -396,11 +394,10 @@ class WhatsAppInstance(models.Model):
         import requests
         from apps.connections.models import EvolutionConnection
         
-        # Usar api_url da instância ou buscar do servidor cadastrado
+        # Usar api_url da instância ou buscar do servidor global do sistema
         api_url = self.api_url
         if not api_url:
             evolution_server = EvolutionConnection.objects.filter(
-                tenant=self.tenant,
                 is_active=True
             ).first()
             if evolution_server:
@@ -482,11 +479,10 @@ class WhatsAppConnectionLog(models.Model):
         import requests
         from apps.connections.models import EvolutionConnection
         
-        # Usar api_url da instância ou buscar do servidor cadastrado
+        # Usar api_url da instância ou buscar do servidor global do sistema
         api_url = self.api_url
         if not api_url:
             evolution_server = EvolutionConnection.objects.filter(
-                tenant=self.tenant,
                 is_active=True
             ).first()
             if evolution_server:

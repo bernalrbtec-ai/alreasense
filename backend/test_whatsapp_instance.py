@@ -74,7 +74,6 @@ def test_whatsapp_instance():
     from apps.connections.models import EvolutionConnection
     
     evolution_server = EvolutionConnection.objects.filter(
-        tenant=tenant,
         is_active=True
     ).first()
     

@@ -130,11 +130,10 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             import requests
             from apps.connections.models import EvolutionConnection
             
-            # Usar api_url da instância ou buscar do servidor cadastrado
+            # Usar api_url da instância ou buscar do servidor global do sistema
             api_url = instance.api_url
             if not api_url:
                 evolution_server = EvolutionConnection.objects.filter(
-                    tenant=instance.tenant,
                     is_active=True
                 ).first()
                 if evolution_server:
