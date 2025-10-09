@@ -169,11 +169,11 @@ export default function Layout({ children }: LayoutProps) {
             })}
             
             {/* Admin Section */}
-            {isSuperAdmin && (
+            {isSuperAdmin && !sidebarCollapsed && (
               <>
                 <div className="pt-4 pb-2">
                   <div className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                    Administração
+                    ADMIN
                   </div>
                 </div>
                 {adminNavigation.map((item) => {
