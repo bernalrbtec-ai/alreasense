@@ -147,7 +147,7 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tenant', 'tenant_name', 'name',
             'host', 'port', 'username', 'password',
-            'use_tls', 'use_ssl', 'from_email', 'from_name',
+            'use_tls', 'use_ssl', 'verify_ssl', 'from_email', 'from_name',
             'is_active', 'is_default',
             'last_test', 'last_test_status', 'last_test_status_display', 'last_test_error',
             'created_at', 'updated_at', 'created_by', 'created_by_name'

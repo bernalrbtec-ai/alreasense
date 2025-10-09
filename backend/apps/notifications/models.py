@@ -323,6 +323,10 @@ class SMTPConfig(models.Model):
     password = encrypt(models.CharField(max_length=255, help_text="Senha do email"))
     use_tls = models.BooleanField(default=True, help_text="Usar TLS (Transport Layer Security)")
     use_ssl = models.BooleanField(default=False, help_text="Usar SSL (Secure Sockets Layer)")
+    verify_ssl = models.BooleanField(
+        default=True, 
+        help_text="Verificar certificado SSL (desative se usar certificado auto-assinado)"
+    )
     
     # Email Settings
     from_email = models.EmailField(help_text="Email do remetente")
@@ -374,11 +378,23 @@ class SMTPConfig(models.Model):
     
     def test_connection(self, test_email):
         """Test SMTP connection by sending a test email."""
-        from django.core.mail import send_mail
+        from django.core.mail import send_mail, EmailMessage
         from django.core.mail import get_connection
         from django.utils import timezone
+        import socket
+        import ssl
         
         try:
+            # Set socket timeout to avoid hanging
+            socket.setdefaulttimeout(30)
+            
+            # Disable SSL verification if needed
+            ssl_context = None
+            if not self.verify_ssl:
+                ssl_context = ssl.create_default_context()
+                ssl_context.check_hostname = False
+                ssl_context.verify_mode = ssl.CERT_NONE
+            
             # Create email connection with these settings
             connection = get_connection(
                 backend='django.core.mail.backends.smtp.EmailBackend',
@@ -389,19 +405,29 @@ class SMTPConfig(models.Model):
                 use_tls=self.use_tls,
                 use_ssl=self.use_ssl,
                 fail_silently=False,
+                timeout=30,  # Add explicit timeout
             )
+            
+            # Apply SSL context if needed
+            if ssl_context and hasattr(connection, 'ssl_context'):
+                connection.ssl_context = ssl_context
+            
+            # Test connection first
+            connection.open()
             
             # Send test email
             from_address = f"{self.from_name} <{self.from_email}>" if self.from_name else self.from_email
             
-            send_mail(
+            email = EmailMessage(
                 subject='Teste de Configuração SMTP - Alrea Sense',
-                message='Este é um email de teste para verificar a configuração do servidor SMTP.\n\nSe você recebeu esta mensagem, a configuração está funcionando corretamente!',
+                body='Este é um email de teste para verificar a configuração do servidor SMTP.\n\nSe você recebeu esta mensagem, a configuração está funcionando corretamente!',
                 from_email=from_address,
-                recipient_list=[test_email],
+                to=[test_email],
                 connection=connection,
-                fail_silently=False,
             )
+            
+            email.send(fail_silently=False)
+            connection.close()
             
             # Update test status
             self.last_test = timezone.now()
@@ -411,12 +437,29 @@ class SMTPConfig(models.Model):
             
             return True, 'Email de teste enviado com sucesso!'
         
-        except Exception as e:
-            # Update test status with error
+        except socket.timeout:
+            error_msg = f'Timeout ao conectar com {self.host}:{self.port}. Verifique se o servidor está acessível.'
             self.last_test = timezone.now()
             self.last_test_status = 'failed'
-            self.last_test_error = str(e)
+            self.last_test_error = error_msg
+            self.save()
+            return False, error_msg
+            
+        except ssl.SSLError as e:
+            error_msg = f'Erro SSL: {str(e)}. Tente desabilitar "Verificar SSL" se usar certificado auto-assinado.'
+            self.last_test = timezone.now()
+            self.last_test_status = 'failed'
+            self.last_test_error = error_msg
+            self.save()
+            return False, error_msg
+            
+        except Exception as e:
+            # Update test status with error
+            error_msg = str(e)
+            self.last_test = timezone.now()
+            self.last_test_status = 'failed'
+            self.last_test_error = error_msg
             self.save()
             
-            return False, str(e)
+            return False, error_msg
 

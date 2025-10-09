@@ -74,6 +74,7 @@ export default function NotificationsPage() {
     password: '',
     use_tls: true,
     use_ssl: false,
+    verify_ssl: true,
     from_email: '',
     from_name: '',
   })
@@ -250,6 +251,7 @@ export default function NotificationsPage() {
       password: '', // Não preencher senha por segurança
       use_tls: smtp.use_tls,
       use_ssl: smtp.use_ssl,
+      verify_ssl: smtp.verify_ssl ?? true,
       from_email: smtp.from_email,
       from_name: smtp.from_name,
     })
@@ -645,25 +647,38 @@ export default function NotificationsPage() {
                            />
                          </div>
                 
-                <div className="col-span-2 flex gap-4">
-                  <label className="flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      checked={smtpForm.use_tls}
-                      onChange={(e) => setSMTPForm({ ...smtpForm, use_tls: e.target.checked, use_ssl: false })}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                    />
-                    <span className="text-sm text-gray-700">Usar TLS (porta 587)</span>
-                  </label>
+                <div className="col-span-2 space-y-3">
+                  <div className="flex gap-4">
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={smtpForm.use_tls}
+                        onChange={(e) => setSMTPForm({ ...smtpForm, use_tls: e.target.checked, use_ssl: false })}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700">Usar TLS (porta 587)</span>
+                    </label>
+                    
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={smtpForm.use_ssl}
+                        onChange={(e) => setSMTPForm({ ...smtpForm, use_ssl: e.target.checked, use_tls: false })}
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                      />
+                      <span className="text-sm text-gray-700">Usar SSL (porta 465)</span>
+                    </label>
+                  </div>
                   
                   <label className="flex items-center gap-2">
                     <input
                       type="checkbox"
-                      checked={smtpForm.use_ssl}
-                      onChange={(e) => setSMTPForm({ ...smtpForm, use_ssl: e.target.checked, use_tls: false })}
+                      checked={smtpForm.verify_ssl ?? true}
+                      onChange={(e) => setSMTPForm({ ...smtpForm, verify_ssl: e.target.checked })}
                       className="h-4 w-4 text-blue-600 border-gray-300 rounded"
                     />
-                    <span className="text-sm text-gray-700">Usar SSL (porta 465)</span>
+                    <span className="text-sm text-gray-700">Verificar certificado SSL</span>
+                    <span className="text-xs text-gray-500">(desative se houver erro de certificado)</span>
                   </label>
                 </div>
               </div>
