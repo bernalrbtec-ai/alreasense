@@ -47,37 +47,43 @@ def evolution_config(request):
         last_error = None
         instance_count = 0
         
-        try:
-            headers = {
-                'apikey': connection.api_key,
-                'Content-Type': 'application/json'
-            }
-            
-            test_url = f"{connection.base_url}/instance/fetchInstances"
-            response = requests.get(test_url, headers=headers, timeout=5)
-            
-            if response.status_code == 200:
-                instances = response.json()
-                instance_count = len(instances)
-                connection_status = 'active'
-                connection.update_status('active')
-            else:
-                connection_status = 'error'
-                last_error = f'HTTP {response.status_code}: {response.text[:100]}'
-                connection.update_status('error', last_error)
+        # Só testar se tiver api_key e base_url
+        if connection.api_key and connection.base_url:
+            try:
+                headers = {
+                    'apikey': connection.api_key,
+                    'Content-Type': 'application/json'
+                }
                 
-        except requests.exceptions.Timeout:
-            connection_status = 'error'
-            last_error = 'Timeout na conexão'
-            connection.update_status('error', last_error)
-        except requests.exceptions.ConnectionError:
-            connection_status = 'error'
-            last_error = 'Erro de conexão - servidor não alcançável'
-            connection.update_status('error', last_error)
-        except Exception as e:
-            connection_status = 'error'
-            last_error = str(e)[:100]
-            connection.update_status('error', last_error)
+                test_url = f"{connection.base_url}/instance/fetchInstances"
+                response = requests.get(test_url, headers=headers, timeout=5)
+                
+                if response.status_code == 200:
+                    instances = response.json()
+                    instance_count = len(instances)
+                    connection_status = 'active'
+                    connection.update_status('active')
+                else:
+                    connection_status = 'error'
+                    last_error = f'HTTP {response.status_code}: {response.text[:100]}'
+                    connection.update_status('error', last_error)
+                    
+            except requests.exceptions.Timeout:
+                connection_status = 'error'
+                last_error = 'Timeout na conexão'
+                connection.update_status('error', last_error)
+            except requests.exceptions.ConnectionError:
+                connection_status = 'error'
+                last_error = 'Erro de conexão - servidor não alcançável'
+                connection.update_status('error', last_error)
+            except Exception as e:
+                connection_status = 'error'
+                last_error = str(e)[:100]
+                connection.update_status('error', last_error)
+        else:
+            # Sem configuração ainda
+            connection_status = 'inactive'
+            last_error = 'Configuração incompleta - adicione URL e API Key'
         
         return Response({
             'id': str(connection.id),
