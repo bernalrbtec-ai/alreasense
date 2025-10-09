@@ -25,9 +25,22 @@ def evolution_config(request):
     """Get or update Evolution API configuration."""
     
     if request.method == 'GET':
-        # Get configuration
-        base_url = 'https://evo.rbtec.com.br'
-        api_key = '584B4A4A-0815-AC86-DC39-C38FC27E8E17'
+        # Buscar configuração do banco de dados
+        connection = EvolutionConnection.objects.filter(is_active=True).first()
+        
+        if not connection:
+            # Se não existe, criar uma configuração padrão
+            from apps.tenancy.models import Tenant
+            tenant = Tenant.objects.first()
+            
+            connection = EvolutionConnection.objects.create(
+                tenant=tenant,
+                name='Evolution RBTec',
+                base_url='https://evo.rbtec.com.br',
+                api_key='584B4A4A-0815-AC86-DC39-C38FC27E8E17',
+                is_active=True,
+                status='inactive'
+            )
         
         # Auto-test connection
         connection_status = 'inactive'
@@ -36,61 +49,89 @@ def evolution_config(request):
         
         try:
             headers = {
-                'apikey': api_key,
+                'apikey': connection.api_key,
                 'Content-Type': 'application/json'
             }
             
-            test_url = f"{base_url}/instance/fetchInstances"
+            test_url = f"{connection.base_url}/instance/fetchInstances"
             response = requests.get(test_url, headers=headers, timeout=5)
             
             if response.status_code == 200:
                 instances = response.json()
                 instance_count = len(instances)
                 connection_status = 'active'
+                connection.update_status('active')
             else:
                 connection_status = 'error'
                 last_error = f'HTTP {response.status_code}: {response.text[:100]}'
+                connection.update_status('error', last_error)
                 
         except requests.exceptions.Timeout:
             connection_status = 'error'
             last_error = 'Timeout na conexão'
+            connection.update_status('error', last_error)
         except requests.exceptions.ConnectionError:
             connection_status = 'error'
             last_error = 'Erro de conexão - servidor não alcançável'
+            connection.update_status('error', last_error)
         except Exception as e:
             connection_status = 'error'
             last_error = str(e)[:100]
+            connection.update_status('error', last_error)
         
         return Response({
-            'id': None,
-            'name': 'Default Evolution API',
-            'base_url': base_url,
-            'api_key': api_key,
+            'id': str(connection.id),
+            'name': connection.name,
+            'base_url': connection.base_url,
+            'api_key': connection.api_key,
             'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
-            'is_active': True,
+            'is_active': connection.is_active,
             'status': connection_status,
             'last_check': timezone.now().isoformat(),
             'last_error': last_error,
             'instance_count': instance_count,
-            'created_at': None,
-            'updated_at': None,
+            'created_at': connection.created_at.isoformat() if connection.created_at else None,
+            'updated_at': connection.updated_at.isoformat() if connection.updated_at else None,
         })
     
     elif request.method == 'POST':
-        # For now, just return success (without database dependency)
+        # Atualizar configuração no banco de dados
         data = request.data
+        
+        # Buscar ou criar conexão
+        connection = EvolutionConnection.objects.filter(is_active=True).first()
+        
+        if not connection:
+            from apps.tenancy.models import Tenant
+            tenant = Tenant.objects.first()
+            connection = EvolutionConnection.objects.create(
+                tenant=tenant,
+                name=data.get('name', 'Evolution RBTec'),
+                base_url=data.get('base_url', 'https://evo.rbtec.com.br'),
+                api_key=data.get('api_key', ''),
+                is_active=data.get('is_active', True),
+                status='inactive'
+            )
+        else:
+            # Atualizar existente
+            connection.name = data.get('name', connection.name)
+            connection.base_url = data.get('base_url', connection.base_url)
+            connection.api_key = data.get('api_key', connection.api_key)
+            connection.is_active = data.get('is_active', connection.is_active)
+            connection.save()
+        
         return Response({
-            'id': 'temp-id',
-            'name': data.get('name', 'Default Evolution API'),
-            'base_url': data.get('base_url', 'https://evo.rbtec.com.br'),
-            'api_key': data.get('api_key', '584B4A4A-0815-AC86-DC39-C38FC27E8E17'),
-            'webhook_url': data.get('webhook_url', f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/"),
-            'is_active': data.get('is_active', True),
-            'status': 'active',
-            'last_check': timezone.now().isoformat(),
-            'last_error': None,
-            'created_at': timezone.now().isoformat(),
-            'updated_at': timezone.now().isoformat(),
+            'id': str(connection.id),
+            'name': connection.name,
+            'base_url': connection.base_url,
+            'api_key': connection.api_key,
+            'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
+            'is_active': connection.is_active,
+            'status': connection.status,
+            'last_check': connection.last_check.isoformat() if connection.last_check else None,
+            'last_error': connection.last_error,
+            'created_at': connection.created_at.isoformat() if connection.created_at else None,
+            'updated_at': connection.updated_at.isoformat() if connection.updated_at else None,
         }, status=status.HTTP_200_OK)
 
 
