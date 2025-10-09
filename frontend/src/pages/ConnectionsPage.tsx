@@ -41,6 +41,25 @@ export default function ConnectionsPage() {
   const [testPhone, setTestPhone] = useState('')
   const [isSendingTest, setIsSendingTest] = useState(false)
   
+  // Função para formatar telefone
+  const formatPhone = (phone: string) => {
+    if (!phone) return ''
+    // Remove caracteres não numéricos
+    const numbers = phone.replace(/\D/g, '')
+    
+    // Formato brasileiro: +55 17 99125-3112
+    if (numbers.length === 13 && numbers.startsWith('55')) {
+      const ddi = numbers.substring(0, 2)
+      const ddd = numbers.substring(2, 4)
+      const part1 = numbers.substring(4, 9)
+      const part2 = numbers.substring(9, 13)
+      return `+${ddi} ${ddd} ${part1}-${part2}`
+    }
+    
+    // Outros formatos: apenas +XX XXXXXXXXX
+    return `+${numbers}`
+  }
+  
   // Form data para WhatsApp Instance
   const [instanceForm, setInstanceForm] = useState({
     friendly_name: '',
@@ -325,7 +344,7 @@ export default function ConnectionsPage() {
                 <div>
                   <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
                   {instance.phone_number && (
-                    <p className="text-sm text-gray-600 mt-1">📱 {instance.phone_number}</p>
+                    <p className="text-sm text-gray-600 mt-1">📱 {formatPhone(instance.phone_number)}</p>
                   )}
                   {instance.api_key && (
                     <div className="flex items-center gap-2 mt-1">

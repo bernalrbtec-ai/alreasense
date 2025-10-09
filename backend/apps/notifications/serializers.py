@@ -56,7 +56,7 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'status', 'qr_code', 'last_check', 'last_error', 'created_at', 'updated_at']
         extra_kwargs = {
-            'api_key': {'write_only': True, 'required': False, 'allow_blank': True}  # Don't expose API key in responses
+            'api_key': {'required': False, 'allow_blank': True}  # API key visível (usuário pode mascarar no frontend)
         }
     
     def get_created_by_name(self, obj):
