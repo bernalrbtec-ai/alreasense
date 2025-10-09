@@ -36,6 +36,10 @@ export default function ConnectionsPage() {
   const [qrInstance, setQrInstance] = useState<WhatsAppInstance | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   const [visibleApiKeys, setVisibleApiKeys] = useState<Set<string>>(new Set())
+  const [showTestModal, setShowTestModal] = useState(false)
+  const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
+  const [testPhone, setTestPhone] = useState('')
+  const [isSendingTest, setIsSendingTest] = useState(false)
   
   // Form data para WhatsApp Instance
   const [instanceForm, setInstanceForm] = useState({
@@ -242,6 +246,41 @@ export default function ConnectionsPage() {
     }
   }
 
+  const handleOpenTestModal = (instance: WhatsAppInstance) => {
+    setTestInstance(instance)
+    setTestPhone(instance.phone_number || '') // Pré-preencher com número da instância se disponível
+    setShowTestModal(true)
+  }
+
+  const handleSendTest = async () => {
+    if (!testInstance) return
+    
+    // Validar telefone
+    if (!testPhone.trim()) {
+      showToast('❌ Digite um número de telefone', 'error')
+      return
+    }
+
+    setIsSendingTest(true)
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${testInstance.id}/send_test/`, {
+        phone: testPhone
+      })
+      if (response.data.success) {
+        showToast('✅ Mensagem de teste enviada com sucesso!', 'success')
+        setShowTestModal(false)
+        setTestPhone('')
+      } else {
+        showToast(`❌ Erro ao enviar: ${response.data.error}`, 'error')
+      }
+    } catch (error: any) {
+      console.error('❌ Erro ao enviar mensagem de teste:', error)
+      showToast(`❌ Erro ao enviar: ${error.response?.data?.error || error.message}`, 'error')
+    } finally {
+      setIsSendingTest(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -345,9 +384,28 @@ export default function ConnectionsPage() {
                 <Button 
                   variant="ghost" 
                   size="sm"
+                  onClick={() => handleOpenTestModal(instance)}
+                  disabled={instance.connection_state !== 'open'}
+                  className={`${
+                    instance.connection_state === 'open' 
+                      ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
+                      : 'text-gray-300 cursor-not-allowed'
+                  }`}
+                  title={instance.connection_state === 'open' ? 'Enviar Mensagem de Teste' : 'Conecte a instância primeiro'}
+                >
+                  <MessageSquare className="h-4 w-4" />
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  size="sm"
                   onClick={() => handleDisconnect(instance)}
-                  className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                  title="Desconectar"
+                  disabled={instance.connection_state !== 'open'}
+                  className={`${
+                    instance.connection_state === 'open' 
+                      ? 'text-orange-600 hover:text-orange-700 hover:bg-orange-50' 
+                      : 'text-gray-300 cursor-not-allowed'
+                  }`}
+                  title={instance.connection_state === 'open' ? 'Desconectar' : 'Instância não conectada'}
                 >
                   <WifiOff className="h-4 w-4" />
                 </Button>
@@ -539,6 +597,78 @@ export default function ConnectionsPage() {
                   }}
                 >
                   Fechar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Teste de Mensagem */}
+      {showTestModal && testInstance && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full">
+            <div className="p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold text-gray-900">
+                  📱 Enviar Mensagem de Teste
+                </h3>
+                <button
+                  onClick={() => {
+                    setShowTestModal(false)
+                    setTestPhone('')
+                    setTestInstance(null)
+                  }}
+                  className="text-gray-400 hover:text-gray-600"
+                >
+                  <XIcon className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-gray-600 mb-4">
+                    Instância: <strong>{testInstance.friendly_name}</strong>
+                  </p>
+                  <Label htmlFor="test-phone">
+                    Número de Telefone (com DDI)
+                  </Label>
+                  <Input
+                    id="test-phone"
+                    type="text"
+                    placeholder="5511999999999"
+                    value={testPhone}
+                    onChange={(e) => setTestPhone(e.target.value)}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Formato: DDI + DDD + Número (ex: 5511999999999)
+                  </p>
+                </div>
+
+                <div className="bg-blue-50 p-3 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    <strong>💬 Mensagem:</strong> "Olá! Esta é uma mensagem de teste da Alrea Sense."
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2 justify-end mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowTestModal(false)
+                    setTestPhone('')
+                    setTestInstance(null)
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleSendTest}
+                  disabled={isSendingTest || !testPhone.trim()}
+                >
+                  {isSendingTest ? 'Enviando...' : 'Enviar Teste'}
                 </Button>
               </div>
             </div>
