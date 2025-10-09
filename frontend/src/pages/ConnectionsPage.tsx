@@ -173,27 +173,40 @@ export default function ConnectionsPage() {
         setShowQRModal(true)
         showToast('✅ QR code gerado com sucesso! Aguardando conexão...', 'success')
         
-        // Iniciar polling para verificar status (verificar a cada 3 segundos por 2 minutos)
+        // Iniciar polling para verificar status (a cada 5 segundos por 3 minutos)
         let checks = 0
-        const maxChecks = 40 // 40 checks * 3s = 2 minutos
+        const maxChecks = 36 // 36 checks * 5s = 3 minutos
         const checkInterval = setInterval(async () => {
           checks++
+          console.log(`🔄 Verificando conexão... (tentativa ${checks}/${maxChecks})`)
+          
           try {
             const statusResponse = await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
-            if (statusResponse.data.success && statusResponse.data.connection_state === 'open') {
-              clearInterval(checkInterval)
-              setShowQRModal(false)
-              fetchData() // Recarregar lista para mostrar número e status atualizado
-              showToast('🎉 WhatsApp conectado com sucesso!', 'success')
+            
+            if (statusResponse.data.success) {
+              const connectionState = statusResponse.data.connection_state
+              console.log(`📱 Estado atual: ${connectionState}`)
+              
+              if (connectionState === 'open') {
+                clearInterval(checkInterval)
+                setShowQRModal(false)
+                setQrInstance(null)
+                fetchData() // Recarregar lista para mostrar número e status atualizado
+                showToast('🎉 WhatsApp conectado com sucesso!', 'success')
+                console.log('✅ WhatsApp conectado! Polling encerrado.')
+              }
             }
-          } catch (err) {
-            console.error('Erro ao verificar status:', err)
+          } catch (err: any) {
+            // Não mostrar erro para o usuário durante polling (pode ser temporário)
+            console.log(`⚠️ Erro ao verificar (ignorando): ${err.message}`)
           }
           
           if (checks >= maxChecks) {
             clearInterval(checkInterval)
+            console.log('⏱️ Tempo limite atingido. Polling encerrado.')
+            showToast('⏱️ Tempo limite para conexão. Tente verificar status manualmente.', 'warning')
           }
-        }, 3000)
+        }, 5000) // 5 segundos entre cada verificação
         
         // Limpar interval quando fechar o modal
         const originalClose = () => setShowQRModal(false)
