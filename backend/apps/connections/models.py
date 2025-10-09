@@ -18,7 +18,9 @@ class EvolutionConnection(models.Model):
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='evolution_connections')
     name = models.CharField(max_length=100)
     base_url = models.URLField(help_text="URL base da Evolution API", blank=True, null=True)
-    api_key = encrypt(models.CharField(max_length=255, help_text="API Key da Evolution API", blank=True, null=True))
+    # TEMPORARIAMENTE SEM CRIPTOGRAFIA - para resolver problema de SECRET_KEY
+    api_key = models.CharField(max_length=255, help_text="API Key da Evolution API", blank=True, null=True)
+    # api_key = encrypt(models.CharField(max_length=255, help_text="API Key da Evolution API", blank=True, null=True))
     webhook_url = models.URLField(help_text="URL do webhook para receber eventos", blank=True, null=True)
     is_active = models.BooleanField(default=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='inactive')
