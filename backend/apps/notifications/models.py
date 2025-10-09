@@ -205,28 +205,45 @@ class WhatsAppInstance(models.Model):
         ).first()
         
         if not evolution_server:
-            self.last_error = 'Nenhum servidor Evolution API ativo encontrado. Configure em Admin → Servidor de Instância'
+            error_msg = (
+                '❌ Nenhum servidor Evolution API configurado!\n\n'
+                '📋 Passos para configurar:\n'
+                '1. Acesse: Admin → Servidor de Instância\n'
+                '2. Configure a URL e API Key do Evolution API\n'
+                '3. Teste a conexão\n'
+                '4. Volte aqui e tente novamente'
+            )
+            self.last_error = error_msg
+            self.status = 'error'
             self.save()
             return None
         
-        # Usar URL do servidor cadastrado ou da instância
-        api_url = self.api_url or evolution_server.base_url
+        # SEMPRE usar URL e API Key do servidor global
+        api_url = evolution_server.base_url
+        system_api_key = evolution_server.api_key
         
         if not api_url:
-            self.last_error = 'URL da Evolution API não configurada'
+            error_msg = f'❌ Servidor Evolution "{evolution_server.name}" sem URL configurada. Configure em Admin → Servidor de Instância'
+            self.last_error = error_msg
+            self.status = 'error'
             self.save()
             return None
+        
+        if not system_api_key:
+            error_msg = f'❌ Servidor Evolution "{evolution_server.name}" sem API Key configurada. Configure em Admin → Servidor de Instância'
+            self.last_error = error_msg
+            self.status = 'error'
+            self.save()
+            return None
+        
+        # Salvar api_url da instância para referência
+        if not self.api_url:
+            self.api_url = api_url
+            self.save()
         
         try:
             # Se não tem API key, primeiro criar a instância no Evolution API
             if not self.api_key:
-                # Usar a API key do servidor cadastrado no sistema
-                system_api_key = evolution_server.api_key
-                if not system_api_key:
-                    self.last_error = f'API key do servidor Evolution "{evolution_server.name}" não configurada'
-                    self.save()
-                    return None
-                
                 create_response = requests.post(
                     f"{api_url}/instance/create",
                     headers={
@@ -316,23 +333,18 @@ class WhatsAppInstance(models.Model):
         from apps.connections.models import EvolutionConnection
         
         if not self.api_key:
-            self.last_error = 'API key não configurada'
+            self.last_error = 'API key não configurada. Gere um QR code primeiro.'
             self.save()
             return False
         
-        # Usar api_url da instância ou buscar do servidor global do sistema
-        api_url = self.api_url
-        if not api_url:
-            evolution_server = EvolutionConnection.objects.filter(
-                is_active=True
-            ).first()
-            if evolution_server:
-                api_url = evolution_server.base_url
-        
-        if not api_url:
-            self.last_error = 'URL da Evolution API não configurada'
+        # Buscar servidor Evolution global
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server or not evolution_server.base_url:
+            self.last_error = 'Servidor Evolution não configurado no sistema'
             self.save()
             return False
+        
+        api_url = evolution_server.base_url
             
         try:
             response = requests.get(
@@ -394,14 +406,14 @@ class WhatsAppInstance(models.Model):
         import requests
         from apps.connections.models import EvolutionConnection
         
-        # Usar api_url da instância ou buscar do servidor global do sistema
-        api_url = self.api_url
-        if not api_url:
-            evolution_server = EvolutionConnection.objects.filter(
-                is_active=True
-            ).first()
-            if evolution_server:
-                api_url = evolution_server.base_url
+        # Buscar servidor Evolution global
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server or not evolution_server.base_url:
+            self.last_error = 'Servidor Evolution não configurado no sistema'
+            self.save()
+            return False
+        
+        api_url = evolution_server.base_url
         
         try:
             response = requests.delete(
@@ -434,6 +446,51 @@ class WhatsAppInstance(models.Model):
             self.last_error = str(e)
             self.save()
             return False
+    
+    def check_status(self):
+        """Check instance status via Evolution API (for Celery tasks)."""
+        import requests
+        from apps.connections.models import EvolutionConnection
+        
+        # Buscar servidor Evolution global
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server or not evolution_server.base_url:
+            self.last_error = 'Servidor Evolution não configurado no sistema'
+            self.status = 'error'
+            self.save()
+            return
+        
+        api_url = evolution_server.base_url
+        
+        try:
+            response = requests.get(
+                f"{api_url}/instance/connectionState/{self.instance_name}",
+                headers={'apikey': self.api_key},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                data = response.json()
+                state = data.get('state', 'close')
+                
+                if state == 'open':
+                    self.status = 'active'
+                    self.connection_state = 'open'
+                    self.last_error = ''
+                else:
+                    self.status = 'inactive'
+                    self.connection_state = state
+            else:
+                self.status = 'error'
+                self.last_error = f"HTTP {response.status_code}: {response.text[:100]}"
+        
+        except Exception as e:
+            self.status = 'error'
+            self.last_error = str(e)
+        
+        from django.utils import timezone
+        self.last_check = timezone.now()
+        self.save()
 
 
 class WhatsAppConnectionLog(models.Model):
@@ -473,49 +530,6 @@ class WhatsAppConnectionLog(models.Model):
     
     def __str__(self):
         return f"{self.instance.friendly_name} - {self.get_action_display()} ({self.created_at})"
-    
-    def check_status(self):
-        """Check instance status via Evolution API."""
-        import requests
-        from apps.connections.models import EvolutionConnection
-        
-        # Usar api_url da instância ou buscar do servidor global do sistema
-        api_url = self.api_url
-        if not api_url:
-            evolution_server = EvolutionConnection.objects.filter(
-                is_active=True
-            ).first()
-            if evolution_server:
-                api_url = evolution_server.base_url
-        
-        try:
-            response = requests.get(
-                f"{api_url}/instance/connectionState/{self.instance_name}",
-                headers={'apikey': self.api_key},
-                timeout=5
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                state = data.get('state', 'close')
-                
-                if state == 'open':
-                    self.status = 'active'
-                    self.last_error = ''
-                else:
-                    self.status = 'inactive'
-                    self.last_error = f"Connection state: {state}"
-            else:
-                self.status = 'error'
-                self.last_error = f"HTTP {response.status_code}"
-        
-        except Exception as e:
-            self.status = 'error'
-            self.last_error = str(e)
-        
-        from django.utils import timezone
-        self.last_check = timezone.now()
-        self.save()
 
 
 class NotificationLog(models.Model):

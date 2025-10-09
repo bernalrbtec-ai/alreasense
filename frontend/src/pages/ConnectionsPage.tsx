@@ -80,8 +80,8 @@ export default function ConnectionsPage() {
       const instanceData = {
         ...instanceForm,
         instance_name: crypto.randomUUID(), // Gerar UUID automaticamente
-        api_url: 'https://evo.rbtec.com.br', // Usar servidor padrão
-        api_key: '', // Será preenchido quando conectar
+        // api_url será obtido do servidor Evolution global configurado no backend
+        // Não enviar api_url nem api_key - backend gerencia isso
       }
 
       if (editingInstance) {
