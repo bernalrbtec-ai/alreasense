@@ -21,7 +21,7 @@ def clean_smtp_configs():
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'public' 
-                AND table_name = 'notifications_smtpconfig'
+                AND table_name = 'notifications_smtp_config'
             )
         """)
         smtp_table_exists = cursor.fetchone()[0]
@@ -31,14 +31,14 @@ def clean_smtp_configs():
             SELECT EXISTS (
                 SELECT FROM information_schema.tables 
                 WHERE table_schema = 'public' 
-                AND table_name = 'notifications_whatsappinstance'
+                AND table_name = 'notifications_whatsapp_instance'
             )
         """)
         whatsapp_table_exists = cursor.fetchone()[0]
         
         if smtp_table_exists:
             # Deletar todos os registros SMTP
-            cursor.execute("DELETE FROM notifications_smtpconfig")
+            cursor.execute("DELETE FROM notifications_smtp_config")
             deleted_count = cursor.rowcount
             print(f"🧹 Deletados {deleted_count} registros SMTP")
         else:
@@ -46,7 +46,7 @@ def clean_smtp_configs():
         
         if whatsapp_table_exists:
             # Deletar todos os registros WhatsApp
-            cursor.execute("DELETE FROM notifications_whatsappinstance")
+            cursor.execute("DELETE FROM notifications_whatsapp_instance")
             deleted_whatsapp = cursor.rowcount
             print(f"🧹 Deletados {deleted_whatsapp} registros WhatsApp")
         else:
