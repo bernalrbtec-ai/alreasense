@@ -221,7 +221,7 @@ export default function PlansPage() {
                   📱 Conexões: {plan.max_connections === -1 ? 'Ilimitadas' : plan.max_connections}
                 </p>
                 <p className="font-medium">
-                  💬 Mensagens: {plan.max_messages_per_month === -1 ? 'Ilimitadas' : plan.max_messages_per_month.toLocaleString()}/{plan.billing_cycle_days} dias
+                  💬 Mensagens: {plan.max_messages_per_month === -1 ? 'Ilimitadas' : (plan.max_messages_per_month || 0).toLocaleString()}/{plan.billing_cycle_days} dias
                 </p>
               </div>
               
