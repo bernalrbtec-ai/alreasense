@@ -22,6 +22,7 @@ interface Plan {
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
   const { toast, showToast, hideToast } = useToast()
