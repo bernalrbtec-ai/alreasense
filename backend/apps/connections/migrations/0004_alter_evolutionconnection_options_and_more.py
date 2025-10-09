@@ -5,6 +5,116 @@ import django.db.models.deletion
 import django_cryptography.fields
 
 
+def add_fields_if_not_exist(apps, schema_editor):
+    """Add fields only if they don't exist."""
+    with schema_editor.connection.cursor() as cursor:
+        # Check which columns already exist
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'connections_evolutionconnection'
+            AND table_schema = 'public';
+        """)
+        existing_columns = {row[0] for row in cursor.fetchall()}
+        
+        # Add api_key if not exists
+        if 'api_key' not in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                ADD COLUMN api_key bytea NULL;
+            """)
+            print("✅ Added api_key column")
+        else:
+            print("⏭️  api_key column already exists, skipping")
+        
+        # Add base_url if not exists
+        if 'base_url' not in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                ADD COLUMN base_url VARCHAR(200) NULL;
+            """)
+            print("✅ Added base_url column")
+        else:
+            print("⏭️  base_url column already exists, skipping")
+        
+        # Add last_check if not exists
+        if 'last_check' not in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                ADD COLUMN last_check TIMESTAMP WITH TIME ZONE NULL;
+            """)
+            print("✅ Added last_check column")
+        else:
+            print("⏭️  last_check column already exists, skipping")
+        
+        # Add last_error if not exists
+        if 'last_error' not in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                ADD COLUMN last_error TEXT NULL;
+            """)
+            print("✅ Added last_error column")
+        else:
+            print("⏭️  last_error column already exists, skipping")
+        
+        # Add status if not exists
+        if 'status' not in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                ADD COLUMN status VARCHAR(20) DEFAULT 'inactive' NOT NULL;
+            """)
+            print("✅ Added status column")
+        else:
+            print("⏭️  status column already exists, skipping")
+        
+        # Add webhook_url if not exists
+        if 'webhook_url' not in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                ADD COLUMN webhook_url VARCHAR(200) NULL;
+            """)
+            print("✅ Added webhook_url column")
+        else:
+            print("⏭️  webhook_url column already exists, skipping")
+        
+        # Remove old columns if they exist
+        if 'evo_token' in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                DROP COLUMN evo_token;
+            """)
+            print("✅ Removed evo_token column")
+        
+        if 'evo_ws_url' in existing_columns:
+            cursor.execute("""
+                ALTER TABLE connections_evolutionconnection 
+                DROP COLUMN evo_ws_url;
+            """)
+            print("✅ Removed evo_ws_url column")
+
+
+def remove_fields_if_exist(apps, schema_editor):
+    """Reverse migration."""
+    with schema_editor.connection.cursor() as cursor:
+        # Check which columns exist
+        cursor.execute("""
+            SELECT column_name 
+            FROM information_schema.columns 
+            WHERE table_name = 'connections_evolutionconnection'
+            AND table_schema = 'public';
+        """)
+        existing_columns = {row[0] for row in cursor.fetchall()}
+        
+        # Remove new columns
+        for column in ['api_key', 'base_url', 'last_check', 'last_error', 'status', 'webhook_url']:
+            if column in existing_columns:
+                cursor.execute(f"""
+                    ALTER TABLE connections_evolutionconnection 
+                    DROP COLUMN {column};
+                """)
+                print(f"✅ Removed {column} column")
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -13,6 +123,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(add_fields_if_not_exist, remove_fields_if_exist),
         migrations.AlterModelOptions(
             name='evolutionconnection',
             options={'ordering': ['-created_at'], 'verbose_name': 'Evolution Connection', 'verbose_name_plural': 'Evolution Connections'},
@@ -20,58 +131,5 @@ class Migration(migrations.Migration):
         migrations.AlterUniqueTogether(
             name='evolutionconnection',
             unique_together=set(),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='api_key',
-            field=django_cryptography.fields.encrypt(models.CharField(blank=True, help_text='API Key da Evolution API', max_length=255, null=True)),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='base_url',
-            field=models.URLField(blank=True, help_text='URL base da Evolution API', null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='last_check',
-            field=models.DateTimeField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='last_error',
-            field=models.TextField(blank=True, null=True),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='status',
-            field=models.CharField(choices=[('active', 'Active'), ('inactive', 'Inactive'), ('error', 'Error')], default='inactive', max_length=20),
-        ),
-        migrations.AddField(
-            model_name='evolutionconnection',
-            name='webhook_url',
-            field=models.URLField(blank=True, help_text='URL do webhook para receber eventos', null=True),
-        ),
-        migrations.AlterField(
-            model_name='evolutionconnection',
-            name='id',
-            field=models.AutoField(primary_key=True, serialize=False),
-        ),
-        migrations.AlterField(
-            model_name='evolutionconnection',
-            name='name',
-            field=models.CharField(max_length=100),
-        ),
-        migrations.AlterField(
-            model_name='evolutionconnection',
-            name='tenant',
-            field=models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='evolution_connections', to='tenancy.tenant'),
-        ),
-        migrations.RemoveField(
-            model_name='evolutionconnection',
-            name='evo_token',
-        ),
-        migrations.RemoveField(
-            model_name='evolutionconnection',
-            name='evo_ws_url',
         ),
     ]
