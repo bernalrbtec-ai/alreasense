@@ -167,7 +167,34 @@ export default function ConnectionsPage() {
           expires_at: response.data.expires_at
         })
         setShowQRModal(true)
-        showToast('✅ QR code gerado com sucesso!', 'success')
+        showToast('✅ QR code gerado com sucesso! Aguardando conexão...', 'success')
+        
+        // Iniciar polling para verificar status (verificar a cada 3 segundos por 2 minutos)
+        let checks = 0
+        const maxChecks = 40 // 40 checks * 3s = 2 minutos
+        const checkInterval = setInterval(async () => {
+          checks++
+          try {
+            const statusResponse = await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
+            if (statusResponse.data.success && statusResponse.data.connection_state === 'open') {
+              clearInterval(checkInterval)
+              setShowQRModal(false)
+              fetchData() // Recarregar lista para mostrar número e status atualizado
+              showToast('🎉 WhatsApp conectado com sucesso!', 'success')
+            }
+          } catch (err) {
+            console.error('Erro ao verificar status:', err)
+          }
+          
+          if (checks >= maxChecks) {
+            clearInterval(checkInterval)
+          }
+        }, 3000)
+        
+        // Limpar interval quando fechar o modal
+        const originalClose = () => setShowQRModal(false)
+        // Guardar referência do interval para limpar depois
+        ;(window as any).__qrCheckInterval = checkInterval
       } else {
         showToast(`❌ Erro ao gerar QR code: ${response.data.error}`, 'error')
       }
@@ -248,36 +275,33 @@ export default function ConnectionsPage() {
                   {instance.phone_number && (
                     <p className="text-sm text-gray-600 mt-1">📱 {instance.phone_number}</p>
                   )}
-                  {instance.instance_name && (
-                    <p className="text-xs text-gray-500 mt-1">ID: {instance.instance_name.substring(0, 8)}...</p>
-                  )}
                   {instance.api_key && (
                     <div className="flex items-center gap-2 mt-1">
-                      <p className="text-xs text-gray-500">
-                        API Key: {visibleApiKeys.has(instance.id) 
-                          ? instance.api_key 
-                          : '•'.repeat(20)}
+                      <p className="text-xs text-gray-600 font-mono">
+                        API Key: {visibleApiKeys.has(instance.id) ? instance.api_key : '••••••••••••••••'}
                       </p>
                       <button
-                        onClick={() => {
-                          const newSet = new Set(visibleApiKeys)
-                          if (newSet.has(instance.id)) {
-                            newSet.delete(instance.id)
-                          } else {
-                            newSet.add(instance.id)
-                          }
-                          setVisibleApiKeys(newSet)
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setVisibleApiKeys(prev => {
+                            const next = new Set(prev)
+                            if (next.has(instance.id)) {
+                              next.delete(instance.id)
+                            } else {
+                              next.add(instance.id)
+                            }
+                            return next
+                          })
                         }}
                         className="text-gray-400 hover:text-gray-600"
                         title={visibleApiKeys.has(instance.id) ? 'Ocultar API Key' : 'Mostrar API Key'}
                       >
-                        {visibleApiKeys.has(instance.id) ? (
-                          <EyeOff className="h-3 w-3" />
-                        ) : (
-                          <Eye className="h-3 w-3" />
-                        )}
+                        {visibleApiKeys.has(instance.id) ? '👁️' : '👁️‍🗨️'}
                       </button>
                     </div>
+                  )}
+                  {!instance.api_key && instance.instance_name && (
+                    <p className="text-xs text-gray-400 mt-1 italic">API Key será gerada ao conectar</p>
                   )}
                 </div>
                 <div className="flex items-center gap-2">
@@ -506,6 +530,10 @@ export default function ConnectionsPage() {
                 </Button>
                 <Button
                   onClick={() => {
+                    // Limpar interval de verificação
+                    if ((window as any).__qrCheckInterval) {
+                      clearInterval((window as any).__qrCheckInterval)
+                    }
                     setShowQRModal(false)
                     setQrInstance(null)
                   }}
