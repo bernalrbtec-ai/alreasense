@@ -290,7 +290,7 @@ export default function NotificationsPage() {
   }
   
   // Limpar polling quando fechar modal manualmente
-  React.useEffect(() => {
+  useEffect(() => {
     if (!showQRModal) {
       // Modal fechou, limpar estados
       setQrCodeData(null)
