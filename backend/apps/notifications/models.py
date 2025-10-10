@@ -259,8 +259,29 @@ class WhatsAppInstance(models.Model):
             self.save()
         
         try:
-            # Se não tem API key, primeiro criar a instância no Evolution API
-            if not self.api_key:
+            # ETAPA 1: Verificar se instância já existe no Evolution API
+            check_response = requests.get(
+                f"{api_url}/instance/fetchInstances",
+                headers={'apikey': system_api_key},
+                params={'instanceName': self.instance_name},
+                timeout=10
+            )
+            
+            instance_exists = False
+            if check_response.status_code == 200:
+                instances = check_response.json()
+                # Verificar se nossa instância está na lista
+                if isinstance(instances, list):
+                    instance_exists = any(
+                        inst.get('instance', {}).get('instanceName') == self.instance_name or
+                        inst.get('name') == self.instance_name
+                        for inst in instances
+                    )
+                print(f"🔍 Verificação: instância '{self.instance_name}' {'existe' if instance_exists else 'não existe'} no Evolution")
+            
+            # Se não tem API key E instância não existe, criar no Evolution API
+            if not self.api_key and not instance_exists:
+                print(f"🆕 Criando nova instância no Evolution: {self.instance_name}")
                 create_response = requests.post(
                     f"{api_url}/instance/create",
                     headers={
@@ -311,6 +332,8 @@ class WhatsAppInstance(models.Model):
                     self.last_error = f'Erro ao criar instância (Status {create_response.status_code}): {create_response.text}'
                     self.save()
                     return None
+            elif instance_exists:
+                print(f"♻️  Instância já existe no Evolution, pulando criação")
             
             # ETAPA 2: Gerar QR code usando API MASTER (padrão whatsapp-orchestrator)
             # IMPORTANTE: Usar API MASTER, não API da instância!
