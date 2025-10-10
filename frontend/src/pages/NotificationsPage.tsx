@@ -540,11 +540,12 @@ export default function NotificationsPage() {
                 </div>
                 <div className="flex flex-col items-end gap-2">
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    instance.status === 'active' ? 'bg-green-100 text-green-800' :
-                    instance.status === 'inactive' ? 'bg-yellow-100 text-yellow-800' :
-                    'bg-red-100 text-red-800'
+                    instance.connection_state === 'open' ? 'bg-green-100 text-green-800' :
+                    instance.connection_state === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
+                    'bg-gray-100 text-gray-800'
                   }`}>
-                    {instance.status}
+                    {instance.connection_state === 'open' ? 'Conectado' : 
+                     instance.connection_state === 'connecting' ? 'Conectando' : 'Desconectado'}
                   </span>
                   {instance.is_default && (
                     <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-brand-100 text-brand-800">
@@ -558,6 +559,8 @@ export default function NotificationsPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => handleCheckStatus(instance.id)}
+                  disabled={instance.connection_state === 'open'}
+                  title={instance.connection_state === 'open' ? 'Já conectado' : 'Verificar Status'}
                 >
                   Verificar Status
                 </Button>
@@ -565,9 +568,9 @@ export default function NotificationsPage() {
                   variant="ghost" 
                   size="sm"
                   onClick={() => handleGenerateQR(instance)}
-                  disabled={isGeneratingQR}
+                  disabled={isGeneratingQR || instance.connection_state === 'open'}
                   className="text-accent-600 hover:text-accent-700 hover:bg-accent-50"
-                  title="Gerar QR Code"
+                  title={instance.connection_state === 'open' ? 'Já conectado' : 'Gerar QR Code'}
                 >
                   <QrCode className="h-4 w-4" />
                 </Button>
@@ -575,8 +578,9 @@ export default function NotificationsPage() {
                   variant="ghost" 
                   size="sm"
                   onClick={() => handleDisconnect(instance)}
+                  disabled={instance.connection_state !== 'open'}
                   className="text-orange-600 hover:text-orange-700 hover:bg-orange-50"
-                  title="Desconectar"
+                  title={instance.connection_state !== 'open' ? 'Não conectado' : 'Desconectar'}
                 >
                   <WifiOff className="h-4 w-4" />
                 </Button>
@@ -1082,7 +1086,7 @@ export default function NotificationsPage() {
             <div className="text-center">
               <div className="mb-4">
                 <img 
-                  src={`data:image/png;base64,${qrCodeData.qr_code}`}
+                  src={qrCodeData.qr_code.startsWith('data:image') ? qrCodeData.qr_code : `data:image/png;base64,${qrCodeData.qr_code}`}
                   alt="QR Code para conectar WhatsApp"
                   className="mx-auto border border-gray-200 rounded-lg"
                 />
