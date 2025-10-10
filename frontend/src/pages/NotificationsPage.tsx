@@ -952,7 +952,6 @@ export default function NotificationsPage() {
                   </div>
                 </div>
               </div>
-            </div>
               
               <div className="flex justify-end gap-3 pt-6 border-t mt-6">
                 <Button
