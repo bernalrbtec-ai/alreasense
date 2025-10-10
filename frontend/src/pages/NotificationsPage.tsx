@@ -67,6 +67,7 @@ export default function NotificationsPage() {
   const [editingInstance, setEditingInstance] = useState<WhatsAppInstance | null>(null)
   const [showQRModal, setShowQRModal] = useState(false)
   const [qrCodeData, setQrCodeData] = useState<{qr_code: string, expires_at: string} | null>(null)
+  const [qrCodeInstance, setQrCodeInstance] = useState<WhatsAppInstance | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
   
   // Notificações toast
@@ -245,8 +246,12 @@ export default function NotificationsPage() {
           qr_code: response.data.qr_code,
           expires_at: response.data.expires_at
         })
+        setQrCodeInstance(instance)
         setShowQRModal(true)
         showToast('✅ QR code gerado com sucesso!', 'success')
+        
+        // Iniciar polling para verificar conexão
+        startConnectionPolling(instance.id)
       } else {
         showToast(`❌ Erro ao gerar QR code: ${response.data.error}`, 'error')
       }
@@ -257,6 +262,41 @@ export default function NotificationsPage() {
       setIsGeneratingQR(false)
     }
   }
+  
+  // Polling para verificar se conectou
+  const startConnectionPolling = (instanceId: string) => {
+    const pollInterval = setInterval(async () => {
+      try {
+        const response = await api.post(`/notifications/whatsapp-instances/${instanceId}/check_status/`)
+        if (response.data.success && response.data.connection_state === 'open') {
+          // Conectou! Fechar modal e atualizar lista
+          setShowQRModal(false)
+          setQrCodeData(null)
+          setQrCodeInstance(null)
+          clearInterval(pollInterval)
+          showToast('🎉 WhatsApp conectado com sucesso!', 'success')
+          fetchData() // Atualizar lista de instâncias
+        }
+      } catch (error) {
+        console.error('Erro no polling:', error)
+      }
+    }, 3000) // Verifica a cada 3 segundos
+    
+    // Parar após 5 minutos (QR expira)
+    setTimeout(() => clearInterval(pollInterval), 5 * 60 * 1000)
+    
+    // Limpar quando fechar o modal
+    return () => clearInterval(pollInterval)
+  }
+  
+  // Limpar polling quando fechar modal manualmente
+  React.useEffect(() => {
+    if (!showQRModal) {
+      // Modal fechou, limpar estados
+      setQrCodeData(null)
+      setQrCodeInstance(null)
+    }
+  }, [showQRModal])
 
   const handleDisconnect = async (instance: WhatsAppInstance) => {
     showConfirm(
@@ -1105,8 +1145,8 @@ export default function NotificationsPage() {
               <div className="flex gap-2 justify-center">
                 <Button
                   variant="outline"
-                  onClick={() => handleGenerateQR(editingInstance!)}
-                  disabled={isGeneratingQR}
+                  onClick={() => qrCodeInstance && handleGenerateQR(qrCodeInstance)}
+                  disabled={isGeneratingQR || !qrCodeInstance}
                 >
                   {isGeneratingQR ? 'Gerando...' : 'Atualizar QR'}
                 </Button>
