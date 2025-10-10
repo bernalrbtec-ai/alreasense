@@ -34,7 +34,7 @@
 ### 1️⃣ Criar Tenant (Empresa do Cliente)
 
 1. Acesse: **http://localhost:5173**
-2. Login: `admin@alrea.com` / `admin123`
+2. Login: `admin@alreasense.com` / `admin123`
 3. Clique em **Admin** (canto superior direito)
 4. Vá em **Tenants** → **Adicionar Tenant**
 5. Preencha:
@@ -193,7 +193,7 @@ Menu:
 **Para testar o sistema de campanhas:**
 
 1. Use o tenant padrão: `Default Tenant`
-2. Usuário: `admin@alrea.com` / `admin123`
+2. Usuário: `admin@alreasense.com` / `admin123`
 3. Configure instância WhatsApp
 4. Rode: `docker-compose -f docker-compose.local.yml exec backend python manage.py test_campaign_send`
 

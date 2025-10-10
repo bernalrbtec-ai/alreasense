@@ -107,7 +107,9 @@ export default function NotificationsPage() {
         setTemplates(Array.isArray(response.data) ? response.data : [])
       } else if (activeTab === 'instances') {
         const response = await api.get('/notifications/whatsapp-instances/')
-        setInstances(Array.isArray(response.data) ? response.data : [])
+        // API retorna paginado: {count, results}
+        const data = response.data?.results || response.data
+        setInstances(Array.isArray(data) ? data : [])
       } else if (activeTab === 'smtp') {
         console.log('🔍 Fetching SMTP configs...')
         const response = await api.get('/notifications/smtp-configs/')

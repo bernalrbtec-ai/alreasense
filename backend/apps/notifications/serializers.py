@@ -56,7 +56,9 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'status', 'qr_code', 'last_check', 'last_error', 'created_at', 'updated_at']
         extra_kwargs = {
-            'api_key': {'required': False, 'allow_blank': True}  # API key visível (usuário pode mascarar no frontend)
+            'api_key': {'required': False, 'allow_blank': True},
+            'instance_name': {'required': False},  # Gerado automaticamente se não fornecido
+            'evolution_instance_name': {'required': False}  # Gerado automaticamente
         }
     
     def get_created_by_name(self, obj):
@@ -75,6 +77,15 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
             # Set tenant from user if not provided
             if not validated_data.get('tenant'):
                 validated_data['tenant'] = request.user.tenant
+        
+        # Gerar instance_name se não fornecido (UUID único)
+        if not validated_data.get('instance_name'):
+            import uuid
+            validated_data['instance_name'] = str(uuid.uuid4())
+        
+        # Gerar evolution_instance_name se não fornecido
+        if not validated_data.get('evolution_instance_name'):
+            validated_data['evolution_instance_name'] = validated_data['instance_name']
         
         return super().create(validated_data)
 

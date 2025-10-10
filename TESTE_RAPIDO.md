@@ -12,7 +12,7 @@
 ✅ Redis:        Healthy
 ```
 
-**Login:** `admin@alrea.com` / `admin123`
+**Login:** `admin@alreasense.com` / `admin123`
 
 ---
 
