@@ -8,7 +8,7 @@ import Toast from '../components/ui/Toast'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
-import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon, QrCode, WifiOff } from 'lucide-react'
+import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon, QrCode, WifiOff, Phone, Key, EyeOff } from 'lucide-react'
 import { api } from '../lib/api'
 
 interface NotificationTemplate {
@@ -69,6 +69,7 @@ export default function NotificationsPage() {
   const [qrCodeData, setQrCodeData] = useState<{qr_code: string, expires_at: string} | null>(null)
   const [qrCodeInstance, setQrCodeInstance] = useState<WhatsAppInstance | null>(null)
   const [isGeneratingQR, setIsGeneratingQR] = useState(false)
+  const [showApiKeys, setShowApiKeys] = useState<{[key: string]: boolean}>({})
   
   // Notificações toast
   const { toast, showToast, hideToast } = useToast()
@@ -569,16 +570,35 @@ export default function NotificationsPage() {
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {Array.isArray(instances) && instances.map((instance) => (
-            <Card key={instance.id} className="p-6 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
+            <Card key={instance.id} className="p-4 hover:shadow-md transition-shadow duration-200 border-0 shadow-sm">
               <div className="flex items-start justify-between">
-                <div>
+                <div className="flex-1">
                   <h3 className="font-semibold text-gray-900">{instance.friendly_name}</h3>
-                  <p className="text-sm text-gray-500">{instance.instance_name}</p>
+                  
+                  {/* API Key com ícone e toggle */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <Key className="h-3 w-3 text-gray-400" />
+                    <span className="text-xs text-gray-500 font-mono">
+                      {showApiKeys[instance.id] ? instance.api_key || instance.instance_name : '••••••••••••••••'}
+                    </span>
+                    <button
+                      onClick={() => setShowApiKeys(prev => ({...prev, [instance.id]: !prev[instance.id]}))}
+                      className="text-gray-400 hover:text-gray-600"
+                    >
+                      {showApiKeys[instance.id] ? <EyeOff className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
+                    </button>
+                  </div>
+                  
+                  {/* Phone Number com ícone */}
                   {instance.phone_number && (
-                    <p className="text-sm text-gray-600 mt-1">{instance.phone_number}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Phone className="h-3 w-3 text-gray-400" />
+                      <span className="text-xs text-gray-600">{instance.phone_number}</span>
+                    </div>
                   )}
                 </div>
-                <div className="flex flex-col items-end gap-2">
+                
+                <div className="flex flex-col items-end gap-1">
                   <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                     instance.connection_state === 'open' ? 'bg-green-100 text-green-800' :
                     instance.connection_state === 'connecting' ? 'bg-yellow-100 text-yellow-800' :
@@ -594,7 +614,7 @@ export default function NotificationsPage() {
                   )}
                 </div>
               </div>
-              <div className="mt-4 flex gap-2">
+              <div className="mt-3 flex gap-2">
                 <Button
                   variant="outline"
                   size="sm"
