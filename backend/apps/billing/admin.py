@@ -9,10 +9,11 @@ from .models import Product, Plan, PlanProduct, TenantProduct, BillingHistory
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['icon', 'name', 'slug', 'addon_price', 'is_active', 'requires_ui_access']
+    list_display = ['icon_display', 'name', 'slug', 'addon_price_display', 'is_active', 'requires_ui_access', 'tenant_count']
     list_filter = ['is_active', 'requires_ui_access']
     search_fields = ['name', 'slug', 'description']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'tenant_count']
+    ordering = ['name']
     
     fieldsets = (
         ('Identificação', {
@@ -24,19 +25,40 @@ class ProductAdmin(admin.ModelAdmin):
         ('Preços', {
             'fields': ('addon_price',)
         }),
+        ('Estatísticas', {
+            'fields': ('tenant_count',),
+            'classes': ('collapse',)
+        }),
         ('Metadados', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
+    
+    def icon_display(self, obj):
+        if obj.icon:
+            return format_html('<span style="font-size: 18px;">{}</span>', obj.icon)
+        return '-'
+    icon_display.short_description = 'Ícone'
+    
+    def addon_price_display(self, obj):
+        if obj.addon_price:
+            return format_html('<span style="color: green; font-weight: bold;">R$ {:.2f}</span>', obj.addon_price)
+        return format_html('<span style="color: gray;">Não disponível</span>')
+    addon_price_display.short_description = 'Preço Add-on'
+    
+    def tenant_count(self, obj):
+        count = obj.tenant_products.filter(is_active=True).count()
+        return format_html('<span style="color: blue; font-weight: bold;">{} clientes</span>', count)
+    tenant_count.short_description = 'Clientes Ativos'
 
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ['name', 'slug', 'price', 'is_active', 'sort_order']
+    list_display = ['name', 'slug', 'price_display', 'is_active', 'sort_order', 'tenant_count', 'total_mrr']
     list_filter = ['is_active']
     search_fields = ['name', 'slug', 'description']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'tenant_count', 'total_mrr']
     ordering = ['sort_order', 'price']
     
     fieldsets = (
@@ -49,11 +71,30 @@ class PlanAdmin(admin.ModelAdmin):
         ('Aparência', {
             'fields': ('color',)
         }),
+        ('Estatísticas', {
+            'fields': ('tenant_count', 'total_mrr'),
+            'classes': ('collapse',)
+        }),
         ('Metadados', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
+    
+    def price_display(self, obj):
+        return format_html('<span style="color: green; font-weight: bold;">R$ {:.2f}</span>', obj.price)
+    price_display.short_description = 'Preço'
+    
+    def tenant_count(self, obj):
+        count = obj.tenants.filter(is_active=True).count()
+        return format_html('<span style="color: blue; font-weight: bold;">{} clientes</span>', count)
+    tenant_count.short_description = 'Clientes'
+    
+    def total_mrr(self, obj):
+        count = obj.tenants.filter(is_active=True).count()
+        total = count * obj.price
+        return format_html('<span style="color: green; font-weight: bold;">R$ {:.2f}</span>', total)
+    total_mrr.short_description = 'MRR Total'
 
 
 class PlanProductInline(admin.TabularInline):
