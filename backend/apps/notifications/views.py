@@ -69,7 +69,6 @@ class NotificationTemplateViewSet(viewsets.ModelViewSet):
         return Response(categories)
 
 
-@require_product('flow')
 class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     """ViewSet for WhatsAppInstance."""
     

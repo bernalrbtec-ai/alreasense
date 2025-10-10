@@ -1,23 +1,103 @@
 from django.contrib import admin
+from django.contrib.auth import get_user_model
 from .models import Tenant
+
+User = get_user_model()
+
+
+class TenantUserInline(admin.TabularInline):
+    """Inline para mostrar usuários do tenant"""
+    model = User
+    extra = 0
+    fields = ['email', 'first_name', 'last_name', 'role', 'is_active']
+    readonly_fields = ['email']
+    can_delete = False
+    
+    def has_add_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    list_display = ['name', 'current_plan', 'status', 'ui_access', 'next_billing_date', 'created_at']
+    list_display = ['name', 'current_plan', 'status', 'ui_access', 'products_display', 'created_at']
     list_filter = ['current_plan', 'status', 'ui_access', 'created_at']
     search_fields = ['name']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    readonly_fields = ['id', 'created_at', 'updated_at', 'products_display', 'monthly_total_display']
+    inlines = [TenantUserInline]
     
     fieldsets = (
-        ('Basic Information', {
-            'fields': ('id', 'name', 'current_plan', 'status', 'ui_access')
+        ('📋 Informações Básicas', {
+            'fields': ('id', 'name')
         }),
-        ('Billing', {
-            'fields': ('next_billing_date',)
+        ('💳 Plano e Produtos', {
+            'fields': ('current_plan', 'ui_access', 'products_display', 'monthly_total_display'),
+            'description': 'Configure o plano base. Produtos adicionais (add-ons) são gerenciados em "Produtos dos Tenants".'
         }),
-        ('Timestamps', {
+        ('📊 Status e Billing', {
+            'fields': ('status', 'next_billing_date')
+        }),
+        ('🕐 Timestamps', {
             'fields': ('created_at', 'updated_at'),
             'classes': ('collapse',)
         }),
     )
+    
+    def products_display(self, obj):
+        """Mostra produtos ativos"""
+        if not obj.current_plan:
+            return "Sem produtos"
+        
+        products = obj.active_product_slugs
+        if not products:
+            return "Nenhum produto ativo"
+        
+        product_names = {
+            'flow': '📤 Flow',
+            'sense': '🧠 Sense',
+            'api_public': '🔌 API Pública'
+        }
+        
+        badges = [product_names.get(p, p) for p in products]
+        return " | ".join(badges)
+    products_display.short_description = 'Produtos Ativos'
+    
+    def monthly_total_display(self, obj):
+        """Mostra valor total mensal"""
+        try:
+            total = obj.monthly_total
+            return f"R$ {total:.2f}/mês"
+        except:
+            return "N/A"
+    monthly_total_display.short_description = 'Valor Mensal'
+    
+    def save_model(self, request, obj, form, change):
+        """Ao salvar tenant, criar usuário admin se for novo"""
+        is_new = obj.pk is None
+        super().save_model(request, obj, form, change)
+        
+        if is_new:
+            # Será criado manualmente pelo admin via "Criar Usuário" action
+            pass
+    
+    actions = ['create_user_for_tenant']
+    
+    def create_user_for_tenant(self, request, queryset):
+        """Action para criar usuário para tenant selecionado"""
+        if queryset.count() != 1:
+            self.message_user(request, "Selecione apenas 1 tenant por vez", level='warning')
+            return
+        
+        tenant = queryset.first()
+        
+        # Redirecionar para página de criação de usuário
+        from django.shortcuts import redirect
+        from django.urls import reverse
+        
+        # Por enquanto, mostrar mensagem
+        self.message_user(
+            request, 
+            f"Para criar usuário para '{tenant.name}', use: Admin → Usuários → Adicionar usuário → Selecione o tenant '{tenant.name}'",
+            level='info'
+        )
+    
+    create_user_for_tenant.short_description = "➕ Criar usuário para tenant selecionado"
