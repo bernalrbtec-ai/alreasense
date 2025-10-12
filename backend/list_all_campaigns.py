@@ -25,3 +25,4 @@ for c in Campaign.objects.all().order_by('-created_at'):
 
 
 
+

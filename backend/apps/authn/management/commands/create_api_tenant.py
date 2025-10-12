@@ -62,3 +62,4 @@ class Command(BaseCommand):
         self.stdout.write("\n✅ Tenant API Only criado com sucesso!")
 
 
+

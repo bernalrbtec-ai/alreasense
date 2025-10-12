@@ -41,3 +41,4 @@ print(f"\n✅ Total com estado inferido: {total_with_state}/{total} ({total_with
 
 
 
+

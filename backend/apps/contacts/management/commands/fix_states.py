@@ -57,3 +57,4 @@ class Command(BaseCommand):
             self.stdout.write(f"  • {state_val}: {item['count']} contatos")
 
 
+

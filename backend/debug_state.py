@@ -21,3 +21,4 @@ no_state = Contact.objects.filter(state__isnull=True).count()
 print(f'⚠️ Contatos sem estado: {no_state}')
 
 
+

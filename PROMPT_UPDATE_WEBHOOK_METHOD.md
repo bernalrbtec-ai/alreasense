@@ -307,3 +307,4 @@ Como você vai subir na Railway, sugiro:
 **📄 Criei `PROMPT_UPDATE_WEBHOOK_METHOD.md` com o código completo dos métodos `update_webhook_config()` e `verify_webhook_config()` prontos para implementar quando precisar!**
 
 
+

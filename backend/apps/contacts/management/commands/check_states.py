@@ -28,3 +28,4 @@ class Command(BaseCommand):
             self.stdout.write(f"  • {contact.name} - {contact.phone} - {contact.state}")
 
 
+

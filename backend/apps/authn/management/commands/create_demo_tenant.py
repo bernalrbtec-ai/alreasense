@@ -61,3 +61,4 @@ class Command(BaseCommand):
         self.stdout.write("\n✅ Tenant de demonstração criado com sucesso!")
 
 
+

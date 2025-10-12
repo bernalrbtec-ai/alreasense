@@ -35,3 +35,4 @@ print("\n✅ Reset completo!")
 
 
 
+

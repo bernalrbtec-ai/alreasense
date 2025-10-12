@@ -85,3 +85,4 @@ class Command(BaseCommand):
             self.stdout.write(f"  ✅ Plano criado: {contacts_unlimited.name}")
 
 
+

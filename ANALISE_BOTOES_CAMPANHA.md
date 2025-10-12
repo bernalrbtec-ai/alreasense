@@ -360,3 +360,4 @@ cancelled (Cancelada)
 
 **Quer que eu implemente o botão Cancelar agora ou deixa pro Railway depois?** 🤔
 
+

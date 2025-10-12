@@ -46,3 +46,4 @@ call_command('migrate', verbosity=1)
 print("\n✅ Migrations aplicadas com sucesso!")
 
 
+

@@ -297,3 +297,4 @@ docker-compose exec backend python TESTE_SISTEMA_COMPLETO.py
 
 
 
+

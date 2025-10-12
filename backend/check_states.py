@@ -12,3 +12,4 @@ for item in state_counts:
     print(f'{state_val}: {item["count"]}')
 
 
+

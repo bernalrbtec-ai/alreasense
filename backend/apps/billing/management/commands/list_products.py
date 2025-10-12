@@ -36,3 +36,4 @@ class Command(BaseCommand):
         self.stdout.write("\n✅ Listagem completa!")
 
 
+

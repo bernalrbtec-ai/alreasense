@@ -574,3 +574,4 @@ frontend/src/
 **É isso que você tinha em mente? Qual abordagem prefere?** 🤔
 
 
+

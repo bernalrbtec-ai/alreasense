@@ -549,3 +549,4 @@ tenant = instance.tenant  # ✅ Tenant correto!
 **💡 RESPOSTA: Não salva tudo e depois cruza. Identifica tenant NA HORA (pelo nome da instância) e salva JÁ com dados corretos. Processamento pesado (IA) vai para Celery assíncrono!**
 
 
+

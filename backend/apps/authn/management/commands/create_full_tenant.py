@@ -62,3 +62,4 @@ class Command(BaseCommand):
         self.stdout.write("\n✅ Tenant completo criado com sucesso!")
 
 
+

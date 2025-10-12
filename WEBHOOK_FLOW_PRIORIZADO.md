@@ -632,3 +632,4 @@ Total: ~40ms ✅
 **✅ Foco 100% no rastreamento de campanhas, deixando Sense para depois!**
 
 
+

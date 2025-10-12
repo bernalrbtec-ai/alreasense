@@ -57,3 +57,4 @@ class Command(BaseCommand):
         self.stdout.write("✅ Sistema de limites por plano funcionando")
 
 
+
