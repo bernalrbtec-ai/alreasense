@@ -199,6 +199,44 @@ class TenantViewSet(viewsets.ModelViewSet):
                 print(f"✅ Usuário admin atualizado: {admin_user.email}")
             else:
                 print(f"⚠️ Usuário admin não encontrado para o tenant: {instance.name}")
+                print(f"🔧 Criando novo usuário admin...")
+                
+                # Criar novo usuário admin
+                email = admin_user_data.get('email')
+                if not email:
+                    return Response(
+                        {'error': 'Email é obrigatório para criar usuário admin'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Verificar se o email já existe
+                existing_user = User.objects.filter(email=email).first()
+                if existing_user:
+                    return Response(
+                        {'error': f'Email "{email}" já está em uso'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Criar usuário
+                admin_user = User.objects.create(
+                    email=email,
+                    username=email,
+                    first_name=admin_user_data.get('first_name', ''),
+                    last_name=admin_user_data.get('last_name', ''),
+                    phone=admin_user_data.get('phone', ''),
+                    tenant=instance,
+                    role='admin',
+                    is_staff=False,
+                    is_superuser=False,
+                    is_active=True,
+                )
+                
+                # Definir senha
+                password = admin_user_data.get('password', 'changeme')
+                admin_user.set_password(password)
+                admin_user.save()
+                
+                print(f"✅ Novo usuário admin criado: {admin_user.email}")
         
         return Response(serializer.data)
     
