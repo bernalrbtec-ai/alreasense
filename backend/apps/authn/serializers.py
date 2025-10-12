@@ -8,7 +8,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
     """Custom JWT serializer with tenant and role info."""
     
     # Override to accept 'email' instead of 'username'
-    username_field = 'email'
+    username_field = User.USERNAME_FIELD
+    
+    # Add email field explicitly
+    email = serializers.EmailField(required=True)
     
     def validate(self, attrs):
         # Debug: ver o que está chegando
