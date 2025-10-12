@@ -76,7 +76,8 @@ const billingService = {
   // Produtos do Tenant
   getTenantProducts: async (): Promise<TenantProduct[]> => {
     const response = await api.get('/billing/tenant-products/');
-    return response.data;
+    // A API retorna paginado, então precisamos pegar o array 'results'
+    return response.data.results || response.data;
   },
 
   addAddon: async (productId: string): Promise<TenantProduct> => {

@@ -3,54 +3,80 @@ import { Plus, Edit, Trash2, Check, X } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
-import Toast from '../components/ui/Toast'
-import { useToast } from '../hooks/useToast'
 import { api } from '../lib/api'
+import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
+
+interface Product {
+  id: string
+  name: string
+  slug: string
+  description: string
+  icon: string
+  addon_price: number | null
+  is_active: boolean
+}
+
+interface PlanProduct {
+  id?: string
+  product: Product
+  product_id: string
+  is_included: boolean
+  limit_value: number | null
+  limit_unit: string | null
+}
 
 interface Plan {
   id: string
   name: string
+  slug: string
+  description: string
   price: number
-  billing_cycle_days: number
-  is_free: boolean
-  max_connections: number
-  max_messages_per_month: number
-  features: string[]
   is_active: boolean
+  sort_order: number
+  products: PlanProduct[]
+  product_count: number
+  created_at: string
+  updated_at: string
 }
 
 export default function PlansPage() {
   const [plans, setPlans] = useState<Plan[]>([])
+  const [products, setProducts] = useState<Product[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isSaving, setIsSaving] = useState(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null)
-  const { toast, showToast, hideToast } = useToast()
   const [formData, setFormData] = useState({
     name: '',
+    slug: '',
+    description: '',
     price: 0,
-    billing_cycle_days: 30,
-    is_free: false,
-    max_connections: 1,
-    max_messages_per_month: 1000,
-    features: [''],
+    sort_order: 0,
     is_active: true,
+    plan_products: [] as PlanProduct[],
   })
 
   useEffect(() => {
-    fetchPlans()
+    fetchData()
   }, [])
 
-  const fetchPlans = async () => {
+  const fetchData = async () => {
     try {
       setIsLoading(true)
-      console.log('🔍 Fetching plans from /billing/plans/')
-      const response = await api.get('/billing/plans/')
-      console.log('✅ Plans response:', response.data)
-      setPlans(response.data.results || response.data)
+      const [plansResponse, productsResponse] = await Promise.all([
+        api.get('/billing/plans/'),
+        api.get('/billing/products/')
+      ])
+      
+      console.log('✅ Plans response:', plansResponse.data)
+      console.log('✅ Products response:', productsResponse.data)
+      
+      setPlans(plansResponse.data.results || plansResponse.data)
+      setProducts(productsResponse.data.results || productsResponse.data)
     } catch (error) {
-      console.error('❌ Error fetching plans:', error)
+      console.error('❌ Error fetching data:', error)
       setPlans([])
+      setProducts([])
     } finally {
       setIsLoading(false)
     }
@@ -58,42 +84,25 @@ export default function PlansPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    const toastId = showLoadingToast(editingPlan ? 'atualizar' : 'criar', 'Plano')
+    
     try {
       setIsSaving(true)
-      console.log('🔍 Submitting plan data:', formData)
-      console.log('🔍 Editing plan:', editingPlan)
       
       if (editingPlan) {
-        console.log(`🔍 Updating plan ${editingPlan.id} with PATCH`)
-        const response = await api.patch(`/billing/plans/${editingPlan.id}/`, formData)
-        console.log('✅ Update response:', response.data)
+        await api.patch(`/billing/plans/${editingPlan.id}/`, formData)
+        updateToastSuccess(toastId, 'atualizar', 'Plano')
       } else {
-        console.log('🔍 Creating new plan with POST')
-        const response = await api.post('/billing/plans/', formData)
-        console.log('✅ Create response:', response.data)
+        await api.post('/billing/plans/', formData)
+        updateToastSuccess(toastId, 'criar', 'Plano')
       }
-      await fetchPlans()
+      
+      await fetchData()
       handleCloseModal()
-      showToast(editingPlan ? 'Plano atualizado com sucesso!' : 'Plano criado com sucesso!', 'success')
     } catch (error: any) {
       console.error('❌ Error saving plan:', error)
-      console.error('❌ Error type:', typeof error)
-      console.error('❌ Error message:', error.message)
-      console.error('❌ Error response:', error.response)
-      console.error('❌ Error response data:', error.response?.data)
-      console.error('❌ Error status:', error.response?.status)
-      console.error('❌ Full error object:', JSON.stringify(error, null, 2))
-      
-      let errorMessage = 'Erro ao salvar plano'
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail
-      } else if (error.message) {
-        errorMessage = error.message
-      } else if (error.response?.data) {
-        errorMessage = JSON.stringify(error.response.data)
-      }
-      
-      showToast(errorMessage, 'error')
+      updateToastError(toastId, editingPlan ? 'atualizar' : 'criar', 'Plano', error)
     } finally {
       setIsSaving(false)
     }
@@ -101,13 +110,16 @@ export default function PlansPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Tem certeza que deseja excluir este plano?')) return
+    
+    const toastId = showLoadingToast('excluir', 'Plano')
+    
     try {
       await api.delete(`/billing/plans/${id}/`)
-      await fetchPlans()
-      showToast('Plano excluído com sucesso!', 'success')
+      updateToastSuccess(toastId, 'excluir', 'Plano')
+      await fetchData()
     } catch (error: any) {
       console.error('Error deleting plan:', error)
-      showToast(error.response?.data?.detail || 'Erro ao excluir plano', 'error')
+      updateToastError(toastId, 'excluir', 'Plano', error)
     }
   }
 
@@ -115,13 +127,12 @@ export default function PlansPage() {
     setEditingPlan(plan)
     setFormData({
       name: plan.name,
+      slug: plan.slug,
+      description: plan.description,
       price: plan.price,
-      billing_cycle_days: plan.billing_cycle_days,
-      is_free: plan.is_free,
-      max_connections: plan.max_connections,
-      max_messages_per_month: plan.max_messages_per_month,
-      features: plan.features,
+      sort_order: plan.sort_order,
       is_active: plan.is_active,
+      plan_products: plan.products || [],
     })
     setIsModalOpen(true)
   }
@@ -131,29 +142,61 @@ export default function PlansPage() {
     setEditingPlan(null)
     setFormData({
       name: '',
+      slug: '',
+      description: '',
       price: 0,
-      billing_cycle_days: 30,
-      is_free: false,
-      max_connections: 1,
-      max_messages_per_month: 1000,
-      features: [''],
+      sort_order: 0,
       is_active: true,
+      plan_products: [],
     })
   }
 
-  const addFeature = () => {
-    setFormData({ ...formData, features: [...formData.features, ''] })
+  const generateSlug = (name: string) => {
+    return name
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9\s-]/g, '')
+      .replace(/\s+/g, '-')
+      .replace(/-+/g, '-')
+      .trim()
   }
 
-  const removeFeature = (index: number) => {
-    const newFeatures = formData.features.filter((_, i) => i !== index)
-    setFormData({ ...formData, features: newFeatures })
+  const handleNameChange = (name: string) => {
+    setFormData({ 
+      ...formData, 
+      name,
+      slug: editingPlan ? formData.slug : generateSlug(name)
+    })
   }
 
-  const updateFeature = (index: number, value: string) => {
-    const newFeatures = [...formData.features]
-    newFeatures[index] = value
-    setFormData({ ...formData, features: newFeatures })
+  const addProduct = (productId: string) => {
+    const product = products.find(p => p.id === productId)
+    if (!product) return
+
+    const newPlanProduct: PlanProduct = {
+      product_id: productId,
+      product: product,
+      is_included: true,
+      limit_value: null,
+      limit_unit: null,
+    }
+
+    setFormData({
+      ...formData,
+      plan_products: [...formData.plan_products, newPlanProduct]
+    })
+  }
+
+  const removeProduct = (index: number) => {
+    const newProducts = formData.plan_products.filter((_, i) => i !== index)
+    setFormData({ ...formData, plan_products: newProducts })
+  }
+
+  const updateProduct = (index: number, field: keyof PlanProduct, value: any) => {
+    const newProducts = [...formData.plan_products]
+    newProducts[index] = { ...newProducts[index], [field]: value }
+    setFormData({ ...formData, plan_products: newProducts })
   }
 
   if (isLoading && (!Array.isArray(plans) || plans.length === 0)) {
@@ -219,22 +262,28 @@ export default function PlansPage() {
             <div className="space-y-3">
               <div className="text-sm text-gray-600 space-y-1">
                 <p className="font-medium">
-                  📱 Conexões: {plan.max_connections === -1 ? 'Ilimitadas' : plan.max_connections}
-                </p>
-                <p className="font-medium">
-                  💬 Mensagens: {plan.max_messages_per_month === -1 ? 'Ilimitadas' : (plan.max_messages_per_month || 0).toLocaleString()}/{plan.billing_cycle_days} dias
+                  📦 Produtos: {plan.product_count} incluído(s)
                 </p>
               </div>
               
               <div className="pt-3 border-t border-gray-200">
-                <ul className="space-y-2">
-                  {Array.isArray(plan.features) && plan.features.map((feature, index) => (
-                    <li key={index} className="flex items-start text-sm text-gray-600">
-                      <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0 mt-0.5" />
-                      {feature}
-                    </li>
-                  ))}
-                </ul>
+                <div className="space-y-2">
+                  {Array.isArray(plan.products) && plan.products.length > 0 ? (
+                    plan.products.map((planProduct, index) => (
+                      <div key={index} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center">
+                          <Check className="h-4 w-4 text-green-500 mr-2 flex-shrink-0" />
+                          <span className="text-gray-600">{planProduct.product.name}</span>
+                        </div>
+                        <span className="text-gray-500 font-medium">
+                          {planProduct.limit_value || 0} instâncias
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500">Nenhum produto incluído</p>
+                  )}
+                </div>
               </div>
             </div>
             
@@ -315,11 +364,41 @@ export default function PlansPage() {
                           id="name"
                           required
                           value={formData.name}
-                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          onChange={(e) => handleNameChange(e.target.value)}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
                       </div>
 
+                      <div>
+                        <label htmlFor="slug" className="block text-sm font-medium text-gray-700">
+                          Slug (identificador único)
+                        </label>
+                        <input
+                          type="text"
+                          id="slug"
+                          required
+                          value={formData.slug}
+                          onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                        Descrição
+                      </label>
+                      <textarea
+                        id="description"
+                        rows={3}
+                        required
+                        value={formData.description}
+                        onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
                         <label htmlFor="price" className="block text-sm font-medium text-gray-700">
                           Preço (R$)
@@ -333,112 +412,162 @@ export default function PlansPage() {
                           value={formData.price}
                           onChange={(e) => setFormData({ ...formData, price: parseFloat(e.target.value) })}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          disabled={formData.is_free}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="billing_cycle_days" className="block text-sm font-medium text-gray-700">
-                          Ciclo de Cobrança (dias)
-                        </label>
-                        <input
-                          type="number"
-                          id="billing_cycle_days"
-                          min="1"
-                          required
-                          value={formData.billing_cycle_days}
-                          onChange={(e) => setFormData({ ...formData, billing_cycle_days: parseInt(e.target.value) })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          disabled={formData.is_free}
-                        />
-                        <p className="mt-1 text-xs text-gray-500">
-                          Padrão: 30 dias (mensal)
-                        </p>
-                      </div>
-
-                      <div className="flex items-center pt-6">
-                        <input
-                          type="checkbox"
-                          id="is_free"
-                          checked={formData.is_free}
-                          onChange={(e) => {
-                            const isFree = e.target.checked
-                            setFormData({ 
-                              ...formData, 
-                              is_free: isFree,
-                              price: isFree ? 0 : formData.price,
-                            })
-                          }}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <label htmlFor="is_free" className="ml-2 block text-sm text-gray-900">
-                          Plano Gratuito (não gera cobrança)
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label htmlFor="max_connections" className="block text-sm font-medium text-gray-700">
-                          Máx. Conexões (-1 = ilimitado)
-                        </label>
-                        <input
-                          type="number"
-                          id="max_connections"
-                          min="-1"
-                          required
-                          value={formData.max_connections}
-                          onChange={(e) => setFormData({ ...formData, max_connections: parseInt(e.target.value) })}
-                          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
                       </div>
 
                       <div>
-                        <label htmlFor="max_messages" className="block text-sm font-medium text-gray-700">
-                          Máx. Mensagens/Mês (-1 = ilimitado)
+                        <label htmlFor="sort_order" className="block text-sm font-medium text-gray-700">
+                          Ordem de Exibição
                         </label>
                         <input
                           type="number"
-                          id="max_messages"
-                          min="-1"
-                          required
-                          value={formData.max_messages_per_month}
-                          onChange={(e) => setFormData({ ...formData, max_messages_per_month: parseInt(e.target.value) })}
+                          id="sort_order"
+                          min="0"
+                          value={formData.sort_order}
+                          onChange={(e) => setFormData({ ...formData, sort_order: parseInt(e.target.value) })}
                           className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         />
                       </div>
                     </div>
 
+                    {/* Seção de Produtos */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Funcionalidades
+                        Produtos Incluídos
                       </label>
-                      <div className="space-y-2">
-                        {Array.isArray(formData.features) && formData.features.map((feature, index) => (
-                          <div key={index} className="flex gap-2">
-                            <input
-                              type="text"
-                              value={feature}
-                              onChange={(e) => updateFeature(index, e.target.value)}
-                              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                              placeholder="Digite uma funcionalidade"
-                            />
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => removeFeature(index)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                      <div className="space-y-3">
+                        {formData.plan_products.map((planProduct, index) => (
+                          <div key={index} className="border border-gray-200 rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <input
+                                  type="checkbox"
+                                  checked={planProduct.is_included}
+                                  onChange={(e) => updateProduct(index, 'is_included', e.target.checked)}
+                                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                />
+                                <span className="font-medium">{planProduct.product.name}</span>
+                              </div>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeProduct(index)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </div>
+                            
+                            {planProduct.is_included && (
+                              <div className="space-y-3">
+                                {/* Limite de Instâncias - Todos os produtos */}
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                                    Limite de Instâncias
+                                  </label>
+                                  <div className="grid grid-cols-2 gap-4">
+                                    <input
+                                      type="number"
+                                      min="1"
+                                      required
+                                      value={planProduct.limit_value || ''}
+                                      onChange={(e) => updateProduct(index, 'limit_value', e.target.value ? parseInt(e.target.value) : null)}
+                                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                      placeholder="Ex: 5"
+                                    />
+                                    <input
+                                      type="text"
+                                      value="instâncias"
+                                      readOnly
+                                      className="block w-full rounded-md border-gray-300 bg-gray-50 text-sm text-gray-500"
+                                    />
+                                  </div>
+                                  <p className="text-xs text-gray-500 mt-1">
+                                    Número máximo de instâncias que o cliente pode cadastrar para este produto
+                                  </p>
+                                </div>
+                                
+                                {/* Limites específicos por produto */}
+                                {planProduct.product.slug === 'sense' && (
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                      Limite de Análises (Adicional)
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={planProduct.limit_unit || ''}
+                                        onChange={(e) => updateProduct(index, 'limit_unit', e.target.value)}
+                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                        placeholder="Ex: 1000"
+                                      />
+                                      <input
+                                        type="text"
+                                        value="análises/mês"
+                                        readOnly
+                                        className="block w-full rounded-md border-gray-300 bg-gray-50 text-sm text-gray-500"
+                                      />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Número máximo de análises de sentimento por mês
+                                    </p>
+                                  </div>
+                                )}
+                                
+                                {planProduct.product.slug === 'api_public' && (
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                                      Limite de Requests (Adicional)
+                                    </label>
+                                    <div className="grid grid-cols-2 gap-4">
+                                      <input
+                                        type="number"
+                                        min="1"
+                                        value={planProduct.limit_unit || ''}
+                                        onChange={(e) => updateProduct(index, 'limit_unit', e.target.value)}
+                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                                        placeholder="Ex: 10000"
+                                      />
+                                      <input
+                                        type="text"
+                                        value="requests/dia"
+                                        readOnly
+                                        className="block w-full rounded-md border-gray-300 bg-gray-50 text-sm text-gray-500"
+                                      />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                      Número máximo de requests à API por dia
+                                    </p>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         ))}
-                        <Button type="button" variant="outline" onClick={addFeature} className="w-full">
-                          <Plus className="h-4 w-4 mr-2" />
-                          Adicionar Funcionalidade
-                        </Button>
+                        
+                        {/* Adicionar Produto */}
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
+                          <select
+                            onChange={(e) => {
+                              if (e.target.value) {
+                                addProduct(e.target.value)
+                                e.target.value = ''
+                              }
+                            }}
+                            className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                          >
+                            <option value="">Selecionar produto para adicionar...</option>
+                            {products
+                              .filter(product => !formData.plan_products.some(pp => pp.product_id === product.id))
+                              .map(product => (
+                                <option key={product.id} value={product.id}>
+                                  {product.name}
+                                </option>
+                              ))}
+                          </select>
+                        </div>
                       </div>
                     </div>
 
@@ -472,14 +601,6 @@ export default function PlansPage() {
           </div>
         </div>
       )}
-
-      {/* Toast Notification */}
-      <Toast
-        show={toast.show}
-        message={toast.message}
-        type={toast.type}
-        onClose={hideToast}
-      />
     </div>
   )
 }

@@ -1,12 +1,14 @@
-from django.urls import path, include
+"""
+URLs para o módulo de contatos
+"""
+
 from rest_framework.routers import DefaultRouter
-from apps.contacts.views import ContactViewSet, ContactGroupViewSet
+from .views import ContactViewSet, TagViewSet, ContactListViewSet, ContactImportViewSet
 
 router = DefaultRouter()
 router.register(r'contacts', ContactViewSet, basename='contact')
-router.register(r'groups', ContactGroupViewSet, basename='contact-group')
+router.register(r'tags', TagViewSet, basename='tag')
+router.register(r'lists', ContactListViewSet, basename='contact-list')
+router.register(r'imports', ContactImportViewSet, basename='contact-import')
 
-urlpatterns = [
-    path('', include(router.urls)),
-]
-
+urlpatterns = router.urls

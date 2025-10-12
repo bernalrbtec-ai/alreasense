@@ -1,8 +1,10 @@
-from django.urls import path
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
 from . import views
 
+router = DefaultRouter()
+router.register(r'tenants', views.TenantViewSet, basename='tenant')
+
 urlpatterns = [
-    path('tenants/', views.TenantListView.as_view(), name='tenant-list'),
-    path('me/', views.TenantDetailView.as_view(), name='tenant-detail'),
-    path('<uuid:tenant_id>/metrics/', views.tenant_metrics, name='tenant-metrics'),
+    path('', include(router.urls)),
 ]

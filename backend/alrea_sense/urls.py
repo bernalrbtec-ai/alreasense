@@ -37,7 +37,7 @@ urlpatterns = [
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/contacts/', include('apps.contacts.urls')),
     path('api/campaigns/', include('apps.campaigns.urls')),
-    path('api/webhooks/evolution/', include('apps.connections.urls')),
+    # Note: webhook Evolution está em apps.connections.urls (path: webhooks/evolution/)
 ]
 
 # Serve static and media files

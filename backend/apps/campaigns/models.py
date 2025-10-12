@@ -1,395 +1,661 @@
 from django.db import models
-from django.core.validators import MinValueValidator, MaxValueValidator
 from django.utils import timezone
-from django.core.exceptions import ValidationError
 import uuid
 
 
 class Campaign(models.Model):
-    """Campanha de disparo em massa"""
+    """
+    Campanha de disparo em massa via WhatsApp
+    """
     
-    class Status(models.TextChoices):
-        DRAFT = 'draft', 'Rascunho'
-        ACTIVE = 'active', 'Ativa'
-        PAUSED = 'paused', 'Pausada'
-        COMPLETED = 'completed', 'Concluída'
-        CANCELLED = 'cancelled', 'Cancelada'
+    ROTATION_MODE_CHOICES = [
+        ('round_robin', 'Round Robin'),
+        ('balanced', 'Balanceado'),
+        ('intelligent', 'Inteligente'),
+    ]
     
-    class ScheduleType(models.TextChoices):
-        IMMEDIATE = 'immediate', 'Imediato'
-        BUSINESS_DAYS = 'business_days', 'Apenas Dias Úteis'
-        BUSINESS_HOURS = 'business_hours', 'Horário Comercial'
-        CUSTOM_PERIOD = 'custom_period', 'Período Personalizado'
+    STATUS_CHOICES = [
+        ('draft', 'Rascunho'),
+        ('scheduled', 'Agendada'),
+        ('running', 'Em Execução'),
+        ('paused', 'Pausada'),
+        ('completed', 'Concluída'),
+        ('cancelled', 'Cancelada'),
+    ]
     
     # Identificação
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey(
-        'tenancy.Tenant',
-        on_delete=models.CASCADE,
-        related_name='campaigns'
-    )
-    name = models.CharField(max_length=200)
-    description = models.TextField(blank=True)
+    tenant = models.ForeignKey('tenancy.Tenant', on_delete=models.CASCADE, related_name='campaigns')
+    name = models.CharField(max_length=255, verbose_name='Nome da Campanha')
+    description = models.TextField(blank=True, null=True, verbose_name='Descrição')
     
-    # Estado
-    status = models.CharField(
-        max_length=20,
-        choices=Status.choices,
-        default=Status.DRAFT,
-        db_index=True
+    # Configurações
+    rotation_mode = models.CharField(
+        max_length=20, 
+        choices=ROTATION_MODE_CHOICES, 
+        default='intelligent',
+        verbose_name='Modo de Rotação'
     )
-    is_paused = models.BooleanField(default=False, db_index=True)
     
-    # Relacionamentos
-    instance = models.ForeignKey(
+    # Instâncias selecionadas para rotação
+    instances = models.ManyToManyField(
         'notifications.WhatsAppInstance',
-        on_delete=models.PROTECT,
-        related_name='campaigns'
+        related_name='campaigns',
+        verbose_name='Instâncias'
+    )
+    
+    # Lista de contatos
+    contact_list = models.ForeignKey(
+        'contacts.ContactList',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaigns',
+        verbose_name='Lista de Contatos'
+    )
+    
+    # Contatos individuais (se não usar lista)
+    contacts = models.ManyToManyField(
+        'contacts.Contact',
+        through='CampaignContact',
+        related_name='campaigns',
+        verbose_name='Contatos'
+    )
+    
+    # Configurações de envio
+    interval_min = models.IntegerField(default=25, verbose_name='Intervalo Mínimo (seg)')
+    interval_max = models.IntegerField(default=50, verbose_name='Intervalo Máximo (seg)')
+    daily_limit_per_instance = models.IntegerField(
+        default=100, 
+        verbose_name='Limite Diário por Instância'
+    )
+    pause_on_health_below = models.IntegerField(
+        default=30,
+        verbose_name='Pausar se Health Score abaixo de'
     )
     
     # Agendamento
-    schedule_type = models.CharField(
+    scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Agendada Para')
+    started_at = models.DateTimeField(null=True, blank=True, verbose_name='Iniciada Em')
+    completed_at = models.DateTimeField(null=True, blank=True, verbose_name='Concluída Em')
+    
+    # Status
+    status = models.CharField(
         max_length=20,
-        choices=ScheduleType.choices,
-        default=ScheduleType.IMMEDIATE
+        choices=STATUS_CHOICES,
+        default='draft',
+        verbose_name='Status'
     )
-    morning_start = models.TimeField(null=True, blank=True)
-    morning_end = models.TimeField(null=True, blank=True)
-    afternoon_start = models.TimeField(null=True, blank=True)
-    afternoon_end = models.TimeField(null=True, blank=True)
-    skip_weekends = models.BooleanField(default=True)
-    skip_holidays = models.BooleanField(default=True)
     
     # Contadores
-    total_contacts = models.IntegerField(default=0)
-    current_contact_index = models.IntegerField(default=0)
-    sent_messages = models.IntegerField(default=0)
-    failed_messages = models.IntegerField(default=0)
-    responded_count = models.IntegerField(default=0)
+    total_contacts = models.IntegerField(default=0, verbose_name='Total de Contatos')
+    messages_sent = models.IntegerField(default=0, verbose_name='Mensagens Enviadas')
+    messages_delivered = models.IntegerField(default=0, verbose_name='Mensagens Entregues')
+    messages_read = models.IntegerField(default=0, verbose_name='Mensagens Lidas')
+    messages_failed = models.IntegerField(default=0, verbose_name='Mensagens com Erro')
     
-    # Controle
-    next_scheduled_send = models.DateTimeField(null=True, blank=True, db_index=True)
-    last_send_at = models.DateTimeField(null=True, blank=True)
-    last_heartbeat = models.DateTimeField(null=True, blank=True)
-    is_processing = models.BooleanField(default=False)
+    # Rotação (para round robin)
+    current_instance_index = models.IntegerField(default=0, verbose_name='Índice da Instância Atual')
     
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    started_at = models.DateTimeField(null=True, blank=True)
-    paused_at = models.DateTimeField(null=True, blank=True)
-    resumed_at = models.DateTimeField(null=True, blank=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
-    cancelled_at = models.DateTimeField(null=True, blank=True)
+    # Controle de timing
+    last_message_sent_at = models.DateTimeField(null=True, blank=True, verbose_name='Última Mensagem Enviada Em')
+    next_message_scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Próxima Mensagem Agendada Para')
+    next_contact_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome do Próximo Contato')
+    next_contact_phone = models.CharField(max_length=20, null=True, blank=True, verbose_name='Telefone do Próximo Contato')
     
-    # Auditoria
+    # Metadados
     created_by = models.ForeignKey(
         'authn.User',
         on_delete=models.SET_NULL,
         null=True,
-        related_name='campaigns_created'
+        related_name='created_campaigns',
+        verbose_name='Criado Por'
     )
-    started_by = models.ForeignKey(
-        'authn.User',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name='campaigns_started'
-    )
-    
-    # Erro tracking
-    last_error = models.TextField(blank=True)
-    last_error_at = models.DateTimeField(null=True, blank=True)
-    auto_pause_reason = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado Em')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado Em')
     
     class Meta:
         db_table = 'campaigns_campaign'
         verbose_name = 'Campanha'
         verbose_name_plural = 'Campanhas'
         ordering = ['-created_at']
-        
-        indexes = [
-            models.Index(fields=['tenant', 'status', 'created_at']),
-            models.Index(fields=['status', 'is_paused', 'next_scheduled_send']),
-            models.Index(fields=['instance', 'status']),
-        ]
-        
-        constraints = [
-            models.UniqueConstraint(
-                fields=['instance'],
-                condition=models.Q(status='active'),
-                name='unique_active_campaign_per_instance'
-            ),
-        ]
     
     def __str__(self):
-        return f"{self.name} ({self.get_status_display()}) - {self.tenant.name}"
+        return f"{self.name} ({self.get_status_display()})"
+    
+    @property
+    def success_rate(self):
+        """Taxa de sucesso da campanha"""
+        if self.messages_sent == 0:
+            return 0
+        return (self.messages_delivered / self.messages_sent) * 100
+    
+    @property
+    def read_rate(self):
+        """Taxa de leitura"""
+        if self.messages_delivered == 0:
+            return 0
+        return (self.messages_read / self.messages_delivered) * 100
     
     @property
     def progress_percentage(self):
+        """Progresso da campanha"""
         if self.total_contacts == 0:
             return 0
-        return round((self.sent_messages / self.total_contacts) * 100, 1)
+        return (self.messages_sent / self.total_contacts) * 100
     
-    @property
-    def response_rate(self):
-        if self.sent_messages == 0:
-            return 0
-        return round((self.responded_count / self.sent_messages) * 100, 1)
-    
-    @property
-    def can_be_started(self):
-        return (
-            self.status == self.Status.DRAFT and
-            self.total_contacts > 0 and
-            self.messages.filter(is_active=True).exists() and
-            self.instance.connection_state == 'open'
-        )
-    
-    def start(self, user):
-        if not self.can_be_started:
-            raise ValidationError("Campanha não pode ser iniciada")
-        
-        self.status = self.Status.ACTIVE
-        self.is_paused = False
+    def start(self):
+        """Inicia a campanha"""
+        self.status = 'running'
         self.started_at = timezone.now()
-        self.started_by = user
-        self.next_scheduled_send = timezone.now() + timezone.timedelta(seconds=10)
-        self.save(update_fields=['status', 'is_paused', 'started_at', 'started_by', 'next_scheduled_send'])
-        
-        CampaignLog.objects.create(
-            campaign=self,
-            user=user,
-            level=CampaignLog.Level.INFO,
-            event_type='campaign_started',
-            message=f'Campanha iniciada por {user.email}',
-            metadata={'total_contacts': self.total_contacts}
-        )
+        self.save()
     
-    def pause(self, user, reason=''):
-        self.is_paused = True
-        self.paused_at = timezone.now()
-        self.save(update_fields=['is_paused', 'paused_at'])
-        
-        CampaignLog.objects.create(
-            campaign=self,
-            user=user,
-            level=CampaignLog.Level.WARNING,
-            event_type='campaign_paused',
-            message=f'Campanha pausada por {user.email}',
-            metadata={'reason': reason}
-        )
+    def pause(self):
+        """Pausa a campanha"""
+        self.status = 'paused'
+        self.next_message_scheduled_at = None
+        self.next_contact_name = None
+        self.next_contact_phone = None
+        self.save()
     
-    def resume(self, user):
-        self.is_paused = False
-        self.resumed_at = timezone.now()
-        self.next_scheduled_send = timezone.now() + timezone.timedelta(seconds=10)
-        self.auto_pause_reason = ''
-        self.save(update_fields=['is_paused', 'resumed_at', 'next_scheduled_send', 'auto_pause_reason'])
-        
-        CampaignLog.objects.create(
-            campaign=self,
-            user=user,
-            level=CampaignLog.Level.INFO,
-            event_type='campaign_resumed',
-            message=f'Campanha retomada por {user.email}'
-        )
+    def resume(self):
+        """Resume a campanha"""
+        self.status = 'running'
+        # next_message_scheduled_at será definido no próximo envio
+        self.save()
     
-    def cancel(self, user, reason=''):
-        self.status = self.Status.CANCELLED
-        self.is_paused = True
-        self.cancelled_at = timezone.now()
-        self.save(update_fields=['status', 'is_paused', 'cancelled_at'])
-        
-        CampaignLog.objects.create(
-            campaign=self,
-            user=user,
-            level=CampaignLog.Level.ERROR,
-            event_type='campaign_cancelled',
-            message=f'Campanha cancelada por {user.email}',
-            metadata={'reason': reason, 'sent_messages': self.sent_messages}
-        )
+    def complete(self):
+        """Completa a campanha"""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.next_message_scheduled_at = None
+        self.next_contact_name = None
+        self.next_contact_phone = None
+        self.save()
+    
+    def cancel(self):
+        """Cancela a campanha"""
+        self.status = 'cancelled'
+        self.next_message_scheduled_at = None
+        self.next_contact_name = None
+        self.next_contact_phone = None
+        self.save()
 
 
 class CampaignMessage(models.Model):
-    """Mensagem de campanha (até 5 por campanha)"""
+    """
+    Variações de mensagem para a campanha
+    """
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='messages')
+    content = models.TextField(verbose_name='Conteúdo da Mensagem')
+    order = models.IntegerField(default=0, verbose_name='Ordem')
+    times_used = models.IntegerField(default=0, verbose_name='Vezes Utilizada')
     
-    message_text = models.TextField()
-    order = models.PositiveIntegerField(
-        validators=[MinValueValidator(1), MaxValueValidator(5)]
+    # Mídia (opcional)
+    media_url = models.URLField(blank=True, null=True, verbose_name='URL da Mídia')
+    media_type = models.CharField(
+        max_length=20,
+        choices=[
+            ('image', 'Imagem'),
+            ('video', 'Vídeo'),
+            ('audio', 'Áudio'),
+            ('document', 'Documento'),
+        ],
+        blank=True,
+        null=True,
+        verbose_name='Tipo de Mídia'
     )
-    is_active = models.BooleanField(default=True)
-    
-    # Métricas
-    times_sent = models.IntegerField(default=0)
-    response_count = models.IntegerField(default=0)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'campaigns_message'
-        ordering = ['campaign', 'order']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['campaign', 'order'],
-                name='unique_message_order_per_campaign'
-            )
-        ]
+        verbose_name = 'Mensagem da Campanha'
+        verbose_name_plural = 'Mensagens da Campanha'
+        ordering = ['order']
     
     def __str__(self):
-        return f"Mensagem {self.order} - {self.campaign.name}"
-    
-    @property
-    def response_rate(self):
-        if self.times_sent == 0:
-            return 0
-        return round((self.response_count / self.times_sent) * 100, 1)
-    
-    def render_variables(self, contact, current_datetime=None):
-        if current_datetime is None:
-            current_datetime = timezone.now()
-        
-        hour = current_datetime.hour
-        if hour < 12:
-            saudacao = "Bom dia"
-        elif hour < 18:
-            saudacao = "Boa tarde"
-        else:
-            saudacao = "Boa noite"
-        
-        dias = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 
-                'Sexta-feira', 'Sábado', 'Domingo']
-        dia_semana = dias[current_datetime.weekday()]
-        
-        rendered = self.message_text
-        rendered = rendered.replace('{{nome}}', contact.name or '')
-        rendered = rendered.replace('{{quem_indicou}}', contact.quem_indicou or '')
-        rendered = rendered.replace('{{saudacao}}', saudacao)
-        rendered = rendered.replace('{{dia_semana}}', dia_semana)
-        
-        if hasattr(contact, 'custom_vars') and contact.custom_vars:
-            for key, value in contact.custom_vars.items():
-                rendered = rendered.replace(f'{{{{{key}}}}}', str(value))
-        
-        return rendered
+        return f"Mensagem #{self.order} - {self.campaign.name}"
 
 
 class CampaignContact(models.Model):
-    """Relacionamento N:N entre Campaign e Contact"""
+    """
+    Relacionamento entre campanha e contato com status de envio
+    """
     
-    class Status(models.TextChoices):
-        PENDING = 'pending', 'Pendente'
-        SENT = 'sent', 'Enviada'
-        DELIVERED = 'delivered', 'Entregue'
-        READ = 'read', 'Lida'
-        RESPONDED = 'responded', 'Respondeu'
-        FAILED = 'failed', 'Falhou'
-        SKIPPED = 'skipped', 'Pulado'
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('sending', 'Enviando'),
+        ('sent', 'Enviada'),
+        ('delivered', 'Entregue'),
+        ('read', 'Lida'),
+        ('failed', 'Falhou'),
+    ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='campaign_contacts')
-    contact = models.ForeignKey('contacts.Contact', on_delete=models.CASCADE, related_name='campaigns_participated')
+    contact = models.ForeignKey('contacts.Contact', on_delete=models.CASCADE, related_name='campaign_contacts')
     
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING, db_index=True)
-    message_sent = models.ForeignKey(CampaignMessage, on_delete=models.SET_NULL, null=True, blank=True)
+    # Instância usada para enviar
+    instance_used = models.ForeignKey(
+        'notifications.WhatsAppInstance',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaign_messages_sent'
+    )
     
-    sent_at = models.DateTimeField(null=True, blank=True)
-    delivered_at = models.DateTimeField(null=True, blank=True)
-    read_at = models.DateTimeField(null=True, blank=True)
-    responded_at = models.DateTimeField(null=True, blank=True)
+    # Mensagem usada
+    message_used = models.ForeignKey(
+        CampaignMessage,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contacts_sent'
+    )
     
-    evolution_message_id = models.CharField(max_length=255, blank=True)
-    error_message = models.TextField(blank=True)
-    retry_count = models.IntegerField(default=0)
+    # Status
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    # Timestamps
+    scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Agendado Para')
+    sent_at = models.DateTimeField(null=True, blank=True, verbose_name='Enviado Em')
+    delivered_at = models.DateTimeField(null=True, blank=True, verbose_name='Entregue Em')
+    read_at = models.DateTimeField(null=True, blank=True, verbose_name='Lido Em')
+    failed_at = models.DateTimeField(null=True, blank=True, verbose_name='Falhou Em')
+    
+    # Erro (se houver)
+    error_message = models.TextField(blank=True, null=True, verbose_name='Mensagem de Erro')
+    
+    # ID da mensagem no WhatsApp
+    whatsapp_message_id = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Tentativas
+    retry_count = models.IntegerField(default=0, verbose_name='Tentativas')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'campaigns_contact'
-        indexes = [
-            models.Index(fields=['campaign', 'status']),
-        ]
-        constraints = [
-            models.UniqueConstraint(
-                fields=['campaign', 'contact'],
-                name='unique_contact_per_campaign'
-            )
-        ]
+        verbose_name = 'Contato da Campanha'
+        verbose_name_plural = 'Contatos da Campanha'
+        unique_together = ['campaign', 'contact']
+        ordering = ['created_at']
     
     def __str__(self):
-        return f"{self.contact.name} - {self.campaign.name}"
+        return f"{self.contact.name} - {self.campaign.name} ({self.get_status_display()})"
 
 
 class CampaignLog(models.Model):
-    """Log detalhado de eventos"""
+    """
+    Log detalhado de todas as ações da campanha
+    Para investigação, análise e criação de indicadores
+    """
     
-    class Level(models.TextChoices):
-        DEBUG = 'debug', 'Debug'
-        INFO = 'info', 'Info'
-        SUCCESS = 'success', 'Sucesso'
-        WARNING = 'warning', 'Aviso'
-        ERROR = 'error', 'Erro'
+    LOG_TYPE_CHOICES = [
+        ('created', 'Campanha Criada'),
+        ('started', 'Campanha Iniciada'),
+        ('paused', 'Campanha Pausada'),
+        ('resumed', 'Campanha Retomada'),
+        ('completed', 'Campanha Concluída'),
+        ('cancelled', 'Campanha Cancelada'),
+        ('instance_selected', 'Instância Selecionada'),
+        ('instance_paused', 'Instância Pausada'),
+        ('instance_resumed', 'Instância Retomada'),
+        ('message_sent', 'Mensagem Enviada'),
+        ('message_delivered', 'Mensagem Entregue'),
+        ('message_read', 'Mensagem Lida'),
+        ('message_failed', 'Mensagem Falhou'),
+        ('rotation_changed', 'Modo de Rotação Alterado'),
+        ('contact_added', 'Contato Adicionado'),
+        ('contact_removed', 'Contato Removido'),
+        ('limit_reached', 'Limite Atingido'),
+        ('health_issue', 'Problema de Saúde'),
+        ('error', 'Erro'),
+    ]
+    
+    SEVERITY_CHOICES = [
+        ('info', 'Informação'),
+        ('warning', 'Aviso'),
+        ('error', 'Erro'),
+        ('critical', 'Crítico'),
+    ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     campaign = models.ForeignKey(Campaign, on_delete=models.CASCADE, related_name='logs')
-    contact = models.ForeignKey('contacts.Contact', on_delete=models.SET_NULL, null=True, blank=True)
-    user = models.ForeignKey('authn.User', on_delete=models.SET_NULL, null=True, blank=True)
     
-    level = models.CharField(max_length=20, choices=Level.choices, default=Level.INFO, db_index=True)
-    event_type = models.CharField(max_length=50, db_index=True)
-    message = models.TextField()
-    metadata = models.JSONField(default=dict, blank=True)
+    # Tipo e severidade
+    log_type = models.CharField(max_length=30, choices=LOG_TYPE_CHOICES, db_index=True)
+    severity = models.CharField(max_length=10, choices=SEVERITY_CHOICES, default='info', db_index=True)
     
+    # Contexto
+    message = models.TextField(verbose_name='Mensagem do Log')
+    details = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Detalhes (JSON)',
+        help_text='Dados estruturados: instance_id, contact_id, error_code, etc.'
+    )
+    
+    # Relacionamentos opcionais (para facilitar queries)
+    instance = models.ForeignKey(
+        'notifications.WhatsAppInstance',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaign_logs'
+    )
+    contact = models.ForeignKey(
+        'contacts.Contact',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaign_logs'
+    )
+    campaign_contact = models.ForeignKey(
+        CampaignContact,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='logs'
+    )
+    
+    # Performance/Timing
+    duration_ms = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Duração (ms)',
+        help_text='Tempo de execução da operação'
+    )
+    
+    # Request/Response (para debug)
+    request_data = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Dados da Requisição',
+        help_text='Payload enviado para API'
+    )
+    response_data = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Dados da Resposta',
+        help_text='Resposta recebida da API'
+    )
+    http_status = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Status HTTP'
+    )
+    
+    # Métricas no momento do log
+    campaign_progress = models.FloatField(
+        null=True,
+        blank=True,
+        verbose_name='Progresso da Campanha (%)',
+        help_text='Snapshot do progresso quando log foi criado'
+    )
+    instance_health_score = models.IntegerField(
+        null=True,
+        blank=True,
+        verbose_name='Health Score da Instância',
+        help_text='Snapshot do health quando log foi criado'
+    )
+    
+    # Metadados
+    created_by = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='campaign_logs_created'
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
     
     class Meta:
         db_table = 'campaigns_log'
+        verbose_name = 'Log da Campanha'
+        verbose_name_plural = 'Logs das Campanhas'
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['campaign', '-created_at']),
+            models.Index(fields=['log_type', '-created_at']),
+            models.Index(fields=['severity', '-created_at']),
+            models.Index(fields=['instance', '-created_at']),
         ]
     
     def __str__(self):
-        return f"[{self.level.upper()}] {self.campaign.name} - {self.message[:50]}"
-
-
-class Holiday(models.Model):
-    """Feriados"""
+        return f"[{self.get_severity_display()}] {self.get_log_type_display()} - {self.campaign.name}"
     
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    tenant = models.ForeignKey('tenancy.Tenant', on_delete=models.CASCADE, null=True, blank=True, related_name='holidays')
+    @staticmethod
+    def log_campaign_created(campaign, user=None):
+        """Log de criação de campanha"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='created',
+            severity='info',
+            message=f'Campanha "{campaign.name}" criada',
+            details={
+                'rotation_mode': campaign.rotation_mode,
+                'total_contacts': campaign.total_contacts,
+                'instances_count': campaign.instances.count(),
+            },
+            created_by=user
+        )
     
-    date = models.DateField(db_index=True)
-    name = models.CharField(max_length=200)
-    is_national = models.BooleanField(default=False)
-    is_active = models.BooleanField(default=True)
+    @staticmethod
+    def log_campaign_started(campaign, user=None):
+        """Log de início de campanha"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='started',
+            severity='info',
+            message=f'Campanha "{campaign.name}" iniciada',
+            details={
+                'total_contacts': campaign.total_contacts,
+                'rotation_mode': campaign.rotation_mode,
+            },
+            created_by=user
+        )
     
-    created_at = models.DateTimeField(auto_now_add=True)
+    @staticmethod
+    def log_campaign_paused(campaign, user=None):
+        """Log de pausa de campanha"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='paused',
+            severity='info',
+            message=f'Campanha "{campaign.name}" pausada',
+            details={
+                'total_contacts': campaign.total_contacts,
+                'messages_sent': campaign.messages_sent,
+                'messages_delivered': campaign.messages_delivered,
+            },
+            created_by=user
+        )
     
-    class Meta:
-        db_table = 'campaigns_holiday'
-        ordering = ['date']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['date', 'tenant'],
-                name='unique_holiday_per_date_tenant'
-            )
-        ]
+    @staticmethod
+    def log_campaign_resumed(campaign, user=None):
+        """Log de retomada de campanha"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='resumed',
+            severity='info',
+            message=f'Campanha "{campaign.name}" retomada',
+            details={
+                'total_contacts': campaign.total_contacts,
+                'messages_sent': campaign.messages_sent,
+                'messages_delivered': campaign.messages_delivered,
+            },
+            created_by=user
+        )
     
-    def __str__(self):
-        return f"{self.name} ({self.date})"
+    @staticmethod
+    def log_message_sent(campaign, instance, contact, campaign_contact, duration_ms=None, message_content=None):
+        """Log de mensagem enviada"""
+        details = {
+            'contact_id': str(contact.id),
+            'contact_phone': contact.phone,
+            'instance_id': str(instance.id),
+            'instance_name': instance.friendly_name,
+        }
+        
+        # Adicionar conteúdo da mensagem se fornecido
+        if message_content:
+            details['message_content'] = message_content
+        
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='message_sent',
+            severity='info',
+            message=f'Mensagem enviada para {contact.name}',
+            details=details,
+            instance=instance,
+            contact=contact,
+            campaign_contact=campaign_contact,
+            duration_ms=duration_ms,
+            campaign_progress=campaign.progress_percentage,
+            instance_health_score=instance.health_score
+        )
     
-    @classmethod
-    def is_holiday(cls, date, tenant=None):
-        query = models.Q(date=date, is_active=True)
-        if tenant:
-            query &= (models.Q(tenant=tenant) | models.Q(is_national=True, tenant__isnull=True))
-        else:
-            query &= models.Q(is_national=True, tenant__isnull=True)
-        return cls.objects.filter(query).exists()
-
+    @staticmethod
+    def log_message_delivered(campaign, instance, contact, campaign_contact, response_data=None):
+        """Log de mensagem entregue"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='message_delivered',
+            severity='info',
+            message=f'Mensagem entregue para {contact.name}',
+            details={
+                'contact_id': str(contact.id),
+                'contact_phone': contact.phone,
+            },
+            instance=instance,
+            contact=contact,
+            campaign_contact=campaign_contact,
+            response_data=response_data,
+            instance_health_score=instance.health_score
+        )
+    
+    @staticmethod
+    def log_message_read(campaign, instance, contact, campaign_contact):
+        """Log de mensagem lida"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='message_read',
+            severity='info',
+            message=f'Mensagem lida por {contact.name}',
+            details={
+                'contact_id': str(contact.id),
+                'contact_phone': contact.phone,
+            },
+            instance=instance,
+            contact=contact,
+            campaign_contact=campaign_contact
+        )
+    
+    @staticmethod
+    def log_message_failed(campaign, instance, contact, campaign_contact, error_msg, request_data=None, response_data=None, http_status=None):
+        """Log de falha no envio"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='message_failed',
+            severity='error',
+            message=f'Falha ao enviar para {contact.name}: {error_msg}',
+            details={
+                'contact_id': str(contact.id),
+                'contact_phone': contact.phone,
+                'error': error_msg,
+            },
+            instance=instance,
+            contact=contact,
+            campaign_contact=campaign_contact,
+            request_data=request_data,
+            response_data=response_data,
+            http_status=http_status,
+            instance_health_score=instance.health_score
+        )
+    
+    @staticmethod
+    def log_instance_selected(campaign, instance, reason=''):
+        """Log de seleção de instância (rotação)"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='instance_selected',
+            severity='info',
+            message=f'Instância "{instance.friendly_name}" selecionada para envio',
+            details={
+                'instance_id': str(instance.id),
+                'instance_name': instance.friendly_name,
+                'health_score': instance.health_score,
+                'msgs_sent_today': instance.msgs_sent_today,
+                'reason': reason,
+            },
+            instance=instance,
+            instance_health_score=instance.health_score
+        )
+    
+    @staticmethod
+    def log_instance_paused(campaign, instance, reason=''):
+        """Log de pausa de instância"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='instance_paused',
+            severity='warning',
+            message=f'Instância "{instance.friendly_name}" pausada',
+            details={
+                'instance_id': str(instance.id),
+                'health_score': instance.health_score,
+                'consecutive_errors': instance.consecutive_errors,
+                'reason': reason,
+            },
+            instance=instance,
+            instance_health_score=instance.health_score
+        )
+    
+    @staticmethod
+    def log_limit_reached(campaign, instance, limit_type='daily'):
+        """Log de limite atingido"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='limit_reached',
+            severity='warning',
+            message=f'Limite {limit_type} atingido para instância "{instance.friendly_name}"',
+            details={
+                'instance_id': str(instance.id),
+                'limit_type': limit_type,
+                'msgs_sent_today': instance.msgs_sent_today,
+            },
+            instance=instance
+        )
+    
+    @staticmethod
+    def log_health_issue(campaign, instance, issue_description):
+        """Log de problema de saúde"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='health_issue',
+            severity='warning',
+            message=f'Problema de saúde detectado em "{instance.friendly_name}"',
+            details={
+                'instance_id': str(instance.id),
+                'health_score': instance.health_score,
+                'issue': issue_description,
+            },
+            instance=instance,
+            instance_health_score=instance.health_score
+        )
+    
+    @staticmethod
+    def log_error(campaign, error_msg, details=None, severity='error'):
+        """Log genérico de erro"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='error',
+            severity=severity,
+            message=error_msg,
+            details=details or {}
+        )

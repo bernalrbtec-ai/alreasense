@@ -7,8 +7,9 @@ class User(AbstractUser):
     """Custom User model with tenant and role."""
     
     ROLE_CHOICES = [
-        ('admin', 'Admin'),
-        ('operator', 'Operator'),
+        ('superadmin', 'Super Admin'),  # Admin do sistema
+        ('admin', 'Admin'),              # Admin do cliente
+        ('user', 'User'),                # Usuário do cliente
     ]
     
     # Override email to make it unique (required for USERNAME_FIELD)
@@ -29,7 +30,7 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=16, 
         choices=ROLE_CHOICES, 
-        default='operator'
+        default='user'
     )
     avatar = models.ImageField(
         upload_to='avatars/', 

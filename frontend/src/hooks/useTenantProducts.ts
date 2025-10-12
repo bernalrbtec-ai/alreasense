@@ -19,13 +19,16 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
     try {
       setLoading(true);
       setError(null);
+      console.log('🔍 Buscando produtos do tenant...');
       const data = await billingService.getTenantProducts();
+      console.log('📦 Dados recebidos:', data);
       
       // Garantir que é um array
       if (Array.isArray(data)) {
+        console.log('✅ Dados são um array, definindo produtos:', data);
         setProducts(data);
       } else {
-        console.warn('getTenantProducts não retornou um array:', data);
+        console.warn('⚠️ getTenantProducts não retornou um array:', data);
         setProducts([]);
       }
     } catch (err: any) {
@@ -71,10 +74,17 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
   };
 
   const activeProductSlugs = useMemo(() => {
-    if (!Array.isArray(products)) return [];
-    return products
+    console.log('🔄 Calculando activeProductSlugs...');
+    console.log('   Products:', products);
+    if (!Array.isArray(products)) {
+      console.log('   ❌ Products não é array, retornando []');
+      return [];
+    }
+    const active = products
       .filter(tp => tp.is_active)
       .map(tp => tp.product.slug);
+    console.log('   ✅ Produtos ativos:', active);
+    return active;
   }, [products]);
 
   return {

@@ -16,10 +16,12 @@ import {
   Server,
   Bell,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Settings
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
+import { useUserAccess } from '../hooks/useUserAccess'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
@@ -29,22 +31,28 @@ import { cn } from '@/lib/utils'
 // Mapeamento de produtos para itens do menu
 const productMenuItems = {
   flow: [
-    { name: 'Mensagens', href: '/messages', icon: MessageSquare },
-    { name: 'Conexões', href: '/connections', icon: Wifi },
+    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'contacts' },
+    { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
   ],
   sense: [
-    { name: 'Experimentos', href: '/experiments', icon: FlaskConical },
+    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'contacts' },
+    { name: 'Experimentos', href: '/experiments', icon: FlaskConical, requiredProduct: 'sense' },
+  ],
+  api_public: [
+    { name: 'API Docs', href: '/api-docs', icon: Server, requiredProduct: 'api_public' },
   ],
 }
 
 const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { name: 'Billing', href: '/billing', icon: CreditCard },
+  { name: 'Planos', href: '/billing', icon: CreditCard },
+  { name: 'Configurações', href: '/configurations', icon: Settings },
 ]
 
 const adminNavigation = [
   { name: 'Clientes', href: '/admin/tenants', icon: Users },
-  { name: 'Planos', href: '/admin/plans', icon: Package },
+  { name: 'Produtos', href: '/admin/products', icon: Package },
+  { name: 'Planos', href: '/admin/plans', icon: CreditCard },
   { name: 'Status do Sistema', href: '/admin/system', icon: Activity },
   { name: 'Servidor de Instância', href: '/admin/evolution', icon: Server },
   { name: 'Notificações', href: '/admin/notifications', icon: Bell },
@@ -60,23 +68,44 @@ export default function Layout({ children }: LayoutProps) {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
+  const { hasProductAccess } = useUserAccess()
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
   
-  // Gerar navegação dinâmica baseada nos produtos ativos
+  // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
+    console.log('🎯 Gerando navegação...');
+    console.log('   activeProductSlugs:', activeProductSlugs);
+    console.log('   user:', user);
+    
     const items = [...baseNavigation]
     
-    // Adicionar itens de menu dos produtos ativos
+    // Adicionar itens de menu dos produtos ativos, mas filtrar por acesso
     activeProductSlugs.forEach((productSlug) => {
+      console.log(`   Processando produto: ${productSlug}`);
       const productItems = productMenuItems[productSlug as keyof typeof productMenuItems]
       if (productItems) {
-        items.push(...productItems)
+        console.log(`     Itens do produto ${productSlug}:`, productItems);
+        // Filtrar itens baseado no acesso do usuário
+        const accessibleItems = productItems.filter(item => {
+          if (!item.requiredProduct) {
+            console.log(`       Item ${item.name}: sem requiredProduct, permitindo`);
+            return true
+          }
+          const access = hasProductAccess(item.requiredProduct)
+          console.log(`       Item ${item.name}: requiredProduct=${item.requiredProduct}, canAccess=${access.canAccess}`);
+          return access.canAccess
+        })
+        console.log(`     Itens acessíveis para ${productSlug}:`, accessibleItems);
+        items.push(...accessibleItems)
+      } else {
+        console.log(`     ❌ Nenhum item encontrado para produto ${productSlug}`);
       }
     })
     
+    console.log('   ✅ Navegação final:', items);
     return items
-  }, [activeProductSlugs])
+  }, [activeProductSlugs, hasProductAccess])
 
   return (
     <div className="min-h-screen bg-gray-50">

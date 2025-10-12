@@ -1,91 +1,59 @@
 from django.contrib import admin
-from apps.campaigns.models import (
-    Campaign, CampaignMessage, CampaignContact, CampaignLog, Holiday
-)
-
-
-class CampaignMessageInline(admin.TabularInline):
-    model = CampaignMessage
-    extra = 1
-    fields = ['order', 'message_text', 'is_active', 'times_sent', 'response_count']
-    readonly_fields = ['times_sent', 'response_count']
+from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog
 
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = ['name', 'tenant', 'status', 'instance', 'progress_percentage', 'created_at']
-    list_filter = ['status', 'is_paused', 'schedule_type', 'tenant', 'created_at']
-    search_fields = ['name', 'description']
-    readonly_fields = [
-        'id', 'progress_percentage', 'response_rate', 'can_be_started',
-        'created_at', 'updated_at', 'started_at', 'paused_at', 'completed_at', 'cancelled_at'
-    ]
-    inlines = [CampaignMessageInline]
+    list_display = ['name', 'tenant', 'status', 'rotation_mode', 'total_contacts', 'messages_sent', 'success_rate', 'created_at']
+    list_filter = ['status', 'rotation_mode', 'created_at']
+    search_fields = ['name', 'tenant__name']
+    readonly_fields = ['id', 'total_contacts', 'messages_sent', 'messages_delivered', 'messages_read', 'messages_failed', 'created_at', 'updated_at']
     
     fieldsets = (
         ('Informações Básicas', {
-            'fields': ('tenant', 'name', 'description', 'instance', 'status', 'is_paused')
+            'fields': ('id', 'tenant', 'name', 'description', 'created_by')
+        }),
+        ('Configurações', {
+            'fields': ('rotation_mode', 'instances', 'contact_list', 'interval_min', 'interval_max', 'daily_limit_per_instance', 'pause_on_health_below')
         }),
         ('Agendamento', {
-            'fields': (
-                'schedule_type', 'morning_start', 'morning_end',
-                'afternoon_start', 'afternoon_end', 'skip_weekends', 'skip_holidays'
-            )
+            'fields': ('scheduled_at', 'started_at', 'completed_at')
         }),
-        ('Métricas', {
-            'fields': (
-                'total_contacts', 'sent_messages', 'failed_messages', 'responded_count',
-                'progress_percentage', 'response_rate'
-            )
+        ('Status e Métricas', {
+            'fields': ('status', 'total_contacts', 'messages_sent', 'messages_delivered', 'messages_read', 'messages_failed')
         }),
-        ('Controle', {
-            'fields': ('next_scheduled_send', 'last_send_at', 'last_heartbeat', 'is_processing')
-        }),
-        ('Auditoria', {
-            'fields': (
-                'created_by', 'started_by', 'created_at', 'updated_at',
-                'started_at', 'paused_at', 'completed_at', 'cancelled_at'
-            ),
-            'classes': ('collapse',)
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
         }),
     )
 
 
 @admin.register(CampaignMessage)
 class CampaignMessageAdmin(admin.ModelAdmin):
-    list_display = ['campaign', 'order', 'message_preview', 'is_active', 'times_sent', 'response_rate']
-    list_filter = ['is_active', 'campaign__tenant']
-    search_fields = ['message_text', 'campaign__name']
-    
-    def message_preview(self, obj):
-        return obj.message_text[:100]
-    message_preview.short_description = 'Mensagem'
+    list_display = ['campaign', 'order', 'times_used', 'created_at']
+    list_filter = ['campaign', 'created_at']
+    search_fields = ['campaign__name', 'content']
 
 
 @admin.register(CampaignContact)
 class CampaignContactAdmin(admin.ModelAdmin):
-    list_display = ['campaign', 'contact', 'status', 'sent_at', 'responded_at']
-    list_filter = ['status', 'campaign__tenant']
-    search_fields = ['contact__name', 'contact__phone', 'campaign__name']
-    readonly_fields = ['id', 'created_at', 'updated_at']
+    list_display = ['campaign', 'contact', 'status', 'instance_used', 'sent_at', 'delivered_at', 'retry_count']
+    list_filter = ['status', 'sent_at']
+    search_fields = ['campaign__name', 'contact__name', 'contact__phone']
+    readonly_fields = ['id', 'whatsapp_message_id', 'sent_at', 'delivered_at', 'read_at', 'failed_at', 'created_at', 'updated_at']
 
 
 @admin.register(CampaignLog)
 class CampaignLogAdmin(admin.ModelAdmin):
-    list_display = ['campaign', 'level', 'event_type', 'message_preview', 'created_at']
-    list_filter = ['level', 'event_type', 'campaign__tenant', 'created_at']
-    search_fields = ['message', 'campaign__name']
-    readonly_fields = ['id', 'created_at']
+    list_display = ['campaign', 'log_type', 'severity', 'message', 'instance', 'contact', 'created_at']
+    list_filter = ['log_type', 'severity', 'created_at']
+    search_fields = ['campaign__name', 'message']
+    readonly_fields = ['id', 'campaign', 'log_type', 'severity', 'message', 'details', 'instance', 'contact', 'campaign_contact', 'duration_ms', 'request_data', 'response_data', 'http_status', 'campaign_progress', 'instance_health_score', 'created_by', 'created_at']
     
-    def message_preview(self, obj):
-        return obj.message[:100]
-    message_preview.short_description = 'Mensagem'
-
-
-@admin.register(Holiday)
-class HolidayAdmin(admin.ModelAdmin):
-    list_display = ['name', 'date', 'is_national', 'tenant', 'is_active']
-    list_filter = ['is_national', 'is_active', 'date', 'tenant']
-    search_fields = ['name']
-    readonly_fields = ['id', 'created_at']
-
+    def has_add_permission(self, request):
+        # Logs são criados automaticamente, não manualmente
+        return False
+    
+    def has_change_permission(self, request, obj=None):
+        # Logs não devem ser editados
+        return False

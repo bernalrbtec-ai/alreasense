@@ -12,26 +12,35 @@ logger = logging.getLogger(__name__)
 class TenantMiddleware(MiddlewareMixin):
     """
     Middleware to add tenant context to requests.
+    
+    IMPORTANTE: Este middleware deve vir DEPOIS do AuthenticationMiddleware
+    mas a autenticação JWT do DRF acontece na view, não no middleware.
+    Por isso, vamos usar process_view para ter acesso ao usuário autenticado.
     """
     
     def process_request(self, request):
-        """Add tenant context to request."""
-        
+        """Add request ID to request."""
         # Add request ID for tracking
         request.request_id = str(uuid.uuid4())[:8]
         
+        # Inicializar tenant como None (será preenchido no process_view)
+        request.tenant = None
+        request.tenant_id = None
+    
+    def process_view(self, request, view_func, view_args, view_kwargs):
+        """
+        Add tenant context to request after authentication.
+        Este método é chamado DEPOIS da autenticação do DRF.
+        """
         # Add tenant context if user is authenticated
         if hasattr(request, 'user') and request.user.is_authenticated:
-            request.tenant = request.user.tenant
-            request.tenant_id = str(request.user.tenant.id)
-        else:
-            request.tenant = None
-            request.tenant_id = None
+            request.tenant = getattr(request.user, 'tenant', None)
+            request.tenant_id = str(request.tenant.id) if request.tenant else None
         
         # Log request with context
         logger.info(
             f"Request {request.request_id} - "
-            f"User: {getattr(request.user, 'username', 'anonymous')} - "
+            f"User: {getattr(request.user, 'username', 'anonymous') if hasattr(request, 'user') else 'anonymous'} - "
             f"Tenant: {getattr(request.tenant, 'name', 'none')} - "
             f"Path: {request.path}"
         )

@@ -8,7 +8,8 @@ import Toast from '../components/ui/Toast'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
-import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon, QrCode, WifiOff, Phone, Key, EyeOff } from 'lucide-react'
+import { useTenantLimits } from '../hooks/useTenantLimits'
+import { Bell, Mail, MessageSquare, Plus, Server, FileText, Eye, Trash2, Edit, Send, Check, X as XIcon, QrCode, WifiOff, Phone, Key, EyeOff, AlertTriangle, Crown } from 'lucide-react'
 import { api } from '../lib/api'
 
 interface NotificationTemplate {
@@ -54,6 +55,9 @@ export default function NotificationsPage() {
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  
+  // Hook para limites do tenant
+  const { limits, loading: limitsLoading, checkInstanceLimit } = useTenantLimits()
   const [testEmailModal, setTestEmailModal] = useState<{ show: boolean, smtpId: string | null }>({ show: false, smtpId: null })
   const [testEmail, setTestEmail] = useState('')
   const [isTesting, setIsTesting] = useState(false)
@@ -374,6 +378,18 @@ export default function NotificationsPage() {
         await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceForm)
         showToast('✅ Instância atualizada com sucesso!', 'success')
       } else {
+        // Verificar limite antes de criar
+        try {
+          const limitCheck = await checkInstanceLimit()
+          if (!limitCheck.can_create) {
+            showToast(`❌ ${limitCheck.message}`, 'error')
+            return
+          }
+        } catch (error) {
+          console.error('Erro ao verificar limite:', error)
+          // Continuar mesmo se der erro na verificação
+        }
+        
         await api.post('/notifications/whatsapp-instances/', instanceForm)
         showToast('✅ Instância criada! Use "Gerar QR Code" para conectar.', 'success')
       }
@@ -562,6 +578,49 @@ export default function NotificationsPage() {
       {/* Instances Tab */}
       {activeTab === 'instances' && (
         <>
+          {/* Informações de Limite */}
+          {limits?.products?.flow && (
+            <Card className="p-4 mb-4 bg-blue-50 border-blue-200">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <MessageSquare className="h-5 w-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-blue-900">ALREA Flow</h3>
+                    <p className="text-sm text-blue-700">
+                      {limits.products.flow.unlimited 
+                        ? `Instâncias ilimitadas (${limits.products.flow.current} ativas)`
+                        : limits.products.flow.message
+                      }
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {limits.products.flow.can_create ? (
+                    <div className="flex items-center gap-1 text-green-600">
+                      <Check className="h-4 w-4" />
+                      <span className="text-sm font-medium">Pode criar</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-1 text-orange-600">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="text-sm font-medium">Limite atingido</span>
+                    </div>
+                  )}
+                  <Button 
+                    onClick={() => setShowInstanceModal(true)}
+                    disabled={!limits.products.flow.can_create}
+                    size="sm"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nova Instância
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+          
           <div className="flex justify-end">
             <Button onClick={() => setShowInstanceModal(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -648,6 +707,8 @@ export default function NotificationsPage() {
                   variant="ghost" 
                   size="sm"
                   onClick={() => handleEditInstance(instance)}
+                  title="Editar Instância"
+                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                 >
                   <Edit className="h-4 w-4" />
                 </Button>
@@ -656,6 +717,7 @@ export default function NotificationsPage() {
                   size="sm"
                   onClick={() => handleDeleteInstance(instance.id)}
                   className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="Excluir Instância"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>

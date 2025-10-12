@@ -40,9 +40,9 @@ LOCAL_APPS = [
     'apps.tenancy',
     'apps.authn',
     'apps.connections',
-    'apps.chat_messages',
     'apps.ai',
     'apps.billing',
+    'apps.chat_messages',
     'apps.experiments',
     'apps.notifications',
     'apps.contacts',
@@ -119,7 +119,7 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static']
+# STATICFILES_DIRS = [BASE_DIR / 'static']  # Disabled: directory doesn't exist
 
 # Media files
 MEDIA_URL = '/media/'
@@ -143,7 +143,7 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
-    'PAGE_SIZE': 20,
+    'PAGE_SIZE': 50,
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',
         'rest_framework.filters.SearchFilter',
@@ -162,7 +162,7 @@ SIMPLE_JWT = {
 # CORS Settings
 CORS_ALLOWED_ORIGINS = config(
     'CORS_ALLOWED_ORIGINS',
-    default='http://localhost:5173,http://127.0.0.1:5173,https://alreasense-production.up.railway.app'
+    default='http://localhost,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:5173,https://alreasense-production.up.railway.app'
 ).split(',')
 
 CORS_ALLOW_CREDENTIALS = True
@@ -215,9 +215,9 @@ CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 # Celery Beat Schedule
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
-    'campaign-scheduler': {
-        'task': 'apps.campaigns.tasks.campaign_scheduler',
-        'schedule': 10.0,  # A cada 10 segundos
+    'check-campaign-health': {
+        'task': 'apps.campaigns.tasks.check_campaign_health',
+        'schedule': crontab(minute='*/5'),  # A cada 5 minutos
     },
 }
 
@@ -231,11 +231,11 @@ N8N_AI_WEBHOOK = config('N8N_AI_WEBHOOK', default='')
 AI_MODEL_NAME = config('AI_MODEL_NAME', default='qwen-local')
 AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings')
 
-# Evolution API
-EVO_BASE_URL = config('EVO_BASE_URL', default='')
-EVO_API_KEY = config('EVO_API_KEY', default='')
+# Evolution API (Consolidated)
 EVOLUTION_API_URL = config('EVOLUTION_API_URL', default='https://evo.rbtec.com.br')
 EVOLUTION_API_KEY = config('EVOLUTION_API_KEY', default='')
+
+# Base URL for webhooks and callbacks
 BASE_URL = config('BASE_URL', default='https://alreasense-backend-production.up.railway.app')
 
 # Logging
@@ -289,9 +289,25 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-if not DEBUG:
-    # Disable SSL redirect for Railway (handled by Railway's load balancer)
-    SECURE_SSL_REDIRECT = False
-    SECURE_HSTS_SECONDS = 31536000
+# Production Security Settings
+# Only enable strict HTTPS in production with a reverse proxy (Railway)
+IS_PRODUCTION = not DEBUG and config('RAILWAY_ENVIRONMENT', default='') == 'production'
+
+if IS_PRODUCTION:
+    # SSL/HTTPS Configuration
+    SECURE_SSL_REDIRECT = True  # Redirect HTTP to HTTPS
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')  # Trust Railway proxy
+    
+    # HSTS Configuration
+    SECURE_HSTS_SECONDS = 31536000  # 1 year
     SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_HSTS_PRELOAD = True
+    
+    # Cookie Security
+    SESSION_COOKIE_SECURE = True  # Only send session cookie over HTTPS
+    CSRF_COOKIE_SECURE = True  # Only send CSRF cookie over HTTPS
+    SESSION_COOKIE_HTTPONLY = True  # Prevent JavaScript access to session cookie
+    CSRF_COOKIE_HTTPONLY = True  # Prevent JavaScript access to CSRF cookie
+    
+    # Additional Security Headers
+    SECURE_REFERRER_POLICY = 'same-origin'

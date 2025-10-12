@@ -188,6 +188,46 @@ class WhatsAppInstance(models.Model):
         help_text="Nome da instância no Evolution (geralmente igual a instance_name)"
     )
     
+    # Health Tracking para Campanhas
+    health_score = models.IntegerField(
+        default=100,
+        help_text="Score de saúde da instância (0-100)"
+    )
+    msgs_sent_today = models.IntegerField(
+        default=0,
+        help_text="Mensagens enviadas hoje"
+    )
+    msgs_delivered_today = models.IntegerField(
+        default=0,
+        help_text="Mensagens entregues hoje"
+    )
+    msgs_read_today = models.IntegerField(
+        default=0,
+        help_text="Mensagens lidas hoje"
+    )
+    msgs_failed_today = models.IntegerField(
+        default=0,
+        help_text="Mensagens com erro hoje"
+    )
+    consecutive_errors = models.IntegerField(
+        default=0,
+        help_text="Erros consecutivos"
+    )
+    last_success_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Última mensagem enviada com sucesso"
+    )
+    last_health_update = models.DateTimeField(
+        auto_now=True,
+        help_text="Última atualização do health score"
+    )
+    health_last_reset = models.DateField(
+        null=True,
+        blank=True,
+        help_text="Última vez que os contadores diários foram resetados"
+    )
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -293,8 +333,31 @@ class WhatsAppInstance(models.Model):
                         'qrcode': True,
                         'integration': 'WHATSAPP-BAILEYS',
                         'webhook': {
+                            'enabled': True,
                             'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
-                            'events': ['messages.upsert', 'connection.update']
+                            'webhook_by_events': False,
+                            'webhook_base64': True,
+                            'events': [
+                                'messages.upsert',
+                                'messages.update',
+                                'messages.delete',
+                                'connection.update',
+                                'presence.update',
+                                'contacts.upsert',
+                                'contacts.update',
+                                'chats.upsert',
+                                'chats.update',
+                                'chats.delete',
+                            ]
+                        },
+                        'settings': {
+                            'reject_call': True,
+                            'msg_call': 'Desculpe, não atendemos chamadas. Use mensagens de texto!',
+                            'groups_ignore': False,
+                            'always_online': False,
+                            'read_messages': False,
+                            'read_status': False,
+                            'sync_full_history': False,
                         }
                     },
                     timeout=30
@@ -328,12 +391,20 @@ class WhatsAppInstance(models.Model):
                     else:
                         print(f"⚠️  API key não retornada, continuando sem ela...")
                         # Continuar mesmo sem API key (será buscada depois se necessário)
+                    
+                    # 🆕 ETAPA 1.5: Atualizar webhook após criação (garantir configuração completa)
+                    print(f"🔧 Configurando webhook completo...")
+                    self._update_webhook_after_create(api_url, system_api_key)
+                    
                 else:
                     self.last_error = f'Erro ao criar instância (Status {create_response.status_code}): {create_response.text}'
                     self.save()
                     return None
             elif instance_exists:
                 print(f"♻️  Instância já existe no Evolution, pulando criação")
+                # 🆕 Atualizar webhook mesmo se instância já existe
+                print(f"🔧 Atualizando webhook da instância existente...")
+                self._update_webhook_after_create(api_url, system_api_key)
             
             # ETAPA 2: Gerar QR code usando API MASTER (padrão whatsapp-orchestrator)
             # IMPORTANTE: Usar API MASTER, não API da instância!
@@ -376,6 +447,100 @@ class WhatsAppInstance(models.Model):
             self.last_error = f'Exceção ao gerar QR code: {str(e)}'
             self.save()
             return None
+    
+    def _update_webhook_after_create(self, api_url, api_key):
+        """
+        Atualiza webhook após criação da instância (uso interno).
+        Garante que todos eventos e base64 estão ativos.
+        """
+        import requests
+        from django.conf import settings
+        
+        try:
+            webhook_config = {
+                'enabled': True,
+                'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
+                'webhookByEvents': False,
+                'webhookBase64': True,
+                'events': [
+                    'messages.upsert',
+                    'messages.update',
+                    'messages.delete',
+                    'connection.update',
+                    'presence.update',
+                    'contacts.upsert',
+                    'contacts.update',
+                    'chats.upsert',
+                    'chats.update',
+                    'chats.delete',
+                ]
+            }
+            
+            webhook_url = f"{api_url.rstrip('/')}/webhook/set/{self.instance_name}"
+            
+            # 🆕 LOGS DETALHADOS
+            print(f"   🔧 CONFIGURANDO WEBHOOK VIA /webhook/set")
+            print(f"   📍 URL: {webhook_url}")
+            print(f"   🔑 API Key: {api_key[:20]}...")
+            print(f"   🌐 Webhook URL: {webhook_config['url']}")
+            print(f"   📊 Eventos: {len(webhook_config['events'])}")
+            print(f"   📷 Base64: {webhook_config['webhookBase64']}")
+            
+            response = requests.post(
+                webhook_url,
+                headers={
+                    'Content-Type': 'application/json',
+                    'apikey': api_key,
+                },
+                json=webhook_config,
+                timeout=10
+            )
+            
+            print(f"   📡 Status Code: {response.status_code}")
+            print(f"   📋 Response: {response.text[:500]}")
+            
+            if response.status_code in [200, 201]:
+                print(f"   ✅ WEBHOOK CONFIGURADO COM SUCESSO!")
+                try:
+                    response_data = response.json()
+                    print(f"   📦 Dados retornados: {response_data}")
+                except:
+                    pass
+                return True
+            else:
+                print(f"   ❌ ERRO: Status {response.status_code}")
+                print(f"   📄 Body completo: {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"   ❌ EXCEÇÃO ao configurar webhook!")
+            print(f"   ⚠️  Erro: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
+    
+    def update_webhook_config(self):
+        """
+        Atualiza configuração de webhook em instância existente (uso público).
+        Pode ser chamado via API ou admin action.
+        """
+        import requests
+        from django.conf import settings
+        from apps.connections.models import EvolutionConnection
+        
+        # Buscar servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
+            self.last_error = 'Servidor Evolution não configurado'
+            self.save()
+            return False
+        
+        api_url = evolution_server.base_url.rstrip('/')
+        api_key = evolution_server.api_key
+        
+        print(f"🔧 Atualizando webhook para instância: {self.instance_name}")
+        
+        return self._update_webhook_after_create(api_url, api_key)
     
     def check_connection_status(self):
         """
@@ -609,6 +774,104 @@ class WhatsAppInstance(models.Model):
         from django.utils import timezone
         self.last_check = timezone.now()
         self.save()
+    
+    # ========== Health Tracking Methods ==========
+    
+    def reset_daily_counters_if_needed(self):
+        """Reseta contadores diários se mudou de dia"""
+        from datetime import date
+        today = date.today()
+        
+        if self.health_last_reset != today:
+            self.msgs_sent_today = 0
+            self.msgs_delivered_today = 0
+            self.msgs_read_today = 0
+            self.msgs_failed_today = 0
+            self.health_last_reset = today
+            # Regenerar health score (bônus por novo dia)
+            if self.health_score < 100:
+                self.health_score = min(100, self.health_score + 10)
+            self.save()
+    
+    def record_message_sent(self):
+        """Registra envio de mensagem"""
+        self.reset_daily_counters_if_needed()
+        self.msgs_sent_today += 1
+        self.save()
+    
+    def record_message_delivered(self):
+        """Registra mensagem entregue"""
+        from django.utils import timezone
+        self.reset_daily_counters_if_needed()
+        self.msgs_delivered_today += 1
+        self.consecutive_errors = 0  # Reset erros consecutivos
+        self.last_success_at = timezone.now()
+        # Pequeno bônus no health
+        if self.health_score < 100:
+            self.health_score = min(100, self.health_score + 0.5)
+        self.save()
+    
+    def record_message_read(self):
+        """Registra mensagem lida"""
+        self.reset_daily_counters_if_needed()
+        self.msgs_read_today += 1
+        # Bônus maior no health
+        if self.health_score < 100:
+            self.health_score = min(100, self.health_score + 1)
+        self.save()
+    
+    def record_message_failed(self, error_msg=''):
+        """Registra falha no envio"""
+        self.reset_daily_counters_if_needed()
+        self.msgs_failed_today += 1
+        self.consecutive_errors += 1
+        self.last_error = error_msg[:500]  # Limitar tamanho
+        # Penalidade no health
+        self.health_score = max(0, self.health_score - 10)
+        self.save()
+    
+    @property
+    def delivery_rate(self):
+        """Taxa de entrega hoje"""
+        if self.msgs_sent_today == 0:
+            return 100.0
+        return (self.msgs_delivered_today / self.msgs_sent_today) * 100
+    
+    @property
+    def read_rate(self):
+        """Taxa de leitura hoje"""
+        if self.msgs_delivered_today == 0:
+            return 0.0
+        return (self.msgs_read_today / self.msgs_delivered_today) * 100
+    
+    @property
+    def is_healthy(self):
+        """Instância está saudável?"""
+        return (
+            self.health_score >= 50 and
+            self.connection_state == 'open' and
+            self.consecutive_errors < 5
+        )
+    
+    @property
+    def health_status(self):
+        """Status de saúde textual"""
+        if self.health_score >= 95:
+            return 'excellent'  # Excelente
+        elif self.health_score >= 80:
+            return 'good'  # Boa
+        elif self.health_score >= 50:
+            return 'warning'  # Atenção
+        else:
+            return 'critical'  # Crítica
+    
+    def can_send_message(self, daily_limit=100):
+        """Verifica se pode enviar mensagem (considerando limites)"""
+        self.reset_daily_counters_if_needed()
+        return (
+            self.is_healthy and
+            self.msgs_sent_today < daily_limit
+        )
 
 
 class WhatsAppConnectionLog(models.Model):

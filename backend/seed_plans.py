@@ -25,74 +25,39 @@ def seed_plans():
     
     plans_data = [
         {
-            'name': 'Free',
-            'description': 'Plano gratuito para testar a plataforma',
-            'price': 0,
-            'billing_cycle_days': 30,
-            'is_free': True,
-            'max_connections': 1,
-            'max_messages_per_month': 1000,
-            'features': [
-                '1 conexão WhatsApp',
-                '1.000 mensagens/mês',
-                'Análise básica de sentimento',
-                'Suporte por email',
-            ],
-            'is_active': True,
-        },
-        {
+            'slug': 'starter',
             'name': 'Starter',
             'description': 'Ideal para pequenas empresas',
-            'price': 49.90,
-            'billing_cycle_days': 30,
-            'is_free': False,
-            'max_connections': 3,
-            'max_messages_per_month': 10000,
-            'features': [
-                '3 conexões WhatsApp',
-                '10.000 mensagens/mês',
-                'Análise completa de sentimento',
-                'Dashboard personalizado',
-                'Suporte prioritário',
-            ],
+            'price': 49.00,
+            'color': '#10B981',
+            'sort_order': 1,
             'is_active': True,
         },
         {
+            'slug': 'pro',
             'name': 'Pro',
             'description': 'Para empresas em crescimento',
-            'price': 149.90,
-            'billing_cycle_days': 30,
-            'is_free': False,
-            'max_connections': 10,
-            'max_messages_per_month': 50000,
-            'features': [
-                '10 conexões WhatsApp',
-                '50.000 mensagens/mês',
-                'Análise avançada com IA',
-                'Experimentos A/B',
-                'Integração via API',
-                'Suporte 24/7',
-                'Webhooks personalizados',
-            ],
+            'price': 149.00,
+            'color': '#3B82F6',
+            'sort_order': 2,
             'is_active': True,
         },
         {
+            'slug': 'api-only',
+            'name': 'API Only',
+            'description': 'Apenas acesso via API',
+            'price': 99.00,
+            'color': '#8B5CF6',
+            'sort_order': 3,
+            'is_active': True,
+        },
+        {
+            'slug': 'enterprise',
             'name': 'Enterprise',
             'description': 'Solução completa para grandes empresas',
-            'price': 499.90,
-            'billing_cycle_days': 30,
-            'is_free': False,
-            'max_connections': -1,  # Unlimited
-            'max_messages_per_month': -1,  # Unlimited
-            'features': [
-                'Conexões ilimitadas',
-                'Mensagens ilimitadas',
-                'IA personalizada',
-                'Suporte dedicado',
-                'SLA garantido',
-                'Treinamento da equipe',
-                'Custom features sob demanda',
-            ],
+            'price': 499.00,
+            'color': '#F59E0B',
+            'sort_order': 4,
             'is_active': True,
         },
     ]
@@ -102,7 +67,7 @@ def seed_plans():
     
     for plan_data in plans_data:
         plan, created = Plan.objects.update_or_create(
-            name=plan_data['name'],
+            slug=plan_data['slug'],
             defaults=plan_data
         )
         
@@ -125,5 +90,6 @@ if __name__ == '__main__':
         seed_plans()
     except Exception as e:
         print(f'❌ Error seeding plans: {e}')
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
-

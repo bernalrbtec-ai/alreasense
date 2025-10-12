@@ -22,10 +22,11 @@ class ProductSerializer(serializers.ModelSerializer):
 class PlanProductSerializer(serializers.ModelSerializer):
     """Serializer para produtos de um plano"""
     product = ProductSerializer(read_only=True)
+    product_id = serializers.UUIDField(write_only=True, required=False)
     
     class Meta:
         model = PlanProduct
-        fields = ['id', 'product', 'is_included', 'limit_value', 'limit_unit']
+        fields = ['id', 'product', 'product_id', 'is_included', 'limit_value', 'limit_unit']
 
 
 class PlanSerializer(serializers.ModelSerializer):
@@ -44,6 +45,64 @@ class PlanSerializer(serializers.ModelSerializer):
     
     def get_product_count(self, obj):
         return obj.plan_products.count()
+
+
+class PlanCreateUpdateSerializer(serializers.ModelSerializer):
+    """Serializer para criar/editar planos com produtos"""
+    plan_products = PlanProductSerializer(many=True, required=False)
+    
+    class Meta:
+        model = Plan
+        fields = [
+            'id', 'slug', 'name', 'description', 'price', 
+            'is_active', 'sort_order', 'plan_products',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        plan_products_data = validated_data.pop('plan_products', [])
+        plan = Plan.objects.create(**validated_data)
+        
+        for product_data in plan_products_data:
+            product_id = product_data.pop('product_id')
+            PlanProduct.objects.create(
+                plan=plan,
+                product_id=product_id,
+                **product_data
+            )
+        
+        return plan
+    
+    def update(self, instance, validated_data):
+        plan_products_data = validated_data.pop('plan_products', [])
+        
+        # Atualizar dados do plano
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Atualizar produtos do plano
+        if plan_products_data:
+            # Remover produtos existentes
+            instance.plan_products.all().delete()
+            
+            # Criar novos produtos
+            for product_data in plan_products_data:
+                # Se não tem product_id, usar o product.id se existir
+                if 'product_id' not in product_data and 'product' in product_data:
+                    product_data['product_id'] = product_data['product'].id
+                    product_data.pop('product', None)
+                
+                product_id = product_data.pop('product_id', None)
+                if product_id:
+                    PlanProduct.objects.create(
+                        plan=instance,
+                        product_id=product_id,
+                        **product_data
+                    )
+        
+        return instance
 
 
 class TenantProductSerializer(serializers.ModelSerializer):

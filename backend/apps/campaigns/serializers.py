@@ -1,145 +1,193 @@
 from rest_framework import serializers
-from apps.campaigns.models import (
-    Campaign, CampaignMessage, CampaignContact, CampaignLog, Holiday
-)
-from apps.contacts.serializers import ContactSerializer
+from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog
+from apps.notifications.models import WhatsAppInstance
+from apps.contacts.models import Contact, ContactList
 
 
 class CampaignMessageSerializer(serializers.ModelSerializer):
-    response_rate = serializers.ReadOnlyField()
-    
     class Meta:
         model = CampaignMessage
-        fields = [
-            'id', 'message_text', 'order', 'is_active',
-            'times_sent', 'response_count', 'response_rate',
-            'created_at', 'updated_at'
-        ]
-        read_only_fields = ['id', 'times_sent', 'response_count', 'created_at', 'updated_at']
+        fields = ['id', 'content', 'order', 'times_used', 'media_url', 'media_type']
 
 
-class CampaignContactSerializer(serializers.ModelSerializer):
-    contact = ContactSerializer(read_only=True)
-    message_sent_preview = serializers.SerializerMethodField()
-    
+class CampaignInstanceSerializer(serializers.ModelSerializer):
+    """Serializer simplificado para instâncias dentro de campanhas"""
     class Meta:
-        model = CampaignContact
-        fields = [
-            'id', 'contact', 'status', 'message_sent', 'message_sent_preview',
-            'sent_at', 'delivered_at', 'read_at', 'responded_at',
-            'error_message', 'retry_count'
-        ]
-        read_only_fields = ['id']
-    
-    def get_message_sent_preview(self, obj):
-        if obj.message_sent:
-            return obj.message_sent.message_text[:100]
-        return None
-
-
-class CampaignLogSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = CampaignLog
-        fields = ['id', 'level', 'event_type', 'message', 'metadata', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        model = WhatsAppInstance
+        fields = ['id', 'friendly_name', 'phone_number', 'connection_state', 'health_score', 'msgs_sent_today']
 
 
 class CampaignSerializer(serializers.ModelSerializer):
-    progress_percentage = serializers.ReadOnlyField()
-    response_rate = serializers.ReadOnlyField()
-    can_be_started = serializers.ReadOnlyField()
+    """Serializer principal para campanhas"""
     
-    # Nested (read-only)
-    messages = CampaignMessageSerializer(many=True, read_only=True)
-    instance_name = serializers.CharField(source='instance.friendly_name', read_only=True)
+    messages = CampaignMessageSerializer(many=True, required=False)
+    instances = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=WhatsAppInstance.objects.all()
+    )
+    instances_detail = CampaignInstanceSerializer(source='instances', many=True, read_only=True)
     
-    # Write-only
-    instance_id = serializers.UUIDField(write_only=True)
-    contact_ids = serializers.ListField(
-        child=serializers.UUIDField(),
-        write_only=True,
-        required=False
-    )
-    message_texts = serializers.ListField(
-        child=serializers.CharField(),
-        write_only=True,
-        required=False
-    )
+    # Campos calculados
+    success_rate = serializers.FloatField(read_only=True)
+    read_rate = serializers.FloatField(read_only=True)
+    progress_percentage = serializers.FloatField(read_only=True)
+    
+    # Modo de rotação com descrição
+    rotation_mode_display = serializers.CharField(source='get_rotation_mode_display', read_only=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
     
     class Meta:
         model = Campaign
         fields = [
-            'id', 'name', 'description', 'status', 'is_paused',
-            'instance', 'instance_id', 'instance_name',
-            'schedule_type', 'morning_start', 'morning_end',
-            'afternoon_start', 'afternoon_end', 'skip_weekends', 'skip_holidays',
-            'total_contacts', 'sent_messages', 'failed_messages', 'responded_count',
-            'progress_percentage', 'response_rate', 'can_be_started',
-            'messages', 'contact_ids', 'message_texts',
-            'next_scheduled_send', 'last_send_at',
-            'created_at', 'updated_at', 'started_at', 'paused_at', 'completed_at',
-            'last_error', 'auto_pause_reason'
+            'id', 'name', 'description', 'rotation_mode', 'rotation_mode_display',
+            'instances', 'instances_detail', 'contact_list', 'messages',
+            'interval_min', 'interval_max', 'daily_limit_per_instance', 'pause_on_health_below',
+            'scheduled_at', 'started_at', 'completed_at',
+            'status', 'status_display', 'total_contacts', 'messages_sent',
+            'messages_delivered', 'messages_read', 'messages_failed',
+            'success_rate', 'read_rate', 'progress_percentage',
+            'last_message_sent_at', 'next_message_scheduled_at',
+            'next_contact_name', 'next_contact_phone',
+            'created_at', 'updated_at'
         ]
         read_only_fields = [
-            'id', 'status', 'sent_messages', 'failed_messages', 'responded_count',
-            'next_scheduled_send', 'last_send_at', 'created_at', 'updated_at',
-            'started_at', 'paused_at', 'completed_at'
+            'id', 'total_contacts', 'messages_sent', 'messages_delivered',
+            'messages_read', 'messages_failed', 'started_at', 'completed_at',
+            'created_at', 'updated_at'
         ]
     
-    def validate_instance_id(self, value):
-        from apps.notifications.models import WhatsAppInstance
-        try:
-            instance = WhatsAppInstance.objects.get(
-                id=value,
-                tenant=self.context['request'].tenant
+    def create(self, validated_data):
+        messages_data = validated_data.pop('messages', [])
+        instances_data = validated_data.pop('instances', [])
+        tag_id = self.context.get('tag_id')
+        contact_ids = self.context.get('contact_ids', [])
+        
+        # Criar campanha
+        campaign = Campaign.objects.create(**validated_data)
+        
+        # Adicionar instâncias
+        campaign.instances.set(instances_data)
+        
+        # Criar mensagens
+        for msg_data in messages_data:
+            CampaignMessage.objects.create(campaign=campaign, **msg_data)
+        
+        # Adicionar contatos
+        contacts_to_add = []
+        
+        # Priorizar contact_ids se fornecidos (permite seleção manual mesmo com tag)
+        if contact_ids:
+            # Usar contatos específicos (podem vir de uma tag ou avulsos)
+            contacts_to_add = Contact.objects.filter(
+                tenant=campaign.tenant,
+                id__in=contact_ids,
+                is_active=True,
+                opted_out=False
             )
-        except WhatsAppInstance.DoesNotExist:
-            raise serializers.ValidationError("Instância não encontrada")
+            if tag_id:
+                print(f"📊 Tag {tag_id}: {contacts_to_add.count()} contatos selecionados manualmente")
+            else:
+                print(f"📊 Contatos avulsos: {contacts_to_add.count()} selecionados")
+        elif tag_id:
+            # Buscar TODOS os contatos por tag (fallback se contact_ids não fornecido)
+            contacts_to_add = Contact.objects.filter(
+                tenant=campaign.tenant,
+                tags__id=tag_id,
+                is_active=True,
+                opted_out=False
+            ).distinct()
+            print(f"📊 Tag {tag_id}: {contacts_to_add.count()} contatos encontrados (todos da tag)")
         
-        if instance.connection_state != 'open':
-            raise serializers.ValidationError("Instância não está conectada")
-        
-        # Verificar se já tem campanha ativa
-        if Campaign.objects.filter(
-            instance=instance,
-            status=Campaign.Status.ACTIVE
-        ).exists():
-            raise serializers.ValidationError(
-                f"Instância já tem uma campanha ativa"
+        # Criar CampaignContact para cada contato
+        campaign_contacts = []
+        for contact in contacts_to_add:
+            campaign_contacts.append(
+                CampaignContact(
+                    campaign=campaign,
+                    contact=contact,
+                    status='pending'
+                )
             )
         
-        return value
+        CampaignContact.objects.bulk_create(campaign_contacts)
+        
+        # Atualizar contador
+        campaign.total_contacts = len(campaign_contacts)
+        campaign.save()
+        
+        print(f"✅ Campanha criada com {campaign.total_contacts} contatos")
+        
+        return campaign
     
-    def validate_contact_ids(self, value):
-        from apps.contacts.models import Contact
-        if not value:
-            return value
+    def update(self, instance, validated_data):
+        messages_data = validated_data.pop('messages', None)
+        instances_data = validated_data.pop('instances', None)
         
-        contacts = Contact.objects.filter(
-            id__in=value,
-            tenant=self.context['request'].tenant
-        )
+        # Atualizar campos da campanha
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
         
-        if contacts.count() != len(value):
-            raise serializers.ValidationError("Um ou mais contatos não foram encontrados")
+        # Atualizar instâncias
+        if instances_data is not None:
+            instance.instances.set(instances_data)
         
-        return value
-    
-    def validate(self, attrs):
-        if attrs.get('schedule_type') == Campaign.ScheduleType.CUSTOM_PERIOD:
-            required_fields = ['morning_start', 'morning_end', 'afternoon_start', 'afternoon_end']
-            for field in required_fields:
-                if not attrs.get(field):
-                    raise serializers.ValidationError({
-                        field: f"Campo obrigatório para agendamento personalizado"
-                    })
+        # Atualizar mensagens
+        if messages_data is not None:
+            # Deletar mensagens antigas
+            instance.messages.all().delete()
+            # Criar novas
+            for msg_data in messages_data:
+                CampaignMessage.objects.create(campaign=instance, **msg_data)
         
-        return attrs
+        return instance
 
 
-class HolidaySerializer(serializers.ModelSerializer):
+class CampaignContactSerializer(serializers.ModelSerializer):
+    """Serializer para contatos da campanha"""
+    
+    contact_name = serializers.CharField(source='contact.name', read_only=True)
+    contact_phone = serializers.CharField(source='contact.phone', read_only=True)
+    instance_name = serializers.CharField(source='instance_used.friendly_name', read_only=True, allow_null=True)
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    
     class Meta:
-        model = Holiday
-        fields = ['id', 'date', 'name', 'is_national', 'is_active', 'created_at']
-        read_only_fields = ['id', 'created_at']
+        model = CampaignContact
+        fields = [
+            'id', 'contact', 'contact_name', 'contact_phone',
+            'instance_used', 'instance_name', 'message_used',
+            'status', 'status_display', 'scheduled_at', 'sent_at',
+            'delivered_at', 'read_at', 'failed_at', 'error_message',
+            'whatsapp_message_id', 'retry_count'
+        ]
+
+
+class CampaignLogSerializer(serializers.ModelSerializer):
+    """Serializer para logs da campanha"""
+    
+    log_type_display = serializers.CharField(source='get_log_type_display', read_only=True)
+    severity_display = serializers.CharField(source='get_severity_display', read_only=True)
+    instance_name = serializers.CharField(source='instance.friendly_name', read_only=True, allow_null=True)
+    contact_name = serializers.CharField(source='contact.name', read_only=True, allow_null=True)
+    
+    class Meta:
+        model = CampaignLog
+        fields = [
+            'id', 'log_type', 'log_type_display', 'severity', 'severity_display',
+            'message', 'details', 'instance', 'instance_name',
+            'contact', 'contact_name', 'duration_ms',
+            'campaign_progress', 'instance_health_score', 'created_at'
+        ]
+
+
+class CampaignStatsSerializer(serializers.Serializer):
+    """Serializer para estatísticas da campanha"""
+    
+    total_campaigns = serializers.IntegerField()
+    active_campaigns = serializers.IntegerField()
+    completed_campaigns = serializers.IntegerField()
+    total_messages_sent = serializers.IntegerField()
+    total_messages_delivered = serializers.IntegerField()
+    avg_success_rate = serializers.FloatField()
+    campaigns_by_status = serializers.DictField()
 

@@ -52,9 +52,16 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
             'api_url', 'api_key', 'phone_number', 'qr_code', 'qr_code_expires_at',
             'connection_state', 'status', 'status_display', 'last_check', 'last_error',
             'is_active', 'is_default',
+            'health_score', 'msgs_sent_today', 'msgs_delivered_today', 'msgs_read_today', 'msgs_failed_today',
+            'consecutive_errors', 'last_success_at',
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
-        read_only_fields = ['id', 'status', 'qr_code', 'last_check', 'last_error', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'status', 'qr_code', 'last_check', 'last_error',
+            'health_score', 'msgs_sent_today', 'msgs_delivered_today', 'msgs_read_today', 'msgs_failed_today',
+            'consecutive_errors', 'last_success_at',
+            'created_at', 'updated_at'
+        ]
         extra_kwargs = {
             'api_key': {'required': False, 'allow_blank': True},
             'instance_name': {'required': False},  # Gerado automaticamente se não fornecido

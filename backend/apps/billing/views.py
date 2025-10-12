@@ -12,19 +12,34 @@ from .models import Product, Plan, TenantProduct, BillingHistory
 from .serializers import (
     ProductSerializer,
     PlanSerializer,
+    PlanCreateUpdateSerializer,
     TenantProductSerializer,
     BillingHistorySerializer,
     TenantBillingInfoSerializer
 )
 from apps.common.permissions import IsTenantMember, IsAdminUser
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 
-class ProductViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet para produtos (somente leitura)"""
+class ProductViewSet(viewsets.ModelViewSet):
+    """ViewSet para produtos"""
     
     serializer_class = ProductSerializer
     permission_classes = [IsAuthenticated]
-    queryset = Product.objects.filter(is_active=True)
+    queryset = Product.objects.all()
+    
+    def get_queryset(self):
+        """Filtrar produtos baseado no usuário"""
+        user = self.request.user
+        
+        if user.is_superuser or user.is_staff:
+            # Super admin vê todos os produtos
+            return Product.objects.all()
+        else:
+            # Usuário comum só vê produtos ativos
+            return Product.objects.filter(is_active=True)
     
     @action(detail=False, methods=['get'])
     def available(self, request):
@@ -44,12 +59,28 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         return Response(serializer.data)
 
 
-class PlanViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet para planos (somente leitura)"""
+class PlanViewSet(viewsets.ModelViewSet):
+    """ViewSet para planos"""
     
-    serializer_class = PlanSerializer
     permission_classes = [IsAuthenticated]
-    queryset = Plan.objects.filter(is_active=True).order_by('sort_order')
+    queryset = Plan.objects.all()
+    
+    def get_serializer_class(self):
+        """Usar serializer diferente para create/update"""
+        if self.action in ['create', 'update', 'partial_update']:
+            return PlanCreateUpdateSerializer
+        return PlanSerializer
+    
+    def get_queryset(self):
+        """Filtrar planos baseado no usuário"""
+        user = self.request.user
+        
+        if user.is_superuser or user.is_staff:
+            # Super admin vê todos os planos
+            return Plan.objects.all().order_by('sort_order')
+        else:
+            # Usuário comum só vê planos ativos
+            return Plan.objects.filter(is_active=True).order_by('sort_order')
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTenantMember, IsAdminUser])
     def select(self, request, pk=None):

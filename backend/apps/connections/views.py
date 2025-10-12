@@ -25,22 +25,29 @@ def evolution_config(request):
     """Get or update Evolution API configuration."""
     
     if request.method == 'GET':
-        # Buscar configuração do banco de dados
-        connection = EvolutionConnection.objects.filter(is_active=True).first()
+        # Buscar configuração do tenant atual
+        user = request.user
+        
+        if user.is_superuser:
+            # Superadmin vê configuração global
+            connection = EvolutionConnection.objects.filter(is_active=True).first()
+        else:
+            # Usuário comum vê configuração do seu tenant
+            connection = EvolutionConnection.objects.filter(
+                tenant=user.tenant, 
+                is_active=True
+            ).first()
         
         if not connection:
-            # Se não existe, criar uma configuração padrão
-            from apps.tenancy.models import Tenant
-            tenant = Tenant.objects.first()
-            
-            connection = EvolutionConnection.objects.create(
-                tenant=tenant,
-                name='Evolution RBTec',
-                base_url='https://evo.rbtec.com.br',
-                api_key='584B4A4A-0815-AC86-DC39-C38FC27E8E17',
-                is_active=True,
-                status='inactive'
-            )
+            # Se não existe, retornar configuração vazia
+            return Response({
+                'base_url': '',
+                'api_key': '',
+                'webhook_url': '',
+                'is_active': False,
+                'status': 'inactive',
+                'last_error': 'Configuração não encontrada'
+            })
         
         # Auto-test connection
         connection_status = 'inactive'
@@ -120,38 +127,68 @@ def evolution_config(request):
         try:
             data = request.data
             
-            # Buscar ou criar conexão
-            connection = EvolutionConnection.objects.filter(is_active=True).first()
+            # Buscar ou criar conexão para o tenant atual
+            user = request.user
             
-            if not connection:
-                from apps.tenancy.models import Tenant
-                tenant = Tenant.objects.first()
-                
-                if not tenant:
-                    return Response({
-                        'error': 'Nenhum tenant encontrado no sistema'
-                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                
-                connection = EvolutionConnection.objects.create(
-                    tenant=tenant,
-                    name=data.get('name', 'Evolution RBTec'),
-                    base_url=data.get('base_url', 'https://evo.rbtec.com.br'),
-                    api_key=data.get('api_key', ''),
-                    is_active=data.get('is_active', True),
-                    status='inactive'
-                )
+            if user.is_superuser:
+                # Superadmin pode atualizar configuração global
+                connection = EvolutionConnection.objects.filter(is_active=True).first()
+                if not connection:
+                    from apps.tenancy.models import Tenant
+                    tenant = Tenant.objects.first()
+                    if not tenant:
+                        return Response({
+                            'error': 'Nenhum tenant encontrado no sistema'
+                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                    
+                    connection = EvolutionConnection.objects.create(
+                        tenant=tenant,
+                        name=data.get('name', 'Evolution RBTec'),
+                        base_url=data.get('base_url', 'https://evo.rbtec.com.br'),
+                        api_key=data.get('api_key', ''),
+                        is_active=data.get('is_active', True),
+                        status='inactive'
+                    )
+                else:
+                    # Atualizar existente
+                    connection.name = data.get('name', connection.name)
+                    connection.base_url = data.get('base_url', connection.base_url)
+                    
+                    # API Key: só atualizar se vier nova (não vazia)
+                    new_api_key = data.get('api_key', '')
+                    if new_api_key and new_api_key.strip():
+                        connection.api_key = new_api_key
+                    
+                    connection.is_active = data.get('is_active', connection.is_active)
+                    connection.save()
             else:
-                # Atualizar existente
-                connection.name = data.get('name', connection.name)
-                connection.base_url = data.get('base_url', connection.base_url)
+                # Usuário comum atualiza configuração do seu tenant
+                connection = EvolutionConnection.objects.filter(
+                    tenant=user.tenant, 
+                    is_active=True
+                ).first()
                 
-                # API Key: só atualizar se vier nova (não vazia)
-                new_api_key = data.get('api_key', '')
-                if new_api_key and new_api_key.strip():
-                    connection.api_key = new_api_key
-                
-                connection.is_active = data.get('is_active', connection.is_active)
-                connection.save()
+                if not connection:
+                    connection = EvolutionConnection.objects.create(
+                        tenant=user.tenant,
+                        name=data.get('name', 'Evolution API'),
+                        base_url=data.get('base_url', ''),
+                        api_key=data.get('api_key', ''),
+                        is_active=data.get('is_active', True),
+                        status='inactive'
+                    )
+                else:
+                    # Atualizar existente
+                    connection.name = data.get('name', connection.name)
+                    connection.base_url = data.get('base_url', connection.base_url)
+                    
+                    # API Key: só atualizar se vier nova (não vazia)
+                    new_api_key = data.get('api_key', '')
+                    if new_api_key and new_api_key.strip():
+                        connection.api_key = new_api_key
+                    
+                    connection.is_active = data.get('is_active', connection.is_active)
+                    connection.save()
             
             # Webhook URL seguro
             try:

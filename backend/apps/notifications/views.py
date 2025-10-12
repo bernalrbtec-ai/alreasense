@@ -78,15 +78,37 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # Superadmin can see all instances
-        if user.is_superuser or user.is_staff:
-            return WhatsAppInstance.objects.all()
+        # REGRA: Cada cliente vê APENAS seus dados
+        # Superadmin NÃO vê dados individuais de clientes
+        if not user.tenant:
+            # Superadmin sem tenant = sem acesso a dados de clientes
+            return WhatsAppInstance.objects.none()
         
-        # Regular users see only their tenant instances
-        return WhatsAppInstance.objects.filter(tenant=user.tenant)
+        # Todos (incluindo admin de cliente) veem apenas do seu tenant
+        return WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
     
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        # Verificar limite de instâncias antes de criar
+        tenant = self.request.tenant
+        if tenant:
+            can_create, message = tenant.can_create_instance()
+            if not can_create:
+                from rest_framework.exceptions import ValidationError
+                raise ValidationError({'error': message})
+        
+        # Criar a instância
+        instance = serializer.save(created_by=self.request.user)
+        
+        # Log da criação
+        from .models import WhatsAppConnectionLog
+        WhatsAppConnectionLog.objects.create(
+            instance=instance,
+            action='created',
+            details='Instância WhatsApp criada',
+            user=self.request.user
+        )
+        
+        return instance
     
     def perform_destroy(self, instance):
         """
@@ -158,6 +180,33 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
                 'error': f'Erro ao verificar status: {str(e)}',
                 'details': instance.last_error
             }, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=True, methods=['post'])
+    def update_webhook(self, request, pk=None):
+        """Update webhook configuration for this instance."""
+        instance = self.get_object()
+        
+        try:
+            success = instance.update_webhook_config()
+            
+            if success:
+                return Response({
+                    'success': True,
+                    'message': 'Webhook atualizado com sucesso! Events e Base64 ativados.',
+                })
+            else:
+                return Response({
+                    'success': False,
+                    'message': instance.last_error or 'Erro ao atualizar webhook',
+                    'error': instance.last_error,
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+        except Exception as e:
+            return Response({
+                'success': False,
+                'message': f'Erro ao atualizar webhook: {str(e)}',
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
     def set_default(self, request, pk=None):
@@ -412,12 +461,11 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         
-        # Superadmin can see all configs
-        if user.is_superuser or user.is_staff:
-            return SMTPConfig.objects.all()
+        # REGRA: Cada cliente vê APENAS seus dados
+        if not user.tenant:
+            return SMTPConfig.objects.none()
         
-        # Regular users see only their tenant configs
-        return SMTPConfig.objects.filter(tenant=user.tenant)
+        return SMTPConfig.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)

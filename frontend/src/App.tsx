@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
 import { useEffect } from 'react'
 import { api } from './lib/api'
+import { Toaster } from 'sonner'
 
 // Pages
 import LoginPage from './pages/LoginPage'
@@ -11,16 +12,21 @@ import ConnectionsPage from './pages/ConnectionsPage'
 import ExperimentsPage from './pages/ExperimentsPage'
 import BillingPage from './pages/BillingPage'
 import TenantsPage from './pages/TenantsPage'
+import ProductsPage from './pages/ProductsPage'
 import PlansPage from './pages/PlansPage'
 import SystemStatusPage from './pages/SystemStatusPage'
 import EvolutionConfigPage from './pages/EvolutionConfigPage'
 import ProfilePage from './pages/ProfilePage'
 import NotificationsPage from './pages/NotificationsPage'
+import ConfigurationsPage from './pages/ConfigurationsPage'
+import ContactsPage from './pages/ContactsPage'
+import CampaignsPage from './pages/CampaignsPage'
 
 // Components
 import Layout from './components/Layout'
 import LoadingSpinner from './components/ui/LoadingSpinner'
 import ErrorBoundary from './components/ErrorBoundary'
+import { ProtectedRoute } from './components/ProtectedRoute'
 
 function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
@@ -56,20 +62,42 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <Toaster position="top-right" richColors closeButton />
       <Layout>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/messages" element={<MessagesPage />} />
-          <Route path="/connections" element={<ConnectionsPage />} />
-          <Route path="/experiments" element={<ExperimentsPage />} />
           <Route path="/billing" element={<BillingPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/configurations" element={<ConfigurationsPage />} />
+          
+          {/* Rotas Protegidas por Produto */}
+          <Route path="/contacts" element={
+            <ProtectedRoute requiredProduct="contacts">
+              <ContactsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/campaigns" element={
+            <ProtectedRoute requiredProduct="flow">
+              <CampaignsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/connections" element={
+            <ProtectedRoute requiredProduct="flow">
+              <ConnectionsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/experiments" element={
+            <ProtectedRoute requiredProduct="sense">
+              <ExperimentsPage />
+            </ProtectedRoute>
+          } />
           
           {/* Super Admin Routes */}
           {isSuperAdmin && (
             <>
               <Route path="/admin/tenants" element={<TenantsPage />} />
+              <Route path="/admin/products" element={<ProductsPage />} />
               <Route path="/admin/plans" element={<PlansPage />} />
               <Route path="/admin/system" element={<SystemStatusPage />} />
               <Route path="/admin/evolution" element={<EvolutionConfigPage />} />

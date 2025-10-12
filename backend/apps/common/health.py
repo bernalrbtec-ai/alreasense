@@ -89,55 +89,71 @@ def check_celery():
 
 
 def check_evolution_api():
-    """Check Evolution API connectivity (optimized)."""
+    """Check Evolution API connectivity and registered instances."""
     try:
         from apps.connections.models import EvolutionConnection
         
-        # Get first active connection (or create default)
-        base_url = settings.EVO_BASE_URL if hasattr(settings, 'EVO_BASE_URL') else 'https://evo.rbtec.com.br'
-        api_key = settings.EVO_API_KEY if hasattr(settings, 'EVO_API_KEY') else '584B4A4A-0815-AC86-DC39-C38FC27E8E17'
+        # Count instances registered in our database
+        all_connections = EvolutionConnection.objects.all()
+        total_count = all_connections.count()
+        active_count = all_connections.filter(status='active', is_active=True).count()
+        inactive_count = all_connections.filter(status='inactive').count()
         
-        headers = {
-            'apikey': api_key,
-            'Content-Type': 'application/json'
-        }
+        # Try to check external API connectivity using registered connections
+        api_status = 'disconnected'
+        external_count = 0
         
-        # Use a faster endpoint or reduce timeout
-        test_url = f"{base_url}/instance/fetchInstances"
-        response = requests.get(test_url, headers=headers, timeout=2)  # Reduced timeout
-        
-        if response.status_code == 200:
-            instances = response.json()
+        try:
+            # Use the first active connection from database
+            active_connection = all_connections.filter(is_active=True).first()
             
-            # Count registered instances in our database
-            registered_count = 0
-            active_count = 0
-            inactive_count = 0
-            
-            return {
-                'status': 'active',
-                'instance_count': len(instances),
-                'registered_instances': {
-                    'total': registered_count,
-                    'active': active_count,
-                    'inactive': inactive_count,
+            if active_connection and active_connection.base_url and active_connection.api_key:
+                headers = {
+                    'apikey': active_connection.api_key,
+                    'Content-Type': 'application/json'
                 }
-            }
-        else:
-            return {
-                'status': 'error',
-                'error': f'HTTP {response.status_code}'
-            }
-            
-    except requests.exceptions.Timeout:
+                
+                # Test connectivity with the registered connection
+                test_url = f"{active_connection.base_url}/instance/fetchInstances"
+                response = requests.get(test_url, headers=headers, timeout=3)
+                
+                if response.status_code == 200:
+                    external_instances = response.json()
+                    api_status = 'connected'
+                    external_count = len(external_instances)
+                else:
+                    api_status = 'error'
+                    external_count = 0
+            else:
+                api_status = 'no_active_connection'
+                external_count = 0
+                
+        except Exception:
+            api_status = 'disconnected'
+            external_count = 0
+        
         return {
-            'status': 'timeout',
-            'error': 'Connection timeout (optimized)'
+            'status': api_status,
+            'registered_instances': {
+                'total': total_count,
+                'active': active_count,
+                'inactive': inactive_count,
+            },
+            'external_api_instances': external_count,
+            'api_connectivity': api_status
         }
+            
     except Exception as e:
         return {
             'status': 'error',
-            'error': str(e)[:100]
+            'error': str(e)[:100],
+            'registered_instances': {
+                'total': 0,
+                'active': 0,
+                'inactive': 0,
+            },
+            'external_api_instances': 0,
+            'api_connectivity': 'error'
         }
 
 

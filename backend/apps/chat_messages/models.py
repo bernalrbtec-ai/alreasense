@@ -1,5 +1,4 @@
 from django.db import models
-from django.contrib.postgres.indexes import GinIndex
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
 
@@ -19,7 +18,7 @@ class Message(models.Model):
         blank=True
     )
     chat_id = models.CharField(max_length=128, db_index=True)
-    sender = models.CharField(max_length=64)  # hash do número/ID
+    sender = models.CharField(max_length=64, default='unknown')  # hash do número/ID
     text = models.TextField()
     created_at = models.DateTimeField(db_index=True)
     
@@ -40,7 +39,7 @@ class Message(models.Model):
         indexes = [
             models.Index(fields=['created_at']),
             models.Index(fields=['chat_id']),
-            GinIndex(fields=['text']),  # full-text search
+            models.Index(fields=['text']),  # Índice simples para busca
         ]
         ordering = ['-created_at']
     

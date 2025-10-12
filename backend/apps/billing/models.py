@@ -218,6 +218,63 @@ class TenantProduct(models.Model):
         self.save()
 
 
+class InstanceAddon(models.Model):
+    """
+    Add-ons de instâncias extras por produto
+    - Cliente pode comprar instâncias adicionais
+    - Preço por instância extra
+    """
+    
+    # Relacionamentos
+    tenant = models.ForeignKey(
+        'tenancy.Tenant', 
+        on_delete=models.CASCADE, 
+        related_name='instance_addons',
+        null=True,
+        blank=True
+    )
+    product = models.ForeignKey(Product, on_delete=models.CASCADE, related_name='instance_addons')
+    
+    # Configurações
+    quantity = models.PositiveIntegerField(help_text="Quantidade de instâncias extras")
+    price_per_instance = models.DecimalField(
+        max_digits=10, 
+        decimal_places=2,
+        validators=[MinValueValidator(0)],
+        help_text="Preço por instância extra (R$/mês)"
+    )
+    
+    # Status
+    is_active = models.BooleanField(default=True, help_text="Add-on ativo")
+    activated_at = models.DateTimeField(default=timezone.now, help_text="Data de ativação")
+    deactivated_at = models.DateTimeField(null=True, blank=True, help_text="Data de desativação")
+    
+    # Metadados
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'billing_instance_addon'
+        verbose_name = 'Add-on de Instância'
+        verbose_name_plural = 'Add-ons de Instâncias'
+        unique_together = ['tenant', 'product']
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.tenant.name} → {self.product.name}: +{self.quantity} instâncias (R$ {self.price_per_instance}/mês)"
+    
+    @property
+    def total_price(self):
+        """Preço total do add-on"""
+        return self.quantity * self.price_per_instance
+    
+    def deactivate(self):
+        """Desativa o add-on"""
+        self.is_active = False
+        self.deactivated_at = timezone.now()
+        self.save()
+
+
 class BillingHistory(models.Model):
     """
     Histórico de mudanças de billing
