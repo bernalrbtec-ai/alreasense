@@ -80,7 +80,7 @@ class ContactSerializer(serializers.ModelSerializer):
             'total_campaigns_participated', 'total_campaigns_responded',
             
             # Observações
-            'notes', 'custom_fields',
+            'notes', 'referred_by', 'custom_fields',
             
             # Segmentação
             'tags', 'tag_ids',
