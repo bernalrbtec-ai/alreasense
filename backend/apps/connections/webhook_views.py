@@ -415,21 +415,24 @@ class EvolutionWebhookView(APIView):
             if campaign_contact:
                 logger.info(f"✅ Found CampaignContact: {campaign_contact.id} for message_id: {message_id}")
                 # Update status based on Evolution API status
-                if status == 'delivered':
+                if status in ['delivered', 'delivery_ack']:
                     campaign_contact.delivered_at = timezone.now()
                     campaign_contact.status = 'delivered'
-                    logger.info(f"Campaign contact {campaign_contact.id} marked as delivered")
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as delivered (status: {status})")
                     
-                elif status == 'read':
+                elif status in ['read', 'read_ack']:
                     campaign_contact.read_at = timezone.now()
                     campaign_contact.status = 'read'
-                    logger.info(f"Campaign contact {campaign_contact.id} marked as read")
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as read (status: {status})")
                     
-                elif status == 'failed':
+                elif status in ['failed', 'error']:
                     campaign_contact.failed_at = timezone.now()
                     campaign_contact.error_message = f"Message failed: {status}"
                     campaign_contact.status = 'failed'
-                    logger.info(f"Campaign contact {campaign_contact.id} marked as failed")
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as failed (status: {status})")
+                
+                else:
+                    logger.warning(f"Unknown status received: {status}")
                 
                 campaign_contact.save()
                 
