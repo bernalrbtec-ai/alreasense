@@ -398,12 +398,15 @@ class EvolutionWebhookView(APIView):
         try:
             from apps.campaigns.models import CampaignContact
             
+            logger.info(f"🔍 Searching for CampaignContact with whatsapp_message_id: {message_id}")
+            
             # Find campaign contact by WhatsApp message ID
             campaign_contact = CampaignContact.objects.filter(
                 whatsapp_message_id=message_id
             ).first()
             
             if campaign_contact:
+                logger.info(f"✅ Found CampaignContact: {campaign_contact.id} for message_id: {message_id}")
                 # Update status based on Evolution API status
                 if status == 'delivered':
                     campaign_contact.delivered_at = timezone.now()
@@ -428,7 +431,10 @@ class EvolutionWebhookView(APIView):
                 
                 return True
             else:
-                logger.info(f"No campaign contact found for message_id: {message_id}")
+                logger.warning(f"❌ No CampaignContact found for message_id: {message_id}")
+                # Debug: List all CampaignContacts with whatsapp_message_id
+                all_contacts = CampaignContact.objects.filter(whatsapp_message_id__isnull=False)
+                logger.info(f"🔍 Available whatsapp_message_ids: {[c.whatsapp_message_id for c in all_contacts]}")
                 return False
                 
         except Exception as e:

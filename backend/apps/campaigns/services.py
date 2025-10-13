@@ -359,7 +359,7 @@ class CampaignSender:
             # Atualizar status do contato PRIMEIRO
             campaign_contact.status = 'sent'
             campaign_contact.sent_at = timezone.now()
-            campaign_contact.save()
+            campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
             
             # Atualizar campanha
             self.campaign.messages_sent += 1
