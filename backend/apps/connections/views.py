@@ -31,6 +31,12 @@ def evolution_config(request):
         
         if user.is_superuser:
             # Superadmin vê configuração global (primeira configuração ativa)
+            print(f"🔍 Superuser - buscando conexões ativas...")
+            all_connections = EvolutionConnection.objects.all()
+            print(f"🔍 Superuser - total de conexões: {all_connections.count()}")
+            for conn in all_connections:
+                print(f"🔍 Superuser - conexão: id={conn.id}, is_active={conn.is_active}, tenant={conn.tenant.name}")
+            
             connection = EvolutionConnection.objects.filter(is_active=True).first()
             print(f"🔍 Superuser - conexão encontrada: {connection is not None}")
             if connection:
