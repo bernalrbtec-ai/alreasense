@@ -21,6 +21,7 @@ import NotificationsPage from './pages/NotificationsPage'
 import ConfigurationsPage from './pages/ConfigurationsPage'
 import ContactsPage from './pages/ContactsPage'
 import CampaignsPage from './pages/CampaignsPage'
+import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
 
 // Components
 import Layout from './components/Layout'
@@ -102,6 +103,7 @@ function App() {
               <Route path="/admin/system" element={<SystemStatusPage />} />
               <Route path="/admin/evolution" element={<EvolutionConfigPage />} />
               <Route path="/admin/notifications" element={<NotificationsPage />} />
+              <Route path="/admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
             </>
           )}
           

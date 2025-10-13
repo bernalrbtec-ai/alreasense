@@ -17,7 +17,8 @@ import {
   Bell,
   ChevronLeft,
   ChevronRight,
-  Settings
+  Settings,
+  Database
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
@@ -55,6 +56,7 @@ const adminNavigation = [
   { name: 'Planos', href: '/admin/plans', icon: CreditCard },
   { name: 'Status do Sistema', href: '/admin/system', icon: Activity },
   { name: 'Servidor de Instância', href: '/admin/evolution', icon: Server },
+  { name: 'Monitoramento Webhooks', href: '/admin/webhook-monitoring', icon: Database },
   { name: 'Notificações', href: '/admin/notifications', icon: Bell },
 ]
 

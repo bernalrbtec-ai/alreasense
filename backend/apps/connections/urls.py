@@ -2,7 +2,7 @@ from django.urls import path
 from . import views
 from . import webhook_views
 from . import test_views
-from . import webhook_monitoring
+from . import webhook_monitoring_views
 
 urlpatterns = [
     # Connections list
@@ -19,8 +19,8 @@ urlpatterns = [
     path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook'),
     
     # Webhook monitoring (admin only)
-    path('webhooks/cache/stats/', webhook_monitoring.webhook_cache_stats, name='webhook-cache-stats'),
-    path('webhooks/cache/events/', webhook_monitoring.webhook_recent_events, name='webhook-recent-events'),
-    path('webhooks/cache/reprocess/', webhook_monitoring.webhook_reprocess_events, name='webhook-reprocess-events'),
-    path('webhooks/cache/events/<str:event_id>/', webhook_monitoring.webhook_event_details, name='webhook-event-details'),
+    path('webhooks/cache/stats/', webhook_monitoring_views.WebhookCacheStatsView.as_view(), name='webhook-cache-stats'),
+    path('webhooks/cache/events/', webhook_monitoring_views.WebhookCacheEventsView.as_view(), name='webhook-recent-events'),
+    path('webhooks/cache/reprocess/', webhook_monitoring_views.WebhookCacheReprocessView.as_view(), name='webhook-reprocess-events'),
+    path('webhooks/cache/events/<str:event_id>/', webhook_monitoring_views.WebhookCacheEventDetailView.as_view(), name='webhook-event-details'),
 ]

@@ -7,14 +7,15 @@ e persiste dados processados no PostgreSQL.
 import json
 import logging
 import redis
+import os
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
-from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
-# Redis connection
-redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
+# Redis connection - usar variável de ambiente ou padrão
+redis_url = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
+redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
 
 class WebhookCache:
     """Sistema de cache para webhooks com TTL de 24h."""
