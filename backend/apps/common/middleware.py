@@ -23,6 +23,12 @@ class TenantMiddleware(MiddlewareMixin):
         # Add request ID for tracking
         request.request_id = str(uuid.uuid4())[:8]
         
+        # Skip tenant processing for webhooks (they don't need authentication)
+        if request.path.startswith('/webhooks/'):
+            request.tenant = None
+            request.tenant_id = None
+            return None  # Skip further processing
+        
         # Inicializar tenant como None (será preenchido no process_view)
         request.tenant = None
         request.tenant_id = None

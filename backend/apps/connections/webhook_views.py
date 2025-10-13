@@ -16,6 +16,7 @@ from .models import EvolutionConnection
 from apps.chat_messages.models import Message
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
+from apps.campaigns.models import CampaignContact
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -219,9 +220,48 @@ class EvolutionWebhookView(APIView):
     def handle_message_update(self, data):
         """Handle message status updates (delivered, read, etc.)."""
         try:
-            # TODO: Update message status
-            logger.info(f"Message update received: {data}")
+            update_data = data.get('data', {})
+            key = update_data.get('key', {})
+            update = update_data.get('update', {})
+            
+            # Extract message info
+            chat_id = key.get('remoteJid', '')
+            message_id = key.get('id', '')
+            status = update.get('status', '')
+            timestamp = update.get('timestamp')
+            
+            logger.info(f"Message update: {message_id} status={status}")
+            
+            # Find message in database
+            try:
+                message_obj = Message.objects.get(
+                    chat_id=chat_id,
+                    message_id=message_id
+                )
+                
+                # Update message status based on Evolution API status
+                if status == 'delivered':
+                    message_obj.delivered_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
+                    logger.info(f"Message {message_id} marked as delivered")
+                    
+                elif status == 'read':
+                    message_obj.read_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
+                    logger.info(f"Message {message_id} marked as read")
+                    
+                elif status == 'failed':
+                    message_obj.failed_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
+                    logger.info(f"Message {message_id} marked as failed")
+                
+                message_obj.save()
+                
+                # TODO: Update campaign contact status if this is a campaign message
+                self.update_campaign_contact_status(message_obj, status, timestamp)
+                
+            except Message.DoesNotExist:
+                logger.warning(f"Message not found: {message_id}")
+            
             return Response({'status': 'success'})
+            
         except Exception as e:
             logger.error(f"Error handling message update: {str(e)}")
             return JsonResponse({'error': 'Message update failed'}, status=500)

@@ -31,7 +31,7 @@ class Campaign(models.Model):
     
     # Configurações
     rotation_mode = models.CharField(
-        max_length=20, 
+        max_length=20,
         choices=ROTATION_MODE_CHOICES, 
         default='intelligent',
         verbose_name='Modo de Rotação'
