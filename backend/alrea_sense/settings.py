@@ -167,6 +167,19 @@ CORS_ALLOWED_ORIGINS = config(
     default='http://localhost,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:5173,https://alreasense-production.up.railway.app'
 ).split(',')
 
+# Ensure Railway domains are included
+RAILWAY_DOMAINS = [
+    'https://alreasense-production.up.railway.app',
+    'https://alreasense-backend-production.up.railway.app'
+]
+
+for domain in RAILWAY_DOMAINS:
+    if domain not in CORS_ALLOWED_ORIGINS:
+        CORS_ALLOWED_ORIGINS.append(domain)
+
+# Debug CORS configuration
+print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
+
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # Keep False for security, use CORS_ALLOWED_ORIGINS
 CORS_ALLOW_HEADERS = [
