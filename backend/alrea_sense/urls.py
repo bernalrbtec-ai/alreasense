@@ -38,8 +38,9 @@ urlpatterns = [
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/contacts/', include('apps.contacts.urls')),
     path('api/campaigns/', include('apps.campaigns.urls')),
-    # Webhook Evolution - rota direta (sem include)
-    path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct'),
+    # Webhook Evolution - rotas diretas (com e sem barra final)
+    path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct-slash'),
+    path('webhooks/evolution', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct'),
 ]
 
 # Serve static and media files
