@@ -161,16 +161,17 @@ class EvolutionWebhookView(APIView):
         try:
             logger.info(f"📞 Contacts update received: {json.dumps(data, indent=2)}")
             
-            # Extract contact data
-            contact_data = data.get('data', {})
+            # Extract contact data - data is a LIST, not a dict!
+            contacts_list = data.get('data', [])
             instance = data.get('instance', '')
             
-            # Process contact update (for now, just log)
-            remote_jid = contact_data.get('remoteJid', '')
-            push_name = contact_data.get('pushName', '')
-            profile_pic = contact_data.get('profilePicUrl', '')
-            
-            logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
+            # Process each contact in the list
+            for contact_data in contacts_list:
+                remote_jid = contact_data.get('remoteJid', '')
+                push_name = contact_data.get('pushName', '')
+                profile_pic = contact_data.get('profilePicUrl', '')
+                
+                logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
             
             # TODO: Update contact information in database if needed
             # This could be used to sync contact names and profile pictures
