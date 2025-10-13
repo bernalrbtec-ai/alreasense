@@ -252,8 +252,8 @@ CELERY_TASK_ACKS_LATE = True  # Acknowledge tasks after completion
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 50  # Restart worker after 50 tasks
 CELERY_TASK_REJECT_ON_WORKER_LOST = True  # Reject tasks if worker dies
 CELERY_WORKER_DISABLE_RATE_LIMITS = False  # Enable rate limits
-CELERY_TASK_TIME_LIMIT = 300  # 5 minutes max per task
-CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minutes soft limit
+CELERY_TASK_TIME_LIMIT = 900  # 15 minutes max per task (para intervalos de 600s)
+CELERY_TASK_SOFT_TIME_LIMIT = 720  # 12 minutes soft limit
 
 # Celery Beat Schedule
 from celery.schedules import crontab
