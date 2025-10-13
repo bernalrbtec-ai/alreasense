@@ -227,11 +227,6 @@ class CampaignSender:
         import random
         from django.utils import timezone
         
-        # Verificar se pode enviar
-        can_send, reason = self.rotation_service.can_send_message()
-        if not can_send:
-            return False, reason
-        
         # Selecionar próximo contato pendente
         campaign_contact = self.campaign.campaign_contacts.filter(
             status='pending'
