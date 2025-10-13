@@ -266,6 +266,55 @@ class EvolutionWebhookView(APIView):
             logger.error(f"Error handling message update: {str(e)}")
             return JsonResponse({'error': 'Message update failed'}, status=500)
     
+    def update_campaign_contact_status(self, message_obj, status, timestamp):
+        """Update campaign contact status based on message status."""
+        try:
+            # Find campaign contact by WhatsApp message ID
+            campaign_contact = CampaignContact.objects.filter(
+                whatsapp_message_id=message_obj.message_id
+            ).first()
+            
+            if campaign_contact:
+                # Update status based on Evolution API status
+                if status == 'delivered':
+                    campaign_contact.delivered_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
+                    campaign_contact.status = 'delivered'
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as delivered")
+                    
+                elif status == 'read':
+                    campaign_contact.read_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
+                    campaign_contact.status = 'read'
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as read")
+                    
+                elif status == 'failed':
+                    campaign_contact.failed_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
+                    campaign_contact.error_message = f"Message failed: {status}"
+                    campaign_contact.status = 'failed'
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as failed")
+                
+                campaign_contact.save()
+                
+                # Update campaign stats
+                self.update_campaign_stats(campaign_contact.campaign)
+                
+        except Exception as e:
+            logger.error(f"Error updating campaign contact status: {str(e)}")
+    
+    def update_campaign_stats(self, campaign):
+        """Update campaign statistics."""
+        try:
+            from apps.campaigns.models import CampaignContact
+            
+            total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
+            delivered_count = CampaignContact.objects.filter(campaign=campaign, status='delivered').count()
+            read_count = CampaignContact.objects.filter(campaign=campaign, status='read').count()
+            failed_count = CampaignContact.objects.filter(campaign=campaign, status='failed').count()
+            
+            logger.info(f"Campaign {campaign.id} stats: {delivered_count}/{total_contacts} delivered, {read_count} read, {failed_count} failed")
+            
+        except Exception as e:
+            logger.error(f"Error updating campaign stats: {str(e)}")
+    
     def handle_connection_update(self, data):
         """Handle connection status updates."""
         try:
