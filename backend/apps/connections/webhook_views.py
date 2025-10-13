@@ -347,50 +347,75 @@ class EvolutionWebhookView(APIView):
         """Handle message status updates (delivered, read, etc.)."""
         try:
             update_data = data.get('data', {})
-            key = update_data.get('key', {})
-            update = update_data.get('update', {})
             
-            # Extract message info
-            chat_id = key.get('remoteJid', '')
-            message_id = key.get('id', '')
-            status = update.get('status', '')
-            timestamp = update.get('timestamp')
+            # Extract message info from Evolution API structure
+            chat_id = update_data.get('remoteJid', '')
+            message_id = update_data.get('messageId', '')  # Evolution API field
+            status = update_data.get('status', '').lower()  # Convert to lowercase
+            key_id = update_data.get('keyId', '')
             
-            logger.info(f"Message update: {message_id} status={status}")
+            logger.info(f"Message update: {message_id} status={status} chat_id={chat_id}")
             
-            # Find message in database
+            # Find message in database by chat_id and text content
+            # Since we don't have message_id field, we'll need to match differently
             try:
-                message_obj = Message.objects.get(
-                    chat_id=chat_id,
-                    message_id=message_id
-                )
+                # Try to find by chat_id and some identifier
+                # For now, we'll skip the Message model update and focus on CampaignContact
+                logger.info(f"Processing message update for chat_id: {chat_id}, status: {status}")
                 
-                # Update message status based on Evolution API status
-                if status == 'delivered':
-                    message_obj.delivered_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
-                    logger.info(f"Message {message_id} marked as delivered")
-                    
-                elif status == 'read':
-                    message_obj.read_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
-                    logger.info(f"Message {message_id} marked as read")
-                    
-                elif status == 'failed':
-                    message_obj.failed_at = datetime.fromtimestamp(timestamp, tz=timezone.utc) if timestamp else timezone.now()
-                    logger.info(f"Message {message_id} marked as failed")
+                # Update campaign contact status directly
+                self.update_campaign_contact_by_message_id(message_id, status)
                 
-                message_obj.save()
-                
-                # TODO: Update campaign contact status if this is a campaign message
-                self.update_campaign_contact_status(message_obj, status, timestamp)
-                
-            except Message.DoesNotExist:
-                logger.warning(f"Message not found: {message_id}")
+            except Exception as e:
+                logger.error(f"Error updating campaign contact: {str(e)}")
             
             return Response({'status': 'success'})
             
         except Exception as e:
             logger.error(f"Error handling message update: {str(e)}")
             return JsonResponse({'error': 'Message update failed'}, status=500)
+    
+    def update_campaign_contact_by_message_id(self, message_id, status):
+        """Update campaign contact status by WhatsApp message ID."""
+        try:
+            from apps.campaigns.models import CampaignContact
+            
+            # Find campaign contact by WhatsApp message ID
+            campaign_contact = CampaignContact.objects.filter(
+                whatsapp_message_id=message_id
+            ).first()
+            
+            if campaign_contact:
+                # Update status based on Evolution API status
+                if status == 'delivered':
+                    campaign_contact.delivered_at = timezone.now()
+                    campaign_contact.status = 'delivered'
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as delivered")
+                    
+                elif status == 'read':
+                    campaign_contact.read_at = timezone.now()
+                    campaign_contact.status = 'read'
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as read")
+                    
+                elif status == 'failed':
+                    campaign_contact.failed_at = timezone.now()
+                    campaign_contact.error_message = f"Message failed: {status}"
+                    campaign_contact.status = 'failed'
+                    logger.info(f"Campaign contact {campaign_contact.id} marked as failed")
+                
+                campaign_contact.save()
+                
+                # Update campaign stats
+                self.update_campaign_stats(campaign_contact.campaign)
+                
+                return True
+            else:
+                logger.info(f"No campaign contact found for message_id: {message_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating campaign contact by message_id: {str(e)}")
+            return False
     
     def update_campaign_contact_status(self, message_obj, status, timestamp):
         """Update campaign contact status based on message status."""
