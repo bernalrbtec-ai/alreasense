@@ -1,4 +1,4 @@
-import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award } from 'lucide-react'
+import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus } from 'lucide-react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 
@@ -21,6 +21,7 @@ interface Contact {
   city?: string
   state?: string
   birth_date?: string
+  referred_by?: string
   lifecycle_stage: string
   rfm_segment: string
   engagement_score: number
@@ -126,6 +127,13 @@ export default function ContactCard({ contact, onEdit, onDelete }: ContactCardPr
           <div className="flex items-center gap-2">
             <Mail className="h-4 w-4 flex-shrink-0" />
             <span className="truncate">{contact.email}</span>
+          </div>
+        )}
+        
+        {contact.referred_by && (
+          <div className="flex items-center gap-2">
+            <UserPlus className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">Indicado por: {contact.referred_by}</span>
           </div>
         )}
         

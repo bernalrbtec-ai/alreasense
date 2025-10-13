@@ -16,6 +16,7 @@ interface Contact {
   city?: string
   state?: string
   birth_date?: string
+  referred_by?: string
   lifecycle_stage: string
   rfm_segment: string
   engagement_score: number
@@ -81,6 +82,7 @@ export default function ContactsPage() {
     city: '',
     state: '',
     zipcode: '',
+    referred_by: '',
     notes: '',
     tag_ids: [] as string[]
   })
@@ -250,6 +252,7 @@ export default function ContactsPage() {
       city: contact.city || '',
       state: contact.state || '',
       zipcode: '',
+      referred_by: contact.referred_by || '',
       notes: '',
       tag_ids: contact.tags.map(t => t.id)
     })
@@ -268,6 +271,7 @@ export default function ContactsPage() {
       city: '',
       state: '',
       zipcode: '',
+      referred_by: '',
       notes: '',
       tag_ids: []
     })
@@ -633,6 +637,19 @@ export default function ContactsPage() {
                       value={formData.state}
                       onChange={(e) => setFormData({ ...formData, state: e.target.value.toUpperCase() })}
                       placeholder="SP"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Quem Indicou
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.referred_by}
+                      onChange={(e) => setFormData({ ...formData, referred_by: e.target.value })}
+                      placeholder="Nome de quem indicou o contato"
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                     />
                   </div>
