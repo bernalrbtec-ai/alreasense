@@ -31,11 +31,11 @@ import { cn } from '@/lib/utils'
 // Mapeamento de produtos para itens do menu
 const productMenuItems = {
   flow: [
-    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'contacts' },
+    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'flow' },
     { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
   ],
   sense: [
-    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'contacts' },
+    { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'sense' },
     { name: 'Experimentos', href: '/experiments', icon: FlaskConical, requiredProduct: 'sense' },
   ],
   api_public: [
