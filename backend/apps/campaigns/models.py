@@ -125,10 +125,11 @@ class Campaign(models.Model):
     
     @property
     def success_rate(self):
-        """Taxa de sucesso da campanha"""
-        if self.messages_sent == 0:
+        """Taxa de entrega da campanha (entregues / (entregues + falhas))"""
+        total_processed = self.messages_delivered + self.messages_failed
+        if total_processed == 0:
             return 0
-        return (self.messages_delivered / self.messages_sent) * 100
+        return (self.messages_delivered / total_processed) * 100
     
     @property
     def read_rate(self):
