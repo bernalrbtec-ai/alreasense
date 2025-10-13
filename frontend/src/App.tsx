@@ -73,7 +73,7 @@ function App() {
           
           {/* Rotas Protegidas por Produto */}
           <Route path="/contacts" element={
-            <ProtectedRoute requiredProduct="contacts">
+            <ProtectedRoute requiredProduct="flow">
               <ContactsPage />
             </ProtectedRoute>
           } />
