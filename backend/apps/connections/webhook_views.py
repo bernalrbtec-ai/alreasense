@@ -371,18 +371,25 @@ class EvolutionWebhookView(APIView):
             status = update_data.get('status', '').lower()  # Convert to lowercase
             key_id = update_data.get('keyId', '')
             
-            logger.info(f"Message update: {message_id} status={status} chat_id={chat_id}")
+            logger.info(f"Message update: messageId={message_id}, keyId={key_id}, status={status}, chat_id={chat_id}")
             
             # Find message in database by chat_id and text content
             # Since we don't have message_id field, we'll need to match differently
             try:
                 logger.info(f"Processing message update for chat_id: {chat_id}, status: {status}")
                 
-                # Update campaign contact status directly
-                self.update_campaign_contact_by_message_id(message_id, status)
+                # Try both messageId and keyId for matching
+                success = False
+                if message_id:
+                    success = self.update_campaign_contact_by_message_id(message_id, status)
+                    if success:
+                        self.update_message_model_by_message_id(message_id, status)
                 
-                # ALSO update Message model for dashboard counters
-                self.update_message_model_by_message_id(message_id, status)
+                if not success and key_id:
+                    logger.info(f"Trying with keyId instead: {key_id}")
+                    success = self.update_campaign_contact_by_message_id(key_id, status)
+                    if success:
+                        self.update_message_model_by_message_id(key_id, status)
                 
             except Exception as e:
                 logger.error(f"Error updating message status: {str(e)}")
