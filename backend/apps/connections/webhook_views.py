@@ -105,6 +105,8 @@ class EvolutionWebhookView(APIView):
                 return self.handle_connection_update(data)
             elif event_type == 'presence.update':
                 return self.handle_presence_update(data)
+            elif event_type == 'contacts.update':
+                return self.handle_contacts_update(data)
             else:
                 logger.info(f"Unhandled event type: {event_type}")
                 return JsonResponse({'status': 'ignored', 'event': event_type})
@@ -115,6 +117,31 @@ class EvolutionWebhookView(APIView):
         except Exception as e:
             logger.error(f"Webhook error: {str(e)}")
             return JsonResponse({'error': 'Internal server error'}, status=500)
+    
+    def handle_contacts_update(self, data):
+        """Handle contacts.update events from Evolution API."""
+        try:
+            logger.info(f"📞 Contacts update received: {json.dumps(data, indent=2)}")
+            
+            # Extract contact data
+            contact_data = data.get('data', {})
+            instance = data.get('instance', '')
+            
+            # Process contact update (for now, just log)
+            remote_jid = contact_data.get('remoteJid', '')
+            push_name = contact_data.get('pushName', '')
+            profile_pic = contact_data.get('profilePicUrl', '')
+            
+            logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
+            
+            # TODO: Update contact information in database if needed
+            # This could be used to sync contact names and profile pictures
+            
+            return JsonResponse({'status': 'success', 'event': 'contacts.update'})
+            
+        except Exception as e:
+            logger.error(f"Error handling contacts update: {str(e)}")
+            return JsonResponse({'error': 'Contacts update failed'}, status=500)
     
     def handle_message_upsert(self, data):
         """Handle new messages from Evolution API."""
