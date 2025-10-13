@@ -188,6 +188,13 @@ print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
 
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # Keep False for security, use CORS_ALLOWED_ORIGINS
+
+# Force CORS headers to be added to all responses
+CORS_PREFLIGHT_MAX_AGE = 86400
+
+# Ensure CORS headers are always present
+CORS_EXPOSE_HEADERS = ['content-type', 'x-requested-with']
+CORS_REPLACE_HTTPS_REFERER = True
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
