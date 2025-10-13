@@ -71,14 +71,22 @@ class CampaignViewSet(viewsets.ModelViewSet):
     def pause(self, request, pk=None):
         """Pausar campanha"""
         campaign = self.get_object()
+        
+        print(f"🛑 PAUSANDO CAMPANHA: {campaign.name} (ID: {campaign.id})")
+        print(f"   Status atual: {campaign.status}")
+        
         campaign.pause()
+        
+        # Verificar se foi pausada
+        campaign.refresh_from_db()
+        print(f"   Status após pausar: {campaign.status}")
         
         # Log de pausa
         CampaignLog.log_campaign_paused(campaign, request.user)
         
         return Response({
             'message': 'Campanha pausada com sucesso',
-            'status': 'paused'
+            'status': campaign.status
         })
     
     @action(detail=True, methods=['post'])

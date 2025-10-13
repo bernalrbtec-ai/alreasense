@@ -38,6 +38,8 @@ def process_campaign(self, campaign_id: str):
         # ⚠️ CRÍTICO: Recarregar campanha ANTES de processar lote
         campaign.refresh_from_db()
         
+        print(f"🔄 Verificando status da campanha: {campaign.status}")
+        
         # Verificar se foi pausada/cancelada
         if campaign.status != 'running':
             print(f"⏸️ Campanha pausada ou cancelada (status: {campaign.status})")
