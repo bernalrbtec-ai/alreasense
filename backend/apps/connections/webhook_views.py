@@ -1,5 +1,6 @@
 import json
 import logging
+import socket
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -7,6 +8,10 @@ from django.utils.decorators import method_decorator
 from django.views import View
 from django.utils import timezone
 from datetime import datetime
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import permission_classes
+from rest_framework.response import Response
+from rest_framework.views import APIView
 from .models import EvolutionConnection
 from apps.chat_messages.models import Message
 from apps.tenancy.models import Tenant
@@ -15,14 +20,68 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
+# Lista de IPs/DNS permitidos para webhook
+ALLOWED_WEBHOOK_ORIGINS = [
+    'evo.rbtec.com.br',  # DNS da Evolution API
+    # Adicione outros IPs/DNS conforme necessário
+    # Exemplo: '192.168.1.100', 'api.evolution.com'
+]
+
+# Configuração de desenvolvimento (permitir todos em dev)
+import os
+ALLOW_ALL_ORIGINS_IN_DEV = os.getenv('ALLOW_ALL_WEBHOOK_ORIGINS', 'False').lower() == 'true'
+
+def get_client_ip(request):
+    """Get client IP address from request."""
+    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+    if x_forwarded_for:
+        ip = x_forwarded_for.split(',')[0]
+    else:
+        ip = request.META.get('REMOTE_ADDR')
+    return ip
+
+def is_allowed_origin(request):
+    """Check if request origin is allowed for webhook."""
+    client_ip = get_client_ip(request)
+    
+    # Em desenvolvimento, permitir todos os IPs se configurado
+    if ALLOW_ALL_ORIGINS_IN_DEV:
+        return True, f"Development mode: allowing {client_ip}"
+    
+    # Verificar se o IP está na lista de permitidos
+    for allowed_origin in ALLOWED_WEBHOOK_ORIGINS:
+        try:
+            # Se for um DNS, resolver para IP
+            if not allowed_origin.replace('.', '').isdigit():
+                resolved_ips = socket.gethostbyname_ex(allowed_origin)[2]
+                if client_ip in resolved_ips:
+                    return True, f"DNS {allowed_origin} resolved to {client_ip}"
+            # Se for um IP direto
+            elif client_ip == allowed_origin:
+                return True, f"Direct IP match: {client_ip}"
+        except socket.gaierror:
+            logger.warning(f"Could not resolve DNS: {allowed_origin}")
+            continue
+    
+    return False, f"IP {client_ip} not in allowed origins: {ALLOWED_WEBHOOK_ORIGINS}"
+
 
 @method_decorator(csrf_exempt, name='dispatch')
 @method_decorator(require_http_methods(["POST"]), name='dispatch')
-class EvolutionWebhookView(View):
+class EvolutionWebhookView(APIView):
+    permission_classes = [AllowAny]  # Não requer autenticação
     """Webhook para receber eventos do Evolution API."""
     
     def post(self, request):
         try:
+            # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
+            is_allowed, reason = is_allowed_origin(request)
+            if not is_allowed:
+                logger.warning(f"🚫 Webhook blocked: {reason}")
+                return Response({'error': 'Unauthorized origin'}, status=403)
+            
+            logger.info(f"✅ Webhook allowed: {reason}")
+            
             # Parse JSON data
             data = json.loads(request.body)
             logger.info(f"Webhook received: {json.dumps(data, indent=2)}")
@@ -155,7 +214,7 @@ class EvolutionWebhookView(View):
         try:
             # TODO: Update message status
             logger.info(f"Message update received: {data}")
-            return JsonResponse({'status': 'success'})
+            return Response({'status': 'success'})
         except Exception as e:
             logger.error(f"Error handling message update: {str(e)}")
             return JsonResponse({'error': 'Message update failed'}, status=500)
@@ -165,7 +224,7 @@ class EvolutionWebhookView(View):
         try:
             # TODO: Update connection status
             logger.info(f"Connection update received: {data}")
-            return JsonResponse({'status': 'success'})
+            return Response({'status': 'success'})
         except Exception as e:
             logger.error(f"Error handling connection update: {str(e)}")
             return JsonResponse({'error': 'Connection update failed'}, status=500)
@@ -175,7 +234,7 @@ class EvolutionWebhookView(View):
         try:
             # TODO: Update presence status
             logger.info(f"Presence update received: {data}")
-            return JsonResponse({'status': 'success'})
+            return Response({'status': 'success'})
         except Exception as e:
             logger.error(f"Error handling presence update: {str(e)}")
             return JsonResponse({'error': 'Presence update failed'}, status=500)

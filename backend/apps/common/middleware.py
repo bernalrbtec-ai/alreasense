@@ -32,6 +32,11 @@ class TenantMiddleware(MiddlewareMixin):
         Add tenant context to request after authentication.
         Este método é chamado DEPOIS da autenticação do DRF.
         """
+        # Skip tenant processing for webhooks (they don't need authentication)
+        if request.path.startswith('/webhooks/'):
+            logger.info(f"Request {request.request_id} - Webhook: {request.path}")
+            return None
+        
         # Add tenant context if user is authenticated
         if hasattr(request, 'user') and request.user.is_authenticated:
             request.tenant = getattr(request.user, 'tenant', None)
