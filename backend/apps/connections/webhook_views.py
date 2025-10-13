@@ -376,15 +376,16 @@ class EvolutionWebhookView(APIView):
             # Find message in database by chat_id and text content
             # Since we don't have message_id field, we'll need to match differently
             try:
-                # Try to find by chat_id and some identifier
-                # For now, we'll skip the Message model update and focus on CampaignContact
                 logger.info(f"Processing message update for chat_id: {chat_id}, status: {status}")
                 
                 # Update campaign contact status directly
                 self.update_campaign_contact_by_message_id(message_id, status)
                 
+                # ALSO update Message model for dashboard counters
+                self.update_message_model_by_message_id(message_id, status)
+                
             except Exception as e:
-                logger.error(f"Error updating campaign contact: {str(e)}")
+                logger.error(f"Error updating message status: {str(e)}")
             
             return Response({'status': 'success'})
             
@@ -483,6 +484,67 @@ class EvolutionWebhookView(APIView):
         except Exception as e:
             logger.error(f"Error updating campaign stats: {str(e)}")
     
+    def update_message_model_by_message_id(self, message_id, status):
+        """Update Message model status by WhatsApp message ID."""
+        try:
+            # Find campaign contact first to get the message details
+            from apps.campaigns.models import CampaignContact
+            
+            campaign_contact = CampaignContact.objects.filter(
+                whatsapp_message_id=message_id
+            ).first()
+            
+            if campaign_contact:
+                # Find corresponding Message record
+                chat_id = f"campaign_{campaign_contact.campaign.id}_{campaign_contact.contact.id}"
+                sender = f"campaign_{campaign_contact.campaign.id}"
+                
+                message_obj = Message.objects.filter(
+                    chat_id=chat_id,
+                    sender=sender,
+                    tenant=campaign_contact.campaign.tenant
+                ).first()
+                
+                if message_obj:
+                    # Update Message model with delivery status
+                    if status == 'delivered':
+                        # Add delivery timestamp (we can use a custom field or update existing)
+                        logger.info(f"Message {message_obj.id} marked as delivered in Message model")
+                        # Note: Message model doesn't have delivery fields, but we can track in summary
+                        if not message_obj.summary:
+                            message_obj.summary = f"Status: delivered at {timezone.now().isoformat()}"
+                        else:
+                            message_obj.summary += f" | delivered at {timezone.now().isoformat()}"
+                        message_obj.save(update_fields=['summary'])
+                        
+                    elif status == 'read':
+                        logger.info(f"Message {message_obj.id} marked as read in Message model")
+                        if not message_obj.summary:
+                            message_obj.summary = f"Status: read at {timezone.now().isoformat()}"
+                        else:
+                            message_obj.summary += f" | read at {timezone.now().isoformat()}"
+                        message_obj.save(update_fields=['summary'])
+                        
+                    elif status == 'failed':
+                        logger.info(f"Message {message_obj.id} marked as failed in Message model")
+                        if not message_obj.summary:
+                            message_obj.summary = f"Status: failed at {timezone.now().isoformat()}"
+                        else:
+                            message_obj.summary += f" | failed at {timezone.now().isoformat()}"
+                        message_obj.save(update_fields=['summary'])
+                    
+                    return True
+                else:
+                    logger.info(f"No Message record found for campaign message {message_id}")
+                    return False
+            else:
+                logger.info(f"No CampaignContact found for message_id: {message_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating Message model by message_id: {str(e)}")
+            return False
+
     def handle_connection_update(self, data):
         """Handle connection status updates."""
         try:
