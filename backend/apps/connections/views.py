@@ -27,26 +27,35 @@ def evolution_config(request):
     if request.method == 'GET':
         # Buscar configuração do tenant atual
         user = request.user
+        print(f"🔍 Buscando configuração Evolution para usuário: {user.username} (superuser: {user.is_superuser})")
         
         if user.is_superuser:
             # Superadmin vê configuração global
             connection = EvolutionConnection.objects.filter(is_active=True).first()
+            print(f"🔍 Superuser - conexão encontrada: {connection is not None}")
         else:
             # Usuário comum vê configuração do seu tenant
             connection = EvolutionConnection.objects.filter(
                 tenant=user.tenant, 
                 is_active=True
             ).first()
+            print(f"🔍 Usuário comum - tenant: {user.tenant.name}, conexão encontrada: {connection is not None}")
         
         if not connection:
             # Se não existe, retornar configuração vazia
             return Response({
+                'id': None,
+                'name': '',
                 'base_url': '',
                 'api_key': '',
                 'webhook_url': '',
                 'is_active': False,
                 'status': 'inactive',
-                'last_error': 'Configuração não encontrada'
+                'last_check': None,
+                'last_error': 'Configuração não encontrada - configure abaixo',
+                'instance_count': 0,
+                'created_at': None,
+                'updated_at': None,
             })
         
         # Auto-test connection

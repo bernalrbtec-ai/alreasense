@@ -45,15 +45,15 @@ export default function EvolutionConfigPage() {
       setConfig(response.data)
     } catch (error) {
       console.error('Error fetching config:', error)
-      // Fallback to default values if API fails
+      // ✅ NO FALLBACK - use empty config from database only
       setConfig({
-        base_url: 'https://evo.rbtec.com.br',
-        api_key: '', // ✅ Empty API key - user must enter their own
+        base_url: '',
+        api_key: '',
         webhook_url: `${window.location.origin}/api/webhooks/evolution/`,
         is_active: true,
         last_check: undefined,
         status: 'inactive',
-        last_error: 'Não foi possível carregar configuração',
+        last_error: 'Configuração não encontrada - configure abaixo',
         instance_count: 0,
       })
     } finally {
