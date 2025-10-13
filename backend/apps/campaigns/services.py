@@ -450,7 +450,7 @@ class CampaignSender:
             elif "pendente" in message.lower() or "disponível" in message.lower():
                 results['skipped'] += 1
                 break  # Parar se não há mais o que fazer
-    else:
+            else:
                 results['failed'] += 1
             
             results['messages'].append(message)
