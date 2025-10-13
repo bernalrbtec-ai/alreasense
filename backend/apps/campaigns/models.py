@@ -105,6 +105,7 @@ class Campaign(models.Model):
     next_instance_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome da Próxima Instância')
     last_contact_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome do Último Contato')
     last_contact_phone = models.CharField(max_length=20, null=True, blank=True, verbose_name='Telefone do Último Contato')
+    last_instance_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome da Última Instância')
     
     # Metadados
     created_by = models.ForeignKey(
