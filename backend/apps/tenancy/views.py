@@ -341,7 +341,7 @@ class TenantViewSet(viewsets.ModelViewSet):
         thirty_days_ago = timezone.now() - timedelta(days=30)
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Mensagens
+        # Mensagens (incluindo campanhas)
         total_messages = Message.objects.filter(tenant=tenant).count()
         messages_today = Message.objects.filter(
             tenant=tenant,
@@ -351,6 +351,33 @@ class TenantViewSet(viewsets.ModelViewSet):
             tenant=tenant,
             created_at__gte=thirty_days_ago
         ).count()
+        
+        # Adicionar mensagens de campanhas se não estiverem no modelo Message
+        from apps.campaigns.models import CampaignContact
+        campaign_messages_sent = CampaignContact.objects.filter(
+            campaign__tenant=tenant,
+            status='sent'
+        ).count()
+        
+        # Se houver mensagens de campanha que não estão no modelo Message, incluir
+        if campaign_messages_sent > 0:
+            # Para hoje
+            campaign_messages_today = CampaignContact.objects.filter(
+                campaign__tenant=tenant,
+                status='sent',
+                sent_at__gte=today_start
+            ).count()
+            
+            # Para últimos 30 dias
+            campaign_messages_30_days = CampaignContact.objects.filter(
+                campaign__tenant=tenant,
+                status='sent',
+                sent_at__gte=thirty_days_ago
+            ).count()
+            
+            # Adicionar aos contadores se não estiverem duplicados
+            messages_today += campaign_messages_today
+            messages_last_30_days += campaign_messages_30_days
         
         # Sentimento (análise básica)
         messages_with_sentiment = Message.objects.filter(

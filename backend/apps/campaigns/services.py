@@ -389,6 +389,19 @@ class CampaignSender:
             
             self.campaign.save(update_fields=['messages_sent', 'last_message_sent_at', 'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
             
+            # Salvar mensagem no modelo Message para contadores do dashboard
+            from apps.chat_messages.models import Message
+            from django.utils import timezone
+            
+            Message.objects.create(
+                tenant=self.campaign.tenant,
+                connection=instance.connection if hasattr(instance, 'connection') else None,
+                chat_id=f"campaign_{self.campaign.id}_{contact.id}",
+                sender=f"campaign_{self.campaign.id}",
+                text=message_text,
+                created_at=timezone.now()
+            )
+            
             # Log de sucesso
             CampaignLog.log_message_sent(
                 self.campaign, instance, contact, campaign_contact,
