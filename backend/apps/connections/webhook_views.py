@@ -107,9 +107,10 @@ class EvolutionWebhookView(APIView):
     
     def post(self, request):
         try:
-            # 🔍 LOG DO IP PARA DEBUG
+            # 🔍 LOG DETALHADO PARA DEBUG
             client_ip = get_client_ip(request)
-            logger.info(f"🔍 Webhook IP: {client_ip}")
+            logger.info(f"🔍 POST Webhook - IP: {client_ip}, Path: {request.path}, Method: {request.method}")
+            logger.info(f"🔍 Headers: {dict(request.headers)}")
             
             # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
             is_allowed, reason = is_allowed_origin(request)

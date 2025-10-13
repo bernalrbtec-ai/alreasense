@@ -63,3 +63,10 @@ class TenantMiddleware(MiddlewareMixin):
             response['X-Request-ID'] = request.request_id
         
         return response
+    
+    def process_exception(self, request, exception):
+        """Handle exceptions in webhook requests."""
+        if request.path.startswith('/webhooks/'):
+            logger.error(f"Webhook exception: {str(exception)}")
+            return None
+        return None
