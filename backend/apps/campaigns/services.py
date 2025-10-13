@@ -473,7 +473,7 @@ class CampaignSender:
                 if remaining_pending == 0:
                     print(f"   🎯 Último contato enviado! Campanha será completada após este lote...")
                     results['completed'] = True  # Marcar como completada (não skipped)
-                    # NÃO fazer break aqui - deixar o lote terminar naturalmente
+                    break  # Parar o lote imediatamente após último contato
                     
             elif "pendente" in message.lower() or "disponível" in message.lower():
                 results['skipped'] += 1
