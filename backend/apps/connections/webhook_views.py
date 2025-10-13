@@ -13,6 +13,7 @@ from rest_framework.decorators import permission_classes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from .models import EvolutionConnection
+from .webhook_cache import WebhookCache, generate_event_id
 from apps.chat_messages.models import Message
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
@@ -92,7 +93,14 @@ class EvolutionWebhookView(APIView):
             
             # Parse JSON data
             data = json.loads(request.body)
-            logger.info(f"Webhook received: {json.dumps(data, indent=2)}")
+            
+            # Generate unique event ID
+            event_id = generate_event_id(data)
+            logger.info(f"📥 Webhook received: {event_id} - {data.get('event', 'unknown')}")
+            
+            # Store event in Redis cache (24h)
+            WebhookCache.store_event(event_id, data)
+            logger.info(f"💾 Evento armazenado no cache: {event_id}")
             
             # Process different event types
             event_type = data.get('event')
@@ -101,12 +109,36 @@ class EvolutionWebhookView(APIView):
                 return self.handle_message_upsert(data)
             elif event_type == 'messages.update':
                 return self.handle_message_update(data)
+            elif event_type == 'messages.delete':
+                return self.handle_message_delete(data)
+            elif event_type == 'messages.edited':
+                return self.handle_message_edited(data)
             elif event_type == 'connection.update':
                 return self.handle_connection_update(data)
             elif event_type == 'presence.update':
                 return self.handle_presence_update(data)
             elif event_type == 'contacts.update':
                 return self.handle_contacts_update(data)
+            elif event_type == 'contacts.upsert':
+                return self.handle_contacts_upsert(data)
+            elif event_type == 'contacts.set':
+                return self.handle_contacts_set(data)
+            elif event_type == 'chats.update':
+                return self.handle_chats_update(data)
+            elif event_type == 'chats.upsert':
+                return self.handle_chats_upsert(data)
+            elif event_type == 'chats.delete':
+                return self.handle_chats_delete(data)
+            elif event_type == 'chats.set':
+                return self.handle_chats_set(data)
+            elif event_type == 'groups.upsert':
+                return self.handle_groups_upsert(data)
+            elif event_type == 'groups.update':
+                return self.handle_groups_update(data)
+            elif event_type == 'group.participants.update':
+                return self.handle_group_participants_update(data)
+            elif event_type == 'send.message':
+                return self.handle_send_message(data)
             else:
                 logger.info(f"Unhandled event type: {event_type}")
                 return JsonResponse({'status': 'ignored', 'event': event_type})
@@ -142,6 +174,66 @@ class EvolutionWebhookView(APIView):
         except Exception as e:
             logger.error(f"Error handling contacts update: {str(e)}")
             return JsonResponse({'error': 'Contacts update failed'}, status=500)
+    
+    def handle_message_delete(self, data):
+        """Handle messages.delete events."""
+        logger.info(f"🗑️ Message deleted: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'messages.delete'})
+    
+    def handle_message_edited(self, data):
+        """Handle messages.edited events."""
+        logger.info(f"✏️ Message edited: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'messages.edited'})
+    
+    def handle_contacts_upsert(self, data):
+        """Handle contacts.upsert events."""
+        logger.info(f"📞 Contact upsert: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'contacts.upsert'})
+    
+    def handle_contacts_set(self, data):
+        """Handle contacts.set events."""
+        logger.info(f"📞 Contact set: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'contacts.set'})
+    
+    def handle_chats_update(self, data):
+        """Handle chats.update events."""
+        logger.info(f"💬 Chat updated: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'chats.update'})
+    
+    def handle_chats_upsert(self, data):
+        """Handle chats.upsert events."""
+        logger.info(f"💬 Chat upsert: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'chats.upsert'})
+    
+    def handle_chats_delete(self, data):
+        """Handle chats.delete events."""
+        logger.info(f"💬 Chat deleted: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'chats.delete'})
+    
+    def handle_chats_set(self, data):
+        """Handle chats.set events."""
+        logger.info(f"💬 Chat set: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'chats.set'})
+    
+    def handle_groups_upsert(self, data):
+        """Handle groups.upsert events."""
+        logger.info(f"👥 Group upsert: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'groups.upsert'})
+    
+    def handle_groups_update(self, data):
+        """Handle groups.update events."""
+        logger.info(f"👥 Group updated: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'groups.update'})
+    
+    def handle_group_participants_update(self, data):
+        """Handle group.participants.update events."""
+        logger.info(f"👥 Group participants updated: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'group.participants.update'})
+    
+    def handle_send_message(self, data):
+        """Handle send.message events."""
+        logger.info(f"📤 Message sent: {data.get('event')}")
+        return JsonResponse({'status': 'success', 'event': 'send.message'})
     
     def handle_message_upsert(self, data):
         """Handle new messages from Evolution API."""
