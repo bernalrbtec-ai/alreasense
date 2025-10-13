@@ -7,6 +7,7 @@ from django.db.models import F
 from apps.notifications.models import WhatsAppInstance
 from .models import Campaign, CampaignLog
 import random
+import json
 
 
 class RotationService:

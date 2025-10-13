@@ -194,7 +194,6 @@ CORS_PREFLIGHT_MAX_AGE = 86400
 
 # Ensure CORS headers are always present
 CORS_EXPOSE_HEADERS = ['content-type', 'x-requested-with']
-CORS_REPLACE_HTTPS_REFERER = True
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
