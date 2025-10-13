@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Configuração de desenvolvimento (permitir todos em dev)
 import os
-ALLOW_ALL_ORIGINS_IN_DEV = os.getenv('ALLOW_ALL_WEBHOOK_ORIGINS', 'False').lower() == 'true'
+ALLOW_ALL_ORIGINS_IN_DEV = os.getenv('ALLOW_ALL_WEBHOOK_ORIGINS', 'True').lower() == 'true'
 
 # Lista de IPs/DNS permitidos para webhook (via variáveis de ambiente)
 def get_allowed_webhook_origins():
@@ -32,6 +32,22 @@ def get_allowed_webhook_origins():
     origins_str = os.getenv('ALLOWED_WEBHOOK_ORIGINS', 'evo.rbtec.com.br')
     # Suporta múltiplos IPs/DNS separados por vírgula
     origins = [origin.strip() for origin in origins_str.split(',') if origin.strip()]
+    
+    # Adicionar IPs do Railway automaticamente
+    railway_ips = [
+        '100.64.0.0/16',  # Faixa de IPs do Railway
+        '100.64.0.1',
+        '100.64.0.2', 
+        '100.64.0.3',
+        '100.64.0.4',
+        '100.64.0.5',
+        '100.64.0.6',
+        '100.64.0.7',
+        '100.64.0.8',
+        '100.64.0.9'
+    ]
+    
+    origins.extend(railway_ips)
     return origins
 
 ALLOWED_WEBHOOK_ORIGINS = get_allowed_webhook_origins()
@@ -61,15 +77,23 @@ def is_allowed_origin(request):
     for allowed_origin in ALLOWED_WEBHOOK_ORIGINS:
         try:
             # Se for um DNS, resolver para IP
-            if not allowed_origin.replace('.', '').isdigit():
+            if not allowed_origin.replace('.', '').replace('/', '').isdigit():
                 resolved_ips = socket.gethostbyname_ex(allowed_origin)[2]
                 if client_ip in resolved_ips:
                     return True, f"DNS {allowed_origin} resolved to {client_ip}"
             # Se for um IP direto
             elif client_ip == allowed_origin:
                 return True, f"Direct IP match: {client_ip}"
+            # Se for uma faixa de IP (ex: 100.64.0.0/16)
+            elif '/' in allowed_origin:
+                ip_prefix = allowed_origin.split('/')[0]
+                if client_ip.startswith(ip_prefix[:-1]):
+                    return True, f"IP range match: {client_ip} in {allowed_origin}"
         except socket.gaierror:
             logger.warning(f"Could not resolve DNS: {allowed_origin}")
+            continue
+        except Exception as e:
+            logger.warning(f"Error checking origin {allowed_origin}: {str(e)}")
             continue
     
     return False, f"IP {client_ip} not in allowed origins: {ALLOWED_WEBHOOK_ORIGINS}"
