@@ -3,6 +3,7 @@ Views para monitoramento de webhooks em tempo real
 """
 
 import logging
+import json
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
@@ -81,7 +82,47 @@ class WebhookCacheEventsView(APIView):
             # Aplicar filtros
             filtered_events = []
             for event in events:
-                event_data = event.get('data', {})
+                # Função flexível para extrair dados do evento
+                def extract_event_data(event_obj):
+                    """Extrai dados do evento de forma flexível"""
+                    try:
+                        # Se é lista, pegar primeiro item
+                        if isinstance(event_obj, list):
+                            event_obj = event_obj[0] if event_obj else {}
+                        
+                        # Se é string, tentar fazer parse JSON
+                        if isinstance(event_obj, str):
+                            try:
+                                event_obj = json.loads(event_obj)
+                            except json.JSONDecodeError:
+                                return {}
+                        
+                        # Se tem campo 'data', usar ele
+                        if isinstance(event_obj, dict) and 'data' in event_obj:
+                            data_field = event_obj['data']
+                            
+                            # Se data é string, tentar parse
+                            if isinstance(data_field, str):
+                                try:
+                                    data_field = json.loads(data_field)
+                                except json.JSONDecodeError:
+                                    data_field = {}
+                            
+                            # Mesclar dados do evento com dados internos
+                            result = event_obj.copy()
+                            if isinstance(data_field, dict):
+                                result.update(data_field)
+                            return result
+                        
+                        # Se não tem campo 'data', usar o objeto diretamente
+                        return event_obj if isinstance(event_obj, dict) else {}
+                        
+                    except Exception as e:
+                        logger.warning(f"Erro ao extrair dados do evento: {str(e)}")
+                        return {}
+                
+                # Extrair dados do evento
+                event_data = extract_event_data(event)
                 
                 # Filtro por tipo de evento
                 if event_type and event_type.lower() not in event_data.get('event', '').lower():
@@ -112,10 +153,22 @@ class WebhookCacheEventsView(APIView):
                             # Se não conseguir parsear a data, inclui o evento
                             pass
                 
-                filtered_events.append(event)
+                filtered_events.append(event_data)
             
             # Ordenar por data (mais recentes primeiro)
-            filtered_events.sort(key=lambda x: x.get('data', {}).get('date_time', ''), reverse=True)
+            def get_sort_key(event_obj):
+                """Extrai chave de ordenação de forma flexível"""
+                # Tentar diferentes campos de data
+                date_fields = ['date_time', '_cached_at', 'created_at', 'timestamp']
+                for field in date_fields:
+                    date_value = event_obj.get(field, '')
+                    if date_value:
+                        return date_value
+                
+                # Se não encontrar data, usar string vazia
+                return ''
+            
+            filtered_events.sort(key=get_sort_key, reverse=True)
             
             # Aplicar paginação
             total_events = len(filtered_events)
