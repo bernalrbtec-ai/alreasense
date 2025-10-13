@@ -58,14 +58,15 @@ class RotationService:
         
         # Log da seleção (mantido para debug, mas com limite)
         if instance:
-            # Só logar se não foi selecionada recentemente (evitar spam)
+            # Só logar se esta instância específica não foi selecionada recentemente (evitar spam)
             from django.utils import timezone
             from datetime import timedelta
             
             recent_log = CampaignLog.objects.filter(
                 campaign=self.campaign,
                 log_type='instance_selected',
-                created_at__gte=timezone.now() - timedelta(seconds=30)  # Reduzido para 30 segundos
+                instance=instance,  # Verificar esta instância específica
+                created_at__gte=timezone.now() - timedelta(seconds=30)
             ).exists()
             
             if not recent_log:
