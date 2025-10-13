@@ -30,9 +30,11 @@ def evolution_config(request):
         print(f"🔍 Buscando configuração Evolution para usuário: {user.username} (superuser: {user.is_superuser})")
         
         if user.is_superuser:
-            # Superadmin vê configuração global
+            # Superadmin vê configuração global (primeira configuração ativa)
             connection = EvolutionConnection.objects.filter(is_active=True).first()
             print(f"🔍 Superuser - conexão encontrada: {connection is not None}")
+            if connection:
+                print(f"🔍 Superuser - tenant da conexão: {connection.tenant.name}")
         else:
             # Usuário comum vê configuração do seu tenant
             connection = EvolutionConnection.objects.filter(
@@ -158,8 +160,10 @@ def evolution_config(request):
                         is_active=data.get('is_active', True),
                         status='inactive'
                     )
+                    print(f"🔧 Superuser - criou nova conexão para tenant: {tenant.name}")
                 else:
                     # Atualizar existente
+                    print(f"🔧 Superuser - atualizando conexão existente: {connection.id} (tenant: {connection.tenant.name})")
                     connection.name = data.get('name', connection.name)
                     connection.base_url = data.get('base_url', connection.base_url)
                     
@@ -167,6 +171,7 @@ def evolution_config(request):
                     new_api_key = data.get('api_key', '')
                     if new_api_key and new_api_key.strip():
                         connection.api_key = new_api_key
+                        print(f"🔧 Superuser - API key atualizada")
                     
                     connection.is_active = data.get('is_active', connection.is_active)
                     connection.save()
