@@ -1,0 +1,543 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static admin_modify %}
+
+{% block title %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block extrahead %}
+    {{ block.super }}
+    <style>
+        .webhook-monitoring {
+            padding: 20px;
+            background: #f8f9fa;
+            min-height: 100vh;
+        }
+        
+        .monitoring-header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007cba;
+        }
+        
+        .stat-label {
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .event-types-grid {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        
+        .event-types-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .event-types-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+        }
+        
+        .event-type-button {
+            background: #f8f9fa;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-align: center;
+            text-decoration: none;
+            color: #333;
+            display: block;
+        }
+        
+        .event-type-button:hover {
+            background: #007cba;
+            border-color: #007cba;
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .event-type-button.active {
+            background: #007cba;
+            border-color: #007cba;
+            color: white;
+        }
+        
+        .event-icon {
+            font-size: 24px;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .event-count {
+            font-size: 18px;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .event-name {
+            font-size: 12px;
+            display: block;
+            word-break: break-all;
+        }
+        
+        .events-container {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+        }
+        
+        .events-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .events-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .filters {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .filter-input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .filter-button {
+            background: #007cba;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .filter-button:hover {
+            background: #005a87;
+        }
+        
+        .events-list {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .event-item {
+            border: 1px solid #e9ecef;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 10px;
+            background: #f8f9fa;
+        }
+        
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        .event-type {
+            background: #007cba;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .event-timestamp {
+            color: #666;
+            font-size: 12px;
+        }
+        
+        .event-instance {
+            color: #666;
+            font-size: 12px;
+            margin-bottom: 10px;
+        }
+        
+        .event-data {
+            background: white;
+            padding: 10px;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #333;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        
+        .pagination {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .pagination button {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .pagination button:hover:not(:disabled) {
+            background: #f8f9fa;
+        }
+        
+        .pagination button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        
+        .pagination .current-page {
+            background: #007cba;
+            color: white;
+            border-color: #007cba;
+        }
+        
+        .no-events {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-style: italic;
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="webhook-monitoring">
+    <div class="monitoring-header">
+        <h1>{{ title }}</h1>
+        <p>Monitoramento em tempo real dos webhooks do Evolution API</p>
+    </div>
+    
+    <!-- Estatísticas Gerais -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-number">{{ cache_stats.total_events }}</div>
+            <div class="stat-label">Total de Eventos (24h)</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ recent_events_count }}</div>
+            <div class="stat-label">Eventos Recentes</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ events_by_type|length }}</div>
+            <div class="stat-label">Tipos de Eventos</div>
+        </div>
+    </div>
+    
+    <!-- Distribuição por Tipo de Evento -->
+    <div class="event-types-grid">
+        <div class="event-types-title">
+            Distribuição por Tipo de Evento
+            <button class="filter-button" onclick="refreshDistribution()" style="margin-left: 10px; font-size: 12px;">🔄 Atualizar</button>
+        </div>
+        <div id="event-types-container" class="event-types-container">
+            {% for event_type, count in events_by_type.items %}
+            <a href="#" class="event-type-button" data-event-type="{{ event_type }}">
+                <span class="event-icon">{{ event_icons|default_if_none:event_type }}</span>
+                <span class="event-count">{{ count }}</span>
+                <span class="event-name">{{ event_type }}</span>
+            </a>
+            {% empty %}
+            <div class="no-events">Nenhum evento encontrado</div>
+            {% endfor %}
+        </div>
+    </div>
+    
+    <!-- Lista de Eventos -->
+    <div class="events-container">
+        <div class="events-header">
+            <div class="events-title">Eventos Recentes</div>
+            <div class="filters">
+                <input type="text" id="instance-filter" class="filter-input" placeholder="Filtrar por instância...">
+                <select id="hours-filter" class="filter-input">
+                    <option value="1">Última 1 hora</option>
+                    <option value="6">Últimas 6 horas</option>
+                    <option value="24" selected>Últimas 24 horas</option>
+                    <option value="72">Últimas 72 horas</option>
+                </select>
+                <button class="filter-button" onclick="loadEvents()">Filtrar</button>
+                <button class="filter-button" onclick="clearFilters()">Limpar</button>
+            </div>
+        </div>
+        
+        <div id="events-list" class="events-list">
+            <div class="loading">Carregando eventos...</div>
+        </div>
+        
+        <div id="pagination" class="pagination"></div>
+    </div>
+</div>
+
+<script>
+let currentEventType = '';
+let currentPage = 1;
+let currentHours = 24;
+
+// Função para carregar eventos
+function loadEvents(page = 1) {
+    currentPage = page;
+    
+    const params = new URLSearchParams({
+        page: page,
+        page_size: 50,
+        hours: currentHours,
+        instance: document.getElementById('instance-filter').value
+    });
+    
+    if (currentEventType) {
+        params.append('event_type', currentEventType);
+    }
+    
+    fetch(`{% url 'admin:connections_evolutionconnection_webhook_monitoring_api' %}?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                displayEvents(data.data.events);
+                displayPagination(data.data.pagination);
+            } else {
+                document.getElementById('events-list').innerHTML = 
+                    `<div class="no-events">Erro ao carregar eventos: ${data.message}</div>`;
+            }
+        })
+        .catch(error => {
+            console.error('Erro:', error);
+            document.getElementById('events-list').innerHTML = 
+                `<div class="no-events">Erro ao carregar eventos</div>`;
+        });
+}
+
+// Função para exibir eventos
+function displayEvents(events) {
+    const container = document.getElementById('events-list');
+    
+    if (events.length === 0) {
+        container.innerHTML = '<div class="no-events">Nenhum evento encontrado</div>';
+        return;
+    }
+    
+    const eventsHtml = events.map(event => `
+        <div class="event-item">
+            <div class="event-header">
+                <span class="event-type">${event.event_type}</span>
+                <span class="event-timestamp">${event.formatted_timestamp}</span>
+            </div>
+            <div class="event-instance">Instância: ${event.instance || 'N/A'}</div>
+            <div class="event-data">${event.formatted_data}</div>
+        </div>
+    `).join('');
+    
+    container.innerHTML = eventsHtml;
+}
+
+// Função para exibir paginação
+function displayPagination(pagination) {
+    const container = document.getElementById('pagination');
+    
+    if (pagination.total_pages <= 1) {
+        container.innerHTML = '';
+        return;
+    }
+    
+    let paginationHtml = '';
+    
+    // Botão anterior
+    paginationHtml += `<button ${!pagination.has_previous ? 'disabled' : ''} 
+        onclick="loadEvents(${pagination.current_page - 1})">« Anterior</button>`;
+    
+    // Páginas
+    for (let i = Math.max(1, pagination.current_page - 2); 
+         i <= Math.min(pagination.total_pages, pagination.current_page + 2); i++) {
+        const isCurrent = i === pagination.current_page;
+        paginationHtml += `<button ${isCurrent ? 'class="current-page"' : ''} 
+            onclick="loadEvents(${i})">${i}</button>`;
+    }
+    
+    // Botão próximo
+    paginationHtml += `<button ${!pagination.has_next ? 'disabled' : ''} 
+        onclick="loadEvents(${pagination.current_page + 1})">Próximo »</button>`;
+    
+    container.innerHTML = paginationHtml;
+}
+
+// Função para limpar filtros
+function clearFilters() {
+    currentEventType = '';
+    currentPage = 1;
+    document.getElementById('instance-filter').value = '';
+    document.getElementById('hours-filter').value = '24';
+    currentHours = 24;
+    
+    // Remover classe active dos botões de evento
+    document.querySelectorAll('.event-type-button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    loadEvents();
+}
+
+// Função para atualizar distribuição de eventos
+function refreshDistribution() {
+    const params = new URLSearchParams({
+        hours: currentHours
+    });
+    
+    fetch(`{% url 'admin:connections_evolutionconnection_webhook_distribution_api' %}?${params}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                displayEventDistribution(data.data.distribution);
+                updateStats(data.data.total_events);
+            } else {
+                console.error('Erro ao atualizar distribuição:', data.message);
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao atualizar distribuição:', error);
+        });
+}
+
+// Função para exibir distribuição de eventos
+function displayEventDistribution(distribution) {
+    const container = document.getElementById('event-types-container');
+    
+    if (distribution.length === 0) {
+        container.innerHTML = '<div class="no-events">Nenhum evento encontrado</div>';
+        return;
+    }
+    
+    const distributionHtml = distribution.map(item => `
+        <a href="#" class="event-type-button" data-event-type="${item.event_type}">
+            <span class="event-icon">${item.icon}</span>
+            <span class="event-count">${item.count}</span>
+            <span class="event-name">${item.event_type}</span>
+        </a>
+    `).join('');
+    
+    container.innerHTML = distributionHtml;
+    
+    // Re-adicionar event listeners aos novos botões
+    addEventTypeButtonListeners();
+}
+
+// Função para atualizar estatísticas
+function updateStats(totalEvents) {
+    const totalEventsElement = document.querySelector('.stat-card .stat-number');
+    if (totalEventsElement) {
+        totalEventsElement.textContent = totalEvents;
+    }
+}
+
+// Função para adicionar event listeners aos botões de tipo de evento
+function addEventTypeButtonListeners() {
+    document.querySelectorAll('.event-type-button').forEach(button => {
+        button.addEventListener('click', function(e) {
+            e.preventDefault();
+            
+            // Remover classe active de todos os botões
+            document.querySelectorAll('.event-type-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            
+            // Adicionar classe active ao botão clicado
+            this.classList.add('active');
+            
+            // Definir tipo de evento atual
+            currentEventType = this.dataset.eventType;
+            currentPage = 1;
+            
+            // Carregar eventos
+            loadEvents();
+        });
+    });
+}
+
+// Event listeners
+document.addEventListener('DOMContentLoaded', function() {
+    // Carregar eventos iniciais
+    loadEvents();
+    
+    // Adicionar event listeners aos botões de tipo de evento
+    addEventTypeButtonListeners();
+    
+    // Event listener para filtro de horas
+    document.getElementById('hours-filter').addEventListener('change', function() {
+        currentHours = parseInt(this.value);
+        currentPage = 1;
+        loadEvents();
+    });
+    
+    // Event listener para filtro de instância (Enter)
+    document.getElementById('instance-filter').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            currentPage = 1;
+            loadEvents();
+        }
+    });
+    
+    // Auto-refresh a cada 30 segundos
+    setInterval(() => {
+        if (!currentEventType && !document.getElementById('instance-filter').value) {
+            loadEvents(currentPage);
+            refreshDistribution();
+        }
+    }, 30000);
+});
+</script>
+{% endblock %}
