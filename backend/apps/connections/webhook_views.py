@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 # Configuração de desenvolvimento (permitir todos em dev)
 import os
-ALLOW_ALL_ORIGINS_IN_DEV = os.getenv('ALLOW_ALL_WEBHOOK_ORIGINS', 'True').lower() == 'true'
+ALLOW_ALL_ORIGINS_IN_DEV = True  # FORÇAR TRUE PARA DEBUG
 
 # Lista de IPs/DNS permitidos para webhook (via variáveis de ambiente)
 def get_allowed_webhook_origins():
