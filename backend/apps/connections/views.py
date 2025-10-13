@@ -35,13 +35,12 @@ def evolution_config(request):
             print(f"🔍 Superuser - conexão encontrada: {connection is not None}")
             if connection:
                 print(f"🔍 Superuser - tenant da conexão: {connection.tenant.name}")
+                print(f"🔍 Superuser - dados da conexão: id={connection.id}, base_url={connection.base_url}, is_active={connection.is_active}")
         else:
-            # Usuário comum vê configuração do seu tenant
-            connection = EvolutionConnection.objects.filter(
-                tenant=user.tenant, 
-                is_active=True
-            ).first()
-            print(f"🔍 Usuário comum - tenant: {user.tenant.name}, conexão encontrada: {connection is not None}")
+            # Usuário comum NÃO PODE acessar configuração - apenas superuser
+            return Response({
+                'error': 'Apenas administradores podem acessar a configuração Evolution API'
+            }, status=status.HTTP_403_FORBIDDEN)
         
         if not connection:
             # Se não existe, retornar configuração vazia
@@ -164,6 +163,8 @@ def evolution_config(request):
                 else:
                     # Atualizar existente
                     print(f"🔧 Superuser - atualizando conexão existente: {connection.id} (tenant: {connection.tenant.name})")
+                    print(f"🔧 Dados recebidos: base_url={data.get('base_url')}, api_key={'*' * 10 if data.get('api_key') else 'empty'}")
+                    
                     connection.name = data.get('name', connection.name)
                     connection.base_url = data.get('base_url', connection.base_url)
                     
@@ -175,34 +176,13 @@ def evolution_config(request):
                     
                     connection.is_active = data.get('is_active', connection.is_active)
                     connection.save()
+                    
+                    print(f"🔧 Superuser - conexão salva: id={connection.id}, base_url={connection.base_url}, is_active={connection.is_active}")
             else:
-                # Usuário comum atualiza configuração do seu tenant
-                connection = EvolutionConnection.objects.filter(
-                    tenant=user.tenant, 
-                    is_active=True
-                ).first()
-                
-                if not connection:
-                    connection = EvolutionConnection.objects.create(
-                        tenant=user.tenant,
-                        name=data.get('name', 'Evolution API'),
-                        base_url=data.get('base_url', ''),
-                        api_key=data.get('api_key', ''),
-                        is_active=data.get('is_active', True),
-                        status='inactive'
-                    )
-                else:
-                    # Atualizar existente
-                    connection.name = data.get('name', connection.name)
-                    connection.base_url = data.get('base_url', connection.base_url)
-                    
-                    # API Key: só atualizar se vier nova (não vazia)
-                    new_api_key = data.get('api_key', '')
-                    if new_api_key and new_api_key.strip():
-                        connection.api_key = new_api_key
-                    
-                    connection.is_active = data.get('is_active', connection.is_active)
-                    connection.save()
+                # Usuário comum NÃO PODE configurar - apenas superuser
+                return Response({
+                    'error': 'Apenas administradores podem configurar o servidor Evolution API'
+                }, status=status.HTTP_403_FORBIDDEN)
             
             # Webhook URL seguro
             try:

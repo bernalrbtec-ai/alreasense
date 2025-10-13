@@ -6,6 +6,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import Toast from '../components/ui/Toast'
 import { useToast } from '../hooks/useToast'
 import { api } from '../lib/api'
+import { useAuthStore } from '../stores/authStore'
 
 interface EvolutionConfig {
   base_url: string
@@ -19,6 +20,7 @@ interface EvolutionConfig {
 }
 
 export default function EvolutionConfigPage() {
+  const { user } = useAuthStore()
   const [config, setConfig] = useState<EvolutionConfig>({
     base_url: '',
     api_key: '',
@@ -33,6 +35,21 @@ export default function EvolutionConfigPage() {
     success: boolean
     message: string
   } | null>(null)
+
+  // ✅ Apenas superuser pode acessar esta página
+  if (!user?.is_superuser) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Acesso Negado</h2>
+          <p className="text-gray-600">
+            Apenas administradores podem configurar o servidor Evolution API.
+          </p>
+        </div>
+      </div>
+    )
+  }
 
   useEffect(() => {
     fetchConfig()
