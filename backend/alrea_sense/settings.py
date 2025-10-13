@@ -117,6 +117,9 @@ TIME_ZONE = 'America/Sao_Paulo'
 USE_I18N = True
 USE_TZ = True
 
+# URL Settings
+APPEND_SLASH = False  # Disable automatic slash appending to prevent 301 redirects
+
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
