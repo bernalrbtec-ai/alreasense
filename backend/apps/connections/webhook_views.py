@@ -68,34 +68,51 @@ def get_client_ip(request):
 def is_allowed_origin(request):
     """Check if request origin is allowed for webhook."""
     client_ip = get_client_ip(request)
+    logger.info(f"🔍 Origin validation - Client IP: {client_ip}")
+    logger.info(f"🔍 Origin validation - ALLOW_ALL_ORIGINS_IN_DEV: {ALLOW_ALL_ORIGINS_IN_DEV}")
+    logger.info(f"🔍 Origin validation - ALLOWED_WEBHOOK_ORIGINS: {ALLOWED_WEBHOOK_ORIGINS}")
     
     # Em desenvolvimento, permitir todos os IPs se configurado
     if ALLOW_ALL_ORIGINS_IN_DEV:
+        logger.info(f"🔍 Origin validation - Development mode: allowing {client_ip}")
         return True, f"Development mode: allowing {client_ip}"
     
     # Verificar se o IP está na lista de permitidos
-    for allowed_origin in ALLOWED_WEBHOOK_ORIGINS:
+    logger.info(f"🔍 Origin validation - Checking against {len(ALLOWED_WEBHOOK_ORIGINS)} allowed origins")
+    
+    for i, allowed_origin in enumerate(ALLOWED_WEBHOOK_ORIGINS):
+        logger.info(f"🔍 Origin validation - Checking origin {i+1}/{len(ALLOWED_WEBHOOK_ORIGINS)}: {allowed_origin}")
+        
         try:
             # Se for um DNS, resolver para IP
             if not allowed_origin.replace('.', '').replace('/', '').isdigit():
+                logger.info(f"🔍 Origin validation - Resolving DNS: {allowed_origin}")
                 resolved_ips = socket.gethostbyname_ex(allowed_origin)[2]
+                logger.info(f"🔍 Origin validation - DNS {allowed_origin} resolved to: {resolved_ips}")
                 if client_ip in resolved_ips:
+                    logger.info(f"🔍 Origin validation - DNS match found!")
                     return True, f"DNS {allowed_origin} resolved to {client_ip}"
             # Se for um IP direto
             elif client_ip == allowed_origin:
+                logger.info(f"🔍 Origin validation - Direct IP match found!")
                 return True, f"Direct IP match: {client_ip}"
             # Se for uma faixa de IP (ex: 100.64.0.0/16)
             elif '/' in allowed_origin:
                 ip_prefix = allowed_origin.split('/')[0]
+                logger.info(f"🔍 Origin validation - Checking IP range: {allowed_origin}, prefix: {ip_prefix}")
                 if client_ip.startswith(ip_prefix[:-1]):
+                    logger.info(f"🔍 Origin validation - IP range match found!")
                     return True, f"IP range match: {client_ip} in {allowed_origin}"
+                else:
+                    logger.info(f"🔍 Origin validation - IP range no match: {client_ip} does not start with {ip_prefix[:-1]}")
         except socket.gaierror:
-            logger.warning(f"Could not resolve DNS: {allowed_origin}")
+            logger.warning(f"🔍 Origin validation - Could not resolve DNS: {allowed_origin}")
             continue
         except Exception as e:
-            logger.warning(f"Error checking origin {allowed_origin}: {str(e)}")
+            logger.warning(f"🔍 Origin validation - Error checking origin {allowed_origin}: {str(e)}")
             continue
     
+    logger.warning(f"🔍 Origin validation - No match found for IP {client_ip}")
     return False, f"IP {client_ip} not in allowed origins: {ALLOWED_WEBHOOK_ORIGINS}"
 
 
@@ -111,11 +128,31 @@ class EvolutionWebhookView(APIView):
             client_ip = get_client_ip(request)
             logger.info(f"🔍 POST Webhook - IP: {client_ip}, Path: {request.path}, Method: {request.method}")
             logger.info(f"🔍 Headers: {dict(request.headers)}")
+            logger.info(f"🔍 META keys: {list(request.META.keys())}")
+            logger.info(f"🔍 REMOTE_ADDR: {request.META.get('REMOTE_ADDR')}")
+            logger.info(f"🔍 HTTP_X_FORWARDED_FOR: {request.META.get('HTTP_X_FORWARDED_FOR')}")
+            logger.info(f"🔍 HTTP_HOST: {request.META.get('HTTP_HOST')}")
+            logger.info(f"🔍 CONTENT_TYPE: {request.META.get('CONTENT_TYPE')}")
+            
+            # Log do body
+            if request.body:
+                try:
+                    body_str = request.body.decode('utf-8')
+                    logger.info(f"🔍 Body length: {len(body_str)}")
+                    logger.info(f"🔍 Body preview: {body_str[:200]}...")
+                except Exception as e:
+                    logger.error(f"🔍 Error decoding body: {str(e)}")
             
             # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
+            logger.info(f"🔍 Starting origin validation...")
             is_allowed, reason = is_allowed_origin(request)
+            logger.info(f"🔍 Origin validation result: {is_allowed}, reason: {reason}")
+            
             if not is_allowed:
                 logger.warning(f"🚫 Webhook blocked: {reason}")
+                logger.warning(f"🚫 Blocked IP: {client_ip}")
+                logger.warning(f"🚫 Allowed origins: {ALLOWED_WEBHOOK_ORIGINS}")
+                logger.warning(f"🚫 ALLOW_ALL_ORIGINS_IN_DEV: {ALLOW_ALL_ORIGINS_IN_DEV}")
                 return Response({'error': 'Unauthorized origin'}, status=403)
             
             logger.info(f"✅ Webhook allowed: {reason}")
