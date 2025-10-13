@@ -1,4 +1,4 @@
-# Generated manually to avoid User model conflict
+# Generated manually to avoid User model conflict - Railway deploy fix
 
 from django.db import migrations, models
 
