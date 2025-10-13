@@ -832,11 +832,10 @@ class WhatsAppInstance(models.Model):
     
     @property
     def delivery_rate(self):
-        """Taxa de entrega hoje (incluindo mensagens lidas)"""
+        """Taxa de entrega hoje (apenas entregues)"""
         if self.msgs_sent_today == 0:
             return 100.0
-        total_delivered = self.msgs_delivered_today + self.msgs_read_today
-        return (total_delivered / self.msgs_sent_today) * 100
+        return (self.msgs_delivered_today / self.msgs_sent_today) * 100
     
     @property
     def read_rate(self):
