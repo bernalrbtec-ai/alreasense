@@ -20,16 +20,23 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-# Lista de IPs/DNS permitidos para webhook
-ALLOWED_WEBHOOK_ORIGINS = [
-    'evo.rbtec.com.br',  # DNS da Evolution API
-    # Adicione outros IPs/DNS conforme necessário
-    # Exemplo: '192.168.1.100', 'api.evolution.com'
-]
-
 # Configuração de desenvolvimento (permitir todos em dev)
 import os
 ALLOW_ALL_ORIGINS_IN_DEV = os.getenv('ALLOW_ALL_WEBHOOK_ORIGINS', 'False').lower() == 'true'
+
+# Lista de IPs/DNS permitidos para webhook (via variáveis de ambiente)
+def get_allowed_webhook_origins():
+    """Get allowed webhook origins from environment variables."""
+    origins_str = os.getenv('ALLOWED_WEBHOOK_ORIGINS', 'evo.rbtec.com.br')
+    # Suporta múltiplos IPs/DNS separados por vírgula
+    origins = [origin.strip() for origin in origins_str.split(',') if origin.strip()]
+    return origins
+
+ALLOWED_WEBHOOK_ORIGINS = get_allowed_webhook_origins()
+
+# Log das configurações carregadas
+logger.info(f"🔒 Webhook security config: ALLOW_ALL_ORIGINS_IN_DEV={ALLOW_ALL_ORIGINS_IN_DEV}")
+logger.info(f"🔒 Allowed webhook origins: {ALLOWED_WEBHOOK_ORIGINS}")
 
 def get_client_ip(request):
     """Get client IP address from request."""
