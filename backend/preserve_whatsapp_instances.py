@@ -45,6 +45,8 @@ def preserve_whatsapp_instances():
         }
         backup_data['instances'].append(instance_data)
         print(f"   ✅ Backed up: {instance.friendly_name}")
+        print(f"      API URL: {instance.api_url}")
+        print(f"      Instance Name: {instance.instance_name}")
     
     # Save backup
     with open(backup_file, 'w') as f:
@@ -93,8 +95,12 @@ def restore_whatsapp_instances():
         
         if created:
             print(f"   ✅ Restored: {instance.friendly_name}")
+            print(f"      API URL: {instance.api_url}")
+            print(f"      Instance Name: {instance.instance_name}")
         else:
             print(f"   ⏭️ Exists: {instance.friendly_name}")
+            print(f"      API URL: {instance.api_url}")
+            print(f"      Instance Name: {instance.instance_name}")
     
     print("=" * 50)
     print("✅ WhatsApp instances restored!")
