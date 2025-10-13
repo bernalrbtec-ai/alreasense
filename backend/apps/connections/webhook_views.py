@@ -80,6 +80,9 @@ class EvolutionWebhookView(APIView):
             event_id = generate_event_id(data)
             logger.info(f"📥 Webhook received: {event_id} - {data.get('event', 'unknown')}")
             
+            # Log completo do JSON para debug
+            logger.info(f"🔍 FULL WEBHOOK DATA: {json.dumps(data, indent=2)}")
+            
             # Store event in Redis cache (24h)
             WebhookCache.store_event(event_id, data)
             logger.info(f"💾 Evento armazenado no cache: {event_id}")
