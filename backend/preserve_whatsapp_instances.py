@@ -107,9 +107,52 @@ def restore_whatsapp_instances():
     
     return True
 
+def check_whatsapp_instances():
+    """Verifica quantas WhatsApp Instances existem."""
+    print("🔍 CHECKING WHATSAPP INSTANCES")
+    print("=" * 50)
+    
+    instances = WhatsAppInstance.objects.all()
+    print(f"📊 Found {instances.count()} WhatsApp instances")
+    
+    for instance in instances:
+        print(f"   📱 {instance.friendly_name}")
+        print(f"      API URL: {instance.api_url}")
+        print(f"      Status: {instance.status}")
+    
+    print("=" * 50)
+    return instances.count()
+
+def verify_whatsapp_instances():
+    """Verifica se as WhatsApp Instances ainda existem após migrations."""
+    print("✅ VERIFYING WHATSAPP INSTANCES")
+    print("=" * 50)
+    
+    instances = WhatsAppInstance.objects.all()
+    print(f"📊 Found {instances.count()} WhatsApp instances after migrations")
+    
+    if instances.count() == 0:
+        print("❌ WARNING: No WhatsApp instances found after migrations!")
+        print("   This means migrations are deleting the data!")
+    else:
+        print("✅ WhatsApp instances preserved successfully!")
+        for instance in instances:
+            print(f"   📱 {instance.friendly_name}")
+            print(f"      API URL: {instance.api_url}")
+    
+    print("=" * 50)
+    return instances.count()
+
 if __name__ == '__main__':
     import sys
-    if len(sys.argv) > 1 and sys.argv[1] == 'restore':
-        restore_whatsapp_instances()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'restore':
+            restore_whatsapp_instances()
+        elif sys.argv[1] == 'check':
+            check_whatsapp_instances()
+        elif sys.argv[1] == 'verify':
+            verify_whatsapp_instances()
+        else:
+            preserve_whatsapp_instances()
     else:
         preserve_whatsapp_instances()
