@@ -61,7 +61,7 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.common.middleware.TenantMiddleware',
-    'apps.common.webhook_debug_middleware.WebhookDebugMiddleware',  # Debug webhooks
+    # 'apps.common.webhook_debug_middleware.WebhookDebugMiddleware',  # Temporarily disabled
 ]
 
 ROOT_URLCONF = 'alrea_sense.urls'
