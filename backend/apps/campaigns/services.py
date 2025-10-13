@@ -347,6 +347,8 @@ class CampaignSender:
             # Salvar ID da mensagem do WhatsApp se disponível
             if 'key' in response_data and 'id' in response_data['key']:
                 campaign_contact.whatsapp_message_id = response_data['key']['id']
+                print(f"🔑 SALVANDO whatsapp_message_id: {response_data['key']['id']}")
+                print(f"📋 Resposta completa da API: {json.dumps(response_data, indent=2)}")
             
             # Calcular duração
             duration_ms = int((time.time() - start_time) * 1000)
