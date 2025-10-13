@@ -54,8 +54,8 @@ class RotationService:
         Retorna lista de instâncias disponíveis para envio
         Filtra por:
         - Conectadas (connection_state = 'open')
-        - Saudáveis (health_score >= pause_on_health_below)
         - Dentro do limite diário
+        - Health score baixo apenas gera log (não bloqueia)
         """
         instances = self.campaign.instances.all()
         available = []
@@ -68,35 +68,15 @@ class RotationService:
             if instance.connection_state != 'open':
                 continue
             
-            # Verificar health (bloqueante)
+            # Verificar health (apenas log, sem pausar)
             if instance.health_score < self.campaign.pause_on_health_below:
-                # Log de health issue
+                # Log de health issue (apenas informativo)
                 CampaignLog.log_health_issue(
                     self.campaign, instance,
-                    f"Health score baixo: {instance.health_score} (mínimo: {self.campaign.pause_on_health_below})"
+                    f"Health score baixo: {instance.health_score} (mínimo: {self.campaign.pause_on_health_below}) - Continuando envio"
                 )
-                
-                # Se for a única instância, pausar a campanha
-                total_instances = self.campaign.instances.count()
-                if total_instances == 1:
-                    print(f"⚠️ Única instância com health baixo - pausando campanha")
-                    self.campaign.pause()
-                    CampaignLog.objects.create(
-                        campaign=self.campaign,
-                        log_type='paused',
-                        severity='warning',
-                        message=f'Campanha pausada automaticamente: health da única instância está baixo ({instance.health_score})',
-                        details={
-                            'auto_paused': True,
-                            'reason': 'single_instance_low_health',
-                            'instance_id': str(instance.id),
-                            'health_score': instance.health_score,
-                            'threshold': self.campaign.pause_on_health_below
-                        },
-                        instance=instance
-                    )
-                
-                continue  # Pula esta instância
+                print(f"⚠️ Instância com health baixo ({instance.health_score}), mas continuando envio")
+                # continue  # Comentado - não pula mais a instância
             
             # Verificar limite diário
             if instance.msgs_sent_today >= self.campaign.daily_limit_per_instance:
@@ -105,13 +85,14 @@ class RotationService:
                 )
                 continue
             
-            # Verificar health mínimo
+            # Verificar health mínimo (apenas log, sem pausar)
             if instance.health_score < self.campaign.pause_on_health_below:
-                CampaignLog.log_instance_paused(
+                CampaignLog.log_health_issue(
                     self.campaign, instance,
-                    f"Health abaixo do mínimo: {instance.health_score} < {self.campaign.pause_on_health_below}"
+                    f"Health abaixo do mínimo: {instance.health_score} < {self.campaign.pause_on_health_below} - Continuando envio"
                 )
-                continue
+                print(f"⚠️ Instância com health baixo ({instance.health_score}), mas continuando envio")
+                # continue  # Comentado - não pula mais a instância
             
             available.append(instance)
         
