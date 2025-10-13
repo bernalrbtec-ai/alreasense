@@ -23,49 +23,63 @@ def migrate_campaign_messages():
     
     print("🔧 Iniciando migração de mensagens de campanhas...")
     
-    # Buscar todas as mensagens de campanha enviadas
-    campaign_contacts = CampaignContact.objects.filter(
-        status='sent',
-        sent_at__isnull=False
-    ).select_related('campaign', 'contact', 'campaign__tenant')
-    
-    total_migrated = 0
-    total_skipped = 0
-    
-    for campaign_contact in campaign_contacts:
-        # Verificar se já existe no modelo Message
-        existing_message = Message.objects.filter(
-            tenant=campaign_contact.campaign.tenant,
-            chat_id=f"campaign_{campaign_contact.campaign.id}_{campaign_contact.contact.id}",
-            sender=f"campaign_{campaign_contact.campaign.id}"
-        ).first()
+    try:
+        # Buscar todas as mensagens de campanha enviadas
+        campaign_contacts = CampaignContact.objects.filter(
+            status='sent',
+            sent_at__isnull=False
+        ).select_related('campaign', 'contact', 'campaign__tenant')
         
-        if existing_message:
-            total_skipped += 1
-            continue
+        total_migrated = 0
+        total_skipped = 0
         
-        # Criar mensagem no modelo Message
-        message_text = campaign_contact.message_used.content if campaign_contact.message_used else "Mensagem de campanha"
+        print(f"   📊 Encontradas {campaign_contacts.count()} mensagens de campanha para migrar...")
         
-        Message.objects.create(
-            tenant=campaign_contact.campaign.tenant,
-            connection=None,  # Não temos conexão direta
-            chat_id=f"campaign_{campaign_contact.campaign.id}_{campaign_contact.contact.id}",
-            sender=f"campaign_{campaign_contact.campaign.id}",
-            text=message_text,
-            created_at=campaign_contact.sent_at or timezone.now()
-        )
+        for campaign_contact in campaign_contacts:
+            try:
+                # Verificar se já existe no modelo Message
+                existing_message = Message.objects.filter(
+                    tenant=campaign_contact.campaign.tenant,
+                    chat_id=f"campaign_{campaign_contact.campaign.id}_{campaign_contact.contact.id}",
+                    sender=f"campaign_{campaign_contact.campaign.id}"
+                ).first()
+                
+                if existing_message:
+                    total_skipped += 1
+                    continue
+                
+                # Criar mensagem no modelo Message
+                message_text = "Mensagem de campanha"
+                if hasattr(campaign_contact, 'message_used') and campaign_contact.message_used:
+                    message_text = campaign_contact.message_used.content
+                
+                Message.objects.create(
+                    tenant=campaign_contact.campaign.tenant,
+                    connection=None,  # Não temos conexão direta
+                    chat_id=f"campaign_{campaign_contact.campaign.id}_{campaign_contact.contact.id}",
+                    sender=f"campaign_{campaign_contact.campaign.id}",
+                    text=message_text,
+                    created_at=campaign_contact.sent_at or timezone.now()
+                )
+                
+                total_migrated += 1
+                
+                if total_migrated % 50 == 0:
+                    print(f"   Migradas: {total_migrated} mensagens...")
+                    
+            except Exception as e:
+                print(f"   ⚠️ Erro ao migrar mensagem {campaign_contact.id}: {str(e)}")
+                continue
         
-        total_migrated += 1
+        print(f"✅ Migração concluída!")
+        print(f"   📊 Total migradas: {total_migrated}")
+        print(f"   ⏭️  Total ignoradas (já existiam): {total_skipped}")
         
-        if total_migrated % 100 == 0:
-            print(f"   Migradas: {total_migrated} mensagens...")
-    
-    print(f"✅ Migração concluída!")
-    print(f"   📊 Total migradas: {total_migrated}")
-    print(f"   ⏭️  Total ignoradas (já existiam): {total_skipped}")
-    
-    return total_migrated, total_skipped
+        return total_migrated, total_skipped
+        
+    except Exception as e:
+        print(f"❌ Erro na migração: {str(e)}")
+        return 0, 0
 
 def verify_counters():
     """Verifica se os contadores estão funcionando"""
