@@ -362,6 +362,9 @@ class CampaignSender:
             # Atualizar campanha
             self.campaign.messages_sent += 1
             self.campaign.last_message_sent_at = timezone.now()
+            # Salvar informações do último contato enviado
+            self.campaign.last_contact_name = contact.name
+            self.campaign.last_contact_phone = contact.phone
             
             # Verificar se há mais mensagens pendentes APÓS marcar como enviado
             from .models import CampaignContact
@@ -385,7 +388,7 @@ class CampaignSender:
                 self.campaign.next_contact_name = None
                 self.campaign.next_contact_phone = None
             
-            self.campaign.save(update_fields=['messages_sent', 'last_message_sent_at', 'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+            self.campaign.save(update_fields=['messages_sent', 'last_message_sent_at', 'last_contact_name', 'last_contact_phone', 'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
             
             # Salvar mensagem no modelo Message para contadores do dashboard
             from apps.chat_messages.models import Message
@@ -467,9 +470,9 @@ class CampaignSender:
                 ).count()
                 
                 if remaining_pending == 0:
-                    print(f"   🎯 Último contato enviado! Completando campanha...")
-                    results['skipped'] = 1  # Marcar como finalizada
-                    break  # Parar imediatamente
+                    print(f"   🎯 Último contato enviado! Campanha será completada após este lote...")
+                    results['completed'] = True  # Marcar como completada (não skipped)
+                    # NÃO fazer break aqui - deixar o lote terminar naturalmente
                     
             elif "pendente" in message.lower() or "disponível" in message.lower():
                 results['skipped'] += 1

@@ -47,7 +47,8 @@ class CampaignSerializer(serializers.ModelSerializer):
             'messages_delivered', 'messages_read', 'messages_failed',
             'success_rate', 'read_rate', 'progress_percentage',
             'last_message_sent_at', 'next_message_scheduled_at',
-            'next_contact_name', 'next_contact_phone',
+            'next_contact_name', 'next_contact_phone', 'next_instance_name',
+            'last_contact_name', 'last_contact_phone',
             'created_at', 'updated_at'
         ]
         read_only_fields = [

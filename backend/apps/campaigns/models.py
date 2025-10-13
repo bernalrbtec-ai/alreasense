@@ -102,6 +102,9 @@ class Campaign(models.Model):
     next_message_scheduled_at = models.DateTimeField(null=True, blank=True, verbose_name='Próxima Mensagem Agendada Para')
     next_contact_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome do Próximo Contato')
     next_contact_phone = models.CharField(max_length=20, null=True, blank=True, verbose_name='Telefone do Próximo Contato')
+    next_instance_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome da Próxima Instância')
+    last_contact_name = models.CharField(max_length=255, null=True, blank=True, verbose_name='Nome do Último Contato')
+    last_contact_phone = models.CharField(max_length=20, null=True, blank=True, verbose_name='Telefone do Último Contato')
     
     # Metadados
     created_by = models.ForeignKey(
@@ -192,11 +195,21 @@ class Campaign(models.Model):
             if next_campaign_contact:
                 self.next_contact_name = next_campaign_contact.contact.name
                 self.next_contact_phone = next_campaign_contact.contact.phone
+                
+                # Obter próxima instância usando o serviço de rotação
+                from .services import RotationService
+                rotation_service = RotationService(self)
+                next_instance = rotation_service.select_next_instance()
+                if next_instance:
+                    self.next_instance_name = next_instance.friendly_name
+                else:
+                    self.next_instance_name = None
             else:
                 self.next_contact_name = None
                 self.next_contact_phone = None
+                self.next_instance_name = None
             
-            self.save(update_fields=['next_contact_name', 'next_contact_phone'])
+            self.save(update_fields=['next_contact_name', 'next_contact_phone', 'next_instance_name'])
 
 
 class CampaignMessage(models.Model):
