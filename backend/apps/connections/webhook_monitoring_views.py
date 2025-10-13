@@ -51,12 +51,12 @@ class WebhookCacheStatsView(APIView):
 
 class WebhookCacheEventsView(APIView):
     """
-    View para listar eventos recentes do cache
+    View para listar eventos recentes do cache com filtros e paginação
     """
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        """Retorna eventos recentes do cache"""
+        """Retorna eventos recentes do cache com filtros e paginação"""
         try:
             # Verificar se é superuser
             if not request.user.is_superuser:
@@ -64,23 +64,89 @@ class WebhookCacheEventsView(APIView):
                     'error': 'Apenas administradores podem acessar esta funcionalidade'
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            # Parâmetros opcionais
+            # Parâmetros de filtro
             hours = int(request.GET.get('hours', 24))
-            limit = int(request.GET.get('limit', 100))
+            event_type = request.GET.get('event_type', '')  # Filtro por tipo de evento
+            start_date = request.GET.get('start_date', '')  # Filtro por data inicial
+            end_date = request.GET.get('end_date', '')      # Filtro por data final
+            instance = request.GET.get('instance', '')      # Filtro por instância
             
+            # Parâmetros de paginação
+            page = int(request.GET.get('page', 1))
+            page_size = int(request.GET.get('page_size', 50))
+            
+            # Obter todos os eventos
             events = WebhookCache.list_recent_events(hours=hours)
             
-            # Limitar quantidade de eventos
-            if limit > 0:
-                events = events[:limit]
+            # Aplicar filtros
+            filtered_events = []
+            for event in events:
+                event_data = event.get('data', {})
+                
+                # Filtro por tipo de evento
+                if event_type and event_type.lower() not in event_data.get('event', '').lower():
+                    continue
+                
+                # Filtro por instância
+                if instance and instance.lower() not in event_data.get('instance', '').lower():
+                    continue
+                
+                # Filtro por data (se fornecido)
+                if start_date or end_date:
+                    event_time = event_data.get('date_time', '')
+                    if event_time:
+                        try:
+                            from datetime import datetime
+                            event_datetime = datetime.fromisoformat(event_time.replace('Z', '+00:00'))
+                            
+                            if start_date:
+                                start_datetime = datetime.fromisoformat(start_date.replace('Z', '+00:00'))
+                                if event_datetime < start_datetime:
+                                    continue
+                            
+                            if end_date:
+                                end_datetime = datetime.fromisoformat(end_date.replace('Z', '+00:00'))
+                                if event_datetime > end_datetime:
+                                    continue
+                        except ValueError:
+                            # Se não conseguir parsear a data, inclui o evento
+                            pass
+                
+                filtered_events.append(event)
+            
+            # Ordenar por data (mais recentes primeiro)
+            filtered_events.sort(key=lambda x: x.get('data', {}).get('date_time', ''), reverse=True)
+            
+            # Aplicar paginação
+            total_events = len(filtered_events)
+            start_index = (page - 1) * page_size
+            end_index = start_index + page_size
+            paginated_events = filtered_events[start_index:end_index]
+            
+            # Calcular informações de paginação
+            total_pages = (total_events + page_size - 1) // page_size
+            has_next = page < total_pages
+            has_previous = page > 1
             
             return Response({
                 'status': 'success',
                 'data': {
-                    'events': events,
-                    'total': len(events),
-                    'hours': hours,
-                    'limit': limit
+                    'events': paginated_events,
+                    'pagination': {
+                        'current_page': page,
+                        'page_size': page_size,
+                        'total_events': total_events,
+                        'total_pages': total_pages,
+                        'has_next': has_next,
+                        'has_previous': has_previous
+                    },
+                    'filters': {
+                        'hours': hours,
+                        'event_type': event_type,
+                        'start_date': start_date,
+                        'end_date': end_date,
+                        'instance': instance
+                    }
                 }
             })
             

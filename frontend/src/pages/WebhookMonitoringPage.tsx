@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Database, Clock, TrendingUp, AlertCircle, CheckCircle } from 'lucide-react'
+import { RefreshCw, Database, Clock, TrendingUp, AlertCircle, CheckCircle, Filter, ChevronLeft, ChevronRight, Search } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -23,20 +23,53 @@ interface WebhookEvent {
   data: any
 }
 
+interface PaginationInfo {
+  current_page: number
+  page_size: number
+  total_events: number
+  total_pages: number
+  has_next: boolean
+  has_previous: boolean
+}
+
+interface EventsResponse {
+  events: WebhookEvent[]
+  pagination: PaginationInfo
+  filters: {
+    hours: number
+    event_type: string
+    start_date: string
+    end_date: string
+    instance: string
+  }
+}
+
 export default function WebhookMonitoringPage() {
   const [stats, setStats] = useState<CacheStats | null>(null)
   const [recentEvents, setRecentEvents] = useState<WebhookEvent[]>([])
+  const [pagination, setPagination] = useState<PaginationInfo | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [selectedEvent, setSelectedEvent] = useState<WebhookEvent | null>(null)
   const { toast, showToast, hideToast } = useToast()
+
+  // Filter states
+  const [filters, setFilters] = useState({
+    event_type: '',
+    start_date: '',
+    end_date: '',
+    instance: '',
+    page: 1,
+    page_size: 50
+  })
+  const [showFilters, setShowFilters] = useState(false)
 
   useEffect(() => {
     fetchData()
     // Auto refresh every 30 seconds
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [filters.page, filters.page_size])
 
   const fetchData = async () => {
     try {
@@ -46,9 +79,20 @@ export default function WebhookMonitoringPage() {
       const statsResponse = await api.get('/connections/webhooks/cache/stats/')
       setStats(statsResponse.data.data)
       
-      // Fetch recent events
-      const eventsResponse = await api.get('/connections/webhooks/cache/events/')
-      setRecentEvents(eventsResponse.data.data.events)
+      // Fetch recent events with filters
+      const params = new URLSearchParams()
+      if (filters.event_type) params.append('event_type', filters.event_type)
+      if (filters.start_date) params.append('start_date', filters.start_date)
+      if (filters.end_date) params.append('end_date', filters.end_date)
+      if (filters.instance) params.append('instance', filters.instance)
+      params.append('page', filters.page.toString())
+      params.append('page_size', filters.page_size.toString())
+      
+      const eventsResponse = await api.get(`/connections/webhooks/cache/events/?${params}`)
+      const eventsData: EventsResponse = eventsResponse.data.data
+      
+      setRecentEvents(eventsData.events)
+      setPagination(eventsData.pagination)
       
     } catch (error) {
       console.error('Error fetching webhook monitoring data:', error)
@@ -57,6 +101,32 @@ export default function WebhookMonitoringPage() {
       setIsLoading(false)
       setIsRefreshing(false)
     }
+  }
+
+  const handleFilterChange = (key: string, value: string) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: value,
+      page: 1 // Reset to first page when filters change
+    }))
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setFilters(prev => ({
+      ...prev,
+      page: newPage
+    }))
+  }
+
+  const clearFilters = () => {
+    setFilters({
+      event_type: '',
+      start_date: '',
+      end_date: '',
+      instance: '',
+      page: 1,
+      page_size: 50
+    })
   }
 
   const handleReprocess = async () => {
@@ -213,15 +283,100 @@ export default function WebhookMonitoringPage() {
 
       {/* Recent Events */}
       <Card className="p-6">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Eventos Recentes (Últimas 24h)</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">
+            Eventos Recentes {pagination && `(${pagination.total_events} total)`}
+          </h3>
+          <div className="flex gap-2">
+            <Button
+              onClick={() => setShowFilters(!showFilters)}
+              variant="outline"
+              size="sm"
+            >
+              <Filter className="h-4 w-4 mr-2" />
+              Filtros
+            </Button>
+          </div>
+        </div>
+
+        {/* Filters Panel */}
+        {showFilters && (
+          <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tipo de Evento
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: messages.update"
+                  value={filters.event_type}
+                  onChange={(e) => handleFilterChange('event_type', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Instância
+                </label>
+                <input
+                  type="text"
+                  placeholder="Ex: Teste"
+                  value={filters.instance}
+                  onChange={(e) => handleFilterChange('instance', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data Inicial
+                </label>
+                <input
+                  type="datetime-local"
+                  value={filters.start_date}
+                  onChange={(e) => handleFilterChange('start_date', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Data Final
+                </label>
+                <input
+                  type="datetime-local"
+                  value={filters.end_date}
+                  onChange={(e) => handleFilterChange('end_date', e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-4">
+              <Button
+                onClick={clearFilters}
+                variant="outline"
+                size="sm"
+              >
+                Limpar Filtros
+              </Button>
+              <Button
+                onClick={fetchData}
+                size="sm"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Buscar
+              </Button>
+            </div>
+          </div>
+        )}
+
         <div className="space-y-3">
           {recentEvents.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-              <p>Nenhum evento encontrado nas últimas 24h</p>
+              <p>Nenhum evento encontrado com os filtros aplicados</p>
             </div>
           ) : (
-            recentEvents.slice(0, 20).map((event) => (
+            recentEvents.map((event) => (
               <div
                 key={event._event_id}
                 className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 cursor-pointer"
@@ -246,6 +401,61 @@ export default function WebhookMonitoringPage() {
             ))
           )}
         </div>
+
+        {/* Pagination */}
+        {pagination && pagination.total_pages > 1 && (
+          <div className="mt-6 flex items-center justify-between">
+            <div className="text-sm text-gray-700">
+              Mostrando {((pagination.current_page - 1) * pagination.page_size) + 1} a{' '}
+              {Math.min(pagination.current_page * pagination.page_size, pagination.total_events)} de{' '}
+              {pagination.total_events} eventos
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => handlePageChange(pagination.current_page - 1)}
+                disabled={!pagination.has_previous}
+                variant="outline"
+                size="sm"
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Anterior
+              </Button>
+              
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, pagination.total_pages) }, (_, i) => {
+                  const pageNum = Math.max(1, Math.min(
+                    pagination.total_pages - 4,
+                    pagination.current_page - 2
+                  )) + i
+                  
+                  if (pageNum > pagination.total_pages) return null
+                  
+                  return (
+                    <Button
+                      key={pageNum}
+                      onClick={() => handlePageChange(pageNum)}
+                      variant={pageNum === pagination.current_page ? "default" : "outline"}
+                      size="sm"
+                      className="w-8 h-8 p-0"
+                    >
+                      {pageNum}
+                    </Button>
+                  )
+                })}
+              </div>
+              
+              <Button
+                onClick={() => handlePageChange(pagination.current_page + 1)}
+                disabled={!pagination.has_next}
+                variant="outline"
+                size="sm"
+              >
+                Próximo
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Event Details Modal */}
