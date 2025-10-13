@@ -17,6 +17,7 @@ def preserve_whatsapp_instances():
     """Preserva apenas as configurações de WhatsApp Instances."""
     print("📱 PRESERVING WHATSAPP INSTANCES")
     print("=" * 50)
+    print("🛡️ Railway Deploy Protection Active")
     
     # Backup file
     backup_file = "/tmp/whatsapp_instances_backup.json"
