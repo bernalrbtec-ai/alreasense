@@ -161,9 +161,26 @@ class EvolutionWebhookView(APIView):
         try:
             logger.info(f"📞 Contacts update received: {json.dumps(data, indent=2)}")
             
-            # Extract contact data - data is a LIST, not a dict!
-            contacts_list = data.get('data', [])
+            # Extract contact data - data can be a string or dict!
+            contact_data_raw = data.get('data', {})
             instance = data.get('instance', '')
+            
+            # Handle case where data is a string (JSON)
+            if isinstance(contact_data_raw, str):
+                try:
+                    contact_data_raw = json.loads(contact_data_raw)
+                except json.JSONDecodeError:
+                    logger.error(f"Failed to parse contact data as JSON: {contact_data_raw}")
+                    return JsonResponse({'status': 'error', 'message': 'Invalid JSON in data field'}, status=400)
+            
+            # Handle case where data is a single contact object
+            if isinstance(contact_data_raw, dict):
+                contacts_list = [contact_data_raw]
+            elif isinstance(contact_data_raw, list):
+                contacts_list = contact_data_raw
+            else:
+                logger.error(f"Unexpected data type for contacts: {type(contact_data_raw)}")
+                return JsonResponse({'status': 'error', 'message': 'Invalid data format'}, status=400)
             
             # Process each contact in the list
             for contact_data in contacts_list:
