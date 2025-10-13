@@ -497,11 +497,19 @@ class EvolutionWebhookView(APIView):
             from apps.campaigns.models import CampaignContact
             
             total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
+            sent_count = CampaignContact.objects.filter(campaign=campaign, status__in=['sent', 'delivered', 'read']).count()
             delivered_count = CampaignContact.objects.filter(campaign=campaign, status='delivered').count()
             read_count = CampaignContact.objects.filter(campaign=campaign, status='read').count()
             failed_count = CampaignContact.objects.filter(campaign=campaign, status='failed').count()
             
-            logger.info(f"Campaign {campaign.id} stats: {delivered_count}/{total_contacts} delivered, {read_count} read, {failed_count} failed")
+            # Atualizar campos da campanha
+            campaign.messages_sent = sent_count
+            campaign.messages_delivered = delivered_count
+            campaign.messages_read = read_count
+            campaign.messages_failed = failed_count
+            campaign.save(update_fields=['messages_sent', 'messages_delivered', 'messages_read', 'messages_failed'])
+            
+            logger.info(f"✅ Campaign {campaign.id} stats updated: {sent_count} sent, {delivered_count} delivered, {read_count} read, {failed_count} failed")
             
         except Exception as e:
             logger.error(f"Error updating campaign stats: {str(e)}")
