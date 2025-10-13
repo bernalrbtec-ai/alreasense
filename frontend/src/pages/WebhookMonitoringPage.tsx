@@ -69,7 +69,12 @@ export default function WebhookMonitoringPage() {
     // Auto refresh every 30 seconds
     const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
-  }, [filters.page, filters.page_size])
+  }, []) // Executar apenas uma vez na montagem
+
+  // Effect separado para reagir a mudanças de filtros
+  useEffect(() => {
+    fetchData()
+  }, [filters.page, filters.page_size, filters.event_type, filters.start_date, filters.end_date, filters.instance])
 
   const fetchData = async () => {
     try {
@@ -173,6 +178,16 @@ export default function WebhookMonitoringPage() {
       default: return 'text-gray-600 bg-gray-50'
     }
   }
+
+  // Lista de tipos de evento disponíveis
+  const eventTypes = [
+    { type: '', icon: '📋', label: 'Todos os Eventos', color: 'text-gray-600 bg-gray-50' },
+    { type: 'messages.upsert', icon: '📥', label: 'Mensagens Recebidas', color: 'text-green-600 bg-green-50' },
+    { type: 'messages.update', icon: '📤', label: 'Status de Mensagens', color: 'text-blue-600 bg-blue-50' },
+    { type: 'contacts.update', icon: '📞', label: 'Atualizações de Contato', color: 'text-purple-600 bg-purple-50' },
+    { type: 'connection.update', icon: '🔗', label: 'Status de Conexão', color: 'text-orange-600 bg-orange-50' },
+    { type: 'presence.update', icon: '👤', label: 'Status de Presença', color: 'text-gray-600 bg-gray-50' },
+  ]
 
   if (isLoading) {
     return (
@@ -284,9 +299,27 @@ export default function WebhookMonitoringPage() {
       {/* Recent Events */}
       <Card className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Eventos Recentes {pagination && `(${pagination.total_events} total)`}
-          </h3>
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Eventos Recentes {pagination && `(${pagination.total_events} total)`}
+            </h3>
+            {/* Active Filter Indicator */}
+            {filters.event_type && (
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-sm text-gray-500">Filtro ativo:</span>
+                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${getEventColor(filters.event_type)}`}>
+                  <span>{getEventIcon(filters.event_type)}</span>
+                  {eventTypes.find(et => et.type === filters.event_type)?.label || filters.event_type}
+                </span>
+                <button
+                  onClick={() => handleFilterChange('event_type', '')}
+                  className="text-gray-400 hover:text-gray-600 text-xs"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex gap-2">
             <Button
               onClick={() => setShowFilters(!showFilters)}
@@ -302,19 +335,30 @@ export default function WebhookMonitoringPage() {
         {/* Filters Panel */}
         {showFilters && (
           <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Tipo de Evento
-                </label>
-                <input
-                  type="text"
-                  placeholder="Ex: messages.update"
-                  value={filters.event_type}
-                  onChange={(e) => handleFilterChange('event_type', e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+            {/* Event Type Filter with Icons */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-3">
+                Tipo de Evento
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {eventTypes.map((eventType) => (
+                  <button
+                    key={eventType.type}
+                    onClick={() => handleFilterChange('event_type', eventType.type)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border transition-all ${
+                      filters.event_type === eventType.type
+                        ? `${eventType.color} border-current`
+                        : 'bg-white border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    <span className="text-lg">{eventType.icon}</span>
+                    <span className="text-sm font-medium">{eventType.label}</span>
+                  </button>
+                ))}
               </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
                   Instância
