@@ -506,9 +506,11 @@ class EvolutionWebhookView(APIView):
             total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
             sent_count = CampaignContact.objects.filter(campaign=campaign, status__in=['sent', 'delivered', 'read']).count()
             # Contar como entregues: mensagens com status 'delivered' OU que foram lidas (têm read_at)
+            from django.db.models import Q
             delivered_count = CampaignContact.objects.filter(
-                campaign=campaign,
-                models.Q(status='delivered') | models.Q(read_at__isnull=False)
+                campaign=campaign
+            ).filter(
+                Q(status='delivered') | Q(read_at__isnull=False)
             ).count()
             read_count = CampaignContact.objects.filter(campaign=campaign, status='read').count()
             failed_count = CampaignContact.objects.filter(campaign=campaign, status='failed').count()

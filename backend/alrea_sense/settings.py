@@ -165,21 +165,23 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
 }
 
-# CORS Settings
-CORS_ALLOWED_ORIGINS = config(
-    'CORS_ALLOWED_ORIGINS',
-    default='http://localhost,http://localhost:5173,http://127.0.0.1,http://127.0.0.1:5173,https://alreasense-production.up.railway.app'
-).split(',')
-
-# Ensure Railway domains are included
-RAILWAY_DOMAINS = [
+# CORS Settings - Hardcoded for Railway
+CORS_ALLOWED_ORIGINS = [
+    'http://localhost',
+    'http://localhost:5173',
+    'http://127.0.0.1',
+    'http://127.0.0.1:5173',
     'https://alreasense-production.up.railway.app',
     'https://alreasense-backend-production.up.railway.app'
 ]
 
-for domain in RAILWAY_DOMAINS:
-    if domain not in CORS_ALLOWED_ORIGINS:
-        CORS_ALLOWED_ORIGINS.append(domain)
+# Also try to get from environment variable as fallback
+env_cors = config('CORS_ALLOWED_ORIGINS', default='')
+if env_cors:
+    for origin in env_cors.split(','):
+        origin = origin.strip()
+        if origin and origin not in CORS_ALLOWED_ORIGINS:
+            CORS_ALLOWED_ORIGINS.append(origin)
 
 # Debug CORS configuration
 print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
