@@ -20,9 +20,17 @@ while [ $? -ne 0 ]; do
     python manage.py migrate --check
 done
 
+# Preserve WhatsApp Instances before migrations
+echo "Preserving WhatsApp Instances..."
+python preserve_whatsapp_instances.py
+
 # Run migrations
 echo "Running migrations..."
 python manage.py migrate
+
+# Restore WhatsApp Instances after migrations
+echo "Restoring WhatsApp Instances..."
+python preserve_whatsapp_instances.py restore
 
 # Create superuser
 echo "Creating superuser..."
