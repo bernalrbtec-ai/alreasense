@@ -26,11 +26,23 @@ class RotationService:
         available_instances = self._get_available_instances()
         
         if not available_instances:
-            CampaignLog.log_error(
-                self.campaign,
-                "Nenhuma instância disponível para envio",
-                details={'rotation_mode': self.campaign.rotation_mode}
-            )
+            # Log de erro apenas se não foi logado recentemente
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            recent_error = CampaignLog.objects.filter(
+                campaign=self.campaign,
+                log_type='error',
+                message__contains="Nenhuma instância disponível",
+                created_at__gte=timezone.now() - timedelta(minutes=5)
+            ).exists()
+            
+            if not recent_error:
+                CampaignLog.log_error(
+                    self.campaign,
+                    "Nenhuma instância disponível para envio",
+                    details={'rotation_mode': self.campaign.rotation_mode}
+                )
             return None
         
         # Selecionar baseado no modo
@@ -44,9 +56,20 @@ class RotationService:
             instance = self._select_intelligent(available_instances)
             reason = "Inteligente (melhor health)"
         
-        # Log da seleção
+        # Log da seleção (mantido para debug, mas com limite)
         if instance:
-            CampaignLog.log_instance_selected(self.campaign, instance, reason)
+            # Só logar se não foi selecionada recentemente (evitar spam)
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            recent_log = CampaignLog.objects.filter(
+                campaign=self.campaign,
+                log_type='instance_selected',
+                created_at__gte=timezone.now() - timedelta(seconds=30)  # Reduzido para 30 segundos
+            ).exists()
+            
+            if not recent_log:
+                CampaignLog.log_instance_selected(self.campaign, instance, reason)
         
         return instance
     
@@ -399,11 +422,12 @@ class CampaignSender:
                 created_at=timezone.now()
             )
             
-            # Log de sucesso
+            # Log de sucesso (SEMPRE registrado - sem limitação)
             CampaignLog.log_message_sent(
                 self.campaign, instance, contact, campaign_contact,
                 duration_ms=duration_ms,
-                message_content=message_text  # Passar mensagem com variáveis substituídas
+                message_content=message_text,  # Passar mensagem com variáveis substituídas
+                whatsapp_message_id=campaign_contact.whatsapp_message_id  # ID da mensagem WhatsApp
             )
             
             return True, f"Mensagem enviada para {contact.name}"
@@ -423,7 +447,7 @@ class CampaignSender:
             self.campaign.messages_failed += 1
             self.campaign.save(update_fields=['messages_failed'])
             
-            # Log de falha
+            # Log de falha (SEMPRE registrado - sem limitação)
             CampaignLog.log_message_failed(
                 self.campaign, instance, contact, campaign_contact,
                 error_msg
@@ -454,6 +478,12 @@ class CampaignSender:
                 break  # Sair do loop se campanha foi pausada
             
             success, message = self.send_next_message()
+            
+            # Verificar se falhou por falta de instâncias disponíveis
+            if not success and ("disponível" in message.lower() or "instância" in message.lower()):
+                print(f"   ⚠️ Nenhuma instância disponível, pausando lote")
+                results['skipped'] = 1
+                break
             
             if success:
                 results['sent'] += 1

@@ -442,6 +442,13 @@ class EvolutionWebhookView(APIView):
                 # Update campaign stats
                 self.update_campaign_stats(campaign_contact.campaign)
                 
+                # Update delivery status in the log
+                from apps.campaigns.models import CampaignLog
+                if status in ['delivered', 'delivery_ack']:
+                    CampaignLog.update_message_delivery_status(campaign_contact, 'delivered')
+                elif status in ['read', 'read_ack']:
+                    CampaignLog.update_message_delivery_status(campaign_contact, 'read')
+                
                 return True
             else:
                 logger.warning(f"❌ No CampaignContact found for message_id: {message_id}")

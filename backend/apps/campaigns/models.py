@@ -525,18 +525,24 @@ class CampaignLog(models.Model):
         )
     
     @staticmethod
-    def log_message_sent(campaign, instance, contact, campaign_contact, duration_ms=None, message_content=None):
+    def log_message_sent(campaign, instance, contact, campaign_contact, duration_ms=None, message_content=None, whatsapp_message_id=None):
         """Log de mensagem enviada"""
         details = {
             'contact_id': str(contact.id),
             'contact_phone': contact.phone,
             'instance_id': str(instance.id),
             'instance_name': instance.friendly_name,
+            'delivery_status': 'sent',  # Status inicial
+            'delivery_timestamp': None,
         }
         
         # Adicionar conteúdo da mensagem se fornecido
         if message_content:
             details['message_content'] = message_content
+            
+        # Adicionar ID da mensagem WhatsApp se disponível
+        if whatsapp_message_id:
+            details['whatsapp_message_id'] = whatsapp_message_id
         
         return CampaignLog.objects.create(
             campaign=campaign,
@@ -587,6 +593,37 @@ class CampaignLog(models.Model):
             contact=contact,
             campaign_contact=campaign_contact
         )
+    
+    @staticmethod
+    def update_message_delivery_status(campaign_contact, status='delivered'):
+        """Atualiza o status de entrega no log de mensagem enviada"""
+        try:
+            from django.utils import timezone
+            
+            # Buscar o log de mensagem enviada mais recente para este campaign_contact
+            log = CampaignLog.objects.filter(
+                campaign_contact=campaign_contact,
+                log_type='message_sent'
+            ).order_by('-created_at').first()
+            
+            if log:
+                # Atualizar details com novo status
+                details = log.details or {}
+                details['delivery_status'] = status
+                details['delivery_timestamp'] = timezone.now().isoformat()
+                
+                log.details = details
+                
+                # Atualizar mensagem também
+                if status == 'delivered':
+                    log.message = f'Mensagem enviada e entregue para {log.contact.name if log.contact else "contato"}'
+                elif status == 'read':
+                    log.message = f'Mensagem enviada, entregue e lida por {log.contact.name if log.contact else "contato"}'
+                
+                log.save(update_fields=['message', 'details'])
+                
+        except Exception as e:
+            print(f"Erro ao atualizar status de entrega: {e}")
     
     @staticmethod
     def log_message_failed(campaign, instance, contact, campaign_contact, error_msg, request_data=None, response_data=None, http_status=None):
