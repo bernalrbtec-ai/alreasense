@@ -439,18 +439,18 @@ class EvolutionWebhookView(APIView):
                 return True
             else:
                 logger.warning(f"❌ No CampaignContact found for message_id: {message_id}")
-        # Debug: List all CampaignContacts with whatsapp_message_id
-        all_contacts = CampaignContact.objects.filter(whatsapp_message_id__isnull=False)
-        logger.info(f"🔍 Available whatsapp_message_ids: {[c.whatsapp_message_id for c in all_contacts]}")
-        
-        # Debug: Show recent campaign contacts
-        recent_contacts = CampaignContact.objects.filter(
-            campaign__tenant__isnull=False
-        ).order_by('-created_at')[:5]
-        
-        logger.info(f"🔍 Recent CampaignContacts:")
-        for contact in recent_contacts:
-            logger.info(f"   ID: {contact.id}, WhatsApp ID: {contact.whatsapp_message_id}, Status: {contact.status}, Campaign: {contact.campaign.id}")
+                # Debug: List all CampaignContacts with whatsapp_message_id
+                all_contacts = CampaignContact.objects.filter(whatsapp_message_id__isnull=False)
+                logger.info(f"🔍 Available whatsapp_message_ids: {[c.whatsapp_message_id for c in all_contacts]}")
+                
+                # Debug: Show recent campaign contacts
+                recent_contacts = CampaignContact.objects.filter(
+                    campaign__tenant__isnull=False
+                ).order_by('-created_at')[:5]
+                
+                logger.info(f"🔍 Recent CampaignContacts:")
+                for contact in recent_contacts:
+                    logger.info(f"   ID: {contact.id}, WhatsApp ID: {contact.whatsapp_message_id}, Status: {contact.status}, Campaign: {contact.campaign.id}")
                 return False
                 
         except Exception as e:
