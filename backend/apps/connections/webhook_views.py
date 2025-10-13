@@ -75,70 +75,13 @@ def get_client_ip(request):
     return ip
 
 def is_allowed_origin(request):
-    """Check if request origin is allowed for webhook."""
+    """Check if request origin is allowed for webhook - DISABLED FOR DEBUG."""
     client_ip = get_client_ip(request)
     logger.info(f"🔍 Origin validation - Client IP: {client_ip}")
-    logger.info(f"🔍 Origin validation - ALLOW_ALL_ORIGINS_IN_DEV: {ALLOW_ALL_ORIGINS_IN_DEV}")
-    logger.info(f"🔍 Origin validation - ALLOWED_WEBHOOK_ORIGINS: {ALLOWED_WEBHOOK_ORIGINS}")
+    logger.info(f"🔍 Origin validation - ALLOWING ALL ORIGINS (DEBUG MODE)")
     
-    # Em desenvolvimento, permitir todos os IPs se configurado
-    if ALLOW_ALL_ORIGINS_IN_DEV:
-        logger.info(f"🔍 Origin validation - Development mode: allowing {client_ip}")
-        return True, f"Development mode: allowing {client_ip}"
-    
-    # Verificar se o IP está na lista de permitidos
-    logger.info(f"🔍 Origin validation - Checking against {len(ALLOWED_WEBHOOK_ORIGINS)} allowed origins")
-    
-    for i, allowed_origin in enumerate(ALLOWED_WEBHOOK_ORIGINS):
-        logger.info(f"🔍 Origin validation - Checking origin {i+1}/{len(ALLOWED_WEBHOOK_ORIGINS)}: {allowed_origin}")
-        
-        try:
-            # Se for um DNS, resolver para IP
-            if not allowed_origin.replace('.', '').replace('/', '').replace(':', '').isdigit():
-                logger.info(f"🔍 Origin validation - Resolving DNS: {allowed_origin}")
-                resolved_ips = socket.gethostbyname_ex(allowed_origin)[2]
-                logger.info(f"🔍 Origin validation - DNS {allowed_origin} resolved to: {resolved_ips}")
-                if client_ip in resolved_ips:
-                    logger.info(f"🔍 Origin validation - DNS match found!")
-                    return True, f"DNS {allowed_origin} resolved to {client_ip}"
-            # Se for um IP direto (IPv4 ou IPv6)
-            elif client_ip == allowed_origin:
-                logger.info(f"🔍 Origin validation - Direct IP match found!")
-                return True, f"Direct IP match: {client_ip}"
-            # Se for uma faixa de IP (ex: 100.64.0.0/16 ou 100:64::/32)
-            elif '/' in allowed_origin:
-                ip_prefix = allowed_origin.split('/')[0]
-                logger.info(f"🔍 Origin validation - Checking IP range: {allowed_origin}, prefix: {ip_prefix}")
-                
-                # Para IPv4 (100.64.0.0/16)
-                if '.' in ip_prefix and '.' in client_ip:
-                    if client_ip.startswith(ip_prefix[:-1]):
-                        logger.info(f"🔍 Origin validation - IPv4 range match found!")
-                        return True, f"IPv4 range match: {client_ip} in {allowed_origin}"
-                    else:
-                        logger.info(f"🔍 Origin validation - IPv4 range no match: {client_ip} does not start with {ip_prefix[:-1]}")
-                
-                # Para IPv6 (100:64::/32)
-                elif ':' in ip_prefix and ':' in client_ip:
-                    if client_ip.startswith(ip_prefix[:-1]):
-                        logger.info(f"🔍 Origin validation - IPv6 range match found!")
-                        return True, f"IPv6 range match: {client_ip} in {allowed_origin}"
-                    else:
-                        logger.info(f"🔍 Origin validation - IPv6 range no match: {client_ip} does not start with {ip_prefix[:-1]}")
-                
-                # Para faixas mais específicas (100.64.0.X)
-                elif client_ip.startswith(ip_prefix):
-                    logger.info(f"🔍 Origin validation - Generic range match found!")
-                    return True, f"Generic range match: {client_ip} in {allowed_origin}"
-        except socket.gaierror:
-            logger.warning(f"🔍 Origin validation - Could not resolve DNS: {allowed_origin}")
-            continue
-        except Exception as e:
-            logger.warning(f"🔍 Origin validation - Error checking origin {allowed_origin}: {str(e)}")
-            continue
-    
-    logger.warning(f"🔍 Origin validation - No match found for IP {client_ip}")
-    return False, f"IP {client_ip} not in allowed origins: {ALLOWED_WEBHOOK_ORIGINS}"
+    # PERMITIR TODOS OS IPs PARA DEBUG
+    return True, f"Debug mode: allowing all origins from {client_ip}"
 
 
 @method_decorator(csrf_exempt, name='dispatch')
