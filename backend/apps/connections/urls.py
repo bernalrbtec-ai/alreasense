@@ -3,6 +3,7 @@ from . import views
 from . import webhook_views
 from . import test_views
 from . import webhook_monitoring_views
+from . import test_webhook_endpoint
 
 urlpatterns = [
     # Connections list
@@ -17,6 +18,9 @@ urlpatterns = [
     
     # Webhook endpoint
     path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook'),
+    
+    # Webhook test endpoint (admin only)
+    path('webhooks/test/', test_webhook_endpoint.TestWebhookEndpointView.as_view(), name='webhook-test'),
     
     # Webhook monitoring (admin only)
     path('webhooks/cache/stats/', webhook_monitoring_views.WebhookCacheStatsView.as_view(), name='webhook-cache-stats'),

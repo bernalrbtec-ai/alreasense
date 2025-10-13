@@ -110,12 +110,12 @@ def evolution_config(request):
         
         # Webhook URL seguro (não usa request.get_host que pode dar erro)
         try:
-            webhook_url = f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/"
+            webhook_url = f"{request.scheme}://{request.get_host()}/webhooks/evolution/"
         except Exception:
             # Fallback para Railway ou localhost
             from django.conf import settings
             base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
-            webhook_url = f"{base_url}/api/webhooks/evolution/"
+            webhook_url = f"{base_url}/webhooks/evolution/"
         
         # Tentar obter api_key, se falhar retornar string vazia
         try:
@@ -192,11 +192,11 @@ def evolution_config(request):
             
             # Webhook URL seguro
             try:
-                webhook_url = f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/"
+                webhook_url = f"{request.scheme}://{request.get_host()}/webhooks/evolution/"
             except Exception:
                 from django.conf import settings
                 base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
-                webhook_url = f"{base_url}/api/webhooks/evolution/"
+                webhook_url = f"{base_url}/webhooks/evolution/"
             
             # Tentar obter api_key, se falhar (criptografia corrompida) retornar string vazia
             try:
@@ -267,7 +267,7 @@ def test_evolution_connection(request):
                     'name': 'Default Evolution API',
                     'base_url': base_url,
                     'api_key': api_key,
-                    'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
+                    'webhook_url': f"{request.scheme}://{request.get_host()}/webhooks/evolution/",
                     'is_active': True,
                     'status': 'active',
                     'last_check': timezone.now().isoformat(),
@@ -287,7 +287,7 @@ def test_evolution_connection(request):
                     'name': 'Default Evolution API',
                     'base_url': base_url,
                     'api_key': api_key,
-                    'webhook_url': f"{request.scheme}://{request.get_host()}/api/webhooks/evolution/",
+                    'webhook_url': f"{request.scheme}://{request.get_host()}/webhooks/evolution/",
                     'is_active': False,
                     'status': 'error',
                     'last_check': timezone.now().isoformat(),

@@ -66,7 +66,7 @@ export default function EvolutionConfigPage() {
       setConfig({
         base_url: '',
         api_key: '',
-        webhook_url: `${window.location.origin}/api/webhooks/evolution/`,
+        webhook_url: `${window.location.origin}/webhooks/evolution/`,
         is_active: true,
         last_check: undefined,
         status: 'inactive',
