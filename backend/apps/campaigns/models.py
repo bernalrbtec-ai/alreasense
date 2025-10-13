@@ -181,6 +181,22 @@ class Campaign(models.Model):
         self.next_contact_name = None
         self.next_contact_phone = None
         self.save()
+    
+    def update_next_contact_info(self):
+        """Atualiza informações do próximo contato para campanhas em execução"""
+        if self.status == 'running':
+            next_campaign_contact = self.campaign_contacts.filter(
+                status='pending'
+            ).select_related('contact').first()
+            
+            if next_campaign_contact:
+                self.next_contact_name = next_campaign_contact.contact.name
+                self.next_contact_phone = next_campaign_contact.contact.phone
+            else:
+                self.next_contact_name = None
+                self.next_contact_phone = None
+            
+            self.save(update_fields=['next_contact_name', 'next_contact_phone'])
 
 
 class CampaignMessage(models.Model):

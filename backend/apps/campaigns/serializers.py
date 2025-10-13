@@ -56,6 +56,14 @@ class CampaignSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
     
+    def to_representation(self, instance):
+        """Atualiza informações do próximo contato antes de serializar"""
+        # Atualizar informações do próximo contato para campanhas em execução
+        if instance.status == 'running':
+            instance.update_next_contact_info()
+        
+        return super().to_representation(instance)
+    
     def create(self, validated_data):
         messages_data = validated_data.pop('messages', [])
         instances_data = validated_data.pop('instances', [])
