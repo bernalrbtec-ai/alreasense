@@ -22,41 +22,7 @@ import uuid
 
 logger = logging.getLogger(__name__)
 
-# Configuração de desenvolvimento (permitir todos em dev)
-import os
-ALLOW_ALL_ORIGINS_IN_DEV = True  # FORÇAR TRUE PARA DEBUG
-
-# Lista de IPs/DNS permitidos para webhook (via variáveis de ambiente)
-def get_allowed_webhook_origins():
-    """Get allowed webhook origins from environment variables."""
-    origins_str = os.getenv('ALLOWED_WEBHOOK_ORIGINS', 'evo.rbtec.com.br')
-    # Suporta múltiplos IPs/DNS separados por vírgula
-    origins = [origin.strip() for origin in origins_str.split(',') if origin.strip()]
-    
-    # Adicionar IPs do Railway automaticamente (IPv4 e IPv6)
-    railway_ips = [
-        # IPv4 Railway
-        '100.64.0.0/16',  # Faixa completa IPv4 Railway
-        '100.64.0.1', '100.64.0.2', '100.64.0.3', '100.64.0.4', '100.64.0.5',
-        '100.64.0.6', '100.64.0.7', '100.64.0.8', '100.64.0.9', '100.64.0.10',
-        '100.64.0.11', '100.64.0.12', '100.64.0.13', '100.64.0.14', '100.64.0.15',
-        # IPv6 Railway (formato comum)
-        '100:64::/32',  # Faixa IPv6 Railway
-        '100:64:0::/48',
-        # IPs internos comuns
-        '127.0.0.1',  # localhost
-        '::1',        # localhost IPv6
-        '0.0.0.0',    # wildcard
-    ]
-    
-    origins.extend(railway_ips)
-    return origins
-
-ALLOWED_WEBHOOK_ORIGINS = get_allowed_webhook_origins()
-
-# Log das configurações carregadas
-logger.info(f"🔒 Webhook security config: ALLOW_ALL_ORIGINS_IN_DEV={ALLOW_ALL_ORIGINS_IN_DEV}")
-logger.info(f"🔒 Allowed webhook origins: {ALLOWED_WEBHOOK_ORIGINS}")
+# 🚫 CONFIGURAÇÃO DE VALIDAÇÃO REMOVIDA COMPLETAMENTE
 
 def get_client_ip(request):
     """Get client IP address from request."""
@@ -74,14 +40,7 @@ def get_client_ip(request):
     
     return ip
 
-def is_allowed_origin(request):
-    """Check if request origin is allowed for webhook - DISABLED FOR DEBUG."""
-    client_ip = get_client_ip(request)
-    logger.info(f"🔍 Origin validation - Client IP: {client_ip}")
-    logger.info(f"🔍 Origin validation - ALLOWING ALL ORIGINS (DEBUG MODE)")
-    
-    # PERMITIR TODOS OS IPs PARA DEBUG
-    return True, f"Debug mode: allowing all origins from {client_ip}"
+# 🚫 FUNÇÃO DE VALIDAÇÃO DE ORIGEM REMOVIDA COMPLETAMENTE
 
 
 @method_decorator(csrf_exempt, name='dispatch')
@@ -111,19 +70,8 @@ class EvolutionWebhookView(APIView):
                 except Exception as e:
                     logger.error(f"🔍 Error decoding body: {str(e)}")
             
-            # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
-            logger.info(f"🔍 Starting origin validation...")
-            is_allowed, reason = is_allowed_origin(request)
-            logger.info(f"🔍 Origin validation result: {is_allowed}, reason: {reason}")
-            
-            if not is_allowed:
-                logger.warning(f"🚫 Webhook blocked: {reason}")
-                logger.warning(f"🚫 Blocked IP: {client_ip}")
-                logger.warning(f"🚫 Allowed origins: {ALLOWED_WEBHOOK_ORIGINS}")
-                logger.warning(f"🚫 ALLOW_ALL_ORIGINS_IN_DEV: {ALLOW_ALL_ORIGINS_IN_DEV}")
-                return Response({'error': 'Unauthorized origin'}, status=403)
-            
-            logger.info(f"✅ Webhook allowed: {reason}")
+            # 🚫 VALIDAÇÃO DE ORIGEM REMOVIDA COMPLETAMENTE
+            logger.info(f"✅ Webhook allowed: NO VALIDATION - ALL ORIGINS ACCEPTED")
             
             # Parse JSON data
             data = json.loads(request.body)
@@ -191,13 +139,8 @@ class EvolutionWebhookView(APIView):
             client_ip = get_client_ip(request)
             logger.info(f"🔍 GET Webhook IP: {client_ip}")
             
-            # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
-            is_allowed, reason = is_allowed_origin(request)
-            if not is_allowed:
-                logger.warning(f"🚫 GET Webhook blocked: {reason}")
-                return Response({'error': 'Unauthorized origin'}, status=403)
-            
-            logger.info(f"✅ GET Webhook allowed: {reason}")
+            # 🚫 VALIDAÇÃO DE ORIGEM REMOVIDA COMPLETAMENTE
+            logger.info(f"✅ GET Webhook allowed: NO VALIDATION - ALL ORIGINS ACCEPTED")
             
             return Response({
                 'status': 'success',
