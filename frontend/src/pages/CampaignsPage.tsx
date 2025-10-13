@@ -254,6 +254,32 @@ const CampaignsPage: React.FC = () => {
     }
   }
 
+  const handleCancel = async (campaignId: string) => {
+    // Confirmação (é definitivo!)
+    const confirmed = confirm(
+      '⚠️ TEM CERTEZA QUE DESEJA CANCELAR ESTA CAMPANHA?\n\n' +
+      '⚠️ Esta ação é IRREVERSÍVEL!\n' +
+      '⚠️ A campanha NÃO poderá ser retomada.\n\n' +
+      'Histórico e logs serão mantidos para consulta.\n\n' +
+      'Deseja realmente cancelar?'
+    )
+    
+    if (!confirmed) {
+      return
+    }
+    
+    const toastId = showLoadingToast('cancelar', 'Campanha')
+    
+    try {
+      await api.post(`/campaigns/campaigns/${campaignId}/cancel/`)
+      updateToastSuccess(toastId, 'cancelar', 'Campanha')
+      fetchData()
+    } catch (error: any) {
+      console.error('Erro ao cancelar campanha:', error)
+      updateToastError(toastId, 'cancelar', 'Campanha', error)
+    }
+  }
+
   const handleCloseModal = () => {
     setShowModal(false)
     setEditingCampaign(null)
@@ -418,6 +444,20 @@ const CampaignsPage: React.FC = () => {
                     title="Retomar campanha"
                   >
                     <Play className="h-4 w-4" />
+                  </Button>
+                )}
+                
+                {/* Cancelar - para running e paused */}
+                {(campaign.status === 'running' || campaign.status === 'paused') && (
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => handleCancel(campaign.id)}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-300"
+                    title="Cancelar campanha (irreversível)"
+                  >
+                    <X className="h-4 w-4 mr-1" />
+                    Cancelar
                   </Button>
                 )}
                 
