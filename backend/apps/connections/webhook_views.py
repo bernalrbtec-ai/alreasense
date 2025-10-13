@@ -421,6 +421,9 @@ class EvolutionWebhookView(APIView):
                     logger.info(f"Campaign contact {campaign_contact.id} marked as delivered (status: {status})")
                     
                 elif status in ['read', 'read_ack']:
+                    # Se ainda não foi entregue, marcar como entregue primeiro
+                    if not campaign_contact.delivered_at:
+                        campaign_contact.delivered_at = timezone.now()
                     campaign_contact.read_at = timezone.now()
                     campaign_contact.status = 'read'
                     logger.info(f"Campaign contact {campaign_contact.id} marked as read (status: {status})")
@@ -498,10 +501,15 @@ class EvolutionWebhookView(APIView):
         """Update campaign statistics."""
         try:
             from apps.campaigns.models import CampaignContact
+            from django.db import models
             
             total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
             sent_count = CampaignContact.objects.filter(campaign=campaign, status__in=['sent', 'delivered', 'read']).count()
-            delivered_count = CampaignContact.objects.filter(campaign=campaign, status='delivered').count()
+            # Contar como entregues: mensagens com status 'delivered' OU que foram lidas (têm read_at)
+            delivered_count = CampaignContact.objects.filter(
+                campaign=campaign,
+                models.Q(status='delivered') | models.Q(read_at__isnull=False)
+            ).count()
             read_count = CampaignContact.objects.filter(campaign=campaign, status='read').count()
             failed_count = CampaignContact.objects.filter(campaign=campaign, status='failed').count()
             
