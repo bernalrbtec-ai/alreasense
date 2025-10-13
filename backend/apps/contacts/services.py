@@ -188,6 +188,11 @@ class ContactImportService:
                 mapping[header] = 'email'
                 continue
             
+            # Quem indicou
+            if header_lower in ['quem indicou', 'indicado por', 'referral', 'referred_by']:
+                mapping[header] = 'referred_by'
+                continue
+            
             # Campos demográficos
             if header_lower in ['cidade', 'city']:
                 mapping[header] = 'city'
@@ -506,6 +511,7 @@ class ContactImportService:
             total_purchases=self._parse_int(row.get('total_purchases'), 0),
             lifetime_value=self._parse_decimal(row.get('lifetime_value'), Decimal('0')),
             notes=notes if notes else '',
+            referred_by=row.get('referred_by'),
             source='import',
             created_by=self.user
         )
