@@ -76,13 +76,17 @@ def is_allowed_origin(request):
 
 
 @method_decorator(csrf_exempt, name='dispatch')
-@method_decorator(require_http_methods(["POST"]), name='dispatch')
+@method_decorator(require_http_methods(["POST", "GET"]), name='dispatch')
 class EvolutionWebhookView(APIView):
     permission_classes = [AllowAny]  # Não requer autenticação
     """Webhook para receber eventos do Evolution API."""
     
     def post(self, request):
         try:
+            # 🔍 LOG DO IP PARA DEBUG
+            client_ip = get_client_ip(request)
+            logger.info(f"🔍 Webhook IP: {client_ip}")
+            
             # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
             is_allowed, reason = is_allowed_origin(request)
             if not is_allowed:
@@ -149,6 +153,32 @@ class EvolutionWebhookView(APIView):
         except Exception as e:
             logger.error(f"Webhook error: {str(e)}")
             return JsonResponse({'error': 'Internal server error'}, status=500)
+    
+    def get(self, request):
+        """Endpoint GET para evitar erro 403 no redirecionamento"""
+        try:
+            # 🔍 LOG DO IP PARA DEBUG
+            client_ip = get_client_ip(request)
+            logger.info(f"🔍 GET Webhook IP: {client_ip}")
+            
+            # 🔒 VALIDAÇÃO DE SEGURANÇA: Verificar origem
+            is_allowed, reason = is_allowed_origin(request)
+            if not is_allowed:
+                logger.warning(f"🚫 GET Webhook blocked: {reason}")
+                return Response({'error': 'Unauthorized origin'}, status=403)
+            
+            logger.info(f"✅ GET Webhook allowed: {reason}")
+            
+            return Response({
+                'status': 'success',
+                'message': 'Webhook endpoint is working',
+                'timestamp': timezone.now().isoformat(),
+                'ip': client_ip
+            })
+            
+        except Exception as e:
+            logger.error(f"GET Webhook error: {str(e)}")
+            return Response({'error': 'Internal server error'}, status=500)
     
     def handle_contacts_update(self, data):
         """Handle contacts.update events from Evolution API."""
