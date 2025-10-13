@@ -33,18 +33,20 @@ def get_allowed_webhook_origins():
     # Suporta múltiplos IPs/DNS separados por vírgula
     origins = [origin.strip() for origin in origins_str.split(',') if origin.strip()]
     
-    # Adicionar IPs do Railway automaticamente
+    # Adicionar IPs do Railway automaticamente (IPv4 e IPv6)
     railway_ips = [
-        '100.64.0.0/16',  # Faixa de IPs do Railway
-        '100.64.0.1',
-        '100.64.0.2', 
-        '100.64.0.3',
-        '100.64.0.4',
-        '100.64.0.5',
-        '100.64.0.6',
-        '100.64.0.7',
-        '100.64.0.8',
-        '100.64.0.9'
+        # IPv4 Railway
+        '100.64.0.0/16',  # Faixa completa IPv4 Railway
+        '100.64.0.1', '100.64.0.2', '100.64.0.3', '100.64.0.4', '100.64.0.5',
+        '100.64.0.6', '100.64.0.7', '100.64.0.8', '100.64.0.9', '100.64.0.10',
+        '100.64.0.11', '100.64.0.12', '100.64.0.13', '100.64.0.14', '100.64.0.15',
+        # IPv6 Railway (formato comum)
+        '100:64::/32',  # Faixa IPv6 Railway
+        '100:64:0::/48',
+        # IPs internos comuns
+        '127.0.0.1',  # localhost
+        '::1',        # localhost IPv6
+        '0.0.0.0',    # wildcard
     ]
     
     origins.extend(railway_ips)
@@ -58,11 +60,18 @@ logger.info(f"🔒 Allowed webhook origins: {ALLOWED_WEBHOOK_ORIGINS}")
 
 def get_client_ip(request):
     """Get client IP address from request."""
+    # Tentar múltiplas fontes de IP
     x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
     if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
+        ip = x_forwarded_for.split(',')[0].strip()
     else:
         ip = request.META.get('REMOTE_ADDR')
+    
+    # Log detalhado do IP
+    logger.info(f"🔍 IP Detection - REMOTE_ADDR: {request.META.get('REMOTE_ADDR')}")
+    logger.info(f"🔍 IP Detection - X_FORWARDED_FOR: {x_forwarded_for}")
+    logger.info(f"🔍 IP Detection - Final IP: {ip}")
+    
     return ip
 
 def is_allowed_origin(request):
@@ -85,26 +94,42 @@ def is_allowed_origin(request):
         
         try:
             # Se for um DNS, resolver para IP
-            if not allowed_origin.replace('.', '').replace('/', '').isdigit():
+            if not allowed_origin.replace('.', '').replace('/', '').replace(':', '').isdigit():
                 logger.info(f"🔍 Origin validation - Resolving DNS: {allowed_origin}")
                 resolved_ips = socket.gethostbyname_ex(allowed_origin)[2]
                 logger.info(f"🔍 Origin validation - DNS {allowed_origin} resolved to: {resolved_ips}")
                 if client_ip in resolved_ips:
                     logger.info(f"🔍 Origin validation - DNS match found!")
                     return True, f"DNS {allowed_origin} resolved to {client_ip}"
-            # Se for um IP direto
+            # Se for um IP direto (IPv4 ou IPv6)
             elif client_ip == allowed_origin:
                 logger.info(f"🔍 Origin validation - Direct IP match found!")
                 return True, f"Direct IP match: {client_ip}"
-            # Se for uma faixa de IP (ex: 100.64.0.0/16)
+            # Se for uma faixa de IP (ex: 100.64.0.0/16 ou 100:64::/32)
             elif '/' in allowed_origin:
                 ip_prefix = allowed_origin.split('/')[0]
                 logger.info(f"🔍 Origin validation - Checking IP range: {allowed_origin}, prefix: {ip_prefix}")
-                if client_ip.startswith(ip_prefix[:-1]):
-                    logger.info(f"🔍 Origin validation - IP range match found!")
-                    return True, f"IP range match: {client_ip} in {allowed_origin}"
-                else:
-                    logger.info(f"🔍 Origin validation - IP range no match: {client_ip} does not start with {ip_prefix[:-1]}")
+                
+                # Para IPv4 (100.64.0.0/16)
+                if '.' in ip_prefix and '.' in client_ip:
+                    if client_ip.startswith(ip_prefix[:-1]):
+                        logger.info(f"🔍 Origin validation - IPv4 range match found!")
+                        return True, f"IPv4 range match: {client_ip} in {allowed_origin}"
+                    else:
+                        logger.info(f"🔍 Origin validation - IPv4 range no match: {client_ip} does not start with {ip_prefix[:-1]}")
+                
+                # Para IPv6 (100:64::/32)
+                elif ':' in ip_prefix and ':' in client_ip:
+                    if client_ip.startswith(ip_prefix[:-1]):
+                        logger.info(f"🔍 Origin validation - IPv6 range match found!")
+                        return True, f"IPv6 range match: {client_ip} in {allowed_origin}"
+                    else:
+                        logger.info(f"🔍 Origin validation - IPv6 range no match: {client_ip} does not start with {ip_prefix[:-1]}")
+                
+                # Para faixas mais específicas (100.64.0.X)
+                elif client_ip.startswith(ip_prefix):
+                    logger.info(f"🔍 Origin validation - Generic range match found!")
+                    return True, f"Generic range match: {client_ip} in {allowed_origin}"
         except socket.gaierror:
             logger.warning(f"🔍 Origin validation - Could not resolve DNS: {allowed_origin}")
             continue
