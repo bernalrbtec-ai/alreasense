@@ -458,6 +458,19 @@ class CampaignSender:
             
             if success:
                 results['sent'] += 1
+                
+                # ✅ NOVO: Verificar se foi o último contato APÓS envio bem-sucedido
+                from .models import CampaignContact
+                remaining_pending = CampaignContact.objects.filter(
+                    campaign=self.campaign,
+                    status='pending'
+                ).count()
+                
+                if remaining_pending == 0:
+                    print(f"   🎯 Último contato enviado! Completando campanha...")
+                    results['skipped'] = 1  # Marcar como finalizada
+                    break  # Parar imediatamente
+                    
             elif "pendente" in message.lower() or "disponível" in message.lower():
                 results['skipped'] += 1
                 break  # Parar se não há mais o que fazer
