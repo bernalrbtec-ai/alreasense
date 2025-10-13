@@ -44,6 +44,27 @@ class ContactImportService:
         self.tenant = tenant
         self.user = user
     
+    def _decode_file_content(self, raw_content):
+        """
+        Tenta decodificar o arquivo com múltiplos encodings
+        
+        Args:
+            raw_content: Conteúdo bruto do arquivo
+            
+        Returns:
+            str: Conteúdo decodificado
+        """
+        encodings = ['utf-8-sig', 'utf-8', 'cp1252', 'iso-8859-1', 'latin1']
+        
+        for encoding in encodings:
+            try:
+                return raw_content.decode(encoding)
+            except (UnicodeDecodeError, UnicodeError):
+                continue
+        
+        # Se nenhum encoding funcionar, usar utf-8 com errors='replace'
+        return raw_content.decode('utf-8', errors='replace')
+    
     def preview_csv(self, file, max_rows=10):
         """
         Gera preview do CSV para o usuário revisar antes de importar
@@ -56,8 +77,9 @@ class ContactImportService:
             dict: Preview com headers, mapeamento, samples
         """
         try:
-            # Ler CSV
-            decoded_file = file.read().decode('utf-8-sig')
+            # Ler CSV com detecção automática de encoding
+            raw_content = file.read()
+            decoded_file = self._decode_file_content(raw_content)
             file.seek(0)  # Reset para poder ler novamente depois
             
             # Auto-detectar delimitador (vírgula ou ponto-e-vírgula)
@@ -289,8 +311,9 @@ class ContactImportService:
                 pass
         
         try:
-            # Ler CSV
-            decoded_file = file.read().decode('utf-8-sig')  # utf-8-sig remove BOM
+            # Ler CSV com detecção automática de encoding
+            raw_content = file.read()
+            decoded_file = self._decode_file_content(raw_content)
             
             # Auto-detectar delimitador se não fornecido
             if not delimiter:
