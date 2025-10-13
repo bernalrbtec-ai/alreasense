@@ -225,7 +225,7 @@ class RotationService:
             return False, "Nenhum contato pendente"
         
         return True, "OK"
-
+    
 
 class CampaignSender:
     """
@@ -441,8 +441,8 @@ class CampaignSender:
             if self.campaign.status != 'running':
                 print(f"   ⏸️ Campanha pausada dentro do lote (mensagem {i+1}/{batch_size})")
                 results['paused'] = True
-                break
-            
+        break
+    
             success, message = self.send_next_message()
             
             if success:
@@ -450,7 +450,7 @@ class CampaignSender:
             elif "pendente" in message.lower() or "disponível" in message.lower():
                 results['skipped'] += 1
                 break  # Parar se não há mais o que fazer
-            else:
+    else:
                 results['failed'] += 1
             
             results['messages'].append(message)

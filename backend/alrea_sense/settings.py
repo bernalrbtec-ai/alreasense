@@ -212,6 +212,16 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
 
+# Railway/Production Celery Settings
+CELERY_WORKER_CONCURRENCY = 2  # Limit to 2 workers instead of 48
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Process one task at a time
+CELERY_TASK_ACKS_LATE = True  # Acknowledge tasks after completion
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 50  # Restart worker after 50 tasks
+CELERY_TASK_REJECT_ON_WORKER_LOST = True  # Reject tasks if worker dies
+CELERY_WORKER_DISABLE_RATE_LIMITS = False  # Enable rate limits
+CELERY_TASK_TIME_LIMIT = 300  # 5 minutes max per task
+CELERY_TASK_SOFT_TIME_LIMIT = 240  # 4 minutes soft limit
+
 # Celery Beat Schedule
 from celery.schedules import crontab
 CELERY_BEAT_SCHEDULE = {
