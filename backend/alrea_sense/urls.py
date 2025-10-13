@@ -9,6 +9,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from apps.common.health import get_system_health
+from apps.connections import webhook_views
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -37,8 +38,8 @@ urlpatterns = [
     path('api/notifications/', include('apps.notifications.urls')),
     path('api/contacts/', include('apps.contacts.urls')),
     path('api/campaigns/', include('apps.campaigns.urls')),
-    # Webhook Evolution - rota direta
-    path('webhooks/evolution/', include('apps.connections.urls')),
+    # Webhook Evolution - rota direta (sem include)
+    path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct'),
 ]
 
 # Serve static and media files
