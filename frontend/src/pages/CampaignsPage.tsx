@@ -35,6 +35,9 @@ interface Campaign {
   next_message_scheduled_at?: string
   next_contact_name?: string
   next_contact_phone?: string
+  next_instance_name?: string
+  last_contact_name?: string
+  last_contact_phone?: string
   created_at: string
 }
 
@@ -60,7 +63,10 @@ const NextMessageCountdown: React.FC<{
   campaignStatus: string;
   nextContactName?: string;
   nextContactPhone?: string;
-}> = ({ nextScheduledAt, campaignStatus, nextContactName, nextContactPhone }) => {
+  nextInstanceName?: string;
+  lastContactName?: string;
+  lastContactPhone?: string;
+}> = ({ nextScheduledAt, campaignStatus, nextContactName, nextContactPhone, nextInstanceName, lastContactName, lastContactPhone }) => {
   const [seconds, setSeconds] = useState(0)
 
   useEffect(() => {
@@ -85,15 +91,38 @@ const NextMessageCountdown: React.FC<{
   if (!nextScheduledAt || seconds === 0 || campaignStatus !== 'running') return null
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-3">
+      {/* Histórico - Último disparo */}
+      {lastContactName && lastContactPhone && (
+        <div className="bg-gray-50 rounded p-2 text-xs">
+          <div className="text-gray-500 mb-1">Último disparo:</div>
+          <div className="text-gray-700">
+            <div>📱 <span className="font-medium">{lastContactName}</span></div>
+            <div>☎️ <span className="font-medium">{lastContactPhone}</span></div>
+          </div>
+        </div>
+      )}
+
+      {/* Próximo disparo */}
       <div className="flex items-center gap-2 text-sm text-blue-600">
         <Clock className="h-4 w-4" />
         <span>Próximo disparo em: <span className="font-bold">{seconds}s</span></span>
       </div>
+      
       {nextContactName && nextContactPhone && (
-        <div className="text-xs text-gray-600 pl-6">
+        <div className="text-xs text-gray-600 pl-6 space-y-1">
           <div>📱 Contato: <span className="font-medium">{nextContactName}</span></div>
           <div>☎️ Fone: <span className="font-medium">{nextContactPhone}</span></div>
+          {nextInstanceName && (
+            <div>🔄 Instância: <span className="font-medium">{nextInstanceName}</span></div>
+          )}
+        </div>
+      )}
+
+      {/* Seta visual entre último e próximo */}
+      {lastContactName && nextContactName && (
+        <div className="flex items-center justify-center text-gray-400">
+          <div className="text-xs">⬇️</div>
         </div>
       )}
     </div>
@@ -589,6 +618,9 @@ const CampaignsPage: React.FC = () => {
                       campaignStatus={campaign.status}
                       nextContactName={campaign.next_contact_name}
                       nextContactPhone={campaign.next_contact_phone}
+                      nextInstanceName={campaign.next_instance_name}
+                      lastContactName={campaign.last_contact_name}
+                      lastContactPhone={campaign.last_contact_phone}
                     />
                   </div>
                 )}

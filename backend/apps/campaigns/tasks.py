@@ -68,9 +68,14 @@ def process_campaign(self, campaign_id: str):
             break
         
         # Se não há mais mensagens para enviar
-        if results['skipped'] > 0:
+        if results.get('completed', False):
             print("\n✅ Todos os contatos processados!")
             campaign.complete()
+            break
+        
+        # Se não há mais contatos pendentes (sem completar)
+        if results['skipped'] > 0:
+            print("\n⚠️ Nenhum contato pendente encontrado!")
             break
         
         # Pequena pausa entre lotes
