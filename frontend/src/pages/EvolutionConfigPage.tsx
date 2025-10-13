@@ -48,7 +48,7 @@ export default function EvolutionConfigPage() {
       // Fallback to default values if API fails
       setConfig({
         base_url: 'https://evo.rbtec.com.br',
-        api_key: '584B4A4A-0815-AC86-DC39-C38FC27E8E17',
+        api_key: '', // ✅ Empty API key - user must enter their own
         webhook_url: `${window.location.origin}/api/webhooks/evolution/`,
         is_active: true,
         last_check: undefined,
@@ -65,11 +65,17 @@ export default function EvolutionConfigPage() {
     e.preventDefault()
     try {
       setIsSaving(true)
+      console.log('🔧 Salvando configuração:', {
+        base_url: config.base_url,
+        api_key: config.api_key ? `${config.api_key.substring(0, 4)}...` : 'empty',
+        is_active: config.is_active
+      })
       const response = await api.post('/connections/evolution/config/', config)
+      console.log('✅ Configuração salva:', response.data)
       setConfig(response.data)
       showToast('Configuração salva com sucesso!', 'success')
     } catch (error) {
-      console.error('Error saving config:', error)
+      console.error('❌ Erro ao salvar configuração:', error)
       showToast('Erro ao salvar configuração', 'error')
     } finally {
       setIsSaving(false)
