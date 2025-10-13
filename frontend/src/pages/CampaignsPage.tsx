@@ -38,6 +38,7 @@ interface Campaign {
   next_instance_name?: string
   last_contact_name?: string
   last_contact_phone?: string
+  last_instance_name?: string
   created_at: string
 }
 
@@ -66,7 +67,8 @@ const NextMessageCountdown: React.FC<{
   nextInstanceName?: string;
   lastContactName?: string;
   lastContactPhone?: string;
-}> = ({ nextScheduledAt, campaignStatus, nextContactName, nextContactPhone, nextInstanceName, lastContactName, lastContactPhone }) => {
+  lastInstanceName?: string;
+}> = ({ nextScheduledAt, campaignStatus, nextContactName, nextContactPhone, nextInstanceName, lastContactName, lastContactPhone, lastInstanceName }) => {
   const [seconds, setSeconds] = useState(0)
 
   useEffect(() => {
@@ -92,37 +94,52 @@ const NextMessageCountdown: React.FC<{
 
   return (
     <div className="space-y-3">
-      {/* Histórico - Último disparo */}
-      {lastContactName && lastContactPhone && (
-        <div className="bg-gray-50 rounded p-2 text-xs">
-          <div className="text-gray-500 mb-1">Último disparo:</div>
-          <div className="text-gray-700">
-            <div>📱 <span className="font-medium">{lastContactName}</span></div>
-            <div>☎️ <span className="font-medium">{lastContactPhone}</span></div>
+      {/* Layout horizontal: Último disparo ------- Próximo disparo */}
+      {(lastContactName && lastContactPhone) || (nextContactName && nextContactPhone) ? (
+        <div className="bg-gray-50 rounded p-3 text-xs">
+          <div className="flex items-center justify-between">
+            {/* Último disparo */}
+            <div className="flex-1">
+              <div className="text-gray-500 mb-2 font-medium">Último disparo:</div>
+              {lastContactName && lastContactPhone && (
+                <div className="text-gray-700 space-y-1">
+                  <div>📱 <span className="font-medium">{lastContactName}</span></div>
+                  <div>☎️ <span className="font-medium">{lastContactPhone}</span></div>
+                  {lastInstanceName && (
+                    <div>🔄 <span className="font-medium">{lastInstanceName}</span></div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Seta visual */}
+            <div className="flex items-center justify-center text-gray-400 mx-4">
+              <div className="text-lg">→</div>
+            </div>
+
+            {/* Próximo disparo */}
+            <div className="flex-1">
+              <div className="text-blue-600 mb-2 font-medium flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                Próximo disparo em: <span className="font-bold">{seconds}s</span>
+              </div>
+              {nextContactName && nextContactPhone && (
+                <div className="text-gray-700 space-y-1">
+                  <div>📱 <span className="font-medium">{nextContactName}</span></div>
+                  <div>☎️ <span className="font-medium">{nextContactPhone}</span></div>
+                  {nextInstanceName && (
+                    <div>🔄 <span className="font-medium">{nextInstanceName}</span></div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      )}
-
-      {/* Próximo disparo */}
-      <div className="flex items-center gap-2 text-sm text-blue-600">
-        <Clock className="h-4 w-4" />
-        <span>Próximo disparo em: <span className="font-bold">{seconds}s</span></span>
-      </div>
-      
-      {nextContactName && nextContactPhone && (
-        <div className="text-xs text-gray-600 pl-6 space-y-1">
-          <div>📱 Contato: <span className="font-medium">{nextContactName}</span></div>
-          <div>☎️ Fone: <span className="font-medium">{nextContactPhone}</span></div>
-          {nextInstanceName && (
-            <div>🔄 Instância: <span className="font-medium">{nextInstanceName}</span></div>
-          )}
-        </div>
-      )}
-
-      {/* Seta visual entre último e próximo */}
-      {lastContactName && nextContactName && (
-        <div className="flex items-center justify-center text-gray-400">
-          <div className="text-xs">⬇️</div>
+      ) : (
+        /* Fallback para quando não há histórico */
+        <div className="flex items-center gap-2 text-sm text-blue-600">
+          <Clock className="h-4 w-4" />
+          <span>Próximo disparo em: <span className="font-bold">{seconds}s</span></span>
         </div>
       )}
     </div>
@@ -621,6 +638,7 @@ const CampaignsPage: React.FC = () => {
                       nextInstanceName={campaign.next_instance_name}
                       lastContactName={campaign.last_contact_name}
                       lastContactPhone={campaign.last_contact_phone}
+                      lastInstanceName={campaign.last_instance_name}
                     />
                   </div>
                 )}
