@@ -40,6 +40,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
   const [instances, setInstances] = useState<WhatsAppInstance[]>([])
   const [tags, setTags] = useState<Tag[]>([])
   const [contacts, setContacts] = useState<Contact[]>([])
+  const [tagContacts, setTagContacts] = useState<Contact[]>([])  // ✅ Contatos da tag selecionada
   const [isLoading, setIsLoading] = useState(false)
 
   const [formData, setFormData] = useState({
@@ -125,6 +126,22 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
       setContacts(contactsData)
     } catch (error) {
       console.error('Erro ao buscar dados:', error)
+    }
+  }
+
+  // ✅ Função para carregar contatos de uma tag específica
+  const fetchTagContacts = async (tagId: string) => {
+    try {
+      console.log(`🔍 Carregando contatos da tag: ${tagId}`)
+      const response = await api.get(`/contacts/contacts/?tags=${tagId}&page_size=10000`)
+      const contactsData = response.data.results || response.data || []
+      console.log(`✅ Encontrados ${contactsData.length} contatos para a tag`)
+      setTagContacts(contactsData)
+      return contactsData
+    } catch (error) {
+      console.error('❌ Erro ao buscar contatos da tag:', error)
+      setTagContacts([])
+      return []
     }
   }
 
@@ -366,19 +383,21 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   </label>
                   <select
                     value={formData.tag_id}
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const tagId = e.target.value
                       setFormData({ ...formData, tag_id: tagId })
                       
-                      // Quando seleciona uma tag, marca todos os contatos dessa tag automaticamente
+                      // ✅ Carregar contatos da tag via API quando seleciona uma tag
                       if (tagId) {
-                        const tagContacts = contacts.filter(c => c.tags?.some(t => t.id === tagId))
+                        console.log(`🏷️ Tag selecionada: ${tagId}`)
+                        const tagContacts = await fetchTagContacts(tagId)
                         setFormData({ 
                           ...formData, 
                           tag_id: tagId,
                           contact_ids: tagContacts.map(c => c.id)
                         })
                       } else {
+                        setTagContacts([])  // Limpar contatos da tag
                         setFormData({ ...formData, tag_id: '', contact_ids: [] })
                       }
                     }}
@@ -402,7 +421,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           <button
                             type="button"
                             onClick={() => {
-                              const tagContacts = contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id))
+                              // ✅ Usar tagContacts carregados via API
                               setFormData({ ...formData, contact_ids: tagContacts.map(c => c.id) })
                             }}
                             className="text-xs text-blue-600 hover:text-blue-800"
@@ -427,11 +446,11 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                                 <input
                                   type="checkbox"
                                   checked={
-                                    contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id)).length > 0 &&
-                                    contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id)).every(c => formData.contact_ids.includes(c.id))
+                                    tagContacts.length > 0 &&
+                                    tagContacts.every(c => formData.contact_ids.includes(c.id))
                                   }
                                   onChange={(e) => {
-                                    const tagContacts = contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id))
+                                    // ✅ Usar tagContacts carregados via API
                                     if (e.target.checked) {
                                       setFormData({ ...formData, contact_ids: tagContacts.map(c => c.id) })
                                     } else {
@@ -446,9 +465,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                             </tr>
                           </thead>
                           <tbody>
-                            {contacts
-                              .filter(c => c.tags?.some(t => t.id === formData.tag_id))
-                              .map((contact, idx) => (
+                            {tagContacts.map((contact, idx) => (
                                 <tr key={contact.id} className={`border-t hover:bg-gray-50 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-25'}`}>
                                   <td className="p-2">
                                     <input
@@ -470,7 +487,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                               ))}
                           </tbody>
                         </table>
-                        {contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id)).length === 0 && (
+                        {tagContacts.length === 0 && (
                           <div className="p-8 text-center text-gray-500">
                             Nenhum contato encontrado com esta tag
                           </div>
