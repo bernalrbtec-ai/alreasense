@@ -437,6 +437,14 @@ class CampaignSender:
                 results['paused'] = True
                 break
             
+            # Log de contatos pendentes restantes
+            from .models import CampaignContact
+            pending_count = CampaignContact.objects.filter(
+                campaign=self.campaign,
+                status='pending'
+            ).count()
+            print(f"📋 [BATCH] Contatos pendentes restantes: {pending_count}")
+            
             # ⚠️ TIMEOUT PROTECTION: Contador individual por disparo
             import time
             disparo_start_time = time.time()
@@ -456,6 +464,9 @@ class CampaignSender:
                 )
             
             success, message = self.send_next_message()
+            
+            # Log detalhado do resultado
+            print(f"📊 [BATCH] Mensagem {i+1}: success={success}, message='{message}'")
             
             # Verificar timeout do disparo individual
             disparo_elapsed = time.time() - disparo_start_time
@@ -515,9 +526,13 @@ class CampaignSender:
                             results['skipped'] = 1
                             break
                     
-            elif "pendente" in message.lower() or "disponível" in message.lower():
+            elif "pendente" in message.lower():
+                # Se não há contatos pendentes, marcar como completado
+                results['completed'] = True
+                break
+            elif "disponível" in message.lower() or "instância" in message.lower():
                 results['skipped'] += 1
-                break  # Parar se não há mais o que fazer
+                break  # Parar se não há instâncias disponíveis
             else:
                 results['failed'] += 1
             
