@@ -247,17 +247,9 @@ class CampaignSender:
         if not instance:
             return False, "Nenhuma instância disponível"
         
-        # ✅ HEALTH CHECK da instância antes do envio
-        if not self._check_instance_health(instance):
-            print(f"⚠️ [HEALTH] Instância {instance.friendly_name} com health baixo, tentando alternativa...")
-            
-            # Tentar instância alternativa
-            alt_instance = self.rotation_service.select_next_instance()
-            if alt_instance and alt_instance.id != instance.id:
-                print(f"🔄 [HEALTH] Usando instância alternativa: {alt_instance.friendly_name}")
-                instance = alt_instance
-            else:
-                return False, f"Instância {instance.friendly_name} com health baixo e sem alternativas"
+        # ✅ HEALTH CHECK VISUAL - apenas para referência, não bloqueia envio
+        health_status = self._check_instance_health_visual(instance)
+        print(f"🔍 [HEALTH] Status visual da instância {instance.friendly_name}: {health_status}")
         
         # Selecionar mensagem (rotacionar entre as disponíveis)
         messages = list(self.campaign.messages.all().order_by('order'))
@@ -501,29 +493,35 @@ class CampaignSender:
             
             return False, f"Erro ao enviar: {error_msg}"
     
-    def _check_instance_health(self, instance) -> bool:
+    def _check_instance_health_visual(self, instance) -> str:
         """
-        ✅ Verifica saúde da instância antes do envio
+        ✅ Verifica saúde da instância APENAS para referência visual - NÃO bloqueia envio
         """
         try:
+            status_parts = []
+            
             # Verificar health score da instância
             if hasattr(instance, 'health_score') and instance.health_score is not None:
-                if instance.health_score < 30:  # Health muito baixo
-                    print(f"⚠️ [HEALTH] Instância {instance.friendly_name} com health muito baixo: {instance.health_score}")
-                    return False
+                if instance.health_score < 30:
+                    status_parts.append(f"health_baixo({instance.health_score})")
+                else:
+                    status_parts.append(f"health_ok({instance.health_score})")
+            else:
+                status_parts.append("health_nao_disponivel")
             
             # Verificar se instância está ativa
             if not instance.is_active:
-                print(f"⚠️ [HEALTH] Instância {instance.friendly_name} está inativa")
-                return False
+                status_parts.append("inativa")
+            else:
+                status_parts.append("ativa")
             
             # Verificar connection state
             if hasattr(instance, 'connection_state'):
-                if instance.connection_state not in ['connected', 'open']:
-                    print(f"⚠️ [HEALTH] Instância {instance.friendly_name} não conectada: {instance.connection_state}")
-                    return False
+                status_parts.append(f"conn_{instance.connection_state}")
+            else:
+                status_parts.append("conn_nao_disponivel")
             
-            # ✅ HEALTH CHECK via API (opcional - ping rápido)
+            # ✅ HEALTH CHECK via API (apenas para informação visual)
             try:
                 import requests
                 health_url = f"{instance.api_url}/instance/connectionState/{instance.instance_name}"
@@ -532,24 +530,18 @@ class CampaignSender:
                 response = requests.get(health_url, headers=headers, timeout=3)
                 if response.status_code == 200:
                     data = response.json()
-                    if data.get('state') not in ['connected', 'open']:
-                        print(f"⚠️ [HEALTH] Instância {instance.friendly_name} não conectada via API: {data.get('state')}")
-                        return False
+                    state = data.get('state')
+                    status_parts.append(f"api_{state}")
                 else:
-                    print(f"⚠️ [HEALTH] Falha ao verificar health da instância {instance.friendly_name}: HTTP {response.status_code}")
-                    return False
+                    status_parts.append(f"api_erro_{response.status_code}")
                     
             except Exception as e:
-                print(f"⚠️ [HEALTH] Erro ao verificar health da instância {instance.friendly_name}: {str(e)}")
-                # Não falhar por erro de health check, apenas logar
-                return True
+                status_parts.append(f"api_timeout")
             
-            print(f"✅ [HEALTH] Instância {instance.friendly_name} saudável")
-            return True
+            return " | ".join(status_parts)
             
         except Exception as e:
-            print(f"❌ [HEALTH] Erro inesperado ao verificar health: {str(e)}")
-            return True  # Em caso de erro, permitir tentativa
+            return f"erro_verificacao: {str(e)}"
     
     def process_batch(self, batch_size: int = 10) -> dict:
         """
@@ -633,10 +625,12 @@ class CampaignSender:
                 results['paused'] = True
                 break
             
-            # Verificar se falhou por falta de instâncias disponíveis
-            if not success and ("disponível" in message.lower() or "instância" in message.lower()):
-                results['skipped'] = 1
-                break
+            # ✅ Verificar se falhou por falta de instâncias disponíveis (NÃO PARAR CAMPANHA)
+            if not success and ("disponível" in message.lower() or "instância" in message.lower() or "health baixo" in message.lower()):
+                print(f"⚠️ [BATCH] Instância indisponível, mas continuando com próximos contatos...")
+                results['skipped'] += 1
+                # ✅ NÃO fazer break - continuar tentando outros contatos
+                continue
             
             if success:
                 results['sent'] += 1
