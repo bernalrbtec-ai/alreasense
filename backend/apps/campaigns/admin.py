@@ -1,6 +1,6 @@
 from django.contrib import admin
-from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog
-# CampaignNotification temporariamente comentado
+from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
+# CampaignNotification reativado
 
 
 @admin.register(Campaign)
@@ -60,36 +60,35 @@ class CampaignLogAdmin(admin.ModelAdmin):
         return False
 
 
-# Temporariamente comentado
-# @admin.register(CampaignNotification)
-# class CampaignNotificationAdmin(admin.ModelAdmin):
-#     list_display = ['contact_name', 'campaign_name', 'notification_type', 'status', 'received_timestamp', 'created_at']
-#     list_filter = ['notification_type', 'status', 'created_at', 'received_timestamp']
-#     search_fields = ['contact__name', 'contact__phone', 'campaign__name', 'received_message']
-#     readonly_fields = ['id', 'received_timestamp', 'created_at', 'updated_at']
-#     
-#     fieldsets = (
-#         ('Informações Básicas', {
-#             'fields': ('id', 'tenant', 'campaign', 'contact', 'campaign_contact', 'instance')
-#         }),
-#         ('Notificação', {
-#             'fields': ('notification_type', 'status', 'received_message', 'received_timestamp')
-#         }),
-#         ('Resposta', {
-#             'fields': ('sent_reply', 'sent_timestamp', 'sent_by')
-#         }),
-#         ('Metadados', {
-#             'fields': ('whatsapp_message_id', 'details')
-#         }),
-#         ('Timestamps', {
-#             'fields': ('created_at', 'updated_at')
-#         }),
-#     )
-#     
-#     def contact_name(self, obj):
-#         return obj.contact.name if obj.contact else 'N/A'
-#     contact_name.short_description = 'Contato'
-#     
-#     def campaign_name(self, obj):
-#         return obj.campaign.name if obj.campaign else 'N/A'
-#     campaign_name.short_description = 'Campanha'
+@admin.register(CampaignNotification)
+class CampaignNotificationAdmin(admin.ModelAdmin):
+    list_display = ['contact_name', 'campaign_name', 'notification_type', 'status', 'received_timestamp', 'created_at']
+    list_filter = ['notification_type', 'status', 'created_at', 'received_timestamp']
+    search_fields = ['contact__name', 'contact__phone', 'campaign__name', 'received_message']
+    readonly_fields = ['id', 'received_timestamp', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('id', 'tenant', 'campaign', 'contact', 'campaign_contact', 'instance')
+        }),
+        ('Notificação', {
+            'fields': ('notification_type', 'status', 'received_message', 'received_timestamp')
+        }),
+        ('Resposta', {
+            'fields': ('sent_reply', 'sent_timestamp', 'sent_by')
+        }),
+        ('Metadados', {
+            'fields': ('whatsapp_message_id', 'details')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at')
+        }),
+    )
+    
+    def contact_name(self, obj):
+        return obj.contact.name if obj.contact else 'N/A'
+    contact_name.short_description = 'Contato'
+    
+    def campaign_name(self, obj):
+        return obj.campaign.name if obj.campaign else 'N/A'
+    campaign_name.short_description = 'Campanha'

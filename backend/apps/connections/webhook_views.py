@@ -17,8 +17,8 @@ from .webhook_cache import WebhookCache, generate_event_id
 from apps.chat_messages.models import Message
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
-from apps.campaigns.models import CampaignContact
-# CampaignNotification temporariamente comentado
+from apps.campaigns.models import CampaignContact, CampaignNotification
+# CampaignNotification reativado
 import uuid
 
 logger = logging.getLogger(__name__)

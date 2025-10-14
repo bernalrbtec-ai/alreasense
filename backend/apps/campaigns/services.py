@@ -466,7 +466,35 @@ class CampaignSender:
                 results['paused'] = True
                 break  # Sair do loop se campanha foi pausada
             
+            # ⚠️ TIMEOUT PROTECTION: Contador individual por disparo
+            import time
+            disparo_start_time = time.time()
+            MAX_DISPARO_DURATION = 600  # 10 minutos por disparo individual
+            
             success, message = self.send_next_message()
+            
+            # Verificar timeout do disparo individual
+            disparo_elapsed = time.time() - disparo_start_time
+            if disparo_elapsed > MAX_DISPARO_DURATION:
+                print(f"   ⏰ PAUSA DE SEGURANÇA: Disparo {i+1} demorou {disparo_elapsed:.1f}s")
+                print(f"   🔄 Pausando devido ao tempo excessivo do disparo...")
+                
+                # Log de pausa de segurança
+                from .models import CampaignLog
+                CampaignLog.log_campaign_paused(
+                    campaign=self.campaign,
+                    reason=f"Pausa de segurança - Disparo {i+1} com tempo excessivo ({disparo_elapsed:.1f}s)"
+                )
+                
+                # Reagendar task para continuar
+                from .tasks import process_campaign
+                process_campaign.apply_async(
+                    args=[self.campaign.id], 
+                    countdown=10  # Aguardar 10 segundos
+                )
+                
+                results['paused'] = True
+                break
             
             # Verificar se falhou por falta de instâncias disponíveis
             if not success and ("disponível" in message.lower() or "instância" in message.lower()):

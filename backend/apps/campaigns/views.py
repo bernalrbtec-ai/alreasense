@@ -5,12 +5,12 @@ from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Q, Avg
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog
-# CampaignNotification temporariamente comentado
+from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
+# CampaignNotification reativado
 from .serializers import (
     CampaignSerializer, CampaignContactSerializer,
-    CampaignLogSerializer, CampaignStatsSerializer
-    # CampaignNotificationSerializer, NotificationMarkReadSerializer, NotificationReplySerializer temporariamente comentados
+    CampaignLogSerializer, CampaignStatsSerializer,
+    CampaignNotificationSerializer, NotificationMarkReadSerializer, NotificationReplySerializer
 )
 
 
@@ -212,59 +212,53 @@ class CampaignViewSet(viewsets.ModelViewSet):
         serializer = CampaignStatsSerializer(stats)
         return Response(serializer.data)
     
-    @action(detail=False, methods=['get'], url_path='notifications/unread_count')
-    def notifications_unread_count(self, request):
-        """Endpoint temporário para contador de notificações não lidas"""
-        # Retorna 0 temporariamente até implementar o sistema de notificações
-        return Response({'unread_count': 0})
 
 
-# Temporariamente comentado para resolver erro 500
-# class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
-#     """API para notificações de campanhas"""
-#     
-#     serializer_class = CampaignNotificationSerializer
-#     permission_classes = [IsAuthenticated]
-#     pagination_class = None  # Desabilitar paginação para simplificar
-#     
-#     def get_queryset(self):
-#         """Filtrar por tenant e ordenar por mais recentes"""
-#         queryset = CampaignNotification.objects.filter(
-#             tenant=self.request.user.tenant
-#         ).select_related(
-#             'campaign', 'contact', 'instance', 'sent_by'
-#         )
-#         
-#         # Filtros opcionais
-#         status = self.request.query_params.get('status')
-#         if status:
-#             queryset = queryset.filter(status=status)
-#             
-#         notification_type = self.request.query_params.get('type')
-#         if notification_type:
-#             queryset = queryset.filter(notification_type=notification_type)
-#             
-#         campaign_id = self.request.query_params.get('campaign_id')
-#         if campaign_id:
-#             queryset = queryset.filter(campaign_id=campaign_id)
-#             
-#         # Ordenação
-#         order_by = self.request.query_params.get('order_by', '-created_at')
-#         queryset = queryset.order_by(order_by)
-#         
-#         return queryset
-#     
-#     def get_serializer_context(self):
-#         """Adicionar request ao contexto"""
-#         context = super().get_serializer_context()
-#         context['request'] = self.request
-#         return context
-#     
-#     @action(detail=False, methods=['get'])
-#     def unread_count(self, request):
-#         """Contar notificações não lidas"""
-#         count = self.get_queryset().filter(status='unread').count()
-#         return Response({'unread_count': count})
+class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """API para notificações de campanhas"""
+    
+    serializer_class = CampaignNotificationSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # Desabilitar paginação para simplificar
+    
+    def get_queryset(self):
+        """Filtrar por tenant e ordenar por mais recentes"""
+        queryset = CampaignNotification.objects.filter(
+            tenant=self.request.user.tenant
+        ).select_related(
+            'campaign', 'contact', 'instance', 'sent_by'
+        )
+        
+        # Filtros opcionais
+        status = self.request.query_params.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+            
+        notification_type = self.request.query_params.get('type')
+        if notification_type:
+            queryset = queryset.filter(notification_type=notification_type)
+            
+        campaign_id = self.request.query_params.get('campaign_id')
+        if campaign_id:
+            queryset = queryset.filter(campaign_id=campaign_id)
+            
+        # Ordenação
+        order_by = self.request.query_params.get('order_by', '-created_at')
+        queryset = queryset.order_by(order_by)
+        
+        return queryset
+    
+    def get_serializer_context(self):
+        """Adicionar request ao contexto"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Contar notificações não lidas"""
+        count = self.get_queryset().filter(status='unread').count()
+        return Response({'unread_count': count})
     
     @action(detail=False, methods=['get'])
     def stats(self, request):
