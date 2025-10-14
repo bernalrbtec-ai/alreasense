@@ -1072,25 +1072,25 @@ const CampaignsPage: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-blue-600">
-                        {logs.filter((g: any) => g.status === 'read').length}
+                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_read').length), 0)}
                       </div>
                       <div className="text-xs sm:text-sm text-blue-800">Lidas</div>
                     </div>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-green-600">
-                        {logs.filter((g: any) => g.status === 'delivered').length}
+                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_delivered').length), 0)}
                       </div>
                       <div className="text-xs sm:text-sm text-green-800">Entregues</div>
                     </div>
                     <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-yellow-600">
-                        {logs.filter((g: any) => g.status === 'sent').length}
+                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_sent').length), 0)}
                       </div>
                       <div className="text-xs sm:text-sm text-yellow-800">Enviadas</div>
                     </div>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-red-600">
-                        {logs.filter((g: any) => g.status === 'failed').length}
+                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_failed').length), 0)}
                       </div>
                       <div className="text-xs sm:text-sm text-red-800">Falhas</div>
                     </div>
