@@ -74,9 +74,10 @@ def process_campaign(self, campaign_id: str):
             campaign.complete()
             break
         
+        # ✅ NÃO parar por skipped - apenas logar
         if results['skipped'] > 0:
-            print(f"⚠️ [TASK] Nenhum contato pendente encontrado, interrompendo")
-            break
+            print(f"⚠️ [TASK] {results['skipped']} mensagens puladas, mas continuando processamento...")
+            # ✅ NÃO fazer break - continuar com próximos lotes
         
         
         # Pequena pausa entre lotes
