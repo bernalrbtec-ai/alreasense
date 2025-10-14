@@ -81,16 +81,7 @@ export function useNotifications() {
 
     toast({
       title: `💬 ${notification.contact_name} respondeu!`,
-      description: (
-        <div className="space-y-2">
-          <div className="text-sm font-medium">
-            Campanha: {notification.campaign_name}
-          </div>
-          <div className="text-sm text-muted-foreground">
-            {messagePreview}
-          </div>
-        </div>
-      ),
+      description: `Campanha: ${notification.campaign_name}\n${messagePreview}`,
       duration: 8000,
       action: {
         label: 'Ver Detalhes',
