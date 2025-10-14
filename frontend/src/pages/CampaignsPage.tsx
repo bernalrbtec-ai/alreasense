@@ -974,7 +974,7 @@ const CampaignsPage: React.FC = () => {
                         : 'text-gray-400'
                     }`}>
                       {campaign.messages_sent > 0 
-                        ? (((campaign.messages_sent - campaign.messages_delivered) / campaign.messages_sent) * 100).toFixed(1)
+                        ? ((campaign.messages_delivered / campaign.messages_sent) * 100).toFixed(1)
                         : '0.0'}%
                     </div>
                     <div className="text-xs text-gray-500">Taxa Entrega</div>
