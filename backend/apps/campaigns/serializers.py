@@ -104,8 +104,14 @@ class CampaignSerializer(serializers.ModelSerializer):
         # Adicionar contatos
         contacts_to_add = []
         
+        print(f"🔍 [CAMPANHA] Dados recebidos:")
+        print(f"   - tag_id: {tag_id}")
+        print(f"   - contact_ids: {contact_ids}")
+        print(f"   - tenant: {campaign.tenant}")
+        
         # Priorizar contact_ids se fornecidos (permite seleção manual mesmo com tag)
         if contact_ids:
+            print(f"✅ [CAMPANHA] Usando contact_ids específicos: {len(contact_ids)} contatos")
             # Usar contatos específicos (podem vir de uma tag ou avulsos)
             contacts_to_add = Contact.objects.filter(
                 tenant=campaign.tenant,
@@ -114,6 +120,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 opted_out=False
             )
         elif tag_id:
+            print(f"✅ [CAMPANHA] Buscando contatos por tag_id: {tag_id}")
             # Buscar TODOS os contatos por tag (fallback se contact_ids não fornecido)
             contacts_to_add = Contact.objects.filter(
                 tenant=campaign.tenant,
@@ -121,6 +128,11 @@ class CampaignSerializer(serializers.ModelSerializer):
                 is_active=True,
                 opted_out=False
             ).distinct()
+            print(f"✅ [CAMPANHA] Encontrados {contacts_to_add.count()} contatos com a tag")
+        else:
+            print(f"⚠️ [CAMPANHA] Nenhum tag_id ou contact_ids fornecido!")
+        
+        print(f"📊 [CAMPANHA] Total de contatos a adicionar: {len(contacts_to_add)}")
         
         # Criar CampaignContact para cada contato
         campaign_contacts = []
