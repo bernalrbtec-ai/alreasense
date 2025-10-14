@@ -70,20 +70,44 @@ def check_rabbitmq():
         if consumer:
             # Check if consumer is running
             active_campaigns = consumer.get_active_campaigns()
+            
+            # Obter estatísticas detalhadas
+            campaign_details = []
+            for campaign_id in active_campaigns:
+                try:
+                    campaign_status = consumer.get_campaign_status(campaign_id)
+                    campaign_details.append({
+                        'campaign_id': campaign_id,
+                        'status': campaign_status.get('status', 'unknown'),
+                        'is_running': campaign_status.get('is_running', False),
+                        'messages_processed': campaign_status.get('messages_processed', 0),
+                    })
+                except Exception as e:
+                    campaign_details.append({
+                        'campaign_id': campaign_id,
+                        'status': 'error',
+                        'error': str(e)
+                    })
+            
             return {
                 'status': 'healthy',
                 'active_campaigns': len(active_campaigns),
                 'consumer_running': True,
+                'campaign_details': campaign_details,
             }
         else:
             return {
                 'status': 'not_configured',
-                'error': 'RabbitMQ consumer not available'
+                'error': 'RabbitMQ consumer not available',
+                'active_campaigns': 0,
+                'consumer_running': False,
             }
     except Exception as e:
         return {
             'status': 'unhealthy',
-            'error': str(e)
+            'error': str(e),
+            'active_campaigns': 0,
+            'consumer_running': False,
         }
 
 

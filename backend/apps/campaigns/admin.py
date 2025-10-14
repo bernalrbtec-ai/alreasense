@@ -1,14 +1,23 @@
 from django.contrib import admin
+from django.urls import reverse
 from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
+from .admin_views import RabbitMQMonitoringAdminMixin
 # CampaignNotification reativado
 
 
 @admin.register(Campaign)
-class CampaignAdmin(admin.ModelAdmin):
+class CampaignAdmin(RabbitMQMonitoringAdminMixin, admin.ModelAdmin):
     list_display = ['name', 'tenant', 'status', 'rotation_mode', 'total_contacts', 'messages_sent', 'success_rate', 'created_at']
     list_filter = ['status', 'rotation_mode', 'created_at']
     search_fields = ['name', 'tenant__name']
     readonly_fields = ['id', 'total_contacts', 'messages_sent', 'messages_delivered', 'messages_read', 'messages_failed', 'created_at', 'updated_at']
+    
+    def changelist_view(self, request, extra_context=None):
+        """Adiciona link para monitoramento do RabbitMQ"""
+        extra_context = extra_context or {}
+        extra_context['show_rabbitmq_monitoring'] = True
+        extra_context['rabbitmq_monitoring_url'] = reverse('admin:campaigns_campaign_rabbitmq_monitoring')
+        return super().changelist_view(request, extra_context)
     
     fieldsets = (
         ('Informações Básicas', {
