@@ -338,7 +338,7 @@ class CampaignSender:
             campaign_contact.sent_at = timezone.now()
             campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
             
-            # Atualizar campanha
+            # Atualizar campanha APÓS sucesso no envio
             self.campaign.messages_sent += 1
             self.campaign.last_message_sent_at = timezone.now()
             # Salvar informações do último contato enviado
@@ -405,8 +405,10 @@ class CampaignSender:
             
             instance.record_message_failed(error_msg)
             
-            self.campaign.messages_failed += 1
-            self.campaign.save(update_fields=['messages_failed'])
+            # Incrementar tanto messages_sent quanto messages_failed para falhas
+            self.campaign.messages_sent += 1  # Contar como disparo realizado
+            self.campaign.messages_failed += 1  # Contar como falha
+            self.campaign.save(update_fields=['messages_sent', 'messages_failed'])
             
             # Log de falha (SEMPRE registrado - sem limitação)
             CampaignLog.log_message_failed(
