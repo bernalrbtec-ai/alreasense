@@ -179,7 +179,7 @@ class CampaignSerializer(serializers.ModelSerializer):
 
 
 class CampaignDetailSerializer(CampaignSerializer):
-    """Serializer detalhado para campanhas com informações adicionais"""
+    """Serializer detalhado para campanhas com informações adicionais - Railway Fix"""
     
     contacts = CampaignContactSerializer(source='campaigncontact_set', many=True, read_only=True)
     logs = CampaignLogSerializer(source='campaignlog_set', many=True, read_only=True)
