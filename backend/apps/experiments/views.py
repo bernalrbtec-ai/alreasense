@@ -113,14 +113,15 @@ def start_replay_experiment(request):
     experiment_run.save()
     
     # ✅ Start replay task (IMPORT LOCAL para evitar loop)
-    from .tasks import replay_window
-    replay_window.delay(
-        tenant_id=str(request.user.tenant.id),
-        start_iso=data['start_date'].isoformat(),
-        end_iso=data['end_date'].isoformat(),
-        prompt_version=data['prompt_version'],
-        run_id=experiment_run.run_id
-    )
+    # from .tasks import replay_window  # Removido - Celery deletado
+    # replay_window.delay(
+    #     tenant_id=str(request.user.tenant.id),
+    #     start_iso=data['start_date'].isoformat(),
+    #     end_iso=data['end_date'].isoformat(),
+    #     prompt_version=data['prompt_version'],
+    #     run_id=experiment_run.run_id
+    # )
+    # TODO: Implementar com RabbitMQ
     
     return Response({
         'status': 'success',

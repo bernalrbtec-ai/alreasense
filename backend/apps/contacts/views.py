@@ -192,7 +192,7 @@ class ContactViewSet(viewsets.ModelViewSet):
         
         # Se for assíncrono, disparar Celery task
         if async_processing:
-            from .tasks import process_contact_import_async
+            # from .tasks import process_contact_import_async  # Removido - Celery deletado
             
             # Salvar arquivo temporariamente
             import os

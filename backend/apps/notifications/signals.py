@@ -3,7 +3,6 @@ from django.dispatch import receiver
 from django.contrib.auth import get_user_model
 
 from apps.tenancy.models import Tenant
-from .tasks import send_welcome_notification, send_plan_change_notification
 
 User = get_user_model()
 
@@ -12,8 +11,9 @@ User = get_user_model()
 def user_created_handler(sender, instance, created, **kwargs):
     """Send welcome notification when a new user is created."""
     if created and instance.email:
-        # Send welcome notification asynchronously
-        send_welcome_notification.delay(instance.id)
+        # TODO: Implementar notificação de boas-vindas com RabbitMQ
+        print(f"🎉 Novo usuário criado: {instance.email}")
+        # send_welcome_notification.delay(instance.id)  # Removido - Celery deletado
 
 
 # Note: For plan change, you'll need to update the Tenant model save method
