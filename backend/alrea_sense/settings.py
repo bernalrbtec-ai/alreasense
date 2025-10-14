@@ -237,6 +237,9 @@ CHANNEL_LAYERS = {
     },
 }
 
+# RabbitMQ
+RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
+
 # Celery
 CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
 CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
@@ -254,6 +257,9 @@ CELERY_WORKER_CONCURRENCY = 2  # Limit to 2 workers instead of 48
 CELERY_TASK_ACKS_LATE = True  # Acknowledge tasks after completion
 CELERY_WORKER_MAX_TASKS_PER_CHILD = 50  # Restart worker after 50 tasks
 CELERY_TASK_REJECT_ON_WORKER_LOST = True  # Reject tasks if worker dies
+
+# Alertas por Email
+ALERT_EMAIL_RECIPIENTS = config('ALERT_EMAIL_RECIPIENTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
 
 # Celery Beat Schedule
 from celery.schedules import crontab
