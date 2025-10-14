@@ -413,7 +413,8 @@ class CampaignSender:
                 created_at=timezone.now()
             )
             
-            # Log de sucesso (SEMPRE registrado - sem limitação)
+            # ✅ Log de sucesso (SEMPRE registrado - sem limitação)
+            from .models import CampaignLog
             CampaignLog.log_message_sent(
                 self.campaign, instance, contact, campaign_contact,
                 duration_ms=duration_ms,
@@ -456,7 +457,7 @@ class CampaignSender:
             from .models import CampaignLog
             CampaignLog.log_error(
                 campaign=self.campaign,
-                message=f"Falha ao enviar mensagem para {contact.name}",
+                error_msg=f"Falha ao enviar mensagem para {contact.name}",
                 details={
                     'contact_id': contact.id,
                     'contact_name': contact.name,
