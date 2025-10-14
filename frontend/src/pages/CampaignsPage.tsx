@@ -669,7 +669,11 @@ const CampaignsPage: React.FC = () => {
           events: [],
           status: 'pending',
           first_event: null,
-          last_event: null
+          last_event: null,
+          has_sent: false,
+          has_delivered: false,
+          has_read: false,
+          has_failed: false
         }
       }
       
@@ -678,6 +682,17 @@ const CampaignsPage: React.FC = () => {
         ...log,
         timestamp: new Date(log.created_at).getTime()
       })
+      
+      // Marcar tipos de eventos
+      if (log.log_type === 'message_sent') {
+        contactGroups[contactKey].has_sent = true
+      } else if (log.log_type === 'message_delivered') {
+        contactGroups[contactKey].has_delivered = true
+      } else if (log.log_type === 'message_read') {
+        contactGroups[contactKey].has_read = true
+      } else if (log.log_type === 'message_failed') {
+        contactGroups[contactKey].has_failed = true
+      }
       
       // Atualizar primeiro e último evento
       if (!contactGroups[contactKey].first_event || log.created_at < contactGroups[contactKey].first_event) {
@@ -692,16 +707,17 @@ const CampaignsPage: React.FC = () => {
     Object.values(contactGroups).forEach((group: any) => {
       group.events.sort((a: any, b: any) => a.timestamp - b.timestamp)
       
-      // Determinar status baseado no último evento
-      const lastEvent = group.events[group.events.length - 1]
-      if (lastEvent.log_type === 'message_read') {
-        group.status = 'read'
-      } else if (lastEvent.log_type === 'message_delivered') {
-        group.status = 'delivered'
-      } else if (lastEvent.log_type === 'message_sent') {
-        group.status = 'sent'
-      } else if (lastEvent.log_type === 'message_failed') {
+      // Determinar status baseado na prioridade (failed > read > delivered > sent)
+      if (group.has_failed) {
         group.status = 'failed'
+      } else if (group.has_read) {
+        group.status = 'read'
+      } else if (group.has_delivered) {
+        group.status = 'delivered'
+      } else if (group.has_sent) {
+        group.status = 'sent'
+      } else {
+        group.status = 'pending'
       }
     })
     
