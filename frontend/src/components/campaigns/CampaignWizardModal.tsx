@@ -113,14 +113,14 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   const fetchData = async () => {
     try {
-      const [instancesRes, tagsRes, contactsRes] = await Promise.all([
+      const [instancesRes, tagsStatsRes, contactsRes] = await Promise.all([
         api.get('/notifications/whatsapp-instances/'),
-        api.get('/contacts/tags/'),
+        api.get('/contacts/tags/stats/'), // Usar endpoint de stats para contagem real
         api.get('/contacts/contacts/?page_size=10000')  // Buscar todos os contatos
       ])
       
       setInstances(instancesRes.data.results || instancesRes.data || [])
-      setTags(tagsRes.data.results || tagsRes.data || [])
+      setTags(tagsStatsRes.data.tags || []) // Usar dados do stats
       
       const contactsData = contactsRes.data.results || contactsRes.data || []
       setContacts(contactsData)

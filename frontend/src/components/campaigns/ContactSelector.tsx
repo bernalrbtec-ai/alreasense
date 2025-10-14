@@ -96,9 +96,14 @@ export default function ContactSelector({ value, onChange }: ContactSelectorProp
     setEstimatedCount(0)
     
     if (type === 'all') {
-      // Buscar total de contatos
-      api.get('/contacts/contacts/?opted_out=false&is_active=true')
-        .then(res => setEstimatedCount(res.data.count || res.data.results?.length || 0))
+      // Buscar total de contatos usando stats endpoint
+      api.get('/contacts/contacts/stats/?opted_out=false&is_active=true')
+        .then(res => setEstimatedCount(res.data.active || 0))
+        .catch(() => {
+          // Fallback para endpoint antigo
+          api.get('/contacts/contacts/?opted_out=false&is_active=true')
+            .then(res => setEstimatedCount(res.data.count || res.data.results?.length || 0))
+        })
     }
   }
   

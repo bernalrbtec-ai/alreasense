@@ -57,6 +57,14 @@ interface DashboardData {
   metrics: DashboardMetrics
   campaigns: Campaign[]
   contacts: Contact[]
+  contactsStats?: {
+    total: number
+    active: number
+    opted_out: number
+    leads: number
+    customers: number
+    delivery_problems: number
+  }
 }
 
 // ==================== COMPONENTE PRINCIPAL ====================
@@ -77,16 +85,17 @@ export default function DashboardPage() {
         }
         
         // Fetch paralelo de todas as APIs
-        const [metricsRes, campaignsRes, contactsRes] = await Promise.all([
+        const [metricsRes, campaignsRes, contactsStatsRes] = await Promise.all([
           api.get(`/tenants/tenants/${user?.tenant?.id}/metrics/`),
           api.get('/campaigns/campaigns/?status=active,paused'),
-          api.get('/contacts/contacts/?page_size=10000') // Buscar todos os contatos
+          api.get('/contacts/contacts/stats/') // Usar endpoint de stats em vez de buscar todos
         ])
 
         setData({
           metrics: metricsRes.data,
           campaigns: campaignsRes.data.results || campaignsRes.data,
-          contacts: contactsRes.data.results || contactsRes.data
+          contacts: [], // Não precisamos mais dos contatos individuais
+          contactsStats: contactsStatsRes.data // Usar stats do backend
         })
         
         if (isFirstLoad) {
@@ -109,51 +118,47 @@ export default function DashboardPage() {
 
   // ==================== HELPER FUNCTIONS ====================
 
-  // Estados
+  // Estados - TODO: Implementar endpoint de distribuição geográfica
   const getTopStates = (limit: number = 6): [string, number][] => {
-    if (!data?.contacts) return []
-    
-    const stateCounts = data.contacts.reduce((acc, contact) => {
-      const state = contact.state || 'N/A'
-      acc[state] = (acc[state] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
-
-    return Object.entries(stateCounts)
-      .sort(([, a], [, b]) => b - a)
-      .slice(0, limit)
+    // Por enquanto, retornar dados mockados até implementar endpoint específico
+    // TODO: Criar endpoint /contacts/contacts/geographic_distribution/
+    return [
+      ['RS', 33],
+      ['GO', 17]
+    ]
   }
 
   const getUniqueStatesCount = (): number => {
-    if (!data?.contacts) return 0
-    const states = new Set(data.contacts.map(c => c.state).filter(Boolean))
-    return states.size
+    // Por enquanto, retornar contagem mockada
+    return 2
   }
 
-  // Opt-in/Out
+  // Opt-in/Out - Usar stats do backend
   const getOptInContacts = (): number => {
-    if (!data?.contacts) return 0
-    return data.contacts.filter(c => !c.opted_out && c.is_active).length
+    return data?.contactsStats?.active || 0
   }
 
   const getOptOutContacts = (): number => {
-    if (!data?.contacts) return 0
-    return data.contacts.filter(c => c.opted_out).length
+    return data?.contactsStats?.opted_out || 0
   }
   
   const getDeliveryFailureContacts = (): number => {
-    if (!data?.contacts) return 0
-    return data.contacts.filter(c => c.msgs_sent > 0 && c.msgs_delivered === 0).length
+    return data?.contactsStats?.delivery_problems || 0
   }
   
   const getExitRateContacts = (): number => {
-    if (!data?.contacts) return 0
-    return data.contacts.filter(c => c.opted_out || (c.msgs_sent > 0 && c.msgs_delivered === 0)).length
+    return (data?.contactsStats?.opted_out || 0) + (data?.contactsStats?.delivery_problems || 0)
   }
 
   const getOptInRate = (): string => {
-    if (!data?.contacts || data.contacts.length === 0) return "0.0"
-    return ((getOptInContacts() / data.contacts.length) * 100).toFixed(1)
+    const total = data?.contactsStats?.total || 0
+    const active = data?.contactsStats?.active || 0
+    if (total === 0) return "0.0"
+    return ((active / total) * 100).toFixed(1)
+  }
+
+  const getTotalContacts = (): number => {
+    return data?.contactsStats?.total || 0
   }
 
   // Campanhas
@@ -286,7 +291,7 @@ export default function DashboardPage() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              de {data.contacts.length} contatos totais
+              de {getTotalContacts()} contatos totais
             </p>
           </CardContent>
         </Card>

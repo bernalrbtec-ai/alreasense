@@ -478,6 +478,43 @@ class TagViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         """Associa tenant na criação"""
         serializer.save(tenant=self.request.user.tenant)
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Estatísticas das tags com contagem real de contatos
+        
+        GET /api/contacts/tags/stats/
+        """
+        user = request.user
+        
+        if not user.tenant:
+            return Response({'tags': []})
+        
+        tags = Tag.objects.filter(tenant=user.tenant)
+        
+        # Calcular contagem real de contatos para cada tag
+        tags_stats = []
+        for tag in tags:
+            # Contagem real sem paginação
+            total_contacts = tag.contacts.filter(is_active=True).count()
+            opted_out_contacts = tag.contacts.filter(is_active=True, opted_out=True).count()
+            
+            tags_stats.append({
+                'id': str(tag.id),
+                'name': tag.name,
+                'color': tag.color,
+                'description': tag.description,
+                'contact_count': total_contacts,
+                'opted_out_count': opted_out_contacts,
+                'active_count': total_contacts - opted_out_contacts,
+                'created_at': tag.created_at
+            })
+        
+        return Response({
+            'tags': tags_stats,
+            'total_tags': len(tags_stats)
+        })
 
 
 class ContactListViewSet(viewsets.ModelViewSet):
