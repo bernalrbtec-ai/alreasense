@@ -232,9 +232,9 @@ class CampaignSender:
         import random
         from django.utils import timezone
         
-        # Selecionar próximo contato pendente
+        # ✅ Selecionar próximo contato pendente (INCLUIR 'sending' como pendente)
         campaign_contact = self.campaign.campaign_contacts.filter(
-            status='pending'
+            status__in=['pending', 'sending']  # ✅ Incluir 'sending' para retry
         ).select_related('contact').first()
         
         if not campaign_contact:
@@ -242,10 +242,22 @@ class CampaignSender:
         
         contact = campaign_contact.contact
         
-        # Selecionar instância
+        # ✅ Selecionar instância com HEALTH CHECK
         instance = self.rotation_service.select_next_instance()
         if not instance:
             return False, "Nenhuma instância disponível"
+        
+        # ✅ HEALTH CHECK da instância antes do envio
+        if not self._check_instance_health(instance):
+            print(f"⚠️ [HEALTH] Instância {instance.friendly_name} com health baixo, tentando alternativa...")
+            
+            # Tentar instância alternativa
+            alt_instance = self.rotation_service.select_next_instance()
+            if alt_instance and alt_instance.id != instance.id:
+                print(f"🔄 [HEALTH] Usando instância alternativa: {alt_instance.friendly_name}")
+                instance = alt_instance
+            else:
+                return False, f"Instância {instance.friendly_name} com health baixo e sem alternativas"
         
         # Selecionar mensagem (rotacionar entre as disponíveis)
         messages = list(self.campaign.messages.all().order_by('order'))
@@ -305,7 +317,7 @@ class CampaignSender:
             message_text = message_text.replace('{{quem_indicou}}', quem_indicou)
             message_text = message_text.replace('{{primeiro_nome_indicador}}', primeiro_nome_indicador)
             
-            # Enviar via Evolution API
+            # ✅ Enviar via Evolution API com RETRY e BACKOFF
             url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
             headers = {
                 'apikey': instance.api_key,
@@ -316,9 +328,35 @@ class CampaignSender:
                 'text': message_text
             }
             
+            # ✅ RETRY com backoff exponencial
+            max_retries = 3
+            base_delay = 1  # 1 segundo base
             
-            response = requests.post(url, json=payload, headers=headers, timeout=10)
-            response.raise_for_status()
+            for attempt in range(max_retries + 1):
+                try:
+                    response = requests.post(url, json=payload, headers=headers, timeout=10)
+                    response.raise_for_status()
+                    break  # Sucesso, sair do loop
+                    
+                except requests.exceptions.RequestException as e:
+                    if attempt == max_retries:
+                        # Última tentativa falhou, re-raise
+                        raise e
+                    
+                    # Calcular delay com backoff exponencial
+                    delay = base_delay * (2 ** attempt)
+                    print(f"⚠️ [RETRY] Tentativa {attempt + 1}/{max_retries + 1} falhou: {str(e)}")
+                    print(f"⏳ [RETRY] Aguardando {delay}s antes da próxima tentativa...")
+                    time.sleep(delay)
+                    
+                    # ✅ Tentar instância alternativa se disponível
+                    if attempt == 1:  # Na segunda tentativa
+                        alt_instance = self.rotation_service.select_next_instance()
+                        if alt_instance and alt_instance.id != instance.id:
+                            print(f"🔄 [RETRY] Tentando instância alternativa: {alt_instance.friendly_name}")
+                            instance = alt_instance
+                            url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
+                            headers['apikey'] = instance.api_key
             
             response_data = response.json()
             # Salvar ID da mensagem do WhatsApp se disponível
@@ -346,11 +384,11 @@ class CampaignSender:
             self.campaign.last_contact_phone = contact.phone
             self.campaign.last_instance_name = instance.friendly_name
             
-            # Verificar se há mais mensagens pendentes APÓS marcar como enviado
+            # ✅ Verificar se há mais mensagens pendentes APÓS marcar como enviado (QUERY ATÔMICA)
             from .models import CampaignContact
             next_campaign_contact = CampaignContact.objects.filter(
                 campaign=self.campaign,
-                status='pending'
+                status__in=['pending', 'sending']  # ✅ Incluir 'sending' como pendente
             ).select_related('contact').first()
             
             if next_campaign_contact:
@@ -394,29 +432,124 @@ class CampaignSender:
             return True, f"Mensagem enviada para {contact.name}"
             
         except Exception as e:
-            # Registrar falha
+            # ✅ MELHOR TRATAMENTO DE ERROS com logging detalhado
             error_msg = str(e)
             
+            # ✅ Log detalhado do erro
+            print(f"❌ [ERRO] Falha ao enviar mensagem:")
+            print(f"   - Contato: {contact.name} ({contact.phone})")
+            print(f"   - Instância: {instance.friendly_name}")
+            print(f"   - Erro: {error_msg}")
+            print(f"   - URL: {url}")
+            print(f"   - Payload: {payload}")
+            
+            # ✅ Classificar tipo de erro
+            error_type = "unknown"
+            if "400" in error_msg:
+                error_type = "bad_request"
+            elif "401" in error_msg:
+                error_type = "unauthorized"
+            elif "403" in error_msg:
+                error_type = "forbidden"
+            elif "404" in error_msg:
+                error_type = "not_found"
+            elif "500" in error_msg:
+                error_type = "server_error"
+            elif "timeout" in error_msg.lower():
+                error_type = "timeout"
+            elif "connection" in error_msg.lower():
+                error_type = "connection_error"
+            
+            # ✅ Log estruturado do erro
+            from .models import CampaignLog
+            CampaignLog.log_error(
+                campaign=self.campaign,
+                message=f"Falha ao enviar mensagem para {contact.name}",
+                details={
+                    'contact_id': contact.id,
+                    'contact_name': contact.name,
+                    'contact_phone': contact.phone,
+                    'instance_id': instance.id,
+                    'instance_name': instance.friendly_name,
+                    'error_type': error_type,
+                    'error_message': error_msg,
+                    'url': url,
+                    'retry_count': campaign_contact.retry_count + 1
+                }
+            )
+            
+            # ✅ Atualizar contato com erro detalhado
             campaign_contact.status = 'failed'
-            campaign_contact.error_message = error_msg
+            campaign_contact.error_message = f"[{error_type.upper()}] {error_msg}"
             campaign_contact.failed_at = timezone.now()
             campaign_contact.retry_count += 1
             campaign_contact.save()
             
+            # ✅ Registrar falha na instância
             instance.record_message_failed(error_msg)
             
-            # Incrementar tanto messages_sent quanto messages_failed para falhas
+            # ✅ Incrementar contadores
             self.campaign.messages_sent += 1  # Contar como disparo realizado
             self.campaign.messages_failed += 1  # Contar como falha
             self.campaign.save(update_fields=['messages_sent', 'messages_failed'])
             
-            # Log de falha (SEMPRE registrado - sem limitação)
+            # ✅ Log de falha estruturado
             CampaignLog.log_message_failed(
                 self.campaign, instance, contact, campaign_contact,
                 error_msg
             )
             
             return False, f"Erro ao enviar: {error_msg}"
+    
+    def _check_instance_health(self, instance) -> bool:
+        """
+        ✅ Verifica saúde da instância antes do envio
+        """
+        try:
+            # Verificar health score da instância
+            if hasattr(instance, 'health_score') and instance.health_score is not None:
+                if instance.health_score < 30:  # Health muito baixo
+                    print(f"⚠️ [HEALTH] Instância {instance.friendly_name} com health muito baixo: {instance.health_score}")
+                    return False
+            
+            # Verificar se instância está ativa
+            if not instance.is_active:
+                print(f"⚠️ [HEALTH] Instância {instance.friendly_name} está inativa")
+                return False
+            
+            # Verificar connection state
+            if hasattr(instance, 'connection_state'):
+                if instance.connection_state not in ['connected', 'open']:
+                    print(f"⚠️ [HEALTH] Instância {instance.friendly_name} não conectada: {instance.connection_state}")
+                    return False
+            
+            # ✅ HEALTH CHECK via API (opcional - ping rápido)
+            try:
+                import requests
+                health_url = f"{instance.api_url}/instance/connectionState/{instance.instance_name}"
+                headers = {'apikey': instance.api_key}
+                
+                response = requests.get(health_url, headers=headers, timeout=3)
+                if response.status_code == 200:
+                    data = response.json()
+                    if data.get('state') not in ['connected', 'open']:
+                        print(f"⚠️ [HEALTH] Instância {instance.friendly_name} não conectada via API: {data.get('state')}")
+                        return False
+                else:
+                    print(f"⚠️ [HEALTH] Falha ao verificar health da instância {instance.friendly_name}: HTTP {response.status_code}")
+                    return False
+                    
+            except Exception as e:
+                print(f"⚠️ [HEALTH] Erro ao verificar health da instância {instance.friendly_name}: {str(e)}")
+                # Não falhar por erro de health check, apenas logar
+                return True
+            
+            print(f"✅ [HEALTH] Instância {instance.friendly_name} saudável")
+            return True
+            
+        except Exception as e:
+            print(f"❌ [HEALTH] Erro inesperado ao verificar health: {str(e)}")
+            return True  # Em caso de erro, permitir tentativa
     
     def process_batch(self, batch_size: int = 10) -> dict:
         """
@@ -439,11 +572,11 @@ class CampaignSender:
                 results['paused'] = True
                 break
             
-            # Log de contatos pendentes restantes
+            # ✅ Log de contatos pendentes restantes (QUERY ATÔMICA)
             from .models import CampaignContact
             pending_count = CampaignContact.objects.filter(
                 campaign=self.campaign,
-                status='pending'
+                status__in=['pending', 'sending']  # ✅ Incluir 'sending' como pendente
             ).count()
             print(f"📋 [BATCH] Contatos pendentes restantes: {pending_count}")
             
@@ -452,12 +585,13 @@ class CampaignSender:
             disparo_start_time = time.time()
             MAX_DISPARO_DURATION = 600  # 10 minutos por disparo individual
             
-            # Log de início do disparo
+            # ✅ Log detalhado do início do disparo
             from .models import CampaignLogManager
             # Buscar contato e instância para o log
             contact, instance = self.get_next_contact_and_instance()
             if contact and instance:
                 message_content = self.get_next_message_content()
+                print(f"🎯 [DISPARO] Iniciando disparo para {contact.name} via {instance.friendly_name}")
                 CampaignLogManager.log_disparo_started(
                     campaign=self.campaign,
                     contact=contact,
@@ -507,14 +641,17 @@ class CampaignSender:
             if success:
                 results['sent'] += 1
                 
-                # ✅ NOVO: Verificar se foi o último contato APÓS envio bem-sucedido
+                # ✅ NOVO: Verificar se foi o último contato APÓS envio bem-sucedido (QUERY ATÔMICA)
                 from .models import CampaignContact
                 remaining_pending = CampaignContact.objects.filter(
                     campaign=self.campaign,
-                    status='pending'
+                    status__in=['pending', 'sending']  # ✅ Incluir 'sending' como pendente
                 ).count()
                 
+                print(f"📊 [BATCH] Após envio bem-sucedido, contatos pendentes: {remaining_pending}")
+                
                 if remaining_pending == 0:
+                    print(f"🎯 [BATCH] Campanha completada - último contato enviado!")
                     results['completed'] = True
                     break
                 
@@ -526,8 +663,8 @@ class CampaignSender:
                         wait_seconds = (self.campaign.next_message_scheduled_at - now).total_seconds()
                         if wait_seconds > 30:  # Se precisa aguardar mais de 30s, pausar lote
                             results['skipped'] = 1
-                            break
-                    
+        break
+    
             elif "pendente" in message.lower():
                 # Se não há contatos pendentes, marcar como completado
                 results['completed'] = True
@@ -535,7 +672,7 @@ class CampaignSender:
             elif "disponível" in message.lower() or "instância" in message.lower():
                 results['skipped'] += 1
                 break  # Parar se não há instâncias disponíveis
-            else:
+    else:
                 results['failed'] += 1
             
             results['messages'].append(message)
