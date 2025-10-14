@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from .models import Campaign, CampaignContact, CampaignLog
-from .engine import campaign_manager
+from .engine_simple import simple_campaign_manager
 from .monitor import campaign_health_monitor, system_health_monitor
 from .serializers import CampaignSerializer, CampaignDetailSerializer
 
@@ -49,7 +49,7 @@ class CampaignControlView(generics.GenericAPIView):
                     )
                 
                 # Iniciar engine
-                engine = campaign_manager.start_campaign(str(campaign.id))
+                engine = simple_campaign_manager.start_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} iniciada com sucesso',
@@ -65,7 +65,7 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                campaign_manager.pause_campaign(str(campaign.id))
+                simple_campaign_manager.pause_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} pausada com sucesso'
@@ -79,7 +79,7 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                campaign_manager.resume_campaign(str(campaign.id))
+                simple_campaign_manager.resume_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} resumida com sucesso'
@@ -93,7 +93,7 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                campaign_manager.stop_campaign(str(campaign.id))
+                simple_campaign_manager.stop_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} parada com sucesso'
@@ -134,7 +134,7 @@ def campaign_health(request, campaign_id):
         alerts = campaign_health_monitor.get_campaign_alerts(str(campaign.id))
         
         # Status do engine
-        engine_status = campaign_manager.get_campaign_status(str(campaign.id))
+        engine_status = simple_campaign_manager.get_campaign_status(str(campaign.id))
         
         return Response({
             'campaign_id': str(campaign.id),
@@ -184,7 +184,7 @@ def active_campaigns(request):
         tenant_campaigns = Campaign.objects.filter(tenant=request.user.tenant)
         
         # Campanhas ativas no engine
-        active_engine_campaigns = campaign_manager.list_active_campaigns()
+        active_engine_campaigns = simple_campaign_manager.list_active_campaigns()
         
         campaigns_data = []
         for campaign in tenant_campaigns:
@@ -196,7 +196,7 @@ def active_campaigns(request):
                 'messages_delivered': campaign.messages_delivered,
                 'messages_failed': campaign.messages_failed,
                 'is_engine_active': str(campaign.id) in active_engine_campaigns,
-                'engine_status': campaign_manager.get_campaign_status(str(campaign.id))
+                'engine_status': simple_campaign_manager.get_campaign_status(str(campaign.id))
             }
             
             # Adicionar métricas de saúde se disponível

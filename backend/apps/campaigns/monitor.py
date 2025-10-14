@@ -13,7 +13,7 @@ from django.core.mail import send_mail
 from django.conf import settings
 import json
 
-from .models import Campaign, CampaignContact, CampaignLog, CampaignState
+from .models import Campaign, CampaignContact, CampaignLog
 from apps.notifications.models import WhatsAppInstance
 
 logger = logging.getLogger(__name__)

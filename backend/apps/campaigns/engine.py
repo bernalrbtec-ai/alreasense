@@ -15,7 +15,7 @@ import pika
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
-from .models import Campaign, CampaignContact, CampaignLog, CampaignState
+from .models import Campaign, CampaignContact, CampaignLog
 from apps.notifications.models import WhatsAppInstance
 
 logger = logging.getLogger(__name__)
