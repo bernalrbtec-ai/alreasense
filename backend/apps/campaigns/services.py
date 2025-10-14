@@ -57,20 +57,8 @@ class RotationService:
             reason = "Inteligente (melhor health)"
         
         # Log da seleção (mantido para debug, mas com limite)
-        if instance:
-            # Só logar se esta instância específica não foi selecionada recentemente (evitar spam)
-            from django.utils import timezone
-            from datetime import timedelta
-            
-            recent_log = CampaignLog.objects.filter(
-                campaign=self.campaign,
-                log_type='instance_selected',
-                instance=instance,  # Verificar esta instância específica
-                created_at__gte=timezone.now() - timedelta(seconds=30)
-            ).exists()
-            
-            if not recent_log:
-                CampaignLog.log_instance_selected(self.campaign, instance, reason)
+        # Removido log de "Instância Selecionada" - informação redundante
+        # A instância já aparece no log de "Mensagem Enviada"
         
         return instance
     
