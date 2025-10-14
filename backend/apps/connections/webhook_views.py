@@ -17,7 +17,7 @@ from .webhook_cache import WebhookCache, generate_event_id
 from apps.chat_messages.models import Message
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
-from apps.campaigns.models import CampaignContact
+from apps.campaigns.models import CampaignContact, CampaignNotification
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -351,6 +351,12 @@ class EvolutionWebhookView(APIView):
             if created:
                 logger.info(f"New message created: {message_obj.id} from {sender}")
                 
+                # Criar notificação se mensagem for de contato (não do bot)
+                if not from_me and text_content.strip():
+                    self.create_campaign_notification(
+                        message_obj, sender, text_content, tenant, connection
+                    )
+                
                 # TODO: Trigger AI analysis
                 # self.trigger_ai_analysis(message_obj)
                 
@@ -614,3 +620,77 @@ class EvolutionWebhookView(APIView):
         except Exception as e:
             logger.error(f"Error handling presence update: {str(e)}")
             return JsonResponse({'error': 'Presence update failed'}, status=500)
+    
+    def create_campaign_notification(self, message_obj, sender_phone, message_content, tenant, connection):
+        """Criar notificação de campanha quando contato responde"""
+        try:
+            # Extrair número do telefone (remover @s.whatsapp.net)
+            phone_number = sender_phone.split('@')[0] if '@' in sender_phone else sender_phone
+            
+            # Buscar contato pelo telefone
+            from apps.contacts.models import Contact
+            contact = Contact.objects.filter(
+                tenant=tenant,
+                phone=phone_number,
+                is_active=True
+            ).first()
+            
+            if not contact:
+                logger.info(f"Contato não encontrado para telefone: {phone_number}")
+                return
+            
+            # Buscar campanha ativa onde este contato foi enviado
+            campaign_contact = CampaignContact.objects.filter(
+                contact=contact,
+                campaign__tenant=tenant,
+                campaign__status__in=['running', 'completed', 'paused']
+            ).order_by('-campaign__created_at').first()
+            
+            if not campaign_contact:
+                logger.info(f"Nenhuma campanha encontrada para contato: {contact.name}")
+                return
+            
+            # Buscar instância WhatsApp
+            from apps.notifications.models import WhatsAppInstance
+            instance = WhatsAppInstance.objects.filter(
+                tenant=tenant,
+                phone_number=phone_number
+            ).first()
+            
+            if not instance:
+                logger.info(f"Instância WhatsApp não encontrada para telefone: {phone_number}")
+                return
+            
+            # Criar notificação
+            notification = CampaignNotification.objects.create(
+                tenant=tenant,
+                campaign=campaign_contact.campaign,
+                contact=contact,
+                campaign_contact=campaign_contact,
+                instance=instance,
+                notification_type='response',
+                status='unread',
+                received_message=message_content,
+                whatsapp_message_id=message_obj.message_id,
+                details={
+                    'message_type': 'text',
+                    'chat_id': message_obj.chat_id,
+                    'connection_id': str(connection.id),
+                }
+            )
+            
+            # Log da notificação criada
+            from apps.campaigns.models import CampaignLog
+            CampaignLog.log_notification_created(
+                campaign=campaign_contact.campaign,
+                contact=contact,
+                notification=notification,
+                message_content=message_content
+            )
+            
+            logger.info(f"✅ Notificação criada: {notification.id} para {contact.name} na campanha {campaign_contact.campaign.name}")
+            
+        except Exception as e:
+            logger.error(f"Erro ao criar notificação de campanha: {str(e)}")
+            import traceback
+            traceback.print_exc()

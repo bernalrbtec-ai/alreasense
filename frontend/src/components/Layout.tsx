@@ -23,6 +23,7 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
 import { useUserAccess } from '../hooks/useUserAccess'
+import { useNotificationCount } from '../hooks/useNotifications'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
@@ -71,6 +72,7 @@ export default function Layout({ children }: LayoutProps) {
   const { user, logout } = useAuthStore()
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
   const { hasProductAccess } = useUserAccess()
+  const { unreadCount } = useNotificationCount()
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
   
@@ -234,6 +236,8 @@ export default function Layout({ children }: LayoutProps) {
                 </div>
                 {adminNavigation.map((item) => {
                   const isActive = location.pathname === item.href
+                  const isNotificationItem = item.name === 'Notificações'
+                  
                   return (
                     <Link
                       key={item.name}
@@ -245,7 +249,14 @@ export default function Layout({ children }: LayoutProps) {
                           : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
                       )}
                     >
-                      <item.icon className="mr-3 h-5 w-5" />
+                      <div className="relative">
+                        <item.icon className="mr-3 h-5 w-5" />
+                        {isNotificationItem && unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                        )}
+                      </div>
                       {item.name}
                     </Link>
                   )

@@ -3,10 +3,13 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Q, Avg
-from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog
+from django.shortcuts import get_object_or_404
+from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
 from .serializers import (
     CampaignSerializer, CampaignContactSerializer,
-    CampaignLogSerializer, CampaignStatsSerializer
+    CampaignLogSerializer, CampaignStatsSerializer,
+    CampaignNotificationSerializer, NotificationMarkReadSerializer,
+    NotificationReplySerializer
 )
 
 
@@ -168,4 +171,112 @@ class CampaignViewSet(viewsets.ModelViewSet):
         
         serializer = CampaignStatsSerializer(stats)
         return Response(serializer.data)
+
+
+class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
+    """API para notificações de campanhas"""
+    
+    serializer_class = CampaignNotificationSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Filtrar por tenant e ordenar por mais recentes"""
+        return CampaignNotification.objects.filter(
+            tenant=self.request.user.tenant
+        ).select_related(
+            'campaign', 'contact', 'instance', 'sent_by'
+        ).order_by('-created_at')
+    
+    def get_serializer_context(self):
+        """Adicionar request ao contexto"""
+        context = super().get_serializer_context()
+        context['request'] = self.request
+        return context
+    
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        """Contar notificações não lidas"""
+        count = self.get_queryset().filter(status='unread').count()
+        return Response({'unread_count': count})
+    
+    @action(detail=False, methods=['post'])
+    def mark_as_read(self, request):
+        """Marcar notificação como lida"""
+        serializer = NotificationMarkReadSerializer(data=request.data)
+        if serializer.is_valid():
+            notification_id = serializer.validated_data['notification_id']
+            
+            try:
+                notification = get_object_or_404(
+                    CampaignNotification,
+                    id=notification_id,
+                    tenant=request.user.tenant
+                )
+                
+                notification.mark_as_read(user=request.user)
+                
+                return Response({
+                    'message': 'Notificação marcada como lida',
+                    'notification_id': str(notification_id)
+                })
+                
+            except Exception as e:
+                return Response(
+                    {'error': f'Erro ao marcar notificação: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def reply(self, request):
+        """Responder notificação"""
+        serializer = NotificationReplySerializer(data=request.data)
+        if serializer.is_valid():
+            notification_id = serializer.validated_data['notification_id']
+            message = serializer.validated_data['message']
+            
+            try:
+                notification = get_object_or_404(
+                    CampaignNotification,
+                    id=notification_id,
+                    tenant=request.user.tenant
+                )
+                
+                # TODO: Implementar envio via Evolution API
+                # Por enquanto, apenas marcar como respondida
+                notification.mark_as_replied(message, request.user)
+                
+                return Response({
+                    'message': 'Resposta enviada com sucesso',
+                    'notification_id': str(notification_id)
+                })
+                
+            except Exception as e:
+                return Response(
+                    {'error': f'Erro ao enviar resposta: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    
+    @action(detail=False, methods=['post'])
+    def mark_all_as_read(self, request):
+        """Marcar todas as notificações como lidas"""
+        try:
+            notifications = self.get_queryset().filter(status='unread')
+            count = notifications.count()
+            
+            for notification in notifications:
+                notification.mark_as_read(user=request.user)
+            
+            return Response({
+                'message': f'{count} notificações marcadas como lidas'
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Erro ao marcar notificações: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
