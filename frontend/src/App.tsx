@@ -63,7 +63,19 @@ function App() {
 
   return (
     <ErrorBoundary>
-      <Toaster position="top-right" richColors closeButton />
+      <Toaster 
+        position="top-right"
+        expand={false}
+        richColors
+        closeButton
+        duration={4000}
+        toastOptions={{
+          style: {
+            fontSize: '14px',
+            maxWidth: '400px',
+          },
+        }}
+      />
       <Layout>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -94,6 +106,13 @@ function App() {
             </ProtectedRoute>
           } />
           
+          {/* Notificações - Acesso para usuários com Flow */}
+          <Route path="/admin/notifications" element={
+            <ProtectedRoute requiredProduct="flow">
+              <NotificationsPage />
+            </ProtectedRoute>
+          } />
+          
           {/* Super Admin Routes */}
           {isSuperAdmin && (
             <>
@@ -102,7 +121,6 @@ function App() {
               <Route path="/admin/plans" element={<PlansPage />} />
               <Route path="/admin/system" element={<SystemStatusPage />} />
               <Route path="/admin/evolution" element={<EvolutionConfigPage />} />
-              <Route path="/admin/notifications" element={<NotificationsPage />} />
               <Route path="/admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
             </>
           )}

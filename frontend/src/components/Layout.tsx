@@ -35,13 +35,11 @@ const productMenuItems = {
   flow: [
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'flow' },
     { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
+    { name: 'Notificações', href: '/admin/notifications', icon: Bell, requiredProduct: 'flow' },
   ],
   sense: [
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'sense' },
     { name: 'Experimentos', href: '/experiments', icon: FlaskConical, requiredProduct: 'sense' },
-  ],
-  notifications: [
-    { name: 'Notificações', href: '/admin/notifications', icon: Bell, requiredProduct: 'notifications' },
   ],
   api_public: [
     { name: 'API Docs', href: '/api-docs', icon: Server, requiredProduct: 'api_public' },
@@ -117,11 +115,11 @@ export default function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-gray-50">
       {/* Mobile sidebar */}
       <div className={cn(
-        "fixed inset-0 z-50 lg:hidden",
+        "fixed inset-0 z-modal lg:hidden",
         sidebarOpen ? "block" : "hidden"
       )}>
         <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-        <div className="fixed inset-y-0 left-0 flex w-64 flex-col bg-white">
+        <div className="relative flex w-full max-w-xs flex-1 flex-col bg-white">
           <div className="flex h-16 items-center justify-between px-4">
             <Logo size="sm" />
             <Button
@@ -188,8 +186,8 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Desktop sidebar */}
       <div className={cn(
-        "hidden lg:fixed lg:inset-y-0 lg:flex lg:flex-col transition-all duration-300",
-        sidebarCollapsed ? "lg:w-16" : "lg:w-64"
+        "hidden md:fixed md:inset-y-0 md:flex md:flex-col transition-all duration-300 z-sidebar",
+        sidebarCollapsed ? "md:w-16" : "md:w-64"
       )}>
         <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
           <div className="flex h-16 items-center justify-between px-4">
@@ -313,17 +311,17 @@ export default function Layout({ children }: LayoutProps) {
       {/* Main content */}
       <div className={cn(
         "transition-all duration-300",
-        sidebarCollapsed ? "lg:pl-16" : "lg:pl-64"
+        sidebarCollapsed ? "md:pl-16" : "md:pl-64"
       )}>
         {/* Top bar */}
-        <div className="sticky top-0 z-40 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-4 shadow-sm sm:gap-x-6 sm:px-6 lg:px-8">
+        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-3 shadow-sm sm:gap-x-6 sm:px-4 md:px-6 lg:px-8">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            className="md:hidden"
             onClick={() => setSidebarOpen(true)}
           >
-            <Menu className="h-6 w-6" />
+            <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
           
           <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
@@ -338,8 +336,8 @@ export default function Layout({ children }: LayoutProps) {
         </div>
 
         {/* Page content */}
-        <main className="py-6">
-          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <main className="py-4 sm:py-6">
+          <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
             {children}
           </div>
         </main>

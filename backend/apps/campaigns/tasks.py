@@ -1,13 +1,14 @@
 """
 Celery tasks para processamento de campanhas
 """
+import time
 from celery import shared_task
 from django.utils import timezone
 from .models import Campaign, CampaignLog
 from .services import CampaignSender
 
 
-@shared_task(bind=True, max_retries=3)
+@shared_task(bind=True, max_retries=3, time_limit=540, soft_time_limit=480)
 def process_campaign(self, campaign_id: str):
     """
     Processa uma campanha, enviando mensagens de forma assíncrona
@@ -21,6 +22,10 @@ def process_campaign(self, campaign_id: str):
     print(f"\n{'='*70}")
     print(f"🚀 Processando Campanha: {campaign.name}")
     print(f"{'='*70}")
+    
+    # ⚠️ TIMEOUT PROTECTION: Marcar início da task
+    task_start_time = time.time()
+    MAX_TASK_DURATION = 420  # 7 minutos (margem de segurança)
     
     # Verificar se campanha está rodando
     if campaign.status != 'running':
@@ -78,8 +83,35 @@ def process_campaign(self, campaign_id: str):
             print("\n⚠️ Nenhum contato pendente encontrado!")
             break
         
+        # ⚠️ TIMEOUT CHECK: Verificar se estamos próximo do limite
+        elapsed_time = time.time() - task_start_time
+        if elapsed_time > MAX_TASK_DURATION:
+            print(f"\n⏰ TIMEOUT PROTECTION: Task rodando há {elapsed_time:.1f}s")
+            print(f"🔄 Pausando task e reagendando para continuar...")
+            
+            # ⚠️ CRÍTICO: Recalcular próximo disparo para evitar envio imediato
+            if campaign.next_message_scheduled_at:
+                from django.utils import timezone
+                import random
+                
+                # Recalcular próximo intervalo baseado no tempo restante
+                next_interval = random.randint(campaign.interval_min, campaign.interval_max)
+                campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=next_interval)
+                campaign.save(update_fields=['next_message_scheduled_at'])
+                
+                print(f"🕒 Próximo disparo recalculado para: {campaign.next_message_scheduled_at}")
+                print(f"⏱️ Intervalo: {next_interval}s")
+            
+            # Reagendar task para continuar
+            process_campaign.apply_async(
+                args=[campaign_id], 
+                countdown=10  # Aguardar 10 segundos
+            )
+            
+            print(f"✅ Task reagendada para continuar em 10s")
+            return
+        
         # Pequena pausa entre lotes
-        import time
         time.sleep(2)
     
     print(f"\n{'='*70}")

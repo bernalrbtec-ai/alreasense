@@ -1,5 +1,6 @@
 from rest_framework import serializers
-from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
+from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog
+# CampaignNotification temporariamente comentado
 from apps.notifications.models import WhatsAppInstance
 from apps.contacts.models import Contact, ContactList
 
@@ -36,6 +37,25 @@ class CampaignSerializer(serializers.ModelSerializer):
     rotation_mode_display = serializers.CharField(source='get_rotation_mode_display', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     
+    def validate(self, data):
+        """Validação personalizada do serializer"""
+        interval_min = data.get('interval_min')
+        interval_max = data.get('interval_max')
+        
+        if interval_min and interval_max:
+            if interval_min > interval_max:
+                raise serializers.ValidationError({
+                    'interval_min': 'Intervalo mínimo não pode ser maior que o máximo.',
+                    'interval_max': 'Intervalo máximo não pode ser menor que o mínimo.'
+                })
+            
+            if interval_max > 420:
+                raise serializers.ValidationError({
+                    'interval_max': 'Intervalo máximo deve ser no máximo 420 segundos para evitar timeouts.'
+                })
+        
+        return data
+
     class Meta:
         model = Campaign
         fields = [
@@ -201,47 +221,48 @@ class CampaignStatsSerializer(serializers.Serializer):
     campaigns_by_status = serializers.DictField()
 
 
-class CampaignNotificationSerializer(serializers.ModelSerializer):
-    """Serializer para notificações de campanhas"""
-    campaign_name = serializers.CharField(source='campaign.name', read_only=True)
-    contact_name = serializers.CharField(source='contact.name', read_only=True)
-    contact_phone = serializers.CharField(source='contact.phone', read_only=True)
-    instance_name = serializers.CharField(source='instance.friendly_name', read_only=True)
-    sent_by_name = serializers.CharField(source='sent_by.email', read_only=True)
-    
-    class Meta:
-        model = CampaignNotification
-        fields = [
-            'id', 'tenant', 'campaign', 'contact', 'campaign_contact', 'instance',
-            'notification_type', 'status', 'received_message', 'received_timestamp',
-            'sent_reply', 'sent_timestamp', 'sent_by', 'whatsapp_message_id',
-            'details', 'created_at', 'updated_at',
-            # Campos calculados
-            'campaign_name', 'contact_name', 'contact_phone', 'instance_name', 'sent_by_name'
-        ]
-        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'received_timestamp']
-    
-    def create(self, validated_data):
-        """Criar notificação com tenant do usuário"""
-        request = self.context.get('request')
-        if request and hasattr(request, 'user'):
-            validated_data['tenant'] = request.user.tenant
-        return super().create(validated_data)
-
-
-class NotificationMarkReadSerializer(serializers.Serializer):
-    """Serializer para marcar notificação como lida"""
-    notification_id = serializers.UUIDField()
-
-
-class NotificationReplySerializer(serializers.Serializer):
-    """Serializer para responder notificação"""
-    notification_id = serializers.UUIDField()
-    message = serializers.CharField(max_length=4000, help_text="Mensagem de resposta")
-    
-    def validate_message(self, value):
-        """Validar mensagem não vazia"""
-        if not value.strip():
-            raise serializers.ValidationError("Mensagem não pode estar vazia")
-        return value.strip()
+# Temporariamente comentado
+# class CampaignNotificationSerializer(serializers.ModelSerializer):
+#     """Serializer para notificações de campanhas"""
+#     campaign_name = serializers.CharField(source='campaign.name', read_only=True)
+#     contact_name = serializers.CharField(source='contact.name', read_only=True)
+#     contact_phone = serializers.CharField(source='contact.phone', read_only=True)
+#     instance_name = serializers.CharField(source='instance.friendly_name', read_only=True)
+#     sent_by_name = serializers.CharField(source='sent_by.email', read_only=True)
+#     
+#     class Meta:
+#         model = CampaignNotification
+#         fields = [
+#             'id', 'tenant', 'campaign', 'contact', 'campaign_contact', 'instance',
+#             'notification_type', 'status', 'received_message', 'received_timestamp',
+#             'sent_reply', 'sent_timestamp', 'sent_by', 'whatsapp_message_id',
+#             'details', 'created_at', 'updated_at',
+#             # Campos calculados
+#             'campaign_name', 'contact_name', 'contact_phone', 'instance_name', 'sent_by_name'
+#         ]
+#         read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'received_timestamp']
+#     
+#     def create(self, validated_data):
+#         """Criar notificação com tenant do usuário"""
+#         request = self.context.get('request')
+#         if request and hasattr(request, 'user'):
+#             validated_data['tenant'] = request.user.tenant
+#         return super().create(validated_data)
+#
+#
+# class NotificationMarkReadSerializer(serializers.Serializer):
+#     """Serializer para marcar notificação como lida"""
+#     notification_id = serializers.UUIDField()
+#
+#
+# class NotificationReplySerializer(serializers.Serializer):
+#     """Serializer para responder notificação"""
+#     notification_id = serializers.UUIDField()
+#     message = serializers.CharField(max_length=4000, help_text="Mensagem de resposta")
+#     
+#     def validate_message(self, value):
+#         """Validar mensagem não vazia"""
+#         if not value.strip():
+#             raise serializers.ValidationError("Mensagem não pode estar vazia")
+#         return value.strip()
 

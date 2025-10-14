@@ -204,14 +204,14 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-gray-600">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
+        <p className="text-sm sm:text-base text-gray-600">
           Visão geral das métricas de {user?.tenant?.name}
         </p>
       </div>
 
       {/* ==================== LINHA 1: CARDS PRINCIPAIS ==================== */}
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 sm:grid-cols-2 lg:grid-cols-3">
         
         {/* 🆕 CARD 1: Mensagens (Modificado) */}
         <Card>

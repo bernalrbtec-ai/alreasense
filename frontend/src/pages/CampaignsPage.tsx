@@ -3,7 +3,7 @@ import { Plus, Search, Send, Pause, Play, Edit, Trash2, Users, TrendingUp, Copy,
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
-import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
+import { showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import { api } from '../lib/api'
 import CampaignWizardModal from '../components/campaigns/CampaignWizardModal'
 
@@ -398,64 +398,63 @@ const CampaignsPage: React.FC = () => {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">📤 Campanhas</h1>
-          <p className="text-gray-600">Gerencie suas campanhas de disparo em massa</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">📤 Campanhas</h1>
+          <p className="text-sm sm:text-base text-gray-600">Gerencie suas campanhas de disparo em massa</p>
         </div>
-        <Button onClick={() => setShowModal(true)}>
+        <Button onClick={() => setShowModal(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
           Nova Campanha
         </Button>
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="Buscar campanhas..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
-          </div>
+      <div className="space-y-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <Input
+            placeholder="Buscar campanhas..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10 w-full"
+          />
         </div>
       </div>
 
       {/* Lista de Campanhas */}
       <div className="grid gap-4">
         {filteredCampaigns.map((campaign) => (
-          <Card key={campaign.id} className="p-6">
-            <div className="flex justify-between items-start mb-4">
+          <Card key={campaign.id} className="p-4 sm:p-6">
+            <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-4 mb-4">
               <div className="flex-1">
-                <div className="flex items-center gap-3 mb-2">
-                  <h3 className="text-lg font-semibold text-gray-900">{campaign.name}</h3>
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${getStatusColor(campaign.status)}`}>
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2">
+                  <h3 className="text-base sm:text-lg font-semibold text-gray-900">{campaign.name}</h3>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full w-fit ${getStatusColor(campaign.status)}`}>
                     {campaign.status_display}
                   </span>
                 </div>
-                <p className="text-gray-600 mb-3">{campaign.description}</p>
+                <p className="text-sm sm:text-base text-gray-600 mb-3">{campaign.description}</p>
                 
-                <div className="flex gap-4 text-sm text-gray-600">
+                <div className="flex flex-wrap gap-3 sm:gap-4 text-xs sm:text-sm text-gray-600">
                   <div className="flex items-center gap-1">
-                    <Users className="h-4 w-4" />
+                    <Users className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span>{campaign.instances_detail?.length || 0} instâncias</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <Send className="h-4 w-4" />
+                    <Send className="h-3 w-3 sm:h-4 sm:w-4" />
                     <span>{campaign.messages?.length || 0} mensagens</span>
                   </div>
                   <div className="flex items-center gap-1">
-                    <TrendingUp className="h-4 w-4" />
-                    <span>{campaign.rotation_mode_display}</span>
+                    <TrendingUp className="h-3 w-3 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">{campaign.rotation_mode_display}</span>
+                    <span className="sm:hidden">Rotação</span>
                   </div>
                 </div>
               </div>
               
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {/* Iniciar - só para draft/scheduled */}
                 {(campaign.status === 'draft' || campaign.status === 'scheduled') && (
                   <Button 
@@ -584,37 +583,37 @@ const CampaignsPage: React.FC = () => {
                 </div>
 
                 {/* Estatísticas Detalhadas */}
-                <div className="grid grid-cols-5 gap-3 pt-2 border-t">
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 pt-2 border-t">
                   <div className="text-center">
-                    <div className="text-lg font-bold text-blue-600">
+                    <div className="text-base sm:text-lg font-bold text-blue-600">
                       {campaign.messages_sent || 0}
                     </div>
                     <div className="text-xs text-gray-500">Enviadas</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-lg font-bold text-green-600">
+                    <div className="text-base sm:text-lg font-bold text-green-600">
                       {campaign.messages_delivered || 0}
                     </div>
                     <div className="text-xs text-gray-500">Entregues</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-lg font-bold text-teal-600">
+                    <div className="text-base sm:text-lg font-bold text-teal-600">
                       {campaign.messages_read || 0}
                     </div>
                     <div className="text-xs text-gray-500">Lidas</div>
                   </div>
                   
                   <div className="text-center">
-                    <div className="text-lg font-bold text-red-600">
+                    <div className="text-base sm:text-lg font-bold text-red-600">
                       {campaign.messages_failed || 0}
                     </div>
                     <div className="text-xs text-gray-500">Falhas</div>
                   </div>
                   
-                  <div className="text-center">
-                    <div className={`text-lg font-bold ${
+                  <div className="text-center col-span-2 sm:col-span-1">
+                    <div className={`text-base sm:text-lg font-bold ${
                       campaign.messages_sent > 0 
                         ? `text-green-600` 
                         : 'text-gray-400'
@@ -695,34 +694,34 @@ const CampaignsPage: React.FC = () => {
 
       {/* Modal de Logs */}
       {showLogsModal && selectedCampaignForLogs && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white">
-              <div>
-                <h2 className="text-xl font-bold">Logs da Campanha</h2>
-                <p className="text-sm text-gray-500">{selectedCampaignForLogs.name}</p>
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-2 sm:p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-3 sm:p-4 border-b sticky top-0 bg-white z-10">
+              <div className="flex-1 min-w-0">
+                <h2 className="text-lg sm:text-xl font-bold truncate">Logs da Campanha</h2>
+                <p className="text-xs sm:text-sm text-gray-500 truncate">{selectedCampaignForLogs.name}</p>
               </div>
-              <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600">
-                <X className="h-6 w-6" />
+              <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
+                <X className="h-5 w-5 sm:h-6 sm:w-6" />
               </button>
             </div>
 
-            <div className="p-4">
+            <div className="p-3 sm:p-4">
               {logs.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
+                <div className="text-center py-6 sm:py-8 text-gray-500">
                   Nenhum log encontrado
                 </div>
               ) : (
-                <div className="space-y-2">
+                <div className="space-y-2 sm:space-y-3">
                   {logs.map((log, idx) => {
-                    const severityColors = {
+                    const severityColors: Record<string, string> = {
                       'info': 'bg-blue-50 border-blue-200 text-blue-900',
                       'warning': 'bg-yellow-50 border-yellow-200 text-yellow-900',
                       'error': 'bg-red-50 border-red-200 text-red-900',
                       'critical': 'bg-red-100 border-red-300 text-red-950'
                     }
                     
-                    const severityIcons = {
+                    const severityIcons: Record<string, string> = {
                       'info': '📘',
                       'warning': '⚠️',
                       'error': '❌',
@@ -769,8 +768,8 @@ const CampaignsPage: React.FC = () => {
               )}
             </div>
 
-            <div className="p-4 border-t bg-gray-50 flex justify-end">
-              <Button onClick={() => setShowLogsModal(false)}>
+            <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-end">
+              <Button onClick={() => setShowLogsModal(false)} size="sm" className="w-full sm:w-auto">
                 Fechar
               </Button>
             </div>

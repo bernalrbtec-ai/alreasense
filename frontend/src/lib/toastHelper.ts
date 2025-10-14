@@ -8,7 +8,7 @@
 
 import { toast } from 'sonner'
 
-type Action = 'criar' | 'atualizar' | 'excluir' | 'salvar' | 'carregar' | 'importar' | 'exportar' | 'conectar' | 'desconectar' | 'testar'
+type Action = 'criar' | 'atualizar' | 'excluir' | 'salvar' | 'carregar' | 'importar' | 'exportar' | 'conectar' | 'desconectar' | 'testar' | 'buscar' | 'iniciar' | 'pausar' | 'retomar' | 'cancelar' | 'duplicar'
 type Entity = string // 'Cliente', 'Produto', 'Contato', 'Instância', etc
 
 /**
@@ -26,6 +26,12 @@ export function showSuccessToast(action: Action, entity: Entity) {
     conectar: `✅ ${entity} conectado com sucesso!`,
     desconectar: `✅ ${entity} desconectado com sucesso!`,
     testar: `✅ Teste de ${entity} realizado com sucesso!`,
+    buscar: `✅ ${entity} encontrado com sucesso!`,
+    iniciar: `✅ ${entity} iniciado com sucesso!`,
+    pausar: `✅ ${entity} pausado com sucesso!`,
+    retomar: `✅ ${entity} retomado com sucesso!`,
+    cancelar: `✅ ${entity} cancelado com sucesso!`,
+    duplicar: `✅ ${entity} duplicado com sucesso!`,
   }
 
   toast.success(messages[action] || `✅ ${action} realizado com sucesso!`)
@@ -45,17 +51,19 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
     if (typeof data === 'string') {
       errorMessage = data
     } else if (data.detail) {
-      errorMessage = data.detail
+      errorMessage = Array.isArray(data.detail) ? data.detail[0] : data.detail
     } else if (data.message) {
-      errorMessage = data.message
+      errorMessage = Array.isArray(data.message) ? data.message[0] : data.message
     } else if (data.error) {
-      errorMessage = data.error
+      errorMessage = Array.isArray(data.error) ? data.error[0] : data.error
     } else if (data.phone) {
       errorMessage = Array.isArray(data.phone) ? data.phone[0] : data.phone
     } else if (data.email) {
       errorMessage = Array.isArray(data.email) ? data.email[0] : data.email
     } else if (data.name) {
       errorMessage = Array.isArray(data.name) ? data.name[0] : data.name
+    } else if (data.non_field_errors) {
+      errorMessage = Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : data.non_field_errors
     } else {
       // Pegar primeiro erro encontrado
       const firstKey = Object.keys(data)[0]
@@ -66,6 +74,13 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
     }
   } else if (error?.message) {
     errorMessage = error.message
+  } else if (error?.toString) {
+    errorMessage = error.toString()
+  }
+  
+  // Fallback se ainda estiver vazio
+  if (!errorMessage || errorMessage.trim() === '') {
+    errorMessage = 'Erro desconhecido'
   }
 
   const baseMessages: Record<Action, string> = {
@@ -79,6 +94,12 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
     conectar: `Erro ao conectar ${entity}`,
     desconectar: `Erro ao desconectar ${entity}`,
     testar: `Erro ao testar ${entity}`,
+    buscar: `Erro ao buscar ${entity}`,
+    iniciar: `Erro ao iniciar ${entity}`,
+    pausar: `Erro ao pausar ${entity}`,
+    retomar: `Erro ao retomar ${entity}`,
+    cancelar: `Erro ao cancelar ${entity}`,
+    duplicar: `Erro ao duplicar ${entity}`,
   }
 
   const baseMessage = baseMessages[action] || `Erro ao ${action} ${entity}`
@@ -102,6 +123,12 @@ export function showLoadingToast(action: Action, entity: Entity): string | numbe
     conectar: `Conectando ${entity}...`,
     desconectar: `Desconectando ${entity}...`,
     testar: `Testando ${entity}...`,
+    buscar: `Buscando ${entity}...`,
+    iniciar: `Iniciando ${entity}...`,
+    pausar: `Pausando ${entity}...`,
+    retomar: `Retomando ${entity}...`,
+    cancelar: `Cancelando ${entity}...`,
+    duplicar: `Duplicando ${entity}...`,
   }
 
   return toast.loading(messages[action] || `Processando ${entity}...`)
@@ -122,6 +149,12 @@ export function updateToastSuccess(toastId: string | number, action: Action, ent
     conectar: `✅ ${entity} conectado com sucesso!`,
     desconectar: `✅ ${entity} desconectado com sucesso!`,
     testar: `✅ Teste de ${entity} realizado com sucesso!`,
+    buscar: `✅ ${entity} encontrado com sucesso!`,
+    iniciar: `✅ ${entity} iniciado com sucesso!`,
+    pausar: `✅ ${entity} pausado com sucesso!`,
+    retomar: `✅ ${entity} retomado com sucesso!`,
+    cancelar: `✅ ${entity} cancelado com sucesso!`,
+    duplicar: `✅ ${entity} duplicado com sucesso!`,
   }
 
   toast.success(messages[action], { id: toastId })
@@ -141,17 +174,19 @@ export function updateToastError(toastId: string | number, action: Action, entit
     if (typeof data === 'string') {
       errorMessage = data
     } else if (data.detail) {
-      errorMessage = data.detail
+      errorMessage = Array.isArray(data.detail) ? data.detail[0] : data.detail
     } else if (data.message) {
-      errorMessage = data.message
+      errorMessage = Array.isArray(data.message) ? data.message[0] : data.message
     } else if (data.error) {
-      errorMessage = data.error
+      errorMessage = Array.isArray(data.error) ? data.error[0] : data.error
     } else if (data.phone) {
       errorMessage = Array.isArray(data.phone) ? data.phone[0] : data.phone
     } else if (data.email) {
       errorMessage = Array.isArray(data.email) ? data.email[0] : data.email
     } else if (data.name) {
       errorMessage = Array.isArray(data.name) ? data.name[0] : data.name
+    } else if (data.non_field_errors) {
+      errorMessage = Array.isArray(data.non_field_errors) ? data.non_field_errors[0] : data.non_field_errors
     } else {
       // Pegar primeiro erro encontrado
       const firstKey = Object.keys(data)[0]
@@ -162,6 +197,13 @@ export function updateToastError(toastId: string | number, action: Action, entit
     }
   } else if (error?.message) {
     errorMessage = error.message
+  } else if (error?.toString) {
+    errorMessage = error.toString()
+  }
+  
+  // Fallback se ainda estiver vazio
+  if (!errorMessage || errorMessage.trim() === '') {
+    errorMessage = 'Erro desconhecido'
   }
 
   const baseMessages: Record<Action, string> = {
@@ -175,6 +217,12 @@ export function updateToastError(toastId: string | number, action: Action, entit
     conectar: `Erro ao conectar ${entity}`,
     desconectar: `Erro ao desconectar ${entity}`,
     testar: `Erro ao testar ${entity}`,
+    buscar: `Erro ao buscar ${entity}`,
+    iniciar: `Erro ao iniciar ${entity}`,
+    pausar: `Erro ao pausar ${entity}`,
+    retomar: `Erro ao retomar ${entity}`,
+    cancelar: `Erro ao cancelar ${entity}`,
+    duplicar: `Erro ao duplicar ${entity}`,
   }
 
   const baseMessage = baseMessages[action]

@@ -1,24 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
+import { Select } from '../components/ui/select';
 import { 
   Bell, 
   Search, 
   Filter, 
   MessageSquare, 
   Check, 
-  Clock,
-  User,
   Phone,
   Calendar,
   Reply,
-  Eye,
-  MoreHorizontal
+  Eye
 } from 'lucide-react';
-import { useToast } from '../hooks/useToast';
 import { useNotifications } from '../hooks/useNotifications';
 
 interface Notification {
@@ -55,7 +51,6 @@ export default function NotificationsPage() {
     "Obrigado! Vamos processar sua solicitação o mais rápido possível."
   ];
   
-  const { toast } = useToast();
   const { 
     notifications, 
     stats, 
@@ -129,20 +124,20 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Bell className="h-8 w-8" />
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold flex items-center gap-2">
+            <Bell className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
             Notificações
           </h1>
-          <p className="text-muted-foreground">
+          <p className="text-sm sm:text-base text-muted-foreground">
             Gerencie respostas e interações das suas campanhas
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
           <div className="text-right">
             <div className="text-2xl font-bold text-blue-600">
               {stats.unread_count}
@@ -169,7 +164,7 @@ export default function NotificationsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div className="relative">
               <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
               <Input
@@ -180,30 +175,20 @@ export default function NotificationsPage() {
               />
             </div>
             
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
-                <SelectItem value="unread">Não lidas</SelectItem>
-                <SelectItem value="read">Lidas</SelectItem>
-                <SelectItem value="replied">Respondidas</SelectItem>
-              </SelectContent>
+            <Select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="all">Todos os status</option>
+              <option value="unread">Não lidas</option>
+              <option value="read">Lidas</option>
+              <option value="replied">Respondidas</option>
             </Select>
             
-            <Select value={campaignFilter} onValueChange={setCampaignFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Campanha" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as campanhas</SelectItem>
-                {uniqueCampaigns.map(campaign => (
-                  <SelectItem key={campaign} value={campaign}>
-                    {campaign}
-                  </SelectItem>
-                ))}
-              </SelectContent>
+            <Select value={campaignFilter} onChange={(e) => setCampaignFilter(e.target.value)}>
+              <option value="all">Todas as campanhas</option>
+              {uniqueCampaigns.map(campaign => (
+                <option key={campaign} value={campaign}>
+                  {campaign}
+                </option>
+              ))}
             </Select>
             
             <Button variant="outline" onClick={fetchNotifications}>

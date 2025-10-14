@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 
 
@@ -63,8 +64,24 @@ class Campaign(models.Model):
     )
     
     # Configurações de envio
-    interval_min = models.IntegerField(default=25, verbose_name='Intervalo Mínimo (seg)')
-    interval_max = models.IntegerField(default=50, verbose_name='Intervalo Máximo (seg)')
+    interval_min = models.IntegerField(
+        default=25, 
+        verbose_name='Intervalo Mínimo (seg)',
+        validators=[
+            MinValueValidator(20, message="Intervalo mínimo deve ser pelo menos 20 segundos"),
+            MaxValueValidator(420, message="Intervalo máximo deve ser no máximo 420 segundos")
+        ],
+        help_text="Intervalo mínimo entre mensagens (20-420 segundos)"
+    )
+    interval_max = models.IntegerField(
+        default=50, 
+        verbose_name='Intervalo Máximo (seg)',
+        validators=[
+            MinValueValidator(20, message="Intervalo mínimo deve ser pelo menos 20 segundos"),
+            MaxValueValidator(420, message="Intervalo máximo deve ser no máximo 420 segundos")
+        ],
+        help_text="Intervalo máximo entre mensagens (20-420 segundos)"
+    )
     daily_limit_per_instance = models.IntegerField(
         default=100, 
         verbose_name='Limite Diário por Instância'
@@ -211,6 +228,23 @@ class Campaign(models.Model):
                 self.next_instance_name = None
             
             self.save(update_fields=['next_contact_name', 'next_contact_phone', 'next_instance_name'])
+    
+    def clean(self):
+        """Validação adicional do modelo"""
+        from django.core.exceptions import ValidationError
+        
+        # Validar que interval_min <= interval_max
+        if self.interval_min > self.interval_max:
+            raise ValidationError({
+                'interval_min': 'Intervalo mínimo não pode ser maior que o máximo.',
+                'interval_max': 'Intervalo máximo não pode ser menor que o mínimo.'
+            })
+        
+        # Validar que interval_max <= 420 (limite de timeout)
+        if self.interval_max > 420:
+            raise ValidationError({
+                'interval_max': 'Intervalo máximo deve ser no máximo 420 segundos para evitar timeouts.'
+            })
 
 
 class CampaignMessage(models.Model):
@@ -825,101 +859,102 @@ class CampaignLog(models.Model):
         )
 
 
-class CampaignNotification(models.Model):
-    """
-    Notificações de respostas de contatos em campanhas
-    """
-    NOTIFICATION_TYPES = [
-        ('response', 'Resposta do Contato'),
-        ('delivery', 'Entrega Confirmada'),
-        ('read', 'Mensagem Lida'),
-    ]
-    
-    STATUS_CHOICES = [
-        ('unread', 'Não Lida'),
-        ('read', 'Lida'),
-        ('replied', 'Respondida'),
-    ]
+# Temporariamente comentado para resolver problema de migração
+# class CampaignNotification(models.Model):
+#     """
+#     Notificações de respostas de contatos em campanhas
+#     """
+#     NOTIFICATION_TYPES = [
+#         ('response', 'Resposta do Contato'),
+#         ('delivery', 'Entrega Confirmada'),
+#         ('read', 'Mensagem Lida'),
+#     ]
+#     
+#     STATUS_CHOICES = [
+#         ('unread', 'Não Lida'),
+#         ('read', 'Lida'),
+#         ('replied', 'Respondida'),
+#     ]
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     tenant = models.ForeignKey('tenancy.Tenant', on_delete=models.CASCADE, related_name='campaign_notifications')
     campaign = models.ForeignKey('campaigns.Campaign', on_delete=models.CASCADE, related_name='notifications')
     contact = models.ForeignKey('contacts.Contact', on_delete=models.CASCADE, related_name='campaign_notifications')
     campaign_contact = models.ForeignKey('campaigns.CampaignContact', on_delete=models.CASCADE, related_name='notifications')
-    instance = models.ForeignKey('notifications.WhatsAppInstance', on_delete=models.CASCADE, related_name='notifications')
+#     instance = models.ForeignKey('notifications.WhatsAppInstance', on_delete=models.CASCADE, related_name='notifications')
+#     
+#     # Dados da notificação
+#     notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES, default='response')
+#     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='unread')
     
-    # Dados da notificação
-    notification_type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES, default='response')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='unread')
-    
-    # Mensagem recebida
-    received_message = models.TextField(help_text="Mensagem recebida do contato")
-    received_timestamp = models.DateTimeField(auto_now_add=True)
-    
-    # Resposta enviada (se houver)
-    sent_reply = models.TextField(blank=True, null=True, help_text="Resposta enviada pelo usuário")
-    sent_timestamp = models.DateTimeField(blank=True, null=True)
-    sent_by = models.ForeignKey('authn.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_replies')
-    
-    # Metadados
-    whatsapp_message_id = models.CharField(max_length=255, blank=True, null=True)
-    details = models.JSONField(default=dict, blank=True)
-    
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    class Meta:
-        db_table = 'campaigns_notification'
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['tenant', 'status', 'created_at']),
-            models.Index(fields=['campaign', 'created_at']),
-            models.Index(fields=['contact', 'created_at']),
-        ]
-    
-    def __str__(self):
-        return f"{self.contact.name} - {self.campaign.name} ({self.get_status_display()})"
-    
-    def mark_as_read(self, user=None):
-        """Marca notificação como lida"""
-        self.status = 'read'
-        self.save(update_fields=['status', 'updated_at'])
-        
-        # Log da ação
-        CampaignLog.log_notification_read(
-            campaign=self.campaign,
-            contact=self.contact,
-            notification=self,
-            user=user
-        )
-    
-    def mark_as_replied(self, reply_message, user):
-        """Marca notificação como respondida"""
-        from django.utils import timezone
-        self.status = 'replied'
-        self.sent_reply = reply_message
-        self.sent_timestamp = timezone.now()
-        self.sent_by = user
-        self.save(update_fields=['status', 'sent_reply', 'sent_timestamp', 'sent_by', 'updated_at'])
-        
-        # Log da resposta
-        CampaignLog.log_notification_reply(
-            campaign=self.campaign,
-            contact=self.contact,
-            notification=self,
-            reply_message=reply_message,
-            user=user
-        )
-    
-    def mark_as_failed(self, user, error_message=None):
-        """Marca notificação como falhou ao responder"""
-        from django.utils import timezone
-        self.status = 'read'  # Volta para read se falhou
-        self.save(update_fields=['status', 'updated_at'])
-        
-        # Log do erro
-        CampaignLog.log_error(
-            campaign=self.campaign,
-            error_msg=f"Falha ao enviar resposta para {self.contact.name}: {error_message or 'Erro desconhecido'}"
-        )
+#     # Mensagem recebida
+#     received_message = models.TextField(help_text="Mensagem recebida do contato")
+#     received_timestamp = models.DateTimeField(auto_now_add=True)
+#     
+#     # Resposta enviada (se houver)
+#     sent_reply = models.TextField(blank=True, null=True, help_text="Resposta enviada pelo usuário")
+#     sent_timestamp = models.DateTimeField(blank=True, null=True)
+#     sent_by = models.ForeignKey('authn.User', on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_replies')
+#     
+#     # Metadados
+#     whatsapp_message_id = models.CharField(max_length=255, blank=True, null=True)
+#     details = models.JSONField(default=dict, blank=True)
+#     
+#     # Timestamps
+#     created_at = models.DateTimeField(auto_now_add=True)
+#     updated_at = models.DateTimeField(auto_now=True)
+#     
+#     class Meta:
+#         db_table = 'campaigns_notification'
+#         ordering = ['-created_at']
+#         indexes = [
+#             models.Index(fields=['tenant', 'status', 'created_at']),
+#             models.Index(fields=['campaign', 'created_at']),
+#             models.Index(fields=['contact', 'created_at']),
+#         ]
+#     
+#     def __str__(self):
+#         return f"{self.contact.name} - {self.campaign.name} ({self.get_status_display()})"
+#     
+#     def mark_as_read(self, user=None):
+#         """Marca notificação como lida"""
+#         self.status = 'read'
+#         self.save(update_fields=['status', 'updated_at'])
+#         
+#         # Log da ação
+#         CampaignLog.log_notification_read(
+#             campaign=self.campaign,
+#             contact=self.contact,
+#             notification=self,
+#             user=user
+#         )
+#     
+#     def mark_as_replied(self, reply_message, user):
+#         """Marca notificação como respondida"""
+#         from django.utils import timezone
+#         self.status = 'replied'
+#         self.sent_reply = reply_message
+#         self.sent_timestamp = timezone.now()
+#         self.sent_by = user
+#         self.save(update_fields=['status', 'sent_reply', 'sent_timestamp', 'sent_by', 'updated_at'])
+#         
+#         # Log da resposta
+#         CampaignLog.log_notification_reply(
+#             campaign=self.campaign,
+#             contact=self.contact,
+#             notification=self,
+#             reply_message=reply_message,
+#             user=user
+#         )
+#     
+#     def mark_as_failed(self, user, error_message=None):
+#         """Marca notificação como falhou ao responder"""
+#         from django.utils import timezone
+#         self.status = 'read'  # Volta para read se falhou
+#         self.save(update_fields=['status', 'updated_at'])
+#         
+#         # Log do erro
+#         CampaignLog.log_error(
+#             campaign=self.campaign,
+#             error_msg=f"Falha ao enviar resposta para {self.contact.name}: {error_message or 'Erro desconhecido'}"
+#         )

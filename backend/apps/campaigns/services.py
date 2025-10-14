@@ -488,6 +488,17 @@ class CampaignSender:
                     print(f"   🎯 Último contato enviado! Campanha será completada após este lote...")
                     results['completed'] = True  # Marcar como completada (não skipped)
                     break  # Parar o lote imediatamente após último contato
+                
+                # ⚠️ TIMEOUT PROTECTION: Verificar se próxima mensagem deve aguardar
+                if self.campaign.next_message_scheduled_at:
+                    from django.utils import timezone
+                    now = timezone.now()
+                    if self.campaign.next_message_scheduled_at > now:
+                        wait_seconds = (self.campaign.next_message_scheduled_at - now).total_seconds()
+                        if wait_seconds > 30:  # Se precisa aguardar mais de 30s, pausar lote
+                            print(f"   ⏰ Próxima mensagem agendada em {wait_seconds:.0f}s, pausando lote")
+                            results['skipped'] = 1
+                            break
                     
             elif "pendente" in message.lower() or "disponível" in message.lower():
                 results['skipped'] += 1
