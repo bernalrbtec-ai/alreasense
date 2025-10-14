@@ -225,11 +225,12 @@ class ContactViewSet(viewsets.ModelViewSet):
                     pass
             
             # Disparar task assíncrona
-            process_contact_import_async.delay(
-                import_id=str(import_record.id),
-                tenant_id=str(request.user.tenant.id),
-                user_id=str(request.user.id)
-            )
+            # process_contact_import_async.delay(  # Removido - Celery deletado
+            #     import_id=str(import_record.id),
+            #     tenant_id=str(request.user.tenant.id),
+            #     user_id=str(request.user.id)
+            # )
+            # TODO: Implementar com RabbitMQ
             
             return Response({
                 'status': 'processing',

@@ -61,7 +61,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
         
         # Disparar task Celery para processar campanha
         # from .tasks import process_campaign  # Removido - Celery deletado
-        process_campaign.delay(str(campaign.id))
+        # process_campaign.delay(str(campaign.id))  # TODO: Implementar com RabbitMQ
         
         return Response({
             'message': 'Campanha iniciada com sucesso',
@@ -114,12 +114,12 @@ class CampaignViewSet(viewsets.ModelViewSet):
             
             # Disparar task Celery novamente para continuar processamento
             # from .tasks import process_campaign  # Removido - Celery deletado
-            task_result = process_campaign.delay(str(campaign.id))
+            # task_result = process_campaign.delay(str(campaign.id))  # TODO: Implementar com RabbitMQ
             
             return Response({
                 'message': f'Campanha "{campaign.name}" retomada com sucesso',
                 'status': campaign.status,
-                'task_id': task_result.id,
+                'task_id': 'rabbitmq_implementation_pending',
                 'success': True
             })
             
