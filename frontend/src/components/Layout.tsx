@@ -40,6 +40,9 @@ const productMenuItems = {
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'sense' },
     { name: 'Experimentos', href: '/experiments', icon: FlaskConical, requiredProduct: 'sense' },
   ],
+  notifications: [
+    { name: 'Notificações', href: '/admin/notifications', icon: Bell, requiredProduct: 'notifications' },
+  ],
   api_public: [
     { name: 'API Docs', href: '/api-docs', icon: Server, requiredProduct: 'api_public' },
   ],
@@ -58,7 +61,6 @@ const adminNavigation = [
   { name: 'Status do Sistema', href: '/admin/system', icon: Activity },
   { name: 'Servidor de Instância', href: '/admin/evolution', icon: Server },
   { name: 'Monitoramento Webhooks', href: '/admin/webhook-monitoring', icon: Database },
-  { name: 'Notificações', href: '/admin/notifications', icon: Bell },
 ]
 
 interface LayoutProps {
