@@ -49,7 +49,7 @@ class WebhookMonitoringAdminMixin:
                 name='connections_evolutionconnection_webhook_distribution_api',
             ),
         ]
-            return custom_urls + urls
+        return custom_urls + urls
     
     @method_decorator(user_passes_test(is_superuser))
     @require_http_methods(["GET"])
