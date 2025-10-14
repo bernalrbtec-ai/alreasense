@@ -578,8 +578,31 @@ class CampaignLog(models.Model):
         )
     
     @staticmethod
+    def log_message_delivered(campaign, instance, contact, campaign_contact):
+        """Log de mensagem entregue"""
+        from django.utils import timezone
+        
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='message_delivered',
+            severity='info',
+            message=f'Mensagem entregue para {contact.name}',
+            details={
+                'contact_id': str(contact.id),
+                'contact_phone': contact.phone,
+                'delivered_at': timezone.now().isoformat(),
+                'whatsapp_message_id': campaign_contact.whatsapp_message_id,
+            },
+            instance=instance,
+            contact=contact,
+            campaign_contact=campaign_contact
+        )
+    
+    @staticmethod
     def log_message_read(campaign, instance, contact, campaign_contact):
         """Log de mensagem lida"""
+        from django.utils import timezone
+        
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='message_read',
@@ -588,6 +611,9 @@ class CampaignLog(models.Model):
             details={
                 'contact_id': str(contact.id),
                 'contact_phone': contact.phone,
+                'read_at': timezone.now().isoformat(),
+                'delivered_at': campaign_contact.delivered_at.isoformat() if campaign_contact.delivered_at else None,
+                'whatsapp_message_id': campaign_contact.whatsapp_message_id,
             },
             instance=instance,
             contact=contact,
@@ -596,7 +622,7 @@ class CampaignLog(models.Model):
     
     @staticmethod
     def update_message_delivery_status(campaign_contact, status='delivered'):
-        """Atualiza o status de entrega no log de mensagem enviada"""
+        """Atualiza o status de entrega no log de mensagem enviada E cria log separado"""
         try:
             from django.utils import timezone
             
@@ -621,6 +647,22 @@ class CampaignLog(models.Model):
                     log.message = f'Mensagem enviada, entregue e lida por {log.contact.name if log.contact else "contato"}'
                 
                 log.save(update_fields=['message', 'details'])
+                
+                # 🆕 CRIAR LOG SEPARADO para o novo status (além de atualizar o original)
+                if status == 'delivered':
+                    CampaignLog.log_message_delivered(
+                        campaign=log.campaign,
+                        instance=log.instance,
+                        contact=log.contact,
+                        campaign_contact=campaign_contact
+                    )
+                elif status == 'read':
+                    CampaignLog.log_message_read(
+                        campaign=log.campaign,
+                        instance=log.instance,
+                        contact=log.contact,
+                        campaign_contact=campaign_contact
+                    )
                 
         except Exception as e:
             print(f"Erro ao atualizar status de entrega: {e}")
