@@ -187,13 +187,12 @@ if env_cors:
 print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False  # Keep False for security, use CORS_ALLOWED_ORIGINS
+CORS_ALLOW_ALL_ORIGINS = True  # Temporarily True to fix Railway CORS issue
 
 # Force CORS headers to be added to all responses
 CORS_PREFLIGHT_MAX_AGE = 86400
 
-# Ensure CORS headers are always present
-CORS_EXPOSE_HEADERS = ['content-type', 'x-requested-with']
+# Additional CORS settings for Railway
 CORS_ALLOW_HEADERS = [
     'accept',
     'accept-encoding',
@@ -205,6 +204,7 @@ CORS_ALLOW_HEADERS = [
     'x-csrftoken',
     'x-requested-with',
 ]
+
 CORS_ALLOW_METHODS = [
     'DELETE',
     'GET',
@@ -213,6 +213,9 @@ CORS_ALLOW_METHODS = [
     'POST',
     'PUT',
 ]
+
+# Ensure CORS headers are always present
+CORS_EXPOSE_HEADERS = ['content-type', 'x-requested-with']
 
 # CSRF Settings
 CSRF_TRUSTED_ORIGINS = config(
