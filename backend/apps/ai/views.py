@@ -3,7 +3,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from .tasks import analyze_message_async
+# from .tasks import analyze_message_async  # Removido - Celery deletado
 from apps.chat_messages.models import Message
 from apps.common.permissions import IsTenantMember, IsAdminUser
 
@@ -25,7 +25,7 @@ def analyze_message(request, message_id):
         )
     
     # Queue analysis task
-    analyze_message_async.delay(
+    # analyze_message_async.delay(  # Removido - Celery deletado
         tenant_id=str(request.user.tenant.id),
         message_id=message.id,
         is_shadow=False,
@@ -66,7 +66,7 @@ def analyze_batch(request):
     # Queue analysis tasks
     queued_count = 0
     for message in messages:
-        analyze_message_async.delay(
+        # analyze_message_async.delay(  # Removido - Celery deletado
             tenant_id=str(request.user.tenant.id),
             message_id=message.id,
             is_shadow=False,

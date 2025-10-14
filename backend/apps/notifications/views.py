@@ -406,18 +406,19 @@ class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):
             recipient = User.objects.get(id=recipient_id)
             
             # Import task to avoid circular dependency
-            from .tasks import send_notification_task
+            # from .tasks import send_notification_task  # Removido - Celery deletado
             
             # Queue notification task
-            task = send_notification_task.apply_async(
-                args=[str(template.id), recipient.id, context],
-                eta=scheduled_at
-            )
+            # task = send_notification_task.apply_async(
+            #     args=[str(template.id), recipient.id, context],
+            #     eta=scheduled_at
+            # )
+            # TODO: Implementar com RabbitMQ
             
             return Response({
                 'success': True,
                 'message': 'Notificação agendada para envio',
-                'task_id': task.id
+                'task_id': 'rabbitmq_implementation_pending'
             })
         
         except Exception as e:

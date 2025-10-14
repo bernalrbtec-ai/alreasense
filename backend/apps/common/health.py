@@ -4,7 +4,6 @@ Health check utilities for system status monitoring.
 import redis
 from django.db import connection
 from django.conf import settings
-from celery import current_app
 import requests
 
 
@@ -38,7 +37,13 @@ def check_database():
 def check_redis():
     """Check Redis connectivity."""
     try:
-        redis_url = settings.CELERY_BROKER_URL
+        redis_url = getattr(settings, 'REDIS_URL', None)
+        if not redis_url:
+            return {
+                'status': 'not_configured',
+                'message': 'Redis not configured'
+            }
+        
         r = redis.from_url(redis_url)
         r.ping()
         
@@ -56,35 +61,23 @@ def check_redis():
         }
 
 
-def check_celery():
-    """Check Celery worker status (optimized)."""
+def check_rabbitmq():
+    """Check RabbitMQ connectivity."""
     try:
-        inspect = current_app.control.inspect(timeout=1)  # Reduced timeout
-        stats = inspect.stats()
+        from apps.campaigns.rabbitmq_consumer import rabbitmq_consumer
         
-        if not stats:
-            return {
-                'status': 'unhealthy',
-                'error': 'No workers available'
-            }
-        
-        # Get active tasks with timeout
-        active = inspect.active()
-        active_tasks = 0
-        if active:
-            for worker_tasks in active.values():
-                active_tasks += len(worker_tasks)
+        # Check if consumer is running
+        active_campaigns = rabbitmq_consumer.get_active_campaigns()
         
         return {
             'status': 'healthy',
-            'workers': len(stats) if stats else 0,
-            'active_tasks': active_tasks,
+            'active_campaigns': len(active_campaigns),
+            'consumer_running': True,
         }
     except Exception as e:
-        # If Celery is not running, return unhealthy but don't crash
         return {
             'status': 'unhealthy',
-            'error': 'Celery not available (expected in Railway)'
+            'error': str(e)
         }
 
 
@@ -161,25 +154,25 @@ def get_system_health():
     """Get comprehensive system health status."""
     db_status = check_database()
     redis_status = check_redis()
-    celery_status = check_celery()
+    rabbitmq_status = check_rabbitmq()
     evolution_status = check_evolution_api()
     
     # Overall status is healthy only if all services are healthy
     overall_healthy = all([
         db_status.get('status') == 'healthy',
-        redis_status.get('status') == 'healthy',
+        rabbitmq_status.get('status') == 'healthy',
     ])
     
     return {
         'status': 'healthy' if overall_healthy else 'degraded',
         'database': db_status,
         'redis': redis_status,
-        'celery': celery_status,
+        'rabbitmq': rabbitmq_status,
         'evolution_api': evolution_status,
         'services': {
             'database': db_status.get('status'),
             'redis': redis_status.get('status'),
-            'celery': celery_status.get('status'),
+            'rabbitmq': rabbitmq_status.get('status'),
             'evolution_api': evolution_status.get('status'),
         }
     }

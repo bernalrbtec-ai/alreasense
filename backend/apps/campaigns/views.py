@@ -60,7 +60,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
         CampaignLog.log_campaign_started(campaign, request.user)
         
         # Disparar task Celery para processar campanha
-        from .tasks import process_campaign
+        # from .tasks import process_campaign  # Removido - Celery deletado
         process_campaign.delay(str(campaign.id))
         
         return Response({
@@ -113,7 +113,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
             CampaignLog.log_campaign_resumed(campaign, request.user)
             
             # Disparar task Celery novamente para continuar processamento
-            from .tasks import process_campaign
+            # from .tasks import process_campaign  # Removido - Celery deletado
             task_result = process_campaign.delay(str(campaign.id))
             
             return Response({
