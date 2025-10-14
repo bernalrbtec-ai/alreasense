@@ -234,10 +234,17 @@ CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [config('CHANNELS_REDIS_URL', default='redis://localhost:6379/1')],
+            'hosts': [config('REDIS_URL', default='redis://localhost:6379/1')],
         },
     },
 }
+
+# Redis
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
+REDIS_HOST = config('REDISHOST', default='localhost')
+REDIS_PORT = config('REDISPORT', default='6379')
+REDIS_USER = config('REDISUSER', default='default')
 
 # RabbitMQ
 RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
@@ -343,7 +350,11 @@ print("🚀 [SETTINGS] ==========================================")
 print(f"🔧 [SETTINGS] DEBUG: {DEBUG}")
 print(f"🔧 [SETTINGS] ALLOWED_HOSTS: {ALLOWED_HOSTS}")
 print(f"🔧 [SETTINGS] DATABASE: {DATABASES['default']['ENGINE']}")
-print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:20] if 'REDIS_URL' in locals() else 'Not configured'}...")
+print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:20] if REDIS_URL else 'Not configured'}...")
+print(f"🔧 [SETTINGS] REDIS_HOST: {REDIS_HOST}")
+print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
+print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
+print(f"🔧 [SETTINGS] REDIS_PASSWORD: {'***' if REDIS_PASSWORD else 'Not set'}")
 print(f"🔧 [SETTINGS] PAGE_SIZE: {REST_FRAMEWORK['PAGE_SIZE']}")
 print(f"🔧 [SETTINGS] PAGE_SIZE_MAX: {REST_FRAMEWORK.get('PAGE_SIZE_MAX', 'Not set')}")
 print(f"🔧 [SETTINGS] INSTALLED_APPS: {len(INSTALLED_APPS)} apps")

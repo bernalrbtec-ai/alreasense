@@ -174,6 +174,9 @@ CHANNEL_LAYERS = {
     },
 }
 
+# Redis
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+
 # Celery removido - usando RabbitMQ puro
 
 # Stripe

@@ -26,11 +26,12 @@ def analyze_message(request, message_id):
     
     # Queue analysis task
     # analyze_message_async.delay(  # Removido - Celery deletado
-        tenant_id=str(request.user.tenant.id),
-        message_id=message.id,
-        is_shadow=False,
-        run_id="manual"
-    )
+    #     tenant_id=str(request.user.tenant.id),
+    #     message_id=message.id,
+    #     is_shadow=False,
+    #     run_id="manual"
+    # )
+    # TODO: Implementar com RabbitMQ
     
     return Response({
         'status': 'success',
@@ -67,11 +68,12 @@ def analyze_batch(request):
     queued_count = 0
     for message in messages:
         # analyze_message_async.delay(  # Removido - Celery deletado
-            tenant_id=str(request.user.tenant.id),
-            message_id=message.id,
-            is_shadow=False,
-            run_id="batch"
-        )
+        #     tenant_id=str(request.user.tenant.id),
+        #     message_id=message.id,
+        #     is_shadow=False,
+        #     run_id="batch"
+        # )
+        # TODO: Implementar com RabbitMQ
         queued_count += 1
     
     return Response({
