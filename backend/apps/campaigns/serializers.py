@@ -113,7 +113,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 is_active=True,
                 opted_out=False
             )
-            if tag_id:
         elif tag_id:
             # Buscar TODOS os contatos por tag (fallback se contact_ids não fornecido)
             contacts_to_add = Contact.objects.filter(
