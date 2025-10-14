@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Send, Pause, Play, Edit, Trash2, Users, TrendingUp, Copy, FileText, Clock, X, AlertCircle } from 'lucide-react'
+import { Plus, Search, Send, Pause, Play, Edit, Trash2, Users, TrendingUp, Copy, FileText, Clock, X, AlertCircle, CheckCircle, Eye, MessageSquare, Phone, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
@@ -143,6 +143,283 @@ const NextMessageCountdown: React.FC<{
         </div>
       )}
     </div>
+  )
+}
+
+// Componente para exibir logs unificados por contato
+  const ContactLogCard: React.FC<{ contactGroup: any }> = ({ contactGroup }) => {
+    const [isExpanded, setIsExpanded] = useState(false)
+    
+    // Função para calcular tempo de entrega
+    const getDeliveryTime = (messageEvent: any, events: any[]) => {
+      const deliveredEvent = events.find((e: any) => e.log_type === 'message_delivered')
+      if (deliveredEvent) {
+        const sentTime = new Date(messageEvent.created_at).getTime()
+        const deliveredTime = new Date(deliveredEvent.created_at).getTime()
+        const diffMs = deliveredTime - sentTime
+        const diffSeconds = Math.round(diffMs / 1000)
+        
+        if (diffSeconds < 60) {
+          return `${diffSeconds}s`
+        } else if (diffSeconds < 3600) {
+          const minutes = Math.floor(diffSeconds / 60)
+          const seconds = diffSeconds % 60
+          return `${minutes}m ${seconds}s`
+        } else {
+          const hours = Math.floor(diffSeconds / 3600)
+          const minutes = Math.floor((diffSeconds % 3600) / 60)
+          return `${hours}h ${minutes}m`
+        }
+      }
+      return 'N/A'
+    }
+    
+    // Função para calcular tempo de visualização
+    const getReadTime = (messageEvent: any, events: any[]) => {
+      const readEvent = events.find((e: any) => e.log_type === 'message_read')
+      if (readEvent) {
+        const sentTime = new Date(messageEvent.created_at).getTime()
+        const readTime = new Date(readEvent.created_at).getTime()
+        const diffMs = readTime - sentTime
+        const diffSeconds = Math.round(diffMs / 1000)
+        
+        if (diffSeconds < 60) {
+          return `${diffSeconds}s`
+        } else if (diffSeconds < 3600) {
+          const minutes = Math.floor(diffSeconds / 60)
+          const seconds = diffSeconds % 60
+          return `${minutes}m ${seconds}s`
+        } else {
+          const hours = Math.floor(diffSeconds / 3600)
+          const minutes = Math.floor((diffSeconds % 3600) / 60)
+          return `${hours}h ${minutes}m`
+        }
+      }
+      return 'N/A'
+    }
+    
+    const getStatusInfo = (status: string) => {
+    switch (status) {
+      case 'read':
+        return { 
+          color: 'bg-green-100 text-green-800 border-green-200', 
+          icon: <Eye className="h-4 w-4" />, 
+          text: 'Lida' 
+        }
+      case 'delivered':
+        return { 
+          color: 'bg-blue-100 text-blue-800 border-blue-200', 
+          icon: <CheckCircle className="h-4 w-4" />, 
+          text: 'Entregue' 
+        }
+      case 'sent':
+        return { 
+          color: 'bg-yellow-100 text-yellow-800 border-yellow-200', 
+          icon: <Send className="h-4 w-4" />, 
+          text: 'Enviada' 
+        }
+      case 'failed':
+        return { 
+          color: 'bg-red-100 text-red-800 border-red-200', 
+          icon: <X className="h-4 w-4" />, 
+          text: 'Falhou' 
+        }
+      default:
+        return { 
+          color: 'bg-gray-100 text-gray-800 border-gray-200', 
+          icon: <Clock className="h-4 w-4" />, 
+          text: 'Pendente' 
+        }
+    }
+  }
+  
+  const getEventIcon = (logType: string) => {
+    switch (logType) {
+      case 'message_sent':
+        return <Send className="h-3 w-3 text-blue-600" />
+      case 'message_delivered':
+        return <CheckCircle className="h-3 w-3 text-green-600" />
+      case 'message_read':
+        return <Eye className="h-3 w-3 text-purple-600" />
+      case 'message_failed':
+        return <X className="h-3 w-3 text-red-600" />
+      default:
+        return <MessageSquare className="h-3 w-3 text-gray-600" />
+    }
+  }
+  
+  const getEventColor = (logType: string) => {
+    switch (logType) {
+      case 'message_sent':
+        return 'bg-blue-50 border-blue-200'
+      case 'message_delivered':
+        return 'bg-green-50 border-green-200'
+      case 'message_read':
+        return 'bg-purple-50 border-purple-200'
+      case 'message_failed':
+        return 'bg-red-50 border-red-200'
+      default:
+        return 'bg-gray-50 border-gray-200'
+    }
+  }
+  
+  const statusInfo = getStatusInfo(contactGroup.status)
+  const messageEvent = contactGroup.events.find((e: any) => e.details?.message_content)
+  
+  return (
+    <Card className="overflow-hidden">
+      {/* Header do Contato */}
+      <div className="p-3 sm:p-4 border-b bg-gray-50">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
+              <Phone className="h-4 w-4 text-gray-500 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-gray-900 truncate">{contactGroup.contact_name}</h3>
+                <p className="text-sm text-gray-600 truncate">{contactGroup.contact_phone}</p>
+              </div>
+            </div>
+            <div className="hidden sm:flex items-center gap-2">
+              <span className="text-xs text-gray-500">📱 {contactGroup.instance_name}</span>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between sm:justify-end gap-3">
+            {/* Status Badge */}
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium border ${statusInfo.color}`}>
+              {statusInfo.icon}
+              <span className="hidden sm:inline">{statusInfo.text}</span>
+            </div>
+            
+            {/* Botão Expandir */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="h-8 w-8 p-0 flex-shrink-0"
+            >
+              {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+        
+        {/* Resumo da Timeline */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 sm:gap-4 text-xs text-gray-600">
+          <span className="flex items-center gap-1">
+            <span>🕐</span>
+            <span className="hidden sm:inline">{new Date(contactGroup.first_event).toLocaleString('pt-BR')}</span>
+            <span className="sm:hidden">{new Date(contactGroup.first_event).toLocaleDateString('pt-BR')}</span>
+          </span>
+          <span className="hidden sm:inline">•</span>
+          <span className="flex items-center gap-1">
+            <span>📊</span>
+            <span>{contactGroup.events.length} evento{contactGroup.events.length !== 1 ? 's' : ''}</span>
+          </span>
+          {messageEvent && (
+            <>
+              <span className="hidden sm:inline">•</span>
+              <span className="text-blue-600 flex items-center gap-1">
+                <span>💬</span>
+                <span className="hidden sm:inline">Mensagem incluída</span>
+                <span className="sm:hidden">Msg</span>
+              </span>
+            </>
+          )}
+          <span className="sm:hidden text-gray-500">📱 {contactGroup.instance_name}</span>
+        </div>
+      </div>
+      
+      {/* Timeline Expandida */}
+      {isExpanded && (
+        <div className="p-3 sm:p-4 space-y-3">
+                   {/* Mensagem (se houver) */}
+                   {messageEvent && (
+                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                       <div className="flex items-center gap-2 mb-2">
+                         <MessageSquare className="h-4 w-4 text-blue-600 flex-shrink-0" />
+                         <span className="font-medium text-blue-900">Mensagem Enviada</span>
+                       </div>
+                       <p className="text-sm text-blue-800 whitespace-pre-wrap break-words">
+                         {messageEvent.details.message_content}
+                       </p>
+                       
+                       {/* Status de Entrega e Visualização */}
+                       <div className="mt-3 pt-3 border-t border-blue-200">
+                         <div className="space-y-2 text-xs text-blue-700">
+                           {/* Linha principal: Enviada e Status */}
+                           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                             <span className="flex items-center gap-1">
+                               <span>📤</span>
+                               <span>Enviada em {new Date(messageEvent.created_at).toLocaleString('pt-BR')}</span>
+                             </span>
+                             
+                             {/* Status de Entrega */}
+                             {contactGroup.status === 'delivered' && (
+                               <span className="flex items-center gap-1">
+                                 <span>✅</span>
+                                 <span>Entregue</span>
+                               </span>
+                             )}
+                             
+                             {/* Status de Visualização */}
+                             {contactGroup.status === 'read' && (
+                               <span className="flex items-center gap-1">
+                                 <span>👁️</span>
+                                 <span>Visualizada</span>
+                               </span>
+                             )}
+                           </div>
+                           
+                           {/* Linha de tempos (se disponível) */}
+                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-blue-600">
+                             {/* Tempo de Entrega (se disponível) */}
+                             {contactGroup.events.find((e: any) => e.log_type === 'message_delivered') && (
+                               <span className="flex items-center gap-1">
+                                 <span>⏱️</span>
+                                 <span>Tempo de entrega: {getDeliveryTime(messageEvent, contactGroup.events)}</span>
+                               </span>
+                             )}
+                             
+                             {/* Tempo de Visualização (se disponível) */}
+                             {contactGroup.events.find((e: any) => e.log_type === 'message_read') && (
+                               <span className="flex items-center gap-1">
+                                 <span>⏱️</span>
+                                 <span>Tempo de visualização: {getReadTime(messageEvent, contactGroup.events)}</span>
+                               </span>
+                             )}
+                           </div>
+                         </div>
+                       </div>
+                     </div>
+                   )}
+          
+          {/* Timeline de Eventos */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium text-gray-700 mb-2">Timeline de Eventos:</h4>
+            {contactGroup.events.map((event: any, eventIdx: number) => (
+              <div key={eventIdx} className={`border rounded-lg p-3 ${getEventColor(event.log_type)}`}>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {getEventIcon(event.log_type)}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1 mb-1">
+                      <span className="text-sm font-medium text-gray-900">
+                        {event.log_type_display || event.log_type}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {new Date(event.created_at).toLocaleString('pt-BR')}
+                      </span>
+                    </div>
+                    <p className="text-sm text-gray-700 break-words">{event.message}</p>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </Card>
   )
 }
 
@@ -365,11 +642,73 @@ const CampaignsPage: React.FC = () => {
     
     try {
       const response = await api.get(`/campaigns/campaigns/${campaign.id}/logs/`)
-      setLogs(response.data)
+      const rawLogs = response.data
+      
+      // Agrupar logs por contato
+      const groupedLogs = groupLogsByContact(rawLogs)
+      setLogs(groupedLogs)
     } catch (error: any) {
       console.error('Erro ao buscar logs:', error)
       showErrorToast('buscar', 'Logs', error)
     }
+  }
+
+  // Função para agrupar logs por contato
+  const groupLogsByContact = (rawLogs: any[]) => {
+    const contactGroups: { [key: string]: any } = {}
+    
+    rawLogs.forEach(log => {
+      const contactKey = log.contact_id || log.contact_name || 'unknown'
+      
+      if (!contactGroups[contactKey]) {
+        contactGroups[contactKey] = {
+          contact_id: log.contact_id,
+          contact_name: log.contact_name,
+          contact_phone: log.contact_phone,
+          instance_name: log.instance_name,
+          events: [],
+          status: 'pending',
+          first_event: null,
+          last_event: null
+        }
+      }
+      
+      // Adicionar evento à timeline
+      contactGroups[contactKey].events.push({
+        ...log,
+        timestamp: new Date(log.created_at).getTime()
+      })
+      
+      // Atualizar primeiro e último evento
+      if (!contactGroups[contactKey].first_event || log.created_at < contactGroups[contactKey].first_event) {
+        contactGroups[contactKey].first_event = log.created_at
+      }
+      if (!contactGroups[contactKey].last_event || log.created_at > contactGroups[contactKey].last_event) {
+        contactGroups[contactKey].last_event = log.created_at
+      }
+    })
+    
+    // Ordenar eventos por timestamp e determinar status final
+    Object.values(contactGroups).forEach((group: any) => {
+      group.events.sort((a: any, b: any) => a.timestamp - b.timestamp)
+      
+      // Determinar status baseado no último evento
+      const lastEvent = group.events[group.events.length - 1]
+      if (lastEvent.log_type === 'message_read') {
+        group.status = 'read'
+      } else if (lastEvent.log_type === 'message_delivered') {
+        group.status = 'delivered'
+      } else if (lastEvent.log_type === 'message_sent') {
+        group.status = 'sent'
+      } else if (lastEvent.log_type === 'message_failed') {
+        group.status = 'failed'
+      }
+    })
+    
+    // Converter para array e ordenar por último evento
+    return Object.values(contactGroups).sort((a: any, b: any) => 
+      new Date(b.last_event).getTime() - new Date(a.last_event).getTime()
+    )
   }
 
   const getStatusColor = (status: string) => {
@@ -695,7 +1034,7 @@ const CampaignsPage: React.FC = () => {
       {/* Modal de Logs */}
       {showLogsModal && selectedCampaignForLogs && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-modal p-2 sm:p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center p-3 sm:p-4 border-b sticky top-0 bg-white z-10">
               <div className="flex-1 min-w-0">
                 <h2 className="text-lg sm:text-xl font-bold truncate">Logs da Campanha</h2>
@@ -706,64 +1045,45 @@ const CampaignsPage: React.FC = () => {
               </button>
             </div>
 
-            <div className="p-3 sm:p-4">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               {logs.length === 0 ? (
                 <div className="text-center py-6 sm:py-8 text-gray-500">
                   Nenhum log encontrado
                 </div>
               ) : (
-                <div className="space-y-2 sm:space-y-3">
-                  {logs.map((log, idx) => {
-                    const severityColors: Record<string, string> = {
-                      'info': 'bg-blue-50 border-blue-200 text-blue-900',
-                      'warning': 'bg-yellow-50 border-yellow-200 text-yellow-900',
-                      'error': 'bg-red-50 border-red-200 text-red-900',
-                      'critical': 'bg-red-100 border-red-300 text-red-950'
-                    }
-                    
-                    const severityIcons: Record<string, string> = {
-                      'info': '📘',
-                      'warning': '⚠️',
-                      'error': '❌',
-                      'critical': '🔴'
-                    }
-                    
-                    return (
-                      <div key={idx} className={`border rounded p-3 text-sm ${severityColors[log.severity] || 'bg-gray-50'}`}>
-                        <div className="flex items-start gap-2">
-                          <span className="text-lg">{severityIcons[log.severity]}</span>
-                          <div className="flex-1">
-                            <div className="flex justify-between items-start mb-1">
-                              <span className="font-semibold">{log.log_type_display}</span>
-                              <span className="text-xs opacity-75">
-                                {new Date(log.created_at).toLocaleString('pt-BR')}
-                              </span>
-                            </div>
-                            <p className="mb-1">{log.message}</p>
-                            
-                            {log.contact_name && (
-                              <p className="text-xs opacity-75">
-                                👤 Contato: {log.contact_name}
-                              </p>
-                            )}
-                            
-                            {log.instance_name && (
-                              <p className="text-xs opacity-75">
-                                📱 Instância: {log.instance_name}
-                              </p>
-                            )}
-                            
-                            {log.details?.message_content && (
-                              <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded">
-                                <p className="text-xs font-medium mb-1">💬 Mensagem enviada:</p>
-                                <p className="text-xs whitespace-pre-wrap">{log.details.message_content}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
+                <div className="space-y-3 sm:space-y-4">
+                  {/* Estatísticas Rápidas */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4">
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-xl font-bold text-blue-600">
+                        {logs.filter((g: any) => g.status === 'read').length}
                       </div>
-                    )
-                  })}
+                      <div className="text-xs sm:text-sm text-blue-800">Lidas</div>
+                    </div>
+                    <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-xl font-bold text-green-600">
+                        {logs.filter((g: any) => g.status === 'delivered').length}
+                      </div>
+                      <div className="text-xs sm:text-sm text-green-800">Entregues</div>
+                    </div>
+                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-xl font-bold text-yellow-600">
+                        {logs.filter((g: any) => g.status === 'sent').length}
+                      </div>
+                      <div className="text-xs sm:text-sm text-yellow-800">Enviadas</div>
+                    </div>
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-xl font-bold text-red-600">
+                        {logs.filter((g: any) => g.status === 'failed').length}
+                      </div>
+                      <div className="text-xs sm:text-sm text-red-800">Falhas</div>
+                    </div>
+                  </div>
+                  
+                  {/* Cards de Contatos */}
+                  {logs.map((contactGroup: any, idx: number) => (
+                    <ContactLogCard key={idx} contactGroup={contactGroup} />
+                  ))}
                 </div>
               )}
             </div>

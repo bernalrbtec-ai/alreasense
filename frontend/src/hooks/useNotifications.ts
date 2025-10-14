@@ -38,7 +38,7 @@ export function useNotifications() {
       setNotifications(newNotifications);
       
       // Buscar contador de não lidas
-      const statsResponse = await api.get('/campaigns/campaigns/notifications/unread_count/');
+      const statsResponse = await api.get('/campaigns/notifications/unread_count/');
       setStats(statsResponse.data);
       
       setLastChecked(new Date());
@@ -52,7 +52,7 @@ export function useNotifications() {
   // Verificar novas notificações (para polling)
   const checkNewNotifications = useCallback(async () => {
     try {
-      const response = await api.get('/campaigns/campaigns/notifications/unread_count/');
+      const response = await api.get('/campaigns/notifications/unread_count/');
       const currentUnreadCount = response.data.unread_count;
       const previousUnreadCount = stats.unread_count;
       
@@ -224,7 +224,7 @@ export function useNotificationCount() {
 
   const fetchUnreadCount = useCallback(async () => {
     try {
-      const response = await api.get('/campaigns/campaigns/notifications/unread_count/');
+      const response = await api.get('/campaigns/notifications/unread_count/');
       setUnreadCount(response.data.unread_count);
     } catch (error) {
       console.error('Erro ao carregar contador de notificações:', error);

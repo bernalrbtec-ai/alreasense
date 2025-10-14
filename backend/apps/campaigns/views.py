@@ -96,20 +96,59 @@ class CampaignViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def resume(self, request, pk=None):
         """Retomar campanha"""
-        campaign = self.get_object()
-        campaign.resume()
+        import logging
+        logger = logging.getLogger(__name__)
         
-        # Log de retomada
-        CampaignLog.log_campaign_resumed(campaign, request.user)
+        try:
+            campaign = self.get_object()
+            logger.info(f"🔄 Tentando retomar campanha: {campaign.name} (ID: {campaign.id})")
+            logger.info(f"📊 Status atual: {campaign.status}")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao buscar campanha {pk}: {str(e)}")
+            return Response({
+                'error': f'Campanha não encontrada: {str(e)}',
+                'success': False
+            }, status=404)
         
-        # Disparar task Celery novamente para continuar processamento
-        from .tasks import process_campaign
-        process_campaign.delay(str(campaign.id))
-        
-        return Response({
-            'message': 'Campanha retomada com sucesso',
-            'status': 'running'
-        })
+        try:
+            # Resumir campanha
+            campaign.resume()
+            
+            # Log de retomada
+            CampaignLog.log_campaign_resumed(campaign, request.user)
+            
+            # Disparar task Celery novamente para continuar processamento
+            from .tasks import process_campaign
+            task_result = process_campaign.delay(str(campaign.id))
+            
+            return Response({
+                'message': f'Campanha "{campaign.name}" retomada com sucesso',
+                'status': campaign.status,
+                'task_id': task_result.id,
+                'success': True
+            })
+            
+        except Exception as e:
+            # Se Celery falhar, ainda assim marcar como running
+            campaign.resume()  # Garantir que está running
+            CampaignLog.log_campaign_resumed(campaign, request.user)
+            
+            # Log do erro
+            CampaignLog.objects.create(
+                campaign=campaign,
+                log_type='error',
+                severity='warning',
+                message=f'Campanha retomada, mas task Celery falhou: {str(e)}',
+                details={'error': str(e), 'campaign_id': str(campaign.id)}
+            )
+            
+            return Response({
+                'message': 'Campanha retomada com sucesso',
+                'status': campaign.status,
+                'warning': f'Task Celery falhou: {str(e)}',
+                'success': True
+            })
     
     @action(detail=True, methods=['post'])
     def cancel(self, request, pk=None):

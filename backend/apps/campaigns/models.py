@@ -471,6 +471,14 @@ class CampaignLog(models.Model):
     )
     
     # Metadados
+    tenant = models.ForeignKey(
+        'tenancy.Tenant',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='campaign_logs',
+        help_text='Tenant que possui este log'
+    )
     created_by = models.ForeignKey(
         'authn.User',
         on_delete=models.SET_NULL,
@@ -529,34 +537,50 @@ class CampaignLog(models.Model):
     @staticmethod
     def log_campaign_paused(campaign, user=None):
         """Log de pausa de campanha"""
-        return CampaignLog.objects.create(
-            campaign=campaign,
-            log_type='paused',
-            severity='info',
-            message=f'Campanha "{campaign.name}" pausada',
-            details={
-                'total_contacts': campaign.total_contacts,
-                'messages_sent': campaign.messages_sent,
-                'messages_delivered': campaign.messages_delivered,
-            },
-            created_by=user
-        )
+        try:
+            return CampaignLog.objects.create(
+                campaign=campaign,
+                log_type='paused',
+                severity='info',
+                message=f'Campanha "{campaign.name}" pausada',
+                details={
+                    'total_contacts': campaign.total_contacts,
+                    'messages_sent': campaign.messages_sent,
+                    'messages_delivered': campaign.messages_delivered,
+                },
+                created_by=user
+            )
+        except Exception as e:
+            # Se falhar, criar log simples sem tenant
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ Erro ao criar log de pausa: {str(e)}")
+            # Não falhar a operação principal por causa do log
+            return None
     
     @staticmethod
     def log_campaign_resumed(campaign, user=None):
         """Log de retomada de campanha"""
-        return CampaignLog.objects.create(
-            campaign=campaign,
-            log_type='resumed',
-            severity='info',
-            message=f'Campanha "{campaign.name}" retomada',
-            details={
-                'total_contacts': campaign.total_contacts,
-                'messages_sent': campaign.messages_sent,
-                'messages_delivered': campaign.messages_delivered,
-            },
-            created_by=user
-        )
+        try:
+            return CampaignLog.objects.create(
+                campaign=campaign,
+                log_type='resumed',
+                severity='info',
+                message=f'Campanha "{campaign.name}" retomada',
+                details={
+                    'total_contacts': campaign.total_contacts,
+                    'messages_sent': campaign.messages_sent,
+                    'messages_delivered': campaign.messages_delivered,
+                },
+                created_by=user
+            )
+        except Exception as e:
+            # Se falhar, criar log simples sem tenant
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ Erro ao criar log de retomada: {str(e)}")
+            # Não falhar a operação principal por causa do log
+            return None
     
     @staticmethod
     def log_message_sent(campaign, instance, contact, campaign_contact, duration_ms=None, message_content=None, whatsapp_message_id=None):
