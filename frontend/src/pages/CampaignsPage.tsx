@@ -478,7 +478,13 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.delete(`/campaigns/campaigns/${campaignId}/`)
       updateToastSuccess(toastId, 'excluir', 'Campanha')
-      fetchData()
+      
+      // ✅ Executar callback em try/catch separado
+      try {
+        fetchData()
+      } catch (callbackError) {
+        console.error('Erro ao atualizar lista:', callbackError)
+      }
     } catch (error: any) {
       console.error('Erro ao excluir campanha:', error)
       updateToastError(toastId, 'excluir', 'Campanha', error)
@@ -516,7 +522,13 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaignId}/start/`)
       updateToastSuccess(toastId, 'iniciar', 'Campanha')
-      fetchData()
+      
+      // ✅ Executar callback em try/catch separado
+      try {
+        fetchData()
+      } catch (callbackError) {
+        console.error('Erro ao atualizar lista:', callbackError)
+      }
     } catch (error: any) {
       console.error('Erro ao iniciar campanha:', error)
       updateToastError(toastId, 'iniciar', 'Campanha', error)
@@ -529,7 +541,13 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaignId}/pause/`)
       updateToastSuccess(toastId, 'pausar', 'Campanha')
-      fetchData()
+      
+      // ✅ Executar callback em try/catch separado
+      try {
+        fetchData()
+      } catch (callbackError) {
+        console.error('Erro ao atualizar lista:', callbackError)
+      }
     } catch (error: any) {
       console.error('Erro ao pausar campanha:', error)
       updateToastError(toastId, 'pausar', 'Campanha', error)
@@ -570,7 +588,13 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaignId}/resume/`)
       updateToastSuccess(toastId, 'retomar', 'Campanha')
-      fetchData()
+      
+      // ✅ Executar callback em try/catch separado
+      try {
+        fetchData()
+      } catch (callbackError) {
+        console.error('Erro ao atualizar lista:', callbackError)
+      }
     } catch (error: any) {
       console.error('Erro ao retomar campanha:', error)
       updateToastError(toastId, 'retomar', 'Campanha', error)
@@ -596,7 +620,13 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaignId}/cancel/`)
       updateToastSuccess(toastId, 'cancelar', 'Campanha')
-      fetchData()
+      
+      // ✅ Executar callback em try/catch separado
+      try {
+        fetchData()
+      } catch (callbackError) {
+        console.error('Erro ao atualizar lista:', callbackError)
+      }
     } catch (error: any) {
       console.error('Erro ao cancelar campanha:', error)
       updateToastError(toastId, 'cancelar', 'Campanha', error)
@@ -629,7 +659,13 @@ const CampaignsPage: React.FC = () => {
       
       await api.post('/campaigns/campaigns/', payload)
       updateToastSuccess(toastId, 'duplicar', 'Campanha')
-      fetchData()
+      
+      // ✅ Executar callback em try/catch separado
+      try {
+        fetchData()
+      } catch (callbackError) {
+        console.error('Erro ao atualizar lista:', callbackError)
+      }
     } catch (error: any) {
       console.error('Erro ao duplicar campanha:', error)
       updateToastError(toastId, 'duplicar', 'Campanha', error)

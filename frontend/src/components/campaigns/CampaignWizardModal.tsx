@@ -212,9 +212,18 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
       await api.post('/campaigns/campaigns/', payload)
       
+      // ✅ Garantir que toast seja atualizado ANTES dos callbacks
       updateToastSuccess(toastId, 'criar', 'Campanha')
-      onSuccess()
-      onClose()
+      
+      // ✅ Executar callbacks em try/catch separado para não afetar o toast
+      try {
+        onSuccess()
+        onClose()
+      } catch (callbackError) {
+        console.error('Erro nos callbacks:', callbackError)
+        // Toast já foi atualizado, não afeta o resultado
+      }
+      
     } catch (error: any) {
       console.error('Erro ao salvar campanha:', error)
       updateToastError(toastId, 'criar', 'Campanha', error)
