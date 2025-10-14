@@ -4,7 +4,7 @@ from .views import CampaignViewSet, CampaignNotificationViewSet
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
-router.register(r'campaigns', CampaignViewSet, basename='campaign')
+router.register(r'', CampaignViewSet, basename='campaign')
 router.register(r'notifications', CampaignNotificationViewSet, basename='notification')
 
 urlpatterns = [
