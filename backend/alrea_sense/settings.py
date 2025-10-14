@@ -229,22 +229,40 @@ CSRF_EXEMPT_PATHS = [
     '/api/health/',
 ]
 
-# Channels
+# Redis - Railway Configuration
+REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+REDIS_PASSWORD = config('REDISPASSWORD', default='')
+REDIS_HOST = config('REDISHOST', default='localhost')
+REDIS_PORT = config('REDISPORT', default='6379')
+REDIS_USER = config('REDISUSER', default='default')
+
+# Usar REDIS_URL se disponível, senão construir a partir das variáveis
+if REDIS_URL and REDIS_URL != 'redis://localhost:6379/0':
+    # Usar REDIS_URL diretamente do Railway
+    pass
+else:
+    # Construir URL do Redis a partir das variáveis individuais
+    if REDIS_HOST and REDIS_HOST != 'localhost':
+        if REDIS_PASSWORD:
+            REDIS_URL = f"redis://{REDIS_USER}:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
+        else:
+            REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+
+print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:30]}..." if REDIS_URL else "🔧 [SETTINGS] REDIS_URL: Not configured...")
+print(f"🔧 [SETTINGS] REDIS_HOST: {REDIS_HOST}")
+print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
+print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
+print(f"🔧 [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
+
+# Channels - Using Redis URL
 CHANNEL_LAYERS = {
     'default': {
         'BACKEND': 'channels_redis.core.RedisChannelLayer',
         'CONFIG': {
-            'hosts': [config('REDIS_URL', default='redis://localhost:6379/1')],
+            'hosts': [REDIS_URL.replace('/0', '/1') if REDIS_URL else 'redis://localhost:6379/1'],
         },
     },
 }
-
-# Redis
-REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
-REDIS_PASSWORD = config('REDIS_PASSWORD', default='')
-REDIS_HOST = config('REDISHOST', default='localhost')
-REDIS_PORT = config('REDISPORT', default='6379')
-REDIS_USER = config('REDISUSER', default='default')
 
 # RabbitMQ
 RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')

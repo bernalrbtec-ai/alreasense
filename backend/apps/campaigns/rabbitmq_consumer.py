@@ -481,5 +481,16 @@ class RabbitMQConsumer:
         logger.info("🛑 [CONSUMER] RabbitMQ Consumer parado")
 
 
-# Instância global do consumer
-rabbitmq_consumer = RabbitMQConsumer()
+# Instância global do consumer - inicializada apenas quando necessário
+rabbitmq_consumer = None
+
+def get_rabbitmq_consumer():
+    """Obtém instância do consumer, criando se necessário"""
+    global rabbitmq_consumer
+    if rabbitmq_consumer is None:
+        try:
+            rabbitmq_consumer = RabbitMQConsumer()
+        except Exception as e:
+            print(f"⚠️ [RABBITMQ] Consumer não pode ser inicializado: {e}")
+            rabbitmq_consumer = None
+    return rabbitmq_consumer

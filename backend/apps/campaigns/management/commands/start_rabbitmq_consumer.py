@@ -5,7 +5,7 @@ from django.core.management.base import BaseCommand
 import time
 import logging
 
-from apps.campaigns.rabbitmq_consumer import rabbitmq_consumer
+from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,14 @@ class Command(BaseCommand):
         
         try:
             # Iniciar consumer
-            rabbitmq_consumer.start()
+            consumer = get_rabbitmq_consumer()
+            if not consumer:
+                self.stdout.write(
+                    self.style.ERROR('❌ RabbitMQ não está configurado!')
+                )
+                return
+                
+            consumer.start()
             
             if auto_start:
                 self.stdout.write('🔄 Iniciando campanhas pendentes...')
@@ -44,7 +51,7 @@ class Command(BaseCommand):
             while True:
                 try:
                     # Verificar campanhas ativas
-                    active_campaigns = rabbitmq_consumer.get_active_campaigns()
+                    active_campaigns = consumer.get_active_campaigns()
                     
                     if active_campaigns:
                         self.stdout.write(
@@ -77,7 +84,9 @@ class Command(BaseCommand):
             raise
         finally:
             # Parar consumer
-            rabbitmq_consumer.stop()
+            consumer = get_rabbitmq_consumer()
+            if consumer:
+                consumer.stop()
             self.stdout.write(
                 self.style.SUCCESS('🛑 RabbitMQ Consumer parado')
             )
@@ -94,7 +103,8 @@ class Command(BaseCommand):
                 campaign_id = str(campaign.id)
                 
                 # Verificar se consumer está ativo
-                if campaign_id not in rabbitmq_consumer.get_active_campaigns():
+                consumer = get_rabbitmq_consumer()
+                if consumer and campaign_id not in consumer.get_active_campaigns():
                     self.stdout.write(
                         self.style.WARNING(
                             f'⚠️ Campanha {campaign.name} deveria estar rodando mas consumer não está ativo'
@@ -103,7 +113,7 @@ class Command(BaseCommand):
                     
                     # Tentar iniciar
                     try:
-                        success = rabbitmq_consumer.start_campaign(campaign_id)
+                        success = consumer.start_campaign(campaign_id)
                         if success:
                             self.stdout.write(
                                 self.style.SUCCESS(

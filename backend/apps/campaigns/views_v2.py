@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from .models import Campaign, CampaignContact, CampaignLog
-from .rabbitmq_consumer import rabbitmq_consumer
+from .rabbitmq_consumer import get_rabbitmq_consumer
 from .monitor import campaign_health_monitor, system_health_monitor
 from .serializers import CampaignSerializer, CampaignDetailSerializer
 
@@ -49,7 +49,8 @@ class CampaignControlView(generics.GenericAPIView):
                     )
                 
                 # Iniciar campanha
-                success = rabbitmq_consumer.start_campaign(str(campaign.id))
+                consumer = get_rabbitmq_consumer()
+                success = consumer.start_campaign(str(campaign.id)) if consumer else False
                 
                 if success:
                     return Response({
@@ -70,7 +71,9 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                rabbitmq_consumer.pause_campaign(str(campaign.id))
+                consumer = get_rabbitmq_consumer()
+                if consumer:
+                    consumer.pause_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} pausada com sucesso'
@@ -84,7 +87,9 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                rabbitmq_consumer.resume_campaign(str(campaign.id))
+                consumer = get_rabbitmq_consumer()
+                if consumer:
+                    consumer.resume_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} resumida com sucesso'
@@ -98,7 +103,9 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                rabbitmq_consumer.stop_campaign(str(campaign.id))
+                consumer = get_rabbitmq_consumer()
+                if consumer:
+                    consumer.stop_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} parada com sucesso'
@@ -139,7 +146,8 @@ def campaign_health(request, campaign_id):
         alerts = campaign_health_monitor.get_campaign_alerts(str(campaign.id))
         
         # Status do consumer
-        consumer_status = rabbitmq_consumer.get_campaign_status(str(campaign.id))
+        consumer = get_rabbitmq_consumer()
+        consumer_status = consumer.get_campaign_status(str(campaign.id)) if consumer else {'status': 'not_available'}
         
         return Response({
             'campaign_id': str(campaign.id),

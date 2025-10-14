@@ -64,16 +64,22 @@ def check_redis():
 def check_rabbitmq():
     """Check RabbitMQ connectivity."""
     try:
-        from apps.campaigns.rabbitmq_consumer import rabbitmq_consumer
+        from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
+        consumer = get_rabbitmq_consumer()
         
-        # Check if consumer is running
-        active_campaigns = rabbitmq_consumer.get_active_campaigns()
-        
-        return {
-            'status': 'healthy',
-            'active_campaigns': len(active_campaigns),
-            'consumer_running': True,
-        }
+        if consumer:
+            # Check if consumer is running
+            active_campaigns = consumer.get_active_campaigns()
+            return {
+                'status': 'healthy',
+                'active_campaigns': len(active_campaigns),
+                'consumer_running': True,
+            }
+        else:
+            return {
+                'status': 'not_configured',
+                'error': 'RabbitMQ consumer not available'
+            }
     except Exception as e:
         return {
             'status': 'unhealthy',
