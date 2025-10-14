@@ -723,6 +723,7 @@ class CampaignLog(models.Model):
                     )
                 
         except Exception as e:
+            pass
     
     @staticmethod
     def log_message_failed(campaign, instance, contact, campaign_contact, error_msg, request_data=None, response_data=None, http_status=None):
