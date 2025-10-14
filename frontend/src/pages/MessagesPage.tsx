@@ -41,7 +41,8 @@ export default function MessagesPage() {
       setMessages(response.data.results || response.data)
       
       if (response.data.count) {
-        setTotalPages(Math.ceil(response.data.count / 20))
+        // Usar PAGE_SIZE padrão do backend (50) em vez de hardcode 20
+        setTotalPages(Math.ceil(response.data.count / 50))
       }
     } catch (error) {
       console.error('Failed to fetch messages:', error)

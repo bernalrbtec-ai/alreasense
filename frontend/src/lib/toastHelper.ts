@@ -41,11 +41,15 @@ export function showSuccessToast(action: Action, entity: Entity) {
  * Toast de erro padronizado com extração de mensagem do erro
  */
 export function showErrorToast(action: Action, entity: Entity, error?: any) {
+  // Log detalhado para debug
+  console.log(`🚨 showErrorToast chamado:`, { action, entity, error })
+  
   // Extrair mensagem do erro
   let errorMessage = ''
   
   if (error?.response?.data) {
     const data = error.response.data
+    console.log(`📋 Dados de resposta do erro:`, data)
     
     // Tentar extrair mensagens específicas
     if (typeof data === 'string') {
@@ -78,9 +82,12 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
     errorMessage = error.toString()
   }
   
+  console.log(`📝 Mensagem extraída:`, errorMessage)
+  
   // Fallback se ainda estiver vazio
   if (!errorMessage || errorMessage.trim() === '') {
     errorMessage = 'Erro desconhecido'
+    console.warn(`⚠️ Usando fallback "Erro desconhecido" para:`, { action, entity, error })
   }
 
   const baseMessages: Record<Action, string> = {

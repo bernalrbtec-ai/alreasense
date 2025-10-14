@@ -269,6 +269,13 @@ class ContactViewSet(viewsets.ModelViewSet):
             column_mapping=column_mapping
         )
         
+        # Log detalhado da resposta para debug
+        print(f"📤 RESPOSTA do process_csv:")
+        print(f"   Status: {result.get('status')}")
+        print(f"   Total rows: {result.get('total_rows', 0)}")
+        print(f"   Created: {result.get('created', 0)}")
+        print(f"   Errors: {result.get('errors', 0)}")
+        
         return Response(result)
     
     @action(detail=False, methods=['get'])
@@ -287,6 +294,51 @@ class ContactViewSet(viewsets.ModelViewSet):
         response = HttpResponse(csv_content, content_type='text/csv')
         response['Content-Disposition'] = f'attachment; filename="contacts_{timezone.now().strftime("%Y%m%d")}.csv"'
         return response
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """
+        Estatísticas básicas dos contatos para dashboard
+        
+        GET /api/contacts/contacts/stats/
+        Query params: mesmos filtros do list (tags, state, search, etc.)
+        """
+        user = request.user
+        
+        # Aplicar mesmos filtros do get_queryset
+        contacts = self.filter_queryset(self.get_queryset())
+        
+        # Contadores básicos
+        total = contacts.count()
+        opted_out = contacts.filter(opted_out=True).count()
+        active = contacts.filter(is_active=True).count()
+        
+        # Segmentação por lifecycle
+        leads = contacts.filter(total_purchases=0).count()
+        customers = contacts.filter(total_purchases__gte=1).count()
+        
+        # Contatos com problemas de entrega
+        delivery_problems = contacts.filter(
+            msgs_sent__gt=0, 
+            msgs_delivered=0
+        ).count()
+        
+        return Response({
+            'total': total,
+            'active': active,
+            'opted_out': opted_out,
+            'leads': leads,
+            'customers': customers,
+            'delivery_problems': delivery_problems,
+            'filters_applied': {
+                'search': bool(request.query_params.get('search')),
+                'tags': bool(request.query_params.get('tags')),
+                'state': bool(request.query_params.get('state')),
+                'lifecycle_stage': bool(request.query_params.get('lifecycle_stage')),
+                'opted_out': bool(request.query_params.get('opted_out')),
+                'is_active': bool(request.query_params.get('is_active'))
+            }
+        })
     
     @action(detail=False, methods=['get'])
     def insights(self, request):

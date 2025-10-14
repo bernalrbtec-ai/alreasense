@@ -389,9 +389,24 @@ class ContactImportService:
             import_record.errors.append({'error': str(e)})
             import_record.save()
             
+            # Log detalhado do erro para debug
+            print(f"❌ ERRO FATAL na importação CSV:")
+            print(f"   Arquivo: {file.name}")
+            print(f"   Tenant: {self.tenant.id}")
+            print(f"   Erro: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            
             return {
-                'status': 'failed',
-                'error': str(e)
+                'status': 'error',  # Mudança: usar 'error' em vez de 'failed'
+                'message': str(e),  # Mudança: usar 'message' em vez de 'error'
+                'import_id': str(import_record.id),
+                'total_rows': 0,
+                'created': 0,
+                'updated': 0,
+                'skipped': 0,
+                'errors': 1,
+                'errors_list': [{'row': 0, 'error': str(e)}]
             }
     
     def _apply_column_mapping(self, row, mapping):

@@ -195,10 +195,12 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
         updateToastSuccess(toastId, 'iniciar', 'Importação')
       } else {
         // Importação síncrona - resultado imediato
-        if (result.status === 'completed') {
-        updateToastSuccess(toastId, 'importar', 'Contatos')
+        console.log('📤 Resultado da importação:', result)
+        
+        if (result.status === 'success' || result.status === 'completed') {
+          updateToastSuccess(toastId, 'importar', 'Contatos')
           setImportResult(result)
-        setStep(5)
+          setStep(5)
           setIsLoading(false)
           
           // Chamar onSuccess após pequeno delay para mostrar resultado
@@ -206,15 +208,53 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
             onSuccess()
           }, 2000)
         } else {
-          updateToastError(toastId, 'importar', 'Contatos', { message: result.error || 'Erro desconhecido' })
+          // Tratar diferentes tipos de erro
+          let errorMessage = 'Erro desconhecido'
+          
+          if (result.message) {
+            errorMessage = result.message
+          } else if (result.error) {
+            errorMessage = result.error
+          } else if (result.errors_list && result.errors_list.length > 0) {
+            errorMessage = result.errors_list[0].error || 'Erro na importação'
+          }
+          
+          console.error('❌ Erro na importação:', { result, errorMessage })
+          
+          updateToastError(toastId, 'importar', 'Contatos', { message: errorMessage })
           setIsLoading(false)
+          setStep(2) // Volta para configuração em vez de preview
+          
+          // Reset do arquivo e preview para permitir nova tentativa
+          setFile(null)
+          setPreviewData(null)
         }
       }
     } catch (error: any) {
-      console.error('Erro ao importar:', error)
-      updateToastError(toastId, 'importar', 'Contatos', error)
+      console.error('❌ Erro de rede/requisição na importação:', error)
+      
+      // Extrair mensagem de erro mais específica
+      let errorMessage = 'Erro de conexão'
+      
+      if (error.response?.status === 400) {
+        errorMessage = 'Dados inválidos no arquivo CSV'
+      } else if (error.response?.status === 413) {
+        errorMessage = 'Arquivo muito grande (máximo 10MB)'
+      } else if (error.response?.status === 500) {
+        errorMessage = 'Erro interno do servidor'
+      } else if (error.code === 'NETWORK_ERROR' || !navigator.onLine) {
+        errorMessage = 'Sem conexão com a internet'
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      updateToastError(toastId, 'importar', 'Contatos', { message: errorMessage })
       setIsLoading(false)
-      setStep(3)
+      setStep(2) // Volta para configuração para permitir nova tentativa
+      
+      // Reset do arquivo e preview para permitir nova tentativa
+      setFile(null)
+      setPreviewData(null)
     }
   }
   

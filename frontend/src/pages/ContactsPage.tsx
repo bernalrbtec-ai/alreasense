@@ -61,9 +61,11 @@ export default function ContactsPage() {
   // Stats gerais
   const [stats, setStats] = useState({
     total: 0,
+    active: 0,
     leads: 0,
     customers: 0,
-    opted_out: 0
+    opted_out: 0,
+    delivery_problems: 0
   })
   
   // Estados brasileiros
@@ -96,12 +98,14 @@ export default function ContactsPage() {
   // Buscar quando filtros mudarem (sempre, mesmo se limpar)
   useEffect(() => {
     fetchContacts(1)
+    fetchStats() // Atualizar stats quando filtros mudarem
   }, [selectedTag, selectedState])
   
   // Busca em tempo real (debounced) - aguarda 500ms após parar de digitar
   useEffect(() => {
     const debounceTimer = setTimeout(() => {
       fetchContacts(1)
+      fetchStats() // Atualizar stats quando busca mudar
     }, 500)
     
     return () => clearTimeout(debounceTimer)
@@ -184,23 +188,38 @@ export default function ContactsPage() {
   
   const fetchStats = async () => {
     try {
-      // Buscar stats sem filtros para ter visão geral
-      const response = await api.get('/contacts/contacts/?page_size=1')
+      // Construir parâmetros de filtro para stats
+      const params = new URLSearchParams()
+      
+      if (searchTerm) params.append('search', searchTerm)
+      if (selectedTag) params.append('tags', selectedTag)
+      if (selectedState) params.append('state', selectedState)
+      
+      // Buscar stats com os mesmos filtros aplicados
+      const response = await api.get(`/contacts/contacts/stats/?${params}`)
       const data = response.data
       
-      // Total vem do count da API
-      const total = data.count || 0
+      console.log('📊 Stats carregadas:', data)
       
-      // Para lifecycle e opted_out, vamos usar estimativa da página atual por enquanto
-      // Idealmente seria um endpoint /contacts/stats/
       setStats({
-        total: total,
-        leads: contacts.filter(c => c.lifecycle_stage === 'lead').length,
-        customers: contacts.filter(c => c.lifecycle_stage === 'customer').length,
-        opted_out: contacts.filter(c => c.opted_out).length
+        total: data.total || 0,
+        active: data.active || 0,
+        leads: data.leads || 0,
+        customers: data.customers || 0,
+        opted_out: data.opted_out || 0,
+        delivery_problems: data.delivery_problems || 0
       })
     } catch (error) {
       console.error('Error fetching stats:', error)
+      // Fallback para stats básicas
+      setStats({
+        total: totalCount,
+        active: 0,
+        leads: 0,
+        customers: 0,
+        opted_out: 0,
+        delivery_problems: 0
+      })
     }
   }
 
@@ -407,37 +426,55 @@ export default function ContactsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card className="p-4">
           <div className="text-sm text-gray-500">Total de Contatos</div>
-          <div className="text-2xl font-bold">{totalCount}</div>
+          <div className="text-2xl font-bold">{stats.total}</div>
           <div className="text-xs text-gray-400 mt-1">
-            {selectedTag || selectedState ? 'Filtrados' : 'Base completa'}
+            {selectedTag || selectedState || searchTerm ? 'Filtrados' : 'Base completa'}
           </div>
         </Card>
+        
         <Card className="p-4">
-          <div className="text-sm text-gray-500">Taxa de Saída</div>
-          <div className="flex items-end gap-4">
-            <div className="text-2xl font-bold text-red-600">
-              {contacts.filter(c => c.opted_out || (c.msgs_sent > 0 && c.msgs_delivered === 0)).length}
-            </div>
-            <div className="flex flex-col gap-1 text-xs pb-1">
-              <div className="text-gray-600">
-                <span className="font-medium">Opt-out:</span>{' '}
-                <span className="text-red-600 font-semibold">
-                  {contacts.filter(c => c.opted_out).length}
-                </span>
-              </div>
-              <div className="text-gray-600">
-                <span className="font-medium">Falha na entrega:</span>{' '}
-                <span className="text-red-600 font-semibold">
-                  {contacts.filter(c => c.msgs_sent > 0 && c.msgs_delivered === 0).length}
-                </span>
-              </div>
-            </div>
-          </div>
+          <div className="text-sm text-gray-500">Ativos</div>
+          <div className="text-2xl font-bold text-green-600">{stats.active}</div>
           <div className="text-xs text-gray-400 mt-1">
-            Contatos com problemas (página)
+            Contatos ativos
+          </div>
+        </Card>
+        
+        <Card className="p-4">
+          <div className="text-sm text-gray-500">Opt-out</div>
+          <div className="text-2xl font-bold text-red-600">{stats.opted_out}</div>
+          <div className="text-xs text-gray-400 mt-1">
+            Contatos que saíram
+          </div>
+        </Card>
+        
+        <Card className="p-4">
+          <div className="text-sm text-gray-500">Problemas de Entrega</div>
+          <div className="text-2xl font-bold text-orange-600">{stats.delivery_problems}</div>
+          <div className="text-xs text-gray-400 mt-1">
+            Mensagens não entregues
+          </div>
+        </Card>
+      </div>
+      
+      {/* Stats Detalhadas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Card className="p-4">
+          <div className="text-sm text-gray-500">Leads</div>
+          <div className="text-xl font-bold text-blue-600">{stats.leads}</div>
+          <div className="text-xs text-gray-400 mt-1">
+            Contatos sem compras
+          </div>
+        </Card>
+        
+        <Card className="p-4">
+          <div className="text-sm text-gray-500">Clientes</div>
+          <div className="text-xl font-bold text-green-600">{stats.customers}</div>
+          <div className="text-xs text-gray-400 mt-1">
+            Contatos com compras
           </div>
         </Card>
       </div>
