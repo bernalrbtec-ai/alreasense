@@ -28,7 +28,7 @@ import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import UserDropdown from './UserDropdown'
-import { cn } from '@/lib/utils'
+import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
 const productMenuItems = {

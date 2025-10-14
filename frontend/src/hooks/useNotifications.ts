@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { useToast } from './useToast';
+import { api } from '../lib/api';
 
 interface Notification {
   id: string;

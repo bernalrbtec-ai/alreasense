@@ -18,8 +18,8 @@ import {
   Eye,
   MoreHorizontal
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/hooks/useNotifications';
+import { useToast } from '../hooks/useToast';
+import { useNotifications } from '../hooks/useNotifications';
 
 interface Notification {
   id: string;
