@@ -113,17 +113,17 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   const fetchData = async () => {
     try {
-      const [instancesRes, tagsStatsRes, contactsRes] = await Promise.all([
+      const [instancesRes, tagsStatsRes] = await Promise.all([
         api.get('/notifications/whatsapp-instances/'),
-        api.get('/contacts/tags/stats/'), // Usar endpoint de stats para contagem real
-        api.get('/contacts/contacts/?page_size=10000')  // Buscar todos os contatos
+        api.get('/contacts/tags/stats/') // Usar endpoint de stats para contagem real
       ])
       
       setInstances(instancesRes.data.results || instancesRes.data || [])
       setTags(tagsStatsRes.data.tags || []) // Usar dados do stats
       
-      const contactsData = contactsRes.data.results || contactsRes.data || []
-      setContacts(contactsData)
+      // Não precisamos mais buscar todos os contatos aqui
+      // Eles serão carregados sob demanda quando necessário
+      setContacts([])
     } catch (error) {
       console.error('Erro ao buscar dados:', error)
     }
@@ -505,26 +505,45 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     Selecione os Contatos *
                   </label>
                   <div className="border rounded-lg max-h-64 overflow-y-auto p-3 space-y-2">
-                    {contacts.slice(0, 100).map((contact) => (
-                      <label key={contact.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={formData.contact_ids.includes(contact.id)}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setFormData({ ...formData, contact_ids: [...formData.contact_ids, contact.id] })
-                            } else {
-                              setFormData({ ...formData, contact_ids: formData.contact_ids.filter(id => id !== contact.id) })
-                            }
+                    {contacts.length === 0 ? (
+                      <div className="text-center py-4">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Carregar primeiros 100 contatos quando necessário
+                            api.get('/contacts/contacts/?page_size=100')
+                              .then(res => setContacts(res.data.results || []))
+                              .catch(err => console.error('Erro ao carregar contatos:', err))
                           }}
-                        />
-                        <span className="text-sm">{contact.name} - {contact.phone}</span>
-                      </label>
-                    ))}
+                          className="text-blue-600 hover:text-blue-800 text-sm"
+                        >
+                          Carregar contatos para seleção
+                        </button>
+                      </div>
+                    ) : (
+                      contacts.map((contact) => (
+                        <label key={contact.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={formData.contact_ids.includes(contact.id)}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setFormData({ ...formData, contact_ids: [...formData.contact_ids, contact.id] })
+                              } else {
+                                setFormData({ ...formData, contact_ids: formData.contact_ids.filter(id => id !== contact.id) })
+                              }
+                            }}
+                          />
+                          <span className="text-sm">{contact.name} - {contact.phone}</span>
+                        </label>
+                      ))
+                    )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Mostrando primeiros 100 contatos
-                  </p>
+                  {contacts.length > 0 && (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Mostrando {contacts.length} contatos
+                    </p>
+                  )}
                 </div>
               )}
 
