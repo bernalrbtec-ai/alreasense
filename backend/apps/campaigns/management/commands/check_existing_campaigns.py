@@ -137,8 +137,8 @@ class Command(BaseCommand):
             status='running'
         ).annotate(
             pending_count=Count(
-                'campaigncontact',
-                filter=Q(campaigncontact__status__in=['pending', 'sending'])
+                'campaign_contacts',
+                filter=Q(campaign_contacts__status__in=['pending', 'sending'])
             )
         ).filter(pending_count=0)
         

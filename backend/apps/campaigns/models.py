@@ -829,6 +829,17 @@ class CampaignLog(models.Model):
         )
     
     @staticmethod
+    def log_info(campaign, message, details=None):
+        """Log de informação genérica"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='info',
+            severity='info',
+            message=message,
+            details=details or {}
+        )
+    
+    @staticmethod
     def log_notification_created(campaign, contact, notification, message_content):
         """Log de notificação criada"""
         return CampaignLog.objects.create(
