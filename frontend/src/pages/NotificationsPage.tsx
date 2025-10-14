@@ -1,10 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Badge } from '../components/ui/badge';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { 
   Bell, 
   Search, 
@@ -236,7 +235,7 @@ export default function NotificationsPage() {
               </div>
             </div>
           ) : (
-            <ScrollArea className="h-[600px]">
+            <div className="max-h-[600px] overflow-y-auto">
               <div className="space-y-4">
                 {filteredNotifications.map((notification) => (
                   <Card key={notification.id} className={`transition-all hover:shadow-md ${
@@ -319,7 +318,7 @@ export default function NotificationsPage() {
                   </Card>
                 ))}
               </div>
-            </ScrollArea>
+            </div>
           )}
         </CardContent>
       </Card>
