@@ -15,7 +15,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
           "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
           {
             "bg-accent-500 text-white hover:bg-accent-600 shadow-lg": variant === "default",
-            "bg-accent-500 text-white hover:bg-accent-600 shadow-lg": variant === "accent",
+            "bg-accent-600 text-white hover:bg-accent-700 shadow-lg": variant === "accent",
             "bg-destructive text-destructive-foreground hover:bg-destructive/90": variant === "destructive",
             "border border-accent-200 bg-background hover:bg-accent-50 hover:text-accent-700 hover:border-accent-300": variant === "outline",
             "bg-secondary text-secondary-foreground hover:bg-secondary/80": variant === "secondary",

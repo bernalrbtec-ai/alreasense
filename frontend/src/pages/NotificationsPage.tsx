@@ -1,374 +1,291 @@
-import React, { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Separator } from '@/components/ui/separator';
+import { useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
+import { Button } from '../components/ui/Button';
 import { 
   Bell, 
   Search, 
-  Filter, 
   MessageSquare, 
   Check, 
-  Clock,
-  User,
   Phone,
   Calendar,
   Reply,
-  Eye,
-  MoreHorizontal
+  Eye
 } from 'lucide-react';
-import { useToast } from '@/hooks/use-toast';
-import { useNotifications } from '@/hooks/useNotifications';
 
 interface Notification {
   id: string;
   campaign_name: string;
   contact_name: string;
   contact_phone: string;
-  instance_name: string;
-  notification_type: 'response' | 'delivery' | 'read';
+  message_content: string;
+  received_at: string;
   status: 'unread' | 'read' | 'replied';
-  received_message: string;
-  received_timestamp: string;
-  sent_reply?: string;
-  sent_timestamp?: string;
-  sent_by_name?: string;
-  created_at: string;
+  notification_type: 'response' | 'delivery' | 'read';
 }
 
 interface NotificationStats {
-  unread_count: number;
+  total: number;
+  unread: number;
+  responses: number;
+  deliveries: number;
+  reads: number;
 }
 
 export default function NotificationsPage() {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [campaignFilter, setCampaignFilter] = useState<string>('all');
-  const [selectedNotification, setSelectedNotification] = useState<Notification | null>(null);
-  const [showReplyModal, setShowReplyModal] = useState(false);
-  const [replyMessage, setReplyMessage] = useState('');
-  const [sendingReply, setSendingReply] = useState(false);
-  
-  const { toast } = useToast();
-  const { 
-    notifications, 
-    stats, 
-    loading, 
-    fetchNotifications, 
-    markAsRead, 
-    markAllAsRead, 
-    replyToNotification 
-  } = useNotifications();
-
-  // Responder notificação
-  const handleReplyToNotification = async () => {
-    if (!selectedNotification || !replyMessage.trim()) return;
-    
-    setSendingReply(true);
-    const success = await replyToNotification(selectedNotification.id, replyMessage);
-    
-    if (success) {
-      setShowReplyModal(false);
-      setReplyMessage('');
-      setSelectedNotification(null);
-    }
-    
-    setSendingReply(false);
-  };
-
-  // Filtros
-  const filteredNotifications = notifications.filter(notification => {
-    const matchesSearch = 
-      notification.contact_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      notification.campaign_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      notification.received_message.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || notification.status === statusFilter;
-    const matchesCampaign = campaignFilter === 'all' || notification.campaign_name === campaignFilter;
-    
-    return matchesSearch && matchesStatus && matchesCampaign;
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [stats] = useState<NotificationStats>({
+    total: 0,
+    unread: 0,
+    responses: 0,
+    deliveries: 0,
+    reads: 0
   });
+  const [selectedTab, setSelectedTab] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Campanhas únicas para filtro
-  const uniqueCampaigns = [...new Set(notifications.map(n => n.campaign_name))];
-
-
-  const formatTimestamp = (timestamp: string) => {
-    return new Date(timestamp).toLocaleString('pt-BR');
+  const handleMarkAsRead = (notificationId: string) => {
+    setNotifications(prev => 
+      prev.map(notif => 
+        notif.id === notificationId 
+          ? { ...notif, status: 'read' as const }
+          : notif
+      )
+    );
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'unread':
-        return <Badge variant="destructive">Não Lida</Badge>;
-      case 'read':
-        return <Badge variant="secondary">Lida</Badge>;
-      case 'replied':
-        return <Badge variant="default">Respondida</Badge>;
-      default:
-        return <Badge variant="outline">{status}</Badge>;
-    }
+  const handleMarkAllAsRead = () => {
+    setNotifications(prev => 
+      prev.map(notif => ({ ...notif, status: 'read' as const }))
+    );
   };
+
+  const filteredNotifications = notifications.filter(notification => {
+    const matchesTab = selectedTab === 'all' || notification.status === selectedTab;
+    const matchesSearch = notification.contact_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         notification.campaign_name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesTab && matchesSearch;
+  });
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
-      case 'response':
-        return <MessageSquare className="h-4 w-4 text-blue-500" />;
-      case 'delivery':
-        return <Check className="h-4 w-4 text-green-500" />;
-      case 'read':
-        return <Eye className="h-4 w-4 text-purple-500" />;
-      default:
-        return <Bell className="h-4 w-4 text-gray-500" />;
+      case 'response': return <Reply className="h-4 w-4" />;
+      case 'delivery': return <Check className="h-4 w-4" />;
+      case 'read': return <Eye className="h-4 w-4" />;
+      default: return <Bell className="h-4 w-4" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'unread': return 'bg-blue-100 text-blue-800';
+      case 'read': return 'bg-gray-100 text-gray-800';
+      case 'replied': return 'bg-green-100 text-green-800';
+      default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case 'response': return 'bg-green-100 text-green-800';
+      case 'delivery': return 'bg-blue-100 text-blue-800';
+      case 'read': return 'bg-purple-100 text-purple-800';
+      default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Bell className="h-8 w-8" />
-            Notificações
-          </h1>
-          <p className="text-muted-foreground">
-            Gerencie respostas e interações das suas campanhas
+          <h1 className="text-2xl font-bold text-gray-900">Notificações</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Respostas e atualizações de campanhas
           </p>
         </div>
-        
-        <div className="flex items-center gap-4">
-          <div className="text-right">
-            <div className="text-2xl font-bold text-blue-600">
-              {stats.unread_count}
+        <Button 
+          onClick={handleMarkAllAsRead}
+          variant="outline"
+          disabled={stats.unread === 0}
+        >
+          <Check className="h-4 w-4 mr-2" />
+          Marcar todas como lidas
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-blue-100 rounded-lg">
+              <Bell className="h-5 w-5 text-blue-600" />
             </div>
-            <div className="text-sm text-muted-foreground">
-              Não lidas
+            <div>
+              <p className="text-sm text-gray-500">Total</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-orange-100 rounded-lg">
+              <MessageSquare className="h-5 w-5 text-orange-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Não Lidas</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.unread}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-green-100 rounded-lg">
+              <Reply className="h-5 w-5 text-green-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Respostas</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.responses}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-purple-100 rounded-lg">
+              <Eye className="h-5 w-5 text-purple-600" />
+            </div>
+            <div>
+              <p className="text-sm text-gray-500">Mensagens Lidas</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.reads}</p>
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <Card className="p-6">
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <input
+                type="text"
+                placeholder="Buscar por contato ou campanha..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
             </div>
           </div>
           
-          {stats.unread_count > 0 && (
-            <Button onClick={markAllAsRead} variant="outline">
-              Marcar todas como lidas
+          <div className="flex gap-2">
+            <Button
+              variant={selectedTab === 'all' ? 'default' : 'outline'}
+              onClick={() => setSelectedTab('all')}
+              size="sm"
+            >
+              Todas ({stats.total})
             </Button>
-          )}
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Filter className="h-5 w-5" />
-            Filtros
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Buscar por contato, campanha ou mensagem..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos os status</SelectItem>
-                <SelectItem value="unread">Não lidas</SelectItem>
-                <SelectItem value="read">Lidas</SelectItem>
-                <SelectItem value="replied">Respondidas</SelectItem>
-              </SelectContent>
-            </Select>
-            
-            <Select value={campaignFilter} onValueChange={setCampaignFilter}>
-              <SelectTrigger>
-                <SelectValue placeholder="Campanha" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as campanhas</SelectItem>
-                {uniqueCampaigns.map(campaign => (
-                  <SelectItem key={campaign} value={campaign}>
-                    {campaign}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            
-            <Button variant="outline" onClick={fetchNotifications}>
-              Atualizar
+            <Button
+              variant={selectedTab === 'unread' ? 'default' : 'outline'}
+              onClick={() => setSelectedTab('unread')}
+              size="sm"
+            >
+              Não Lidas ({stats.unread})
+            </Button>
+            <Button
+              variant={selectedTab === 'read' ? 'default' : 'outline'}
+              onClick={() => setSelectedTab('read')}
+              size="sm"
+            >
+              Lidas ({stats.total - stats.unread})
             </Button>
           </div>
-        </CardContent>
+        </div>
       </Card>
 
-      {/* Lista de Notificações */}
-      <Card>
+      {/* Notifications List */}
+      <Card className="p-6">
         <CardHeader>
-          <CardTitle>
-            Notificações ({filteredNotifications.length})
-          </CardTitle>
+          <CardTitle>Notificações Recentes</CardTitle>
         </CardHeader>
         <CardContent>
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-muted-foreground">Carregando notificações...</div>
-            </div>
-          ) : filteredNotifications.length === 0 ? (
-            <div className="flex items-center justify-center py-8">
-              <div className="text-center">
-                <Bell className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                <div className="text-muted-foreground">
-                  Nenhuma notificação encontrada
-                </div>
-              </div>
+          {filteredNotifications.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Bell className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+              <p>Nenhuma notificação encontrada</p>
             </div>
           ) : (
-            <ScrollArea className="h-[600px]">
-              <div className="space-y-4">
-                {filteredNotifications.map((notification) => (
-                  <Card key={notification.id} className={`transition-all hover:shadow-md ${
-                    notification.status === 'unread' ? 'border-l-4 border-l-blue-500' : ''
-                  }`}>
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-start gap-3 flex-1">
-                          {getNotificationIcon(notification.notification_type)}
-                          
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 mb-2">
-                              <h3 className="font-semibold text-lg">
-                                {notification.contact_name}
-                              </h3>
-                              {getStatusBadge(notification.status)}
-                            </div>
-                            
-                            <div className="text-sm text-muted-foreground mb-2">
-                              <div className="flex items-center gap-4">
-                                <span className="flex items-center gap-1">
-                                  <Phone className="h-3 w-3" />
-                                  {notification.contact_phone}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                  <Calendar className="h-3 w-3" />
-                                  {formatTimestamp(notification.received_timestamp)}
-                                </span>
-                              </div>
-                            </div>
-                            
-                            <div className="mb-3">
-                              <div className="text-sm font-medium text-muted-foreground mb-1">
-                                Campanha: {notification.campaign_name}
-                              </div>
-                              <div className="text-sm bg-gray-50 p-3 rounded-lg border">
-                                {notification.received_message}
-                              </div>
-                            </div>
-                            
-                            {notification.sent_reply && (
-                              <div className="mb-3">
-                                <div className="text-sm font-medium text-muted-foreground mb-1">
-                                  Sua resposta:
-                                </div>
-                                <div className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
-                                  {notification.sent_reply}
-                                </div>
-                              </div>
-                            )}
-                          </div>
+            <div className="space-y-4">
+              {filteredNotifications.map((notification) => (
+                <div
+                  key={notification.id}
+                  className={`p-4 border rounded-lg transition-colors ${
+                    notification.status === 'unread' 
+                      ? 'bg-blue-50 border-blue-200' 
+                      : 'bg-white border-gray-200'
+                  }`}
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className="p-2 bg-white rounded-lg shadow-sm">
+                        {getNotificationIcon(notification.notification_type)}
+                      </div>
+                      
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h3 className="font-medium text-gray-900 truncate">
+                            {notification.contact_name}
+                          </h3>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor(notification.notification_type)}`}>
+                            {notification.notification_type}
+                          </span>
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(notification.status)}`}>
+                            {notification.status}
+                          </span>
                         </div>
                         
-                        <div className="flex items-center gap-2">
-                          {notification.status === 'unread' && (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => markAsRead(notification.id)}
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                          )}
-                          
-                          {notification.status !== 'replied' && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedNotification(notification);
-                                setShowReplyModal(true);
-                              }}
-                            >
-                              <Reply className="h-4 w-4 mr-1" />
-                              Responder
-                            </Button>
-                          )}
-                        </div>
+                        <p className="text-sm text-gray-600 mb-2">
+                          <strong>Campanha:</strong> {notification.campaign_name}
+                        </p>
+                        
+                        <p className="text-sm text-gray-600 mb-2">
+                          <Phone className="h-3 w-3 inline mr-1" />
+                          {notification.contact_phone}
+                        </p>
+                        
+                        <p className="text-sm text-gray-500">
+                          <Calendar className="h-3 w-3 inline mr-1" />
+                          {new Date(notification.received_at).toLocaleString('pt-BR')}
+                        </p>
+                        
+                        {notification.message_content && (
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-sm text-gray-700">{notification.message_content}</p>
+                          </div>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            </ScrollArea>
+                    </div>
+                    
+                    {notification.status === 'unread' && (
+                      <Button
+                        onClick={() => handleMarkAsRead(notification.id)}
+                        variant="outline"
+                        size="sm"
+                      >
+                        <Check className="h-4 w-4 mr-1" />
+                        Marcar como lida
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
-
-      {/* Modal de Resposta */}
-      {showReplyModal && selectedNotification && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-md mx-4">
-            <CardHeader>
-              <CardTitle>Responder para {selectedNotification.contact_name}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <label className="text-sm font-medium mb-2 block">
-                  Mensagem de resposta:
-                </label>
-                <textarea
-                  value={replyMessage}
-                  onChange={(e) => setReplyMessage(e.target.value)}
-                  placeholder="Digite sua resposta..."
-                  className="w-full p-3 border rounded-lg resize-none"
-                  rows={4}
-                  maxLength={4000}
-                />
-                <div className="text-xs text-muted-foreground mt-1">
-                  {replyMessage.length}/4000 caracteres
-                </div>
-              </div>
-              
-              <div className="flex gap-2 justify-end">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setShowReplyModal(false);
-                    setReplyMessage('');
-                    setSelectedNotification(null);
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={handleReplyToNotification}
-                  disabled={!replyMessage.trim() || sendingReply}
-                >
-                  {sendingReply ? 'Enviando...' : 'Enviar Resposta'}
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   );
 }
