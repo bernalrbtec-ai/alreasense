@@ -70,6 +70,45 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
     fetchData()
   }, [])
 
+  // Popular formulário com dados da campanha sendo editada
+  useEffect(() => {
+    if (editingCampaign) {
+      console.log('📝 Populando formulário com dados da campanha:', editingCampaign)
+      
+      setFormData({
+        // Step 1: Básico
+        name: editingCampaign.name || '',
+        description: editingCampaign.description || '',
+        scheduled_at: editingCampaign.scheduled_at || '',
+        
+        // Step 2: Público (será carregado via API)
+        audience_type: 'tag' as 'tag' | 'contacts',
+        tag_id: '',
+        contact_ids: [],
+        
+        // Step 3: Mensagens
+        messages: editingCampaign.messages?.length > 0 
+          ? editingCampaign.messages.map((msg: any, index: number) => ({
+              id: msg.id,
+              content: msg.content || '',
+              order: msg.order || index + 1,
+              times_used: msg.times_used || 0
+            }))
+          : [{ content: '', order: 1 }],
+        
+        // Step 4: Instâncias e Rotação
+        instance_ids: editingCampaign.instances || [],
+        rotation_mode: editingCampaign.rotation_mode || 'intelligent',
+        
+        // Step 5: Configurações
+        interval_min: editingCampaign.interval_min || 25,
+        interval_max: editingCampaign.interval_max || 50,
+        daily_limit_per_instance: editingCampaign.daily_limit_per_instance || 100,
+        pause_on_health_below: editingCampaign.pause_on_health_below || 30
+      })
+    }
+  }, [editingCampaign])
+
   const fetchData = async () => {
     try {
       const [instancesRes, tagsRes, contactsRes] = await Promise.all([
