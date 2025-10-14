@@ -911,3 +911,15 @@ class CampaignNotification(models.Model):
             reply_message=reply_message,
             user=user
         )
+    
+    def mark_as_failed(self, user, error_message=None):
+        """Marca notificação como falhou ao responder"""
+        from django.utils import timezone
+        self.status = 'read'  # Volta para read se falhou
+        self.save(update_fields=['status', 'updated_at'])
+        
+        # Log do erro
+        CampaignLog.log_error(
+            campaign=self.campaign,
+            error_msg=f"Falha ao enviar resposta para {self.contact.name}: {error_message or 'Erro desconhecido'}"
+        )

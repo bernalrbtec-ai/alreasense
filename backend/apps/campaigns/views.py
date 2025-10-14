@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.db.models import Count, Q, Avg
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
 from .serializers import (
     CampaignSerializer, CampaignContactSerializer,
@@ -178,14 +179,34 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
     
     serializer_class = CampaignNotificationSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = None  # Desabilitar paginação para simplificar
     
     def get_queryset(self):
         """Filtrar por tenant e ordenar por mais recentes"""
-        return CampaignNotification.objects.filter(
+        queryset = CampaignNotification.objects.filter(
             tenant=self.request.user.tenant
         ).select_related(
             'campaign', 'contact', 'instance', 'sent_by'
-        ).order_by('-created_at')
+        )
+        
+        # Filtros opcionais
+        status = self.request.query_params.get('status')
+        if status:
+            queryset = queryset.filter(status=status)
+            
+        notification_type = self.request.query_params.get('type')
+        if notification_type:
+            queryset = queryset.filter(notification_type=notification_type)
+            
+        campaign_id = self.request.query_params.get('campaign_id')
+        if campaign_id:
+            queryset = queryset.filter(campaign_id=campaign_id)
+            
+        # Ordenação
+        order_by = self.request.query_params.get('order_by', '-created_at')
+        queryset = queryset.order_by(order_by)
+        
+        return queryset
     
     def get_serializer_context(self):
         """Adicionar request ao contexto"""
@@ -198,6 +219,28 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
         """Contar notificações não lidas"""
         count = self.get_queryset().filter(status='unread').count()
         return Response({'unread_count': count})
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Estatísticas de notificações"""
+        queryset = self.get_queryset()
+        
+        stats = {
+            'total': queryset.count(),
+            'unread': queryset.filter(status='unread').count(),
+            'read': queryset.filter(status='read').count(),
+            'replied': queryset.filter(status='replied').count(),
+            'by_type': {
+                'response': queryset.filter(notification_type='response').count(),
+                'delivery': queryset.filter(notification_type='delivery').count(),
+                'read': queryset.filter(notification_type='read').count(),
+            },
+            'recent_activity': queryset.filter(
+                created_at__gte=timezone.now() - timezone.timedelta(days=7)
+            ).count()
+        }
+        
+        return Response(stats)
     
     @action(detail=False, methods=['post'])
     def mark_as_read(self, request):
@@ -243,9 +286,17 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
                     tenant=request.user.tenant
                 )
                 
-                # TODO: Implementar envio via Evolution API
-                # Por enquanto, apenas marcar como respondida
-                notification.mark_as_replied(message, request.user)
+                # Enviar resposta via Evolution API
+                success = self.send_reply_via_evolution(notification, message)
+                
+                if success:
+                    notification.mark_as_replied(message, request.user)
+                else:
+                    notification.mark_as_failed(request.user, 'Erro ao enviar via Evolution API')
+                    return Response(
+                        {'error': 'Erro ao enviar mensagem via WhatsApp'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
                 
                 return Response({
                     'message': 'Resposta enviada com sucesso',
@@ -279,4 +330,56 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
                 {'error': f'Erro ao marcar notificações: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+    
+    def send_reply_via_evolution(self, notification, message):
+        """Enviar resposta via Evolution API"""
+        try:
+            import requests
+            
+            # Buscar configuração da Evolution API
+            from apps.connections.models import EvolutionConnection
+            connection = EvolutionConnection.objects.filter(
+                tenant=notification.tenant,
+                is_active=True
+            ).first()
+            
+            if not connection:
+                print(f"❌ Conexão Evolution não encontrada para tenant: {notification.tenant}")
+                return False
+            
+            # Preparar dados para envio
+            payload = {
+                "number": notification.contact.phone,
+                "text": message
+            }
+            
+            headers = {
+                "Content-Type": "application/json",
+                "apikey": connection.api_key
+            }
+            
+            # URL da Evolution API
+            url = f"{connection.base_url.rstrip('/')}/message/sendText/{notification.instance.friendly_name}"
+            
+            print(f"📤 Enviando resposta via Evolution API:")
+            print(f"   URL: {url}")
+            print(f"   Para: {notification.contact.phone}")
+            print(f"   Mensagem: {message[:50]}...")
+            
+            # Fazer requisição
+            response = requests.post(url, json=payload, headers=headers, timeout=30)
+            
+            if response.status_code == 200:
+                result = response.json()
+                print(f"✅ Resposta enviada com sucesso: {result}")
+                return True
+            else:
+                print(f"❌ Erro ao enviar resposta: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            print(f"❌ Erro ao enviar via Evolution API: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return False
 
