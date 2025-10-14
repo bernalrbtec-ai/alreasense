@@ -616,12 +616,8 @@ class CampaignSender:
                     reason=f"Pausa de segurança - Disparo {i+1} com tempo excessivo ({disparo_elapsed:.1f}s)"
                 )
                 
-                # Reagendar task para continuar
-                from .tasks import process_campaign
-                process_campaign.apply_async(
-                    args=[self.campaign.id], 
-                    countdown=10
-                )
+                # ✅ AUTO-RESCHEDULE REMOVIDO para evitar loop infinito
+                print(f"⚠️ [TIMEOUT] Disparo {i+1} com tempo excessivo ({disparo_elapsed:.1f}s) - NÃO reagendando")
                 
                 results['paused'] = True
                 break
