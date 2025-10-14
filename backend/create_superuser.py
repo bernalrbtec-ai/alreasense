@@ -24,18 +24,26 @@ def create_superuser():
     
     # Test connection
     try:
+        print("🔍 [SUPERUSER] Testando conexão com banco...")
         with connection.cursor() as cursor:
             cursor.execute("SELECT 1;")
-            print('✅ Database connection OK\n')
+            print('✅ [SUPERUSER] Database connection OK\n')
     except Exception as e:
-        print(f'❌ Database connection failed: {e}\n')
+        print(f'❌ [SUPERUSER] Database connection failed: {e}\n')
         raise
     # Create default tenant if it doesn't exist
+    print("🏢 [SUPERUSER] Verificando tenant padrão...")
     from apps.billing.models import Plan
     
     # Pegar plano Starter
+    print("📋 [SUPERUSER] Buscando plano Starter...")
     starter_plan = Plan.objects.filter(slug='starter').first()
+    if starter_plan:
+        print(f"✅ [SUPERUSER] Plano encontrado: {starter_plan.name}")
+    else:
+        print("⚠️ [SUPERUSER] Plano Starter não encontrado!")
     
+    print("🏢 [SUPERUSER] Criando/verificando tenant...")
     tenant, created = Tenant.objects.get_or_create(
         name='Default Tenant',
         defaults={
@@ -45,22 +53,26 @@ def create_superuser():
     )
     
     if created:
-        print(f"Created tenant: {tenant.name}")
+        print(f"✅ [SUPERUSER] Tenant criado: {tenant.name}")
     else:
-        print(f"Using existing tenant: {tenant.name}")
+        print(f"✅ [SUPERUSER] Tenant existente: {tenant.name}")
     
     # Create superuser if it doesn't exist (check by role, not by specific email)
+    print("👤 [SUPERUSER] Verificando superuser...")
     if not User.objects.filter(is_superuser=True).exists():
+        print("👤 [SUPERUSER] Criando novo superuser...")
         user = User.objects.create_superuser(
             username='admin@alreasense.com',  # Use email as username
             email='admin@alreasense.com',
             password='admin123',
             tenant=tenant
         )
-        print(f"Created superuser: {user.email}")
+        print(f"✅ [SUPERUSER] Superuser criado: {user.email}")
     else:
         existing_superuser = User.objects.filter(is_superuser=True).first()
-        print(f"Superuser already exists: {existing_superuser.email}")
+        print(f"✅ [SUPERUSER] Superuser já existe: {existing_superuser.email}")
+    
+    print("🎉 [SUPERUSER] Processo concluído com sucesso!")
 
 if __name__ == '__main__':
     create_superuser()
