@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 
 from .models import PromptTemplate, Inference
 from apps.chat_messages.models import Message
-from apps.ai.tasks import analyze_message_async
+# ✅ IMPORT MOVIDO PARA DENTRO DA FUNÇÃO para evitar loop circular
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +49,8 @@ def replay_window(tenant_id: str, start_date: str, end_date: str, prompt_templat
                 status='running'
             )
             
-            # Enqueue AI analysis with the specific prompt template
+            # ✅ Enqueue AI analysis with the specific prompt template (IMPORT LOCAL)
+            from apps.ai.tasks import analyze_message_async
             analyze_message_async.delay(
                 tenant_id=tenant_id,
                 message_id=str(message.id),

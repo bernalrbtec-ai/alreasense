@@ -14,7 +14,7 @@ from .serializers import (
     ExperimentRunCreateSerializer,
     ReplayRequestSerializer
 )
-from .tasks import replay_window
+# ✅ IMPORT MOVIDO PARA DENTRO DA VIEW para evitar loop circular
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.billing.decorators import require_product
 
@@ -112,7 +112,8 @@ def start_replay_experiment(request):
     experiment_run.total_messages = total_messages
     experiment_run.save()
     
-    # Start replay task
+    # ✅ Start replay task (IMPORT LOCAL para evitar loop)
+    from .tasks import replay_window
     replay_window.delay(
         tenant_id=str(request.user.tenant.id),
         start_iso=data['start_date'].isoformat(),
