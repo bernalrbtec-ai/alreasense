@@ -196,9 +196,9 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
       } else {
         // Importação síncrona - resultado imediato
         if (result.status === 'completed') {
-          updateToastSuccess(toastId, 'importar', 'Contatos')
+        updateToastSuccess(toastId, 'importar', 'Contatos')
           setImportResult(result)
-          setStep(5)
+        setStep(5)
           setIsLoading(false)
           
           // Chamar onSuccess após pequeno delay para mostrar resultado
@@ -278,135 +278,135 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
   
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          {/* Header */}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        {/* Header */}
           <div className="flex justify-between items-center p-4 border-b">
-            <div>
+          <div>
               <h2 className="text-xl font-bold">Importar Contatos</h2>
-              <div className="flex items-center gap-2 mt-2">
-                {[1, 2, 3, 4, 5].map((s) => (
-                  <div
-                    key={s}
-                    className={`h-2 w-10 rounded ${
-                      s === step ? 'bg-blue-600' : s < step ? 'bg-green-500' : 'bg-gray-200'
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-            <button onClick={resetAndClose} className="text-gray-400 hover:text-gray-600">
-              <X className="h-6 w-6" />
-            </button>
-          </div>
-          
-          {/* Body */}
-          <div className="p-4">
-            {/* STEP 1: UPLOAD */}
-            {step === 1 && (
-              <div className="space-y-4">
+            <div className="flex items-center gap-2 mt-2">
+              {[1, 2, 3, 4, 5].map((s) => (
                 <div
-                  onDrop={handleDrop}
-                  onDragOver={handleDragOver}
+                  key={s}
+                    className={`h-2 w-10 rounded ${
+                    s === step ? 'bg-blue-600' : s < step ? 'bg-green-500' : 'bg-gray-200'
+                  }`}
+                />
+              ))}
+            </div>
+          </div>
+          <button onClick={resetAndClose} className="text-gray-400 hover:text-gray-600">
+            <X className="h-6 w-6" />
+          </button>
+        </div>
+        
+        {/* Body */}
+          <div className="p-4">
+          {/* STEP 1: UPLOAD */}
+          {step === 1 && (
+              <div className="space-y-4">
+              <div
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
                   className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-blue-400 transition-colors cursor-pointer"
-                  onClick={() => fileInputRef.current?.click()}
-                >
+                onClick={() => fileInputRef.current?.click()}
+              >
                   <Upload className="mx-auto h-10 w-10 text-gray-400 mb-3" />
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".csv"
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".csv"
+                  onChange={handleFileSelect}
+                  className="hidden"
+                />
                   <p className="text-base font-medium mb-1">
-                    Clique para selecionar ou arraste o arquivo aqui
-                  </p>
+                  Clique para selecionar ou arraste o arquivo aqui
+                </p>
                   <p className="text-xs text-gray-500">
-                    CSV, máximo 10 MB (até 50.000 contatos)
-                  </p>
-                </div>
-                
-                {file && (
+                  CSV, máximo 10 MB (até 50.000 contatos)
+                </p>
+              </div>
+              
+              {file && (
                   <Card className="p-3 bg-gray-50">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
                         <FileText className="h-6 w-6 text-blue-600" />
-                        <div>
+                      <div>
                           <p className="font-medium text-sm">{file.name}</p>
                           <p className="text-xs text-gray-500">
-                            {(file.size / 1024).toFixed(1)} KB
-                          </p>
-                        </div>
+                          {(file.size / 1024).toFixed(1)} KB
+                        </p>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setFile(null)
-                        }}
-                        className="text-red-500 hover:text-red-700"
-                      >
-                        <X className="h-5 w-5" />
-                      </button>
                     </div>
-                  </Card>
-                )}
-                
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setFile(null)
+                      }}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <X className="h-5 w-5" />
+                    </button>
+                  </div>
+                </Card>
+              )}
+              
                 <div className="flex justify-between items-center">
                   <Button variant="outline" onClick={downloadTemplate} size="sm">
-                    <Download className="h-4 w-4 mr-2" />
-                    Baixar Template CSV
-                  </Button>
+                  <Download className="h-4 w-4 mr-2" />
+                  Baixar Template CSV
+                </Button>
                   
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={onClose} size="sm">
-                      Cancelar
-                    </Button>
+                  Cancelar
+                </Button>
                     <Button onClick={() => setStep(2)} disabled={!file} size="sm">
                       Próximo
-                    </Button>
+                </Button>
                   </div>
-                </div>
               </div>
-            )}
-            
+            </div>
+          )}
+          
             {/* STEP 2: CONFIGURAÇÃO (COMPACTO) */}
-            {step === 2 && (
+          {step === 2 && (
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Configurações</h3>
-                
+              
                 {/* Duplicatas */}
-                <div>
-                  <label className="block text-sm font-medium mb-2">
+              <div>
+                <label className="block text-sm font-medium mb-2">
                     Contatos duplicados
-                  </label>
+                </label>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        checked={!config.update_existing}
-                        onChange={() => setConfig({ ...config, update_existing: false })}
-                      />
-                      <div>
+                    <input
+                      type="radio"
+                      checked={!config.update_existing}
+                      onChange={() => setConfig({ ...config, update_existing: false })}
+                    />
+                    <div>
                         <p className="font-medium">Pular</p>
                         <p className="text-xs text-gray-500">Ignorar existentes</p>
-                      </div>
-                    </label>
-                    
+                    </div>
+                  </label>
+                  
                     <label className="flex items-center gap-2 p-2 border rounded hover:bg-gray-50 cursor-pointer text-sm">
-                      <input
-                        type="radio"
-                        checked={config.update_existing}
-                        onChange={() => setConfig({ ...config, update_existing: true })}
-                      />
-                      <div>
+                    <input
+                      type="radio"
+                      checked={config.update_existing}
+                      onChange={() => setConfig({ ...config, update_existing: true })}
+                    />
+                    <div>
                         <p className="font-medium">Atualizar</p>
                         <p className="text-xs text-gray-500">Sobrescrever dados</p>
-                      </div>
-                    </label>
-                  </div>
+                    </div>
+                  </label>
                 </div>
-                
+              </div>
+              
                 {/* Tag - OBRIGATÓRIO */}
                 <div className="border-l-4 border-blue-400 bg-blue-50 p-3 rounded">
                   <label className="block text-sm font-semibold text-blue-800 mb-2">
@@ -472,22 +472,22 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <div className="border-l-4 border-yellow-400 bg-yellow-50 p-3 rounded">
                   <div className="flex items-start justify-between gap-3">
                     <label className="flex items-start gap-2 flex-1 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={config.all_have_consent}
-                        onChange={(e) => setConfig({ ...config, all_have_consent: e.target.checked })}
-                        className="mt-1"
-                      />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">
+                  <input
+                    type="checkbox"
+                    checked={config.all_have_consent}
+                    onChange={(e) => setConfig({ ...config, all_have_consent: e.target.checked })}
+                    className="mt-1"
+                  />
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">
                           Contatos autorizaram receber mensagens
-                        </p>
+                    </p>
                         <p className="text-xs text-gray-600">
                           ⚠️ Necessário para enviar campanhas
-                        </p>
-                      </div>
-                    </label>
-                    
+                    </p>
+                  </div>
+                </label>
+                
                     <button
                       type="button"
                       onClick={() => setShowConsentModal(true)}
@@ -496,76 +496,76 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     >
                       <Info className="h-5 w-5" />
                     </button>
-                  </div>
-                </div>
-                
+                    </div>
+              </div>
+              
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setStep(1)} size="sm">
-                    Voltar
-                  </Button>
+                  Voltar
+                </Button>
                   <Button 
                     onClick={handlePreview} 
                     disabled={!config.auto_tag_id || isLoading}
                     size="sm"
                   >
                     {isLoading ? 'Carregando...' : 'Próximo: Preview'}
-                  </Button>
-                </div>
+                </Button>
               </div>
-            )}
-            
-            {/* STEP 3: PREVIEW */}
-            {step === 3 && previewData && (
+            </div>
+          )}
+          
+          {/* STEP 3: PREVIEW */}
+          {step === 3 && previewData && (
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <h3 className="text-lg font-semibold">Preview dos Dados</h3>
                   <span className="text-sm text-gray-500">
                     ~{previewData.total_rows_detected} linhas detectadas
                   </span>
-                </div>
-                
+              </div>
+              
                 {/* Mapeamento de colunas */}
                 <div className="bg-gray-50 p-3 rounded text-sm">
                   <p className="font-medium mb-2">Mapeamento de Colunas</p>
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     {Object.entries(previewData.column_mapping).map(([csvCol, dbField]) => (
-                      <div key={csvCol} className="flex items-center gap-2">
+                    <div key={csvCol} className="flex items-center gap-2">
                         <span className="text-gray-600">{csvCol}</span>
-                        <span>→</span>
+                      <span>→</span>
                         <span className="font-medium">
                           {dbField || <span className="text-gray-400">ignorado</span>}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                
+              </div>
+              
                 {/* Preview da tabela */}
                 <div className="overflow-x-auto max-h-64 overflow-y-auto border rounded">
                   <table className="min-w-full divide-y divide-gray-200 text-xs">
-                    <thead className="bg-gray-50 sticky top-0">
-                      <tr>
+                  <thead className="bg-gray-50 sticky top-0">
+                    <tr>
                         {Object.keys(previewData.column_mapping).map((header) => (
                           <th key={header} className="px-3 py-2 text-left font-medium text-gray-700">
-                            {header}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
+                          {header}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
                       {previewData.sample_rows.slice(0, 10).map((row, idx) => (
                         <tr key={idx} className="hover:bg-gray-50">
                           {Object.keys(previewData.column_mapping).map((header, colIdx) => (
                             <td key={colIdx} className="px-3 py-2 text-gray-900">
                               {row[header] || '-'}
-                            </td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              
                 {/* Avisos */}
                 {previewData.validation_warnings && previewData.validation_warnings.length > 0 && (
                   <div className="bg-yellow-50 border border-yellow-200 rounded p-3">
@@ -585,18 +585,18 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 
                 <div className="flex justify-end gap-2">
                   <Button variant="outline" onClick={() => setStep(2)} size="sm">
-                    Voltar
-                  </Button>
+                  Voltar
+                </Button>
                   <Button onClick={handleImport} disabled={isLoading} size="sm">
                     {isLoading ? 'Importando...' : 'Confirmar Importação'}
-                  </Button>
-                </div>
+                </Button>
               </div>
-            )}
-            
+            </div>
+          )}
+          
             {/* STEP 4: PROCESSANDO */}
-            {step === 4 && (
-              <div className="text-center py-8">
+          {step === 4 && (
+            <div className="text-center py-8">
                 <Loader className="h-12 w-12 animate-spin text-blue-600 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">Processando Importação...</h3>
                 
@@ -605,35 +605,35 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                     <div className="w-full bg-gray-200 rounded-full h-3 mb-4 max-w-md mx-auto">
                       <div
                         className="bg-blue-600 h-3 rounded-full transition-all"
-                        style={{ width: `${progress.percentage}%` }}
-                      />
-                    </div>
+                    style={{ width: `${progress.percentage}%` }}
+                  />
+                </div>
                     <p className="text-sm text-gray-600">
                       {progress.current} de {progress.total} contatos processados ({progress.percentage}%)
-                    </p>
+                </p>
                     <div className="flex justify-center gap-4 mt-4 text-xs">
                       <span className="text-green-600">✓ Criados: {progress.created}</span>
                       <span className="text-blue-600">↻ Atualizados: {progress.updated}</span>
                       <span className="text-gray-600">⊘ Ignorados: {progress.skipped}</span>
                       <span className="text-red-600">✗ Erros: {progress.errors}</span>
-                    </div>
+              </div>
                   </>
                 ) : (
                   <p className="text-sm text-gray-600">Aguarde enquanto processamos os contatos...</p>
                 )}
-              </div>
-            )}
-            
+            </div>
+          )}
+          
             {/* STEP 5: RESULTADO */}
-            {step === 5 && importResult && (
+          {step === 5 && importResult && (
               <div className="space-y-4">
-                <div className="text-center">
+              <div className="text-center">
                   {importResult.status === 'completed' ? (
                     <>
                       <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
                       <h3 className="text-lg font-semibold text-green-600 mb-2">
-                        Importação Concluída!
-                      </h3>
+                  Importação Concluída!
+                </h3>
                     </>
                   ) : (
                     <>
@@ -643,30 +643,30 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                       </h3>
                     </>
                   )}
-                </div>
-                
+              </div>
+              
                 {/* Estatísticas */}
                 <div className="grid grid-cols-2 gap-3">
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Criados</p>
                     <p className="text-2xl font-bold text-green-600">{importResult.created_count || 0}</p>
-                  </Card>
+                </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Atualizados</p>
                     <p className="text-2xl font-bold text-blue-600">{importResult.updated_count || 0}</p>
-                  </Card>
+                </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Ignorados</p>
                     <p className="text-2xl font-bold text-gray-600">{importResult.skipped_count || 0}</p>
-                  </Card>
+                </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Erros</p>
                     <p className="text-2xl font-bold text-red-600">{importResult.error_count || 0}</p>
-                  </Card>
-                </div>
-                
+                </Card>
+              </div>
+              
                 {/* Erros detalhados */}
-                {importResult.errors && importResult.errors.length > 0 && (
+              {importResult.errors && importResult.errors.length > 0 && (
                   <div className="bg-red-50 border border-red-200 rounded p-3 max-h-32 overflow-y-auto">
                     <p className="text-sm font-medium text-red-800 mb-2">Erros encontrados ({importResult.errors.length}):</p>
                     <ul className="list-disc list-inside space-y-1 text-xs text-red-700">
@@ -674,19 +674,19 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                         <li key={idx}>{error}</li>
                       ))}
                     </ul>
-                  </div>
-                )}
-                
+                </div>
+              )}
+              
                 <div className="flex justify-center">
                   <Button onClick={resetAndClose} size="sm">
                     Fechar
-                  </Button>
-                </div>
+                </Button>
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
+    </div>
       
       {/* MODAL DE CONSENTIMENTO LGPD */}
       {showConsentModal && (
