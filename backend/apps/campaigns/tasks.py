@@ -91,7 +91,6 @@ def send_single_message(campaign_id: str, contact_id: str):
         
         return {'success': success, 'message': message}
     except Exception as e:
-        print(f"❌ Erro ao enviar mensagem: {e}")
         return {'success': False, 'message': str(e)}
 
 
@@ -120,11 +119,9 @@ def update_campaign_stats(campaign_id: str):
         campaign.messages_failed = stats['failed']
         campaign.save()
         
-        print(f"📊 Stats atualizadas para campanha: {campaign.name}")
         
         return stats
     except Exception as e:
-        print(f"❌ Erro ao atualizar stats: {e}")
         return None
 
 
@@ -149,7 +146,6 @@ def check_campaign_health():
                     f"Health check falhou: score={instance.health_score}, errors={instance.consecutive_errors}"
                 )
     
-    print(f"✅ Health check completo: {active_campaigns.count()} campanhas verificadas")
 
 
 @shared_task
@@ -166,7 +162,6 @@ def cleanup_old_logs(days: int = 30):
         severity='info'  # Manter errors e warnings
     ).delete()
     
-    print(f"🗑️ Logs removidos: {deleted[0]} registros")
     
     return deleted[0]
 

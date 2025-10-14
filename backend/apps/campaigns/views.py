@@ -36,9 +36,6 @@ class CampaignViewSet(viewsets.ModelViewSet):
         serializer.context['tag_id'] = tag_id
         serializer.context['contact_ids'] = contact_ids
         
-        print(f"📊 Criando campanha:")
-        print(f"   Tag ID: {tag_id}")
-        print(f"   Contact IDs: {contact_ids}")
         
         campaign = serializer.save(
             tenant=self.request.user.tenant,
@@ -76,14 +73,11 @@ class CampaignViewSet(viewsets.ModelViewSet):
         """Pausar campanha"""
         campaign = self.get_object()
         
-        print(f"🛑 PAUSANDO CAMPANHA: {campaign.name} (ID: {campaign.id})")
-        print(f"   Status atual: {campaign.status}")
         
         campaign.pause()
         
         # Verificar se foi pausada
         campaign.refresh_from_db()
-        print(f"   Status após pausar: {campaign.status}")
         
         # Log de pausa
         CampaignLog.log_campaign_paused(campaign, request.user)
@@ -384,7 +378,6 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             ).first()
             
             if not connection:
-                print(f"❌ Conexão Evolution não encontrada para tenant: {notification.tenant}")
                 return False
             
             # Preparar dados para envio
@@ -401,25 +394,16 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             # URL da Evolution API
             url = f"{connection.base_url.rstrip('/')}/message/sendText/{notification.instance.friendly_name}"
             
-            print(f"📤 Enviando resposta via Evolution API:")
-            print(f"   URL: {url}")
-            print(f"   Para: {notification.contact.phone}")
-            print(f"   Mensagem: {message[:50]}...")
             
             # Fazer requisição
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             
             if response.status_code == 200:
                 result = response.json()
-                print(f"✅ Resposta enviada com sucesso: {result}")
                 return True
             else:
-                print(f"❌ Erro ao enviar resposta: {response.status_code} - {response.text}")
                 return False
                 
         except Exception as e:
-            print(f"❌ Erro ao enviar via Evolution API: {str(e)}")
-            import traceback
-            traceback.print_exc()
             return False
 

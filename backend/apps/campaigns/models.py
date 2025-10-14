@@ -723,7 +723,6 @@ class CampaignLog(models.Model):
                     )
                 
         except Exception as e:
-            print(f"Erro ao atualizar status de entrega: {e}")
     
     @staticmethod
     def log_message_failed(campaign, instance, contact, campaign_contact, error_msg, request_data=None, response_data=None, http_status=None):

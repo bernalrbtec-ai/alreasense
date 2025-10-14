@@ -114,9 +114,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 opted_out=False
             )
             if tag_id:
-                print(f"📊 Tag {tag_id}: {contacts_to_add.count()} contatos selecionados manualmente")
-            else:
-                print(f"📊 Contatos avulsos: {contacts_to_add.count()} selecionados")
         elif tag_id:
             # Buscar TODOS os contatos por tag (fallback se contact_ids não fornecido)
             contacts_to_add = Contact.objects.filter(
@@ -125,7 +122,6 @@ class CampaignSerializer(serializers.ModelSerializer):
                 is_active=True,
                 opted_out=False
             ).distinct()
-            print(f"📊 Tag {tag_id}: {contacts_to_add.count()} contatos encontrados (todos da tag)")
         
         # Criar CampaignContact para cada contato
         campaign_contacts = []
@@ -144,7 +140,6 @@ class CampaignSerializer(serializers.ModelSerializer):
         campaign.total_contacts = len(campaign_contacts)
         campaign.save()
         
-        print(f"✅ Campanha criada com {campaign.total_contacts} contatos")
         
         return campaign
     
