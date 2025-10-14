@@ -187,25 +187,6 @@ if env_cors:
 # Debug CORS configuration
 print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
 
-# Debug settings for Railway deploy
-print(f"🔧 [SETTINGS] DEBUG: {DEBUG}")
-print(f"🔧 [SETTINGS] ALLOWED_HOSTS: {ALLOWED_HOSTS}")
-print(f"🔧 [SETTINGS] DATABASE: {DATABASES['default']['ENGINE']}")
-print(f"🔧 [SETTINGS] REDIS_URL: {CELERY_BROKER_URL[:20]}...")
-print(f"🔧 [SETTINGS] PAGE_SIZE: {REST_FRAMEWORK['PAGE_SIZE']}")
-print(f"🔧 [SETTINGS] PAGE_SIZE_MAX: {REST_FRAMEWORK.get('PAGE_SIZE_MAX', 'Not set')}")
-print(f"🔧 [SETTINGS] INSTALLED_APPS: {len(INSTALLED_APPS)} apps")
-print("🚀 [SETTINGS] Django settings loaded successfully!")
-
-# Log application loading
-print(f"📱 [APPS] Loading {len(LOCAL_APPS)} local apps: {', '.join([app.split('.')[-1] for app in LOCAL_APPS])}")
-print(f"📱 [APPS] Loading {len(THIRD_PARTY_APPS)} third-party apps: {', '.join([app.split('.')[-1] for app in THIRD_PARTY_APPS])}")
-print(f"📱 [APPS] Total apps: {len(INSTALLED_APPS)}")
-
-# Log middleware
-print(f"🔧 [MIDDLEWARE] Loading {len(MIDDLEWARE)} middleware components")
-print(f"🔧 [MIDDLEWARE] Components: {', '.join(MIDDLEWARE)}")
-
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False  # Keep False for security, use CORS_ALLOWED_ORIGINS
 
@@ -373,3 +354,27 @@ if IS_PRODUCTION:
     
     # Additional Security Headers
     SECURE_REFERRER_POLICY = 'same-origin'
+
+# Debug settings for Railway deploy - AFTER all configurations are loaded
+print("🚀 [SETTINGS] ==========================================")
+print("🚀 [SETTINGS] DJANGO SETTINGS LOADED SUCCESSFULLY!")
+print("🚀 [SETTINGS] ==========================================")
+print(f"🔧 [SETTINGS] DEBUG: {DEBUG}")
+print(f"🔧 [SETTINGS] ALLOWED_HOSTS: {ALLOWED_HOSTS}")
+print(f"🔧 [SETTINGS] DATABASE: {DATABASES['default']['ENGINE']}")
+print(f"🔧 [SETTINGS] REDIS_URL: {CELERY_BROKER_URL[:20]}...")
+print(f"🔧 [SETTINGS] PAGE_SIZE: {REST_FRAMEWORK['PAGE_SIZE']}")
+print(f"🔧 [SETTINGS] PAGE_SIZE_MAX: {REST_FRAMEWORK.get('PAGE_SIZE_MAX', 'Not set')}")
+print(f"🔧 [SETTINGS] INSTALLED_APPS: {len(INSTALLED_APPS)} apps")
+
+# Log application loading
+print(f"📱 [APPS] Loading {len(LOCAL_APPS)} local apps: {', '.join([app.split('.')[-1] for app in LOCAL_APPS])}")
+print(f"📱 [APPS] Loading {len(THIRD_PARTY_APPS)} third-party apps: {', '.join([app.split('.')[-1] for app in THIRD_PARTY_APPS])}")
+print(f"📱 [APPS] Total apps: {len(INSTALLED_APPS)}")
+
+# Log middleware
+print(f"🔧 [MIDDLEWARE] Loading {len(MIDDLEWARE)} middleware components")
+print(f"🔧 [MIDDLEWARE] Components: {', '.join(MIDDLEWARE)}")
+
+print("✅ [SETTINGS] All configurations loaded successfully!")
+print("🚀 [SETTINGS] Ready for deployment!")
