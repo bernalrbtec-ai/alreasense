@@ -19,17 +19,16 @@ def process_campaign(self, campaign_id: str):
         print(f"❌ Campanha {campaign_id} não encontrada")
         return
     
-    print(f"\n{'='*70}")
-    print(f"🚀 Processando Campanha: {campaign.name}")
-    print(f"{'='*70}")
-    
-    # ⚠️ TIMEOUT PROTECTION: Por lote (não por task inteira)
-    MAX_LOTE_DURATION = 300  # 5 minutos por lote
-    
     # Verificar se campanha está rodando
     if campaign.status != 'running':
-        print(f"⚠️ Campanha não está rodando (status: {campaign.status})")
         return
+    
+    # Log de worker iniciado
+    from .models import CampaignLogManager
+    CampaignLogManager.log_worker_started(
+        campaign=campaign,
+        worker_info={'task_id': campaign_id, 'worker_type': 'process_campaign'}
+    )
     
     sender = CampaignSender(campaign)
     
@@ -37,63 +36,45 @@ def process_campaign(self, campaign_id: str):
     batch_size = 10
     total_sent = 0
     total_failed = 0
+    batch_number = 1
     
     while campaign.status == 'running':
         # ⚠️ CRÍTICO: Recarregar campanha ANTES de processar lote
         campaign.refresh_from_db()
         
-        print(f"🔄 Verificando status da campanha: {campaign.status}")
-        
-        # Verificar se foi pausada/cancelada
         if campaign.status != 'running':
-            print(f"⏸️ Campanha pausada ou cancelada (status: {campaign.status})")
             break
         
-        # Processar lote
-        print(f"\n📦 Processando lote de {batch_size} mensagens...")
+        # Log de início do lote
+        CampaignLogManager.log_batch_started(campaign, batch_size, batch_number)
+        
         results = sender.process_batch(batch_size)
+        
+        # Log de conclusão do lote
+        CampaignLogManager.log_batch_completed(campaign, batch_number, results)
         
         total_sent += results['sent']
         total_failed += results['failed']
+        batch_number += 1
         
-        print(f"\n📊 Lote processado:")
-        print(f"   ✅ Enviadas: {results['sent']}")
-        print(f"   ❌ Falhas: {results['failed']}")
-        print(f"   ⏭️ Puladas: {results['skipped']}")
-        
-        # Verificar se foi pausada durante o lote
         if results.get('paused', False):
-            print(f"⏸️ Campanha foi pausada durante o processamento do lote")
             break
         
-        # ⚠️ Verificar novamente após processar lote
         campaign.refresh_from_db()
         if campaign.status != 'running':
-            print(f"⏸️ Campanha pausada após o lote (status: {campaign.status})")
             break
         
-        # Se não há mais mensagens para enviar
         if results.get('completed', False):
-            print("\n✅ Todos os contatos processados!")
             campaign.complete()
             break
         
-        # Se não há mais contatos pendentes (sem completar)
         if results['skipped'] > 0:
-            print("\n⚠️ Nenhum contato pendente encontrado!")
             break
         
         
         # Pequena pausa entre lotes
         time.sleep(2)
     
-    print(f"\n{'='*70}")
-    print(f"📊 RESUMO DA CAMPANHA: {campaign.name}")
-    print(f"{'='*70}")
-    print(f"✅ Total enviado: {total_sent}")
-    print(f"❌ Total falhas: {total_failed}")
-    print(f"📈 Taxa de sucesso: {(total_sent / (total_sent + total_failed) * 100) if (total_sent + total_failed) > 0 else 0:.1f}%")
-    print(f"{'='*70}\n")
 
 
 @shared_task

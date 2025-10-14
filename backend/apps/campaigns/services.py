@@ -462,22 +462,40 @@ class CampaignSender:
             self.campaign.refresh_from_db()
             
             if self.campaign.status != 'running':
-                print(f"   ⏸️ Campanha pausada dentro do lote (mensagem {i+1}/{batch_size})")
                 results['paused'] = True
-                break  # Sair do loop se campanha foi pausada
+                break
             
             # ⚠️ TIMEOUT PROTECTION: Contador individual por disparo
             import time
             disparo_start_time = time.time()
             MAX_DISPARO_DURATION = 600  # 10 minutos por disparo individual
             
+            # Log de início do disparo
+            from .models import CampaignLogManager
+            # Buscar contato e instância para o log
+            contact, instance = self.get_next_contact_and_instance()
+            if contact and instance:
+                message_content = self.get_next_message_content()
+                CampaignLogManager.log_disparo_started(
+                    campaign=self.campaign,
+                    contact=contact,
+                    instance=instance,
+                    message_content=message_content
+                )
+            
             success, message = self.send_next_message()
             
             # Verificar timeout do disparo individual
             disparo_elapsed = time.time() - disparo_start_time
             if disparo_elapsed > MAX_DISPARO_DURATION:
-                print(f"   ⏰ PAUSA DE SEGURANÇA: Disparo {i+1} demorou {disparo_elapsed:.1f}s")
-                print(f"   🔄 Pausando devido ao tempo excessivo do disparo...")
+                # Log de timeout do disparo
+                if contact and instance:
+                    CampaignLogManager.log_disparo_timeout(
+                        campaign=self.campaign,
+                        contact=contact,
+                        instance=instance,
+                        elapsed_time=disparo_elapsed
+                    )
                 
                 # Log de pausa de segurança
                 from .models import CampaignLog
@@ -490,7 +508,7 @@ class CampaignSender:
                 from .tasks import process_campaign
                 process_campaign.apply_async(
                     args=[self.campaign.id], 
-                    countdown=10  # Aguardar 10 segundos
+                    countdown=10
                 )
                 
                 results['paused'] = True
@@ -498,7 +516,6 @@ class CampaignSender:
             
             # Verificar se falhou por falta de instâncias disponíveis
             if not success and ("disponível" in message.lower() or "instância" in message.lower()):
-                print(f"   ⚠️ Nenhuma instância disponível, pausando lote")
                 results['skipped'] = 1
                 break
             
@@ -513,9 +530,8 @@ class CampaignSender:
                 ).count()
                 
                 if remaining_pending == 0:
-                    print(f"   🎯 Último contato enviado! Campanha será completada após este lote...")
-                    results['completed'] = True  # Marcar como completada (não skipped)
-                    break  # Parar o lote imediatamente após último contato
+                    results['completed'] = True
+                    break
                 
                 # ⚠️ TIMEOUT PROTECTION: Verificar se próxima mensagem deve aguardar
                 if self.campaign.next_message_scheduled_at:
@@ -524,7 +540,6 @@ class CampaignSender:
                     if self.campaign.next_message_scheduled_at > now:
                         wait_seconds = (self.campaign.next_message_scheduled_at - now).total_seconds()
                         if wait_seconds > 30:  # Se precisa aguardar mais de 30s, pausar lote
-                            print(f"   ⏰ Próxima mensagem agendada em {wait_seconds:.0f}s, pausando lote")
                             results['skipped'] = 1
                             break
                     
@@ -547,4 +562,33 @@ class CampaignSender:
                 time.sleep(interval)
         
         return results
+    
+    def get_next_contact_and_instance(self):
+        """Busca próximo contato e instância para logs"""
+        try:
+            # Buscar próximo contato pendente
+            from .models import CampaignContact
+            campaign_contact = CampaignContact.objects.filter(
+                campaign=self.campaign,
+                status='pending'
+            ).first()
+            
+            if not campaign_contact:
+                return None, None
+            
+            # Buscar instância disponível
+            instance = self.rotation_service.select_next_instance()
+            
+            return campaign_contact.contact, instance
+        except:
+            return None, None
+    
+    def get_next_message_content(self):
+        """Busca conteúdo da próxima mensagem para logs"""
+        try:
+            if self.campaign.messages.exists():
+                return self.campaign.messages.first().content
+            return "Mensagem não encontrada"
+        except:
+            return "Erro ao buscar mensagem"
 

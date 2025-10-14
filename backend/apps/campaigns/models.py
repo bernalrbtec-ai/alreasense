@@ -984,3 +984,92 @@ class CampaignNotification(models.Model):
             campaign=self.campaign,
             error_msg=f"Falha ao enviar resposta para {self.contact.name}: {error_message or 'Erro desconhecido'}"
         )
+
+
+# Métodos adicionais para logs estruturados
+class CampaignLogManager:
+    """Manager para logs estruturados de campanha"""
+    
+    @staticmethod
+    def log_worker_started(campaign, worker_info=None):
+        """Log de worker iniciado"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='worker_started',
+            severity='info',
+            message='Worker iniciado para processar campanha',
+            details={
+                'worker_info': worker_info or {},
+                'timestamp': timezone.now().isoformat()
+            }
+        )
+    
+    @staticmethod
+    def log_batch_started(campaign, batch_size, batch_number):
+        """Log de início de lote"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='batch_started',
+            severity='info',
+            message=f'Iniciando lote {batch_number} com {batch_size} mensagens',
+            details={
+                'batch_size': batch_size,
+                'batch_number': batch_number,
+                'timestamp': timezone.now().isoformat()
+            }
+        )
+    
+    @staticmethod
+    def log_batch_completed(campaign, batch_number, results):
+        """Log de conclusão de lote"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='batch_completed',
+            severity='info',
+            message=f'Lote {batch_number} concluído: {results["sent"]} enviadas, {results["failed"]} falhas',
+            details={
+                'batch_number': batch_number,
+                'results': results,
+                'timestamp': timezone.now().isoformat()
+            }
+        )
+    
+    @staticmethod
+    def log_disparo_started(campaign, contact, instance, message_content):
+        """Log de início de disparo individual"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='disparo_started',
+            severity='info',
+            message=f'Iniciando disparo para {contact.name} via {instance.friendly_name}',
+            details={
+                'contact_id': str(contact.id),
+                'contact_name': contact.name,
+                'contact_phone': contact.phone,
+                'instance_id': str(instance.id),
+                'instance_name': instance.friendly_name,
+                'message_preview': message_content[:100] + '...' if len(message_content) > 100 else message_content,
+                'timestamp': timezone.now().isoformat()
+            },
+            contact=contact
+        )
+    
+    @staticmethod
+    def log_disparo_timeout(campaign, contact, instance, elapsed_time):
+        """Log de timeout de disparo"""
+        return CampaignLog.objects.create(
+            campaign=campaign,
+            log_type='disparo_timeout',
+            severity='warning',
+            message=f'Timeout no disparo para {contact.name}: {elapsed_time:.1f}s',
+            details={
+                'contact_id': str(contact.id),
+                'contact_name': contact.name,
+                'contact_phone': contact.phone,
+                'instance_id': str(instance.id),
+                'instance_name': instance.friendly_name,
+                'elapsed_time': elapsed_time,
+                'timestamp': timezone.now().isoformat()
+            },
+            contact=contact
+        )
