@@ -663,8 +663,8 @@ class CampaignSender:
                         wait_seconds = (self.campaign.next_message_scheduled_at - now).total_seconds()
                         if wait_seconds > 30:  # Se precisa aguardar mais de 30s, pausar lote
                             results['skipped'] = 1
-        break
-    
+                            break
+                    
             elif "pendente" in message.lower():
                 # Se não há contatos pendentes, marcar como completado
                 results['completed'] = True
@@ -672,7 +672,7 @@ class CampaignSender:
             elif "disponível" in message.lower() or "instância" in message.lower():
                 results['skipped'] += 1
                 break  # Parar se não há instâncias disponíveis
-    else:
+            else:
                 results['failed'] += 1
             
             results['messages'].append(message)
