@@ -24,6 +24,7 @@ def process_campaign(self, campaign_id: str):
     
     # Log de worker iniciado
     from .models import CampaignLogManager
+    print(f"🚀 [TASK] Iniciando processamento da campanha: {campaign.name} (ID: {campaign_id})")
     CampaignLogManager.log_worker_started(
         campaign=campaign,
         worker_info={'task_id': campaign_id, 'worker_type': 'process_campaign'}
@@ -42,14 +43,17 @@ def process_campaign(self, campaign_id: str):
         campaign.refresh_from_db()
         
         if campaign.status != 'running':
+            print(f"⏸️ [TASK] Campanha pausada, interrompendo processamento")
             break
         
         # Log de início do lote
+        print(f"📦 [TASK] Processando lote {batch_number} de {batch_size} mensagens")
         CampaignLogManager.log_batch_started(campaign, batch_size, batch_number)
         
         results = sender.process_batch(batch_size)
         
         # Log de conclusão do lote
+        print(f"✅ [TASK] Lote {batch_number} processado: {results['sent']} enviadas, {results['failed']} falhas")
         CampaignLogManager.log_batch_completed(campaign, batch_number, results)
         
         total_sent += results['sent']
@@ -57,22 +61,29 @@ def process_campaign(self, campaign_id: str):
         batch_number += 1
         
         if results.get('paused', False):
+            print(f"⏸️ [TASK] Lote pausado, interrompendo processamento")
             break
         
         campaign.refresh_from_db()
         if campaign.status != 'running':
+            print(f"⏸️ [TASK] Campanha não está mais rodando, interrompendo")
             break
         
         if results.get('completed', False):
+            print(f"🎯 [TASK] Campanha completada com sucesso!")
             campaign.complete()
             break
         
         if results['skipped'] > 0:
+            print(f"⚠️ [TASK] Nenhum contato pendente encontrado, interrompendo")
             break
         
         
         # Pequena pausa entre lotes
+        print(f"⏳ [TASK] Aguardando 2s antes do próximo lote...")
         time.sleep(2)
+    
+    print(f"🏁 [TASK] Processamento finalizado - Total: {total_sent} enviadas, {total_failed} falhas")
     
 
 

@@ -993,6 +993,7 @@ class CampaignLogManager:
     @staticmethod
     def log_worker_started(campaign, worker_info=None):
         """Log de worker iniciado"""
+        print(f"🚀 [WORKER] Iniciando worker para campanha: {campaign.name}")
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='worker_started',
@@ -1007,6 +1008,7 @@ class CampaignLogManager:
     @staticmethod
     def log_batch_started(campaign, batch_size, batch_number):
         """Log de início de lote"""
+        print(f"📦 [BATCH] Iniciando lote {batch_number} com {batch_size} mensagens - Campanha: {campaign.name}")
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='batch_started',
@@ -1022,6 +1024,7 @@ class CampaignLogManager:
     @staticmethod
     def log_batch_completed(campaign, batch_number, results):
         """Log de conclusão de lote"""
+        print(f"✅ [BATCH] Lote {batch_number} concluído: {results['sent']} enviadas, {results['failed']} falhas - Campanha: {campaign.name}")
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='batch_completed',
@@ -1037,6 +1040,7 @@ class CampaignLogManager:
     @staticmethod
     def log_disparo_started(campaign, contact, instance, message_content):
         """Log de início de disparo individual"""
+        print(f"🎯 [DISPARO] Iniciando disparo para {contact.name} via {instance.friendly_name} - Campanha: {campaign.name}")
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='disparo_started',
@@ -1057,6 +1061,7 @@ class CampaignLogManager:
     @staticmethod
     def log_disparo_timeout(campaign, contact, instance, elapsed_time):
         """Log de timeout de disparo"""
+        print(f"⏰ [TIMEOUT] Timeout no disparo para {contact.name}: {elapsed_time:.1f}s - Campanha: {campaign.name}")
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='disparo_timeout',
