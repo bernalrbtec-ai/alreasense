@@ -10,7 +10,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from .models import Campaign, CampaignContact, CampaignLog
-from .engine_simple import simple_campaign_manager
+from .rabbitmq_consumer import rabbitmq_consumer
 from .monitor import campaign_health_monitor, system_health_monitor
 from .serializers import CampaignSerializer, CampaignDetailSerializer
 
@@ -48,14 +48,19 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                # Iniciar engine
-                engine = simple_campaign_manager.start_campaign(str(campaign.id))
+                # Iniciar campanha
+                success = rabbitmq_consumer.start_campaign(str(campaign.id))
                 
-                return Response({
-                    'message': f'Campanha {campaign.name} iniciada com sucesso',
-                    'campaign_id': str(campaign.id),
-                    'engine_status': engine.get_status()
-                })
+                if success:
+                    return Response({
+                        'message': f'Campanha {campaign.name} iniciada com sucesso',
+                        'campaign_id': str(campaign.id)
+                    })
+                else:
+                    return Response(
+                        {'error': 'Erro ao iniciar campanha'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
             
             elif action == 'pause':
                 # Pausar campanha
@@ -65,7 +70,7 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                simple_campaign_manager.pause_campaign(str(campaign.id))
+                rabbitmq_consumer.pause_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} pausada com sucesso'
@@ -79,7 +84,7 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                simple_campaign_manager.resume_campaign(str(campaign.id))
+                rabbitmq_consumer.resume_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} resumida com sucesso'
@@ -93,7 +98,7 @@ class CampaignControlView(generics.GenericAPIView):
                         status=status.HTTP_400_BAD_REQUEST
                     )
                 
-                simple_campaign_manager.stop_campaign(str(campaign.id))
+                rabbitmq_consumer.stop_campaign(str(campaign.id))
                 
                 return Response({
                     'message': f'Campanha {campaign.name} parada com sucesso'
@@ -133,15 +138,15 @@ def campaign_health(request, campaign_id):
         # Obter alertas ativos
         alerts = campaign_health_monitor.get_campaign_alerts(str(campaign.id))
         
-        # Status do engine
-        engine_status = simple_campaign_manager.get_campaign_status(str(campaign.id))
+        # Status do consumer
+        consumer_status = rabbitmq_consumer.get_campaign_status(str(campaign.id))
         
         return Response({
             'campaign_id': str(campaign.id),
             'campaign_name': campaign.name,
             'health_metrics': health_metrics.to_dict(),
             'alerts': [alert.to_dict() for alert in alerts if not alert.resolved],
-            'engine_status': engine_status,
+            'consumer_status': consumer_status,
             'timestamp': timezone.now().isoformat()
         })
         
@@ -183,8 +188,8 @@ def active_campaigns(request):
         # Campanhas do tenant
         tenant_campaigns = Campaign.objects.filter(tenant=request.user.tenant)
         
-        # Campanhas ativas no engine
-        active_engine_campaigns = simple_campaign_manager.list_active_campaigns()
+        # Campanhas ativas no consumer
+        active_consumer_campaigns = rabbitmq_consumer.get_active_campaigns()
         
         campaigns_data = []
         for campaign in tenant_campaigns:
@@ -195,8 +200,8 @@ def active_campaigns(request):
                 'messages_sent': campaign.messages_sent,
                 'messages_delivered': campaign.messages_delivered,
                 'messages_failed': campaign.messages_failed,
-                'is_engine_active': str(campaign.id) in active_engine_campaigns,
-                'engine_status': simple_campaign_manager.get_campaign_status(str(campaign.id))
+                'is_consumer_active': str(campaign.id) in active_consumer_campaigns,
+                'consumer_status': rabbitmq_consumer.get_campaign_status(str(campaign.id))
             }
             
             # Adicionar métricas de saúde se disponível
@@ -211,7 +216,7 @@ def active_campaigns(request):
         
         return Response({
             'campaigns': campaigns_data,
-            'active_engines': len(active_engine_campaigns),
+            'active_consumers': len(active_consumer_campaigns),
             'timestamp': timezone.now().isoformat()
         })
         

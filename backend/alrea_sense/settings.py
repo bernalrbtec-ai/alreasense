@@ -33,7 +33,6 @@ THIRD_PARTY_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'channels',
-    'django_celery_beat',
 ]
 
 LOCAL_APPS = [
@@ -240,35 +239,8 @@ CHANNEL_LAYERS = {
 # RabbitMQ
 RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
 
-# Celery
-CELERY_BROKER_URL = config('CELERY_BROKER_URL', default='redis://localhost:6379/0')
-CELERY_RESULT_BACKEND = config('CELERY_RESULT_BACKEND', default='redis://localhost:6379/0')
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_SERIALIZER = 'json'
-CELERY_TIMEZONE = TIME_ZONE
-CELERY_BEAT_SCHEDULER = 'django_celery_beat.schedulers:DatabaseScheduler'
-
-# ⚠️ CRÍTICO: Configurar timeout para Railway (600s limite)
-CELERY_TASK_TIME_LIMIT = 540  # 9 minutos (60s de margem)
-CELERY_TASK_SOFT_TIME_LIMIT = 480  # 8 minutos (soft limit)
-CELERY_WORKER_PREFETCH_MULTIPLIER = 1  # Processar uma task por vez
-CELERY_WORKER_CONCURRENCY = 2  # Limit to 2 workers instead of 48
-CELERY_TASK_ACKS_LATE = True  # Acknowledge tasks after completion
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 50  # Restart worker after 50 tasks
-CELERY_TASK_REJECT_ON_WORKER_LOST = True  # Reject tasks if worker dies
-
 # Alertas por Email
 ALERT_EMAIL_RECIPIENTS = config('ALERT_EMAIL_RECIPIENTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
-
-# Celery Beat Schedule
-from celery.schedules import crontab
-CELERY_BEAT_SCHEDULE = {
-    'check-campaign-health': {
-        'task': 'apps.campaigns.tasks.check_campaign_health',
-        'schedule': crontab(minute='*/5'),  # A cada 5 minutos
-    },
-}
 
 # Stripe
 STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
