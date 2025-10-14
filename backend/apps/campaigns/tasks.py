@@ -16,7 +16,6 @@ def process_campaign(self, campaign_id: str):
     try:
         campaign = Campaign.objects.get(id=campaign_id)
     except Campaign.DoesNotExist:
-        print(f"❌ Campanha {campaign_id} não encontrada")
         return
     
     # Verificar se campanha está rodando

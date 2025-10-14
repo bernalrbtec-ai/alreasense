@@ -88,7 +88,6 @@ class RotationService:
                     self.campaign, instance,
                     f"Health score baixo: {instance.health_score} (mínimo: {self.campaign.pause_on_health_below}) - Continuando envio"
                 )
-                print(f"⚠️ Instância com health baixo ({instance.health_score}), mas continuando envio")
                 # continue  # Comentado - não pula mais a instância
             
             # Verificar limite diário
@@ -104,7 +103,6 @@ class RotationService:
                     self.campaign, instance,
                     f"Health abaixo do mínimo: {instance.health_score} < {self.campaign.pause_on_health_below} - Continuando envio"
                 )
-                print(f"⚠️ Instância com health baixo ({instance.health_score}), mas continuando envio")
                 # continue  # Comentado - não pula mais a instância
             
             available.append(instance)
@@ -191,11 +189,6 @@ class RotationService:
         best = weighted_instances[0]
         
         # Log detalhado
-        print(f"🎯 Seleção Inteligente:")
-        print(f"   Escolhida: {best['instance'].friendly_name}")
-        print(f"   Weight: {best['weight']:.2f}")
-        print(f"   Health: {best['health']}")
-        print(f"   Capacidade: {best['capacity']:.1f}%")
         
         return best['instance']
     
@@ -323,33 +316,14 @@ class CampaignSender:
                 'text': message_text
             }
             
-            print(f"📤 Enviando mensagem para {contact.name} ({phone})")
-            print(f"   API: {url}")
-            print(f"   Mensagem: {message.content[:50]}...")
             
             response = requests.post(url, json=payload, headers=headers, timeout=10)
             response.raise_for_status()
             
             response_data = response.json()
-            print(f"✅ Resposta da API: {response_data}")
-            print(f"🔍 DEBUG - Keys na resposta: {list(response_data.keys()) if isinstance(response_data, dict) else 'Not a dict'}")
-            
             # Salvar ID da mensagem do WhatsApp se disponível
             if 'key' in response_data and 'id' in response_data['key']:
                 campaign_contact.whatsapp_message_id = response_data['key']['id']
-                print(f"🔑 SALVANDO whatsapp_message_id: {response_data['key']['id']}")
-                print(f"📋 Resposta completa da API: {json.dumps(response_data, indent=2)}")
-            else:
-                print(f"❌ ESTRUTURA INCORRETA - 'key' not in response_data ou 'id' not in key")
-                print(f"📋 Resposta completa da API: {json.dumps(response_data, indent=2)}")
-                print(f"🔍 DEBUG - response_data type: {type(response_data)}")
-                if isinstance(response_data, dict):
-                    print(f"🔍 DEBUG - response_data keys: {list(response_data.keys())}")
-                    if 'key' in response_data:
-                        print(f"🔍 DEBUG - key content: {response_data['key']}")
-                        print(f"🔍 DEBUG - key type: {type(response_data['key'])}")
-                        if isinstance(response_data['key'], dict):
-                            print(f"🔍 DEBUG - key keys: {list(response_data['key'].keys())}")
             
             # Calcular duração
             duration_ms = int((time.time() - start_time) * 1000)
@@ -362,9 +336,7 @@ class CampaignSender:
             # Atualizar status do contato PRIMEIRO
             campaign_contact.status = 'sent'
             campaign_contact.sent_at = timezone.now()
-            print(f"💾 SALVANDO CampaignContact - ID: {campaign_contact.id}, WhatsApp ID: {campaign_contact.whatsapp_message_id}")
             campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
-            print(f"✅ CampaignContact salvo - Status: {campaign_contact.status}, WhatsApp ID: {campaign_contact.whatsapp_message_id}")
             
             # Atualizar campanha
             self.campaign.messages_sent += 1
