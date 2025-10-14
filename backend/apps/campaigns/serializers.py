@@ -178,6 +178,16 @@ class CampaignSerializer(serializers.ModelSerializer):
         return instance
 
 
+class CampaignDetailSerializer(CampaignSerializer):
+    """Serializer detalhado para campanhas com informações adicionais"""
+    
+    contacts = CampaignContactSerializer(source='campaigncontact_set', many=True, read_only=True)
+    logs = CampaignLogSerializer(source='campaignlog_set', many=True, read_only=True)
+    
+    class Meta(CampaignSerializer.Meta):
+        fields = CampaignSerializer.Meta.fields + ['contacts', 'logs']
+
+
 class CampaignContactSerializer(serializers.ModelSerializer):
     """Serializer para contatos da campanha"""
     
