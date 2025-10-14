@@ -317,11 +317,9 @@ class ContactViewSet(viewsets.ModelViewSet):
         leads = contacts.filter(total_purchases=0).count()
         customers = contacts.filter(total_purchases__gte=1).count()
         
-        # Contatos com problemas de entrega
-        delivery_problems = contacts.filter(
-            msgs_sent__gt=0, 
-            msgs_delivered=0
-        ).count()
+        # Contatos com problemas de entrega (usando campos disponíveis)
+        # Por enquanto, usar opted_out como proxy para problemas de entrega
+        delivery_problems = contacts.filter(opted_out=True).count()
         
         return Response({
             'total': total,
