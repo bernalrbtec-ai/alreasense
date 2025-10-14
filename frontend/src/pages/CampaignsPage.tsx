@@ -739,10 +739,32 @@ const CampaignsPage: React.FC = () => {
     }
   }
 
-  const filteredCampaigns = campaigns.filter(campaign =>
-    campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredCampaigns = campaigns
+    .filter(campaign =>
+      campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
+    )
+    .sort((a, b) => {
+      // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
+      const statusOrder = {
+        'draft': 1,        // RASCUNHOS primeiro
+        'scheduled': 2,    // AGENDADAS
+        'running': 3,      // ATIVAS
+        'paused': 4,       // PAUSADAS
+        'completed': 5,    // CONCLUÍDAS
+        'cancelled': 6     // CANCELADAS
+      }
+      
+      const aOrder = statusOrder[a.status] || 999
+      const bOrder = statusOrder[b.status] || 999
+      
+      // Se status igual, ordenar por data de criação (mais recente primeiro)
+      if (aOrder === bOrder) {
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      }
+      
+      return aOrder - bOrder
+    })
 
   if (loading) {
     return (
