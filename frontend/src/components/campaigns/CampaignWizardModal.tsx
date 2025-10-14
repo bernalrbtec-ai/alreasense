@@ -24,6 +24,7 @@ interface Tag {
   id: string
   name: string
   color: string
+  contact_count: number  // ✅ Usar contador do backend
 }
 
 interface Contact {
@@ -386,7 +387,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     <option value="">Escolha uma tag...</option>
                     {tags.map((tag) => (
                       <option key={tag.id} value={tag.id}>
-                        🏷️ {tag.name} ({contacts.filter(c => c.tags?.some(t => t.id === tag.id)).length} contatos)
+                        🏷️ {tag.name} ({tag.contact_count} contatos)
                       </option>
                     ))}
                   </select>
@@ -395,7 +396,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     <div className="space-y-2">
                       <div className="flex justify-between items-center">
                         <p className="text-sm font-medium text-gray-700">
-                          Contatos com esta tag ({contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id) && formData.contact_ids.includes(c.id)).length}/{contacts.filter(c => c.tags?.some(t => t.id === formData.tag_id)).length} selecionados)
+                          Contatos com esta tag ({formData.contact_ids.length}/{tags.find(t => t.id === formData.tag_id)?.contact_count || 0} selecionados)
                         </p>
                         <div className="flex gap-2">
                           <button
