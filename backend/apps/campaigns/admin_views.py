@@ -50,6 +50,11 @@ class RabbitMQMonitoringAdminMixin:
                 self.admin_site.admin_view(self.queue_stats_api),
                 name='campaigns_campaign_queue_stats_api',
             ),
+            path(
+                'rabbitmq-monitoring/control/',
+                self.admin_site.admin_view(self.rabbitmq_control_api),
+                name='campaigns_campaign_rabbitmq_control_api',
+            ),
         ]
         return custom_urls + urls
     
@@ -251,6 +256,62 @@ class RabbitMQMonitoringAdminMixin:
             
         except Exception as e:
             logger.error(f"Erro na API de estatísticas das filas: {e}")
+            return JsonResponse({
+                'status': 'error',
+                'message': str(e)
+            }, status=500)
+    
+    @method_decorator(user_passes_test(is_superuser))
+    @require_http_methods(["POST"])
+    def rabbitmq_control_api(self, request):
+        """API para controlar o RabbitMQ Consumer (start/stop/restart)"""
+        
+        try:
+            action = request.POST.get('action', '').lower()
+            consumer = get_rabbitmq_consumer()
+            
+            if not consumer:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'RabbitMQ Consumer não está configurado'
+                }, status=503)
+            
+            if action == 'start':
+                success, message = consumer.force_start()
+            elif action == 'stop':
+                success, message = consumer.force_stop()
+            elif action == 'restart':
+                success, message = consumer.force_restart()
+            elif action == 'status':
+                detailed_status = consumer.get_detailed_status()
+                return JsonResponse({
+                    'status': 'success',
+                    'data': detailed_status,
+                    'timestamp': timezone.now().isoformat(),
+                })
+            else:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': 'Ação inválida. Use: start, stop, restart ou status'
+                }, status=400)
+            
+            if success:
+                # Obter status atualizado após a ação
+                detailed_status = consumer.get_detailed_status()
+                return JsonResponse({
+                    'status': 'success',
+                    'message': message,
+                    'data': detailed_status,
+                    'timestamp': timezone.now().isoformat(),
+                })
+            else:
+                return JsonResponse({
+                    'status': 'error',
+                    'message': message
+                }, status=500)
+                
+        except Exception as e:
+            logger.error(f"Erro na API de controle RabbitMQ: {e}")
             return JsonResponse({
                 'status': 'error',
                 'message': str(e)

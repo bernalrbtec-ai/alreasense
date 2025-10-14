@@ -402,6 +402,74 @@ class RabbitMQConsumer:
         """Lista campanhas ativas"""
         return list(self.consumer_threads.keys())
     
+    def force_start(self):
+        """Força o início do consumer (para uso via admin)"""
+        try:
+            if not self.is_running:
+                self.start(auto_start_campaigns=True)
+                return True, "Consumer iniciado com sucesso"
+            else:
+                return False, "Consumer já está rodando"
+        except Exception as e:
+            return False, f"Erro ao iniciar consumer: {str(e)}"
+    
+    def force_stop(self):
+        """Força a parada do consumer (para uso via admin)"""
+        try:
+            if self.is_running:
+                self.stop()
+                return True, "Consumer parado com sucesso"
+            else:
+                return False, "Consumer já está parado"
+        except Exception as e:
+            return False, f"Erro ao parar consumer: {str(e)}"
+    
+    def force_restart(self):
+        """Força o reinício do consumer (para uso via admin)"""
+        try:
+            if self.is_running:
+                self.stop()
+                time.sleep(2)  # Aguardar um pouco
+            self.start(auto_start_campaigns=True)
+            return True, "Consumer reiniciado com sucesso"
+        except Exception as e:
+            return False, f"Erro ao reiniciar consumer: {str(e)}"
+    
+    def get_detailed_status(self):
+        """Retorna status detalhado do consumer"""
+        try:
+            active_campaigns = self.get_active_campaigns()
+            campaign_details = []
+            
+            for campaign_id in active_campaigns:
+                status = self.get_campaign_status(campaign_id)
+                campaign_details.append({
+                    'campaign_id': campaign_id,
+                    'status': status.get('status', 'unknown'),
+                    'is_running': status.get('is_running', False),
+                    'messages_processed': status.get('messages_processed', 0),
+                    'last_activity': status.get('last_activity', None),
+                })
+            
+            return {
+                'is_running': self.is_running,
+                'connection_status': 'connected' if self.connection and not self.connection.is_closed else 'disconnected',
+                'active_campaigns_count': len(active_campaigns),
+                'active_campaigns': active_campaigns,
+                'campaign_details': campaign_details,
+                'monitor_running': self.monitor_thread and self.monitor_thread.is_alive() if self.monitor_thread else False,
+            }
+        except Exception as e:
+            return {
+                'is_running': False,
+                'connection_status': 'error',
+                'error': str(e),
+                'active_campaigns_count': 0,
+                'active_campaigns': [],
+                'campaign_details': [],
+                'monitor_running': False,
+            }
+    
     def get_campaign_status(self, campaign_id: str) -> Optional[Dict[str, Any]]:
         """Retorna status de uma campanha"""
         try:

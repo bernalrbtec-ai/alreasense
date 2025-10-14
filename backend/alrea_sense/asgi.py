@@ -36,3 +36,35 @@ application = ProtocolTypeRouter({
 
 print("✅ [ASGI] Aplicação ASGI configurada com sucesso!")
 print("🌐 [ASGI] Servidor pronto para receber conexões HTTP e WebSocket!")
+
+# Iniciar RabbitMQ Consumer em thread separada (apenas em produção)
+import threading
+import time
+import logging
+
+logger = logging.getLogger(__name__)
+
+def start_rabbitmq_consumer():
+    """Inicia o RabbitMQ Consumer em thread separada"""
+    try:
+        # Aguardar um pouco para o Django estar completamente carregado
+        time.sleep(10)
+        
+        from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
+        
+        consumer = get_rabbitmq_consumer()
+        if consumer:
+            print("🚀 [RABBITMQ] Iniciando RabbitMQ Consumer em background...")
+            consumer.start(auto_start_campaigns=True)
+            print("✅ [RABBITMQ] RabbitMQ Consumer iniciado com sucesso!")
+        else:
+            print("⚠️ [RABBITMQ] RabbitMQ Consumer não disponível - campanhas não serão processadas")
+            
+    except Exception as e:
+        print(f"❌ [RABBITMQ] Erro ao iniciar RabbitMQ Consumer: {e}")
+
+# Iniciar consumer apenas se não estiver em DEBUG (produção)
+if not os.environ.get('DEBUG', 'False').lower() == 'true':
+    consumer_thread = threading.Thread(target=start_rabbitmq_consumer, daemon=True)
+    consumer_thread.start()
+    print("🧵 [RABBITMQ] Thread do RabbitMQ Consumer iniciada")

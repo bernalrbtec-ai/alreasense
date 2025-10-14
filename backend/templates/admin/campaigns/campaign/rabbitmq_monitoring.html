@@ -1,6 +1,8 @@
 {% extends "admin/base_site.html" %}
 {% load i18n admin_urls static admin_modify %}
 
+{% csrf_token %}
+
 {% block title %}Monitoramento do RabbitMQ | {{ site_title|default:_('Django site admin') }}{% endblock %}
 
 {% block breadcrumbs %}
@@ -134,10 +136,45 @@
     </div>
     {% endif %}
 
-    <!-- Controles -->
+    <!-- Controles do RabbitMQ Consumer -->
     <div class="form-row">
         <div class="field-box">
-            <h3>🎛️ Controles</h3>
+            <h3>🎛️ Controles do RabbitMQ Consumer</h3>
+            <div class="consumer-controls">
+                <button onclick="controlConsumer('start')" class="btn btn-success" id="startBtn">
+                    ▶️ Iniciar Consumer
+                </button>
+                <button onclick="controlConsumer('stop')" class="btn btn-danger" id="stopBtn">
+                    ⏹️ Parar Consumer
+                </button>
+                <button onclick="controlConsumer('restart')" class="btn btn-warning" id="restartBtn">
+                    🔄 Reiniciar Consumer
+                </button>
+                <button onclick="getConsumerStatus()" class="btn btn-info" id="statusBtn">
+                    📊 Status Detalhado
+                </button>
+            </div>
+            <div id="consumerStatus" class="consumer-status">
+                <div class="status-item">
+                    <strong>Consumer:</strong>
+                    <span id="consumerStatusText">Verificando...</span>
+                </div>
+                <div class="status-item">
+                    <strong>Conexão:</strong>
+                    <span id="connectionStatusText">Verificando...</span>
+                </div>
+                <div class="status-item">
+                    <strong>Monitor:</strong>
+                    <span id="monitorStatusText">Verificando...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controles Gerais -->
+    <div class="form-row">
+        <div class="field-box">
+            <h3>🔧 Controles Gerais</h3>
             <div class="controls">
                 <button onclick="refreshData()" class="btn btn-primary">🔄 Atualizar Dados</button>
                 <button onclick="toggleAutoRefresh()" class="btn btn-secondary" id="autoRefreshBtn">
@@ -266,6 +303,41 @@
     text-decoration: underline;
 }
 
+.btn-success {
+    background: #28a745;
+    color: white;
+}
+
+.btn-danger {
+    background: #dc3545;
+    color: white;
+}
+
+.btn-warning {
+    background: #ffc107;
+    color: #212529;
+}
+
+.btn-info {
+    background: #17a2b8;
+    color: white;
+}
+
+.consumer-controls {
+    display: flex;
+    gap: 10px;
+    margin: 15px 0;
+    flex-wrap: wrap;
+}
+
+.consumer-status {
+    margin-top: 20px;
+    padding: 15px;
+    background: #f8f9fa;
+    border-radius: 5px;
+    border: 1px solid #dee2e6;
+}
+
 .activity-log {
     max-height: 200px;
     overflow-y: auto;
@@ -381,10 +453,78 @@ function addLogEntry(message) {
     }
 }
 
+function controlConsumer(action) {
+    const formData = new FormData();
+    formData.append('action', action);
+    formData.append('csrfmiddlewaretoken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+    
+    // Desabilitar botões durante a ação
+    const buttons = document.querySelectorAll('.consumer-controls button');
+    buttons.forEach(btn => btn.disabled = true);
+    
+    fetch('{% url "admin:campaigns_campaign_rabbitmq_control_api" %}', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            addLogEntry(`✅ ${action.toUpperCase()}: ${data.message}`);
+            updateConsumerStatus(data.data);
+        } else {
+            addLogEntry(`❌ ${action.toUpperCase()}: ${data.message}`);
+        }
+    })
+    .catch(error => {
+        addLogEntry(`❌ Erro ao ${action}: ${error.message}`);
+    })
+    .finally(() => {
+        // Reabilitar botões
+        buttons.forEach(btn => btn.disabled = false);
+    });
+}
+
+function getConsumerStatus() {
+    controlConsumer('status');
+}
+
+function updateConsumerStatus(statusData) {
+    if (!statusData) return;
+    
+    // Atualizar status do consumer
+    const consumerStatusText = document.getElementById('consumerStatusText');
+    const connectionStatusText = document.getElementById('connectionStatusText');
+    const monitorStatusText = document.getElementById('monitorStatusText');
+    
+    if (consumerStatusText) {
+        consumerStatusText.textContent = statusData.is_running ? '✅ Rodando' : '❌ Parado';
+        consumerStatusText.className = statusData.is_running ? 'status-healthy' : 'status-unhealthy';
+    }
+    
+    if (connectionStatusText) {
+        const connectionStatus = statusData.connection_status || 'unknown';
+        connectionStatusText.textContent = connectionStatus === 'connected' ? '✅ Conectado' : 
+                                          connectionStatus === 'disconnected' ? '❌ Desconectado' : '❓ Desconhecido';
+        connectionStatusText.className = connectionStatus === 'connected' ? 'status-healthy' : 'status-unhealthy';
+    }
+    
+    if (monitorStatusText) {
+        monitorStatusText.textContent = statusData.monitor_running ? '✅ Ativo' : '❌ Inativo';
+        monitorStatusText.className = statusData.monitor_running ? 'status-healthy' : 'status-unhealthy';
+    }
+    
+    // Atualizar contadores
+    const activeCampaigns = document.querySelector('.status-active');
+    if (activeCampaigns) {
+        activeCampaigns.textContent = statusData.active_campaigns_count || 0;
+    }
+}
+
 // Inicializar
 document.addEventListener('DOMContentLoaded', function() {
     addLogEntry('Página de monitoramento carregada');
     refreshData();
+    getConsumerStatus(); // Verificar status do consumer ao carregar
 });
 </script>
 {% endblock %}
