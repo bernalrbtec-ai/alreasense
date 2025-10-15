@@ -278,6 +278,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
       })
       
       // Verificar se há campos vazios que podem causar erro
+      console.log('🔍 [VALIDATION] Verificando nome:', {
+        name: formData.name,
+        name_type: typeof formData.name,
+        name_length: formData.name ? formData.name.length : 0,
+        name_trimmed: formData.name ? formData.name.trim() : ''
+      })
+      
       if (!formData.name || formData.name.trim() === '') {
         console.error('❌ [ERROR] Nome da campanha está vazio!')
         throw new Error('Nome da campanha é obrigatório')
@@ -474,7 +481,6 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     value={formData.tag_id}
                     onChange={async (e) => {
                       const tagId = e.target.value
-                      setFormData({ ...formData, tag_id: tagId })
                       
                       // ✅ Carregar contatos da tag via API quando seleciona uma tag
                       if (tagId) {
