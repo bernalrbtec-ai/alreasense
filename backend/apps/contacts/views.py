@@ -475,8 +475,25 @@ class TagViewSet(viewsets.ModelViewSet):
         return Tag.objects.filter(tenant=user.tenant)
     
     def perform_create(self, serializer):
-        """Associa tenant na criação"""
-        serializer.save(tenant=self.request.user.tenant)
+        """Associa tenant na criação com tratamento de duplicação"""
+        from django.db import IntegrityError
+        from rest_framework import status
+        from rest_framework.response import Response
+        
+        try:
+            serializer.save(tenant=self.request.user.tenant)
+        except IntegrityError as e:
+            if 'unique constraint' in str(e).lower() and 'tenant_id_name' in str(e):
+                # Tag já existe para este tenant
+                tag_name = serializer.validated_data.get('name', '')
+                raise serializers.ValidationError({
+                    'name': f'A tag "{tag_name}" já existe. Escolha um nome diferente.'
+                })
+            else:
+                # Outro erro de integridade
+                raise serializers.ValidationError({
+                    'non_field_errors': ['Erro ao criar tag. Tente novamente.']
+                })
     
     @action(detail=False, methods=['get'])
     def stats(self, request):

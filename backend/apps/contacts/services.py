@@ -360,11 +360,16 @@ class ContactImportService:
                         print(f"❌ Erro linha {i+2}: {str(e)}")
                         print(f"   Row: {row}")
                     
+                    # Tratamento específico para erros de tag duplicada
+                    error_message = str(e)
+                    if 'unique constraint' in error_message.lower() and 'tag' in error_message.lower():
+                        error_message = 'Tag já existe. Tente usar um nome diferente para a tag.'
+                    
                     import_record.error_count += 1
                     import_record.errors.append({
                         'row': i + 2,  # +2 porque linha 1 é header
                         'data': row,
-                        'error': str(e)
+                        'error': error_message
                     })
                     import_record.save()
             

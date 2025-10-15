@@ -63,7 +63,12 @@ class RabbitMQConsumer:
             except Exception as e:
                 error_msg = str(e)
                 # Tratar erro específico do pika 1.3.2
-                if "pop from an empty deque" in error_msg or "IndexError" in error_msg:
+                if ("pop from an empty deque" in error_msg or 
+                    "IndexError" in error_msg or 
+                    "Stream connection lost" in error_msg or
+                    "StreamLostError" in error_msg or
+                    "_CallbackResult was not set" in error_msg or
+                    "CallbackResult" in error_msg):
                     logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika (tentativa {attempt}/{max_retries}): {e}")
                     logger.info("🔧 [PIKA_BUG] Tentando reconexão devido a bug do pika...")
                 else:
@@ -89,7 +94,12 @@ class RabbitMQConsumer:
                 self._connect()
         except Exception as e:
             error_msg = str(e)
-            if "pop from an empty deque" in error_msg or "IndexError" in error_msg:
+            if ("pop from an empty deque" in error_msg or 
+                "IndexError" in error_msg or 
+                "Stream connection lost" in error_msg or
+                "StreamLostError" in error_msg or
+                "_CallbackResult was not set" in error_msg or
+                "CallbackResult" in error_msg):
                 logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao verificar conexão: {e}")
             else:
                 logger.error(f"❌ [RABBITMQ] Erro ao verificar conexão: {e}")

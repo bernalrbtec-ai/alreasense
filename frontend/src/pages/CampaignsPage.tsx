@@ -74,28 +74,53 @@ const NextMessageCountdown: React.FC<{
   lastContactPhone?: string;
   lastInstanceName?: string;
 }> = ({ nextScheduledAt, campaignStatus, nextContactName, nextContactPhone, nextInstanceName, lastContactName, lastContactPhone, lastInstanceName }) => {
-  const [seconds, setSeconds] = useState(0)
+  const [timeLeft, setTimeLeft] = useState('')
 
   useEffect(() => {
     // Só mostrar se campanha está realmente rodando
     if (!nextScheduledAt || campaignStatus !== 'running') {
-      setSeconds(0)
+      setTimeLeft('')
       return
     }
 
     const updateCountdown = () => {
-      const now = new Date().getTime()
-      const target = new Date(nextScheduledAt).getTime()
-      const diff = Math.max(0, Math.floor((target - now) / 1000))
-      setSeconds(diff)
+      try {
+        // Forçar parsing como UTC para evitar problemas de timezone
+        const targetTime = new Date(nextScheduledAt.includes('Z') ? nextScheduledAt : nextScheduledAt + 'Z')
+        const now = new Date()
+        
+        // Calcular diferença em segundos
+        const diffSeconds = Math.max(0, Math.floor((targetTime.getTime() - now.getTime()) / 1000))
+        
+        if (diffSeconds === 0) {
+          setTimeLeft('Agora!')
+          return
+        }
+        
+        // Formatar tempo de forma mais legível (aproximado)
+        if (diffSeconds < 60) {
+          setTimeLeft(`${diffSeconds}s`)
+        } else if (diffSeconds < 3600) {
+          const minutes = Math.floor(diffSeconds / 60)
+          setTimeLeft(`${minutes}m`)
+        } else {
+          const hours = Math.floor(diffSeconds / 3600)
+          const minutes = Math.floor((diffSeconds % 3600) / 60)
+          setTimeLeft(`${hours}h ${minutes}m`)
+        }
+      } catch (error) {
+        console.error('Erro ao calcular countdown:', error)
+        setTimeLeft('Calculando...')
+      }
     }
 
     updateCountdown()
-    const interval = setInterval(updateCountdown, 1000)
+    // Atualizar a cada 5 segundos (menos frequente, mais tolerante a latência)
+    const interval = setInterval(updateCountdown, 5000)
     return () => clearInterval(interval)
   }, [nextScheduledAt, campaignStatus])
 
-  if (!nextScheduledAt || seconds === 0 || campaignStatus !== 'running') return null
+  if (!nextScheduledAt || !timeLeft || campaignStatus !== 'running') return null
 
   return (
     <div className="space-y-3">
@@ -126,7 +151,7 @@ const NextMessageCountdown: React.FC<{
             <div className="flex-1">
               <div className="text-blue-600 mb-2 font-medium flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                Próximo disparo em: <span className="font-bold">{seconds}s</span>
+                Próximo disparo em: <span className="font-bold">{timeLeft}</span>
               </div>
               {nextContactName && nextContactPhone && (
                 <div className="text-gray-700 space-y-1">
@@ -144,7 +169,7 @@ const NextMessageCountdown: React.FC<{
         /* Fallback para quando não há histórico */
       <div className="flex items-center gap-2 text-sm text-blue-600">
         <Clock className="h-4 w-4" />
-        <span>Próximo disparo em: <span className="font-bold">{seconds}s</span></span>
+        <span>Próximo disparo em: <span className="font-bold">{timeLeft}</span></span>
       </div>
       )}
         </div>
