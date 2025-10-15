@@ -362,10 +362,31 @@ class RabbitMQConsumer:
             campaign = Campaign.objects.get(id=campaign_id)
             contact = CampaignContact.objects.get(id=campaign_contact_id)
             
-            # ⏰ APLICAR DELAY ANTES DO PROCESSAMENTO
+            # ⏰ APLICAR DELAY ANTES DO PROCESSAMENTO COM CONTADOR REGRESSIVO
             if scheduled_delay > 0:
                 logger.info(f"⏰ [DELAY] Aguardando {scheduled_delay}s antes de processar {contact.contact.name}")
-                time.sleep(scheduled_delay)
+                
+                # Atualizar informações da próxima mensagem na campanha
+                with transaction.atomic():
+                    campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=scheduled_delay)
+                    campaign.next_contact_name = contact.contact.name
+                    campaign.next_contact_phone = contact.contact.phone
+                    campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+                
+                # Aplicar delay com contador regressivo
+                for remaining_seconds in range(scheduled_delay, 0, -1):
+                    # Verificar se campanha ainda está ativa a cada segundo
+                    campaign.refresh_from_db()
+                    if campaign.status != 'running':
+                        logger.warning(f"⚠️ [DELAY] Campanha {campaign.name} pausada durante delay - {remaining_seconds}s restantes")
+                        return False
+                    
+                    # Log a cada 10 segundos ou nos últimos 10 segundos
+                    if remaining_seconds % 10 == 0 or remaining_seconds <= 10:
+                        logger.info(f"⏰ [DELAY] {remaining_seconds}s restantes para {contact.contact.name}")
+                    
+                    time.sleep(1)
+                
                 logger.info(f"✅ [DELAY] Delay concluído - processando {contact.contact.name}")
             
             # Verificar se campanha ainda está ativa após delay
@@ -399,7 +420,28 @@ class RabbitMQConsumer:
                     contact.save()
                     
                     campaign.messages_sent += 1
-                    campaign.save(update_fields=['messages_sent'])
+                    
+                    # Atualizar informações da próxima mensagem
+                    next_contact = CampaignContact.objects.filter(
+                        campaign=campaign,
+                        status__in=['pending', 'sending']
+                    ).select_related('contact').first()
+                    
+                    if next_contact:
+                        campaign.next_contact_name = next_contact.contact.name
+                        campaign.next_contact_phone = next_contact.contact.phone
+                        # Calcular próximo delay
+                        next_delay = random.randint(campaign.interval_min, campaign.interval_max)
+                        campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=next_delay)
+                    else:
+                        # Nenhum contato pendente - campanha concluída
+                        campaign.next_contact_name = None
+                        campaign.next_contact_phone = None
+                        campaign.next_message_scheduled_at = None
+                        campaign.status = 'completed'
+                        campaign.completed_at = timezone.now()
+                    
+                    campaign.save(update_fields=['messages_sent', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
                 
                 logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
                 return True

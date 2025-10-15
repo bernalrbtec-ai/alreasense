@@ -5,6 +5,7 @@ from .views_v2 import (
     CampaignControlView, campaign_health, system_health, 
     active_campaigns, resolve_alert, campaign_metrics
 )
+from .views_realtime import campaign_realtime_status, campaign_realtime_progress
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
@@ -21,6 +22,10 @@ urlpatterns = [
     path('v2/campaigns/<uuid:campaign_id>/alerts/<str:alert_id>/resolve/', resolve_alert, name='resolve-alert'),
     path('v2/campaigns/active/', active_campaigns, name='active-campaigns'),
     path('v2/system/health/', system_health, name='system-health'),
+    
+    # APIs de status em tempo real
+    path('campaigns/<uuid:campaign_id>/realtime/', campaign_realtime_status, name='campaign-realtime'),
+    path('campaigns/<uuid:campaign_id>/progress/', campaign_realtime_progress, name='campaign-progress'),
 ]
 
 
