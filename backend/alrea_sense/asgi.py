@@ -55,7 +55,7 @@ def start_rabbitmq_consumer():
         consumer = get_rabbitmq_consumer()
         if consumer:
             print("🚀 [RABBITMQ] Iniciando RabbitMQ Consumer em background...")
-            consumer.start()
+            consumer.start(auto_start_campaigns=True)
             print("✅ [RABBITMQ] RabbitMQ Consumer iniciado com sucesso!")
         else:
             print("⚠️ [RABBITMQ] RabbitMQ Consumer não disponível - campanhas não serão processadas")

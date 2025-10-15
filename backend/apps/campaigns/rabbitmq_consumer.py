@@ -533,11 +533,32 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [HEALTH] Erro na verificação: {e}")
     
-    def start(self):
+    def start(self, auto_start_campaigns=False):
         """Inicia o consumer"""
         self.running = True
         self.start_health_monitor()
         logger.info("🚀 [CONSUMER] RabbitMQ Consumer iniciado")
+        
+        # Iniciar campanhas ativas automaticamente se solicitado
+        if auto_start_campaigns:
+            self._auto_start_active_campaigns()
+    
+    def _auto_start_active_campaigns(self):
+        """Inicia automaticamente campanhas que estão em execução"""
+        try:
+            from .models import Campaign
+            
+            # Buscar campanhas em execução
+            running_campaigns = Campaign.objects.filter(status='running')
+            
+            for campaign in running_campaigns:
+                campaign_id = str(campaign.id)
+                if campaign_id not in self.consumer_threads:
+                    logger.info(f"🚀 [AUTO-START] Iniciando campanha {campaign.name}")
+                    self.start_campaign(campaign_id)
+                    
+        except Exception as e:
+            logger.error(f"❌ [AUTO-START] Erro ao iniciar campanhas: {e}")
     
     def stop(self):
         """Para o consumer"""
