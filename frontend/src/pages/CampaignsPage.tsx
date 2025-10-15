@@ -176,122 +176,7 @@ const NextMessageCountdown: React.FC<{
   )
 }
 
-// Componente para exibir logs unificados por contato
-  const ContactLogCard: React.FC<{ contactGroup: any }> = ({ contactGroup }) => {
-    const [isExpanded, setIsExpanded] = useState(false)
-    
-    // Função para calcular tempo de entrega
-    const getDeliveryTime = (messageEvent: any, events: any[]) => {
-      const deliveredEvent = events.find((e: any) => e.log_type === 'message_delivered')
-      if (deliveredEvent) {
-        const sentTime = new Date(messageEvent.created_at).getTime()
-        const deliveredTime = new Date(deliveredEvent.created_at).getTime()
-        const diffMs = deliveredTime - sentTime
-        const diffSeconds = Math.round(diffMs / 1000)
-        
-        if (diffSeconds < 60) {
-          return `${diffSeconds}s`
-        } else if (diffSeconds < 3600) {
-          const minutes = Math.floor(diffSeconds / 60)
-          const seconds = diffSeconds % 60
-          return `${minutes}m ${seconds}s`
-        } else {
-          const hours = Math.floor(diffSeconds / 3600)
-          const minutes = Math.floor((diffSeconds % 3600) / 60)
-          return `${hours}h ${minutes}m`
-        }
-      }
-      return 'N/A'
-    }
-    
-    // Função para calcular tempo de visualização
-    const getReadTime = (messageEvent: any, events: any[]) => {
-      const readEvent = events.find((e: any) => e.log_type === 'message_read')
-      if (readEvent) {
-        const sentTime = new Date(messageEvent.created_at).getTime()
-        const readTime = new Date(readEvent.created_at).getTime()
-        const diffMs = readTime - sentTime
-        const diffSeconds = Math.round(diffMs / 1000)
-        
-        if (diffSeconds < 60) {
-          return `${diffSeconds}s`
-        } else if (diffSeconds < 3600) {
-          const minutes = Math.floor(diffSeconds / 60)
-          const seconds = diffSeconds % 60
-          return `${minutes}m ${seconds}s`
-        } else {
-          const hours = Math.floor(diffSeconds / 3600)
-          const minutes = Math.floor((diffSeconds % 3600) / 60)
-          return `${hours}h ${minutes}m`
-        }
-      }
-      return 'N/A'
-    }
-    
-    const getStatusInfo = (status: string) => {
-    switch (status) {
-      case 'read':
-        return { 
-          color: 'bg-green-100 text-green-800 border-green-200', 
-          icon: <Eye className="h-4 w-4" />, 
-          text: 'Lida' 
-        }
-      case 'delivered':
-        return { 
-          color: 'bg-blue-100 text-blue-800 border-blue-200', 
-          icon: <CheckCircle className="h-4 w-4" />, 
-          text: 'Entregue' 
-        }
-      case 'sent':
-        return { 
-          color: 'bg-yellow-100 text-yellow-800 border-yellow-200', 
-          icon: <Send className="h-4 w-4" />, 
-          text: 'Enviada' 
-        }
-      case 'failed':
-        return { 
-          color: 'bg-red-100 text-red-800 border-red-200', 
-          icon: <X className="h-4 w-4" />, 
-          text: 'Falhou' 
-        }
-      default:
-        return { 
-          color: 'bg-gray-100 text-gray-800 border-gray-200', 
-          icon: <Clock className="h-4 w-4" />, 
-          text: 'Pendente' 
-        }
-    }
-  }
-  
-  const getEventIcon = (logType: string) => {
-    switch (logType) {
-      case 'message_sent':
-        return <Send className="h-3 w-3 text-blue-600" />
-      case 'message_delivered':
-        return <CheckCircle className="h-3 w-3 text-green-600" />
-      case 'message_read':
-        return <Eye className="h-3 w-3 text-purple-600" />
-      case 'message_failed':
-        return <X className="h-3 w-3 text-red-600" />
-      default:
-        return <MessageSquare className="h-3 w-3 text-gray-600" />
-    }
-  }
-  
-  const getEventColor = (logType: string) => {
-    switch (logType) {
-      case 'message_sent':
-        return 'bg-blue-50 border-blue-200'
-      case 'message_delivered':
-        return 'bg-green-50 border-green-200'
-      case 'message_read':
-        return 'bg-purple-50 border-purple-200'
-      case 'message_failed':
-        return 'bg-red-50 border-red-200'
-      default:
-        return 'bg-gray-50 border-gray-200'
-    }
-  }
+const CampaignsPage: React.FC = () => {
   
   const statusInfo = getStatusInfo(contactGroup.status)
   const messageEvent = contactGroup.events.find((e: any) => e.details?.message_content)
@@ -715,90 +600,86 @@ const CampaignsPage: React.FC = () => {
     setShowLogsModal(true)
     
     try {
-      const response = await api.get(`/campaigns/campaigns/${campaign.id}/logs/`)
-      const rawLogs = response.data
+      // Usar a nova API de logs com filtro por campanha
+      const response = await api.get(`/campaigns/logs/?campaign_id=${campaign.id}`)
+      const data = response.data
       
-      // Agrupar logs por contato
-      const groupedLogs = groupLogsByContact(rawLogs)
-      setLogs(groupedLogs)
+      if (data.success) {
+        setLogs(data.logs)
+      } else {
+        console.error('Erro na API de logs:', data.error)
+        setLogs([])
+      }
     } catch (error: any) {
       console.error('Erro ao buscar logs:', error)
       showErrorToast('buscar', 'Logs', error)
     }
   }
 
-  // Função para agrupar logs por contato
-  const groupLogsByContact = (rawLogs: any[]) => {
-    const contactGroups: { [key: string]: any } = {}
-    
-    rawLogs.forEach(log => {
-      const contactKey = log.contact_id || log.contact_name || 'unknown'
-      
-      if (!contactGroups[contactKey]) {
-        contactGroups[contactKey] = {
-          contact_id: log.contact_id,
-          contact_name: log.contact_name,
-          contact_phone: log.contact_phone,
-          instance_name: log.instance_name,
-          events: [],
-          status: 'pending',
-          first_event: null,
-          last_event: null,
-          has_sent: false,
-          has_delivered: false,
-          has_read: false,
-          has_failed: false
-        }
-      }
-      
-      // Adicionar evento à timeline
-      contactGroups[contactKey].events.push({
-        ...log,
-        timestamp: new Date(log.created_at).getTime()
-      })
-      
-      // Marcar tipos de eventos
-      if (log.log_type === 'message_sent') {
-        contactGroups[contactKey].has_sent = true
-      } else if (log.log_type === 'message_delivered') {
-        contactGroups[contactKey].has_delivered = true
-      } else if (log.log_type === 'message_read') {
-        contactGroups[contactKey].has_read = true
-      } else if (log.log_type === 'message_failed') {
-        contactGroups[contactKey].has_failed = true
-      }
-      
-      // Atualizar primeiro e último evento
-      if (!contactGroups[contactKey].first_event || log.created_at < contactGroups[contactKey].first_event) {
-        contactGroups[contactKey].first_event = log.created_at
-      }
-      if (!contactGroups[contactKey].last_event || log.created_at > contactGroups[contactKey].last_event) {
-        contactGroups[contactKey].last_event = log.created_at
-      }
+  // Função para obter ícone do tipo de log
+  const getLogIcon = (logType: string) => {
+    switch (logType) {
+      case 'campaign_created':
+      case 'created':
+        return <MessageSquare className="h-4 w-4 text-blue-500" />
+      case 'campaign_started':
+      case 'started':
+        return <Play className="h-4 w-4 text-green-500" />
+      case 'message_sent':
+        return <CheckCircle className="h-4 w-4 text-green-500" />
+      case 'message_failed':
+        return <AlertCircle className="h-4 w-4 text-red-500" />
+      case 'campaign_paused':
+      case 'paused':
+        return <Pause className="h-4 w-4 text-orange-500" />
+      case 'campaign_resumed':
+      case 'resumed':
+        return <Play className="h-4 w-4 text-blue-500" />
+      case 'campaign_completed':
+      case 'completed':
+        return <CheckCircle className="h-4 w-4 text-purple-500" />
+      default:
+        return <FileText className="h-4 w-4 text-gray-500" />
+    }
+  }
+
+  // Função para obter cor do tipo de log
+  const getLogColor = (logType: string) => {
+    switch (logType) {
+      case 'campaign_created':
+      case 'created':
+        return 'border-l-blue-500 bg-blue-50'
+      case 'campaign_started':
+      case 'started':
+        return 'border-l-green-500 bg-green-50'
+      case 'message_sent':
+        return 'border-l-green-500 bg-green-50'
+      case 'message_failed':
+        return 'border-l-red-500 bg-red-50'
+      case 'campaign_paused':
+      case 'paused':
+        return 'border-l-orange-500 bg-orange-50'
+      case 'campaign_resumed':
+      case 'resumed':
+        return 'border-l-blue-500 bg-blue-50'
+      case 'campaign_completed':
+      case 'completed':
+        return 'border-l-purple-500 bg-purple-50'
+      default:
+        return 'border-l-gray-500 bg-gray-50'
+    }
+  }
+
+  // Função para formatar data
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
     })
-    
-    // Ordenar eventos por timestamp e determinar status final
-    Object.values(contactGroups).forEach((group: any) => {
-      group.events.sort((a: any, b: any) => a.timestamp - b.timestamp)
-      
-      // Determinar status baseado na prioridade (failed > read > delivered > sent)
-      if (group.has_failed) {
-        group.status = 'failed'
-      } else if (group.has_read) {
-        group.status = 'read'
-      } else if (group.has_delivered) {
-        group.status = 'delivered'
-      } else if (group.has_sent) {
-        group.status = 'sent'
-      } else {
-        group.status = 'pending'
-      }
-    })
-    
-    // Converter para array e ordenar por último evento
-    return Object.values(contactGroups).sort((a: any, b: any) => 
-      new Date(b.last_event).getTime() - new Date(a.last_event).getTime()
-    )
   }
 
   const getStatusColor = (status: string) => {
@@ -1155,7 +1036,7 @@ const CampaignsPage: React.FC = () => {
           <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full max-h-[95vh] sm:max-h-[90vh] overflow-hidden flex flex-col">
             <div className="flex justify-between items-center p-3 sm:p-4 border-b sticky top-0 bg-white z-10">
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg sm:text-xl font-bold truncate">Logs da Campanha</h2>
+                <h2 className="text-lg sm:text-xl font-bold truncate">📊 Logs da Campanha</h2>
                 <p className="text-xs sm:text-sm text-gray-500 truncate">{selectedCampaignForLogs.name}</p>
               </div>
               <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
@@ -1166,7 +1047,9 @@ const CampaignsPage: React.FC = () => {
             <div className="flex-1 overflow-y-auto p-3 sm:p-4">
               {logs.length === 0 ? (
                 <div className="text-center py-6 sm:py-8 text-gray-500">
-                  Nenhum log encontrado
+                  <FileText className="h-12 w-12 mx-auto text-gray-400 mb-4" />
+                  <p className="text-gray-600">Nenhum log encontrado</p>
+                  <p className="text-sm text-gray-500">Esta campanha ainda não possui logs</p>
                 </div>
               ) : (
                 <div className="space-y-3 sm:space-y-4">
@@ -1174,35 +1057,72 @@ const CampaignsPage: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-blue-600">
-                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_read').length), 0)}
-                            </div>
-                      <div className="text-xs sm:text-sm text-blue-800">Lidas</div>
-                              </div>
+                        {logs.filter((log: any) => log.log_type === 'message_sent').length}
+                      </div>
+                      <div className="text-xs sm:text-sm text-blue-800">Enviadas</div>
+                    </div>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-green-600">
-                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_delivered').length), 0)}
-                          </div>
-                      <div className="text-xs sm:text-sm text-green-800">Entregues</div>
-                        </div>
-                    <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-2 sm:p-3 text-center">
-                      <div className="text-lg sm:text-xl font-bold text-yellow-600">
-                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_sent').length), 0)}
+                        {logs.filter((log: any) => log.log_type === 'message_delivered').length}
                       </div>
-                      <div className="text-xs sm:text-sm text-yellow-800">Enviadas</div>
+                      <div className="text-xs sm:text-sm text-green-800">Entregues</div>
+                    </div>
+                    <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 sm:p-3 text-center">
+                      <div className="text-lg sm:text-xl font-bold text-purple-600">
+                        {logs.filter((log: any) => log.log_type === 'message_read').length}
+                      </div>
+                      <div className="text-xs sm:text-sm text-purple-800">Lidas</div>
                     </div>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-red-600">
-                        {logs.reduce((count, g: any) => count + (g.events.filter((e: any) => e.log_type === 'message_failed').length), 0)}
+                        {logs.filter((log: any) => log.log_type === 'message_failed').length}
                       </div>
                       <div className="text-xs sm:text-sm text-red-800">Falhas</div>
                     </div>
                   </div>
                   
-                  {/* Cards de Contatos */}
-                  {logs.map((contactGroup: any, idx: number) => (
-                    <ContactLogCard key={idx} contactGroup={contactGroup} />
-                  ))}
-                </div>
+                  {/* Lista de Logs */}
+                  <div className="space-y-3">
+                    {logs.map((log: any, idx: number) => (
+                      <div
+                        key={log.id || idx}
+                        className={`border-l-4 p-4 rounded-r-lg ${getLogColor(log.log_type)}`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex items-start gap-3">
+                            {getLogIcon(log.log_type)}
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className="font-medium text-gray-900">
+                                  {log.log_type_display}
+                                </span>
+                                {log.instance_name && (
+                                  <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
+                                    {log.instance_name}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-gray-700 mb-2">{log.message}</p>
+                              <div className="flex items-center gap-4 text-sm text-gray-500">
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {formatDate(log.created_at)}
+                                </span>
+                                {log.contact_name && (
+                                  <span className="flex items-center gap-1">
+                                    <Users className="h-3 w-3" />
+                                    {log.contact_name}
+                                    {log.contact_phone && ` (${log.contact_phone})`}
+                                  </span>
+                                )}
+                                <span>por {log.user_name}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
               )}
             </div>
 
