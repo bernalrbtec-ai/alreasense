@@ -345,18 +345,10 @@ class RabbitMQConsumer:
             
             try:
                 # 🚀 NOVA CONEXÃO INDEPENDENTE para cada campanha
+                # Usar a mesma URL do RabbitMQ que já está configurada
+                rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
                 campaign_connection = pika.BlockingConnection(
-                    pika.ConnectionParameters(
-                        host=settings.RABBITMQ_HOST,
-                        port=settings.RABBITMQ_PORT,
-                        virtual_host=settings.RABBITMQ_VHOST,
-                        credentials=pika.PlainCredentials(
-                            settings.RABBITMQ_USER,
-                            settings.RABBITMQ_PASSWORD
-                        ),
-                        heartbeat=600,
-                        blocked_connection_timeout=300
-                    )
+                    pika.URLParameters(rabbitmq_url)
                 )
                 campaign_channel = campaign_connection.channel()
                 
