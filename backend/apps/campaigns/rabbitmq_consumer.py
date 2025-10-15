@@ -57,7 +57,13 @@ class RabbitMQConsumer:
                 return
                 
             except Exception as e:
-                logger.error(f"❌ [RABBITMQ] Erro na conexão (tentativa {attempt}/{max_retries}): {e}")
+                error_msg = str(e)
+                # Tratar erro específico do pika 1.3.2
+                if "pop from an empty deque" in error_msg or "IndexError" in error_msg:
+                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika (tentativa {attempt}/{max_retries}): {e}")
+                    logger.info("🔧 [PIKA_BUG] Tentando reconexão devido a bug do pika...")
+                else:
+                    logger.error(f"❌ [RABBITMQ] Erro na conexão (tentativa {attempt}/{max_retries}): {e}")
                 
                 if attempt < max_retries:
                     logger.info(f"🔄 [RABBITMQ] Tentando novamente em {retry_delay}s...")
@@ -78,7 +84,12 @@ class RabbitMQConsumer:
                 logger.warning("⚠️ [RABBITMQ] Canal perdido, reconectando...")
                 self._connect()
         except Exception as e:
-            logger.error(f"❌ [RABBITMQ] Erro ao verificar conexão: {e}")
+            error_msg = str(e)
+            if "pop from an empty deque" in error_msg or "IndexError" in error_msg:
+                logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao verificar conexão: {e}")
+            else:
+                logger.error(f"❌ [RABBITMQ] Erro ao verificar conexão: {e}")
+            
             try:
                 self._connect()
             except Exception as reconnect_error:
