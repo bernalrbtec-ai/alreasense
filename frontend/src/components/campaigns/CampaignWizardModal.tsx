@@ -75,9 +75,18 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
     // Listener para inserção de variáveis
     const handleInsertVariable = (event: any) => {
       const variable = event.detail
-      const lastIdx = formData.messages.length - 1
-      const lastMsg = formData.messages[lastIdx]
-      updateMessage(lastIdx, lastMsg.content + variable)
+      // Inserir na última mensagem não vazia ou criar uma nova
+      let targetIndex = formData.messages.length - 1
+      
+      // Se a última mensagem estiver vazia, usar ela
+      if (formData.messages[targetIndex] && !formData.messages[targetIndex].content) {
+        updateMessage(targetIndex, variable)
+      } else {
+        // Senão, adicionar uma nova mensagem
+        addMessage()
+        targetIndex = formData.messages.length // Será a nova mensagem
+        updateMessage(targetIndex, variable)
+      }
     }
     
     window.addEventListener('insertVariable', handleInsertVariable)
@@ -177,11 +186,11 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
   const canProceed = (): boolean => {
     switch (step) {
       case 1:
-        return formData.name.trim().length > 0
+        return formData.name && formData.name.trim().length > 0
       case 2:
         return getSelectedContactsCount() > 0
       case 3:
-        return formData.messages.some(m => m.content.trim().length > 0)
+        return formData.messages.some(m => m.content && m.content.trim().length > 0)
       case 4:
         return formData.instance_ids.length > 0
       case 5:
@@ -215,7 +224,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         description: formData.description,
         rotation_mode: formData.rotation_mode,
         instances: formData.instance_ids,
-        messages: formData.messages.filter(m => m.content.trim()),
+        messages: formData.messages.filter(m => m.content && m.content.trim()),
         interval_min: formData.interval_min,
         interval_max: formData.interval_max,
         daily_limit_per_instance: formData.daily_limit_per_instance,
@@ -232,8 +241,8 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
       
       // ✅ Executar callbacks em try/catch separado para não afetar o toast
       try {
-        onSuccess()
-        onClose()
+      onSuccess()
+      onClose()
       } catch (callbackError) {
         console.error('Erro nos callbacks:', callbackError)
         // Toast já foi atualizado, não afeta o resultado
@@ -546,27 +555,27 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       </div>
                     ) : (
                       contacts.map((contact) => (
-                        <label key={contact.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.contact_ids.includes(contact.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setFormData({ ...formData, contact_ids: [...formData.contact_ids, contact.id] })
-                              } else {
-                                setFormData({ ...formData, contact_ids: formData.contact_ids.filter(id => id !== contact.id) })
-                              }
-                            }}
-                          />
-                          <span className="text-sm">{contact.name} - {contact.phone}</span>
-                        </label>
+                      <label key={contact.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.contact_ids.includes(contact.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, contact_ids: [...formData.contact_ids, contact.id] })
+                            } else {
+                              setFormData({ ...formData, contact_ids: formData.contact_ids.filter(id => id !== contact.id) })
+                            }
+                          }}
+                        />
+                        <span className="text-sm">{contact.name} - {contact.phone}</span>
+                      </label>
                       ))
                     )}
                   </div>
                   {contacts.length > 0 && (
-                    <p className="text-xs text-gray-500 mt-2">
+                  <p className="text-xs text-gray-500 mt-2">
                       Mostrando {contacts.length} contatos
-                    </p>
+                  </p>
                   )}
                 </div>
               )}
@@ -602,7 +611,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 {/* Variáveis Disponíveis */}
                 <div className="flex justify-between items-center">
                   <MessageVariables />
-                </div>
+                  </div>
 
                 {/* Mensagens */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -658,7 +667,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
                       {/* Chat Area */}
                       <div className="bg-[#e5ddd5] h-96 p-3 overflow-y-auto">
-                        {formData.messages.filter(m => m.content.trim()).map((msg, idx) => {
+                        {formData.messages.filter(m => m.content && m.content.trim()).map((msg, idx) => {
                           // Substituir variáveis para preview
                           const nomeCompleto = 'Maria Silva'
                           const primeiroNome = nomeCompleto.split(' ')[0]
@@ -692,7 +701,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           )
                         })}
                         
-                        {formData.messages.filter(m => m.content.trim()).length === 0 && (
+                        {formData.messages.filter(m => m.content && m.content.trim()).length === 0 && (
                           <div className="text-center text-gray-500 text-sm mt-20">
                             Digite uma mensagem para ver o preview
                           </div>
@@ -967,7 +976,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Templates criados:</span>
-                    <span className="font-medium">{formData.messages.filter(m => m.content.trim()).length}</span>
+                    <span className="font-medium">{formData.messages.filter(m => m.content && m.content.trim()).length}</span>
                   </div>
                 </div>
               </Card>
