@@ -78,6 +78,11 @@ class RabbitMQConsumer:
     def start_campaign(self, campaign_id: str):
         """Inicia processamento de uma campanha"""
         try:
+            # Verificar se canal está aberto
+            if not self.channel or self.channel.is_closed:
+                logger.warning("⚠️ [CONSUMER] Canal fechado, reconectando...")
+                self._connect()
+            
             campaign = Campaign.objects.get(id=campaign_id)
             
             if campaign.status not in ['draft', 'running']:
@@ -155,6 +160,11 @@ class RabbitMQConsumer:
                     'message_content': self._get_message_content(campaign),
                     'created_at': timezone.now().isoformat()
                 }
+                
+                # Verificar se canal está aberto antes de publicar
+                if not self.channel or self.channel.is_closed:
+                    logger.warning("⚠️ [CONSUMER] Canal fechado, reconectando...")
+                    self._connect()
                 
                 # Publicar na fila
                 self.channel.basic_publish(
