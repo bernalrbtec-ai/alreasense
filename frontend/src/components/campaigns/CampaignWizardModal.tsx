@@ -699,9 +699,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 </div>
 
                 {/* Variáveis Disponíveis */}
-                <div className="flex justify-between items-center">
-                  <MessageVariables />
-                  </div>
+                <MessageVariables />
 
                 {/* Mensagens */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -715,12 +713,22 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           <textarea
                             value={message.content}
                             onChange={(e) => updateMessage(index, e.target.value)}
+                            onDrop={(e) => {
+                              e.preventDefault()
+                              const variable = e.dataTransfer.getData('text/plain')
+                              const textarea = e.target as HTMLTextAreaElement
+                              const start = textarea.selectionStart
+                              const end = textarea.selectionEnd
+                              const newContent = message.content.substring(0, start) + variable + message.content.substring(end)
+                              updateMessage(index, newContent)
+                            }}
+                            onDragOver={(e) => e.preventDefault()}
                             placeholder="Digite a mensagem... Use {{nome}}, {{primeiro_nome}}, {{saudacao}}, etc."
                             className="w-full px-2 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500"
                             rows={3}
                           />
                           <p className="text-xs text-gray-500 mt-1">
-                            {message.content.length} caracteres
+                            {message.content.length} caracteres • Arraste variáveis aqui
                           </p>
                         </div>
                         {formData.messages.length > 1 && (
@@ -746,12 +754,35 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   <div className="bg-gray-900 rounded-3xl p-3 shadow-2xl">
                     {/* Tela do celular */}
                     <div className="bg-gradient-to-b from-teal-600 to-teal-700 rounded-2xl overflow-hidden">
+                      {/* Status Bar */}
+                      <div className="bg-teal-800 h-4 flex items-center justify-between px-4 text-white text-xs">
+                        <span>9:41</span>
+                        <div className="flex items-center gap-1">
+                          <div className="w-4 h-2 bg-white rounded-sm">
+                            <div className="w-3 h-full bg-green-400 rounded-sm"></div>
+                          </div>
+                          <span>100%</span>
+                        </div>
+                      </div>
+                      
                       {/* Header WhatsApp */}
                       <div className="bg-teal-700 px-4 py-3 flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gray-300 rounded-full"></div>
+                        <div className="w-8 h-8 bg-green-400 rounded-full flex items-center justify-center">
+                          <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clipRule="evenodd" />
+                          </svg>
+                        </div>
                         <div className="flex-1">
-                          <p className="text-white font-medium text-sm">Você</p>
+                          <p className="text-white font-medium text-sm">Maria Silva</p>
                           <p className="text-teal-100 text-xs">online</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z" />
+                          </svg>
+                          <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                          </svg>
                         </div>
                       </div>
 
@@ -778,14 +809,21 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                             )
                           
                           return (
-                            <div key={idx} className="mb-2 flex justify-end">
-                              <div className="bg-[#dcf8c6] rounded-lg rounded-tr-none px-3 py-2 max-w-[85%] shadow-sm">
-                                <p className="text-sm text-gray-800 whitespace-pre-wrap break-words">
-                                  {previewText}
-                                </p>
-                                <p className="text-xs text-gray-500 text-right mt-1">
-                                  {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                </p>
+                            <div key={idx} className="mb-3 flex justify-end">
+                              <div className="max-w-[85%]">
+                                <div className="bg-[#dcf8c6] rounded-lg rounded-tr-none px-3 py-2 shadow-sm relative">
+                                  <p className="text-sm text-gray-800 whitespace-pre-wrap break-words leading-relaxed">
+                                    {previewText}
+                                  </p>
+                                  <div className="flex items-center justify-end mt-1 gap-1">
+                                    <span className="text-xs text-gray-500">
+                                      {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                    <svg className="w-3 h-3 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                    </svg>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           )
@@ -799,12 +837,17 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       </div>
 
                       {/* Input Area (só visual) */}
-                      <div className="bg-gray-100 px-3 py-2 flex items-center gap-2">
-                        <div className="flex-1 bg-white rounded-full px-4 py-2">
-                          <p className="text-xs text-gray-400">Mensagem</p>
+                      <div className="bg-white px-3 py-2 flex items-center gap-2 border-t border-gray-200">
+                        <div className="flex-1 bg-gray-100 rounded-full px-4 py-2 flex items-center gap-2">
+                          <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
+                          </svg>
+                          <span className="text-sm text-gray-500">Digite uma mensagem</span>
                         </div>
                         <div className="w-8 h-8 bg-teal-600 rounded-full flex items-center justify-center">
-                          <Send className="h-4 w-4 text-white" />
+                          <svg className="h-4 w-4 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
+                          </svg>
                         </div>
                       </div>
                     </div>
