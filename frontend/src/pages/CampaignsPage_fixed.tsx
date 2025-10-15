@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, Send, Pause, Play, Edit, Trash2, Users, TrendingUp, Copy, FileText, Clock, X, AlertCircle, CheckCircle, Eye, MessageSquare, Phone, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react'
+import { Plus, Search, Send, Pause, Play, Edit, Trash2, Users, TrendingUp, Copy, FileText, Clock, X, AlertCircle, CheckCircle, Eye, MessageSquare, Phone, ChevronDown, ChevronUp } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
@@ -41,15 +41,6 @@ interface Campaign {
   last_contact_phone?: string
   last_instance_name?: string
   created_at: string
-  // Informações de retry (serão buscadas via API separada)
-  retryInfo?: {
-    is_retrying: boolean
-    retry_contact_name?: string
-    retry_contact_phone?: string
-    retry_attempt: number
-    retry_error_reason?: string
-    retry_countdown: number
-  }
 }
 
 interface WhatsAppInstance {
@@ -134,46 +125,23 @@ const CampaignsPage: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([])
 
   useEffect(() => {
-    fetchData(true) // Primeira carga com loading
+    fetchData()
     
-    // Polling a cada 30 segundos SEM loading
-    const interval = setInterval(() => fetchData(false), 30000)
+    // Polling a cada 30 segundos
+    const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 
-  const fetchData = async (showLoading = false) => {
+  const fetchData = async () => {
     try {
-      if (showLoading) {
-        setLoading(true)
-      }
+      setLoading(true)
       const response = await api.get('/campaigns/campaigns/')
-      const campaigns = response.data.results || response.data
-      
-      // Buscar informações de retry para campanhas em execução
-      const campaignsWithRetry = await Promise.all(
-        campaigns.map(async (campaign: Campaign) => {
-          if (campaign.status === 'running') {
-            try {
-              const retryResponse = await api.get(`/campaigns/campaigns/${campaign.id}/retry-info/`)
-              if (retryResponse.data.success) {
-                campaign.retryInfo = retryResponse.data.retry_info
-              }
-            } catch (error) {
-              console.error(`Erro ao buscar retry info para campanha ${campaign.id}:`, error)
-            }
-          }
-          return campaign
-        })
-      )
-      
-      setCampaigns(campaignsWithRetry)
+      setCampaigns(response.data.results || response.data)
     } catch (error: any) {
       console.error('Erro ao buscar campanhas:', error)
       showErrorToast('buscar', 'Campanhas', error)
     } finally {
-      if (showLoading) {
-        setLoading(false)
-      }
+      setLoading(false)
     }
   }
 
@@ -183,7 +151,7 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaign.id}/start/`)
       updateToastSuccess(toastId, 'iniciada', 'Campanha')
-      fetchData(false)
+      fetchData()
     } catch (error: any) {
       updateToastError(toastId, 'iniciar', 'Campanha', error)
     }
@@ -195,7 +163,7 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaign.id}/pause/`)
       updateToastSuccess(toastId, 'pausada', 'Campanha')
-      fetchData(false)
+      fetchData()
     } catch (error: any) {
       updateToastError(toastId, 'pausar', 'Campanha', error)
     }
@@ -207,7 +175,7 @@ const CampaignsPage: React.FC = () => {
     try {
       await api.post(`/campaigns/campaigns/${campaign.id}/resume/`)
       updateToastSuccess(toastId, 'retomada', 'Campanha')
-      fetchData(false)
+      fetchData()
     } catch (error: any) {
       updateToastError(toastId, 'retomar', 'Campanha', error)
     }
@@ -236,7 +204,7 @@ const CampaignsPage: React.FC = () => {
       
       await api.post('/campaigns/campaigns/', duplicateData)
       updateToastSuccess(toastId, 'duplicada', 'Campanha')
-      fetchData(false)
+      fetchData()
     } catch (error: any) {
       console.error('Erro ao duplicar campanha:', error)
       updateToastError(toastId, 'duplicar', 'Campanha', error)
@@ -344,9 +312,9 @@ const CampaignsPage: React.FC = () => {
 
   const filteredCampaigns = campaigns
     .filter(campaign =>
-    campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+      campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
+    )
     .sort((a, b) => {
       // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
       const statusOrder = {
@@ -397,7 +365,7 @@ const CampaignsPage: React.FC = () => {
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex gap-4">
-        <div className="flex-1">
+          <div className="flex-1">
             <Input
               placeholder="Buscar campanhas..."
               value={searchTerm}
@@ -435,82 +403,12 @@ const CampaignsPage: React.FC = () => {
                     <TrendingUp className="h-4 w-4" />
                     {campaign.success_rate}% sucesso
                   </span>
-                  </div>
+                </div>
 
                 {/* Contador regressivo */}
                 <NextMessageCountdown campaign={campaign} />
-
-                {/* Informações de retry ou próximo disparo */}
-                {campaign.status === 'running' && (
-                  <div className="mt-4 space-y-2 text-sm">
-                    {/* Mostrar retry se estiver ativo */}
-                    {campaign.retryInfo?.is_retrying ? (
-                      <div className="space-y-2">
-                        <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
-                          <div className="flex items-center gap-2 text-orange-700 mb-2">
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                            <span className="font-medium">Tentativa {campaign.retryInfo.retry_attempt}/3</span>
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            <strong>Contato:</strong> {campaign.retryInfo.retry_contact_name} ({campaign.retryInfo.retry_contact_phone})
-                          </div>
-                          {campaign.retryInfo.retry_error_reason && (
-                            <div className="text-sm text-red-600">
-                              <strong>Erro:</strong> {campaign.retryInfo.retry_error_reason}
-                            </div>
-                          )}
-                          <div className="text-sm text-blue-600">
-                            <strong>Próximo retry em:</strong> {campaign.retryInfo.retry_countdown}s
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      /* Mostrar próximo disparo se não há retry */
-                      <div className="space-y-2">
-                        {campaign.next_contact_name && (
-                          <div className="flex items-center gap-2 text-blue-600">
-                            <Users className="h-4 w-4" />
-                            <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
-                          </div>
-                        )}
-                        {campaign.next_instance_name && (
-                          <div className="flex items-center gap-2 text-green-600">
-                            <Phone className="h-4 w-4" />
-                            <span><strong>Via:</strong> {campaign.next_instance_name}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Informações do último disparo */}
-                    {campaign.last_contact_name && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Clock className="h-4 w-4" />
-                        <span><strong>Último:</strong> {campaign.last_contact_name} ({campaign.last_contact_phone})</span>
-                      </div>
-                    )}
-                    {campaign.last_message_sent_at && (
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <Clock className="h-4 w-4" />
-                        <span><strong>Enviado em:</strong> {new Date(campaign.last_message_sent_at).toLocaleString('pt-BR')}</span>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Status de falhas totais (apenas se não há retry ativo) */}
-                {campaign.status === 'running' && !campaign.retryInfo?.is_retrying && campaign.messages_failed > 0 && (
-                  <div className="mt-3 p-2 bg-red-50 border border-red-200 rounded-md">
-                    <div className="flex items-center gap-2 text-red-700">
-                      <AlertCircle className="h-4 w-4" />
-                      <span className="text-sm font-medium">
-                        {campaign.messages_failed} mensagem(s) falharam
-                      </span>
-                    </div>
-                  </div>
-                )}
               </div>
-              
+
               <div className="flex gap-2">
                 {/* Ações básicas */}
                 {campaign.status === 'draft' && (
@@ -519,32 +417,32 @@ const CampaignsPage: React.FC = () => {
                     Iniciar
                   </Button>
                 )}
-                
+
                 {campaign.status === 'running' && (
                   <Button onClick={() => handlePause(campaign)} variant="outline" size="sm">
                     <Pause className="h-4 w-4 mr-2" />
                     Pausar
                   </Button>
                 )}
-                
+
                 {campaign.status === 'paused' && (
                   <Button onClick={() => handleResume(campaign)} size="sm">
                     <Play className="h-4 w-4 mr-2" />
                     Retomar
                   </Button>
                 )}
-                
+
                 {/* Ações secundárias */}
                 {campaign.status !== 'running' && (
                   <Button onClick={() => handleEdit(campaign)} variant="outline" size="sm">
                     <Edit className="h-4 w-4" />
                   </Button>
                 )}
-                
+
                 <Button onClick={() => handleDuplicate(campaign)} variant="outline" size="sm">
                   <Copy className="h-4 w-4" />
-                  </Button>
-                
+                </Button>
+
                 {/* Ver Logs - para todas exceto draft */}
                 {campaign.status !== 'draft' && (
                   <Button 
@@ -585,8 +483,8 @@ const CampaignsPage: React.FC = () => {
                   <div className="text-center">
                     <div className="text-2xl font-bold text-red-600">{campaign.messages_failed}</div>
                     <div className="text-sm text-gray-600">Falhas</div>
-                      </div>
-                    </div>
+                  </div>
+                </div>
               </div>
             )}
           </Card>
@@ -667,7 +565,7 @@ const CampaignsPage: React.FC = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3">
                             {getLogIcon(log.log_type)}
-                          <div className="flex-1">
+                            <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-medium text-gray-900">
                                   {log.log_type_display}
@@ -675,16 +573,16 @@ const CampaignsPage: React.FC = () => {
                                 {log.instance_name && (
                                   <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
                                     {log.instance_name}
-                              </span>
+                                  </span>
                                 )}
-                            </div>
+                              </div>
                               <p className="text-gray-700 mb-2">{log.message}</p>
                               <div className="flex items-center gap-4 text-sm text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
                                   {formatDate(log.created_at)}
                                 </span>
-                            {log.contact_name && (
+                                {log.contact_name && (
                                   <span className="flex items-center gap-1">
                                     <Users className="h-3 w-3" />
                                     {log.contact_name}
@@ -693,14 +591,13 @@ const CampaignsPage: React.FC = () => {
                                 )}
                                 <span>por {log.user_name}</span>
                               </div>
-                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
+                )}
             </div>
 
             <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-end">
