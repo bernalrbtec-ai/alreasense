@@ -519,7 +519,7 @@ const CampaignsPage: React.FC = () => {
   const fetchCampaignEvents = async (silent = false) => {
     try {
       // Buscar eventos e status em tempo real
-      const eventsResponse = await api.get('/campaigns/campaigns/events/')
+      const eventsResponse = await api.get('/campaigns/events/')
       
       if (eventsResponse.data.success) {
         const { campaigns_status } = eventsResponse.data
