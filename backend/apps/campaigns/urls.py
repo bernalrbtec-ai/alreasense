@@ -11,7 +11,6 @@ from .views_events_debug import campaign_events_debug
 from .views_status import campaign_status
 from .views_logs import campaign_logs as campaign_logs_new, campaign_logs_stats
 from .views_retry import campaign_retry_info
-from .views_webhook import whatsapp_webhook, webhook_health
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
@@ -33,10 +32,6 @@ urlpatterns = [
     
     # API de informações de retry
     path('campaigns/<uuid:campaign_id>/retry-info/', campaign_retry_info, name='campaign-retry-info'),
-    
-    # Webhooks para WhatsApp
-    path('webhooks/whatsapp/', whatsapp_webhook, name='whatsapp-webhook'),
-    path('webhooks/health/', webhook_health, name='webhook-health'),
     
     # Router deve vir depois das URLs específicas
     path('', include(router.urls)),

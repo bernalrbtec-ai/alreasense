@@ -7,6 +7,7 @@ from . import test_webhook_endpoint
 from . import simple_webhook_test
 from . import simple_webhook_view
 from . import super_simple_webhook
+from . import views_mongodb
 
 urlpatterns = [
     # Connections list
@@ -39,4 +40,9 @@ urlpatterns = [
     path('webhooks/cache/events/', webhook_monitoring_views.WebhookCacheEventsView.as_view(), name='webhook-recent-events'),
     path('webhooks/cache/reprocess/', webhook_monitoring_views.WebhookCacheReprocessView.as_view(), name='webhook-reprocess-events'),
     path('webhooks/cache/events/<str:event_id>/', webhook_monitoring_views.WebhookCacheEventDetailView.as_view(), name='webhook-event-details'),
+    
+    # MongoDB webhook events
+    path('webhooks/mongodb/stats/', views_mongodb.webhook_events_stats, name='webhook-mongodb-stats'),
+    path('webhooks/mongodb/events/', views_mongodb.webhook_events_list, name='webhook-mongodb-events'),
+    path('webhooks/mongodb/reprocess/', views_mongodb.reprocess_webhook_event, name='webhook-mongodb-reprocess'),
 ]
