@@ -267,15 +267,15 @@ class RabbitMQConsumer:
                 
                 logger.info(f"📝 [MESSAGE] Mensagem criada para {contact.contact.name}: selected_instance_id = {str(selected_instance.id)}")
                 
-                # Publicar com TTL baseado no delay (em milissegundos)
+                # Publicar SEM TTL - delay será aplicado no processamento
                 self.channel.basic_publish(
                     exchange='campaigns',
                     routing_key=queue_name,
                     body=json.dumps(message),
                     properties=pika.BasicProperties(
                         delivery_mode=2,  # Persistir mensagem
-                        timestamp=int(time.time()),
-                        expiration=str(delay_seconds * 1000)  # ← TTL EM MILISSEGUNDOS
+                        timestamp=int(time.time())
+                        # ← REMOVIDO TTL - delay será aplicado no processamento
                     )
                 )
                 
@@ -349,7 +349,7 @@ class RabbitMQConsumer:
         logger.info(f"🚀 [CONSUMER] Thread iniciada para campanha {campaign_id}")
     
     def _process_message(self, message_data: Dict[str, Any]) -> bool:
-        """Processa uma mensagem individual - USA INSTÂNCIA PRÉ-SELECIONADA"""
+        """Processa uma mensagem individual - USA INSTÂNCIA PRÉ-SELECIONADA COM DELAY"""
         try:
             campaign_id = message_data['campaign_id']
             contact_id = message_data['contact_id']
@@ -361,6 +361,18 @@ class RabbitMQConsumer:
             # Buscar dados
             campaign = Campaign.objects.get(id=campaign_id)
             contact = CampaignContact.objects.get(id=campaign_contact_id)
+            
+            # ⏰ APLICAR DELAY ANTES DO PROCESSAMENTO
+            if scheduled_delay > 0:
+                logger.info(f"⏰ [DELAY] Aguardando {scheduled_delay}s antes de processar {contact.contact.name}")
+                time.sleep(scheduled_delay)
+                logger.info(f"✅ [DELAY] Delay concluído - processando {contact.contact.name}")
+            
+            # Verificar se campanha ainda está ativa após delay
+            campaign.refresh_from_db()
+            if campaign.status != 'running':
+                logger.warning(f"⚠️ [DELAY] Campanha {campaign.name} não está mais ativa após delay")
+                return False
             
             # 🎯 USAR INSTÂNCIA PRÉ-SELECIONADA (rotação já calculada)
             instance = self._get_pre_selected_instance(message_data)
