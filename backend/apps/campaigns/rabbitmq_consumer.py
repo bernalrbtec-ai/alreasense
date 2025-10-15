@@ -517,6 +517,30 @@ class RabbitMQConsumer:
             logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} ({contact_phone}) via {instance.friendly_name} (delay: {scheduled_delay}s)")
             logger.info(f"🔒 [SECURITY] Tenant: {campaign.tenant.name} | Instância: {instance.tenant.name}")
             
+            # 🛡️ TESTAR INSTÂNCIA ANTES DE ENVIAR
+            instance_status = self._check_instance_status(instance)
+            if not instance_status['is_active']:
+                logger.error(f"❌ [INSTANCE] Instância {instance.friendly_name} não está ativa: {instance_status['reason']}")
+                
+                # Pausar campanha imediatamente
+                campaign.status = 'paused'
+                campaign.save(update_fields=['status'])
+                
+                # Log da pausa
+                CampaignLog.log_campaign_paused(campaign, f"Instância {instance.friendly_name} desconectada: {instance_status['reason']}")
+                
+                logger.error(f"⏸️ [AUTO-PAUSE] Campanha {campaign.name} pausada - instância desconectada")
+                
+                # WebSocket para notificar pausa
+                self._send_websocket_update(campaign, 'campaign_update', {
+                    'event': 'campaign_auto_paused',
+                    'reason': f'Instância {instance.friendly_name} desconectada',
+                    'instance_name': instance.friendly_name,
+                    'instance_status': instance_status['reason']
+                })
+                
+                return False
+            
             # Enviar mensagem via API com retry
             logger.info(f"🚀 [SEND] Iniciando envio para {contact.contact.name} via {instance.friendly_name}")
             success = self._send_whatsapp_message_with_retry(instance, contact_phone, message_content, campaign)
@@ -582,9 +606,6 @@ class RabbitMQConsumer:
                 
                 logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas via {instance.friendly_name}")
                 
-                # 🛡️ AUTO-PAUSE: Verificar se deve pausar campanha por muitas falhas
-                self._check_auto_pause_campaign(campaign, instance)
-                
                 # 🚀 GATILHO: Falha no envio
                 self._send_websocket_update(campaign, 'campaign_update', {
                     'event': 'message_failed',
@@ -598,6 +619,72 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
             return False
+    
+    def _check_instance_status(self, instance):
+        """Verifica se a instância está ativa fazendo um teste de conectividade"""
+        try:
+            import requests
+            
+            # URL de teste de status da instância
+            test_url = f"{instance.api_url}/instance/connectionState/{instance.instance_name}"
+            headers = {
+                'apikey': instance.api_key,
+                'Content-Type': 'application/json'
+            }
+            
+            logger.info(f"🔍 [INSTANCE] Testando conectividade da instância {instance.friendly_name}")
+            
+            # Fazer requisição de teste com timeout curto
+            response = requests.get(test_url, headers=headers, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # Verificar se a instância está conectada
+                if data.get('instance', {}).get('state') == 'open':
+                    logger.info(f"✅ [INSTANCE] Instância {instance.friendly_name} está ativa e conectada")
+                    return {
+                        'is_active': True,
+                        'reason': 'Conectada',
+                        'state': 'open'
+                    }
+                else:
+                    state = data.get('instance', {}).get('state', 'unknown')
+                    logger.warning(f"⚠️ [INSTANCE] Instância {instance.friendly_name} não está conectada: {state}")
+                    return {
+                        'is_active': False,
+                        'reason': f'Estado: {state}',
+                        'state': state
+                    }
+            else:
+                logger.error(f"❌ [INSTANCE] Erro ao verificar instância {instance.friendly_name}: HTTP {response.status_code}")
+                return {
+                    'is_active': False,
+                    'reason': f'Erro HTTP {response.status_code}',
+                    'state': 'error'
+                }
+                
+        except requests.exceptions.Timeout:
+            logger.error(f"❌ [INSTANCE] Timeout ao verificar instância {instance.friendly_name}")
+            return {
+                'is_active': False,
+                'reason': 'Timeout na verificação',
+                'state': 'timeout'
+            }
+        except requests.exceptions.ConnectionError:
+            logger.error(f"❌ [INSTANCE] Erro de conexão ao verificar instância {instance.friendly_name}")
+            return {
+                'is_active': False,
+                'reason': 'Erro de conexão',
+                'state': 'connection_error'
+            }
+        except Exception as e:
+            logger.error(f"❌ [INSTANCE] Erro inesperado ao verificar instância {instance.friendly_name}: {e}")
+            return {
+                'is_active': False,
+                'reason': f'Erro inesperado: {str(e)}',
+                'state': 'error'
+            }
     
     def _check_auto_pause_campaign(self, campaign, instance):
         """Verifica se deve pausar campanha automaticamente por muitas falhas"""
