@@ -582,6 +582,9 @@ class RabbitMQConsumer:
                 
                 logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas via {instance.friendly_name}")
                 
+                # 🛡️ AUTO-PAUSE: Verificar se deve pausar campanha por muitas falhas
+                self._check_auto_pause_campaign(campaign, instance)
+                
                 # 🚀 GATILHO: Falha no envio
                 self._send_websocket_update(campaign, 'campaign_update', {
                     'event': 'message_failed',
@@ -595,6 +598,45 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
             return False
+    
+    def _check_auto_pause_campaign(self, campaign, instance):
+        """Verifica se deve pausar campanha automaticamente por muitas falhas"""
+        try:
+            # Calcular taxa de falha
+            total_messages = campaign.messages_sent + campaign.messages_failed
+            if total_messages == 0:
+                return
+            
+            failure_rate = (campaign.messages_failed / total_messages) * 100
+            
+            # Pausar se taxa de falha > 80% E pelo menos 5 mensagens tentadas
+            if failure_rate > 80 and total_messages >= 5:
+                logger.warning(f"🛡️ [AUTO-PAUSE] Taxa de falha crítica: {failure_rate:.1f}% ({campaign.messages_failed}/{total_messages})")
+                logger.warning(f"🛡️ [AUTO-PAUSE] Instância {instance.friendly_name} pode estar suspensa")
+                
+                # Pausar campanha
+                campaign.status = 'paused'
+                campaign.save(update_fields=['status'])
+                
+                # Log da pausa
+                CampaignLog.log_campaign_paused(campaign, f"Pausada automaticamente: {failure_rate:.1f}% de falhas ({campaign.messages_failed}/{total_messages})")
+                
+                logger.error(f"⏸️ [AUTO-PAUSE] Campanha {campaign.name} pausada automaticamente por muitas falhas")
+                
+                # WebSocket para notificar pausa
+                self._send_websocket_update(campaign, 'campaign_update', {
+                    'event': 'campaign_auto_paused',
+                    'reason': f'Taxa de falha crítica: {failure_rate:.1f}%',
+                    'failure_count': campaign.messages_failed,
+                    'total_attempts': total_messages,
+                    'instance_name': instance.friendly_name
+                })
+                
+            elif failure_rate > 60 and total_messages >= 3:
+                logger.warning(f"⚠️ [AUTO-PAUSE] Taxa de falha alta: {failure_rate:.1f}% - monitorando...")
+                
+        except Exception as e:
+            logger.error(f"❌ [AUTO-PAUSE] Erro ao verificar auto-pause: {e}")
     
     def _get_pre_selected_instance(self, message_data: Dict[str, Any]):
         """Busca instância pré-selecionada baseada na rotação calculada"""
