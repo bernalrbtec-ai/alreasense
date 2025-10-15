@@ -318,11 +318,14 @@ class RabbitMQConsumer:
             
             # Implementar lógica baseada no modo de rotação da campanha
             if campaign.rotation_mode == 'round_robin':
-                # Round robin baseado em timestamp
-                import time
-                index = int(time.time()) % available_instances.count()
+                # Round robin baseado em contador sequencial
+                if not hasattr(self, '_round_robin_counter'):
+                    self._round_robin_counter = 0
+                
+                self._round_robin_counter += 1
+                index = self._round_robin_counter % available_instances.count()
                 instance = available_instances[index]
-                logger.info(f"🔄 [ROUND_ROBIN] Selecionada instância: {instance.name}")
+                logger.info(f"🔄 [ROUND_ROBIN] Selecionada instância: {instance.name} (index: {index})")
                 return instance
             elif campaign.rotation_mode == 'intelligent':
                 # Selecionar instância com melhor health_score
