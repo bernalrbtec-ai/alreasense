@@ -311,8 +311,8 @@ MONGO_CONFIG = {
     'COLLECTION': 'webhook_events'
 }
 
-# Build MongoDB URL
-MONGO_URL = f"mongodb://{MONGO_CONFIG['USER']}:{MONGO_CONFIG['PASSWORD']}@{MONGO_CONFIG['HOST']}:{MONGO_CONFIG['PORT']}/{MONGO_CONFIG['DATABASE']}"
+# Build MongoDB URL - usar MONGO_URL se disponível, senão construir
+MONGO_URL = config('MONGO_URL', default=f"mongodb://{MONGO_CONFIG['USER']}:{MONGO_CONFIG['PASSWORD']}@{MONGO_CONFIG['HOST']}:{MONGO_CONFIG['PORT']}/{MONGO_CONFIG['DATABASE']}")
 
 print(f"🔧 [SETTINGS] MONGO_URL: {MONGO_URL[:50]}...")
 
