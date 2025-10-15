@@ -194,16 +194,25 @@ class RabbitMQConsumer:
                 message_data = json.loads(body)
                 success = self._process_message(message_data)
                 
-                if success:
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                else:
-                    # Reenviar para retry
-                    self._handle_failed_message(message_data)
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
+                # ✅ SEMPRE confirmar mensagem (nunca travar a fila)
+                ch.basic_ack(delivery_tag=method.delivery_tag)
+                
+                if not success:
+                    logger.warning(f"⚠️ [CONSUMER] Mensagem processada com falha, mas fila continua")
                     
             except Exception as e:
-                logger.error(f"❌ [CONSUMER] Erro ao processar mensagem: {e}")
-                ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                logger.error(f"❌ [CONSUMER] Erro crítico ao processar mensagem: {e}")
+                # ✅ SEMPRE confirmar mensagem para não travar a fila
+                try:
+                    ch.basic_ack(delivery_tag=method.delivery_tag)
+                    logger.info(f"✅ [CONSUMER] Mensagem confirmada mesmo com erro - fila continua")
+                except Exception as ack_error:
+                    logger.error(f"❌ [CONSUMER] Erro ao confirmar mensagem: {ack_error}")
+                    # Forçar nack apenas se ack falhar
+                    try:
+                        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
+                    except:
+                        pass
         
         def start_consuming():
             try:
@@ -262,8 +271,8 @@ class RabbitMQConsumer:
             logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} ({contact.contact.phone}) via {instance.friendly_name}")
             logger.info(f"🔒 [SECURITY] Tenant: {campaign.tenant.name} | Instância: {instance.tenant.name}")
             
-            # Enviar mensagem via API
-            success = self._send_whatsapp_message(instance, contact.contact.phone, message_content)
+            # Enviar mensagem via API com retry
+            success = self._send_whatsapp_message_with_retry(instance, contact.contact.phone, message_content, campaign)
             
             if success:
                 # Atualizar status
@@ -282,7 +291,7 @@ class RabbitMQConsumer:
                 
                 return True
             else:
-                # Marcar como falha
+                # Marcar como falha (após 3 tentativas)
                 with transaction.atomic():
                     contact.status = 'failed'
                     contact.save()
@@ -290,7 +299,7 @@ class RabbitMQConsumer:
                     campaign.messages_failed += 1
                     campaign.save(update_fields=['messages_failed'])
                 
-                logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem")
+                logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas")
                 
                 # 🔄 AGENDAR PRÓXIMA MENSAGEM MESMO COM FALHA (como Celery)
                 self._schedule_next_message(campaign)
@@ -299,6 +308,13 @@ class RabbitMQConsumer:
                 
         except Exception as e:
             logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
+            # 🔄 MESMO COM ERRO, CONTINUAR COM PRÓXIMA MENSAGEM (diferente do Celery)
+            try:
+                campaign = Campaign.objects.get(id=message_data['campaign_id'])
+                self._schedule_next_message(campaign)
+                logger.info(f"🔄 [RECOVERY] Agendando próxima mensagem após erro")
+            except Exception as recovery_error:
+                logger.error(f"❌ [RECOVERY] Erro ao agendar próxima mensagem: {recovery_error}")
             return False
     
     def _schedule_next_message(self, campaign: Campaign):
@@ -329,6 +345,8 @@ class RabbitMQConsumer:
             
         except Exception as e:
             logger.error(f"❌ [SCHEDULE] Erro ao agendar próxima mensagem: {e}")
+            # 🔄 RETRY: Tentar agendar novamente em 30 segundos
+            self._schedule_retry_next_message(campaign, 30, 1)
     
     def _schedule_message_with_delay(self, campaign: Campaign, contact: CampaignContact, delay_seconds: int):
         """Agenda mensagem com delay específico"""
@@ -385,6 +403,47 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [SCHEDULE] Erro ao agendar mensagem com delay: {e}")
     
+    def _schedule_retry_next_message(self, campaign: Campaign, retry_delay: int, attempt: int = 1):
+        """Retry para agendar próxima mensagem em caso de erro"""
+        try:
+            import threading
+            import time
+            
+            def retry_schedule():
+                logger.info(f"🔄 [RETRY] Tentativa {attempt} - agendando em {retry_delay}s para campanha {campaign.name}")
+                time.sleep(retry_delay)
+                
+                # Verificar se campanha ainda está ativa
+                campaign.refresh_from_db()
+                if campaign.status != 'running':
+                    logger.info(f"⏹️ [RETRY] Campanha {campaign.name} não está mais ativa - cancelando retry")
+                    return
+                
+                # Tentar agendar novamente
+                try:
+                    self._schedule_next_message(campaign)
+                    logger.info(f"✅ [RETRY] Próxima mensagem agendada com sucesso após retry")
+                except Exception as retry_error:
+                    logger.error(f"❌ [RETRY] Falha no retry: {retry_error}")
+                    # 🔄 RETRY LIMITADO - máximo 3 tentativas
+                    if attempt < 3:
+                        next_delay = retry_delay * 2  # 30s, 60s, 120s
+                        logger.info(f"🔄 [RETRY] Tentativa {attempt + 1}/3 em {next_delay}s")
+                        self._schedule_retry_next_message(campaign, next_delay, attempt + 1)
+                    else:
+                        logger.error(f"❌ [RETRY] Máximo de 3 tentativas atingido para campanha {campaign.name} - PARANDO RETRY")
+                        # Marcar campanha como pausada por erro
+                        campaign.status = 'paused'
+                        campaign.save(update_fields=['status'])
+                        CampaignLog.log_error(campaign, f"Campanha pausada após 3 tentativas de retry falharem")
+            
+            # Executar retry em thread separada
+            thread = threading.Thread(target=retry_schedule, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            logger.error(f"❌ [RETRY] Erro no sistema de retry: {e}")
+    
     def _validate_message_data(self, campaign: Campaign, contact: CampaignContact, instance: WhatsAppInstance, message_data: Dict) -> bool:
         """Validações críticas de segurança antes do envio"""
         try:
@@ -436,8 +495,49 @@ class RabbitMQConsumer:
             logger.error(f"❌ [SECURITY] Erro nas validações: {e}")
             return False
 
+    def _send_whatsapp_message_with_retry(self, instance: WhatsAppInstance, phone: str, message: str, campaign: Campaign) -> bool:
+        """Envia mensagem via API do WhatsApp com 3 tentativas"""
+        import time
+        
+        for attempt in range(1, 4):  # 3 tentativas
+            try:
+                url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
+                headers = {
+                    'apikey': instance.api_key,
+                    'Content-Type': 'application/json'
+                }
+                payload = {
+                    'number': phone,
+                    'text': message
+                }
+                
+                # Log detalhado do envio
+                logger.info(f"📤 [API] Tentativa {attempt}/3 - Enviando via {instance.friendly_name} para {phone}")
+                logger.info(f"🔗 [API] URL: {url}")
+                logger.info(f"📝 [API] Conteúdo: {message[:100]}...")
+                
+                response = requests.post(url, json=payload, headers=headers, timeout=30)
+                response.raise_for_status()
+                
+                logger.info(f"✅ [API] Mensagem enviada com sucesso na tentativa {attempt}")
+                return True
+                
+            except Exception as e:
+                logger.error(f"❌ [API] Tentativa {attempt}/3 falhou: {e}")
+                
+                if attempt < 3:
+                    # Delay entre tentativas: 2s, 4s
+                    delay = 2 ** attempt
+                    logger.info(f"⏰ [RETRY] Aguardando {delay}s antes da próxima tentativa")
+                    time.sleep(delay)
+                else:
+                    logger.error(f"❌ [API] Todas as 3 tentativas falharam para {phone}")
+                    return False
+        
+        return False
+
     def _send_whatsapp_message(self, instance: WhatsAppInstance, phone: str, message: str) -> bool:
-        """Envia mensagem via API do WhatsApp"""
+        """Envia mensagem via API do WhatsApp (método simples para compatibilidade)"""
         try:
             url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
             headers = {
@@ -448,11 +548,6 @@ class RabbitMQConsumer:
                 'number': phone,
                 'text': message
             }
-            
-            # Log detalhado do envio
-            logger.info(f"📤 [API] Enviando via {instance.friendly_name} para {phone}")
-            logger.info(f"🔗 [API] URL: {url}")
-            logger.info(f"📝 [API] Conteúdo: {message[:100]}...")
             
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
@@ -764,8 +859,56 @@ class RabbitMQConsumer:
                     logger.info(f"🚀 [AUTO-START] Iniciando campanha {campaign.name}")
                     self.start_campaign(campaign_id)
                     
+            # 🔄 RECOVERY: Verificar campanhas travadas a cada 5 minutos
+            self._start_campaign_recovery_monitor()
+                    
         except Exception as e:
             logger.error(f"❌ [AUTO-START] Erro ao iniciar campanhas: {e}")
+    
+    def _start_campaign_recovery_monitor(self):
+        """Monitor para recuperar campanhas travadas"""
+        import threading
+        import time
+        
+        def recovery_monitor():
+            while self.running:
+                try:
+                    time.sleep(60)  # Verificar a cada 1 minuto (mais frequente)
+                    
+                    from .models import Campaign
+                    running_campaigns = Campaign.objects.filter(status='running')
+                    
+                    for campaign in running_campaigns:
+                        campaign_id = str(campaign.id)
+                        
+                        # Se campanha está rodando mas sem consumer ativo
+                        if campaign_id not in self.consumer_threads:
+                            logger.warning(f"🔄 [RECOVERY] Campanha {campaign.name} sem consumer - reiniciando")
+                            self.start_campaign(campaign_id)
+                        
+                        # Verificar se tem contatos pendentes mas sem processamento
+                        pending_contacts = CampaignContact.objects.filter(
+                            campaign=campaign,
+                            status__in=['pending', 'sending']
+                        ).count()
+                        
+                        if pending_contacts > 0:
+                            # Verificar se consumer está ativo mas não processando
+                            if campaign_id in self.consumer_threads:
+                                thread = self.consumer_threads[campaign_id]
+                                if not thread.is_alive():
+                                    logger.warning(f"🔄 [RECOVERY] Consumer morto para {campaign.name} - reiniciando")
+                                    del self.consumer_threads[campaign_id]
+                                    self.start_campaign(campaign_id)
+                                    
+                except Exception as e:
+                    logger.error(f"❌ [RECOVERY] Erro no monitor de recuperação: {e}")
+                    time.sleep(60)  # Aguardar 1 minuto antes de tentar novamente
+        
+        # Iniciar monitor em thread separada
+        thread = threading.Thread(target=recovery_monitor, daemon=True)
+        thread.start()
+        logger.info("🔄 [RECOVERY] Monitor de recuperação de campanhas iniciado")
     
     def stop(self):
         """Para o consumer"""
