@@ -34,7 +34,8 @@ def campaign_logs(request):
         ).select_related(
             'campaign', 
             'campaign_contact__contact',
-            'user'
+            'created_by',
+            'instance'
         ).order_by('-created_at')
         
         # Filtros
@@ -46,7 +47,7 @@ def campaign_logs(request):
             
         if instance_name:
             logs_query = logs_query.filter(
-                Q(instance_name__icontains=instance_name) |
+                Q(instance__friendly_name__icontains=instance_name) |
                 Q(message__icontains=instance_name)
             )
             
@@ -90,9 +91,9 @@ def campaign_logs(request):
                 'campaign_status': log.campaign.status if log.campaign else None,
                 'contact_name': log.campaign_contact.contact.name if log.campaign_contact and log.campaign_contact.contact else None,
                 'contact_phone': log.campaign_contact.contact.phone if log.campaign_contact and log.campaign_contact.contact else None,
-                'instance_name': log.instance_name,
-                'user_name': log.user.get_full_name() if log.user else 'Sistema',
-                'extra_data': log.extra_data
+                'instance_name': log.instance.friendly_name if log.instance else None,
+                'user_name': log.created_by.get_full_name() if log.created_by else 'Sistema',
+                'extra_data': log.details
             }
             logs_data.append(log_data)
         
