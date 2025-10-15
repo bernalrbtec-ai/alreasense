@@ -4,6 +4,7 @@ Implementa processamento robusto sem Celery
 """
 import json
 import time
+import random
 import logging
 import threading
 from typing import Dict, Any, Optional
