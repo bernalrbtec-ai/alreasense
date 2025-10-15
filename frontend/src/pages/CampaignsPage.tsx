@@ -38,6 +38,7 @@ interface Campaign {
   scheduled_at?: string
   last_message_sent_at?: string
   next_message_scheduled_at?: string
+  countdown_seconds?: number
   next_contact_name?: string
   next_contact_phone?: string
   next_instance_name?: string
@@ -66,6 +67,7 @@ interface CampaignMessage {
 // Componente de Countdown
 const NextMessageCountdown: React.FC<{ 
   nextScheduledAt?: string; 
+  countdownSeconds?: number;
   campaignStatus: string;
   nextContactName?: string;
   nextContactPhone?: string;
@@ -73,80 +75,52 @@ const NextMessageCountdown: React.FC<{
   lastContactName?: string;
   lastContactPhone?: string;
   lastInstanceName?: string;
-}> = ({ nextScheduledAt, campaignStatus, nextContactName, nextContactPhone, nextInstanceName, lastContactName, lastContactPhone, lastInstanceName }) => {
-  const [timeLeft, setTimeLeft] = useState('')
+}> = ({ nextScheduledAt, countdownSeconds, campaignStatus, nextContactName, nextContactPhone, nextInstanceName, lastContactName, lastContactPhone, lastInstanceName }) => {
+  const [seconds, setSeconds] = useState(countdownSeconds || 0)
 
   useEffect(() => {
-    // Só mostrar se campanha está realmente rodando
-    if (!nextScheduledAt || campaignStatus !== 'running') {
-      setTimeLeft('')
+    // Só mostrar se campanha está rodando e tem countdown
+    if (!countdownSeconds || countdownSeconds <= 0 || campaignStatus !== 'running') {
+      setSeconds(0)
       return
     }
 
-    const updateCountdown = () => {
-      try {
-        // Forçar parsing como UTC para evitar problemas de timezone
-        const targetTime = new Date(nextScheduledAt.includes('Z') ? nextScheduledAt : nextScheduledAt + 'Z')
-        const now = new Date()
-        
-        // Debug para entender o problema
-        console.log('🕐 [COUNTDOWN] Debug:', {
-          nextScheduledAt,
-          targetTime: targetTime.toISOString(),
-          now: now.toISOString(),
-          targetTimeValid: !isNaN(targetTime.getTime()),
-          nowValid: !isNaN(now.getTime())
-        })
-        
-        // Verificar se a data é válida
-        if (isNaN(targetTime.getTime())) {
-          console.error('❌ [COUNTDOWN] Data inválida:', nextScheduledAt)
-          setTimeLeft('Data inválida')
-          return
-        }
-        
-        // Calcular diferença em segundos
-        const diffMs = targetTime.getTime() - now.getTime()
-        const diffSeconds = Math.max(0, Math.floor(diffMs / 1000))
-        
-        console.log('🕐 [COUNTDOWN] Cálculo:', {
-          diffMs,
-          diffSeconds,
-          diffMsValid: !isNaN(diffMs),
-          diffSecondsValid: !isNaN(diffSeconds)
-        })
-        
-        if (diffSeconds === 0) {
-          setTimeLeft('Agora!')
-          return
-        }
-        
-        // Formatar tempo de forma mais legível (aproximado)
-        if (diffSeconds < 60) {
-          setTimeLeft(`${diffSeconds}s`)
-        } else if (diffSeconds < 3600) {
-          const minutes = Math.floor(diffSeconds / 60)
-          setTimeLeft(`${minutes}m`)
-        } else {
-          const hours = Math.floor(diffSeconds / 3600)
-          const minutes = Math.floor((diffSeconds % 3600) / 60)
-          setTimeLeft(`${hours}h ${minutes}m`)
-        }
-        
-        console.log('✅ [COUNTDOWN] Resultado final:', timeLeft)
-      } catch (error) {
-        console.error('❌ [COUNTDOWN] Erro ao calcular countdown:', error)
-        setTimeLeft('Erro no cálculo')
-      }
-    }
+    // Inicializar com o valor do backend
+    setSeconds(countdownSeconds)
 
-    updateCountdown()
-    // Atualizar a cada 5 segundos (menos frequente, mais tolerante a latência)
-    const interval = setInterval(updateCountdown, 5000)
+    // Contador regressivo simples
+    const interval = setInterval(() => {
+      setSeconds(prev => {
+        const newSeconds = Math.max(0, prev - 1)
+        return newSeconds
+      })
+    }, 1000)
+
     return () => clearInterval(interval)
-  }, [nextScheduledAt, campaignStatus])
+  }, [countdownSeconds, campaignStatus])
 
-  if (!nextScheduledAt || !timeLeft || campaignStatus !== 'running') return null
+  // Atualizar quando countdownSeconds mudar (nova resposta da API)
+  useEffect(() => {
+    if (countdownSeconds !== undefined && countdownSeconds > 0) {
+      setSeconds(countdownSeconds)
+    }
+  }, [countdownSeconds])
+
+  if (!countdownSeconds || countdownSeconds <= 0 || campaignStatus !== 'running') return null
+
+  // Formatar tempo
+  const formatTime = (totalSeconds: number) => {
+    if (totalSeconds < 60) {
+      return `${totalSeconds} segundos`
+    } else if (totalSeconds < 3600) {
+      const minutes = Math.floor(totalSeconds / 60)
+      return `${minutes} minutos`
+    } else {
+      const hours = Math.floor(totalSeconds / 3600)
+      const minutes = Math.floor((totalSeconds % 3600) / 60)
+      return `${hours}h ${minutes}m`
+    }
+  }
 
   return (
     <div className="space-y-3">
@@ -177,7 +151,7 @@ const NextMessageCountdown: React.FC<{
             <div className="flex-1">
               <div className="text-blue-600 mb-2 font-medium flex items-center gap-1">
                 <Clock className="h-3 w-3" />
-                Próximo disparo em: <span className="font-bold">{timeLeft}</span>
+                Próximo disparo em aproximadamente: <span className="font-bold">{formatTime(seconds)}</span>
               </div>
               {nextContactName && nextContactPhone && (
                 <div className="text-gray-700 space-y-1">
@@ -195,7 +169,7 @@ const NextMessageCountdown: React.FC<{
         /* Fallback para quando não há histórico */
       <div className="flex items-center gap-2 text-sm text-blue-600">
         <Clock className="h-4 w-4" />
-        <span>Próximo disparo em: <span className="font-bold">{timeLeft}</span></span>
+        <span>Próximo disparo em aproximadamente: <span className="font-bold">{formatTime(seconds)}</span></span>
       </div>
       )}
         </div>
@@ -1113,6 +1087,7 @@ const CampaignsPage: React.FC = () => {
                   <div className="pt-2 border-t">
                     <NextMessageCountdown 
                       nextScheduledAt={campaign.next_message_scheduled_at} 
+                      countdownSeconds={campaign.countdown_seconds}
                       campaignStatus={campaign.status}
                       nextContactName={campaign.next_contact_name}
                       nextContactPhone={campaign.next_contact_phone}
