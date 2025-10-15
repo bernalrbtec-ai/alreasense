@@ -230,9 +230,17 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         daily_limit_per_instance: formData.daily_limit_per_instance,
         pause_on_health_below: formData.pause_on_health_below,
         scheduled_at: formData.scheduled_at || null,
-        tag_id: formData.audience_type === 'tag' ? formData.tag_id : null,
-        contact_ids: formData.contact_ids
+        tag_id: (formData.audience_type === 'tag' && formData.contact_ids.length === 0) ? formData.tag_id : null,
+        contact_ids: formData.contact_ids.length > 0 ? formData.contact_ids : []
       }
+
+      console.log('🚀 [CAMPANHA] Payload sendo enviado:', {
+        audience_type: formData.audience_type,
+        tag_id: payload.tag_id,
+        contact_ids: payload.contact_ids,
+        total_contacts: payload.contact_ids.length,
+        mode: payload.contact_ids.length > 0 ? 'CONTATOS_ESPECIFICOS' : 'TODOS_DA_TAG'
+      })
 
       await api.post('/campaigns/campaigns/', payload)
       
@@ -427,7 +435,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                         setFormData({ 
                           ...formData, 
                           tag_id: tagId,
-                          contact_ids: tagContacts.map(c => c.id)
+                          contact_ids: [] // Não selecionar automaticamente - deixar usuário escolher
                         })
                       } else {
                         setTagContacts([])  // Limpar contatos da tag
@@ -454,7 +462,17 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           <button
                             type="button"
                             onClick={() => {
-                              // ✅ Usar tagContacts carregados via API
+                              // ✅ Enviar para TODOS os contatos da tag (sem contact_ids específicos)
+                              setFormData({ ...formData, contact_ids: [] })
+                            }}
+                            className="text-xs text-green-600 hover:text-green-800 font-medium"
+                          >
+                            Enviar para Todos
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              // ✅ Selecionar todos os contatos específicos
                               setFormData({ ...formData, contact_ids: tagContacts.map(c => c.id) })
                             }}
                             className="text-xs text-blue-600 hover:text-blue-800"
