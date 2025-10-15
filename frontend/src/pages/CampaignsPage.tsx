@@ -465,34 +465,99 @@ const CampaignsPage: React.FC = () => {
                         </div>
                       </div>
                     ) : (
-                      /* Mostrar próximo disparo se não há retry */
+                      /* Layout com progress bars e informações lado a lado */
                       <div className="space-y-2">
-                        {campaign.next_contact_name && (
-                          <div className="flex items-center gap-2 text-blue-600">
-                            <Users className="h-4 w-4" />
-                            <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
+                        {/* Linha superior: Próximo contato + Progress bars */}
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            {campaign.next_contact_name && (
+                              <div className="flex items-center gap-2 text-blue-600">
+                                <Users className="h-4 w-4" />
+                                <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
+                              </div>
+                            )}
                           </div>
-                        )}
-                        {campaign.next_instance_name && (
-                          <div className="flex items-center gap-2 text-green-600">
-                            <Phone className="h-4 w-4" />
-                            <span><strong>Via:</strong> {campaign.next_instance_name}</span>
+                          
+                          {/* Progress bars */}
+                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 min-w-[280px]">
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="flex items-center gap-2 text-blue-600">
+                                  <Send className="h-4 w-4" />
+                                  Enviadas
+                                </span>
+                                <span className="font-medium">{((campaign.messages_sent / campaign.total_contacts) * 100).toFixed(0)}%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div className="bg-blue-400 h-2 rounded-full" style={{width: `${(campaign.messages_sent / campaign.total_contacts) * 100}%`}}></div>
+                              </div>
+                              
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="flex items-center gap-2 text-green-600">
+                                  <CheckCircle className="h-4 w-4" />
+                                  Entregues
+                                </span>
+                                <span className="font-medium">
+                                  {campaign.messages_sent > 0 ? ((campaign.messages_delivered / campaign.messages_sent) * 100).toFixed(0) : 0}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div className="bg-green-400 h-2 rounded-full" style={{width: `${campaign.messages_sent > 0 ? (campaign.messages_delivered / campaign.messages_sent) * 100 : 0}%`}}></div>
+                              </div>
+                              
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="flex items-center gap-2 text-yellow-600">
+                                  <Eye className="h-4 w-4" />
+                                  Lidas
+                                </span>
+                                <span className="font-medium">
+                                  {campaign.messages_delivered > 0 ? ((campaign.messages_read / campaign.messages_delivered) * 100).toFixed(0) : 0}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div className="bg-yellow-400 h-2 rounded-full" style={{width: `${campaign.messages_delivered > 0 ? (campaign.messages_read / campaign.messages_delivered) * 100 : 0}%`}}></div>
+                              </div>
+                              
+                              <div className="flex items-center justify-between text-sm">
+                                <span className="flex items-center gap-2 text-red-600">
+                                  <X className="h-4 w-4" />
+                                  Falhas
+                                </span>
+                                <span className="font-medium">{((campaign.messages_failed / campaign.total_contacts) * 100).toFixed(0)}%</span>
+                              </div>
+                              <div className="w-full bg-gray-200 rounded-full h-2">
+                                <div className="bg-red-400 h-2 rounded-full" style={{width: `${(campaign.messages_failed / campaign.total_contacts) * 100}%`}}></div>
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    )}
-                    
-                    {/* Informações do último disparo */}
-                    {campaign.last_contact_name && (
-                      <div className="flex items-center gap-2 text-gray-600">
-                        <Clock className="h-4 w-4" />
-                        <span><strong>Último:</strong> {campaign.last_contact_name} ({campaign.last_contact_phone})</span>
-                      </div>
-                    )}
-                    {campaign.last_message_sent_at && (
-                      <div className="flex items-center gap-2 text-gray-500">
-                        <Clock className="h-4 w-4" />
-                        <span><strong>Enviado em:</strong> {new Date(campaign.last_message_sent_at).toLocaleString('pt-BR')}</span>
+                        </div>
+                        
+                        {/* Linha inferior: Último contato + Instância + Horário */}
+                        <div className="flex items-center justify-between gap-4">
+                          <div className="flex-1">
+                            {campaign.last_contact_name && (
+                              <div className="flex items-center gap-2 text-gray-600">
+                                <Clock className="h-4 w-4" />
+                                <span><strong>Último:</strong> {campaign.last_contact_name} ({campaign.last_contact_phone})</span>
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="flex items-center gap-4 text-sm text-gray-500">
+                            {campaign.next_instance_name && (
+                              <div className="flex items-center gap-2 text-green-600">
+                                <Phone className="h-4 w-4" />
+                                <span><strong>Via:</strong> {campaign.next_instance_name}</span>
+                              </div>
+                            )}
+                            {campaign.last_message_sent_at && (
+                              <div className="flex items-center gap-2 text-gray-500">
+                                <Clock className="h-4 w-4" />
+                                <span><strong>Enviado em:</strong> {new Date(campaign.last_message_sent_at).toLocaleString('pt-BR')}</span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </div>
                     )}
                   </div>
