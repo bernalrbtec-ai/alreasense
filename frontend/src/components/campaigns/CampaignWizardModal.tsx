@@ -79,19 +79,12 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
       setFormData(prevFormData => {
         const targetIndex = prevFormData.messages.length - 1
         
-        // Se a última mensagem estiver vazia, usar ela
-        if (prevFormData.messages[targetIndex] && !prevFormData.messages[targetIndex].content) {
-          const newMessages = [...prevFormData.messages]
-          newMessages[targetIndex].content = variable
-          return { ...prevFormData, messages: newMessages }
-        } else {
-          // Senão, adicionar uma nova mensagem
-          const newMessage = { content: variable, order: prevFormData.messages.length + 1 }
-          return { 
-            ...prevFormData, 
-            messages: [...prevFormData.messages, newMessage]
-          }
+        // Sempre inserir na última mensagem (não criar nova)
+        const newMessages = [...prevFormData.messages]
+        if (newMessages[targetIndex]) {
+          newMessages[targetIndex].content += variable
         }
+        return { ...prevFormData, messages: newMessages }
       })
     }
     
@@ -349,7 +342,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+      <div className="bg-white rounded-lg shadow-xl max-w-7xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
         <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
           <div>
@@ -688,18 +681,15 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
           {/* STEP 3: Mensagens */}
           {step === 3 && (
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-6">
               {/* Coluna 1: Editor de Mensagens */}
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
-                  <h3 className="text-lg font-semibold">Templates de Mensagem</h3>
+                  <h3 className="text-lg font-semibold">✏️ Edição das Mensagens</h3>
                   <Button onClick={addMessage} size="sm">
                     + Adicionar
                   </Button>
                 </div>
-
-                {/* Variáveis Disponíveis */}
-                <MessageVariables />
 
                 {/* Mensagens */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -717,15 +707,48 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                               e.preventDefault()
                               const variable = e.dataTransfer.getData('text/plain')
                               const textarea = e.target as HTMLTextAreaElement
-                              const start = textarea.selectionStart
-                              const end = textarea.selectionEnd
+                              
+                              // Se não há seleção ou cursor, inserir no final
+                              let start = textarea.selectionStart
+                              let end = textarea.selectionEnd
+                              
+                              // Se start/end são null ou iguais, inserir no final
+                              if (start === null || start === end) {
+                                start = message.content.length
+                                end = message.content.length
+                              }
+                              
                               const newContent = message.content.substring(0, start) + variable + message.content.substring(end)
                               updateMessage(index, newContent)
+                              
+                              // Limpar classes visuais
+                              textarea.classList.remove('border-blue-400', 'bg-blue-50')
+                              
+                              // Reposicionar cursor após a variável inserida
+                              setTimeout(() => {
+                                textarea.focus()
+                                textarea.setSelectionRange(start + variable.length, start + variable.length)
+                              }, 0)
                             }}
-                            onDragOver={(e) => e.preventDefault()}
+                            onDragOver={(e) => {
+                              e.preventDefault()
+                              e.dataTransfer.dropEffect = 'copy'
+                              // Adicionar classe visual para indicar que pode receber drop
+                              textarea.classList.add('border-blue-400', 'bg-blue-50')
+                            }}
+                            onDragLeave={(e) => {
+                              // Remover classes visuais quando sair da área
+                              const textarea = e.target as HTMLTextAreaElement
+                              textarea.classList.remove('border-blue-400', 'bg-blue-50')
+                            }}
+                            onDragEnter={(e) => {
+                              e.preventDefault()
+                              const textarea = e.target as HTMLTextAreaElement
+                              textarea.classList.add('border-blue-400', 'bg-blue-50')
+                            }}
                             placeholder="Digite a mensagem... Use {{nome}}, {{primeiro_nome}}, {{saudacao}}, etc."
-                            className="w-full px-2 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500"
-                            rows={3}
+                            className="w-full px-2 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500 transition-colors"
+                            rows={4}
                           />
                           <p className="text-xs text-gray-500 mt-1">
                             {message.content.length} caracteres • Arraste variáveis aqui
@@ -746,8 +769,8 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
               </div>
 
               {/* Coluna 2: Preview WhatsApp */}
-              <div>
-                <h3 className="text-lg font-semibold mb-4">Preview da Mensagem</h3>
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">📱 Preview do WhatsApp</h3>
                 
                 {/* Smartphone Mockup */}
                 <div className="mx-auto max-w-sm">
@@ -858,6 +881,12 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     Preview atualiza em tempo real
                   </p>
                 </div>
+              </div>
+
+              {/* Coluna 3: Variáveis Disponíveis */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">📝 Variáveis Disponíveis</h3>
+                <MessageVariables />
               </div>
             </div>
           )}

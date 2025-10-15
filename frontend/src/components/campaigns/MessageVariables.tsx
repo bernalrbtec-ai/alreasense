@@ -86,6 +86,36 @@ export function MessageVariables({ className = '' }: MessageVariablesProps) {
               onDragStart={(e) => {
                 e.dataTransfer.setData('text/plain', item.variable)
                 e.dataTransfer.effectAllowed = 'copy'
+                
+                // Adicionar feedback visual
+                const element = e.target as HTMLElement
+                element.style.opacity = '0.5'
+                
+                // Criar um elemento de preview personalizado
+                const dragImage = document.createElement('div')
+                dragImage.textContent = item.variable
+                dragImage.style.cssText = `
+                  background: #3b82f6;
+                  color: white;
+                  padding: 8px 12px;
+                  border-radius: 6px;
+                  font-family: monospace;
+                  font-size: 12px;
+                  position: absolute;
+                  top: -1000px;
+                `
+                document.body.appendChild(dragImage)
+                e.dataTransfer.setDragImage(dragImage, 0, 0)
+                
+                // Limpar após um tempo
+                setTimeout(() => {
+                  document.body.removeChild(dragImage)
+                }, 0)
+              }}
+              onDragEnd={(e) => {
+                // Restaurar opacidade
+                const element = e.target as HTMLElement
+                element.style.opacity = '1'
               }}
             >
               {/* Ícone */}
