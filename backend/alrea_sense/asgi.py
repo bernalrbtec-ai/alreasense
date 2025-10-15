@@ -52,13 +52,13 @@ def start_rabbitmq_consumer():
         
         from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
         
-        consumer = get_rabbitmq_consumer()
-        if consumer:
-            print("🚀 [RABBITMQ] Iniciando RabbitMQ Consumer em background...")
-            consumer.start(auto_start_campaigns=True)
-            print("✅ [RABBITMQ] RabbitMQ Consumer iniciado com sucesso!")
-        else:
-            print("⚠️ [RABBITMQ] RabbitMQ Consumer não disponível - campanhas não serão processadas")
+               consumer = get_rabbitmq_consumer()
+               if consumer:
+                   print("🚀 [RABBITMQ] Iniciando RabbitMQ Consumer em background...")
+                   consumer.start()
+                   print("✅ [RABBITMQ] RabbitMQ Consumer iniciado com sucesso!")
+               else:
+                   print("⚠️ [RABBITMQ] RabbitMQ Consumer não disponível - campanhas não serão processadas")
             
     except Exception as e:
         print(f"❌ [RABBITMQ] Erro ao iniciar RabbitMQ Consumer: {e}")
