@@ -31,24 +31,59 @@ class RabbitMQConsumer:
         self._connect()
     
     def _connect(self):
-        """Estabelece conexão com RabbitMQ"""
-        try:
-            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
-            
-            self.connection = pika.BlockingConnection(
-                pika.URLParameters(rabbitmq_url)
-            )
-            self.channel = self.connection.channel()
-            
-            # Configurar exchanges e filas
-            self._setup_queues()
-            
-            logger.info("✅ [RABBITMQ] Conectado com sucesso")
-            
-        except Exception as e:
-            logger.error(f"❌ [RABBITMQ] Erro na conexão: {e}")
-            raise
+        """Estabelece conexão com RabbitMQ com retry automático"""
+        max_retries = 5
+        retry_delay = 2
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+                
+                # Configurações de conexão robustas
+                connection_params = pika.URLParameters(rabbitmq_url)
+                connection_params.heartbeat = 600  # 10 minutos
+                connection_params.blocked_connection_timeout = 300  # 5 minutos
+                connection_params.socket_timeout = 30
+                connection_params.retry_delay = 2
+                connection_params.connection_attempts = 3
+                
+                self.connection = pika.BlockingConnection(connection_params)
+                self.channel = self.connection.channel()
+                
+                # Configurar exchanges e filas
+                self._setup_queues()
+                
+                logger.info(f"✅ [RABBITMQ] Conectado com sucesso (tentativa {attempt})")
+                return
+                
+            except Exception as e:
+                logger.error(f"❌ [RABBITMQ] Erro na conexão (tentativa {attempt}/{max_retries}): {e}")
+                
+                if attempt < max_retries:
+                    logger.info(f"🔄 [RABBITMQ] Tentando novamente em {retry_delay}s...")
+                    import time
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error(f"❌ [RABBITMQ] Falha após {max_retries} tentativas")
+                    raise
     
+    def _check_connection(self):
+        """Verifica se a conexão está ativa e reconecta se necessário"""
+        try:
+            if not self.connection or self.connection.is_closed:
+                logger.warning("⚠️ [RABBITMQ] Conexão perdida, reconectando...")
+                self._connect()
+            elif not self.channel or self.channel.is_closed:
+                logger.warning("⚠️ [RABBITMQ] Canal perdido, reconectando...")
+                self._connect()
+        except Exception as e:
+            logger.error(f"❌ [RABBITMQ] Erro ao verificar conexão: {e}")
+            try:
+                self._connect()
+            except Exception as reconnect_error:
+                logger.error(f"❌ [RABBITMQ] Falha ao reconectar: {reconnect_error}")
+
     def _setup_queues(self):
         """Configura filas e exchanges"""
         # Exchange principal
@@ -78,10 +113,8 @@ class RabbitMQConsumer:
     def start_campaign(self, campaign_id: str):
         """Inicia processamento de uma campanha"""
         try:
-            # Verificar se canal está aberto
-            if not self.channel or self.channel.is_closed:
-                logger.warning("⚠️ [CONSUMER] Canal fechado, reconectando...")
-                self._connect()
+            # Verificar conexão antes de iniciar campanha
+            self._check_connection()
             
             campaign = Campaign.objects.get(id=campaign_id)
             
@@ -162,10 +195,8 @@ class RabbitMQConsumer:
                 'campaign_rotation_mode': campaign.rotation_mode
             }
             
-            # Verificar se canal está aberto antes de publicar
-            if not self.channel or self.channel.is_closed:
-                logger.warning("⚠️ [CONSUMER] Canal fechado, reconectando...")
-                self._connect()
+            # Verificar conexão antes de publicar
+            self._check_connection()
             
             # Publicar APENAS a primeira mensagem
             self.channel.basic_publish(
@@ -377,10 +408,8 @@ class RabbitMQConsumer:
                     'campaign_rotation_mode': campaign.rotation_mode
                 }
                 
-                # Verificar canal
-                if not self.channel or self.channel.is_closed:
-                    logger.warning("⚠️ [SCHEDULE] Canal fechado, reconectando...")
-                    self._connect()
+                # Verificar conexão antes de publicar
+                self._check_connection()
                 
                 # Publicar mensagem agendada
                 queue_name = f"campaign.{campaign.id}.messages"
