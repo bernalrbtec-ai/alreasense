@@ -880,50 +880,69 @@ class RabbitMQConsumer:
         """Envia atualização WebSocket apenas em eventos específicos"""
         try:
             logger.info(f"🔧 [WEBSOCKET] Iniciando envio de {event_type} para campanha {campaign.name}")
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
             
-            async def send_update():
-                logger.info(f"🔧 [WEBSOCKET] Dentro da função async para {event_type}")
-                # Dados básicos da campanha
-                campaign_data = {
-                    'type': event_type,
-                    'campaign_id': str(campaign.id),
-                    'campaign_name': campaign.name,
-                    'status': campaign.status,
-                    'messages_sent': campaign.messages_sent,
-                    'messages_delivered': campaign.messages_delivered,
-                    'messages_read': campaign.messages_read,
-                    'messages_failed': campaign.messages_failed,
-                    'total_contacts': campaign.total_contacts,
-                    'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
-                    'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
-                    'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
-                    'next_contact_name': campaign.next_contact_name,
-                    'next_contact_phone': campaign.next_contact_phone,
-                    'last_contact_name': campaign.last_contact_name,
-                    'last_contact_phone': campaign.last_contact_phone,
-                    'updated_at': campaign.updated_at.isoformat()
-                }
-                
-                # Adicionar dados extras se fornecidos
-                if extra_data:
-                    campaign_data.update(extra_data)
-                
-                # Enviar via WebSocket
-                channel_layer = get_channel_layer()
-                if channel_layer:
-                    await channel_layer.group_send(
-                        f"tenant_{campaign.tenant.id}",
-                        {
-                            "type": "broadcast_notification",
-                            "payload": campaign_data
+            # Usar threading para evitar problemas de contexto assíncrono
+            import threading
+            
+            def send_in_thread():
+                try:
+                    import asyncio
+                    
+                    async def send_update():
+                        logger.info(f"🔧 [WEBSOCKET] Dentro da função async para {event_type}")
+                        from channels.layers import get_channel_layer
+                        
+                        # Dados básicos da campanha
+                        campaign_data = {
+                            'type': event_type,
+                            'campaign_id': str(campaign.id),
+                            'campaign_name': campaign.name,
+                            'status': campaign.status,
+                            'messages_sent': campaign.messages_sent,
+                            'messages_delivered': campaign.messages_delivered,
+                            'messages_read': campaign.messages_read,
+                            'messages_failed': campaign.messages_failed,
+                            'total_contacts': campaign.total_contacts,
+                            'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
+                            'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
+                            'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
+                            'next_contact_name': campaign.next_contact_name,
+                            'next_contact_phone': campaign.next_contact_phone,
+                            'last_contact_name': campaign.last_contact_name,
+                            'last_contact_phone': campaign.last_contact_phone,
+                            'updated_at': campaign.updated_at.isoformat()
                         }
-                    )
-                    logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
+                        
+                        # Adicionar dados extras se fornecidos
+                        if extra_data:
+                            campaign_data.update(extra_data)
+                        
+                        # Enviar via WebSocket
+                        channel_layer = get_channel_layer()
+                        if channel_layer:
+                            await channel_layer.group_send(
+                                f"tenant_{campaign.tenant.id}",
+                                {
+                                    "type": "broadcast_notification",
+                                    "payload": campaign_data
+                                }
+                            )
+                            logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
+                    
+                    # Criar novo loop de evento
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        loop.run_until_complete(send_update())
+                    finally:
+                        loop.close()
+                        
+                except Exception as e:
+                    logger.error(f"❌ [WEBSOCKET] Erro na thread: {e}")
             
-            # Usar async_to_sync para execução mais confiável
-            async_to_sync(send_update)()
+            # Executar em thread separada
+            thread = threading.Thread(target=send_in_thread, daemon=True)
+            thread.start()
                 
         except Exception as e:
             logger.error(f"❌ [WEBSOCKET] Erro ao enviar {event_type}: {e}")
