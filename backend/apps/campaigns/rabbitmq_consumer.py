@@ -80,8 +80,8 @@ class RabbitMQConsumer:
         try:
             campaign = Campaign.objects.get(id=campaign_id)
             
-            if campaign.status != 'draft':
-                logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} não está em rascunho")
+            if campaign.status not in ['draft', 'running']:
+                logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} status inválido: {campaign.status}")
                 return False
             
             # Verificar se tem contatos
@@ -90,8 +90,11 @@ class RabbitMQConsumer:
                 status__in=['pending', 'sending']
             ).count()
             
+            total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
+            logger.info(f"🔍 [CONSUMER] Campanha {campaign.name}: {pending_contacts} pendentes de {total_contacts} total")
+            
             if pending_contacts == 0:
-                logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} não possui contatos")
+                logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} não possui contatos pendentes")
                 return False
             
             # Atualizar status
