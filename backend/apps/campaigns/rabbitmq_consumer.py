@@ -862,6 +862,7 @@ class RabbitMQConsumer:
                 logger.info(f"📤 [API] Tentativa {attempt}/3 - Enviando via {instance.friendly_name} para {phone}")
                 logger.info(f"🔗 [API] URL: {url}")
                 logger.info(f"📝 [API] Conteúdo: {message[:100]}...")
+                logger.info(f"🆔 [INSTANCE] ID: {instance.id} | Nome: {instance.friendly_name} | Instance: {instance.instance_name}")
                 
                 response = requests.post(url, json=payload, headers=headers, timeout=30)
                 response.raise_for_status()
@@ -870,7 +871,8 @@ class RabbitMQConsumer:
                 return True
                 
             except Exception as e:
-                logger.error(f"❌ [API] Tentativa {attempt}/3 falhou: {e}")
+                logger.error(f"❌ [API] Tentativa {attempt}/3 falhou via {instance.friendly_name}: {e}")
+                logger.error(f"🆔 [INSTANCE] ID: {instance.id} | Nome: {instance.friendly_name} | Instance: {instance.instance_name}")
                 
                 if attempt < 3:
                     # Delay entre tentativas: 2s, 4s
