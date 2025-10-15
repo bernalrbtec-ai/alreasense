@@ -374,7 +374,16 @@ class RabbitMQConsumer:
                 
                 # Enviar atualização via WebSocket
                 import asyncio
-                asyncio.run(self._send_campaign_update_websocket(campaign))
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Se já há um loop rodando, usar create_task
+                        asyncio.create_task(self._send_campaign_update_websocket(campaign))
+                    else:
+                        # Se não há loop, usar run
+                        asyncio.run(self._send_campaign_update_websocket(campaign))
+                except Exception as e:
+                    logger.error(f"❌ [WEBSOCKET] Erro ao executar: {e}")
                 
                 # Aplicar delay com contador regressivo
                 for remaining_seconds in range(scheduled_delay, 0, -1):
@@ -453,7 +462,16 @@ class RabbitMQConsumer:
                 
                 # Enviar atualização via WebSocket
                 import asyncio
-                asyncio.run(self._send_campaign_update_websocket(campaign))
+                try:
+                    loop = asyncio.get_event_loop()
+                    if loop.is_running():
+                        # Se já há um loop rodando, usar create_task
+                        asyncio.create_task(self._send_campaign_update_websocket(campaign))
+                    else:
+                        # Se não há loop, usar run
+                        asyncio.run(self._send_campaign_update_websocket(campaign))
+                except Exception as e:
+                    logger.error(f"❌ [WEBSOCKET] Erro ao executar: {e}")
                 
                 logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
                 return True
