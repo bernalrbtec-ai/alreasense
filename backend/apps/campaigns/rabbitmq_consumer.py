@@ -249,7 +249,13 @@ class RabbitMQConsumer:
             contact = CampaignContact.objects.get(id=campaign_contact_id)
             instance = WhatsAppInstance.objects.get(id=instance_id)
             
-            logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} via {instance.friendly_name}")
+            # 🔒 VALIDAÇÕES CRÍTICAS DE SEGURANÇA
+            if not self._validate_message_data(campaign, contact, instance, message_data):
+                logger.error(f"❌ [SECURITY] Validação de segurança falhou para campanha {campaign.name}")
+                return False
+            
+            logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} ({contact.contact.phone}) via {instance.friendly_name}")
+            logger.info(f"🔒 [SECURITY] Tenant: {campaign.tenant.name} | Instância: {instance.tenant.name}")
             
             # Enviar mensagem via API
             success = self._send_whatsapp_message(instance, contact.contact.phone, message_content)
@@ -282,6 +288,57 @@ class RabbitMQConsumer:
             logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
             return False
     
+    def _validate_message_data(self, campaign: Campaign, contact: CampaignContact, instance: WhatsAppInstance, message_data: Dict) -> bool:
+        """Validações críticas de segurança antes do envio"""
+        try:
+            # 1. Verificar se a instância pertence ao mesmo tenant da campanha
+            if campaign.tenant != instance.tenant:
+                logger.error(f"❌ [SECURITY] VIOLAÇÃO: Instância {instance.friendly_name} não pertence ao tenant {campaign.tenant.name}")
+                return False
+            
+            # 2. Verificar se o contato pertence à campanha
+            if contact.campaign != campaign:
+                logger.error(f"❌ [SECURITY] VIOLAÇÃO: Contato {contact.contact.name} não pertence à campanha {campaign.name}")
+                return False
+            
+            # 3. Verificar se o contato pertence ao mesmo tenant
+            if contact.contact.tenant != campaign.tenant:
+                logger.error(f"❌ [SECURITY] VIOLAÇÃO: Contato {contact.contact.name} não pertence ao tenant {campaign.tenant.name}")
+                return False
+            
+            # 4. Verificar se a instância está ativa
+            if not instance.is_active:
+                logger.error(f"❌ [SECURITY] Instância {instance.friendly_name} não está ativa")
+                return False
+            
+            # 5. Verificar se o telefone é válido
+            if not contact.contact.phone or len(contact.contact.phone) < 10:
+                logger.error(f"❌ [SECURITY] Telefone inválido: {contact.contact.phone}")
+                return False
+            
+            # 6. Verificar se a mensagem não está vazia
+            if not message_data.get('message_content') or len(message_data.get('message_content', '').strip()) == 0:
+                logger.error(f"❌ [SECURITY] Mensagem vazia ou inválida")
+                return False
+            
+            # 7. Verificar IDs da mensagem
+            expected_contact_id = str(contact.contact.id)
+            if message_data.get('contact_id') != expected_contact_id:
+                logger.error(f"❌ [SECURITY] ID do contato não confere: esperado {expected_contact_id}, recebido {message_data.get('contact_id')}")
+                return False
+            
+            expected_instance_id = str(instance.id)
+            if message_data.get('instance_id') != expected_instance_id:
+                logger.error(f"❌ [SECURITY] ID da instância não confere: esperado {expected_instance_id}, recebido {message_data.get('instance_id')}")
+                return False
+            
+            logger.info(f"✅ [SECURITY] Todas as validações passaram para {contact.contact.name}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [SECURITY] Erro nas validações: {e}")
+            return False
+
     def _send_whatsapp_message(self, instance: WhatsAppInstance, phone: str, message: str) -> bool:
         """Envia mensagem via API do WhatsApp"""
         try:
@@ -294,6 +351,11 @@ class RabbitMQConsumer:
                 'number': phone,
                 'text': message
             }
+            
+            # Log detalhado do envio
+            logger.info(f"📤 [API] Enviando via {instance.friendly_name} para {phone}")
+            logger.info(f"🔗 [API] URL: {url}")
+            logger.info(f"📝 [API] Conteúdo: {message[:100]}...")
             
             response = requests.post(url, json=payload, headers=headers, timeout=30)
             response.raise_for_status()
