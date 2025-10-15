@@ -39,6 +39,39 @@ class CampaignSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validação personalizada do serializer"""
+        print(f"🔍 [VALIDATE] Dados recebidos para validação: {data}")
+        
+        # Verificar se name está presente e não é vazio
+        name = data.get('name')
+        if not name or (isinstance(name, str) and name.strip() == ''):
+            print(f"❌ [VALIDATE] Nome inválido: {name}")
+            raise serializers.ValidationError({
+                'name': 'Nome da campanha é obrigatório e não pode estar vazio.'
+            })
+        
+        # Verificar se há mensagens
+        messages = data.get('messages', [])
+        if not messages or len(messages) == 0:
+            print(f"❌ [VALIDATE] Nenhuma mensagem encontrada: {messages}")
+            raise serializers.ValidationError({
+                'messages': 'Pelo menos uma mensagem é obrigatória.'
+            })
+        
+        # Verificar se as mensagens têm conteúdo
+        for i, msg in enumerate(messages):
+            if not isinstance(msg, dict):
+                print(f"❌ [VALIDATE] Mensagem {i} não é um dict: {msg}")
+                raise serializers.ValidationError({
+                    'messages': f'Mensagem {i+1} tem formato inválido.'
+                })
+            
+            content = msg.get('content', '')
+            if not content or (isinstance(content, str) and content.strip() == ''):
+                print(f"❌ [VALIDATE] Mensagem {i} está vazia: {content}")
+                raise serializers.ValidationError({
+                    'messages': f'Mensagem {i+1} não pode estar vazia.'
+                })
+        
         interval_min = data.get('interval_min')
         interval_max = data.get('interval_max')
         
@@ -54,6 +87,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                     'interval_max': 'Intervalo máximo deve ser no máximo 420 segundos para evitar timeouts.'
                 })
         
+        print(f"✅ [VALIDATE] Validação passou com sucesso")
         return data
 
     class Meta:

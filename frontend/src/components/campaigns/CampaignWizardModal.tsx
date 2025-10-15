@@ -251,6 +251,19 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
           has_content: !!m.content
         }))
       })
+      
+      // Verificar se há campos vazios que podem causar erro
+      if (!formData.name || formData.name.trim() === '') {
+        console.error('❌ [ERROR] Nome da campanha está vazio!')
+        throw new Error('Nome da campanha é obrigatório')
+      }
+      
+      // Verificar se há mensagens válidas
+      const validMessages = formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim())
+      if (validMessages.length === 0) {
+        console.error('❌ [ERROR] Nenhuma mensagem válida encontrada!')
+        throw new Error('Pelo menos uma mensagem é obrigatória')
+      }
 
       await api.post('/campaigns/campaigns/', payload)
       
