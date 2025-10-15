@@ -191,14 +191,11 @@ class RabbitMQConsumer:
                 logger.warning(f"⚠️ [CONSUMER] Nenhum contato pendente para campanha {campaign.name}")
                 return
             
-            # Buscar instâncias ativas do tenant
-            instances = WhatsAppInstance.objects.filter(
-                tenant=campaign.tenant,
-                is_active=True
-            ).order_by('created_at')
+            # 🎯 USAR APENAS INSTÂNCIAS SELECIONADAS NA CAMPANHA
+            instances = campaign.instances.filter(is_active=True).order_by('created_at')
             
             if not instances.exists():
-                logger.error(f"❌ [CONSUMER] Nenhuma instância ativa para tenant {campaign.tenant.name}")
+                logger.error(f"❌ [CONSUMER] Nenhuma instância selecionada ativa para campanha {campaign.name}")
                 return
             
             queue_name = f"campaign.{campaign.id}.messages"
@@ -320,21 +317,23 @@ class RabbitMQConsumer:
         logger.info(f"🚀 [CONSUMER] Thread iniciada para campanha {campaign_id}")
     
     def _process_message(self, message_data: Dict[str, Any]) -> bool:
-        """Processa uma mensagem individual - FUNCIONA COMO CELERY"""
+        """Processa uma mensagem individual - USA INSTÂNCIA PRÉ-SELECIONADA"""
         try:
             campaign_id = message_data['campaign_id']
             contact_id = message_data['contact_id']
             campaign_contact_id = message_data['campaign_contact_id']
             message_content = message_data['message_content']
+            contact_phone = message_data.get('contact_phone')
+            scheduled_delay = message_data.get('scheduled_delay_seconds', 0)
             
             # Buscar dados
             campaign = Campaign.objects.get(id=campaign_id)
             contact = CampaignContact.objects.get(id=campaign_contact_id)
             
-            # 🔄 SELECIONAR INSTÂNCIA NA HORA DO PROCESSAMENTO (como Celery)
-            instance = self._select_instance(campaign)
+            # 🎯 USAR INSTÂNCIA PRÉ-SELECIONADA (rotação já calculada)
+            instance = self._get_pre_selected_instance(message_data)
             if not instance:
-                logger.error(f"❌ [PROCESSING] Nenhuma instância disponível para campanha {campaign.name}")
+                logger.error(f"❌ [PROCESSING] Instância pré-selecionada não disponível para campanha {campaign.name}")
                 return False
             
             # 🔒 VALIDAÇÕES CRÍTICAS DE SEGURANÇA
@@ -342,11 +341,11 @@ class RabbitMQConsumer:
                 logger.error(f"❌ [SECURITY] Validação de segurança falhou para campanha {campaign.name}")
                 return False
             
-            logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} ({contact.contact.phone}) via {instance.friendly_name}")
+            logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} ({contact_phone}) via {instance.friendly_name} (delay: {scheduled_delay}s)")
             logger.info(f"🔒 [SECURITY] Tenant: {campaign.tenant.name} | Instância: {instance.tenant.name}")
             
             # Enviar mensagem via API com retry
-            success = self._send_whatsapp_message_with_retry(instance, contact.contact.phone, message_content, campaign)
+            success = self._send_whatsapp_message_with_retry(instance, contact_phone, message_content, campaign)
             
             if success:
                 # Atualizar status
@@ -358,11 +357,7 @@ class RabbitMQConsumer:
                     campaign.messages_sent += 1
                     campaign.save(update_fields=['messages_sent'])
                 
-                logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso")
-                
-                # 🔄 AGENDAR PRÓXIMA MENSAGEM (como Celery)
-                self._schedule_next_message(campaign)
-                
+                logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
                 return True
             else:
                 # Marcar como falha (após 3 tentativas)
@@ -373,23 +368,65 @@ class RabbitMQConsumer:
                     campaign.messages_failed += 1
                     campaign.save(update_fields=['messages_failed'])
                 
-                logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas")
-                
-                # 🔄 AGENDAR PRÓXIMA MENSAGEM MESMO COM FALHA (como Celery)
-                self._schedule_next_message(campaign)
-                
+                logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas via {instance.friendly_name}")
                 return False
                 
         except Exception as e:
             logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
-            # 🔄 MESMO COM ERRO, CONTINUAR COM PRÓXIMA MENSAGEM (diferente do Celery)
-            try:
-                campaign = Campaign.objects.get(id=message_data['campaign_id'])
-                self._schedule_next_message(campaign)
-                logger.info(f"🔄 [RECOVERY] Agendando próxima mensagem após erro")
-            except Exception as recovery_error:
-                logger.error(f"❌ [RECOVERY] Erro ao agendar próxima mensagem: {recovery_error}")
             return False
+    
+    def _get_pre_selected_instance(self, message_data: Dict[str, Any]):
+        """Busca instância pré-selecionada baseada na rotação calculada"""
+        try:
+            campaign_settings = message_data.get('campaign_settings', {})
+            selected_instance_id = campaign_settings.get('selected_instance_id')
+            
+            if not selected_instance_id:
+                logger.error("❌ [INSTANCE] selected_instance_id não encontrado na mensagem")
+                return None
+            
+            # Buscar instância específica
+            instance = WhatsAppInstance.objects.get(
+                id=selected_instance_id,
+                is_active=True
+            )
+            
+            logger.info(f"🎯 [INSTANCE] Usando instância pré-selecionada: {instance.friendly_name}")
+            return instance
+            
+        except WhatsAppInstance.DoesNotExist:
+            logger.error(f"❌ [INSTANCE] Instância {selected_instance_id} não encontrada ou inativa")
+            # Fallback: tentar selecionar uma instância disponível
+            return self._select_instance_fallback(message_data.get('campaign_settings', {}))
+        except Exception as e:
+            logger.error(f"❌ [INSTANCE] Erro ao buscar instância pré-selecionada: {e}")
+            return None
+    
+    def _select_instance_fallback(self, campaign_settings: Dict[str, Any]):
+        """Fallback: seleciona primeira instância disponível"""
+        try:
+            selected_instances = campaign_settings.get('selected_instances', [])
+            if not selected_instances:
+                return None
+            
+            # Tentar primeira instância disponível
+            for instance_id in selected_instances:
+                try:
+                    instance = WhatsAppInstance.objects.get(
+                        id=instance_id,
+                        is_active=True
+                    )
+                    logger.info(f"🔄 [FALLBACK] Usando instância alternativa: {instance.friendly_name}")
+                    return instance
+                except WhatsAppInstance.DoesNotExist:
+                    continue
+            
+            logger.error("❌ [FALLBACK] Nenhuma instância disponível encontrada")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ [FALLBACK] Erro no fallback de instância: {e}")
+            return None
     
     def _schedule_next_message(self, campaign: Campaign):
         """Agenda próxima mensagem respeitando intervalos da campanha"""
