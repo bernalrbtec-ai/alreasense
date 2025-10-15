@@ -308,7 +308,7 @@ class RabbitMQConsumer:
             logger.error(f"❌ [CONSUMER] Erro ao popular fila: {e}")
     
     def _start_campaign_consumer(self, campaign_id: str):
-        """Inicia consumer para uma campanha específica"""
+        """Inicia consumer INDEPENDENTE para uma campanha específica - PARALELISMO TOTAL"""
         if campaign_id in self.consumer_threads:
             logger.warning(f"⚠️ [CONSUMER] Consumer já ativo para campanha {campaign_id}")
             return
@@ -339,35 +339,70 @@ class RabbitMQConsumer:
                         pass
         
         def start_consuming():
+            """Consumer INDEPENDENTE com sua própria conexão RabbitMQ"""
+            campaign_connection = None
+            campaign_channel = None
+            
             try:
+                # 🚀 NOVA CONEXÃO INDEPENDENTE para cada campanha
+                campaign_connection = pika.BlockingConnection(
+                    pika.ConnectionParameters(
+                        host=settings.RABBITMQ_HOST,
+                        port=settings.RABBITMQ_PORT,
+                        virtual_host=settings.RABBITMQ_VHOST,
+                        credentials=pika.PlainCredentials(
+                            settings.RABBITMQ_USER,
+                            settings.RABBITMQ_PASSWORD
+                        ),
+                        heartbeat=600,
+                        blocked_connection_timeout=300
+                    )
+                )
+                campaign_channel = campaign_connection.channel()
+                
                 queue_name = f"campaign.{campaign_id}.messages"
                 
-                # Configurar QoS
-                self.channel.basic_qos(prefetch_count=1)
+                # Configurar QoS para esta campanha específica
+                campaign_channel.basic_qos(prefetch_count=1)
                 
-                # Iniciar consumer
-                self.channel.basic_consume(
+                # Iniciar consumer independente
+                campaign_channel.basic_consume(
                     queue=queue_name,
                     on_message_callback=consumer_callback,
                     auto_ack=False
                 )
                 
-                logger.info(f"🎯 [CONSUMER] Iniciando consumer para campanha {campaign_id}")
-                self.channel.start_consuming()
+                logger.info(f"🎯 [PARALLEL] Consumer INDEPENDENTE iniciado para campanha {campaign_id}")
+                campaign_channel.start_consuming()
                 
             except Exception as e:
-                logger.error(f"❌ [CONSUMER] Erro no consumer: {e}")
+                logger.error(f"❌ [PARALLEL] Erro no consumer independente da campanha {campaign_id}: {e}")
             finally:
+                # Limpar conexão independente
+                try:
+                    if campaign_channel and not campaign_channel.is_closed:
+                        campaign_channel.stop_consuming()
+                        campaign_channel.close()
+                except:
+                    pass
+                    
+                try:
+                    if campaign_connection and not campaign_connection.is_closed:
+                        campaign_connection.close()
+                except:
+                    pass
+                
                 # Remover da lista de consumers ativos
                 if campaign_id in self.consumer_threads:
                     del self.consumer_threads[campaign_id]
+                    logger.info(f"🧹 [PARALLEL] Consumer independente da campanha {campaign_id} finalizado")
         
-        # Iniciar em thread separada
+        # Iniciar em thread separada - AGORA TOTALMENTE INDEPENDENTE
         thread = threading.Thread(target=start_consuming, daemon=True)
         thread.start()
         
         self.consumer_threads[campaign_id] = thread
-        logger.info(f"🚀 [CONSUMER] Thread iniciada para campanha {campaign_id}")
+        logger.info(f"🚀 [PARALLEL] Thread INDEPENDENTE iniciada para campanha {campaign_id}")
     
     def _process_message(self, message_data: Dict[str, Any]) -> bool:
         """Processa uma mensagem individual - USA INSTÂNCIA PRÉ-SELECIONADA COM DELAY"""
@@ -1132,19 +1167,26 @@ class RabbitMQConsumer:
             logger.error(f"❌ [CONSUMER] Erro ao pausar campanha: {e}")
     
     def resume_campaign(self, campaign_id: str):
-        """Resume uma campanha"""
+        """Resume uma campanha e inicia automaticamente o consumer"""
         try:
             campaign = Campaign.objects.get(id=campaign_id)
             campaign.status = 'running'
             campaign.save(update_fields=['status'])
             
             CampaignLog.log_campaign_resumed(campaign)
-            logger.info(f"▶️ [CONSUMER] Campanha {campaign.name} resumida")
+            logger.info(f"▶️ [RESUME] Campanha {campaign.name} resumida")
+            
+            # 🚀 REINICIAR AUTOMATICAMENTE o consumer para campanhas resumidas
+            if campaign_id not in self.consumer_threads:
+                logger.info(f"🚀 [RESUME] Iniciando consumer automaticamente para campanha {campaign.name}")
+                self._start_campaign_consumer(campaign_id)
+            else:
+                logger.info(f"✅ [RESUME] Consumer já ativo para campanha {campaign.name}")
             
         except Campaign.DoesNotExist:
-            logger.error(f"❌ [CONSUMER] Campanha {campaign_id} não encontrada")
+            logger.error(f"❌ [RESUME] Campanha {campaign_id} não encontrada")
         except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao resumir campanha: {e}")
+            logger.error(f"❌ [RESUME] Erro ao resumir campanha: {e}")
     
     def stop_campaign(self, campaign_id: str):
         """Para uma campanha"""
@@ -1311,19 +1353,27 @@ class RabbitMQConsumer:
             self._auto_start_active_campaigns()
     
     def _auto_start_active_campaigns(self):
-        """Inicia automaticamente campanhas que estão em execução"""
+        """Inicia automaticamente campanhas que estão em execução - AGORA EM PARALELO"""
         try:
             from .models import Campaign
             
-            # Buscar campanhas em execução
+            logger.info("🔄 [AUTO-START] Verificando campanhas ativas para PARALELISMO...")
             running_campaigns = Campaign.objects.filter(status='running')
+            
+            logger.info(f"📊 [PARALLEL] Encontradas {running_campaigns.count()} campanhas ativas")
             
             for campaign in running_campaigns:
                 campaign_id = str(campaign.id)
                 if campaign_id not in self.consumer_threads:
-                    logger.info(f"🚀 [AUTO-START] Iniciando campanha {campaign.name}")
+                    logger.info(f"🚀 [PARALLEL] Iniciando consumer INDEPENDENTE para campanha {campaign.name}")
                     self.start_campaign(campaign_id)
+                else:
+                    logger.info(f"✅ [PARALLEL] Consumer já ativo para campanha {campaign.name}")
                     
+            # Log do status final
+            active_consumers = len(self.consumer_threads)
+            logger.info(f"🎯 [PARALLEL] STATUS FINAL: {active_consumers} consumers independentes ativos")
+            
             # 🔄 RECOVERY: Verificar campanhas travadas a cada 5 minutos
             self._start_campaign_recovery_monitor()
                     
