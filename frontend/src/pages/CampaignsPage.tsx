@@ -89,8 +89,32 @@ const NextMessageCountdown: React.FC<{
         const targetTime = new Date(nextScheduledAt.includes('Z') ? nextScheduledAt : nextScheduledAt + 'Z')
         const now = new Date()
         
+        // Debug para entender o problema
+        console.log('🕐 [COUNTDOWN] Debug:', {
+          nextScheduledAt,
+          targetTime: targetTime.toISOString(),
+          now: now.toISOString(),
+          targetTimeValid: !isNaN(targetTime.getTime()),
+          nowValid: !isNaN(now.getTime())
+        })
+        
+        // Verificar se a data é válida
+        if (isNaN(targetTime.getTime())) {
+          console.error('❌ [COUNTDOWN] Data inválida:', nextScheduledAt)
+          setTimeLeft('Data inválida')
+          return
+        }
+        
         // Calcular diferença em segundos
-        const diffSeconds = Math.max(0, Math.floor((targetTime.getTime() - now.getTime()) / 1000))
+        const diffMs = targetTime.getTime() - now.getTime()
+        const diffSeconds = Math.max(0, Math.floor(diffMs / 1000))
+        
+        console.log('🕐 [COUNTDOWN] Cálculo:', {
+          diffMs,
+          diffSeconds,
+          diffMsValid: !isNaN(diffMs),
+          diffSecondsValid: !isNaN(diffSeconds)
+        })
         
         if (diffSeconds === 0) {
           setTimeLeft('Agora!')
@@ -108,9 +132,11 @@ const NextMessageCountdown: React.FC<{
           const minutes = Math.floor((diffSeconds % 3600) / 60)
           setTimeLeft(`${hours}h ${minutes}m`)
         }
+        
+        console.log('✅ [COUNTDOWN] Resultado final:', timeLeft)
       } catch (error) {
-        console.error('Erro ao calcular countdown:', error)
-        setTimeLeft('Calculando...')
+        console.error('❌ [COUNTDOWN] Erro ao calcular countdown:', error)
+        setTimeLeft('Erro no cálculo')
       }
     }
 
