@@ -135,49 +135,50 @@ class RabbitMQConsumer:
             return False
     
     def _populate_campaign_queue(self, campaign: Campaign):
-        """Popula fila com mensagens da campanha"""
+        """Popula fila com mensagens da campanha - APENAS PRIMEIRA MENSAGEM"""
         try:
-            contacts = CampaignContact.objects.filter(
+            # Buscar apenas o PRIMEIRO contato pendente
+            first_contact = CampaignContact.objects.filter(
                 campaign=campaign,
                 status__in=['pending', 'sending']
-            ).select_related('contact')
+            ).select_related('contact').first()
+            
+            if not first_contact:
+                logger.warning(f"⚠️ [CONSUMER] Nenhum contato pendente para campanha {campaign.name}")
+                return
             
             queue_name = f"campaign.{campaign.id}.messages"
             
-            for contact in contacts:
-                # Selecionar instância
-                instance = self._select_instance(campaign)
-                if not instance:
-                    logger.warning(f"⚠️ [CONSUMER] Nenhuma instância disponível para {contact.contact.name}")
-                    continue
-                
-                # Criar mensagem
-                message = {
-                    'campaign_id': str(campaign.id),
-                    'contact_id': str(contact.contact.id),
-                    'campaign_contact_id': str(contact.id),
-                    'instance_id': str(instance.id),
-                    'message_content': self._get_message_content(campaign),
-                    'created_at': timezone.now().isoformat()
-                }
-                
-                # Verificar se canal está aberto antes de publicar
-                if not self.channel or self.channel.is_closed:
-                    logger.warning("⚠️ [CONSUMER] Canal fechado, reconectando...")
-                    self._connect()
-                
-                # Publicar na fila
-                self.channel.basic_publish(
-                    exchange='campaigns',
-                    routing_key=queue_name,
-                    body=json.dumps(message),
-                    properties=pika.BasicProperties(
-                        delivery_mode=2,  # Persistir mensagem
-                        timestamp=int(time.time())
-                    )
-                )
+            # Criar mensagem para o PRIMEIRO contato apenas
+            message = {
+                'campaign_id': str(campaign.id),
+                'contact_id': str(first_contact.contact.id),
+                'campaign_contact_id': str(first_contact.id),
+                'instance_id': 'SELECT_AT_PROCESSING',  # Selecionar na hora do processamento
+                'message_content': self._get_message_content(campaign),
+                'created_at': timezone.now().isoformat(),
+                'campaign_interval_min': campaign.interval_min,
+                'campaign_interval_max': campaign.interval_max,
+                'campaign_rotation_mode': campaign.rotation_mode
+            }
             
-            logger.info(f"📤 [CONSUMER] {contacts.count()} mensagens adicionadas à fila")
+            # Verificar se canal está aberto antes de publicar
+            if not self.channel or self.channel.is_closed:
+                logger.warning("⚠️ [CONSUMER] Canal fechado, reconectando...")
+                self._connect()
+            
+            # Publicar APENAS a primeira mensagem
+            self.channel.basic_publish(
+                exchange='campaigns',
+                routing_key=queue_name,
+                body=json.dumps(message),
+                properties=pika.BasicProperties(
+                    delivery_mode=2,  # Persistir mensagem
+                    timestamp=int(time.time())
+                )
+            )
+            
+            logger.info(f"📤 [QUEUE] Primeira mensagem adicionada à fila para {first_contact.contact.name}")
             
         except Exception as e:
             logger.error(f"❌ [CONSUMER] Erro ao popular fila: {e}")
@@ -236,18 +237,22 @@ class RabbitMQConsumer:
         logger.info(f"🚀 [CONSUMER] Thread iniciada para campanha {campaign_id}")
     
     def _process_message(self, message_data: Dict[str, Any]) -> bool:
-        """Processa uma mensagem individual"""
+        """Processa uma mensagem individual - FUNCIONA COMO CELERY"""
         try:
             campaign_id = message_data['campaign_id']
             contact_id = message_data['contact_id']
             campaign_contact_id = message_data['campaign_contact_id']
-            instance_id = message_data['instance_id']
             message_content = message_data['message_content']
             
             # Buscar dados
             campaign = Campaign.objects.get(id=campaign_id)
             contact = CampaignContact.objects.get(id=campaign_contact_id)
-            instance = WhatsAppInstance.objects.get(id=instance_id)
+            
+            # 🔄 SELECIONAR INSTÂNCIA NA HORA DO PROCESSAMENTO (como Celery)
+            instance = self._select_instance(campaign)
+            if not instance:
+                logger.error(f"❌ [PROCESSING] Nenhuma instância disponível para campanha {campaign.name}")
+                return False
             
             # 🔒 VALIDAÇÕES CRÍTICAS DE SEGURANÇA
             if not self._validate_message_data(campaign, contact, instance, message_data):
@@ -271,6 +276,10 @@ class RabbitMQConsumer:
                     campaign.save(update_fields=['messages_sent'])
                 
                 logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso")
+                
+                # 🔄 AGENDAR PRÓXIMA MENSAGEM (como Celery)
+                self._schedule_next_message(campaign)
+                
                 return True
             else:
                 # Marcar como falha
@@ -282,11 +291,99 @@ class RabbitMQConsumer:
                     campaign.save(update_fields=['messages_failed'])
                 
                 logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem")
+                
+                # 🔄 AGENDAR PRÓXIMA MENSAGEM MESMO COM FALHA (como Celery)
+                self._schedule_next_message(campaign)
+                
                 return False
                 
         except Exception as e:
             logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
             return False
+    
+    def _schedule_next_message(self, campaign: Campaign):
+        """Agenda próxima mensagem respeitando intervalos da campanha"""
+        try:
+            # Buscar próximo contato pendente
+            next_contact = CampaignContact.objects.filter(
+                campaign=campaign,
+                status__in=['pending', 'sending']
+            ).select_related('contact').first()
+            
+            if not next_contact:
+                logger.info(f"🏁 [CAMPAIGN] Campanha {campaign.name} concluída - sem mais contatos")
+                # Marcar campanha como concluída
+                campaign.status = 'completed'
+                campaign.completed_at = timezone.now()
+                campaign.save(update_fields=['status', 'completed_at'])
+                return
+            
+            # Calcular delay baseado nos intervalos da campanha
+            import random
+            delay_seconds = random.randint(campaign.interval_min, campaign.interval_max)
+            
+            logger.info(f"⏰ [SCHEDULE] Próxima mensagem em {delay_seconds}s para {next_contact.contact.name}")
+            
+            # Agendar próxima mensagem com delay
+            self._schedule_message_with_delay(campaign, next_contact, delay_seconds)
+            
+        except Exception as e:
+            logger.error(f"❌ [SCHEDULE] Erro ao agendar próxima mensagem: {e}")
+    
+    def _schedule_message_with_delay(self, campaign: Campaign, contact: CampaignContact, delay_seconds: int):
+        """Agenda mensagem com delay específico"""
+        try:
+            import threading
+            import time
+            
+            def delayed_message():
+                # Aguardar o delay
+                time.sleep(delay_seconds)
+                
+                # Verificar se campanha ainda está ativa
+                campaign.refresh_from_db()
+                if campaign.status != 'running':
+                    logger.info(f"⏹️ [SCHEDULE] Campanha {campaign.name} não está mais ativa - cancelando agendamento")
+                    return
+                
+                # Criar próxima mensagem
+                message = {
+                    'campaign_id': str(campaign.id),
+                    'contact_id': str(contact.contact.id),
+                    'campaign_contact_id': str(contact.id),
+                    'instance_id': 'SELECT_AT_PROCESSING',
+                    'message_content': self._get_message_content(campaign),
+                    'created_at': timezone.now().isoformat(),
+                    'campaign_interval_min': campaign.interval_min,
+                    'campaign_interval_max': campaign.interval_max,
+                    'campaign_rotation_mode': campaign.rotation_mode
+                }
+                
+                # Verificar canal
+                if not self.channel or self.channel.is_closed:
+                    logger.warning("⚠️ [SCHEDULE] Canal fechado, reconectando...")
+                    self._connect()
+                
+                # Publicar mensagem agendada
+                queue_name = f"campaign.{campaign.id}.messages"
+                self.channel.basic_publish(
+                    exchange='campaigns',
+                    routing_key=queue_name,
+                    body=json.dumps(message),
+                    properties=pika.BasicProperties(
+                        delivery_mode=2,
+                        timestamp=int(time.time())
+                    )
+                )
+                
+                logger.info(f"📤 [SCHEDULE] Mensagem agendada publicada para {contact.contact.name}")
+            
+            # Executar em thread separada
+            thread = threading.Thread(target=delayed_message, daemon=True)
+            thread.start()
+            
+        except Exception as e:
+            logger.error(f"❌ [SCHEDULE] Erro ao agendar mensagem com delay: {e}")
     
     def _validate_message_data(self, campaign: Campaign, contact: CampaignContact, instance: WhatsAppInstance, message_data: Dict) -> bool:
         """Validações críticas de segurança antes do envio"""
