@@ -207,13 +207,13 @@ class RabbitMQConsumer:
             return False
     
     def _populate_campaign_queue(self, campaign: Campaign):
-        """Popula fila com TODAS as mensagens da campanha - ROTAÇÃO + DELAYS PRÉ-CALCULADOS"""
+        """Popula fila com TODOS os contatos na ORDEM DE CRIAÇÃO - ROTAÇÃO PERFEITA"""
         try:
-            # Buscar TODOS os contatos pendentes
+            # Buscar TODOS os contatos pendentes na ORDEM DE CRIAÇÃO
             contacts = CampaignContact.objects.filter(
                 campaign=campaign,
                 status__in=['pending', 'sending']
-            ).select_related('contact').order_by('created_at')
+            ).select_related('contact').order_by('created_at')  # ← ORDEM DE CRIAÇÃO
             
             if not contacts.exists():
                 logger.warning(f"⚠️ [CONSUMER] Nenhum contato pendente para campanha {campaign.name}")
@@ -230,21 +230,21 @@ class RabbitMQConsumer:
             instances_list = list(instances)
             instance_count = len(instances_list)
             
-            logger.info(f"🔄 [ROTATION] Populando fila: {contacts.count()} contatos, {instance_count} instâncias")
+            logger.info(f"🔄 [ROTATION] Populando fila: {contacts.count()} contatos na ORDEM DE CRIAÇÃO, {instance_count} instâncias")
             
             # Verificar conexão antes de publicar
             self._check_connection()
             
-            # Processar CADA contato com rotação e delay
+            # Processar CADA contato na ordem de criação com rotação sequencial
             for i, contact in enumerate(contacts):
                 # Calcular delay aleatório para este contato
                 delay_seconds = random.randint(campaign.interval_min, campaign.interval_max)
                 
-                # Calcular índice da instância (round robin)
-                instance_index = i % instance_count
+                # Calcular índice da instância (round robin) baseado na ORDEM DE CRIAÇÃO
+                instance_index = i % instance_count  # ← ROTAÇÃO PERFEITA baseada na ordem
                 selected_instance = instances_list[instance_index]
                 
-                logger.info(f"🎯 [ROTATION] Contato {i+1}: selecionando instância {instance_index} = {selected_instance.friendly_name} (ID: {selected_instance.id})")
+                logger.info(f"🎯 [ROTATION] Contato {i+1} (ordem criação): selecionando instância {instance_index} = {selected_instance.friendly_name} (ID: {selected_instance.id})")
                 
                 # Criar mensagem com rotação pré-calculada
                 message = {
@@ -267,7 +267,7 @@ class RabbitMQConsumer:
                 
                 logger.info(f"📝 [MESSAGE] Mensagem criada para {contact.contact.name}: selected_instance_id = {str(selected_instance.id)}")
                 
-                # Publicar SEM TTL - delay será aplicado no processamento
+                # Publicar mensagem (todas na ordem correta)
                 self.channel.basic_publish(
                     exchange='campaigns',
                     routing_key=queue_name,
@@ -275,13 +275,12 @@ class RabbitMQConsumer:
                     properties=pika.BasicProperties(
                         delivery_mode=2,  # Persistir mensagem
                         timestamp=int(time.time())
-                        # ← REMOVIDO TTL - delay será aplicado no processamento
                     )
                 )
                 
                 logger.info(f"📤 [QUEUE] Contato {i+1}/{contacts.count()}: {contact.contact.name} → {selected_instance.friendly_name} (delay: {delay_seconds}s)")
             
-            logger.info(f"✅ [ROTATION] Fila populada: {contacts.count()} mensagens com rotação e delays")
+            logger.info(f"✅ [ROTATION] Fila populada: {contacts.count()} mensagens na ORDEM DE CRIAÇÃO com rotação perfeita")
             
         except Exception as e:
             logger.error(f"❌ [CONSUMER] Erro ao popular fila: {e}")
