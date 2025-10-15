@@ -6,6 +6,7 @@ from .views_v2 import (
     active_campaigns, resolve_alert, campaign_metrics
 )
 from .views_realtime import campaign_realtime_status, campaign_realtime_progress
+from .views_events import campaign_events, campaign_realtime_status as campaign_events_status
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
@@ -26,6 +27,10 @@ urlpatterns = [
     # APIs de status em tempo real
     path('campaigns/<uuid:campaign_id>/realtime/', campaign_realtime_status, name='campaign-realtime'),
     path('campaigns/<uuid:campaign_id>/progress/', campaign_realtime_progress, name='campaign-progress'),
+    
+    # APIs de eventos para contador real
+    path('campaigns/events/', campaign_events, name='campaign-events'),
+    path('campaigns/<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
 ]
 
 

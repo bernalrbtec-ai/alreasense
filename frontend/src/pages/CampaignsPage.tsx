@@ -440,15 +440,15 @@ const CampaignsPage: React.FC = () => {
   useEffect(() => {
     fetchData()
     
-    // Atualização automática: WebSocket conectado = 2 minutos, desconectado = 30 segundos
+    // Polling para eventos e status - 5 segundos para campanhas ativas
     const interval = setInterval(() => {
-      if (!showModal && !isConnected) {  // Só usar polling se WebSocket não estiver conectado
-        fetchData(true)  // silent mode
+      if (!showModal) {
+        fetchCampaignEvents(true)  // Buscar eventos e status em tempo real
       }
-    }, isConnected ? 120000 : 30000) // 2min se WebSocket ativo, 30s se não
+    }, 5000) // 5 segundos - mais frequente para contador mais preciso
     
     return () => clearInterval(interval)
-  }, [showModal, isConnected])
+  }, [showModal])
   
   // Processar mensagens do WebSocket
   useEffect(() => {
@@ -512,6 +512,45 @@ const CampaignsPage: React.FC = () => {
     } finally {
       if (!silent) {
         setLoading(false)
+      }
+    }
+  }
+
+  const fetchCampaignEvents = async (silent = false) => {
+    try {
+      // Buscar eventos e status em tempo real
+      const eventsResponse = await api.get('/campaigns/campaigns/events/')
+      
+      if (eventsResponse.data.success) {
+        const { campaigns_status } = eventsResponse.data
+        
+        // Atualizar campanhas com dados em tempo real
+        setCampaigns(prevCampaigns => 
+          prevCampaigns.map(campaign => {
+            const realtimeData = campaigns_status[campaign.id]
+            if (realtimeData) {
+              return {
+                ...campaign,
+                ...realtimeData,
+                // Converter strings ISO para Date objects
+                last_message_sent_at: realtimeData.last_message_sent_at,
+                next_message_scheduled_at: realtimeData.next_message_scheduled_at,
+                updated_at: realtimeData.updated_at
+              }
+            }
+            return campaign
+          })
+        )
+        
+        if (!silent) {
+          console.log('📡 [EVENTS] Dados em tempo real atualizados')
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao buscar eventos:', error)
+      // Fallback para fetchData normal
+      if (!silent) {
+        fetchData(true)
       }
     }
   }
