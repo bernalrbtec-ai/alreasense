@@ -365,12 +365,15 @@ class RabbitMQConsumer:
             if scheduled_delay > 0:
                 logger.info(f"⏰ [DELAY] Aguardando {scheduled_delay}s antes de processar {contact.contact.name}")
                 
-                # Atualizar informações da próxima mensagem na campanha
-                with transaction.atomic():
-                    campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=scheduled_delay)
-                    campaign.next_contact_name = contact.contact.name
-                    campaign.next_contact_phone = contact.contact.phone
-                    campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+                       # Atualizar informações da próxima mensagem na campanha
+                       with transaction.atomic():
+                           campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=scheduled_delay)
+                           campaign.next_contact_name = contact.contact.name
+                           campaign.next_contact_phone = contact.contact.phone
+                           campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+                       
+                       # Enviar atualização via WebSocket
+                       await self._send_campaign_update_websocket(campaign)
                 
                 # Aplicar delay com contador regressivo
                 for remaining_seconds in range(scheduled_delay, 0, -1):
@@ -445,10 +448,13 @@ class RabbitMQConsumer:
                         campaign.status = 'completed'
                         campaign.completed_at = timezone.now()
                     
-                    campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
-                
-                logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
-                return True
+                       campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
+                   
+                   # Enviar atualização via WebSocket
+                   await self._send_campaign_update_websocket(campaign)
+                   
+                   logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
+                   return True
             else:
                 # Marcar como falha (após 3 tentativas)
                 with transaction.atomic():
@@ -837,6 +843,64 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [CONSUMER] Erro ao obter conteúdo: {e}")
             return f"Mensagem da campanha {campaign.name}"
+    
+    async def _send_campaign_update_websocket(self, campaign):
+        """Envia atualização da campanha via WebSocket"""
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            # Calcular tempo restante
+            time_remaining = None
+            if campaign.next_message_scheduled_at and campaign.status == 'running':
+                from django.utils import timezone
+                now = timezone.now()
+                if campaign.next_message_scheduled_at > now:
+                    delta = campaign.next_message_scheduled_at - now
+                    time_remaining = int(delta.total_seconds())
+                else:
+                    time_remaining = 0
+            
+            # Dados da campanha para WebSocket
+            campaign_data = {
+                'type': 'campaign_update',
+                'campaign_id': str(campaign.id),
+                'status': campaign.status,
+                'messages_sent': campaign.messages_sent,
+                'messages_delivered': campaign.messages_delivered,
+                'messages_read': campaign.messages_read,
+                'messages_failed': campaign.messages_failed,
+                'total_contacts': campaign.total_contacts,
+                'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
+                'last_message': {
+                    'contact_name': campaign.last_contact_name,
+                    'contact_phone': campaign.last_contact_phone,
+                    'sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None
+                },
+                'next_message': {
+                    'contact_name': campaign.next_contact_name,
+                    'contact_phone': campaign.next_contact_phone,
+                    'scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
+                    'time_remaining_seconds': time_remaining
+                },
+                'updated_at': campaign.updated_at.isoformat()
+            }
+            
+            # Enviar via WebSocket
+            channel_layer = get_channel_layer()
+            if channel_layer:
+                await channel_layer.group_send(
+                    f"tenant_{campaign.tenant.id}",
+                    {
+                        "type": "broadcast_notification",
+                        "payload": campaign_data
+                    }
+                )
+                
+                logger.info(f"📡 [WEBSOCKET] Atualização enviada para campanha {campaign.name}")
+                
+        except Exception as e:
+            logger.error(f"❌ [WEBSOCKET] Erro ao enviar atualização: {e}")
     
     def _handle_failed_message(self, message_data: Dict[str, Any]):
         """Trata mensagem que falhou"""

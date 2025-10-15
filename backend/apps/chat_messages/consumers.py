@@ -95,6 +95,20 @@ class TenantConsumer(AsyncJsonWebsocketConsumer):
             'data': event['payload']
         })
     
+    async def campaign_update(self, event):
+        """Handle campaign updates."""
+        await self.send_json({
+            'type': 'campaign_update',
+            'data': event['payload']
+        })
+    
+    async def broadcast_notification(self, event):
+        """Handle broadcast notifications."""
+        await self.send_json({
+            'type': event['payload'].get('type', 'notification'),
+            'data': event['payload']
+        })
+    
     async def billing_update(self, event):
         """Handle billing updates."""
         await self.send_json({
