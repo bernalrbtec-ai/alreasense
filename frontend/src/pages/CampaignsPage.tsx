@@ -6,6 +6,7 @@ import { Input } from '../components/ui/Input'
 import { showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import { api } from '../lib/api'
 import CampaignWizardModal from '../components/campaigns/CampaignWizardModal'
+import { useWebSocket } from '../hooks/useWebSocket'
 
 interface Campaign {
   id: string
@@ -432,19 +433,55 @@ const CampaignsPage: React.FC = () => {
   const [showLogsModal, setShowLogsModal] = useState(false)
   const [selectedCampaignForLogs, setSelectedCampaignForLogs] = useState<Campaign | null>(null)
   const [logs, setLogs] = useState<any[]>([])
+  
+  // WebSocket para atualizações em tempo real
+  const { isConnected, lastMessage } = useWebSocket()
 
   useEffect(() => {
     fetchData()
     
-    // Atualização automática a cada 5 segundos (silenciosa, sem loading)
+    // Atualização automática a cada 30 segundos (backup para WebSocket)
     const interval = setInterval(() => {
-      if (!showModal) {  // Só atualizar se modal estiver fechado
+      if (!showModal && !isConnected) {  // Só usar polling se WebSocket não estiver conectado
         fetchData(true)  // silent mode
       }
-    }, 5000)
+    }, 30000)
     
     return () => clearInterval(interval)
-  }, [showModal])
+  }, [showModal, isConnected])
+  
+  // Processar mensagens do WebSocket
+  useEffect(() => {
+    if (lastMessage?.type === 'campaign_update') {
+      const campaignData = lastMessage.data
+      console.log('📡 [WEBSOCKET] Atualização de campanha recebida:', campaignData)
+      
+      // Atualizar campanha específica na lista
+      setCampaigns(prevCampaigns => 
+        prevCampaigns.map(campaign => 
+          campaign.id === campaignData.campaign_id 
+            ? {
+                ...campaign,
+                status: campaignData.status,
+                messages_sent: campaignData.messages_sent,
+                messages_delivered: campaignData.messages_delivered,
+                messages_read: campaignData.messages_read,
+                messages_failed: campaignData.messages_failed,
+                total_contacts: campaignData.total_contacts,
+                progress_percentage: campaignData.progress_percentage,
+                last_contact_name: campaignData.last_message?.contact_name,
+                last_contact_phone: campaignData.last_message?.contact_phone,
+                last_message_sent_at: campaignData.last_message?.sent_at,
+                next_contact_name: campaignData.next_message?.contact_name,
+                next_contact_phone: campaignData.next_message?.contact_phone,
+                next_message_scheduled_at: campaignData.next_message?.scheduled_at,
+                updated_at: campaignData.updated_at
+              }
+            : campaign
+        )
+      )
+    }
+  }, [lastMessage])
 
   const fetchData = async (silent = false) => {
     try {
@@ -814,8 +851,24 @@ const CampaignsPage: React.FC = () => {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900">📤 Campanhas</h1>
-          <p className="text-sm sm:text-base text-gray-600">Gerencie suas campanhas de disparo em massa</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">📤 Campanhas</h1>
+            {/* Indicador de conexão WebSocket */}
+            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+              isConnected 
+                ? 'bg-green-100 text-green-800 border border-green-200' 
+                : 'bg-red-100 text-red-800 border border-red-200'
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                isConnected ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              <span>{isConnected ? 'Tempo Real' : 'Polling'}</span>
+            </div>
+          </div>
+          <p className="text-sm sm:text-base text-gray-600">
+            Gerencie suas campanhas de disparo em massa
+            {isConnected && <span className="text-green-600 ml-2">• Atualizações em tempo real ativas</span>}
+          </p>
         </div>
         <Button onClick={() => setShowModal(true)} className="w-full sm:w-auto">
           <Plus className="h-4 w-4 mr-2" />
