@@ -134,14 +134,14 @@ const CampaignsPage: React.FC = () => {
 
   const fetchData = async () => {
     try {
-      setLoading(true)
+        setLoading(true)
       const response = await api.get('/campaigns/campaigns/')
       setCampaigns(response.data.results || response.data)
     } catch (error: any) {
       console.error('Erro ao buscar campanhas:', error)
       showErrorToast('buscar', 'Campanhas', error)
     } finally {
-      setLoading(false)
+        setLoading(false)
     }
   }
 
@@ -312,9 +312,9 @@ const CampaignsPage: React.FC = () => {
 
   const filteredCampaigns = campaigns
     .filter(campaign =>
-      campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
+  )
     .sort((a, b) => {
       // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
       const statusOrder = {
@@ -365,7 +365,7 @@ const CampaignsPage: React.FC = () => {
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex gap-4">
-          <div className="flex-1">
+        <div className="flex-1">
             <Input
               placeholder="Buscar campanhas..."
               value={searchTerm}
@@ -403,12 +403,12 @@ const CampaignsPage: React.FC = () => {
                     <TrendingUp className="h-4 w-4" />
                     {campaign.success_rate}% sucesso
                   </span>
-                </div>
+                  </div>
 
                 {/* Contador regressivo */}
                 <NextMessageCountdown campaign={campaign} />
               </div>
-
+              
               <div className="flex gap-2">
                 {/* Ações básicas */}
                 {campaign.status === 'draft' && (
@@ -417,32 +417,32 @@ const CampaignsPage: React.FC = () => {
                     Iniciar
                   </Button>
                 )}
-
+                
                 {campaign.status === 'running' && (
                   <Button onClick={() => handlePause(campaign)} variant="outline" size="sm">
                     <Pause className="h-4 w-4 mr-2" />
                     Pausar
                   </Button>
                 )}
-
+                
                 {campaign.status === 'paused' && (
                   <Button onClick={() => handleResume(campaign)} size="sm">
                     <Play className="h-4 w-4 mr-2" />
                     Retomar
                   </Button>
                 )}
-
+                
                 {/* Ações secundárias */}
                 {campaign.status !== 'running' && (
                   <Button onClick={() => handleEdit(campaign)} variant="outline" size="sm">
                     <Edit className="h-4 w-4" />
                   </Button>
                 )}
-
+                
                 <Button onClick={() => handleDuplicate(campaign)} variant="outline" size="sm">
                   <Copy className="h-4 w-4" />
-                </Button>
-
+                  </Button>
+                
                 {/* Ver Logs - para todas exceto draft */}
                 {campaign.status !== 'draft' && (
                   <Button 
@@ -483,8 +483,8 @@ const CampaignsPage: React.FC = () => {
                   <div className="text-center">
                     <div className="text-2xl font-bold text-red-600">{campaign.messages_failed}</div>
                     <div className="text-sm text-gray-600">Falhas</div>
-                  </div>
-                </div>
+                      </div>
+                    </div>
               </div>
             )}
           </Card>
@@ -565,7 +565,7 @@ const CampaignsPage: React.FC = () => {
                         <div className="flex items-start justify-between">
                           <div className="flex items-start gap-3">
                             {getLogIcon(log.log_type)}
-                            <div className="flex-1">
+                          <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-medium text-gray-900">
                                   {log.log_type_display}
@@ -573,16 +573,16 @@ const CampaignsPage: React.FC = () => {
                                 {log.instance_name && (
                                   <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
                                     {log.instance_name}
-                                  </span>
+                              </span>
                                 )}
-                              </div>
+                            </div>
                               <p className="text-gray-700 mb-2">{log.message}</p>
                               <div className="flex items-center gap-4 text-sm text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
                                   {formatDate(log.created_at)}
                                 </span>
-                                {log.contact_name && (
+                            {log.contact_name && (
                                   <span className="flex items-center gap-1">
                                     <Users className="h-3 w-3" />
                                     {log.contact_name}
@@ -591,13 +591,14 @@ const CampaignsPage: React.FC = () => {
                                 )}
                                 <span>por {log.user_name}</span>
                               </div>
-                            </div>
+                              </div>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
-                )}
+                </div>
+              )}
             </div>
 
             <div className="p-3 sm:p-4 border-t bg-gray-50 flex justify-end">
