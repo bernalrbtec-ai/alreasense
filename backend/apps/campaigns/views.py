@@ -121,28 +121,41 @@ class CampaignViewSet(viewsets.ModelViewSet):
             # Log de retomada
             CampaignLog.log_campaign_resumed(campaign, request.user)
             
-            # Disparar task Celery novamente para continuar processamento
-            # from .tasks import process_campaign  # Removido - Celery deletado
-            # task_result = process_campaign.delay(str(campaign.id))  # TODO: Implementar com RabbitMQ
+            # 🚀 REINICIAR CONSUMER RABBITMQ para continuar processamento
+            from .rabbitmq_consumer import get_rabbitmq_consumer
+            consumer = get_rabbitmq_consumer()
+            if consumer:
+                consumer.resume_campaign(str(campaign.id))
+                logger.info(f"✅ [RESUME] Consumer reiniciado para campanha {campaign.name}")
+            else:
+                logger.warning(f"⚠️ [RESUME] Consumer RabbitMQ não disponível")
             
             return Response({
                 'message': f'Campanha "{campaign.name}" retomada com sucesso',
                 'status': campaign.status,
-                'task_id': 'rabbitmq_implementation_pending',
                 'success': True
             })
             
         except Exception as e:
-            # Se Celery falhar, ainda assim marcar como running
+            # Se falhar, ainda assim marcar como running
             campaign.resume()  # Garantir que está running
             CampaignLog.log_campaign_resumed(campaign, request.user)
+            
+            # Tentar reiniciar consumer mesmo com erro
+            try:
+                from .rabbitmq_consumer import get_rabbitmq_consumer
+                consumer = get_rabbitmq_consumer()
+                if consumer:
+                    consumer.resume_campaign(str(campaign.id))
+            except Exception as consumer_error:
+                logger.error(f"❌ [RESUME] Erro ao reiniciar consumer: {consumer_error}")
             
             # Log do erro
             CampaignLog.objects.create(
                 campaign=campaign,
                 log_type='error',
                 severity='warning',
-                message=f'Campanha retomada, mas task Celery falhou: {str(e)}',
+                message=f'Campanha retomada, mas houve erro: {str(e)}',
                 details={'error': str(e), 'campaign_id': str(campaign.id)}
             )
             
