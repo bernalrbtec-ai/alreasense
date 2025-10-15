@@ -622,17 +622,17 @@ class RabbitMQConsumer:
                 self._round_robin_counter += 1
                 index = self._round_robin_counter % available_instances.count()
                 instance = available_instances[index]
-                logger.info(f"🔄 [ROUND_ROBIN] Selecionada instância: {instance.name} (index: {index})")
+                logger.info(f"🔄 [ROUND_ROBIN] Selecionada instância: {instance.friendly_name} (index: {index})")
                 return instance
             elif campaign.rotation_mode == 'intelligent':
                 # Selecionar instância com melhor health_score
                 instance = available_instances.order_by('-health_score').first()
-                logger.info(f"🧠 [INTELLIGENT] Selecionada instância: {instance.name} (health: {instance.health_score})")
+                logger.info(f"🧠 [INTELLIGENT] Selecionada instância: {instance.friendly_name} (health: {instance.health_score})")
                 return instance
             else:
                 # Fallback para primeira instância
                 instance = available_instances.first()
-                logger.info(f"📱 [DEFAULT] Selecionada instância: {instance.name}")
+                logger.info(f"📱 [DEFAULT] Selecionada instância: {instance.friendly_name}")
                 return instance
             
         except Exception as e:
@@ -644,7 +644,7 @@ class RabbitMQConsumer:
         try:
             # Buscar mensagens da campanha
             from .models import CampaignMessage
-            messages = CampaignMessage.objects.filter(campaign=campaign, is_active=True)
+            messages = CampaignMessage.objects.filter(campaign=campaign)
             
             if messages.exists():
                 # Retornar a primeira mensagem ativa
