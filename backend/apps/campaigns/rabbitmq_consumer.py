@@ -174,11 +174,13 @@ class RabbitMQConsumer:
             logger.info(f"✅ [START] Log criado com sucesso")
             
             # 🚀 GATILHO: Campanha iniciada - frontend receberá dados iniciais
+            logger.info(f"📡 [WEBSOCKET] Enviando gatilho 'campaign_started' para campanha {campaign.name}")
             self._send_websocket_update(campaign, 'campaign_update', {
                 'event': 'campaign_started',
                 'total_contacts': total_contacts,
                 'pending_contacts': pending_contacts
             })
+            logger.info(f"✅ [WEBSOCKET] Gatilho 'campaign_started' enviado com sucesso")
             
             # Criar fila específica da campanha
             logger.info(f"📋 [START] Criando fila RabbitMQ...")
@@ -877,11 +879,12 @@ class RabbitMQConsumer:
     def _send_websocket_update(self, campaign, event_type, extra_data=None):
         """Envia atualização WebSocket apenas em eventos específicos"""
         try:
-            import asyncio
+            logger.info(f"🔧 [WEBSOCKET] Iniciando envio de {event_type} para campanha {campaign.name}")
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
             
             async def send_update():
-                from channels.layers import get_channel_layer
-                
+                logger.info(f"🔧 [WEBSOCKET] Dentro da função async para {event_type}")
                 # Dados básicos da campanha
                 campaign_data = {
                     'type': event_type,
@@ -919,12 +922,8 @@ class RabbitMQConsumer:
                     )
                     logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
             
-            # Executar de forma assíncrona
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(send_update())
-            else:
-                asyncio.run(send_update())
+            # Usar async_to_sync para execução mais confiável
+            async_to_sync(send_update)()
                 
         except Exception as e:
             logger.error(f"❌ [WEBSOCKET] Erro ao enviar {event_type}: {e}")
