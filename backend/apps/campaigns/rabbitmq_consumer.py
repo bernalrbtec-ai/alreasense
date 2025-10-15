@@ -339,36 +339,85 @@ class RabbitMQConsumer:
                         pass
         
         def start_consuming():
-            """Consumer INDEPENDENTE com sua própria conexão RabbitMQ"""
+            """Consumer INDEPENDENTE com sua própria conexão RabbitMQ - COM RETRY ROBUSTO"""
             campaign_connection = None
             campaign_channel = None
+            max_retries = 3
+            retry_delay = 5
             
-            try:
-                # 🚀 NOVA CONEXÃO INDEPENDENTE para cada campanha
-                # Usar a mesma URL do RabbitMQ que já está configurada
-                rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
-                campaign_connection = pika.BlockingConnection(
-                    pika.URLParameters(rabbitmq_url)
-                )
-                campaign_channel = campaign_connection.channel()
-                
-                queue_name = f"campaign.{campaign_id}.messages"
-                
-                # Configurar QoS para esta campanha específica
-                campaign_channel.basic_qos(prefetch_count=1)
-                
-                # Iniciar consumer independente
-                campaign_channel.basic_consume(
-                    queue=queue_name,
-                    on_message_callback=consumer_callback,
-                    auto_ack=False
-                )
-                
-                logger.info(f"🎯 [PARALLEL] Consumer INDEPENDENTE iniciado para campanha {campaign_id}")
-                campaign_channel.start_consuming()
-                
-            except Exception as e:
-                logger.error(f"❌ [PARALLEL] Erro no consumer independente da campanha {campaign_id}: {e}")
+            for attempt in range(max_retries):
+                try:
+                    # 🚀 NOVA CONEXÃO INDEPENDENTE para cada campanha
+                    # Usar a mesma URL do RabbitMQ que já está configurada
+                    rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+                    
+                    # Configurar parâmetros com retry robusto
+                    connection_params = pika.URLParameters(rabbitmq_url)
+                    connection_params.heartbeat = 600
+                    connection_params.blocked_connection_timeout = 300
+                    connection_params.retry_delay = 2
+                    connection_params.connection_attempts = 3
+                    
+                    campaign_connection = pika.BlockingConnection(connection_params)
+                    campaign_channel = campaign_connection.channel()
+                    
+                    queue_name = f"campaign.{campaign_id}.messages"
+                    
+                    # Configurar QoS para esta campanha específica
+                    campaign_channel.basic_qos(prefetch_count=1)
+                    
+                    # Iniciar consumer independente
+                    campaign_channel.basic_consume(
+                        queue=queue_name,
+                        on_message_callback=consumer_callback,
+                        auto_ack=False
+                    )
+                    
+                    logger.info(f"🎯 [PARALLEL] Consumer INDEPENDENTE iniciado para campanha {campaign_id}")
+                    campaign_channel.start_consuming()
+                    break  # Sucesso - sair do loop de retry
+                    
+                except Exception as e:
+                    error_msg = str(e)
+                    
+                    # Detectar bugs conhecidos do Pika
+                    if ("pop from an empty deque" in error_msg or 
+                        "IndexError" in error_msg or 
+                        "Stream connection lost" in error_msg or
+                        "StreamLostError" in error_msg or
+                        "_CallbackResult was not set" in error_msg or
+                        "CallbackResult" in error_msg or
+                        "tx buffer size underflow" in error_msg):
+                        
+                        logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika no consumer independente (tentativa {attempt + 1}/{max_retries}): {e}")
+                        logger.info(f"🔧 [PIKA_BUG] Tentando reconexão do consumer independente em {retry_delay}s...")
+                        
+                        # Limpar conexão atual
+                        try:
+                            if campaign_channel and not campaign_channel.is_closed:
+                                campaign_channel.stop_consuming()
+                                campaign_channel.close()
+                        except:
+                            pass
+                            
+                        try:
+                            if campaign_connection and not campaign_connection.is_closed:
+                                campaign_connection.close()
+                        except:
+                            pass
+                        
+                        # Aguardar antes de tentar novamente
+                        if attempt < max_retries - 1:
+                            import time
+                            time.sleep(retry_delay)
+                            retry_delay *= 2  # Backoff exponencial
+                            continue
+                    else:
+                        logger.error(f"❌ [PARALLEL] Erro não relacionado ao Pika no consumer independente da campanha {campaign_id}: {e}")
+                        break
+            else:
+                logger.error(f"❌ [PARALLEL] Falha após {max_retries} tentativas no consumer independente da campanha {campaign_id}")
+            
             finally:
                 # Limpar conexão independente
                 try:
@@ -459,7 +508,10 @@ class RabbitMQConsumer:
                 return False
             
             # 🔒 VALIDAÇÕES CRÍTICAS DE SEGURANÇA
-            if not self._validate_message_data(campaign, contact, instance, message_data):
+            logger.info(f"🔍 [VALIDATION] Validando dados para {contact.contact.name}")
+            validation_result = self._validate_message_data(campaign, contact, instance, message_data)
+            logger.info(f"📋 [VALIDATION] Resultado da validação: {validation_result}")
+            if not validation_result:
                 logger.error(f"❌ [SECURITY] Validação de segurança falhou para campanha {campaign.name}")
                 return False
             
@@ -467,7 +519,9 @@ class RabbitMQConsumer:
             logger.info(f"🔒 [SECURITY] Tenant: {campaign.tenant.name} | Instância: {instance.tenant.name}")
             
             # Enviar mensagem via API com retry
+            logger.info(f"🚀 [SEND] Iniciando envio para {contact.contact.name} via {instance.friendly_name}")
             success = self._send_whatsapp_message_with_retry(instance, contact_phone, message_content, campaign)
+            logger.info(f"📊 [SEND] Resultado do envio: {success} para {contact.contact.name}")
             
             if success:
                 # Atualizar status
