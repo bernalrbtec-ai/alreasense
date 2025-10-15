@@ -103,8 +103,6 @@ class CampaignSerializer(serializers.ModelSerializer):
             'last_message_sent_at', 'next_message_scheduled_at',
             'next_contact_name', 'next_contact_phone', 'next_instance_name',
             'last_contact_name', 'last_contact_phone', 'last_instance_name',
-            'is_retrying', 'retry_contact_name', 'retry_contact_phone', 
-            'retry_attempt', 'retry_error_reason', 'retry_countdown',
             'created_at', 'updated_at'
         ]
         read_only_fields = [
