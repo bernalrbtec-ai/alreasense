@@ -244,6 +244,8 @@ class RabbitMQConsumer:
                 instance_index = i % instance_count
                 selected_instance = instances_list[instance_index]
                 
+                logger.info(f"🎯 [ROTATION] Contato {i+1}: selecionando instância {instance_index} = {selected_instance.friendly_name} (ID: {selected_instance.id})")
+                
                 # Criar mensagem com rotação pré-calculada
                 message = {
                     'campaign_id': str(campaign.id),
@@ -262,6 +264,8 @@ class RabbitMQConsumer:
                         'selected_instance_id': str(selected_instance.id)  # ← INSTÂNCIA ESPECÍFICA
                     }
                 }
+                
+                logger.info(f"📝 [MESSAGE] Mensagem criada para {contact.contact.name}: selected_instance_id = {str(selected_instance.id)}")
                 
                 # Publicar com TTL baseado no delay (em milissegundos)
                 self.channel.basic_publish(
@@ -406,11 +410,18 @@ class RabbitMQConsumer:
     def _get_pre_selected_instance(self, message_data: Dict[str, Any]):
         """Busca instância pré-selecionada baseada na rotação calculada"""
         try:
+            logger.info(f"🔍 [INSTANCE] Buscando instância pré-selecionada...")
+            logger.info(f"🔍 [INSTANCE] message_data keys: {list(message_data.keys())}")
+            
             campaign_settings = message_data.get('campaign_settings', {})
+            logger.info(f"🔍 [INSTANCE] campaign_settings keys: {list(campaign_settings.keys())}")
+            
             selected_instance_id = campaign_settings.get('selected_instance_id')
+            logger.info(f"🔍 [INSTANCE] selected_instance_id: {selected_instance_id}")
             
             if not selected_instance_id:
                 logger.error("❌ [INSTANCE] selected_instance_id não encontrado na mensagem")
+                logger.error(f"❌ [INSTANCE] campaign_settings completo: {campaign_settings}")
                 return None
             
             # Buscar instância específica
@@ -621,8 +632,18 @@ class RabbitMQConsumer:
                 return False
             
             expected_instance_id = str(instance.id)
-            if message_data.get('instance_id') != expected_instance_id:
-                logger.error(f"❌ [SECURITY] ID da instância não confere: esperado {expected_instance_id}, recebido {message_data.get('instance_id')}")
+            # Verificar se a instância está na lista de instâncias selecionadas da campanha
+            campaign_settings = message_data.get('campaign_settings', {})
+            selected_instance_id = campaign_settings.get('selected_instance_id')
+            
+            if selected_instance_id != expected_instance_id:
+                logger.error(f"❌ [SECURITY] ID da instância não confere: esperado {expected_instance_id}, recebido {selected_instance_id}")
+                return False
+            
+            # Verificar se a instância está na lista de instâncias selecionadas
+            selected_instances = campaign_settings.get('selected_instances', [])
+            if expected_instance_id not in selected_instances:
+                logger.error(f"❌ [SECURITY] Instância {expected_instance_id} não está na lista de instâncias selecionadas: {selected_instances}")
                 return False
             
             logger.info(f"✅ [SECURITY] Todas as validações passaram para {contact.contact.name}")
