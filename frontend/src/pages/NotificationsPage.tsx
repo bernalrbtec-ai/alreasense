@@ -127,7 +127,7 @@ export default function NotificationsPage() {
     <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+          <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold flex items-center gap-2">
             <Bell className="h-6 w-6 sm:h-7 sm:w-7 lg:h-8 lg:w-8" />
             Notificações
@@ -144,16 +144,16 @@ export default function NotificationsPage() {
             </div>
             <div className="text-sm text-muted-foreground">
               Não lidas
-            </div>
-          </div>
-          
+      </div>
+      </div>
+
           {stats.unread_count > 0 && (
             <Button onClick={markAllAsRead} variant="outline">
               Marcar todas como lidas
             </Button>
           )}
-        </div>
-      </div>
+                </div>
+              </div>
 
       {/* Filtros */}
       <Card>
@@ -209,7 +209,7 @@ export default function NotificationsPage() {
           {loading ? (
             <div className="flex items-center justify-center py-8">
               <div className="text-muted-foreground">Carregando notificações...</div>
-            </div>
+                  </div>
           ) : filteredNotifications.length === 0 ? (
             <div className="flex items-center justify-center py-8">
               <div className="text-center">
@@ -235,10 +235,10 @@ export default function NotificationsPage() {
                             <div className="flex items-center gap-2 mb-2">
                               <h3 className="font-semibold text-lg">
                                 {notification.contact_name}
-                              </h3>
+                     </h3>
                               {getStatusBadge(notification.status)}
-                            </div>
-                            
+                   </div>
+            
                             <div className="text-sm text-muted-foreground mb-2">
                               <div className="flex items-center gap-4">
                                 <span className="flex items-center gap-1">
@@ -249,44 +249,44 @@ export default function NotificationsPage() {
                                   <Calendar className="h-3 w-3" />
                                   {formatTimestamp(notification.received_timestamp)}
                                 </span>
-                              </div>
-                            </div>
-                            
+                         </div>
+                         </div>
+                         
                             <div className="mb-3">
                               <div className="text-sm font-medium text-muted-foreground mb-1">
                                 Campanha: {notification.campaign_name}
-                              </div>
+                         </div>
                               <div className="text-sm bg-gray-50 p-3 rounded-lg border">
                                 {notification.received_message}
-                              </div>
-                            </div>
-                            
+                         </div>
+                         </div>
+                         
                             {notification.sent_reply && (
                               <div className="mb-3">
                                 <div className="text-sm font-medium text-muted-foreground mb-1">
                                   Sua resposta:
-                                </div>
+                         </div>
                                 <div className="text-sm bg-blue-50 p-3 rounded-lg border border-blue-200">
                                   {notification.sent_reply}
-                                </div>
-                              </div>
+                         </div>
+                  </div>
                             )}
-                          </div>
-                        </div>
-                        
+                </div>
+              </div>
+              
                         <div className="flex items-center gap-2">
                           {notification.status === 'unread' && (
-                            <Button
+                  <Button
                               size="sm"
-                              variant="outline"
+                    variant="outline"
                               onClick={() => markAsRead(notification.id)}
-                            >
+                  >
                               <Check className="h-4 w-4" />
-                            </Button>
+                  </Button>
                           )}
                           
                           {notification.status !== 'replied' && (
-                            <Button
+                         <Button
                               size="sm"
                               onClick={() => {
                                 setSelectedNotification(notification);
@@ -298,13 +298,13 @@ export default function NotificationsPage() {
                             </Button>
                           )}
                         </div>
-                      </div>
+                </div>
                     </CardContent>
                   </Card>
                 ))}
-              </div>
-            </div>
-          )}
+          </div>
+        </div>
+      )}
         </CardContent>
       </Card>
 
@@ -319,7 +319,7 @@ export default function NotificationsPage() {
               <div>
                 <label className="text-sm font-medium mb-2 block">
                   Mensagem de resposta:
-                </label>
+                  </label>
                 
                 {/* Templates de resposta rápida */}
                 <div className="mb-3">
@@ -336,9 +336,9 @@ export default function NotificationsPage() {
                         {template.substring(0, 30)}...
                       </Button>
                     ))}
-                  </div>
                 </div>
-                
+              </div>
+              
                 <textarea
                   value={replyMessage}
                   onChange={(e) => setReplyMessage(e.target.value)}

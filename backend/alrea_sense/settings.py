@@ -264,8 +264,10 @@ CHANNEL_LAYERS = {
     },
 }
 
-# RabbitMQ
-RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
+# RabbitMQ - Railway Configuration
+RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672')
+
+print(f"🔧 [SETTINGS] RABBITMQ_URL: {RABBITMQ_URL[:50]}...")
 
 # Alertas por Email
 ALERT_EMAIL_RECIPIENTS = config('ALERT_EMAIL_RECIPIENTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])
