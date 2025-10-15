@@ -29,6 +29,9 @@ class RabbitMQConsumer:
         self.channel = None
         self.running = False
         self.consumer_threads = {}
+        # Controle de throttling para WebSocket
+        self.last_websocket_update = {}  # {campaign_id: timestamp}
+        self.websocket_throttle_seconds = 1  # Mínimo 1 segundo entre updates (mais responsivo)
         self._connect()
     
     def _connect(self):
@@ -261,7 +264,7 @@ class RabbitMQConsumer:
                     'contact_id': str(contact.contact.id),
                     'campaign_contact_id': str(contact.id),
                     'contact_phone': contact.contact.phone,
-                    'message_content': self._get_message_content(campaign, i),  # ← ROTAÇÃO DE MENSAGENS baseada na posição
+                    'message_content': self._get_message_content(campaign, i, contact.contact),  # ← ROTAÇÃO DE MENSAGENS baseada na posição
                     'scheduled_delay_seconds': delay_seconds,
                     'created_at': timezone.now().isoformat(),
                     'campaign_settings': {
@@ -616,7 +619,7 @@ class RabbitMQConsumer:
                     'contact_id': str(contact.contact.id),
                     'campaign_contact_id': str(contact.id),
                     'instance_id': 'SELECT_AT_PROCESSING',
-                    'message_content': self._get_message_content(campaign),
+                    'message_content': self._get_message_content(campaign, 0, contact.contact),
                     'created_at': timezone.now().isoformat(),
                     'campaign_interval_min': campaign.interval_min,
                     'campaign_interval_max': campaign.interval_max,
@@ -853,8 +856,8 @@ class RabbitMQConsumer:
             logger.error(f"❌ [CONSUMER] Erro ao selecionar instância: {e}")
             return None
     
-    def _get_message_content(self, campaign: Campaign, contact_position: int = 0) -> str:
-        """Obtém conteúdo da mensagem com rotação baseada na posição do contato"""
+    def _get_message_content(self, campaign: Campaign, contact_position: int = 0, contact=None) -> str:
+        """Obtém conteúdo da mensagem com rotação baseada na posição do contato e substitui variáveis"""
         try:
             # Buscar mensagens da campanha
             from .models import CampaignMessage
@@ -868,7 +871,13 @@ class RabbitMQConsumer:
                 
                 logger.info(f"🔄 [MESSAGE_ROTATION] Contato posição {contact_position}: usando mensagem {message_index + 1}/{message_count} (ID: {selected_message.id})")
                 
-                return selected_message.content
+                # Substituir variáveis na mensagem se contato for fornecido
+                content = selected_message.content
+                if contact:
+                    content = self._replace_message_variables(content, contact)
+                    logger.info(f"🔧 [TEMPLATE] Variáveis substituídas para {contact.name}")
+                
+                return content
             else:
                 logger.warning(f"⚠️ [CONSUMER] Nenhuma mensagem encontrada para campanha {campaign.name}")
                 return f"Mensagem da campanha {campaign.name}"
@@ -876,10 +885,82 @@ class RabbitMQConsumer:
             logger.error(f"❌ [CONSUMER] Erro ao obter conteúdo: {e}")
             return f"Mensagem da campanha {campaign.name}"
     
-    def _send_websocket_update(self, campaign, event_type, extra_data=None):
-        """Envia atualização WebSocket apenas em eventos específicos - VERSÃO SIMPLIFICADA"""
+    def _replace_message_variables(self, message_content: str, contact) -> str:
+        """Substitui variáveis na mensagem com dados do contato"""
         try:
+            # Extrair primeiro nome do nome completo
+            primeiro_nome = contact.name.split()[0] if contact.name else ''
+            
+            # Obter saudação baseada no horário atual
+            from datetime import datetime
+            hora_atual = datetime.now().hour
+            if 5 <= hora_atual < 12:
+                saudacao = "Bom dia"
+            elif 12 <= hora_atual < 18:
+                saudacao = "Boa tarde"
+            else:
+                saudacao = "Boa noite"
+            
+            # Obter dia da semana atual
+            dias_semana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+            dia_semana = dias_semana[datetime.now().weekday()]
+            
+            # Obter dados do indicador do contato
+            quem_indicou = contact.referred_by or 'amigo'
+            primeiro_nome_indicador = quem_indicou.split()[0] if quem_indicou else 'amigo'
+            
+            # Variáveis disponíveis (baseadas nos dados do contato + data atual)
+            variables = {
+                '{{nome}}': contact.name,
+                '{{primeiro_nome}}': primeiro_nome,
+                '{{saudacao}}': saudacao,
+                '{{dia_semana}}': dia_semana,
+                '{{quem_indicou}}': quem_indicou,
+                '{{primeiro_nome_indicador}}': primeiro_nome_indicador,
+                # Suporte também para formato sem chaves duplas (compatibilidade)
+                '{nome}': contact.name,
+                '{primeiro_nome}': primeiro_nome,
+                '{saudacao}': saudacao,
+                '{dia_semana}': dia_semana,
+                '{quem_indicou}': quem_indicou,
+                '{primeiro_nome_indicador}': primeiro_nome_indicador,
+            }
+            
+            # Substituir variáveis
+            processed_content = message_content
+            for variable, value in variables.items():
+                processed_content = processed_content.replace(variable, str(value))
+            
+            # Log da substituição
+            if processed_content != message_content:
+                logger.info(f"🔧 [TEMPLATE] Substituição aplicada: {contact.name}")
+                logger.debug(f"📝 [TEMPLATE] Original: {message_content[:100]}...")
+                logger.debug(f"📝 [TEMPLATE] Processado: {processed_content[:100]}...")
+            
+            return processed_content
+            
+        except Exception as e:
+            logger.error(f"❌ [TEMPLATE] Erro ao substituir variáveis: {e}")
+            return message_content
+    
+    def _send_websocket_update(self, campaign, event_type, extra_data=None):
+        """Envia atualização WebSocket apenas em eventos específicos - VERSÃO OTIMIZADA COM THROTTLING"""
+        try:
+            campaign_id = str(campaign.id)
+            current_time = timezone.now()
+            
+            # Verificar throttling - evitar spam de updates
+            if campaign_id in self.last_websocket_update:
+                time_since_last = (current_time - self.last_websocket_update[campaign_id]).total_seconds()
+                if time_since_last < self.websocket_throttle_seconds:
+                    logger.debug(f"🚫 [WEBSOCKET] Throttling update para {campaign.name} ({time_since_last:.1f}s)")
+                    return
+            
+            # Atualizar timestamp do último update
+            self.last_websocket_update[campaign_id] = current_time
+            
             logger.info(f"🔧 [WEBSOCKET] Enviando {event_type} para campanha {campaign.name}")
+            logger.info(f"📊 [WEBSOCKET] Dados: sent={campaign.messages_sent}, total={campaign.total_contacts}, status={campaign.status}")
             
             # Dados básicos da campanha
             campaign_data = {
@@ -899,43 +980,35 @@ class RabbitMQConsumer:
                 'next_contact_phone': campaign.next_contact_phone,
                 'last_contact_name': campaign.last_contact_name,
                 'last_contact_phone': campaign.last_contact_phone,
-                'updated_at': campaign.updated_at.isoformat()
+                'updated_at': campaign.updated_at.isoformat(),
+                'timestamp': timezone.now().isoformat()
             }
             
             # Adicionar dados extras se fornecidos
             if extra_data:
                 campaign_data.update(extra_data)
             
-            # Usar sync_to_async de forma mais simples
+            # Usar async_to_sync para execução mais confiável
             from channels.layers import get_channel_layer
-            from asgiref.sync import sync_to_async
+            from asgiref.sync import async_to_sync
             
-            async def send_websocket():
+            def send_websocket():
                 channel_layer = get_channel_layer()
                 if channel_layer:
-                    await channel_layer.group_send(
+                    async_to_sync(channel_layer.group_send)(
                         f"tenant_{campaign.tenant.id}",
                         {
-                            "type": "broadcast_notification",
+                            "type": "campaign_update",
                             "payload": campaign_data
                         }
                     )
                     logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
+                    logger.info(f"✅ [WEBSOCKET] Dados enviados: {campaign_data}")
             
-            # Executar de forma mais direta
-            import asyncio
-            try:
-                # Tentar usar o loop existente
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # Se já está rodando, criar task
-                    asyncio.create_task(send_websocket())
-                else:
-                    # Se não está rodando, executar
-                    loop.run_until_complete(send_websocket())
-            except RuntimeError:
-                # Se não há loop, criar um novo
-                asyncio.run(send_websocket())
+            # Executar em thread separada para evitar bloqueios
+            import threading
+            thread = threading.Thread(target=send_websocket, daemon=True)
+            thread.start()
                 
         except Exception as e:
             logger.error(f"❌ [WEBSOCKET] Erro ao enviar {event_type}: {e}")

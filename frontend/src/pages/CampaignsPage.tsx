@@ -6,7 +6,10 @@ import { Input } from '../components/ui/Input'
 import { showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import { api } from '../lib/api'
 import CampaignWizardModal from '../components/campaigns/CampaignWizardModal'
-import { useWebSocket } from '../hooks/useWebSocket'
+import { WebSocketStatus } from '../components/campaigns/WebSocketStatus'
+import { WebSocketDebug } from '../components/campaigns/WebSocketDebug'
+import { useCampaignWebSocket } from '../hooks/useCampaignWebSocket'
+import { useCampaignNotifications } from '../hooks/useCampaignNotifications'
 
 interface Campaign {
   id: string
@@ -434,68 +437,86 @@ const CampaignsPage: React.FC = () => {
   const [selectedCampaignForLogs, setSelectedCampaignForLogs] = useState<Campaign | null>(null)
   const [logs, setLogs] = useState<any[]>([])
   
-  // WebSocket para atualizações em tempo real
-  const { isConnected, lastMessage } = useWebSocket()
-
-  useEffect(() => {
-    fetchData()
-    
-    // Polling para eventos e status - 5 segundos para campanhas ativas
-    const interval = setInterval(() => {
-      if (!showModal) {
-        fetchCampaignEvents(true)  // Buscar eventos e status em tempo real
-      }
-    }, 5000) // 5 segundos - mais frequente para contador mais preciso
-    
-    return () => clearInterval(interval)
-  }, [showModal])
-  
-  // Processar mensagens do WebSocket
-  useEffect(() => {
-    if (lastMessage?.type === 'campaign_update') {
-      const campaignData = lastMessage.data
-      console.log('📡 [WEBSOCKET] Atualização de campanha recebida:', campaignData)
+  // WebSocket para atualizações em tempo real de campanhas
+  const { isConnected, lastUpdate, connectionStatus, reconnectAttempts, messages, clearMessages } = useCampaignWebSocket(
+    (update) => {
+      console.log('📡 [CAMPAIGN-WS] Atualização recebida:', update.campaign_name, update.type)
+      console.log('📊 [CAMPAIGN-WS] Dados:', {
+        messages_sent: update.messages_sent,
+        total_contacts: update.total_contacts,
+        status: update.status,
+        next_contact: update.next_contact_name,
+        last_contact: update.last_contact_name
+      })
       
       // Atualizar campanha específica na lista apenas se houve mudanças significativas
       setCampaigns(prevCampaigns => 
         prevCampaigns.map(campaign => {
-          if (campaign.id === campaignData.campaign_id) {
+          if (campaign.id === update.campaign_id) {
+            console.log('🔄 [CAMPAIGN-WS] Processando campanha:', campaign.name)
+            
             // Verificar se houve mudanças significativas para evitar re-renders desnecessários
             const hasSignificantChanges = 
-              campaign.status !== campaignData.status ||
-              campaign.messages_sent !== campaignData.messages_sent ||
-              campaign.messages_delivered !== campaignData.messages_delivered ||
-              campaign.messages_read !== campaignData.messages_read ||
-              campaign.messages_failed !== campaignData.messages_failed ||
-              campaign.total_contacts !== campaignData.total_contacts ||
-              campaign.progress_percentage !== campaignData.progress_percentage ||
-              campaign.next_message_scheduled_at !== campaignData.next_message?.scheduled_at
+              campaign.status !== update.status ||
+              campaign.messages_sent !== update.messages_sent ||
+              campaign.messages_delivered !== update.messages_delivered ||
+              campaign.messages_read !== update.messages_read ||
+              campaign.messages_failed !== update.messages_failed ||
+              campaign.total_contacts !== update.total_contacts ||
+              campaign.progress_percentage !== update.progress_percentage ||
+              campaign.next_message_scheduled_at !== update.next_message_scheduled_at
             
             if (hasSignificantChanges) {
+              console.log('✅ [CAMPAIGN-WS] Aplicando mudanças para:', campaign.name)
               return {
                 ...campaign,
-                status: campaignData.status,
-                messages_sent: campaignData.messages_sent,
-                messages_delivered: campaignData.messages_delivered,
-                messages_read: campaignData.messages_read,
-                messages_failed: campaignData.messages_failed,
-                total_contacts: campaignData.total_contacts,
-                progress_percentage: campaignData.progress_percentage,
-                last_contact_name: campaignData.last_message?.contact_name,
-                last_contact_phone: campaignData.last_message?.contact_phone,
-                last_message_sent_at: campaignData.last_message?.sent_at,
-                next_contact_name: campaignData.next_message?.contact_name,
-                next_contact_phone: campaignData.next_message?.contact_phone,
-                next_message_scheduled_at: campaignData.next_message?.scheduled_at,
-                updated_at: campaignData.updated_at
+                status: update.status,
+                messages_sent: update.messages_sent,
+                messages_delivered: update.messages_delivered,
+                messages_read: update.messages_read,
+                messages_failed: update.messages_failed,
+                total_contacts: update.total_contacts,
+                progress_percentage: update.progress_percentage,
+                last_message_sent_at: update.last_message_sent_at,
+                next_message_scheduled_at: update.next_message_scheduled_at,
+                next_contact_name: update.next_contact_name,
+                next_contact_phone: update.next_contact_phone,
+                last_contact_name: update.last_contact_name,
+                last_contact_phone: update.last_contact_phone,
+                updated_at: update.updated_at
               }
+            } else {
+              console.log('⏭️ [CAMPAIGN-WS] Nenhuma mudança significativa para:', campaign.name)
             }
           }
           return campaign
         })
       )
+    },
+    (status) => {
+      console.log('🔌 [CAMPAIGN-WS] Status da conexão:', status)
     }
-  }, [lastMessage])
+  )
+
+  // Notificações para eventos importantes de campanhas
+  useCampaignNotifications({ 
+    lastUpdate, 
+    enabled: true 
+  })
+
+  useEffect(() => {
+    fetchData()
+    
+    // Polling de fallback apenas quando WebSocket não estiver conectado
+    // ou para campanhas que não enviam updates via WebSocket
+    const interval = setInterval(() => {
+      if (!showModal && (!isConnected || connectionStatus === 'error')) {
+        fetchCampaignEvents(true)  // Buscar eventos e status em tempo real
+      }
+    }, 10000) // 10 segundos - menos frequente já que temos WebSocket
+    
+    return () => clearInterval(interval)
+  }, [showModal, isConnected, connectionStatus])
 
   const fetchData = async (silent = false) => {
     try {
@@ -518,24 +539,25 @@ const CampaignsPage: React.FC = () => {
 
   const fetchCampaignEvents = async (silent = false) => {
     try {
-      // Buscar eventos e status em tempo real
-      const eventsResponse = await api.get('/campaigns/events/')
+      // Buscar status em tempo real das campanhas ativas
+      const statusResponse = await api.get('/campaigns/status/')
       
-      if (eventsResponse.data.success) {
-        const { campaigns_status } = eventsResponse.data
+      if (statusResponse.data.success) {
+        const { campaigns } = statusResponse.data
         
         // Atualizar campanhas com dados em tempo real
         setCampaigns(prevCampaigns => 
           prevCampaigns.map(campaign => {
-            const realtimeData = campaigns_status[campaign.id]
-            if (realtimeData) {
+            // Buscar dados atualizados da campanha
+            const updatedData = campaigns.find(c => c.id === campaign.id)
+            if (updatedData) {
               return {
                 ...campaign,
-                ...realtimeData,
-                // Converter strings ISO para Date objects
-                last_message_sent_at: realtimeData.last_message_sent_at,
-                next_message_scheduled_at: realtimeData.next_message_scheduled_at,
-                updated_at: realtimeData.updated_at
+                ...updatedData,
+                // Manter tipos corretos
+                last_message_sent_at: updatedData.last_message_sent_at,
+                next_message_scheduled_at: updatedData.next_message_scheduled_at,
+                updated_at: updatedData.updated_at
               }
             }
             return campaign
@@ -543,11 +565,11 @@ const CampaignsPage: React.FC = () => {
         )
         
         if (!silent) {
-          console.log('📡 [EVENTS] Dados em tempo real atualizados')
+          console.log('📡 [STATUS] Dados em tempo real atualizados')
         }
       }
     } catch (error) {
-      console.error('Erro ao buscar eventos:', error)
+      console.error('Erro ao buscar status:', error)
       // Fallback para fetchData normal
       if (!silent) {
         fetchData(true)
@@ -571,7 +593,7 @@ const CampaignsPage: React.FC = () => {
       
       // ✅ Executar callback em try/catch separado
       try {
-        fetchData()
+      fetchData()
       } catch (callbackError) {
         console.error('Erro ao atualizar lista:', callbackError)
       }
@@ -615,7 +637,7 @@ const CampaignsPage: React.FC = () => {
       
       // ✅ Executar callback em try/catch separado
       try {
-        fetchData()
+      fetchData()
       } catch (callbackError) {
         console.error('Erro ao atualizar lista:', callbackError)
       }
@@ -634,7 +656,7 @@ const CampaignsPage: React.FC = () => {
       
       // ✅ Executar callback em try/catch separado
       try {
-        fetchData()
+      fetchData()
       } catch (callbackError) {
         console.error('Erro ao atualizar lista:', callbackError)
       }
@@ -681,7 +703,7 @@ const CampaignsPage: React.FC = () => {
       
       // ✅ Executar callback em try/catch separado
       try {
-        fetchData()
+      fetchData()
       } catch (callbackError) {
         console.error('Erro ao atualizar lista:', callbackError)
       }
@@ -752,7 +774,7 @@ const CampaignsPage: React.FC = () => {
       
       // ✅ Executar callback em try/catch separado
       try {
-        fetchData()
+      fetchData()
       } catch (callbackError) {
         console.error('Erro ao atualizar lista:', callbackError)
       }
@@ -867,9 +889,9 @@ const CampaignsPage: React.FC = () => {
 
   const filteredCampaigns = campaigns
     .filter(campaign =>
-      campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
+  )
     .sort((a, b) => {
       // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
       const statusOrder = {
@@ -907,16 +929,12 @@ const CampaignsPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <h1 className="text-xl sm:text-2xl font-bold text-gray-900">📤 Campanhas</h1>
             {/* Indicador de conexão WebSocket */}
-            <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-              isConnected 
-                ? 'bg-green-100 text-green-800 border border-green-200' 
-                : 'bg-red-100 text-red-800 border border-red-200'
-            }`}>
-              <div className={`w-2 h-2 rounded-full ${
-                isConnected ? 'bg-green-500' : 'bg-red-500'
-              }`}></div>
-              <span>{isConnected ? 'Tempo Real' : 'Polling'}</span>
-            </div>
+            <WebSocketStatus 
+              isConnected={isConnected}
+              connectionStatus={connectionStatus}
+              reconnectAttempts={reconnectAttempts}
+              className="text-xs"
+            />
           </div>
           <p className="text-sm sm:text-base text-gray-600">
             Gerencie suas campanhas de disparo em massa
@@ -1276,6 +1294,16 @@ const CampaignsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Componente de Debug WebSocket */}
+      <WebSocketDebug
+        isConnected={isConnected}
+        connectionStatus={connectionStatus}
+        reconnectAttempts={reconnectAttempts}
+        lastUpdate={lastUpdate}
+        messages={messages}
+        onClearMessages={clearMessages}
+      />
     </div>
   )
 }

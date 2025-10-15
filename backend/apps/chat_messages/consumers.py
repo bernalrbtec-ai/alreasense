@@ -97,9 +97,16 @@ class TenantConsumer(AsyncJsonWebsocketConsumer):
     
     async def campaign_update(self, event):
         """Handle campaign updates."""
+        payload = event.get('payload', {})
+        
+        # Log para debug
+        campaign_name = payload.get('campaign_name', 'Unknown')
+        event_type = payload.get('type', 'update')
+        
         await self.send_json({
             'type': 'campaign_update',
-            'data': event['payload']
+            'data': payload,
+            'timestamp': payload.get('timestamp', None)
         })
     
     async def broadcast_notification(self, event):

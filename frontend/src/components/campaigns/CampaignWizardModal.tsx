@@ -4,6 +4,7 @@ import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
+import { MessageVariables } from './MessageVariables'
 
 interface CampaignWizardModalProps {
   onClose: () => void
@@ -70,7 +71,21 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   useEffect(() => {
     fetchData()
-  }, [])
+    
+    // Listener para inserção de variáveis
+    const handleInsertVariable = (event: any) => {
+      const variable = event.detail
+      const lastIdx = formData.messages.length - 1
+      const lastMsg = formData.messages[lastIdx]
+      updateMessage(lastIdx, lastMsg.content + variable)
+    }
+    
+    window.addEventListener('insertVariable', handleInsertVariable)
+    
+    return () => {
+      window.removeEventListener('insertVariable', handleInsertVariable)
+    }
+  }, [formData.messages])
 
   // Popular formulário com dados da campanha sendo editada
   useEffect(() => {
@@ -585,77 +600,9 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 </div>
 
                 {/* Variáveis Disponíveis */}
-                <Card className="p-3 bg-blue-50 border-blue-200">
-                  <p className="text-xs font-semibold text-blue-900 mb-2">📝 Variáveis disponíveis:</p>
-                  <div className="grid grid-cols-2 gap-1 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lastIdx = formData.messages.length - 1
-                        const lastMsg = formData.messages[lastIdx]
-                        updateMessage(lastIdx, lastMsg.content + '{{nome}}')
-                      }}
-                      className="text-left px-2 py-1 bg-white rounded hover:bg-blue-100 text-blue-700"
-                    >
-                      <code>{'{{nome}}'}</code> - Nome completo
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lastIdx = formData.messages.length - 1
-                        const lastMsg = formData.messages[lastIdx]
-                        updateMessage(lastIdx, lastMsg.content + '{{primeiro_nome}}')
-                      }}
-                      className="text-left px-2 py-1 bg-white rounded hover:bg-blue-100 text-blue-700"
-                    >
-                      <code>{'{{primeiro_nome}}'}</code> - 1º nome
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lastIdx = formData.messages.length - 1
-                        const lastMsg = formData.messages[lastIdx]
-                        updateMessage(lastIdx, lastMsg.content + '{{saudacao}}')
-                      }}
-                      className="text-left px-2 py-1 bg-white rounded hover:bg-blue-100 text-blue-700"
-                    >
-                      <code>{'{{saudacao}}'}</code> - Bom dia/tarde/noite
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lastIdx = formData.messages.length - 1
-                        const lastMsg = formData.messages[lastIdx]
-                        updateMessage(lastIdx, lastMsg.content + '{{dia_semana}}')
-                      }}
-                      className="text-left px-2 py-1 bg-white rounded hover:bg-blue-100 text-blue-700"
-                    >
-                      <code>{'{{dia_semana}}'}</code> - Dia da semana
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lastIdx = formData.messages.length - 1
-                        const lastMsg = formData.messages[lastIdx]
-                        updateMessage(lastIdx, lastMsg.content + '{{quem_indicou}}')
-                      }}
-                      className="text-left px-2 py-1 bg-white rounded hover:bg-blue-100 text-blue-700"
-                    >
-                      <code>{'{{quem_indicou}}'}</code> - Quem indicou
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const lastIdx = formData.messages.length - 1
-                        const lastMsg = formData.messages[lastIdx]
-                        updateMessage(lastIdx, lastMsg.content + '{{primeiro_nome_indicador}}')
-                      }}
-                      className="text-left px-2 py-1 bg-white rounded hover:bg-blue-100 text-blue-700"
-                    >
-                      <code>{'{{primeiro_nome_indicador}}'}</code> - 1º nome indicador
-                    </button>
-                  </div>
-                </Card>
+                <div className="flex justify-between items-center">
+                  <MessageVariables />
+                </div>
 
                 {/* Mensagens */}
                 <div className="space-y-3 max-h-96 overflow-y-auto">
@@ -669,7 +616,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           <textarea
                             value={message.content}
                             onChange={(e) => updateMessage(index, e.target.value)}
-                            placeholder="Digite a mensagem... Use {{nome}}, {{saudacao}}, {{dia_semana}}"
+                            placeholder="Digite a mensagem... Use {{nome}}, {{primeiro_nome}}, {{saudacao}}, etc."
                             className="w-full px-2 py-2 text-sm border rounded focus:ring-2 focus:ring-blue-500"
                             rows={3}
                           />

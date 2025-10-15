@@ -7,6 +7,7 @@ from .views_v2 import (
 )
 from .views_realtime import campaign_realtime_status, campaign_realtime_progress
 from .views_events import campaign_events, campaign_realtime_status as campaign_events_status
+from .views_status import campaign_status
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
@@ -14,6 +15,9 @@ router.register(r'campaigns', CampaignViewSet, basename='campaign')
 router.register(r'notifications', CampaignNotificationViewSet, basename='notification')
 
 urlpatterns = [
+    # APIs de status simples - DEVE VIR ANTES DO ROUTER
+    path('campaigns/status/', campaign_status, name='campaign-status'),
+    
     # APIs de eventos para contador real - DEVE VIR ANTES DO ROUTER
     path('campaigns/events/', campaign_events, name='campaign-events'),
     path('campaigns/<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
