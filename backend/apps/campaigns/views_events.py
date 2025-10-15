@@ -12,8 +12,19 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def campaign_events(request):
     """Endpoint para buscar eventos recentes de campanhas"""
+    logger.info(f"🔍 [EVENTS] Endpoint chamado - User: {request.user}, Tenant: {getattr(request, 'tenant', 'None')}")
     try:
+        # Verificar se tenant está disponível
+        if not hasattr(request, 'tenant') or not request.tenant:
+            logger.warning("⚠️ [EVENTS] Tenant não encontrado na request")
+            return Response({
+                'success': False,
+                'error': 'Tenant não encontrado',
+                'campaigns_status': {}
+            })
+        
         tenant = request.tenant
+        logger.info(f"📊 [EVENTS] Buscando eventos para tenant: {tenant.name}")
         
         # Buscar logs de campanhas dos últimos 5 minutos
         since = timezone.now() - timedelta(minutes=5)

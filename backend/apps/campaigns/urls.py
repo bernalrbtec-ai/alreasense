@@ -7,6 +7,7 @@ from .views_v2 import (
 )
 from .views_realtime import campaign_realtime_status, campaign_realtime_progress
 from .views_events import campaign_events, campaign_realtime_status as campaign_events_status
+from .views_events_debug import campaign_events_debug
 from .views_status import campaign_status
 # CampaignNotificationViewSet reativado
 
@@ -20,6 +21,7 @@ urlpatterns = [
     
     # APIs de eventos para contador real - DEVE VIR ANTES DO ROUTER
     path('campaigns/events/', campaign_events, name='campaign-events'),
+    path('campaigns/events-debug/', campaign_events_debug, name='campaign-events-debug'),
     path('campaigns/<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
     
     # Router deve vir depois das URLs específicas
