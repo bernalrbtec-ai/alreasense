@@ -4,14 +4,12 @@ from rest_framework.response import Response
 from django.utils import timezone
 from datetime import timedelta
 from apps.campaigns.models import Campaign, CampaignContact, CampaignLog
-from apps.common.decorators import tenant_required
 import logging
 
 logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@tenant_required
 def campaign_events(request):
     """Endpoint para buscar eventos recentes de campanhas"""
     try:
@@ -84,7 +82,6 @@ def campaign_events(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-@tenant_required
 def campaign_realtime_status(request, campaign_id):
     """Endpoint para status em tempo real de uma campanha específica"""
     try:
