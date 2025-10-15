@@ -717,12 +717,12 @@ class RabbitMQConsumer:
             return False
     
     def _select_instance(self, campaign: Campaign) -> Optional[WhatsAppInstance]:
-        """Seleciona instância disponível"""
+        """Seleciona instância disponível - APENAS INSTÂNCIAS SELECIONADAS NA CAMPANHA"""
         try:
-            available_instances = WhatsAppInstance.objects.filter(
+            # 🎯 USAR APENAS INSTÂNCIAS SELECIONADAS NA CAMPANHA (como o Celery fazia)
+            available_instances = campaign.instances.filter(
                 is_active=True,
-                health_score__gte=campaign.pause_on_health_below,
-                tenant=campaign.tenant  # 🔒 FILTRO POR TENANT - SEGURANÇA CRÍTICA
+                health_score__gte=campaign.pause_on_health_below
             )
             
             if not available_instances.exists():
