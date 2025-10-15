@@ -877,72 +877,65 @@ class RabbitMQConsumer:
             return f"Mensagem da campanha {campaign.name}"
     
     def _send_websocket_update(self, campaign, event_type, extra_data=None):
-        """Envia atualização WebSocket apenas em eventos específicos"""
+        """Envia atualização WebSocket apenas em eventos específicos - VERSÃO SIMPLIFICADA"""
         try:
-            logger.info(f"🔧 [WEBSOCKET] Iniciando envio de {event_type} para campanha {campaign.name}")
+            logger.info(f"🔧 [WEBSOCKET] Enviando {event_type} para campanha {campaign.name}")
             
-            # Usar threading para evitar problemas de contexto assíncrono
-            import threading
+            # Dados básicos da campanha
+            campaign_data = {
+                'type': event_type,
+                'campaign_id': str(campaign.id),
+                'campaign_name': campaign.name,
+                'status': campaign.status,
+                'messages_sent': campaign.messages_sent,
+                'messages_delivered': campaign.messages_delivered,
+                'messages_read': campaign.messages_read,
+                'messages_failed': campaign.messages_failed,
+                'total_contacts': campaign.total_contacts,
+                'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
+                'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
+                'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
+                'next_contact_name': campaign.next_contact_name,
+                'next_contact_phone': campaign.next_contact_phone,
+                'last_contact_name': campaign.last_contact_name,
+                'last_contact_phone': campaign.last_contact_phone,
+                'updated_at': campaign.updated_at.isoformat()
+            }
             
-            def send_in_thread():
-                try:
-                    import asyncio
-                    
-                    async def send_update():
-                        logger.info(f"🔧 [WEBSOCKET] Dentro da função async para {event_type}")
-                        from channels.layers import get_channel_layer
-                        
-                        # Dados básicos da campanha
-                        campaign_data = {
-                            'type': event_type,
-                            'campaign_id': str(campaign.id),
-                            'campaign_name': campaign.name,
-                            'status': campaign.status,
-                            'messages_sent': campaign.messages_sent,
-                            'messages_delivered': campaign.messages_delivered,
-                            'messages_read': campaign.messages_read,
-                            'messages_failed': campaign.messages_failed,
-                            'total_contacts': campaign.total_contacts,
-                            'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
-                            'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
-                            'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
-                            'next_contact_name': campaign.next_contact_name,
-                            'next_contact_phone': campaign.next_contact_phone,
-                            'last_contact_name': campaign.last_contact_name,
-                            'last_contact_phone': campaign.last_contact_phone,
-                            'updated_at': campaign.updated_at.isoformat()
+            # Adicionar dados extras se fornecidos
+            if extra_data:
+                campaign_data.update(extra_data)
+            
+            # Usar sync_to_async de forma mais simples
+            from channels.layers import get_channel_layer
+            from asgiref.sync import sync_to_async
+            
+            async def send_websocket():
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    await channel_layer.group_send(
+                        f"tenant_{campaign.tenant.id}",
+                        {
+                            "type": "broadcast_notification",
+                            "payload": campaign_data
                         }
-                        
-                        # Adicionar dados extras se fornecidos
-                        if extra_data:
-                            campaign_data.update(extra_data)
-                        
-                        # Enviar via WebSocket
-                        channel_layer = get_channel_layer()
-                        if channel_layer:
-                            await channel_layer.group_send(
-                                f"tenant_{campaign.tenant.id}",
-                                {
-                                    "type": "broadcast_notification",
-                                    "payload": campaign_data
-                                }
-                            )
-                            logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
-                    
-                    # Criar novo loop de evento
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    try:
-                        loop.run_until_complete(send_update())
-                    finally:
-                        loop.close()
-                        
-                except Exception as e:
-                    logger.error(f"❌ [WEBSOCKET] Erro na thread: {e}")
+                    )
+                    logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
             
-            # Executar em thread separada
-            thread = threading.Thread(target=send_in_thread, daemon=True)
-            thread.start()
+            # Executar de forma mais direta
+            import asyncio
+            try:
+                # Tentar usar o loop existente
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Se já está rodando, criar task
+                    asyncio.create_task(send_websocket())
+                else:
+                    # Se não está rodando, executar
+                    loop.run_until_complete(send_websocket())
+            except RuntimeError:
+                # Se não há loop, criar um novo
+                asyncio.run(send_websocket())
                 
         except Exception as e:
             logger.error(f"❌ [WEBSOCKET] Erro ao enviar {event_type}: {e}")
