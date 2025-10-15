@@ -75,18 +75,24 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
     // Listener para inserção de variáveis
     const handleInsertVariable = (event: any) => {
       const variable = event.detail
-      // Inserir na última mensagem não vazia ou criar uma nova
-      let targetIndex = formData.messages.length - 1
-      
-      // Se a última mensagem estiver vazia, usar ela
-      if (formData.messages[targetIndex] && !formData.messages[targetIndex].content) {
-        updateMessage(targetIndex, variable)
-      } else {
-        // Senão, adicionar uma nova mensagem
-        addMessage()
-        targetIndex = formData.messages.length // Será a nova mensagem
-        updateMessage(targetIndex, variable)
-      }
+      // Usar callback para acessar o estado mais recente
+      setFormData(prevFormData => {
+        const targetIndex = prevFormData.messages.length - 1
+        
+        // Se a última mensagem estiver vazia, usar ela
+        if (prevFormData.messages[targetIndex] && !prevFormData.messages[targetIndex].content) {
+          const newMessages = [...prevFormData.messages]
+          newMessages[targetIndex].content = variable
+          return { ...prevFormData, messages: newMessages }
+        } else {
+          // Senão, adicionar uma nova mensagem
+          const newMessage = { content: variable, order: prevFormData.messages.length + 1 }
+          return { 
+            ...prevFormData, 
+            messages: [...prevFormData.messages, newMessage]
+          }
+        }
+      })
     }
     
     window.addEventListener('insertVariable', handleInsertVariable)
@@ -94,7 +100,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
     return () => {
       window.removeEventListener('insertVariable', handleInsertVariable)
     }
-  }, [formData.messages])
+  }, []) // Remover dependência problemática
 
   // Popular formulário com dados da campanha sendo editada
   useEffect(() => {
@@ -320,21 +326,25 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
   }
 
   const addMessage = () => {
-    setFormData({
-      ...formData,
-      messages: [...formData.messages, { content: '', order: formData.messages.length + 1 }]
-    })
+    setFormData(prevFormData => ({
+      ...prevFormData,
+      messages: [...prevFormData.messages, { content: '', order: prevFormData.messages.length + 1 }]
+    }))
   }
 
   const removeMessage = (index: number) => {
-    const newMessages = formData.messages.filter((_, i) => i !== index)
-    setFormData({ ...formData, messages: newMessages })
+    setFormData(prevFormData => {
+      const newMessages = prevFormData.messages.filter((_, i) => i !== index)
+      return { ...prevFormData, messages: newMessages }
+    })
   }
 
   const updateMessage = (index: number, content: string) => {
-    const newMessages = [...formData.messages]
-    newMessages[index].content = content
-    setFormData({ ...formData, messages: newMessages })
+    setFormData(prevFormData => {
+      const newMessages = [...prevFormData.messages]
+      newMessages[index].content = content
+      return { ...prevFormData, messages: newMessages }
+    })
   }
 
   return (
