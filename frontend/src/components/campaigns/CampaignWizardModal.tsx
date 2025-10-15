@@ -190,7 +190,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
       case 2:
         return getSelectedContactsCount() > 0
       case 3:
-        return formData.messages.some(m => m.content && m.content.trim().length > 0)
+        return formData.messages.some(m => m.content && typeof m.content === 'string' && m.content.trim().length > 0)
       case 4:
         return formData.instance_ids.length > 0
       case 5:
@@ -224,14 +224,14 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         description: formData.description,
         rotation_mode: formData.rotation_mode,
         instances: formData.instance_ids,
-        messages: formData.messages.filter(m => m.content && m.content.trim()),
+        messages: formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()),
         interval_min: formData.interval_min,
         interval_max: formData.interval_max,
         daily_limit_per_instance: formData.daily_limit_per_instance,
         pause_on_health_below: formData.pause_on_health_below,
         scheduled_at: formData.scheduled_at || null,
         tag_id: formData.audience_type === 'tag' ? formData.tag_id : null,
-        contact_ids: formData.audience_type === 'contacts' ? formData.contact_ids : []
+        contact_ids: formData.contact_ids
       }
 
       await api.post('/campaigns/campaigns/', payload)
@@ -667,7 +667,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
                       {/* Chat Area */}
                       <div className="bg-[#e5ddd5] h-96 p-3 overflow-y-auto">
-                        {formData.messages.filter(m => m.content && m.content.trim()).map((msg, idx) => {
+                        {formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()).map((msg, idx) => {
                           // Substituir variáveis para preview
                           const nomeCompleto = 'Maria Silva'
                           const primeiroNome = nomeCompleto.split(' ')[0]
@@ -701,7 +701,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           )
                         })}
                         
-                        {formData.messages.filter(m => m.content && m.content.trim()).length === 0 && (
+                        {formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()).length === 0 && (
                           <div className="text-center text-gray-500 text-sm mt-20">
                             Digite uma mensagem para ver o preview
                           </div>
@@ -976,7 +976,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Templates criados:</span>
-                    <span className="font-medium">{formData.messages.filter(m => m.content && m.content.trim()).length}</span>
+                    <span className="font-medium">{formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()).length}</span>
                   </div>
                 </div>
               </Card>
