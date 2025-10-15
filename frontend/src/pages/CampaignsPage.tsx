@@ -456,11 +456,23 @@ const CampaignsPage: React.FC = () => {
       const campaignData = lastMessage.data
       console.log('📡 [WEBSOCKET] Atualização de campanha recebida:', campaignData)
       
-      // Atualizar campanha específica na lista
+      // Atualizar campanha específica na lista apenas se houve mudanças significativas
       setCampaigns(prevCampaigns => 
-        prevCampaigns.map(campaign => 
-          campaign.id === campaignData.campaign_id 
-            ? {
+        prevCampaigns.map(campaign => {
+          if (campaign.id === campaignData.campaign_id) {
+            // Verificar se houve mudanças significativas para evitar re-renders desnecessários
+            const hasSignificantChanges = 
+              campaign.status !== campaignData.status ||
+              campaign.messages_sent !== campaignData.messages_sent ||
+              campaign.messages_delivered !== campaignData.messages_delivered ||
+              campaign.messages_read !== campaignData.messages_read ||
+              campaign.messages_failed !== campaignData.messages_failed ||
+              campaign.total_contacts !== campaignData.total_contacts ||
+              campaign.progress_percentage !== campaignData.progress_percentage ||
+              campaign.next_message_scheduled_at !== campaignData.next_message?.scheduled_at
+            
+            if (hasSignificantChanges) {
+              return {
                 ...campaign,
                 status: campaignData.status,
                 messages_sent: campaignData.messages_sent,
@@ -477,8 +489,10 @@ const CampaignsPage: React.FC = () => {
                 next_message_scheduled_at: campaignData.next_message?.scheduled_at,
                 updated_at: campaignData.updated_at
               }
-            : campaign
-        )
+            }
+          }
+          return campaign
+        })
       )
     }
   }, [lastMessage])

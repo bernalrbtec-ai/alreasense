@@ -386,6 +386,7 @@ class RabbitMQConsumer:
                     logger.error(f"❌ [WEBSOCKET] Erro ao executar: {e}")
                 
                 # Aplicar delay com contador regressivo
+                last_websocket_update = 0
                 for remaining_seconds in range(scheduled_delay, 0, -1):
                     # Verificar se campanha ainda está ativa a cada segundo
                     campaign.refresh_from_db()
@@ -396,6 +397,25 @@ class RabbitMQConsumer:
                     # Log a cada 10 segundos ou nos últimos 10 segundos
                     if remaining_seconds % 10 == 0 or remaining_seconds <= 10:
                         logger.info(f"⏰ [DELAY] {remaining_seconds}s restantes para {contact.contact.name}")
+                    
+                    # Atualizar WebSocket apenas a cada 5 segundos para evitar spam
+                    if remaining_seconds % 5 == 0 and remaining_seconds != last_websocket_update:
+                        last_websocket_update = remaining_seconds
+                        # Atualizar next_message_scheduled_at com o tempo restante
+                        from django.utils import timezone
+                        campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=remaining_seconds)
+                        campaign.save()
+                        
+                        # Enviar atualização WebSocket
+                        import asyncio
+                        try:
+                            loop = asyncio.get_event_loop()
+                            if loop.is_running():
+                                asyncio.create_task(self._send_campaign_update_websocket(campaign))
+                            else:
+                                asyncio.run(self._send_campaign_update_websocket(campaign))
+                        except Exception as e:
+                            logger.error(f"❌ [WEBSOCKET] Erro ao enviar atualização durante delay: {e}")
                     
                     time.sleep(1)
                 
