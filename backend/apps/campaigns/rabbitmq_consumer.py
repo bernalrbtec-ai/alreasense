@@ -418,25 +418,24 @@ class RabbitMQConsumer:
             else:
                 logger.error(f"❌ [PARALLEL] Falha após {max_retries} tentativas no consumer independente da campanha {campaign_id}")
             
-            finally:
-                # Limpar conexão independente
-                try:
-                    if campaign_channel and not campaign_channel.is_closed:
-                        campaign_channel.stop_consuming()
-                        campaign_channel.close()
-                except:
-                    pass
-                    
-                try:
-                    if campaign_connection and not campaign_connection.is_closed:
-                        campaign_connection.close()
-                except:
-                    pass
+            # Limpar conexão independente
+            try:
+                if campaign_channel and not campaign_channel.is_closed:
+                    campaign_channel.stop_consuming()
+                    campaign_channel.close()
+            except:
+                pass
                 
-                # Remover da lista de consumers ativos
-                if campaign_id in self.consumer_threads:
-                    del self.consumer_threads[campaign_id]
-                    logger.info(f"🧹 [PARALLEL] Consumer independente da campanha {campaign_id} finalizado")
+            try:
+                if campaign_connection and not campaign_connection.is_closed:
+                    campaign_connection.close()
+            except:
+                pass
+            
+            # Remover da lista de consumers ativos
+            if campaign_id in self.consumer_threads:
+                del self.consumer_threads[campaign_id]
+                logger.info(f"🧹 [PARALLEL] Consumer independente da campanha {campaign_id} finalizado")
         
         # Iniciar em thread separada - AGORA TOTALMENTE INDEPENDENTE
         thread = threading.Thread(target=start_consuming, daemon=True)
