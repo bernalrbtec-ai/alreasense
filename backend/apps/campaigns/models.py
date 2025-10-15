@@ -140,7 +140,7 @@ class Campaign(models.Model):
         verbose_name = 'Campanha'
         verbose_name_plural = 'Campanhas'
         ordering = ['-created_at']
-    
+        
     def __str__(self):
         return f"{self.name} ({self.get_status_display()})"
     

@@ -440,126 +440,134 @@ const CampaignsPage: React.FC = () => {
                 {/* Contador regressivo */}
                 <NextMessageCountdown campaign={campaign} />
 
-                {/* Informações de retry ou próximo disparo */}
+                {/* Progress Bars e Informações */}
                 {campaign.status === 'running' && (
-                  <div className="mt-4 space-y-2 text-sm">
-                    {/* Mostrar retry se estiver ativo */}
-                    {campaign.retryInfo?.is_retrying ? (
-                      <div className="space-y-2">
-                        <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
-                          <div className="flex items-center gap-2 text-orange-700 mb-2">
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                            <span className="font-medium">Tentativa {campaign.retryInfo.retry_attempt}/3</span>
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            <strong>Contato:</strong> {campaign.retryInfo.retry_contact_name} ({campaign.retryInfo.retry_contact_phone})
-                          </div>
-                          {campaign.retryInfo.retry_error_reason && (
-                            <div className="text-sm text-red-600">
-                              <strong>Erro:</strong> {campaign.retryInfo.retry_error_reason}
-                            </div>
-                          )}
-                          <div className="text-sm text-blue-600">
-                            <strong>Próximo retry em:</strong> {campaign.retryInfo.retry_countdown}s
-                          </div>
+                  <div className="mt-4">
+                    {/* Progress Bars */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 mb-4" style={{marginTop: '-16px'}}>
+                      <div className="text-sm font-medium text-gray-700 mb-3">PROGRESSO</div>
+                      <div className="space-y-3">
+                        {/* Enviadas */}
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-blue-600 text-sm">
+                            <Send className="h-4 w-4" />
+                            Enviadas
+                          </span>
+                          <span className="text-sm font-medium">{Math.round((campaign.messages_sent / campaign.total_contacts) * 100)}%</span>
                         </div>
-                      </div>
-                    ) : (
-                      /* Layout com progress bars e informações lado a lado */
-                      <div className="space-y-2">
-                        {/* Linha superior: Próximo contato + Progress bars */}
-                        <div className="flex items-start justify-between gap-4">
-                          <div className="flex-1">
-                            {campaign.next_contact_name && (
-                              <div className="flex items-center gap-2 text-blue-600">
-                                <Users className="h-4 w-4" />
-                                <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          {/* Progress bars */}
-                          <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 min-w-[280px]">
-                            <div className="space-y-2">
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2 text-blue-600">
-                                  <Send className="h-4 w-4" />
-                                  Enviadas
-                                </span>
-                                <span className="font-medium">{((campaign.messages_sent / campaign.total_contacts) * 100).toFixed(0)}%</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div className="bg-blue-400 h-2 rounded-full" style={{width: `${(campaign.messages_sent / campaign.total_contacts) * 100}%`}}></div>
-                              </div>
-                              
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2 text-green-600">
-                                  <CheckCircle className="h-4 w-4" />
-                                  Entregues
-                                </span>
-                                <span className="font-medium">
-                                  {campaign.messages_sent > 0 ? ((campaign.messages_delivered / campaign.messages_sent) * 100).toFixed(0) : 0}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div className="bg-green-400 h-2 rounded-full" style={{width: `${campaign.messages_sent > 0 ? (campaign.messages_delivered / campaign.messages_sent) * 100 : 0}%`}}></div>
-                              </div>
-                              
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2 text-yellow-600">
-                                  <Eye className="h-4 w-4" />
-                                  Lidas
-                                </span>
-                                <span className="font-medium">
-                                  {campaign.messages_delivered > 0 ? ((campaign.messages_read / campaign.messages_delivered) * 100).toFixed(0) : 0}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div className="bg-yellow-400 h-2 rounded-full" style={{width: `${campaign.messages_delivered > 0 ? (campaign.messages_read / campaign.messages_delivered) * 100 : 0}%`}}></div>
-                              </div>
-                              
-                              <div className="flex items-center justify-between text-sm">
-                                <span className="flex items-center gap-2 text-red-600">
-                                  <X className="h-4 w-4" />
-                                  Falhas
-                                </span>
-                                <span className="font-medium">{((campaign.messages_failed / campaign.total_contacts) * 100).toFixed(0)}%</span>
-                              </div>
-                              <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div className="bg-red-400 h-2 rounded-full" style={{width: `${(campaign.messages_failed / campaign.total_contacts) * 100}%`}}></div>
-                              </div>
-                            </div>
-                          </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-blue-400 h-2 rounded-full transition-all duration-300" 
+                            style={{width: `${Math.min((campaign.messages_sent / campaign.total_contacts) * 100, 100)}%`}}
+                          ></div>
                         </div>
                         
-                        {/* Linha inferior: Último contato + Instância + Horário */}
-                        <div className="flex items-center justify-between gap-4">
-                          <div className="flex-1">
-                            {campaign.last_contact_name && (
-                              <div className="flex items-center gap-2 text-gray-600">
-                                <Clock className="h-4 w-4" />
-                                <span><strong>Último:</strong> {campaign.last_contact_name} ({campaign.last_contact_phone})</span>
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="flex items-center gap-4 text-sm text-gray-500">
-                            {campaign.next_instance_name && (
-                              <div className="flex items-center gap-2 text-green-600">
-                                <Phone className="h-4 w-4" />
-                                <span><strong>Via:</strong> {campaign.next_instance_name}</span>
-                              </div>
-                            )}
-                            {campaign.last_message_sent_at && (
-                              <div className="flex items-center gap-2 text-gray-500">
-                                <Clock className="h-4 w-4" />
-                                <span><strong>Enviado em:</strong> {new Date(campaign.last_message_sent_at).toLocaleString('pt-BR')}</span>
-                              </div>
-                            )}
-                          </div>
+                        {/* Entregues */}
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-green-600 text-sm">
+                            <CheckCircle className="h-4 w-4" />
+                            Entregues
+                          </span>
+                          <span className="text-sm font-medium">
+                            {campaign.messages_sent > 0 ? Math.round((campaign.messages_delivered / campaign.messages_sent) * 100) : 0}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-green-400 h-2 rounded-full transition-all duration-300" 
+                            style={{width: `${campaign.messages_sent > 0 ? Math.min((campaign.messages_delivered / campaign.messages_sent) * 100, 100) : 0}%`}}
+                          ></div>
+                        </div>
+                        
+                        {/* Lidas */}
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-yellow-600 text-sm">
+                            <Eye className="h-4 w-4" />
+                            Lidas
+                          </span>
+                          <span className="text-sm font-medium">
+                            {campaign.messages_delivered > 0 ? Math.round((campaign.messages_read / campaign.messages_delivered) * 100) : 0}%
+                          </span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-yellow-400 h-2 rounded-full transition-all duration-300" 
+                            style={{width: `${campaign.messages_delivered > 0 ? Math.min((campaign.messages_read / campaign.messages_delivered) * 100, 100) : 0}%`}}
+                          ></div>
+                        </div>
+                        
+                        {/* Falhas */}
+                        <div className="flex items-center justify-between">
+                          <span className="flex items-center gap-2 text-red-600 text-sm">
+                            <X className="h-4 w-4" />
+                            Falhas
+                          </span>
+                          <span className="text-sm font-medium">{Math.round((campaign.messages_failed / campaign.total_contacts) * 100)}%</span>
+                        </div>
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className="bg-red-400 h-2 rounded-full transition-all duration-300" 
+                            style={{width: `${Math.min((campaign.messages_failed / campaign.total_contacts) * 100, 100)}%`}}
+                          ></div>
                         </div>
                       </div>
-                    )}
+                    </div>
+
+                    {/* Informações de retry ou próximo disparo */}
+                    <div className="space-y-2 text-sm">
+                      {/* Mostrar retry se estiver ativo */}
+                      {campaign.retryInfo?.is_retrying ? (
+                        <div className="space-y-2">
+                          <div className="p-3 bg-orange-50 border border-orange-200 rounded-md">
+                            <div className="flex items-center gap-2 text-orange-700 mb-2">
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              <span className="font-medium">Tentativa {campaign.retryInfo.retry_attempt}/3</span>
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              <strong>Contato:</strong> {campaign.retryInfo.retry_contact_name} ({campaign.retryInfo.retry_contact_phone})
+                            </div>
+                            {campaign.retryInfo.retry_error_reason && (
+                              <div className="text-sm text-red-600">
+                                <strong>Erro:</strong> {campaign.retryInfo.retry_error_reason}
+                              </div>
+                            )}
+                            <div className="text-sm text-blue-600">
+                              <strong>Próximo retry em:</strong> {campaign.retryInfo.retry_countdown}s
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Mostrar próximo disparo se não há retry */
+                        <div className="space-y-2">
+                          {campaign.next_contact_name && (
+                            <div className="flex items-center gap-2 text-blue-600">
+                              <Users className="h-4 w-4" />
+                              <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
+                            </div>
+                          )}
+                          {campaign.next_instance_name && (
+                            <div className="flex items-center gap-2 text-green-600">
+                              <Phone className="h-4 w-4" />
+                              <span><strong>Via:</strong> {campaign.next_instance_name}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                      
+                      {/* Informações do último disparo */}
+                      {campaign.last_contact_name && (
+                        <div className="flex items-center gap-2 text-gray-600">
+                          <Clock className="h-4 w-4" />
+                          <span><strong>Último:</strong> {campaign.last_contact_name} ({campaign.last_contact_phone})</span>
+                        </div>
+                      )}
+                      {campaign.last_message_sent_at && (
+                        <div className="flex items-center gap-2 text-gray-500">
+                          <Clock className="h-4 w-4" />
+                          <span><strong>Enviado em:</strong> {new Date(campaign.last_message_sent_at).toLocaleString('pt-BR')}</span>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

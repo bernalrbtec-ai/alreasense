@@ -17,6 +17,7 @@ import requests
 
 from .models import Campaign, CampaignContact, CampaignLog
 from apps.notifications.models import WhatsAppInstance
+from .rabbitmq_webhook import start_webhook_consumer
 
 logger = logging.getLogger(__name__)
 
@@ -1524,9 +1525,26 @@ class RabbitMQConsumer:
         self.start_health_monitor()
         logger.info("🚀 [CONSUMER] RabbitMQ Consumer iniciado")
         
+        # Iniciar consumer de webhooks em thread separada
+        self._start_webhook_consumer()
+        
         # Iniciar campanhas ativas automaticamente se solicitado
         if auto_start_campaigns:
             self._auto_start_active_campaigns()
+    
+    def _start_webhook_consumer(self):
+        """Inicia consumer de webhooks em thread separada"""
+        try:
+            def webhook_consumer_thread():
+                logger.info("🚀 [WEBHOOK_CONSUMER] Iniciando consumer de webhooks...")
+                start_webhook_consumer()
+            
+            thread = threading.Thread(target=webhook_consumer_thread, daemon=True)
+            thread.start()
+            logger.info("✅ [WEBHOOK_CONSUMER] Thread do consumer de webhooks iniciada")
+            
+        except Exception as e:
+            logger.error(f"❌ [WEBHOOK_CONSUMER] Erro ao iniciar consumer de webhooks: {e}")
     
     def _auto_start_active_campaigns(self):
         """Inicia automaticamente campanhas que estão em execução - AGORA EM PARALELO"""
