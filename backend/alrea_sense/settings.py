@@ -245,6 +245,23 @@ print(f"🔍 [DEBUG] REDISPASSWORD env: {'Set' if os.environ.get('REDISPASSWORD'
 if REDIS_URL and REDIS_URL != '':
     # Usar REDIS_URL diretamente do Railway
     print(f"✅ [REDIS] Usando REDIS_URL diretamente")
+    
+    # Extrair informações da REDIS_URL para as variáveis individuais
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(REDIS_URL)
+        if parsed.hostname:
+            REDIS_HOST = parsed.hostname
+        if parsed.port:
+            REDIS_PORT = str(parsed.port)
+        if parsed.username:
+            REDIS_USER = parsed.username
+        if parsed.password:
+            REDIS_PASSWORD = parsed.password
+        print(f"🔧 [REDIS] Extraído da URL - Host: {REDIS_HOST}, Port: {REDIS_PORT}, User: {REDIS_USER}")
+    except Exception as e:
+        print(f"⚠️ [REDIS] Erro ao extrair info da URL: {e}")
+        
 else:
     # Construir URL do Redis a partir das variáveis individuais
     if REDIS_HOST and REDIS_HOST != 'localhost':
