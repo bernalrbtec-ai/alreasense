@@ -180,7 +180,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   const getSelectedContactsCount = (): number => {
     // Sempre usar contact_ids, pois agora marcar/desmarcar atualiza essa lista
-    return formData.contact_ids.length
+    const count = formData.contact_ids.length
+    console.log(`📊 [COUNT] Contatos selecionados: ${count}`, {
+      contact_ids: formData.contact_ids,
+      audience_type: formData.audience_type,
+      tag_id: formData.tag_id
+    })
+    return count
   }
 
   const canProceed = (): boolean => {
@@ -204,12 +210,31 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   const handleNext = () => {
     if (canProceed() && step < 6) {
+      console.log(`🔄 [NAVIGATION] Indo do step ${step} para ${step + 1}`)
+      console.log(`🔍 [NAVIGATION] Estado atual:`, {
+        audience_type: formData.audience_type,
+        tag_id: formData.tag_id,
+        contact_ids: formData.contact_ids,
+        contact_count: formData.contact_ids.length
+      })
       setStep(step + 1)
+    } else {
+      console.log(`❌ [NAVIGATION] Não pode prosseguir do step ${step}:`, {
+        canProceed: canProceed(),
+        contact_count: getSelectedContactsCount()
+      })
     }
   }
 
   const handleBack = () => {
     if (step > 1) {
+      console.log(`🔄 [NAVIGATION] Voltando do step ${step} para ${step - 1}`)
+      console.log(`🔍 [NAVIGATION] Estado atual:`, {
+        audience_type: formData.audience_type,
+        tag_id: formData.tag_id,
+        contact_ids: formData.contact_ids,
+        contact_count: formData.contact_ids.length
+      })
       setStep(step - 1)
     }
   }
@@ -547,9 +572,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                                       checked={formData.contact_ids.includes(contact.id)}
                                       onChange={(e) => {
                                         if (e.target.checked) {
-                                          setFormData({ ...formData, contact_ids: [...formData.contact_ids, contact.id] })
+                                          const newContactIds = [...formData.contact_ids, contact.id]
+                                          console.log(`✅ [SELECT] Adicionando contato ${contact.id}:`, newContactIds)
+                                          setFormData({ ...formData, contact_ids: newContactIds })
                                         } else {
-                                          setFormData({ ...formData, contact_ids: formData.contact_ids.filter(id => id !== contact.id) })
+                                          const newContactIds = formData.contact_ids.filter(id => id !== contact.id)
+                                          console.log(`❌ [SELECT] Removendo contato ${contact.id}:`, newContactIds)
+                                          setFormData({ ...formData, contact_ids: newContactIds })
                                         }
                                       }}
                                       className="rounded"
@@ -602,9 +631,13 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           checked={formData.contact_ids.includes(contact.id)}
                           onChange={(e) => {
                             if (e.target.checked) {
-                              setFormData({ ...formData, contact_ids: [...formData.contact_ids, contact.id] })
+                              const newContactIds = [...formData.contact_ids, contact.id]
+                              console.log(`✅ [SELECT-AVULSO] Adicionando contato ${contact.id}:`, newContactIds)
+                              setFormData({ ...formData, contact_ids: newContactIds })
                             } else {
-                              setFormData({ ...formData, contact_ids: formData.contact_ids.filter(id => id !== contact.id) })
+                              const newContactIds = formData.contact_ids.filter(id => id !== contact.id)
+                              console.log(`❌ [SELECT-AVULSO] Removendo contato ${contact.id}:`, newContactIds)
+                              setFormData({ ...formData, contact_ids: newContactIds })
                             }
                           }}
                         />
