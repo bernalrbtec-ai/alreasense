@@ -252,7 +252,7 @@ class RabbitMQConsumer:
                     'contact_id': str(contact.contact.id),
                     'campaign_contact_id': str(contact.id),
                     'contact_phone': contact.contact.phone,
-                    'message_content': self._get_message_content(campaign),
+                    'message_content': self._get_message_content(campaign, i),  # ← ROTAÇÃO DE MENSAGENS baseada na posição
                     'scheduled_delay_seconds': delay_seconds,
                     'created_at': timezone.now().isoformat(),
                     'campaign_settings': {
@@ -815,16 +815,22 @@ class RabbitMQConsumer:
             logger.error(f"❌ [CONSUMER] Erro ao selecionar instância: {e}")
             return None
     
-    def _get_message_content(self, campaign: Campaign) -> str:
-        """Obtém conteúdo da mensagem"""
+    def _get_message_content(self, campaign: Campaign, contact_position: int = 0) -> str:
+        """Obtém conteúdo da mensagem com rotação baseada na posição do contato"""
         try:
             # Buscar mensagens da campanha
             from .models import CampaignMessage
-            messages = CampaignMessage.objects.filter(campaign=campaign)
+            messages = CampaignMessage.objects.filter(campaign=campaign).order_by('order', 'created_at')
             
             if messages.exists():
-                # Retornar a primeira mensagem ativa
-                return messages.first().content
+                # Implementar rotação de mensagens baseada na posição do contato
+                message_count = messages.count()
+                message_index = contact_position % message_count
+                selected_message = messages[message_index]
+                
+                logger.info(f"🔄 [MESSAGE_ROTATION] Contato posição {contact_position}: usando mensagem {message_index + 1}/{message_count} (ID: {selected_message.id})")
+                
+                return selected_message.content
             else:
                 logger.warning(f"⚠️ [CONSUMER] Nenhuma mensagem encontrada para campanha {campaign.name}")
                 return f"Mensagem da campanha {campaign.name}"
