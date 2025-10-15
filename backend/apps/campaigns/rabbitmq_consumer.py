@@ -313,10 +313,27 @@ class RabbitMQConsumer:
             )
             
             if not available_instances.exists():
+                logger.warning("⚠️ [CONSUMER] Nenhuma instância disponível")
                 return None
             
-            # Lógica simples de round robin
-            return available_instances.first()
+            # Implementar lógica baseada no modo de rotação da campanha
+            if campaign.rotation_mode == 'round_robin':
+                # Round robin baseado em timestamp
+                import time
+                index = int(time.time()) % available_instances.count()
+                instance = available_instances[index]
+                logger.info(f"🔄 [ROUND_ROBIN] Selecionada instância: {instance.name}")
+                return instance
+            elif campaign.rotation_mode == 'intelligent':
+                # Selecionar instância com melhor health_score
+                instance = available_instances.order_by('-health_score').first()
+                logger.info(f"🧠 [INTELLIGENT] Selecionada instância: {instance.name} (health: {instance.health_score})")
+                return instance
+            else:
+                # Fallback para primeira instância
+                instance = available_instances.first()
+                logger.info(f"📱 [DEFAULT] Selecionada instância: {instance.name}")
+                return instance
             
         except Exception as e:
             logger.error(f"❌ [CONSUMER] Erro ao selecionar instância: {e}")
@@ -324,8 +341,20 @@ class RabbitMQConsumer:
     
     def _get_message_content(self, campaign: Campaign) -> str:
         """Obtém conteúdo da mensagem"""
-        # Implementar lógica de seleção de mensagem
-        return "Mensagem da campanha"
+        try:
+            # Buscar mensagens da campanha
+            from .models import CampaignMessage
+            messages = CampaignMessage.objects.filter(campaign=campaign, is_active=True)
+            
+            if messages.exists():
+                # Retornar a primeira mensagem ativa
+                return messages.first().content
+            else:
+                logger.warning(f"⚠️ [CONSUMER] Nenhuma mensagem encontrada para campanha {campaign.name}")
+                return f"Mensagem da campanha {campaign.name}"
+        except Exception as e:
+            logger.error(f"❌ [CONSUMER] Erro ao obter conteúdo: {e}")
+            return f"Mensagem da campanha {campaign.name}"
     
     def _handle_failed_message(self, message_data: Dict[str, Any]):
         """Trata mensagem que falhou"""
