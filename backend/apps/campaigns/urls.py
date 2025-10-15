@@ -14,6 +14,11 @@ router.register(r'campaigns', CampaignViewSet, basename='campaign')
 router.register(r'notifications', CampaignNotificationViewSet, basename='notification')
 
 urlpatterns = [
+    # APIs de eventos para contador real - DEVE VIR ANTES DO ROUTER
+    path('campaigns/events/', campaign_events, name='campaign-events'),
+    path('campaigns/<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
+    
+    # Router deve vir depois das URLs específicas
     path('', include(router.urls)),
     
     # V2 - Sistema com RabbitMQ
@@ -27,10 +32,6 @@ urlpatterns = [
     # APIs de status em tempo real
     path('campaigns/<uuid:campaign_id>/realtime/', campaign_realtime_status, name='campaign-realtime'),
     path('campaigns/<uuid:campaign_id>/progress/', campaign_realtime_progress, name='campaign-progress'),
-    
-    # APIs de eventos para contador real
-    path('campaigns/events/', campaign_events, name='campaign-events'),
-    path('campaigns/<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
 ]
 
 
