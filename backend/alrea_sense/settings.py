@@ -230,25 +230,40 @@ CSRF_EXEMPT_PATHS = [
 ]
 
 # Redis - Railway Configuration
-REDIS_URL = config('REDIS_URL', default='redis://localhost:6379/0')
+REDIS_URL = config('REDIS_URL', default='')
 REDIS_PASSWORD = config('REDISPASSWORD', default='')
 REDIS_HOST = config('REDISHOST', default='localhost')
 REDIS_PORT = config('REDISPORT', default='6379')
 REDIS_USER = config('REDISUSER', default='default')
 
+# Debug das variáveis de ambiente
+print(f"🔍 [DEBUG] REDIS_URL env: {os.environ.get('REDIS_URL', 'Not set')}")
+print(f"🔍 [DEBUG] REDISHOST env: {os.environ.get('REDISHOST', 'Not set')}")
+print(f"🔍 [DEBUG] REDISPASSWORD env: {'Set' if os.environ.get('REDISPASSWORD') else 'Not set'}")
+
 # Usar REDIS_URL se disponível, senão construir a partir das variáveis
-if REDIS_URL and REDIS_URL != 'redis://localhost:6379/0':
+if REDIS_URL and REDIS_URL != '':
     # Usar REDIS_URL diretamente do Railway
-    pass
+    print(f"✅ [REDIS] Usando REDIS_URL diretamente")
 else:
     # Construir URL do Redis a partir das variáveis individuais
     if REDIS_HOST and REDIS_HOST != 'localhost':
         if REDIS_PASSWORD:
             REDIS_URL = f"redis://{REDIS_USER}:{REDIS_PASSWORD}@{REDIS_HOST}:{REDIS_PORT}/0"
+            print(f"✅ [REDIS] Construindo URL com password")
         else:
             REDIS_URL = f"redis://{REDIS_HOST}:{REDIS_PORT}/0"
+            print(f"✅ [REDIS] Construindo URL sem password")
+    else:
+        # Se não conseguir construir a URL, usar fallback localhost apenas em DEBUG
+        if DEBUG:
+            REDIS_URL = 'redis://localhost:6379/0'
+            print(f"⚠️ [REDIS] Usando localhost como fallback (DEBUG mode)")
+        else:
+            REDIS_URL = ''
+            print(f"❌ [REDIS] Erro: Redis não configurado em produção!")
 
-print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:30]}..." if REDIS_URL else "🔧 [SETTINGS] REDIS_URL: Not configured...")
+print(f"🔧 [SETTINGS] REDIS_URL: {REDIS_URL[:50]}..." if REDIS_URL else "🔧 [SETTINGS] REDIS_URL: Not configured...")
 print(f"🔧 [SETTINGS] REDIS_HOST: {REDIS_HOST}")
 print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
 print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
