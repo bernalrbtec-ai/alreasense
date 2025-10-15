@@ -420,6 +420,11 @@ class RabbitMQConsumer:
                     
                     campaign.messages_sent += 1
                     
+                    # Atualizar informações do ÚLTIMO disparo
+                    campaign.last_contact_name = contact.contact.name
+                    campaign.last_contact_phone = contact.contact.phone
+                    campaign.last_message_sent_at = timezone.now()
+                    
                     # Atualizar informações da próxima mensagem
                     next_contact = CampaignContact.objects.filter(
                         campaign=campaign,
@@ -440,7 +445,7 @@ class RabbitMQConsumer:
                         campaign.status = 'completed'
                         campaign.completed_at = timezone.now()
                     
-                    campaign.save(update_fields=['messages_sent', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
+                    campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
                 
                 logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
                 return True

@@ -49,6 +49,11 @@ def campaign_realtime_status(request, campaign_id):
                 'total_contacts': total_contacts,
                 'percentage': round(progress_percentage, 1)
             },
+            'last_message': {
+                'contact_name': campaign.last_contact_name,
+                'contact_phone': campaign.last_contact_phone,
+                'sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None
+            },
             'next_message': {
                 'contact_name': campaign.next_contact_name,
                 'contact_phone': campaign.next_contact_phone,
