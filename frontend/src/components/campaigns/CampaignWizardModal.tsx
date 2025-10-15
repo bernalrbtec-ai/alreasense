@@ -186,7 +186,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
   const canProceed = (): boolean => {
     switch (step) {
       case 1:
-        return formData.name && formData.name.trim().length > 0
+        return formData.name && typeof formData.name === 'string' && formData.name.trim().length > 0
       case 2:
         return getSelectedContactsCount() > 0
       case 3:
@@ -240,6 +240,16 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         contact_ids: payload.contact_ids,
         total_contacts: payload.contact_ids.length,
         mode: payload.contact_ids.length > 0 ? 'CONTATOS_ESPECIFICOS' : 'TODOS_DA_TAG'
+      })
+      
+      console.log('🔍 [DEBUG] Dados do formulário:', {
+        name: formData.name,
+        name_type: typeof formData.name,
+        messages: formData.messages.map(m => ({
+          content: m.content,
+          content_type: typeof m.content,
+          has_content: !!m.content
+        }))
       })
 
       await api.post('/campaigns/campaigns/', payload)

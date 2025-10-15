@@ -108,6 +108,8 @@ class CampaignSerializer(serializers.ModelSerializer):
         print(f"   - tag_id: {tag_id}")
         print(f"   - contact_ids: {contact_ids}")
         print(f"   - tenant: {campaign.tenant}")
+        print(f"   - messages_data: {messages_data}")
+        print(f"   - validated_data: {validated_data}")
         
         # Priorizar contact_ids se fornecidos (permite seleção manual mesmo com tag)
         if contact_ids:
