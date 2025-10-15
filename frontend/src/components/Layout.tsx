@@ -35,6 +35,7 @@ const productMenuItems = {
   flow: [
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'flow' },
     { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
+    { name: 'Logs de Campanhas', href: '/campaigns/logs', icon: Database, requiredProduct: 'flow' },
     { name: 'Notificações', href: '/admin/notifications', icon: Bell, requiredProduct: 'flow' },
   ],
   sense: [

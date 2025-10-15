@@ -8,6 +8,7 @@ import { Toaster } from 'sonner'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import MessagesPage from './pages/MessagesPage'
+import CampaignLogsPage from './pages/CampaignLogsPage'
 import ConnectionsPage from './pages/ConnectionsPage'
 import ExperimentsPage from './pages/ExperimentsPage'
 import BillingPage from './pages/BillingPage'
@@ -93,6 +94,11 @@ function App() {
           <Route path="/campaigns" element={
             <ProtectedRoute requiredProduct="flow">
               <CampaignsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/campaigns/logs" element={
+            <ProtectedRoute requiredProduct="flow">
+              <CampaignLogsPage />
             </ProtectedRoute>
           } />
           <Route path="/connections" element={
