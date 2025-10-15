@@ -117,7 +117,24 @@ class CampaignSerializer(serializers.ModelSerializer):
         if instance.status == 'running':
             instance.update_next_contact_info()
         
-        return super().to_representation(instance)
+        data = super().to_representation(instance)
+        
+        # Calcular countdown em segundos
+        data['countdown_seconds'] = self._calculate_countdown_seconds(instance)
+        
+        return data
+    
+    def _calculate_countdown_seconds(self, instance):
+        """Calcula quantos segundos restam para o próximo disparo"""
+        if not instance.next_message_scheduled_at or instance.status != 'running':
+            return None
+        
+        from django.utils import timezone
+        now = timezone.now()
+        target = instance.next_message_scheduled_at
+        
+        diff_seconds = int((target - now).total_seconds())
+        return max(0, diff_seconds)
     
     def create(self, validated_data):
         messages_data = validated_data.pop('messages', [])
