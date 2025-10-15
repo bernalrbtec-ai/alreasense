@@ -125,16 +125,22 @@ class RabbitMQConsumer:
     def start_campaign(self, campaign_id: str):
         """Inicia processamento de uma campanha"""
         try:
+            logger.info(f"🚀 [START] Iniciando campanha {campaign_id}")
+            
             # Verificar conexão antes de iniciar campanha
+            logger.info(f"🔍 [START] Verificando conexão RabbitMQ...")
             self._check_connection()
+            logger.info(f"✅ [START] Conexão RabbitMQ OK")
             
             campaign = Campaign.objects.get(id=campaign_id)
+            logger.info(f"📋 [START] Campanha encontrada: {campaign.name} (status: {campaign.status})")
             
             if campaign.status not in ['draft', 'running']:
                 logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} status inválido: {campaign.status}")
                 return False
             
             # Verificar se tem contatos
+            logger.info(f"🔍 [START] Verificando contatos pendentes...")
             pending_contacts = CampaignContact.objects.filter(
                 campaign=campaign,
                 status__in=['pending', 'sending']
@@ -147,29 +153,50 @@ class RabbitMQConsumer:
                 logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} não possui contatos pendentes")
                 return False
             
+            # Verificar instâncias selecionadas
+            logger.info(f"🔍 [START] Verificando instâncias selecionadas...")
+            selected_instances = campaign.instances.filter(is_active=True).count()
+            logger.info(f"📱 [START] Instâncias ativas selecionadas: {selected_instances}")
+            
+            if selected_instances == 0:
+                logger.error(f"❌ [START] Nenhuma instância ativa selecionada para campanha {campaign.name}")
+                return False
+            
             # Atualizar status
+            logger.info(f"📝 [START] Atualizando status para 'running'...")
             campaign.status = 'running'
             campaign.save(update_fields=['status'])
+            logger.info(f"✅ [START] Status atualizado com sucesso")
             
             # Log de início
+            logger.info(f"📝 [START] Criando log de início...")
             CampaignLog.log_campaign_started(campaign)
+            logger.info(f"✅ [START] Log criado com sucesso")
             
             # Criar fila específica da campanha
+            logger.info(f"📋 [START] Criando fila RabbitMQ...")
             queue_name = f"campaign.{campaign_id}.messages"
             self.channel.queue_declare(queue=queue_name, durable=True)
+            logger.info(f"✅ [START] Fila declarada: {queue_name}")
+            
             self.channel.queue_bind(
                 exchange='campaigns',
                 queue=queue_name,
                 routing_key=queue_name
             )
+            logger.info(f"✅ [START] Fila vinculada ao exchange")
             
             # Adicionar mensagens à fila
+            logger.info(f"📤 [START] Populando fila com mensagens...")
             self._populate_campaign_queue(campaign)
+            logger.info(f"✅ [START] Fila populada com sucesso")
             
             # Iniciar consumer para esta campanha
+            logger.info(f"🎯 [START] Iniciando consumer...")
             self._start_campaign_consumer(campaign_id)
+            logger.info(f"✅ [START] Consumer iniciado")
             
-            logger.info(f"🚀 [CONSUMER] Campanha {campaign.name} iniciada")
+            logger.info(f"🚀 [CONSUMER] Campanha {campaign.name} iniciada com sucesso!")
             return True
             
         except Campaign.DoesNotExist:
