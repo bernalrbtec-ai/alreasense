@@ -440,12 +440,12 @@ const CampaignsPage: React.FC = () => {
   useEffect(() => {
     fetchData()
     
-    // Atualização automática a cada 30 segundos (backup para WebSocket)
+    // Atualização automática: WebSocket conectado = 2 minutos, desconectado = 30 segundos
     const interval = setInterval(() => {
       if (!showModal && !isConnected) {  // Só usar polling se WebSocket não estiver conectado
         fetchData(true)  // silent mode
       }
-    }, 30000)
+    }, isConnected ? 120000 : 30000) // 2min se WebSocket ativo, 30s se não
     
     return () => clearInterval(interval)
   }, [showModal, isConnected])

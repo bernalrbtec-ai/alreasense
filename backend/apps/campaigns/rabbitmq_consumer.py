@@ -173,6 +173,13 @@ class RabbitMQConsumer:
             CampaignLog.log_campaign_started(campaign)
             logger.info(f"✅ [START] Log criado com sucesso")
             
+            # 🚀 GATILHO: Campanha iniciada - frontend receberá dados iniciais
+            self._send_websocket_update(campaign, 'campaign_update', {
+                'event': 'campaign_started',
+                'total_contacts': total_contacts,
+                'pending_contacts': pending_contacts
+            })
+            
             # Criar fila específica da campanha
             logger.info(f"📋 [START] Criando fila RabbitMQ...")
             queue_name = f"campaign.{campaign_id}.messages"
@@ -372,21 +379,9 @@ class RabbitMQConsumer:
                     campaign.next_contact_phone = contact.contact.phone
                     campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
                 
-                # Enviar atualização via WebSocket
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Se já há um loop rodando, usar create_task
-                        asyncio.create_task(self._send_campaign_update_websocket(campaign))
-                    else:
-                        # Se não há loop, usar run
-                        asyncio.run(self._send_campaign_update_websocket(campaign))
-                except Exception as e:
-                    logger.error(f"❌ [WEBSOCKET] Erro ao executar: {e}")
+                # WebSocket será enviado apenas nos gatilhos específicos (sem spam)
                 
                 # Aplicar delay com contador regressivo
-                last_websocket_update = 0
                 for remaining_seconds in range(scheduled_delay, 0, -1):
                     # Verificar se campanha ainda está ativa a cada segundo
                     campaign.refresh_from_db()
@@ -398,28 +393,16 @@ class RabbitMQConsumer:
                     if remaining_seconds % 10 == 0 or remaining_seconds <= 10:
                         logger.info(f"⏰ [DELAY] {remaining_seconds}s restantes para {contact.contact.name}")
                     
-                    # Atualizar WebSocket apenas a cada 5 segundos para evitar spam
-                    if remaining_seconds % 5 == 0 and remaining_seconds != last_websocket_update:
-                        last_websocket_update = remaining_seconds
-                        # Atualizar next_message_scheduled_at com o tempo restante
-                        from django.utils import timezone
-                        campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=remaining_seconds)
-                        campaign.save()
-                        
-                        # Enviar atualização WebSocket
-                        import asyncio
-                        try:
-                            loop = asyncio.get_event_loop()
-                            if loop.is_running():
-                                asyncio.create_task(self._send_campaign_update_websocket(campaign))
-                            else:
-                                asyncio.run(self._send_campaign_update_websocket(campaign))
-                        except Exception as e:
-                            logger.error(f"❌ [WEBSOCKET] Erro ao enviar atualização durante delay: {e}")
-                    
                     time.sleep(1)
                 
                 logger.info(f"✅ [DELAY] Delay concluído - processando {contact.contact.name}")
+                
+                # 🚀 GATILHO: Próximo disparo iniciando (frontend fará contagem)
+                self._send_websocket_update(campaign, 'campaign_update', {
+                    'event': 'next_message_starting',
+                    'contact_name': contact.contact.name,
+                    'contact_phone': contact.contact.phone
+                })
             
             # Verificar se campanha ainda está ativa após delay
             campaign.refresh_from_db()
@@ -480,20 +463,18 @@ class RabbitMQConsumer:
                     
                     campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
                 
-                # Enviar atualização via WebSocket
-                import asyncio
-                try:
-                    loop = asyncio.get_event_loop()
-                    if loop.is_running():
-                        # Se já há um loop rodando, usar create_task
-                        asyncio.create_task(self._send_campaign_update_websocket(campaign))
-                    else:
-                        # Se não há loop, usar run
-                        asyncio.run(self._send_campaign_update_websocket(campaign))
-                except Exception as e:
-                    logger.error(f"❌ [WEBSOCKET] Erro ao executar: {e}")
+                # WebSocket será enviado apenas nos gatilhos específicos (sem spam)
                 
                 logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
+                
+                # 🚀 GATILHO: Mensagem enviada - frontend atualiza e faz nova contagem
+                self._send_websocket_update(campaign, 'campaign_update', {
+                    'event': 'message_sent',
+                    'contact_name': contact.contact.name,
+                    'contact_phone': contact.contact.phone,
+                    'instance_name': instance.friendly_name
+                })
+                
                 return True
             else:
                 # Marcar como falha (após 3 tentativas)
@@ -505,6 +486,15 @@ class RabbitMQConsumer:
                     campaign.save(update_fields=['messages_failed'])
                 
                 logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas via {instance.friendly_name}")
+                
+                # 🚀 GATILHO: Falha no envio
+                self._send_websocket_update(campaign, 'campaign_update', {
+                    'event': 'message_failed',
+                    'contact_name': contact.contact.name,
+                    'contact_phone': contact.contact.phone,
+                    'instance_name': instance.friendly_name
+                })
+                
                 return False
                 
         except Exception as e:
@@ -884,6 +874,61 @@ class RabbitMQConsumer:
             logger.error(f"❌ [CONSUMER] Erro ao obter conteúdo: {e}")
             return f"Mensagem da campanha {campaign.name}"
     
+    def _send_websocket_update(self, campaign, event_type, extra_data=None):
+        """Envia atualização WebSocket apenas em eventos específicos"""
+        try:
+            import asyncio
+            
+            async def send_update():
+                from channels.layers import get_channel_layer
+                
+                # Dados básicos da campanha
+                campaign_data = {
+                    'type': event_type,
+                    'campaign_id': str(campaign.id),
+                    'campaign_name': campaign.name,
+                    'status': campaign.status,
+                    'messages_sent': campaign.messages_sent,
+                    'messages_delivered': campaign.messages_delivered,
+                    'messages_read': campaign.messages_read,
+                    'messages_failed': campaign.messages_failed,
+                    'total_contacts': campaign.total_contacts,
+                    'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
+                    'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
+                    'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
+                    'next_contact_name': campaign.next_contact_name,
+                    'next_contact_phone': campaign.next_contact_phone,
+                    'last_contact_name': campaign.last_contact_name,
+                    'last_contact_phone': campaign.last_contact_phone,
+                    'updated_at': campaign.updated_at.isoformat()
+                }
+                
+                # Adicionar dados extras se fornecidos
+                if extra_data:
+                    campaign_data.update(extra_data)
+                
+                # Enviar via WebSocket
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    await channel_layer.group_send(
+                        f"tenant_{campaign.tenant.id}",
+                        {
+                            "type": "broadcast_notification",
+                            "payload": campaign_data
+                        }
+                    )
+                    logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
+            
+            # Executar de forma assíncrona
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(send_update())
+            else:
+                asyncio.run(send_update())
+                
+        except Exception as e:
+            logger.error(f"❌ [WEBSOCKET] Erro ao enviar {event_type}: {e}")
+
     async def _send_campaign_update_websocket(self, campaign):
         """Envia atualização da campanha via WebSocket"""
         try:
