@@ -148,24 +148,35 @@ class EvolutionWebhookView(APIView):
             instance = data.get('data', {}).get('instance', 'default')
             
             # Extract message info if available
-            message_data = data.get('data', {}).get('messages', [])
-            update_data = data.get('data', {})
+            data_content = data.get('data', {})
             
             # Determine contact and message info
             contact_phone = None
             whatsapp_message_id = None
             
-            if message_data:
-                # For messages.upsert
-                for msg in message_data:
-                    key = msg.get('key', {})
-                    contact_phone = key.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
-                    whatsapp_message_id = key.get('id', '')
-                    break
-            elif update_data:
-                # For messages.update
-                contact_phone = update_data.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
-                whatsapp_message_id = update_data.get('messageId', '') or update_data.get('keyId', '')
+            if isinstance(data_content, dict):
+                # For messages.upsert, messages.update
+                message_data = data_content.get('messages', [])
+                
+                if message_data:
+                    # For messages.upsert
+                    for msg in message_data:
+                        key = msg.get('key', {})
+                        contact_phone = key.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
+                        whatsapp_message_id = key.get('id', '')
+                        break
+                else:
+                    # For messages.update
+                    contact_phone = data_content.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
+                    whatsapp_message_id = data_content.get('messageId', '') or data_content.get('keyId', '')
+                    
+            elif isinstance(data_content, list):
+                # For contacts.update, chats.update, etc.
+                if data_content and len(data_content) > 0:
+                    first_item = data_content[0]
+                    if isinstance(first_item, dict):
+                        contact_phone = first_item.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
+                        whatsapp_message_id = first_item.get('id', '') or first_item.get('messageId', '')
             
             # Create MongoDB document
             event_doc = {
