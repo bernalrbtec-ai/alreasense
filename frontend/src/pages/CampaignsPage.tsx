@@ -407,6 +407,48 @@ const CampaignsPage: React.FC = () => {
 
                 {/* Contador regressivo */}
                 <NextMessageCountdown campaign={campaign} />
+
+                {/* Informações de último e próximo disparo */}
+                {campaign.status === 'running' && (
+                  <div className="mt-4 space-y-2 text-sm">
+                    {campaign.next_contact_name && (
+                      <div className="flex items-center gap-2 text-blue-600">
+                        <Users className="h-4 w-4" />
+                        <span><strong>Próximo:</strong> {campaign.next_contact_name} ({campaign.next_contact_phone})</span>
+                      </div>
+                    )}
+                    {campaign.next_instance_name && (
+                      <div className="flex items-center gap-2 text-green-600">
+                        <Phone className="h-4 w-4" />
+                        <span><strong>Via:</strong> {campaign.next_instance_name}</span>
+                      </div>
+                    )}
+                    {campaign.last_contact_name && (
+                      <div className="flex items-center gap-2 text-gray-600">
+                        <Clock className="h-4 w-4" />
+                        <span><strong>Último:</strong> {campaign.last_contact_name} ({campaign.last_contact_phone})</span>
+                      </div>
+                    )}
+                    {campaign.last_message_sent_at && (
+                      <div className="flex items-center gap-2 text-gray-500">
+                        <Clock className="h-4 w-4" />
+                        <span><strong>Enviado em:</strong> {new Date(campaign.last_message_sent_at).toLocaleString('pt-BR')}</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Status de retry - mostrar quando há falhas recentes */}
+                {campaign.messages_failed > 0 && (
+                  <div className="mt-3 p-2 bg-orange-50 border border-orange-200 rounded-md">
+                    <div className="flex items-center gap-2 text-orange-700">
+                      <AlertCircle className="h-4 w-4" />
+                      <span className="text-sm font-medium">
+                        {campaign.messages_failed} mensagem(s) em retry
+                      </span>
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="flex gap-2">
