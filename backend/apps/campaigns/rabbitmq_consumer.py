@@ -365,15 +365,15 @@ class RabbitMQConsumer:
             if scheduled_delay > 0:
                 logger.info(f"⏰ [DELAY] Aguardando {scheduled_delay}s antes de processar {contact.contact.name}")
                 
-                       # Atualizar informações da próxima mensagem na campanha
-                       with transaction.atomic():
-                           campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=scheduled_delay)
-                           campaign.next_contact_name = contact.contact.name
-                           campaign.next_contact_phone = contact.contact.phone
-                           campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
-                       
-                       # Enviar atualização via WebSocket
-                       await self._send_campaign_update_websocket(campaign)
+                # Atualizar informações da próxima mensagem na campanha
+                with transaction.atomic():
+                    campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=scheduled_delay)
+                    campaign.next_contact_name = contact.contact.name
+                    campaign.next_contact_phone = contact.contact.phone
+                    campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+                
+                # Enviar atualização via WebSocket
+                await self._send_campaign_update_websocket(campaign)
                 
                 # Aplicar delay com contador regressivo
                 for remaining_seconds in range(scheduled_delay, 0, -1):
