@@ -59,9 +59,18 @@ class CampaignViewSet(viewsets.ModelViewSet):
         campaign.start()
         CampaignLog.log_campaign_started(campaign, request.user)
         
-        # Disparar task Celery para processar campanha
-        # from .tasks import process_campaign  # Removido - Celery deletado
-        # process_campaign.delay(str(campaign.id))  # TODO: Implementar com RabbitMQ
+        # Iniciar processamento via RabbitMQ Consumer
+        try:
+            from .rabbitmq_consumer import get_rabbitmq_consumer
+            consumer = get_rabbitmq_consumer()
+            if consumer:
+                success = consumer.start_campaign(str(campaign.id))
+                if not success:
+                    logger.error(f"❌ [VIEW] Falha ao iniciar campanha {campaign.name} no RabbitMQ")
+            else:
+                logger.error("❌ [VIEW] RabbitMQ Consumer não disponível")
+        except Exception as e:
+            logger.error(f"❌ [VIEW] Erro ao iniciar campanha via RabbitMQ: {e}")
         
         return Response({
             'message': 'Campanha iniciada com sucesso',

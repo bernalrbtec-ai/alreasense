@@ -309,12 +309,15 @@ class RabbitMQConsumer:
         try:
             available_instances = WhatsAppInstance.objects.filter(
                 is_active=True,
-                health_score__gte=campaign.pause_on_health_below
+                health_score__gte=campaign.pause_on_health_below,
+                tenant=campaign.tenant  # 🔒 FILTRO POR TENANT - SEGURANÇA CRÍTICA
             )
             
             if not available_instances.exists():
-                logger.warning("⚠️ [CONSUMER] Nenhuma instância disponível")
+                logger.warning(f"⚠️ [CONSUMER] Nenhuma instância disponível para tenant {campaign.tenant.name}")
                 return None
+            
+            logger.info(f"🔒 [SEGURANÇA] Selecionando instância para tenant: {campaign.tenant.name}")
             
             # Implementar lógica baseada no modo de rotação da campanha
             if campaign.rotation_mode == 'round_robin':
