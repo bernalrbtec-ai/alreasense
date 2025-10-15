@@ -179,48 +179,80 @@ class RabbitMQConsumer:
             return False
     
     def _populate_campaign_queue(self, campaign: Campaign):
-        """Popula fila com mensagens da campanha - APENAS PRIMEIRA MENSAGEM"""
+        """Popula fila com TODAS as mensagens da campanha - ROTAÇÃO + DELAYS PRÉ-CALCULADOS"""
         try:
-            # Buscar apenas o PRIMEIRO contato pendente
-            first_contact = CampaignContact.objects.filter(
+            # Buscar TODOS os contatos pendentes
+            contacts = CampaignContact.objects.filter(
                 campaign=campaign,
                 status__in=['pending', 'sending']
-            ).select_related('contact').first()
+            ).select_related('contact').order_by('created_at')
             
-            if not first_contact:
+            if not contacts.exists():
                 logger.warning(f"⚠️ [CONSUMER] Nenhum contato pendente para campanha {campaign.name}")
                 return
             
-            queue_name = f"campaign.{campaign.id}.messages"
+            # Buscar instâncias ativas do tenant
+            instances = WhatsAppInstance.objects.filter(
+                tenant=campaign.tenant,
+                is_active=True
+            ).order_by('created_at')
             
-            # Criar mensagem para o PRIMEIRO contato apenas
-            message = {
-                'campaign_id': str(campaign.id),
-                'contact_id': str(first_contact.contact.id),
-                'campaign_contact_id': str(first_contact.id),
-                'instance_id': 'SELECT_AT_PROCESSING',  # Selecionar na hora do processamento
-                'message_content': self._get_message_content(campaign),
-                'created_at': timezone.now().isoformat(),
-                'campaign_interval_min': campaign.interval_min,
-                'campaign_interval_max': campaign.interval_max,
-                'campaign_rotation_mode': campaign.rotation_mode
-            }
+            if not instances.exists():
+                logger.error(f"❌ [CONSUMER] Nenhuma instância ativa para tenant {campaign.tenant.name}")
+                return
+            
+            queue_name = f"campaign.{campaign.id}.messages"
+            instances_list = list(instances)
+            instance_count = len(instances_list)
+            
+            logger.info(f"🔄 [ROTATION] Populando fila: {contacts.count()} contatos, {instance_count} instâncias")
             
             # Verificar conexão antes de publicar
             self._check_connection()
             
-            # Publicar APENAS a primeira mensagem
-            self.channel.basic_publish(
-                exchange='campaigns',
-                routing_key=queue_name,
-                body=json.dumps(message),
-                properties=pika.BasicProperties(
-                    delivery_mode=2,  # Persistir mensagem
-                    timestamp=int(time.time())
+            # Processar CADA contato com rotação e delay
+            for i, contact in enumerate(contacts):
+                # Calcular delay aleatório para este contato
+                delay_seconds = random.randint(campaign.interval_min, campaign.interval_max)
+                
+                # Calcular índice da instância (round robin)
+                instance_index = i % instance_count
+                selected_instance = instances_list[instance_index]
+                
+                # Criar mensagem com rotação pré-calculada
+                message = {
+                    'campaign_id': str(campaign.id),
+                    'contact_id': str(contact.contact.id),
+                    'campaign_contact_id': str(contact.id),
+                    'contact_phone': contact.contact.phone,
+                    'message_content': self._get_message_content(campaign),
+                    'scheduled_delay_seconds': delay_seconds,
+                    'created_at': timezone.now().isoformat(),
+                    'campaign_settings': {
+                        'interval_min': campaign.interval_min,
+                        'interval_max': campaign.interval_max,
+                        'rotation_mode': campaign.rotation_mode,
+                        'selected_instances': [str(inst.id) for inst in instances_list],
+                        'instance_rotation_index': instance_index,  # ← ROTAÇÃO PRÉ-CALCULADA
+                        'selected_instance_id': str(selected_instance.id)  # ← INSTÂNCIA ESPECÍFICA
+                    }
+                }
+                
+                # Publicar com TTL baseado no delay (em milissegundos)
+                self.channel.basic_publish(
+                    exchange='campaigns',
+                    routing_key=queue_name,
+                    body=json.dumps(message),
+                    properties=pika.BasicProperties(
+                        delivery_mode=2,  # Persistir mensagem
+                        timestamp=int(time.time()),
+                        expiration=str(delay_seconds * 1000)  # ← TTL EM MILISSEGUNDOS
+                    )
                 )
-            )
+                
+                logger.info(f"📤 [QUEUE] Contato {i+1}/{contacts.count()}: {contact.contact.name} → {selected_instance.friendly_name} (delay: {delay_seconds}s)")
             
-            logger.info(f"📤 [QUEUE] Primeira mensagem adicionada à fila para {first_contact.contact.name}")
+            logger.info(f"✅ [ROTATION] Fila populada: {contacts.count()} mensagens com rotação e delays")
             
         except Exception as e:
             logger.error(f"❌ [CONSUMER] Erro ao popular fila: {e}")

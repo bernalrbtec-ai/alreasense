@@ -59,7 +59,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
     
     // Step 4: Instâncias e Rotação
     instance_ids: [] as string[],
-    rotation_mode: 'intelligent' as 'round_robin' | 'balanced' | 'intelligent',
+    rotation_mode: 'round_robin' as 'round_robin' | 'balanced' | 'intelligent',
     
     // Step 5: Configurações
     interval_min: 25,
@@ -100,7 +100,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         
         // Step 4: Instâncias e Rotação
         instance_ids: editingCampaign.instances || [],
-        rotation_mode: editingCampaign.rotation_mode || 'intelligent',
+        rotation_mode: editingCampaign.rotation_mode || 'round_robin',
         
         // Step 5: Configurações
         interval_min: editingCampaign.interval_min || 25,
@@ -851,7 +851,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                     </p>
                   </label>
 
-                  <label className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                  <label className={`p-4 border-2 rounded-lg cursor-not-allowed transition-colors opacity-50 ${
                     formData.rotation_mode === 'balanced' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
                   }`}>
                     <input
@@ -859,14 +859,15 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       checked={formData.rotation_mode === 'balanced'}
                       onChange={() => setFormData({ ...formData, rotation_mode: 'balanced' })}
                       className="mr-2"
+                      disabled
                     />
-                    <span className="font-medium">Balanceado</span>
+                    <span className="font-medium">Balanceado <span className="text-xs text-orange-600">(Em breve)</span></span>
                     <p className="text-xs text-gray-600 mt-1 ml-6">
                       Distribui com base na quantidade de mensagens enviadas por cada instância
                     </p>
                   </label>
 
-                  <label className={`p-4 border-2 rounded-lg cursor-pointer transition-colors ${
+                  <label className={`p-4 border-2 rounded-lg cursor-not-allowed transition-colors opacity-50 ${
                     formData.rotation_mode === 'intelligent' ? 'border-blue-500 bg-blue-50' : 'border-gray-200'
                   }`}>
                     <input
@@ -874,8 +875,9 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       checked={formData.rotation_mode === 'intelligent'}
                       onChange={() => setFormData({ ...formData, rotation_mode: 'intelligent' })}
                       className="mr-2"
+                      disabled
                     />
-                    <span className="font-medium">Inteligente (Recomendado) ⭐</span>
+                    <span className="font-medium">Inteligente <span className="text-xs text-orange-600">(Em breve)</span></span>
                     <p className="text-xs text-gray-600 mt-1 ml-6">
                       Prioriza instâncias com melhor health score e taxa de entrega
                     </p>
