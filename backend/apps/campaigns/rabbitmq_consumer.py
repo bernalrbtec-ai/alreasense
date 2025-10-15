@@ -448,13 +448,13 @@ class RabbitMQConsumer:
                         campaign.status = 'completed'
                         campaign.completed_at = timezone.now()
                     
-                       campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
-                   
-                   # Enviar atualização via WebSocket
-                   await self._send_campaign_update_websocket(campaign)
-                   
-                   logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
-                   return True
+                    campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
+                
+                # Enviar atualização via WebSocket
+                await self._send_campaign_update_websocket(campaign)
+                
+                logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
+                return True
             else:
                 # Marcar como falha (após 3 tentativas)
                 with transaction.atomic():
