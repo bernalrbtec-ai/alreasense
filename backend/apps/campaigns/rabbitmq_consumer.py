@@ -379,9 +379,8 @@ class RabbitMQConsumer:
             
             if not contact:
                 logger.info(f"✅ [AIO-PIKA] Campanha {campaign.id} - Todos os contatos processados")
-                # Pausar campanha
-                campaign.status = 'completed'
-                campaign.save()
+                # Atualizar status da campanha
+                await self._update_campaign_status_async(campaign, 'completed')
                 return
             
             # Processar mensagem
@@ -410,8 +409,7 @@ class RabbitMQConsumer:
             if not instance:
                 logger.error(f"❌ [AIO-PIKA] Nenhuma instância ativa para campanha {campaign.id}")
                 # Pausar campanha
-                campaign.status = 'paused'
-                campaign.save()
+                await self._update_campaign_status_async(campaign, 'paused')
                 return
             
             # Enviar mensagem
@@ -676,13 +674,16 @@ class RabbitMQConsumer:
             
             # Atualizar status no banco
             try:
-                campaign = Campaign.objects.get(id=campaign_id)
-                campaign.status = 'paused'
-                campaign.save()
-                logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} pausada com sucesso")
-                return True
-            except Campaign.DoesNotExist:
-                logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                campaign = await self._get_campaign_async(campaign_id)
+                if campaign:
+                    await self._update_campaign_status_async(campaign, 'paused')
+                    logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} pausada com sucesso")
+                    return True
+                else:
+                    logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha {campaign_id}: {e}")
                 return False
                 
         except Exception as e:
@@ -694,17 +695,36 @@ class RabbitMQConsumer:
         try:
             logger.info(f"▶️ [AIO-PIKA] Retomando campanha {campaign_id}")
             
-            # Atualizar status no banco
+            # Atualizar status no banco de forma síncrona
             try:
-                campaign = Campaign.objects.get(id=campaign_id)
-                campaign.status = 'active'
-                campaign.save()
+                from asgiref.sync import sync_to_async
+                import asyncio
                 
-                # Iniciar processamento
-                return self.start_campaign(campaign_id)
+                @sync_to_async
+                def update_campaign_status():
+                    try:
+                        campaign = Campaign.objects.get(id=campaign_id)
+                        campaign.status = 'active'
+                        campaign.save()
+                        return True
+                    except Campaign.DoesNotExist:
+                        return False
                 
-            except Campaign.DoesNotExist:
-                logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                # Executar de forma síncrona
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                success = loop.run_until_complete(update_campaign_status())
+                loop.close()
+                
+                if success:
+                    # Iniciar processamento
+                    return self.start_campaign(campaign_id)
+                else:
+                    logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                    return False
+                
+            except Exception as e:
+                logger.error(f"❌ [AIO-PIKA] Erro ao retomar campanha {campaign_id}: {e}")
                 return False
                 
         except Exception as e:
@@ -723,13 +743,16 @@ class RabbitMQConsumer:
             
             # Atualizar status no banco
             try:
-                campaign = Campaign.objects.get(id=campaign_id)
-                campaign.status = 'stopped'
-                campaign.save()
-                logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} parada com sucesso")
-                return True
-            except Campaign.DoesNotExist:
-                logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                campaign = await self._get_campaign_async(campaign_id)
+                if campaign:
+                    await self._update_campaign_status_async(campaign, 'stopped')
+                    logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} parada com sucesso")
+                    return True
+                else:
+                    logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                    return False
+            except Exception as e:
+                logger.error(f"❌ [AIO-PIKA] Erro ao parar campanha {campaign_id}: {e}")
                 return False
                 
         except Exception as e:
