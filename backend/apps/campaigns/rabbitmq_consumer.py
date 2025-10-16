@@ -672,16 +672,34 @@ class RabbitMQConsumer:
                 # A thread vai parar naturalmente no próximo loop
                 logger.info(f"🔄 [AIO-PIKA] Thread da campanha {campaign_id} será finalizada")
             
-            # Atualizar status no banco
+            # Atualizar status no banco de forma síncrona
             try:
-                campaign = await self._get_campaign_async(campaign_id)
-                if campaign:
-                    await self._update_campaign_status_async(campaign, 'paused')
+                from asgiref.sync import sync_to_async
+                import asyncio
+                
+                @sync_to_async
+                def update_campaign_status():
+                    try:
+                        campaign = Campaign.objects.get(id=campaign_id)
+                        campaign.status = 'paused'
+                        campaign.save()
+                        return True
+                    except Campaign.DoesNotExist:
+                        return False
+                
+                # Executar de forma síncrona
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                success = loop.run_until_complete(update_campaign_status())
+                loop.close()
+                
+                if success:
                     logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} pausada com sucesso")
                     return True
                 else:
                     logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
                     return False
+                
             except Exception as e:
                 logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha {campaign_id}: {e}")
                 return False
@@ -741,16 +759,34 @@ class RabbitMQConsumer:
                 # A thread vai parar naturalmente no próximo loop
                 logger.info(f"🔄 [AIO-PIKA] Thread da campanha {campaign_id} será finalizada")
             
-            # Atualizar status no banco
+            # Atualizar status no banco de forma síncrona
             try:
-                campaign = await self._get_campaign_async(campaign_id)
-                if campaign:
-                    await self._update_campaign_status_async(campaign, 'stopped')
+                from asgiref.sync import sync_to_async
+                import asyncio
+                
+                @sync_to_async
+                def update_campaign_status():
+                    try:
+                        campaign = Campaign.objects.get(id=campaign_id)
+                        campaign.status = 'stopped'
+                        campaign.save()
+                        return True
+                    except Campaign.DoesNotExist:
+                        return False
+                
+                # Executar de forma síncrona
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                success = loop.run_until_complete(update_campaign_status())
+                loop.close()
+                
+                if success:
                     logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} parada com sucesso")
                     return True
                 else:
                     logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
                     return False
+                
             except Exception as e:
                 logger.error(f"❌ [AIO-PIKA] Erro ao parar campanha {campaign_id}: {e}")
                 return False
