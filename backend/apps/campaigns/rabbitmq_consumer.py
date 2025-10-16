@@ -37,7 +37,7 @@ class RabbitMQConsumer:
         # Usar aio-pika para conexão assíncrona robusta
         logger.info("🔄 [AIO-PIKA] Iniciando sistema RabbitMQ assíncrono")
         # Conexão será estabelecida quando necessário (lazy connection)
-        logger.info("🔍 [DEBUG] Consumer inicializado - conexão será lazy")
+        logger.info("🔍 [DEBUG] Consumer inicializado - cada thread terá sua própria conexão")
     
     async def _connect_async(self):
         """Estabelece conexão assíncrona com RabbitMQ"""
@@ -140,17 +140,23 @@ class RabbitMQConsumer:
             logger.error(f"❌ [AIO-PIKA] Erro geral na configuração de filas: {e}")
             raise
     
-    async def _check_connection(self):
+    async def _check_connection(self, thread_connection=None):
         """Verifica se a conexão está ativa"""
         try:
-            logger.info("🔍 [DEBUG] Verificando conexão...")
-            logger.info(f"🔍 [DEBUG] Connection exists: {self.connection is not None}")
+            # Usar conexão da thread se fornecida, senão usar conexão global
+            connection = thread_connection if thread_connection else self.connection
             
-            if self.connection:
-                logger.info(f"🔍 [DEBUG] Connection is_closed: {self.connection.is_closed}")
+            logger.info("🔍 [DEBUG] Verificando conexão...")
+            logger.info(f"🔍 [DEBUG] Connection exists: {connection is not None}")
+            
+            if connection:
+                logger.info(f"🔍 [DEBUG] Connection is_closed: {connection.is_closed}")
                 
-            if not self.connection or self.connection.is_closed:
+            if not connection or connection.is_closed:
                 logger.warning("⚠️ [AIO-PIKA] Conexão perdida, reconectando...")
+                # Se for thread connection, não reconectar aqui
+                if thread_connection:
+                    return False
                 await self._connect_async()
                 return False
             
@@ -159,7 +165,8 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao verificar conexão: {e}")
             logger.error(f"🔍 [DEBUG] Tipo do erro na verificação: {type(e).__name__}")
-            await self._connect_async()
+            if not thread_connection:
+                await self._connect_async()
             return False
     
     def start_campaign(self, campaign_id: str):
@@ -227,8 +234,23 @@ class RabbitMQConsumer:
     
     async def _process_campaign_async(self, campaign_id: str):
         """Processa campanha de forma assíncrona"""
+        thread_connection = None
+        thread_channel = None
+        
         try:
             logger.info(f"🔄 [AIO-PIKA] Iniciando processamento da campanha {campaign_id}")
+            
+            # Criar conexão própria para esta thread
+            logger.info(f"🔍 [DEBUG] Criando conexão própria para campanha {campaign_id}")
+            thread_connection = await self._create_thread_connection()
+            if not thread_connection:
+                logger.error(f"❌ [AIO-PIKA] Falha ao criar conexão para campanha {campaign_id}")
+                return
+            
+            thread_channel = await thread_connection.channel()
+            await thread_channel.set_qos(prefetch_count=1)
+            logger.info(f"✅ [AIO-PIKA] Conexão criada para campanha {campaign_id}")
+            
             loop_count = 0
             
             while True:
@@ -236,12 +258,19 @@ class RabbitMQConsumer:
                     loop_count += 1
                     logger.info(f"🔍 [DEBUG] Loop {loop_count} da campanha {campaign_id}")
                     
-                    # Verificar conexão
+                    # Verificar conexão da thread
                     logger.info(f"🔍 [DEBUG] Verificando conexão para campanha {campaign_id}")
-                    if not await self._check_connection():
-                        logger.warning("⚠️ [AIO-PIKA] Aguardando reconexão...")
-                        await asyncio.sleep(5)
-                        continue
+                    if not await self._check_connection(thread_connection):
+                        logger.warning("⚠️ [AIO-PIKA] Conexão da thread perdida, recriando...")
+                        # Recriar conexão da thread
+                        thread_connection = await self._create_thread_connection()
+                        if thread_connection:
+                            thread_channel = await thread_connection.channel()
+                            await thread_channel.set_qos(prefetch_count=1)
+                            logger.info(f"✅ [AIO-PIKA] Conexão da thread recriada para campanha {campaign_id}")
+                        else:
+                            await asyncio.sleep(5)
+                            continue
                     
                     # Buscar campanha
                     logger.info(f"🔍 [DEBUG] Buscando campanha {campaign_id} no banco")
@@ -273,6 +302,41 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro crítico no processamento da campanha {campaign_id}: {e}")
             logger.error(f"🔍 [DEBUG] Tipo do erro crítico: {type(e).__name__}")
+        finally:
+            # Fechar conexão da thread
+            if thread_channel:
+                try:
+                    await thread_channel.close()
+                except:
+                    pass
+            if thread_connection:
+                try:
+                    await thread_connection.close()
+                except:
+                    pass
+            logger.info(f"🔍 [DEBUG] Conexão da thread fechada para campanha {campaign_id}")
+    
+    async def _create_thread_connection(self):
+        """Cria uma conexão específica para uma thread"""
+        try:
+            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+            
+            logger.info("🔍 [DEBUG] Criando conexão da thread...")
+            connection = await aio_pika.connect_robust(
+                rabbitmq_url,
+                heartbeat=0,
+                blocked_connection_timeout=0,
+                socket_timeout=10,
+                retry_delay=1,
+                connection_attempts=1
+            )
+            
+            logger.info("✅ [AIO-PIKA] Conexão da thread criada com sucesso")
+            return connection
+            
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao criar conexão da thread: {e}")
+            return None
     
     async def _get_campaign_async(self, campaign_id: str):
         """Busca campanha de forma assíncrona"""
@@ -300,7 +364,9 @@ class RabbitMQConsumer:
             
             @sync_to_async
             def get_next_contact():
-                return campaign.contacts.filter(
+                from .models import CampaignContact
+                return CampaignContact.objects.filter(
+                    campaign=campaign,
                     status='pending'
                 ).order_by('created_at').first()
             
