@@ -36,7 +36,7 @@ class RabbitMQConsumer:
         
         # Usar aio-pika para conexão assíncrona robusta
         logger.info("🔄 [AIO-PIKA] Iniciando sistema RabbitMQ assíncrono")
-        asyncio.create_task(self._connect_async())
+        # Conexão será estabelecida quando necessário (lazy connection)
     
     async def _connect_async(self):
         """Estabelece conexão assíncrona com RabbitMQ"""
@@ -317,68 +317,215 @@ class RabbitMQConsumer:
             logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem: {e}")
     
     async def _send_whatsapp_message_async(self, campaign, contact, instance):
-        """Envia mensagem WhatsApp de forma assíncrona"""
+        """Envia mensagem WhatsApp com retry e controle de erros"""
+        max_retries = 3
+        base_delay = 2
+        
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Verificar se instância ainda está ativa
+                if not await self._check_instance_active(instance):
+                    logger.error(f"❌ [AIO-PIKA] Instância {instance.instance_id} inativa - pausando campanha")
+                    await self._auto_pause_campaign(campaign, "instância desconectada")
+                    return False
+                
+                # Buscar mensagem da campanha
+                from asgiref.sync import sync_to_async
+                
+                @sync_to_async
+                def get_message():
+                    return campaign.messages.first()
+                
+                message = await get_message()
+                
+                if not message:
+                    logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
+                    return False
+                
+                # Preparar dados da mensagem
+                message_data = {
+                    "number": contact.phone,
+                    "text": message.content,
+                    "instance": instance.instance_id
+                }
+                
+                # Enviar via Evolution API
+                url = f"{instance.server_url}/message/sendText/{instance.instance_id}"
+                headers = {
+                    "Content-Type": "application/json",
+                    "apikey": instance.api_key
+                }
+                
+                # Usar requests de forma assíncrona
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: requests.post(url, json=message_data, headers=headers, timeout=30)
+                )
+                
+                if response.status_code == 200:
+                    response_data = response.json()
+                    if response_data.get('sent'):
+                        logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact.phone} (tentativa {attempt})")
+                        
+                        # Salvar message_id
+                        message_id = response_data.get('messageId')
+                        if message_id:
+                            @sync_to_async
+                            def save_message_id():
+                                contact.whatsapp_message_id = message_id
+                                contact.save()
+                            
+                            await save_message_id()
+                        
+                        # Log de sucesso
+                        await self._log_message_sent(campaign, contact, instance, message_id)
+                        
+                        return True
+                    else:
+                        error_msg = response_data.get('message', 'Erro desconhecido')
+                        logger.error(f"❌ [AIO-PIKA] API retornou erro (tentativa {attempt}): {error_msg}")
+                        
+                        # Verificar se é erro de instância inativa
+                        if 'instance' in error_msg.lower() or 'disconnected' in error_msg.lower():
+                            await self._auto_pause_campaign(campaign, f"instância desconectada: {error_msg}")
+                            return False
+                        
+                        # Tentar novamente se não for erro de instância
+                        if attempt < max_retries:
+                            delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
+                            logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            # Log de falha final
+                            await self._log_message_failed(campaign, contact, instance, error_msg)
+                            return False
+                else:
+                    logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} (tentativa {attempt}): {response.text}")
+                    
+                    # Verificar se é erro de instância inativa (500 pode indicar instância offline)
+                    if response.status_code == 500:
+                        await self._auto_pause_campaign(campaign, "instância retornou erro 500")
+                        return False
+                    
+                    # Tentar novamente se não for erro crítico
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
+                        logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        # Log de falha final
+                        await self._log_message_failed(campaign, contact, instance, f"HTTP {response.status_code}")
+                        return False
+                        
+            except Exception as e:
+                logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem WhatsApp (tentativa {attempt}): {e}")
+                
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
+                    logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    # Log de falha final
+                    await self._log_message_failed(campaign, contact, instance, str(e))
+                    return False
+        
+        return False
+    
+    async def _check_instance_active(self, instance):
+        """Verifica se a instância está ativa"""
         try:
-            # Buscar mensagem da campanha
             from asgiref.sync import sync_to_async
             
             @sync_to_async
-            def get_message():
-                return campaign.messages.first()
-            
-            message = await get_message()
-            
-            if not message:
-                logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
-                return False
-            
-            # Preparar dados da mensagem
-            message_data = {
-                "number": contact.phone,
-                "text": message.content,
-                "instance": instance.instance_id
-            }
-            
-            # Enviar via Evolution API
-            url = f"{instance.server_url}/message/sendText/{instance.instance_id}"
-            headers = {
-                "Content-Type": "application/json",
-                "apikey": instance.api_key
-            }
-            
-            # Usar requests de forma assíncrona
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: requests.post(url, json=message_data, headers=headers, timeout=30)
-            )
-            
-            if response.status_code == 200:
-                response_data = response.json()
-                if response_data.get('sent'):
-                    logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact.phone}")
-                    
-                    # Salvar message_id
-                    message_id = response_data.get('messageId')
-                    if message_id:
-                        @sync_to_async
-                        def save_message_id():
-                            contact.whatsapp_message_id = message_id
-                            contact.save()
-                        
-                        await save_message_id()
-                    
-                    return True
-                else:
-                    logger.error(f"❌ [AIO-PIKA] API retornou erro: {response_data}")
+            def check_instance():
+                # Buscar instância atualizada do banco
+                try:
+                    current_instance = WhatsAppInstance.objects.get(id=instance.id)
+                    return current_instance.is_active
+                except WhatsAppInstance.DoesNotExist:
                     return False
-            else:
-                logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code}: {response.text}")
-                return False
-                
+            
+            return await check_instance()
+            
         except Exception as e:
-            logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem WhatsApp: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao verificar instância: {e}")
             return False
+    
+    async def _auto_pause_campaign(self, campaign, reason):
+        """Pausa campanha automaticamente"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def pause_campaign():
+                campaign.status = 'paused'
+                campaign.save()
+                
+                # Log da pausa automática
+                CampaignLog.objects.create(
+                    campaign=campaign,
+                    event_type='campaign_auto_paused',
+                    message=f'Campanha pausada automaticamente: {reason}',
+                    extra_data={'reason': reason}
+                )
+            
+            await pause_campaign()
+            logger.warning(f"⚠️ [AIO-PIKA] Campanha {campaign.id} pausada automaticamente: {reason}")
+            
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha automaticamente: {e}")
+    
+    async def _log_message_sent(self, campaign, contact, instance, message_id):
+        """Log de mensagem enviada"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def create_log():
+                CampaignLog.objects.create(
+                    campaign=campaign,
+                    event_type='message_sent',
+                    message=f'Mensagem enviada para {contact.phone}',
+                    extra_data={
+                        'contact_id': str(contact.id),
+                        'phone': contact.phone,
+                        'instance_id': instance.instance_id,
+                        'message_id': message_id
+                    }
+                )
+            
+            await create_log()
+            
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem enviada: {e}")
+    
+    async def _log_message_failed(self, campaign, contact, instance, error_msg):
+        """Log de mensagem falhada"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def create_log():
+                CampaignLog.objects.create(
+                    campaign=campaign,
+                    event_type='message_failed',
+                    message=f'Falha ao enviar mensagem para {contact.phone}: {error_msg}',
+                    extra_data={
+                        'contact_id': str(contact.id),
+                        'phone': contact.phone,
+                        'instance_id': instance.instance_id,
+                        'error': error_msg
+                    }
+                )
+            
+            await create_log()
+            
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem falhada: {e}")
     
     def pause_campaign(self, campaign_id: str):
         """Pausa uma campanha"""
@@ -504,3 +651,8 @@ class RabbitMQConsumer:
 
 # Instância global
 consumer = RabbitMQConsumer()
+
+
+def get_rabbitmq_consumer():
+    """Retorna a instância global do consumer"""
+    return consumer
