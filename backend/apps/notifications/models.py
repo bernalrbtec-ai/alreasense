@@ -739,8 +739,9 @@ class WhatsAppInstance(models.Model):
         if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
             self.last_error = 'Servidor Evolution não configurado'
             self.status = 'error'
+            self.connection_state = 'error'
             self.save()
-            return
+            return False
         
         api_url = evolution_server.base_url
         api_master = evolution_server.api_key  # ← API MASTER
@@ -760,20 +761,60 @@ class WhatsAppInstance(models.Model):
                     self.status = 'active'
                     self.connection_state = 'open'
                     self.last_error = ''
+                    self.last_check = timezone.now()
+                    self.save()
+                    return True
                 else:
                     self.status = 'inactive'
                     self.connection_state = state
+                    # Detectar problemas específicos
+                    self._detect_specific_problems(response.text)
+                    self.last_check = timezone.now()
+                    self.save()
+                    return False
             else:
                 self.status = 'error'
+                self.connection_state = 'error'
                 self.last_error = f"HTTP {response.status_code}: {response.text[:100]}"
+                self._detect_specific_problems(response.text)
+                self.last_check = timezone.now()
+                self.save()
+                return False
         
         except Exception as e:
             self.status = 'error'
             self.last_error = str(e)
+            self.connection_state = 'error'
+            self.last_check = timezone.now()
+            self.save()
+            return False
+
+    def _detect_specific_problems(self, response_text: str):
+        """
+        Detecta problemas específicos baseado na resposta da API.
+        """
+        if not response_text:
+            return
+            
+        response_lower = response_text.lower()
         
-        from django.utils import timezone
-        self.last_check = timezone.now()
-        self.save()
+        # Problemas conhecidos
+        if 'suspended' in response_lower or 'suspenso' in response_lower:
+            self.last_error = 'Conta WhatsApp suspensa - verifique com o provedor'
+        elif 'unauthorized' in response_lower or '401' in response_text:
+            self.last_error = 'API Key inválida ou expirada'
+        elif 'forbidden' in response_lower or '403' in response_text:
+            self.last_error = 'Acesso negado - verifique permissões da API'
+        elif 'not found' in response_lower or '404' in response_text:
+            self.last_error = 'Instância não encontrada no servidor Evolution'
+        elif 'timeout' in response_lower:
+            self.last_error = 'Timeout na conexão - servidor Evolution indisponível'
+        elif 'connection closed' in response_lower:
+            self.last_error = 'Conexão fechada - WhatsApp desconectado'
+        elif 'instance not connected' in response_lower:
+            self.last_error = 'Instância não conectada - gere novo QR Code'
+        elif 'phone not registered' in response_lower:
+            self.last_error = 'Número não registrado no WhatsApp'
     
     # ========== Health Tracking Methods ==========
     

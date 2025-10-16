@@ -323,9 +323,10 @@ class RabbitMQConsumer:
             # Verificar se estamos em desenvolvimento local (localhost)
             import socket
             hostname = socket.gethostname()
-            if settings.DEBUG and ('localhost' in hostname or '127.0.0.1' in hostname):
-                logger.info("🔍 [DEBUG] Ambiente local - RabbitMQ desabilitado")
-                return None
+            # Permitir RabbitMQ em desenvolvimento local para testes
+            # if settings.DEBUG and ('localhost' in hostname or '127.0.0.1' in hostname):
+            #     logger.info("🔍 [DEBUG] Ambiente local - RabbitMQ desabilitado")
+            #     return None
             
             rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672')
             
@@ -398,6 +399,21 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao processar próxima mensagem: {e}")
     
+    async def _update_contact_status_async(self, contact, status):
+        """Atualiza o status do contato de forma assíncrona"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def update_status():
+                contact.status = status
+                contact.save()
+            
+            await update_status()
+            logger.info(f"✅ [AIO-PIKA] Status do contato {contact.id} atualizado para {status}")
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao atualizar status do contato {contact.id}: {e}")
+
     async def _update_campaign_status_async(self, campaign, status):
         """Atualiza o status da campanha de forma assíncrona"""
         try:
