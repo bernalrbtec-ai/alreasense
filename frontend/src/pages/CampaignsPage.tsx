@@ -93,7 +93,8 @@ const CampaignsPage: React.FC = () => {
         setLoading(true)
       }
       const response = await api.get('/campaigns/')
-      const campaigns = response.data.results || response.data
+      const campaigns = Array.isArray(response.data.results) ? response.data.results : 
+                       Array.isArray(response.data) ? response.data : []
       
       // Buscar informações de retry para campanhas em execução
       const campaignsWithRetry = await Promise.all(
@@ -277,7 +278,7 @@ const CampaignsPage: React.FC = () => {
   }
 
 
-  const filteredCampaigns = campaigns
+  const filteredCampaigns = Array.isArray(campaigns) ? campaigns
     .filter(campaign =>
     campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
@@ -302,7 +303,7 @@ const CampaignsPage: React.FC = () => {
 
       // Se mesmo status, ordenar por data de criação (mais recentes primeiro)
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
+    }) : []
 
   if (loading) {
     return (

@@ -136,7 +136,8 @@ const CampaignsPage: React.FC = () => {
     try {
       setLoading(true)
       const response = await api.get('/campaigns/')
-      setCampaigns(response.data.results || response.data)
+      setCampaigns(Array.isArray(response.data.results) ? response.data.results : 
+                   Array.isArray(response.data) ? response.data : [])
     } catch (error: any) {
       console.error('Erro ao buscar campanhas:', error)
       showErrorToast('buscar', 'Campanhas', error)
@@ -310,11 +311,11 @@ const CampaignsPage: React.FC = () => {
     }
   }
 
-  const filteredCampaigns = campaigns
+  const filteredCampaigns = Array.isArray(campaigns) ? campaigns
     .filter(campaign =>
       campaign.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+    ) : []
     .sort((a, b) => {
       // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
       const statusOrder = {
@@ -335,7 +336,7 @@ const CampaignsPage: React.FC = () => {
 
       // Se mesmo status, ordenar por data de criação (mais recentes primeiro)
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    })
+    }) : []
 
   if (loading) {
     return (
