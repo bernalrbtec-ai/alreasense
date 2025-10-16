@@ -59,3 +59,13 @@ def debug_campaigns(request):
     debug_info['other_tenants_campaigns'] = list(other_tenants_campaigns)
     
     return Response(debug_info)
+
+@api_view(['GET'])
+@permission_classes([AllowAny])  # Temporariamente público para debug
+def test_retry_endpoint(request, campaign_id):
+    """Endpoint de teste para verificar se as rotas estão funcionando"""
+    return Response({
+        'message': f'Endpoint de teste funcionando para campanha {campaign_id}',
+        'campaign_id': campaign_id,
+        'timestamp': timezone.now().isoformat()
+    })
