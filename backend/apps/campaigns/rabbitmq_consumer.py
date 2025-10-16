@@ -409,7 +409,13 @@ class RabbitMQConsumer:
         try:
             from asgiref.sync import sync_to_async
             
-            logger.info(f"📤 [AIO-PIKA] Enviando mensagem para {contact.contact.phone} - Campanha {campaign.id}")
+            # Buscar telefone de forma assíncrona
+            @sync_to_async
+            def get_contact_phone():
+                return contact.contact.phone
+            
+            contact_phone = await get_contact_phone()
+            logger.info(f"📤 [AIO-PIKA] Enviando mensagem para {contact_phone} - Campanha {campaign.id}")
             
             # Buscar instância ativa
             @sync_to_async
@@ -446,7 +452,7 @@ class RabbitMQConsumer:
                 await asyncio.sleep(delay_seconds)
                 
             else:
-                logger.error(f"❌ [AIO-PIKA] Falha ao enviar mensagem para {contact.contact.phone}")
+                logger.error(f"❌ [AIO-PIKA] Falha ao enviar mensagem para {contact_phone}")
                 # Marcar como falha
                 @sync_to_async
                 def mark_failed():
@@ -467,7 +473,13 @@ class RabbitMQConsumer:
         max_retries = 3
         base_delay = 2
         
-        logger.info(f"🔍 [DEBUG] Iniciando envio de mensagem para {contact.contact.phone}")
+        # Buscar telefone de forma assíncrona
+        @sync_to_async
+        def get_contact_phone():
+            return contact.contact.phone
+        
+        contact_phone = await get_contact_phone()
+        logger.info(f"🔍 [DEBUG] Iniciando envio de mensagem para {contact_phone}")
         logger.info(f"🔍 [DEBUG] Campanha: {campaign.name} - Instância: {instance.instance_id}")
         
         for attempt in range(1, max_retries + 1):
@@ -498,7 +510,7 @@ class RabbitMQConsumer:
                 
                 # Preparar dados da mensagem
                 message_data = {
-                    "number": contact.contact.phone,
+                    "number": contact_phone,
                     "text": message.content,
                     "instance": instance.instance_id
                 }
@@ -520,7 +532,7 @@ class RabbitMQConsumer:
                 if response.status_code == 200:
                     response_data = response.json()
                     if response_data.get('sent'):
-                        logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact.contact.phone} (tentativa {attempt})")
+                        logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact_phone} (tentativa {attempt})")
                         
                         # Salvar message_id
                         message_id = response_data.get('messageId')
@@ -533,7 +545,7 @@ class RabbitMQConsumer:
                             await save_message_id()
                         
                         # Log de sucesso
-                        await self._log_message_sent(campaign, contact, instance, message_id)
+                        await self._log_message_sent(campaign, contact, instance, message_id, contact_phone)
                         
                         return True
                     else:
@@ -553,7 +565,7 @@ class RabbitMQConsumer:
                             continue
                         else:
                             # Log de falha final
-                            await self._log_message_failed(campaign, contact, instance, error_msg)
+                            await self._log_message_failed(campaign, contact, instance, error_msg, contact_phone)
                             return False
                 else:
                     logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} (tentativa {attempt}): {response.text}")
@@ -571,7 +583,7 @@ class RabbitMQConsumer:
                         continue
                     else:
                         # Log de falha final
-                        await self._log_message_failed(campaign, contact, instance, f"HTTP {response.status_code}")
+                        await self._log_message_failed(campaign, contact, instance, f"HTTP {response.status_code}", contact_phone)
                         return False
 
             except Exception as e:
@@ -588,7 +600,7 @@ class RabbitMQConsumer:
                     continue
                 else:
                     # Log de falha final
-                    await self._log_message_failed(campaign, contact, instance, str(e))
+                    await self._log_message_failed(campaign, contact, instance, str(e), contact_phone)
                     return False
         
         return False
@@ -637,7 +649,7 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha automaticamente: {e}")
     
-    async def _log_message_sent(self, campaign, contact, instance, message_id):
+    async def _log_message_sent(self, campaign, contact, instance, message_id, contact_phone):
         """Log de mensagem enviada"""
         try:
             from asgiref.sync import sync_to_async
@@ -647,10 +659,10 @@ class RabbitMQConsumer:
                 CampaignLog.objects.create(
                     campaign=campaign,
                     event_type='message_sent',
-                    message=f'Mensagem enviada para {contact.contact.phone}',
+                    message=f'Mensagem enviada para {contact_phone}',
                     extra_data={
                         'contact_id': str(contact.id),
-                        'phone': contact.contact.phone,
+                        'phone': contact_phone,
                         'instance_id': instance.instance_id,
                         'message_id': message_id
                     }
@@ -661,7 +673,7 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem enviada: {e}")
     
-    async def _log_message_failed(self, campaign, contact, instance, error_msg):
+    async def _log_message_failed(self, campaign, contact, instance, error_msg, contact_phone):
         """Log de mensagem falhada"""
         try:
             from asgiref.sync import sync_to_async
@@ -671,10 +683,10 @@ class RabbitMQConsumer:
                 CampaignLog.objects.create(
                     campaign=campaign,
                     event_type='message_failed',
-                    message=f'Falha ao enviar mensagem para {contact.contact.phone}: {error_msg}',
+                    message=f'Falha ao enviar mensagem para {contact_phone}: {error_msg}',
                     extra_data={
                         'contact_id': str(contact.id),
-                        'phone': contact.contact.phone,
+                        'phone': contact_phone,
                         'instance_id': instance.instance_id,
                         'error': error_msg
                     }
