@@ -36,14 +36,14 @@ class Command(BaseCommand):
                 )
                 return
                 
-            consumer.start()
+            # Consumer com aio-pika não precisa de start() - é lazy connection
             
             if auto_start:
                 self.stdout.write('🔄 Iniciando campanhas pendentes...')
                 self._start_pending_campaigns()
             
             self.stdout.write(
-                self.style.SUCCESS('✅ RabbitMQ Consumer iniciado com sucesso!')
+                self.style.SUCCESS('✅ RabbitMQ Consumer (aio-pika) iniciado com sucesso!')
             )
             self.stdout.write('📊 Consumer está rodando. Pressione Ctrl+C para parar.')
             
@@ -51,7 +51,7 @@ class Command(BaseCommand):
             while True:
                 try:
                     # Verificar campanhas ativas
-                    active_campaigns = consumer.get_active_campaigns()
+                    active_campaigns = list(consumer.consumer_threads.keys())
                     
                     if active_campaigns:
                         self.stdout.write(

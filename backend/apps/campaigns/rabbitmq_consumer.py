@@ -43,6 +43,8 @@ class RabbitMQConsumer:
         max_attempts = 10
         base_delay = 1
         
+        logger.info("🔍 [DEBUG] Iniciando processo de conexão aio-pika")
+        
         for attempt in range(1, max_attempts + 1):
             try:
                 logger.info(f"🔄 [AIO-PIKA] Tentativa {attempt}/{max_attempts} de conexão")
@@ -55,7 +57,9 @@ class RabbitMQConsumer:
                 
                 # Tentar conexão com aio-pika
                 rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+                logger.info(f"🔍 [DEBUG] RabbitMQ URL: {rabbitmq_url[:50]}...")
                 
+                logger.info("🔍 [DEBUG] Chamando aio_pika.connect_robust...")
                 self.connection = await aio_pika.connect_robust(
                     rabbitmq_url,
                     heartbeat=0,  # Desabilitar heartbeat
@@ -64,18 +68,30 @@ class RabbitMQConsumer:
                     retry_delay=1,
                     connection_attempts=1
                 )
+                logger.info("🔍 [DEBUG] Conexão aio_pika.connect_robust estabelecida")
                 
+                logger.info("🔍 [DEBUG] Criando channel...")
                 self.channel = await self.connection.channel()
+                logger.info("🔍 [DEBUG] Channel criado")
+                
+                logger.info("🔍 [DEBUG] Configurando QoS...")
                 await self.channel.set_qos(prefetch_count=1)
+                logger.info("🔍 [DEBUG] QoS configurado")
                 
                 # Configurar filas
+                logger.info("🔍 [DEBUG] Configurando filas...")
                 await self._setup_queues_async()
+                logger.info("🔍 [DEBUG] Filas configuradas")
                 
                 logger.info("✅ [AIO-PIKA] Conexão RabbitMQ estabelecida com sucesso!")
+                logger.info(f"🔍 [DEBUG] Connection state: {self.connection.is_closed}")
+                logger.info(f"🔍 [DEBUG] Channel state: {self.channel.is_closed}")
                 return
                 
             except Exception as e:
                 logger.error(f"❌ [AIO-PIKA] Tentativa {attempt} falhou: {e}")
+                logger.error(f"🔍 [DEBUG] Tipo do erro: {type(e).__name__}")
+                logger.error(f"🔍 [DEBUG] Detalhes do erro: {str(e)}")
                 
                 if attempt == max_attempts:
                     logger.error("❌ [AIO-PIKA] Todas as tentativas falharam")
@@ -126,13 +142,22 @@ class RabbitMQConsumer:
     async def _check_connection(self):
         """Verifica se a conexão está ativa"""
         try:
+            logger.info("🔍 [DEBUG] Verificando conexão...")
+            logger.info(f"🔍 [DEBUG] Connection exists: {self.connection is not None}")
+            
+            if self.connection:
+                logger.info(f"🔍 [DEBUG] Connection is_closed: {self.connection.is_closed}")
+                
             if not self.connection or self.connection.is_closed:
                 logger.warning("⚠️ [AIO-PIKA] Conexão perdida, reconectando...")
                 await self._connect_async()
                 return False
+            
+            logger.info("🔍 [DEBUG] Conexão está ativa")
             return True
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao verificar conexão: {e}")
+            logger.error(f"🔍 [DEBUG] Tipo do erro na verificação: {type(e).__name__}")
             await self._connect_async()
             return False
     
@@ -140,81 +165,113 @@ class RabbitMQConsumer:
         """Inicia o processamento de uma campanha"""
         try:
             logger.info(f"🚀 [AIO-PIKA] Iniciando campanha {campaign_id}")
+            logger.info(f"🔍 [DEBUG] Threads ativas: {list(self.consumer_threads.keys())}")
             
             # Verificar se já está rodando
             if campaign_id in self.consumer_threads:
-                logger.warning(f"⚠️ [AIO-PIKA] Campanha {campaign_id} já está rodando")
-                return False
+                thread = self.consumer_threads[campaign_id]
+                if thread.is_alive():
+                    logger.warning(f"⚠️ [AIO-PIKA] Campanha {campaign_id} já está rodando")
+                    return False
+                else:
+                    logger.info(f"🔍 [DEBUG] Thread da campanha {campaign_id} está morta, removendo...")
+                    del self.consumer_threads[campaign_id]
             
+            logger.info(f"🔍 [DEBUG] Criando thread para campanha {campaign_id}")
             # Criar thread para processar a campanha
             thread = threading.Thread(
                 target=self._run_campaign_async,
                 args=(campaign_id,),
                 daemon=True
             )
+            
+            logger.info(f"🔍 [DEBUG] Iniciando thread para campanha {campaign_id}")
             thread.start()
             
             self.consumer_threads[campaign_id] = thread
             logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} iniciada com sucesso")
+            logger.info(f"🔍 [DEBUG] Threads ativas após start: {list(self.consumer_threads.keys())}")
             return True
             
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao iniciar campanha {campaign_id}: {e}")
+            logger.error(f"🔍 [DEBUG] Tipo do erro no start_campaign: {type(e).__name__}")
             return False
     
     def _run_campaign_async(self, campaign_id: str):
         """Executa campanha em loop assíncrono"""
         try:
+            logger.info(f"🔍 [DEBUG] Iniciando _run_campaign_async para {campaign_id}")
+            
             # Criar novo event loop para a thread
+            logger.info(f"🔍 [DEBUG] Criando novo event loop para {campaign_id}")
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             
+            logger.info(f"🔍 [DEBUG] Event loop criado, executando campanha {campaign_id}")
             # Executar campanha
             loop.run_until_complete(self._process_campaign_async(campaign_id))
             
+            logger.info(f"🔍 [DEBUG] Campanha {campaign_id} finalizada normalmente")
+            
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro no processamento da campanha {campaign_id}: {e}")
+            logger.error(f"🔍 [DEBUG] Tipo do erro no _run_campaign_async: {type(e).__name__}")
         finally:
             # Limpar thread
+            logger.info(f"🔍 [DEBUG] Limpando thread da campanha {campaign_id}")
             if campaign_id in self.consumer_threads:
                 del self.consumer_threads[campaign_id]
+                logger.info(f"🔍 [DEBUG] Thread da campanha {campaign_id} removida")
     
     async def _process_campaign_async(self, campaign_id: str):
         """Processa campanha de forma assíncrona"""
         try:
             logger.info(f"🔄 [AIO-PIKA] Iniciando processamento da campanha {campaign_id}")
+            loop_count = 0
             
             while True:
                 try:
+                    loop_count += 1
+                    logger.info(f"🔍 [DEBUG] Loop {loop_count} da campanha {campaign_id}")
+                    
                     # Verificar conexão
+                    logger.info(f"🔍 [DEBUG] Verificando conexão para campanha {campaign_id}")
                     if not await self._check_connection():
                         logger.warning("⚠️ [AIO-PIKA] Aguardando reconexão...")
                         await asyncio.sleep(5)
                         continue
                     
                     # Buscar campanha
+                    logger.info(f"🔍 [DEBUG] Buscando campanha {campaign_id} no banco")
                     campaign = await self._get_campaign_async(campaign_id)
                     if not campaign:
                         logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
                         break
                     
+                    logger.info(f"🔍 [DEBUG] Campanha encontrada: {campaign.name} - Status: {campaign.status}")
+                    
                     # Verificar status
                     if campaign.status not in ['active', 'running']:
-                        logger.info(f"⏸️ [AIO-PIKA] Campanha {campaign_id} pausada/parada")
+                        logger.info(f"⏸️ [AIO-PIKA] Campanha {campaign_id} pausada/parada (status: {campaign.status})")
                         break
                     
                     # Processar próxima mensagem
+                    logger.info(f"🔍 [DEBUG] Processando próxima mensagem da campanha {campaign_id}")
                     await self._process_next_message_async(campaign)
                     
                     # Aguardar antes da próxima iteração
+                    logger.info(f"🔍 [DEBUG] Aguardando 1s antes da próxima iteração")
                     await asyncio.sleep(1)
                     
                 except Exception as e:
                     logger.error(f"❌ [AIO-PIKA] Erro no loop da campanha {campaign_id}: {e}")
+                    logger.error(f"🔍 [DEBUG] Tipo do erro no loop: {type(e).__name__}")
                     await asyncio.sleep(5)
                     
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro crítico no processamento da campanha {campaign_id}: {e}")
+            logger.error(f"🔍 [DEBUG] Tipo do erro crítico: {type(e).__name__}")
     
     async def _get_campaign_async(self, campaign_id: str):
         """Busca campanha de forma assíncrona"""
@@ -321,13 +378,21 @@ class RabbitMQConsumer:
         max_retries = 3
         base_delay = 2
         
+        logger.info(f"🔍 [DEBUG] Iniciando envio de mensagem para {contact.phone}")
+        logger.info(f"🔍 [DEBUG] Campanha: {campaign.name} - Instância: {instance.instance_id}")
+        
         for attempt in range(1, max_retries + 1):
             try:
+                logger.info(f"🔍 [DEBUG] Tentativa {attempt}/{max_retries} de envio")
+                
                 # Verificar se instância ainda está ativa
+                logger.info(f"🔍 [DEBUG] Verificando se instância {instance.instance_id} está ativa")
                 if not await self._check_instance_active(instance):
                     logger.error(f"❌ [AIO-PIKA] Instância {instance.instance_id} inativa - pausando campanha")
                     await self._auto_pause_campaign(campaign, "instância desconectada")
                     return False
+                
+                logger.info(f"🔍 [DEBUG] Instância {instance.instance_id} está ativa")
                 
                 # Buscar mensagem da campanha
                 from asgiref.sync import sync_to_async
