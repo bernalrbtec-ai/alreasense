@@ -10,10 +10,5 @@ class CampaignsConfig(AppConfig):
     verbose_name = 'Campanhas'
     
     def ready(self):
-        """Inicializa MongoDB quando o Django está pronto"""
-        try:
-            from .mongodb_client import mongodb_client
-            mongodb_client.connect()
-            logger.info("✅ [APPS] MongoDB inicializado para campanhas")
-        except Exception as e:
-            logger.error(f"❌ [APPS] Erro ao inicializar MongoDB: {e}")
+        """App pronto - MongoDB removido"""
+        logger.info("✅ [APPS] App campanhas inicializado")

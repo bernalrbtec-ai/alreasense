@@ -301,20 +301,7 @@ RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://75jkOmkcjQmQLFs3:~
 
 print(f"🔧 [SETTINGS] RABBITMQ_URL: {RABBITMQ_URL[:50]}...")
 
-# MongoDB Configuration
-MONGO_CONFIG = {
-    'HOST': config('MONGOHOST', default='localhost'),
-    'PORT': config('MONGOPORT', default=27017, cast=int),
-    'USER': config('MONGOUSER', default='mongo'),
-    'PASSWORD': config('MONGOPASSWORD', default=''),
-    'DATABASE': 'admin',  # Usar database admin primeiro
-    'COLLECTION': 'webhook_events'
-}
-
-# Build MongoDB URL - usar MONGO_URL se disponível, senão construir
-MONGO_URL = config('MONGO_URL', default=f"mongodb://{MONGO_CONFIG['USER']}:{MONGO_CONFIG['PASSWORD']}@{MONGO_CONFIG['HOST']}:{MONGO_CONFIG['PORT']}/{MONGO_CONFIG['DATABASE']}")
-
-print(f"🔧 [SETTINGS] MONGO_URL: {MONGO_URL[:50]}...")
+# MongoDB removido - usando PostgreSQL com pgvector
 
 # Alertas por Email
 ALERT_EMAIL_RECIPIENTS = config('ALERT_EMAIL_RECIPIENTS', default='', cast=lambda v: [s.strip() for s in v.split(',') if s.strip()])

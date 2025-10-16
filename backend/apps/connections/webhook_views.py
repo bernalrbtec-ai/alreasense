@@ -18,7 +18,6 @@ from apps.chat_messages.models import Message
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
 from apps.campaigns.models import CampaignContact, CampaignNotification
-from apps.campaigns.mongodb_client import mongodb_client
 # CampaignNotification reativado
 import uuid
 
@@ -89,9 +88,6 @@ class EvolutionWebhookView(APIView):
             WebhookCache.store_event(event_id, data)
             logger.info(f"💾 Evento armazenado no cache: {event_id}")
             
-            # Store event in MongoDB for long-term storage and reprocessing
-            self.store_event_in_mongodb(event_id, data)
-            
             # Process different event types
             event_type = data.get('event')
             
@@ -139,82 +135,6 @@ class EvolutionWebhookView(APIView):
         except Exception as e:
             logger.error(f"Webhook error: {str(e)}")
             return JsonResponse({'error': 'Internal server error'}, status=500)
-    
-    def store_event_in_mongodb(self, event_id, data):
-        """Store webhook event in MongoDB for long-term storage and reprocessing"""
-        try:
-            # Extract relevant data from webhook
-            event_type = data.get('event', 'unknown')
-            
-            # Extract instance safely
-            data_content = data.get('data', {})
-            if isinstance(data_content, dict):
-                instance = data_content.get('instance', 'default')
-            else:
-                # For events where data is a list, try to get instance from first item or use default
-                instance = 'default'
-                if isinstance(data_content, list) and len(data_content) > 0:
-                    first_item = data_content[0]
-                    if isinstance(first_item, dict) and 'instanceId' in first_item:
-                        instance = first_item.get('instanceId', 'default')
-            
-            # Extract message info if available (data_content já foi definido acima)
-            
-            # Determine contact and message info
-            contact_phone = None
-            whatsapp_message_id = None
-            
-            if isinstance(data_content, dict):
-                # For messages.upsert, messages.update
-                message_data = data_content.get('messages', [])
-                
-                if message_data:
-                    # For messages.upsert
-                    for msg in message_data:
-                        key = msg.get('key', {})
-                        contact_phone = key.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
-                        whatsapp_message_id = key.get('id', '')
-                        break
-                else:
-                    # For messages.update
-                    contact_phone = data_content.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
-                    whatsapp_message_id = data_content.get('messageId', '') or data_content.get('keyId', '')
-                    
-            elif isinstance(data_content, list):
-                # For contacts.update, chats.update, etc.
-                if data_content and len(data_content) > 0:
-                    first_item = data_content[0]
-                    if isinstance(first_item, dict):
-                        contact_phone = first_item.get('remoteJid', '').replace('@s.whatsapp.net', '').replace('@c.us', '')
-                        whatsapp_message_id = first_item.get('id', '') or first_item.get('messageId', '')
-            
-            # Create MongoDB document
-            event_doc = {
-                "event_id": event_id,
-                "timestamp": timezone.now(),
-                "event_type": event_type,
-                "instance": instance,
-                "contact_phone": contact_phone,
-                "whatsapp_message_id": whatsapp_message_id,
-                "status": "processed",  # Already processed by Evolution webhook
-                "raw_payload": data,
-                "processed_at": timezone.now(),
-                "created_at": timezone.now(),
-                "source": "evolution_webhook",
-                "retry_count": 0,
-                "error_message": None
-            }
-            
-            # Insert into MongoDB
-            mongo_id = mongodb_client.insert_webhook_event(event_doc)
-            if mongo_id:
-                logger.info(f"✅ [MONGODB] Evento salvo: {event_id} -> {mongo_id}")
-            else:
-                logger.error(f"❌ [MONGODB] Erro ao salvar evento: {event_id}")
-                
-        except Exception as e:
-            logger.error(f"❌ [MONGODB] Erro ao salvar no MongoDB: {e}")
-            # Não falha o webhook se MongoDB der erro
     
     def get(self, request):
         """Endpoint GET para evitar erro 403 no redirecionamento"""

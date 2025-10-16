@@ -7,7 +7,6 @@ from . import test_webhook_endpoint
 from . import simple_webhook_test
 from . import simple_webhook_view
 from . import super_simple_webhook
-from . import views_mongodb, views_test_mongo, views_debug_env
 
 urlpatterns = [
     # Connections list
@@ -41,13 +40,4 @@ urlpatterns = [
     path('webhooks/cache/reprocess/', webhook_monitoring_views.WebhookCacheReprocessView.as_view(), name='webhook-reprocess-events'),
     path('webhooks/cache/events/<str:event_id>/', webhook_monitoring_views.WebhookCacheEventDetailView.as_view(), name='webhook-event-details'),
     
-    # MongoDB webhook events
-    path('webhooks/mongodb/stats/', views_mongodb.webhook_events_stats, name='webhook-mongodb-stats'),
-    path('webhooks/mongodb/events/', views_mongodb.webhook_events_list, name='webhook-mongodb-events'),
-    path('webhooks/mongodb/reprocess/', views_mongodb.reprocess_webhook_event, name='webhook-mongodb-reprocess'),
-    
-    # Test endpoints MongoDB (públicos)
-    path('webhooks/test-mongo/', views_test_mongo.test_mongodb_connection, name='test-mongodb-connection'),
-    path('webhooks/test-mongo/events/', views_test_mongo.test_mongodb_events, name='test-mongodb-events'),
-    path('webhooks/debug-env/', views_debug_env.debug_mongodb_env, name='debug-mongodb-env'),
 ]
