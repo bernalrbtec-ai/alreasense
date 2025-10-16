@@ -116,7 +116,11 @@ class RabbitMQConsumer:
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error(f"❌ [RABBITMQ] Falha após {max_retries} tentativas")
-                    raise
+                    # Em vez de falhar, desabilitar temporariamente
+                    logger.warning("⚠️ [RABBITMQ] Desabilitando consumer temporariamente devido a bugs do Pika")
+                    self.connection = None
+                    self.channel = None
+                    return
     
     def _check_connection(self):
         """Verifica se a conexão está ativa e reconecta se necessário"""
@@ -146,10 +150,15 @@ class RabbitMQConsumer:
 
     def _setup_queues(self):
         """Configura filas e exchanges com retry robusto"""
-        max_retries = 3
+        max_retries = 5
         
         for attempt in range(1, max_retries + 1):
             try:
+                # Verificar conexão antes de cada tentativa
+                if not self.connection or self.connection.is_closed:
+                    logger.warning(f"⚠️ [SETUP] Reconectando antes da tentativa {attempt}")
+                    self._reconnect_clean()
+                
                 # Exchange principal
                 self.channel.exchange_declare(
                     exchange='campaigns',
@@ -186,21 +195,46 @@ class RabbitMQConsumer:
                     "_CallbackResult was not set" in error_msg or
                     "CallbackResult" in error_msg or
                     "AssertionError" in error_msg):
-                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao configurar filas (tentativa {attempt}): {e}")
+                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao configurar filas (tentativa {attempt}/{max_retries}): {e}")
                     if attempt < max_retries:
-                        logger.info("🔧 [PIKA_BUG] Tentando reconexão e reconfiguração...")
-                        time.sleep(2 ** attempt)
-                        self._connect()
+                        logger.info("🔧 [PIKA_BUG] Aguardando antes de tentar novamente...")
+                        time.sleep(3 ** attempt)  # Backoff mais agressivo
+                        # Não chamar _connect() aqui para evitar recursão
                     else:
                         logger.error("❌ [PIKA_BUG] Falha ao configurar filas após múltiplas tentativas")
                         raise
                 else:
-                    logger.error(f"❌ [RABBITMQ] Erro ao configurar filas (tentativa {attempt}): {e}")
+                    logger.error(f"❌ [RABBITMQ] Erro ao configurar filas (tentativa {attempt}/{max_retries}): {e}")
                     if attempt < max_retries:
-                        time.sleep(2 ** attempt)
-                        self._connect()
+                        time.sleep(3 ** attempt)
                     else:
                         raise
+    
+    def _reconnect_clean(self):
+        """Reconexão limpa sem recursão"""
+        try:
+            # Fechar conexões existentes
+            if self.channel and not self.channel.is_closed:
+                try:
+                    self.channel.close()
+                except:
+                    pass
+            
+            if self.connection and not self.connection.is_closed:
+                try:
+                    self.connection.close()
+                except:
+                    pass
+            
+            # Aguardar um pouco antes de reconectar
+            time.sleep(2)
+            
+            # Reconectar
+            self._connect()
+            
+        except Exception as e:
+            logger.error(f"❌ [RECONNECT] Erro na reconexão limpa: {e}")
+            raise
     
     def start_campaign(self, campaign_id: str):
         """Inicia processamento de uma campanha"""
