@@ -86,7 +86,8 @@ class Command(BaseCommand):
             # Parar consumer
             consumer = get_rabbitmq_consumer()
             if consumer:
-                consumer.stop()
+                # Consumer aio-pika não precisa de stop() - threads são daemon
+                pass
             self.stdout.write(
                 self.style.SUCCESS('🛑 RabbitMQ Consumer parado')
             )
