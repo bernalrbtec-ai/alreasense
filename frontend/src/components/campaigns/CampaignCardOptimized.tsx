@@ -219,7 +219,7 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2">
                 <CardTitle className="text-lg font-semibold text-gray-900 truncate">
-                  {campaign.id}
+                  {campaign.name}
                 </CardTitle>
                 <Badge 
                   variant="outline" 
