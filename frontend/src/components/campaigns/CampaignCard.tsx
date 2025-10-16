@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { motion } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
-import { Badge } from '../ui/Badge'
+import { Badge } from '../ui/badge'
 import { Progress } from '../ui/Progress'
 import { Tooltip } from '../ui/Tooltip'
 import { Button } from '../ui/Button'
