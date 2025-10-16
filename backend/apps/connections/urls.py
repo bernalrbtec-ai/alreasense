@@ -7,7 +7,7 @@ from . import test_webhook_endpoint
 from . import simple_webhook_test
 from . import simple_webhook_view
 from . import super_simple_webhook
-from . import views_mongodb, views_test_mongo
+from . import views_mongodb, views_test_mongo, views_debug_env
 
 urlpatterns = [
     # Connections list
@@ -49,4 +49,5 @@ urlpatterns = [
     # Test endpoints MongoDB (públicos)
     path('webhooks/test-mongo/', views_test_mongo.test_mongodb_connection, name='test-mongodb-connection'),
     path('webhooks/test-mongo/events/', views_test_mongo.test_mongodb_events, name='test-mongodb-events'),
+    path('webhooks/debug-env/', views_debug_env.debug_mongodb_env, name='debug-mongodb-env'),
 ]
