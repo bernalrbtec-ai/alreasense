@@ -68,10 +68,9 @@ class RabbitMQConsumer:
         self.last_websocket_update = {}  # {campaign_id: timestamp}
         self.websocket_throttle_seconds = 1  # Mínimo 1 segundo entre updates (mais responsivo)
         
-        # TEMPORARIAMENTE DESABILITADO devido a bugs do Pika
-        logger.warning("⚠️ [RABBITMQ] Consumer desabilitado temporariamente devido a bugs do Pika")
-        logger.info("🔄 [ALTERNATIVE] Usando processamento direto com threading")
-        # self._connect()  # Comentado temporariamente
+        # Usar SelectConnection em vez de BlockingConnection para evitar bugs do Pika
+        logger.info("🔄 [RABBITMQ] Iniciando com SelectConnection para evitar bugs do Pika")
+        self._connect_select()
     
     def _connect(self):
         """Estabelece conexão com RabbitMQ com retry automático"""
@@ -120,11 +119,114 @@ class RabbitMQConsumer:
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error(f"❌ [RABBITMQ] Falha após {max_retries} tentativas")
-                    # Em vez de falhar, desabilitar temporariamente
-                    logger.warning("⚠️ [RABBITMQ] Desabilitando consumer temporariamente devido a bugs do Pika")
-                    self.connection = None
-                    self.channel = None
-                    return
+            # Em vez de falhar, desabilitar temporariamente
+            logger.warning("⚠️ [RABBITMQ] Desabilitando consumer temporariamente devido a bugs do Pika")
+            self.connection = None
+            self.channel = None
+            return
+    
+    def _connect_select(self):
+        """Estabelece conexão com RabbitMQ usando SelectConnection (mais estável)"""
+        try:
+            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+            
+            # Configurações de conexão robustas para SelectConnection
+            connection_params = pika.URLParameters(rabbitmq_url)
+            connection_params.heartbeat = 600  # 10 minutos
+            connection_params.blocked_connection_timeout = 300  # 5 minutos
+            connection_params.socket_timeout = 30
+            
+            logger.info("🔄 [SELECT] Tentando conectar com SelectConnection...")
+            
+            # Usar SelectConnection em vez de BlockingConnection
+            self.connection = pika.SelectConnection(
+                connection_params,
+                on_open_callback=self._on_connection_open,
+                on_open_error_callback=self._on_connection_open_error,
+                on_close_callback=self._on_connection_closed
+            )
+            
+            logger.info("✅ [SELECT] SelectConnection criada com sucesso")
+            
+        except Exception as e:
+            logger.error(f"❌ [SELECT] Erro ao criar SelectConnection: {e}")
+            self.connection = None
+            self.channel = None
+    
+    def _on_connection_open(self, unused_connection):
+        """Callback quando conexão é aberta"""
+        logger.info("✅ [SELECT] Conexão RabbitMQ aberta")
+        self.connection.channel(on_open_callback=self._on_channel_open)
+    
+    def _on_connection_open_error(self, unused_connection, error):
+        """Callback quando há erro na conexão"""
+        logger.error(f"❌ [SELECT] Erro ao abrir conexão: {error}")
+        self.connection = None
+    
+    def _on_connection_closed(self, unused_connection, reason):
+        """Callback quando conexão é fechada"""
+        logger.warning(f"⚠️ [SELECT] Conexão fechada: {reason}")
+        self.connection = None
+        self.channel = None
+    
+    def _on_channel_open(self, channel):
+        """Callback quando canal é aberto"""
+        logger.info("✅ [SELECT] Canal RabbitMQ aberto")
+        self.channel = channel
+        self._setup_queues_select()
+    
+    def _setup_queues_select(self):
+        """Configura filas usando SelectConnection"""
+        try:
+            # Exchange principal
+            self.channel.exchange_declare(
+                exchange='campaigns',
+                exchange_type='topic',
+                durable=True,
+                callback=self._on_exchange_declared
+            )
+        except Exception as e:
+            logger.error(f"❌ [SELECT] Erro ao configurar filas: {e}")
+    
+    def _on_exchange_declared(self, unused_frame):
+        """Callback quando exchange é declarado"""
+        logger.info("✅ [SELECT] Exchange 'campaigns' declarado")
+        
+        # Filas principais
+        queues = [
+            'campaign.control',      # Comandos de controle
+            'campaign.messages',     # Mensagens para envio
+            'campaign.retry',        # Retry de mensagens
+            'campaign.dlq',          # Dead letter queue
+            'campaign.health'        # Health checks
+        ]
+        
+        # Declarar primeira fila
+        self._declare_queue(queues, 0)
+    
+    def _declare_queue(self, queues, index):
+        """Declara filas uma por vez"""
+        if index >= len(queues):
+            logger.info("✅ [SELECT] Todas as filas configuradas com sucesso")
+            return
+        
+        queue = queues[index]
+        
+        def on_queue_declared(unused_frame):
+            logger.info(f"✅ [SELECT] Fila '{queue}' declarada")
+            # Declarar próxima fila
+            self._declare_queue(queues, index + 1)
+        
+        try:
+            self.channel.queue_declare(
+                queue=queue,
+                durable=True,
+                callback=on_queue_declared
+            )
+        except Exception as e:
+            logger.error(f"❌ [SELECT] Erro ao declarar fila '{queue}': {e}")
+            # Continuar com próxima fila
+            self._declare_queue(queues, index + 1)
     
     def _check_connection(self):
         """Verifica se a conexão está ativa e reconecta se necessário"""
