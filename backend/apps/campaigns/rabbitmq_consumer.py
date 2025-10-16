@@ -470,6 +470,8 @@ class RabbitMQConsumer:
     
     async def _send_whatsapp_message_async(self, campaign, contact, instance):
         """Envia mensagem WhatsApp com retry e controle de erros"""
+        from asgiref.sync import sync_to_async
+        
         max_retries = 3
         base_delay = 2
         
