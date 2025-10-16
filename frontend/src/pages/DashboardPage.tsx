@@ -87,7 +87,7 @@ export default function DashboardPage() {
         // Fetch paralelo de todas as APIs
         const [metricsRes, campaignsRes, contactsStatsRes] = await Promise.all([
           api.get(`/tenants/tenants/${user?.tenant?.id}/metrics/`),
-          api.get('/campaigns/campaigns/?status=active,paused'),
+          api.get('/campaigns/?status=active,paused'),
           api.get('/contacts/contacts/stats/') // Usar endpoint de stats em vez de buscar todos
         ])
 

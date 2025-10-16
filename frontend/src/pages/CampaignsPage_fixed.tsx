@@ -81,7 +81,7 @@ const NextMessageCountdown: React.FC<{ campaign: Campaign }> = ({ campaign }) =>
 
   const fetchCampaignData = async () => {
     try {
-      const response = await api.get(`/campaigns/campaigns/${campaign.id}/`)
+      const response = await api.get(`/campaigns/${campaign.id}/`)
       const updatedCampaign = response.data
       setSeconds(updatedCampaign.countdown_seconds || 0)
     } catch (error) {
@@ -135,7 +135,7 @@ const CampaignsPage: React.FC = () => {
   const fetchData = async () => {
     try {
       setLoading(true)
-      const response = await api.get('/campaigns/campaigns/')
+      const response = await api.get('/campaigns/')
       setCampaigns(response.data.results || response.data)
     } catch (error: any) {
       console.error('Erro ao buscar campanhas:', error)
@@ -149,7 +149,7 @@ const CampaignsPage: React.FC = () => {
     const toastId = showLoadingToast('iniciando', 'Campanha')
     
     try {
-      await api.post(`/campaigns/campaigns/${campaign.id}/start/`)
+      await api.post(`/campaigns/${campaign.id}/start/`)
       updateToastSuccess(toastId, 'iniciada', 'Campanha')
       fetchData()
     } catch (error: any) {
@@ -161,7 +161,7 @@ const CampaignsPage: React.FC = () => {
     const toastId = showLoadingToast('pausando', 'Campanha')
     
     try {
-      await api.post(`/campaigns/campaigns/${campaign.id}/pause/`)
+      await api.post(`/campaigns/${campaign.id}/pause/`)
       updateToastSuccess(toastId, 'pausada', 'Campanha')
       fetchData()
     } catch (error: any) {
@@ -173,7 +173,7 @@ const CampaignsPage: React.FC = () => {
     const toastId = showLoadingToast('retomando', 'Campanha')
     
     try {
-      await api.post(`/campaigns/campaigns/${campaign.id}/resume/`)
+      await api.post(`/campaigns/${campaign.id}/resume/`)
       updateToastSuccess(toastId, 'retomada', 'Campanha')
       fetchData()
     } catch (error: any) {
@@ -202,7 +202,7 @@ const CampaignsPage: React.FC = () => {
         pause_on_health_below: campaign.pause_on_health_below
       }
       
-      await api.post('/campaigns/campaigns/', duplicateData)
+      await api.post('/campaigns/', duplicateData)
       updateToastSuccess(toastId, 'duplicada', 'Campanha')
       fetchData()
     } catch (error: any) {

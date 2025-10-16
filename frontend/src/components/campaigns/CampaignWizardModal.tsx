@@ -296,7 +296,7 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         throw new Error('Pelo menos uma mensagem é obrigatória')
       }
 
-      await api.post('/campaigns/campaigns/', payload)
+      await api.post('/campaigns/', payload)
       
       // ✅ Garantir que toast seja atualizado ANTES dos callbacks
       updateToastSuccess(toastId, 'criar', 'Campanha')
