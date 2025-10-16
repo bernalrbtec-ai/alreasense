@@ -21,6 +21,41 @@ from apps.notifications.models import WhatsAppInstance
 logger = logging.getLogger(__name__)
 
 
+def handle_pika_bug(func):
+    """Decorator para lidar com bugs conhecidos do Pika"""
+    def wrapper(self, *args, **kwargs):
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                return func(self, *args, **kwargs)
+            except Exception as e:
+                error_msg = str(e)
+                if ("pop from an empty deque" in error_msg or 
+                    "IndexError" in error_msg or 
+                    "Stream connection lost" in error_msg or
+                    "StreamLostError" in error_msg or
+                    "_CallbackResult was not set" in error_msg or
+                    "CallbackResult" in error_msg or
+                    "AssertionError" in error_msg):
+                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika em {func.__name__} (tentativa {attempt}): {e}")
+                    if attempt < max_retries:
+                        logger.info("🔧 [PIKA_BUG] Tentando reconexão...")
+                        time.sleep(2 ** attempt)
+                        self._connect()
+                    else:
+                        logger.error(f"❌ [PIKA_BUG] Falha após {max_retries} tentativas em {func.__name__}")
+                        raise
+                else:
+                    logger.error(f"❌ [RABBITMQ] Erro em {func.__name__} (tentativa {attempt}): {e}")
+                    if attempt < max_retries:
+                        time.sleep(2 ** attempt)
+                        self._connect()
+                    else:
+                        raise
+        return None
+    return wrapper
+
+
 class RabbitMQConsumer:
     """Consumer RabbitMQ para processamento de campanhas"""
     
@@ -110,30 +145,62 @@ class RabbitMQConsumer:
                 logger.error(f"❌ [RABBITMQ] Falha ao reconectar: {reconnect_error}")
 
     def _setup_queues(self):
-        """Configura filas e exchanges"""
-        # Exchange principal
-        self.channel.exchange_declare(
-            exchange='campaigns',
-            exchange_type='topic',
-            durable=True
-        )
+        """Configura filas e exchanges com retry robusto"""
+        max_retries = 3
         
-        # Filas principais
-        queues = [
-            'campaign.control',      # Comandos de controle
-            'campaign.messages',     # Mensagens para envio
-            'campaign.retry',        # Retry de mensagens
-            'campaign.dlq',          # Dead letter queue
-            'campaign.health'        # Health checks
-        ]
-        
-        for queue in queues:
-            self.channel.queue_declare(queue=queue, durable=True)
-            self.channel.queue_bind(
-                exchange='campaigns',
-                queue=queue,
-                routing_key=queue
-            )
+        for attempt in range(1, max_retries + 1):
+            try:
+                # Exchange principal
+                self.channel.exchange_declare(
+                    exchange='campaigns',
+                    exchange_type='topic',
+                    durable=True
+                )
+                
+                # Filas principais
+                queues = [
+                    'campaign.control',      # Comandos de controle
+                    'campaign.messages',     # Mensagens para envio
+                    'campaign.retry',        # Retry de mensagens
+                    'campaign.dlq',          # Dead letter queue
+                    'campaign.health'        # Health checks
+                ]
+                
+                for queue in queues:
+                    self.channel.queue_declare(queue=queue, durable=True)
+                    self.channel.queue_bind(
+                        exchange='campaigns',
+                        queue=queue,
+                        routing_key=queue
+                    )
+                
+                logger.info("✅ [RABBITMQ] Filas e exchanges configurados com sucesso")
+                return
+                
+            except Exception as e:
+                error_msg = str(e)
+                if ("pop from an empty deque" in error_msg or 
+                    "IndexError" in error_msg or 
+                    "Stream connection lost" in error_msg or
+                    "StreamLostError" in error_msg or
+                    "_CallbackResult was not set" in error_msg or
+                    "CallbackResult" in error_msg or
+                    "AssertionError" in error_msg):
+                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao configurar filas (tentativa {attempt}): {e}")
+                    if attempt < max_retries:
+                        logger.info("🔧 [PIKA_BUG] Tentando reconexão e reconfiguração...")
+                        time.sleep(2 ** attempt)
+                        self._connect()
+                    else:
+                        logger.error("❌ [PIKA_BUG] Falha ao configurar filas após múltiplas tentativas")
+                        raise
+                else:
+                    logger.error(f"❌ [RABBITMQ] Erro ao configurar filas (tentativa {attempt}): {e}")
+                    if attempt < max_retries:
+                        time.sleep(2 ** attempt)
+                        self._connect()
+                    else:
+                        raise
     
     def start_campaign(self, campaign_id: str):
         """Inicia processamento de uma campanha"""
