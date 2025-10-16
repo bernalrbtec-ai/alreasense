@@ -307,7 +307,7 @@ MONGO_CONFIG = {
     'PORT': config('MONGOPORT', default=27017, cast=int),
     'USER': config('MONGOUSER', default='mongo'),
     'PASSWORD': config('MONGOPASSWORD', default=''),
-    'DATABASE': 'alreasense_webhooks',
+    'DATABASE': 'admin',  # Usar database admin primeiro
     'COLLECTION': 'webhook_events'
 }
 
