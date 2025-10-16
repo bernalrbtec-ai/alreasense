@@ -1,7 +1,8 @@
 """
-Consumer RabbitMQ Puro - Sistema de Campanhas
-Implementa processamento robusto sem Celery
+Consumer RabbitMQ com aio-pika - Sistema de Campanhas
+Implementa processamento assíncrono robusto
 """
+import asyncio
 import json
 import time
 import random
@@ -12,7 +13,7 @@ from datetime import datetime, timedelta
 from django.utils import timezone
 from django.db import transaction
 from django.conf import settings
-import pika
+import aio_pika
 import requests
 
 from .models import Campaign, CampaignContact, CampaignLog
@@ -21,43 +22,8 @@ from apps.notifications.models import WhatsAppInstance
 logger = logging.getLogger(__name__)
 
 
-def handle_pika_bug(func):
-    """Decorator para lidar com bugs conhecidos do Pika"""
-    def wrapper(self, *args, **kwargs):
-        max_retries = 3
-        for attempt in range(1, max_retries + 1):
-            try:
-                return func(self, *args, **kwargs)
-            except Exception as e:
-                error_msg = str(e)
-                if ("pop from an empty deque" in error_msg or 
-                    "IndexError" in error_msg or 
-                    "Stream connection lost" in error_msg or
-                    "StreamLostError" in error_msg or
-                    "_CallbackResult was not set" in error_msg or
-                    "CallbackResult" in error_msg or
-                    "AssertionError" in error_msg):
-                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika em {func.__name__} (tentativa {attempt}): {e}")
-                    if attempt < max_retries:
-                        logger.info("🔧 [PIKA_BUG] Tentando reconexão...")
-                        time.sleep(2 ** attempt)
-                        self._connect()
-                    else:
-                        logger.error(f"❌ [PIKA_BUG] Falha após {max_retries} tentativas em {func.__name__}")
-                        raise
-                else:
-                    logger.error(f"❌ [RABBITMQ] Erro em {func.__name__} (tentativa {attempt}): {e}")
-                    if attempt < max_retries:
-                        time.sleep(2 ** attempt)
-                        self._connect()
-                    else:
-                        raise
-        return None
-    return wrapper
-
-
 class RabbitMQConsumer:
-    """Consumer RabbitMQ para processamento de campanhas"""
+    """Consumer RabbitMQ assíncrono para processamento de campanhas"""
     
     def __init__(self):
         self.connection = None
@@ -66,1894 +32,475 @@ class RabbitMQConsumer:
         self.consumer_threads = {}
         # Controle de throttling para WebSocket
         self.last_websocket_update = {}  # {campaign_id: timestamp}
-        self.websocket_throttle_seconds = 1  # Mínimo 1 segundo entre updates (mais responsivo)
+        self.websocket_throttle_seconds = 1  # Mínimo 1 segundo entre updates
         
-        # TEMPORARIAMENTE DESABILITADO devido a bugs persistentes do Pika
-        logger.warning("⚠️ [RABBITMQ] Consumer desabilitado temporariamente devido a bugs persistentes do Pika")
-        logger.info("🔄 [ALTERNATIVE] Usando sistema de processamento direto com threading")
-        # self._connect_select()  # Comentado temporariamente
+        # Usar aio-pika para conexão assíncrona robusta
+        logger.info("🔄 [AIO-PIKA] Iniciando sistema RabbitMQ assíncrono")
+        asyncio.create_task(self._connect_async())
     
-    def _connect(self):
-        """Estabelece conexão com RabbitMQ com retry automático"""
-        max_retries = 5
-        retry_delay = 2
+    async def _connect_async(self):
+        """Estabelece conexão assíncrona com RabbitMQ"""
+        max_attempts = 10
+        base_delay = 1
         
-        for attempt in range(1, max_retries + 1):
+        for attempt in range(1, max_attempts + 1):
             try:
+                logger.info(f"🔄 [AIO-PIKA] Tentativa {attempt}/{max_attempts} de conexão")
+                
+                # Aguardar antes de tentar
+                if attempt > 1:
+                    delay = base_delay * (2 ** (attempt - 2))  # 1, 2, 4, 8, 16...
+                    logger.info(f"⏳ [AIO-PIKA] Aguardando {delay}s antes da tentativa {attempt}")
+                    await asyncio.sleep(delay)
+                
+                # Tentar conexão com aio-pika
                 rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
                 
-                # Configurações de conexão robustas
-                connection_params = pika.URLParameters(rabbitmq_url)
-                connection_params.heartbeat = 600  # 10 minutos
-                connection_params.blocked_connection_timeout = 300  # 5 minutos
-                connection_params.socket_timeout = 30
-                connection_params.retry_delay = 2
-                connection_params.connection_attempts = 3
-                
-                self.connection = pika.BlockingConnection(connection_params)
-                self.channel = self.connection.channel()
-                
-                # Configurar exchanges e filas
-                self._setup_queues()
-                
-                logger.info(f"✅ [RABBITMQ] Conectado com sucesso (tentativa {attempt})")
-                return
-                
-            except Exception as e:
-                error_msg = str(e)
-                # Tratar erro específico do pika 1.3.2
-                if ("pop from an empty deque" in error_msg or 
-                    "IndexError" in error_msg or 
-                    "Stream connection lost" in error_msg or
-                    "StreamLostError" in error_msg or
-                    "_CallbackResult was not set" in error_msg or
-                    "CallbackResult" in error_msg):
-                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika (tentativa {attempt}/{max_retries}): {e}")
-                    logger.info("🔧 [PIKA_BUG] Tentando reconexão devido a bug do pika...")
-                else:
-                    logger.error(f"❌ [RABBITMQ] Erro na conexão (tentativa {attempt}/{max_retries}): {e}")
-                
-                if attempt < max_retries:
-                    logger.info(f"🔄 [RABBITMQ] Tentando novamente em {retry_delay}s...")
-                    import time
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    logger.error(f"❌ [RABBITMQ] Falha após {max_retries} tentativas")
-            # Em vez de falhar, desabilitar temporariamente
-            logger.warning("⚠️ [RABBITMQ] Desabilitando consumer temporariamente devido a bugs do Pika")
-            self.connection = None
-            self.channel = None
-            return
-    
-    def _connect_select(self):
-        """Estabelece conexão com RabbitMQ usando SelectConnection (mais estável)"""
-        try:
-            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
-            
-            # Configurações de conexão robustas para SelectConnection
-            connection_params = pika.URLParameters(rabbitmq_url)
-            connection_params.heartbeat = 600  # 10 minutos
-            connection_params.blocked_connection_timeout = 300  # 5 minutos
-            connection_params.socket_timeout = 30
-            
-            logger.info("🔄 [SELECT] Tentando conectar com SelectConnection...")
-            
-            # Usar SelectConnection em vez de BlockingConnection
-            self.connection = pika.SelectConnection(
-                connection_params,
-                on_open_callback=self._on_connection_open,
-                on_open_error_callback=self._on_connection_open_error,
-                on_close_callback=self._on_connection_closed
-            )
-            
-            logger.info("✅ [SELECT] SelectConnection criada com sucesso")
-            
-        except Exception as e:
-            logger.error(f"❌ [SELECT] Erro ao criar SelectConnection: {e}")
-            self.connection = None
-            self.channel = None
-    
-    def _on_connection_open(self, unused_connection):
-        """Callback quando conexão é aberta"""
-        logger.info("✅ [SELECT] Conexão RabbitMQ aberta")
-        self.connection.channel(on_open_callback=self._on_channel_open)
-    
-    def _on_connection_open_error(self, unused_connection, error):
-        """Callback quando há erro na conexão"""
-        logger.error(f"❌ [SELECT] Erro ao abrir conexão: {error}")
-        self.connection = None
-    
-    def _on_connection_closed(self, unused_connection, reason):
-        """Callback quando conexão é fechada"""
-        logger.warning(f"⚠️ [SELECT] Conexão fechada: {reason}")
-        self.connection = None
-        self.channel = None
-    
-    def _on_channel_open(self, channel):
-        """Callback quando canal é aberto"""
-        logger.info("✅ [SELECT] Canal RabbitMQ aberto")
-        self.channel = channel
-        self._setup_queues_select()
-    
-    def _setup_queues_select(self):
-        """Configura filas usando SelectConnection"""
-        try:
-            # Exchange principal
-            self.channel.exchange_declare(
-                exchange='campaigns',
-                exchange_type='topic',
-                durable=True,
-                callback=self._on_exchange_declared
-            )
-        except Exception as e:
-            logger.error(f"❌ [SELECT] Erro ao configurar filas: {e}")
-    
-    def _on_exchange_declared(self, unused_frame):
-        """Callback quando exchange é declarado"""
-        logger.info("✅ [SELECT] Exchange 'campaigns' declarado")
-        
-        # Filas principais
-        queues = [
-            'campaign.control',      # Comandos de controle
-            'campaign.messages',     # Mensagens para envio
-            'campaign.retry',        # Retry de mensagens
-            'campaign.dlq',          # Dead letter queue
-            'campaign.health'        # Health checks
-        ]
-        
-        # Declarar primeira fila
-        self._declare_queue(queues, 0)
-    
-    def _declare_queue(self, queues, index):
-        """Declara filas uma por vez"""
-        if index >= len(queues):
-            logger.info("✅ [SELECT] Todas as filas configuradas com sucesso")
-            return
-        
-        queue = queues[index]
-        
-        def on_queue_declared(unused_frame):
-            logger.info(f"✅ [SELECT] Fila '{queue}' declarada")
-            # Declarar próxima fila
-            self._declare_queue(queues, index + 1)
-        
-        try:
-            self.channel.queue_declare(
-                queue=queue,
-                durable=True,
-                callback=on_queue_declared
-            )
-        except Exception as e:
-            logger.error(f"❌ [SELECT] Erro ao declarar fila '{queue}': {e}")
-            # Continuar com próxima fila
-            self._declare_queue(queues, index + 1)
-    
-    def _check_connection(self):
-        """Verifica se a conexão está ativa e reconecta se necessário"""
-        try:
-            if not self.connection or self.connection.is_closed:
-                logger.warning("⚠️ [RABBITMQ] Conexão perdida, reconectando...")
-                self._connect()
-            elif not self.channel or self.channel.is_closed:
-                logger.warning("⚠️ [RABBITMQ] Canal perdido, reconectando...")
-                self._connect()
-        except Exception as e:
-            error_msg = str(e)
-            if ("pop from an empty deque" in error_msg or 
-                "IndexError" in error_msg or 
-                "Stream connection lost" in error_msg or
-                "StreamLostError" in error_msg or
-                "_CallbackResult was not set" in error_msg or
-                "CallbackResult" in error_msg):
-                logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao verificar conexão: {e}")
-            else:
-                logger.error(f"❌ [RABBITMQ] Erro ao verificar conexão: {e}")
-            
-            try:
-                self._connect()
-            except Exception as reconnect_error:
-                logger.error(f"❌ [RABBITMQ] Falha ao reconectar: {reconnect_error}")
-
-    def _setup_queues(self):
-        """Configura filas e exchanges com retry robusto"""
-        max_retries = 5
-        
-        for attempt in range(1, max_retries + 1):
-            try:
-                # Verificar conexão antes de cada tentativa
-                if not self.connection or self.connection.is_closed:
-                    logger.warning(f"⚠️ [SETUP] Reconectando antes da tentativa {attempt}")
-                    self._reconnect_clean()
-                
-                # Exchange principal
-                self.channel.exchange_declare(
-                    exchange='campaigns',
-                    exchange_type='topic',
-                    durable=True
+                self.connection = await aio_pika.connect_robust(
+                    rabbitmq_url,
+                    heartbeat=0,  # Desabilitar heartbeat
+                    blocked_connection_timeout=0,
+                    socket_timeout=10,
+                    retry_delay=1,
+                    connection_attempts=1
                 )
                 
-                # Filas principais
-                queues = [
-                    'campaign.control',      # Comandos de controle
-                    'campaign.messages',     # Mensagens para envio
-                    'campaign.retry',        # Retry de mensagens
-                    'campaign.dlq',          # Dead letter queue
-                    'campaign.health'        # Health checks
-                ]
+                self.channel = await self.connection.channel()
+                await self.channel.set_qos(prefetch_count=1)
                 
-                for queue in queues:
-                    self.channel.queue_declare(queue=queue, durable=True)
-                    self.channel.queue_bind(
-                        exchange='campaigns',
-                        queue=queue,
-                        routing_key=queue
-                    )
+                # Configurar filas
+                await self._setup_queues_async()
                 
-                logger.info("✅ [RABBITMQ] Filas e exchanges configurados com sucesso")
+                logger.info("✅ [AIO-PIKA] Conexão RabbitMQ estabelecida com sucesso!")
                 return
                 
             except Exception as e:
-                error_msg = str(e)
-                if ("pop from an empty deque" in error_msg or 
-                    "IndexError" in error_msg or 
-                    "Stream connection lost" in error_msg or
-                    "StreamLostError" in error_msg or
-                    "_CallbackResult was not set" in error_msg or
-                    "CallbackResult" in error_msg or
-                    "AssertionError" in error_msg):
-                    logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika ao configurar filas (tentativa {attempt}/{max_retries}): {e}")
-                    if attempt < max_retries:
-                        logger.info("🔧 [PIKA_BUG] Aguardando antes de tentar novamente...")
-                        time.sleep(3 ** attempt)  # Backoff mais agressivo
-                        # Não chamar _connect() aqui para evitar recursão
-                    else:
-                        logger.error("❌ [PIKA_BUG] Falha ao configurar filas após múltiplas tentativas")
-                        raise
-                else:
-                    logger.error(f"❌ [RABBITMQ] Erro ao configurar filas (tentativa {attempt}/{max_retries}): {e}")
-                    if attempt < max_retries:
-                        time.sleep(3 ** attempt)
-                    else:
-                        raise
+                logger.error(f"❌ [AIO-PIKA] Tentativa {attempt} falhou: {e}")
+                
+                if attempt == max_attempts:
+                    logger.error("❌ [AIO-PIKA] Todas as tentativas falharam")
+                    self.connection = None
+                    self.channel = None
+                    return
     
-    def _reconnect_clean(self):
-        """Reconexão limpa sem recursão"""
+    async def _setup_queues_async(self):
+        """Configura filas de forma assíncrona"""
         try:
-            # Fechar conexões existentes
-            if self.channel and not self.channel.is_closed:
+            # Exchange principal
+            await self.channel.declare_exchange(
+                name='campaigns',
+                type=aio_pika.ExchangeType.TOPIC,
+                durable=True
+            )
+            
+            # Filas principais
+            queues = [
+                'campaign.control',      # Comandos de controle
+                'campaign.messages',     # Mensagens para envio
+                'campaign.retry',        # Retry de mensagens
+                'campaign.dlq',          # Dead letter queue
+                'campaign.health'        # Health checks
+            ]
+            
+            for queue_name in queues:
                 try:
-                    self.channel.close()
-                except:
-                    pass
+                    queue = await self.channel.declare_queue(
+                        name=queue_name,
+                        durable=True
+                    )
+                    await queue.bind(
+                        exchange='campaigns',
+                        routing_key=queue_name
+                    )
+                    logger.info(f"✅ [AIO-PIKA] Fila '{queue_name}' configurada")
+                except Exception as e:
+                    logger.error(f"❌ [AIO-PIKA] Erro ao configurar fila '{queue_name}': {e}")
+                    continue
             
-            if self.connection and not self.connection.is_closed:
-                try:
-                    self.connection.close()
-                except:
-                    pass
-            
-            # Aguardar um pouco antes de reconectar
-            time.sleep(2)
-            
-            # Reconectar
-            self._connect()
+            logger.info("✅ [AIO-PIKA] Todas as filas configuradas com sucesso")
             
         except Exception as e:
-            logger.error(f"❌ [RECONNECT] Erro na reconexão limpa: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro geral na configuração de filas: {e}")
             raise
     
-    def _start_campaign_direct(self, campaign_id: str):
-        """Inicia campanha diretamente sem RabbitMQ usando threading"""
+    async def _check_connection(self):
+        """Verifica se a conexão está ativa"""
         try:
-            logger.info(f"🚀 [DIRECT] Iniciando campanha {campaign_id} diretamente")
+            if not self.connection or self.connection.is_closed:
+                logger.warning("⚠️ [AIO-PIKA] Conexão perdida, reconectando...")
+                await self._connect_async()
+                return False
+            return True
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao verificar conexão: {e}")
+            await self._connect_async()
+            return False
+    
+    def start_campaign(self, campaign_id: str):
+        """Inicia o processamento de uma campanha"""
+        try:
+            logger.info(f"🚀 [AIO-PIKA] Iniciando campanha {campaign_id}")
             
-            # Verificar se já existe thread para esta campanha
+            # Verificar se já está rodando
             if campaign_id in self.consumer_threads:
-                logger.warning(f"⚠️ [DIRECT] Campanha {campaign_id} já está sendo processada")
-                return
+                logger.warning(f"⚠️ [AIO-PIKA] Campanha {campaign_id} já está rodando")
+                return False
             
             # Criar thread para processar a campanha
             thread = threading.Thread(
-                target=self._process_campaign_direct,
+                target=self._run_campaign_async,
                 args=(campaign_id,),
                 daemon=True
             )
             thread.start()
             
-            # Armazenar referência da thread
             self.consumer_threads[campaign_id] = thread
-            
-            logger.info(f"✅ [DIRECT] Thread de processamento iniciada para campanha {campaign_id}")
-            
-        except Exception as e:
-            logger.error(f"❌ [DIRECT] Erro ao iniciar campanha diretamente {campaign_id}: {e}")
-            raise
-    
-    def _process_campaign_direct(self, campaign_id: str):
-        """Processa campanha diretamente sem RabbitMQ"""
-        try:
-            logger.info(f"🔄 [DIRECT] Iniciando processamento direto da campanha {campaign_id}")
-            
-            # Importar aqui para evitar import circular
-            from .models import Campaign, CampaignContact
-            
-            campaign = Campaign.objects.get(id=campaign_id)
-            
-            # Marcar campanha como running
-            campaign.status = 'running'
-            campaign.save(update_fields=['status'])
-            
-            # Processar contatos pendentes
-            pending_contacts = campaign.campaign_contacts.filter(
-                status='pending'
-            ).select_related('contact')
-            
-            logger.info(f"📊 [DIRECT] Processando {pending_contacts.count()} contatos para campanha {campaign_id}")
-            
-            for contact in pending_contacts:
-                try:
-                    # Processar mensagem diretamente
-                    self._process_message_direct(contact)
-                    
-                    # Pequena pausa entre mensagens
-                    time.sleep(random.uniform(
-                        campaign.interval_min or 60,
-                        campaign.interval_max or 120
-                    ))
-                    
-                except Exception as e:
-                    logger.error(f"❌ [DIRECT] Erro ao processar contato {contact.id}: {e}")
-                    continue
-            
-            # Marcar campanha como concluída
-            campaign.status = 'completed'
-            campaign.save(update_fields=['status'])
-            
-            logger.info(f"✅ [DIRECT] Campanha {campaign_id} processada com sucesso")
-            
-        except Exception as e:
-            logger.error(f"❌ [DIRECT] Erro no processamento direto da campanha {campaign_id}: {e}")
-        finally:
-            # Remover thread da lista
-            if campaign_id in self.consumer_threads:
-                del self.consumer_threads[campaign_id]
-    
-    def _process_message_direct(self, contact):
-        """Processa uma mensagem diretamente sem RabbitMQ"""
-        try:
-            logger.info(f"📤 [DIRECT] Enviando mensagem para {contact.contact.name} ({contact.contact.phone})")
-            
-            # Aqui você pode implementar a lógica de envio direto
-            # Por enquanto, vamos apenas marcar como enviado
-            contact.status = 'sent'
-            contact.sent_at = timezone.now()
-            contact.save()
-            
-            logger.info(f"✅ [DIRECT] Mensagem enviada para {contact.contact.name}")
-            
-        except Exception as e:
-            logger.error(f"❌ [DIRECT] Erro ao enviar mensagem para {contact.contact.name}: {e}")
-            contact.status = 'failed'
-            contact.error_message = str(e)
-            contact.save()
-    
-    def start_campaign(self, campaign_id: str):
-        """Inicia processamento de uma campanha"""
-        try:
-            logger.info(f"🚀 [START] Iniciando campanha {campaign_id}")
-            
-            # Verificar se RabbitMQ está disponível
-            if not self.connection or not self.channel:
-                logger.warning("⚠️ [START] RabbitMQ não disponível, iniciando campanha diretamente")
-                self._start_campaign_direct(campaign_id)
-                return
-            
-            # Verificar conexão antes de iniciar campanha
-            logger.info(f"🔍 [START] Verificando conexão RabbitMQ...")
-            self._check_connection()
-            logger.info(f"✅ [START] Conexão RabbitMQ OK")
-            
-            campaign = Campaign.objects.get(id=campaign_id)
-            logger.info(f"📋 [START] Campanha encontrada: {campaign.name} (status: {campaign.status})")
-            
-            if campaign.status not in ['draft', 'running']:
-                logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} status inválido: {campaign.status}")
-                return False
-            
-            # Verificar se tem contatos
-            logger.info(f"🔍 [START] Verificando contatos pendentes...")
-            pending_contacts = CampaignContact.objects.filter(
-                campaign=campaign,
-                status__in=['pending', 'sending']
-            ).count()
-            
-            total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
-            logger.info(f"🔍 [CONSUMER] Campanha {campaign.name}: {pending_contacts} pendentes de {total_contacts} total")
-            
-            if pending_contacts == 0:
-                logger.warning(f"⚠️ [CONSUMER] Campanha {campaign.name} não possui contatos pendentes")
-                return False
-            
-            # Verificar instâncias selecionadas
-            logger.info(f"🔍 [START] Verificando instâncias selecionadas...")
-            selected_instances = campaign.instances.filter(is_active=True).count()
-            logger.info(f"📱 [START] Instâncias ativas selecionadas: {selected_instances}")
-            
-            if selected_instances == 0:
-                logger.error(f"❌ [START] Nenhuma instância ativa selecionada para campanha {campaign.name}")
-                return False
-            
-            # Atualizar status
-            logger.info(f"📝 [START] Atualizando status para 'running'...")
-            campaign.status = 'running'
-            campaign.save(update_fields=['status'])
-            logger.info(f"✅ [START] Status atualizado com sucesso")
-            
-            # Log de início
-            logger.info(f"📝 [START] Criando log de início...")
-            CampaignLog.log_campaign_started(campaign)
-            logger.info(f"✅ [START] Log criado com sucesso")
-            
-            # 🚀 GATILHO: Campanha iniciada - frontend receberá dados iniciais
-            logger.info(f"📡 [WEBSOCKET] Enviando gatilho 'campaign_started' para campanha {campaign.name}")
-            self._send_websocket_update(campaign, 'campaign_update', {
-                'event': 'campaign_started',
-                'total_contacts': total_contacts,
-                'pending_contacts': pending_contacts
-            })
-            logger.info(f"✅ [WEBSOCKET] Gatilho 'campaign_started' enviado com sucesso")
-            
-            # Criar fila específica da campanha
-            logger.info(f"📋 [START] Criando fila RabbitMQ...")
-            queue_name = f"campaign.{campaign_id}.messages"
-            self.channel.queue_declare(queue=queue_name, durable=True)
-            logger.info(f"✅ [START] Fila declarada: {queue_name}")
-            
-            self.channel.queue_bind(
-                exchange='campaigns',
-                queue=queue_name,
-                routing_key=queue_name
-            )
-            logger.info(f"✅ [START] Fila vinculada ao exchange")
-            
-            # Adicionar mensagens à fila
-            logger.info(f"📤 [START] Populando fila com mensagens...")
-            self._populate_campaign_queue(campaign)
-            logger.info(f"✅ [START] Fila populada com sucesso")
-            
-            # Iniciar consumer para esta campanha
-            logger.info(f"🎯 [START] Iniciando consumer...")
-            self._start_campaign_consumer(campaign_id)
-            logger.info(f"✅ [START] Consumer iniciado")
-            
-            logger.info(f"🚀 [CONSUMER] Campanha {campaign.name} iniciada com sucesso!")
+            logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} iniciada com sucesso")
             return True
             
-        except Campaign.DoesNotExist:
-            logger.error(f"❌ [CONSUMER] Campanha {campaign_id} não encontrada")
-            return False
         except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao iniciar campanha: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao iniciar campanha {campaign_id}: {e}")
             return False
     
-    def _populate_campaign_queue(self, campaign: Campaign):
-        """Popula fila com TODOS os contatos na ORDEM DE CRIAÇÃO - ROTAÇÃO PERFEITA"""
+    def _run_campaign_async(self, campaign_id: str):
+        """Executa campanha em loop assíncrono"""
         try:
-            # Buscar TODOS os contatos pendentes na ORDEM DE CRIAÇÃO
-            contacts = CampaignContact.objects.filter(
-                campaign=campaign,
-                status__in=['pending', 'sending']
-            ).select_related('contact').order_by('created_at')  # ← ORDEM DE CRIAÇÃO
+            # Criar novo event loop para a thread
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             
-            if not contacts.exists():
-                logger.warning(f"⚠️ [CONSUMER] Nenhum contato pendente para campanha {campaign.name}")
-                return
-            
-            # 🎯 USAR APENAS INSTÂNCIAS SELECIONADAS NA CAMPANHA
-            instances = campaign.instances.filter(is_active=True).order_by('created_at')
-            
-            if not instances.exists():
-                logger.error(f"❌ [CONSUMER] Nenhuma instância selecionada ativa para campanha {campaign.name}")
-                return
-            
-            queue_name = f"campaign.{campaign.id}.messages"
-            instances_list = list(instances)
-            instance_count = len(instances_list)
-            
-            logger.info(f"🔄 [ROTATION] Populando fila: {contacts.count()} contatos na ORDEM DE CRIAÇÃO, {instance_count} instâncias")
-            
-            # Verificar conexão antes de publicar
-            self._check_connection()
-            
-            # Processar CADA contato na ordem de criação com rotação sequencial
-            for i, contact in enumerate(contacts):
-                # Calcular delay aleatório para este contato
-                delay_seconds = random.randint(campaign.interval_min, campaign.interval_max)
-                
-                # Calcular índice da instância (round robin) baseado na ORDEM DE CRIAÇÃO
-                instance_index = i % instance_count  # ← ROTAÇÃO PERFEITA baseada na ordem
-                selected_instance = instances_list[instance_index]
-                
-                logger.info(f"🎯 [ROTATION] Contato {i+1} (ordem criação): selecionando instância {instance_index} = {selected_instance.friendly_name} (ID: {selected_instance.id})")
-                
-                # Criar mensagem com rotação pré-calculada
-                message = {
-                    'campaign_id': str(campaign.id),
-                    'contact_id': str(contact.contact.id),
-                    'campaign_contact_id': str(contact.id),
-                    'contact_phone': contact.contact.phone,
-                    'message_content': self._get_message_content(campaign, i, contact.contact),  # ← ROTAÇÃO DE MENSAGENS baseada na posição
-                    'scheduled_delay_seconds': delay_seconds,
-                    'created_at': timezone.now().isoformat(),
-                    'campaign_settings': {
-                        'interval_min': campaign.interval_min,
-                        'interval_max': campaign.interval_max,
-                        'rotation_mode': campaign.rotation_mode,
-                        'selected_instances': [str(inst.id) for inst in instances_list],
-                        'instance_rotation_index': instance_index,  # ← ROTAÇÃO PRÉ-CALCULADA
-                        'selected_instance_id': str(selected_instance.id)  # ← INSTÂNCIA ESPECÍFICA
-                    }
-                }
-                
-                logger.info(f"📝 [MESSAGE] Mensagem criada para {contact.contact.name}: selected_instance_id = {str(selected_instance.id)}")
-                
-                # Publicar mensagem (todas na ordem correta)
-                self.channel.basic_publish(
-                    exchange='campaigns',
-                    routing_key=queue_name,
-                    body=json.dumps(message),
-                    properties=pika.BasicProperties(
-                        delivery_mode=2,  # Persistir mensagem
-                        timestamp=int(time.time())
-                    )
-                )
-                
-                logger.info(f"📤 [QUEUE] Contato {i+1}/{contacts.count()}: {contact.contact.name} → {selected_instance.friendly_name} (delay: {delay_seconds}s)")
-            
-            logger.info(f"✅ [ROTATION] Fila populada: {contacts.count()} mensagens na ORDEM DE CRIAÇÃO com rotação perfeita")
+            # Executar campanha
+            loop.run_until_complete(self._process_campaign_async(campaign_id))
             
         except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao popular fila: {e}")
-    
-    def _start_campaign_consumer(self, campaign_id: str):
-        """Inicia consumer INDEPENDENTE para uma campanha específica - PARALELISMO TOTAL"""
-        if campaign_id in self.consumer_threads:
-            logger.warning(f"⚠️ [CONSUMER] Consumer já ativo para campanha {campaign_id}")
-            return
-        
-        def consumer_callback(ch, method, properties, body):
-            try:
-                message_data = json.loads(body)
-                success = self._process_message(message_data)
-                
-                # ✅ SEMPRE confirmar mensagem (nunca travar a fila)
-                ch.basic_ack(delivery_tag=method.delivery_tag)
-                
-                if not success:
-                    logger.warning(f"⚠️ [CONSUMER] Mensagem processada com falha, mas fila continua")
-                    
-            except Exception as e:
-                logger.error(f"❌ [CONSUMER] Erro crítico ao processar mensagem: {e}")
-                # ✅ SEMPRE confirmar mensagem para não travar a fila
-                try:
-                    ch.basic_ack(delivery_tag=method.delivery_tag)
-                    logger.info(f"✅ [CONSUMER] Mensagem confirmada mesmo com erro - fila continua")
-                except Exception as ack_error:
-                    logger.error(f"❌ [CONSUMER] Erro ao confirmar mensagem: {ack_error}")
-                    # Forçar nack apenas se ack falhar
-                    try:
-                        ch.basic_nack(delivery_tag=method.delivery_tag, requeue=False)
-                    except:
-                        pass
-        
-        def start_consuming():
-            """Consumer INDEPENDENTE com sua própria conexão RabbitMQ - COM RETRY ROBUSTO"""
-            campaign_connection = None
-            campaign_channel = None
-            max_retries = 3
-            retry_delay = 5
-            
-            for attempt in range(max_retries):
-                try:
-                    # 🚀 NOVA CONEXÃO INDEPENDENTE para cada campanha
-                    # Usar a mesma URL do RabbitMQ que já está configurada
-                    rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
-                    
-                    # Configurar parâmetros com retry robusto
-                    connection_params = pika.URLParameters(rabbitmq_url)
-                    connection_params.heartbeat = 600
-                    connection_params.blocked_connection_timeout = 300
-                    connection_params.retry_delay = 2
-                    connection_params.connection_attempts = 3
-                    
-                    campaign_connection = pika.BlockingConnection(connection_params)
-                    campaign_channel = campaign_connection.channel()
-                    
-                    queue_name = f"campaign.{campaign_id}.messages"
-                    
-                    # Configurar QoS para esta campanha específica
-                    campaign_channel.basic_qos(prefetch_count=1)
-                    
-                    # Iniciar consumer independente
-                    campaign_channel.basic_consume(
-                        queue=queue_name,
-                        on_message_callback=consumer_callback,
-                        auto_ack=False
-                    )
-                    
-                    logger.info(f"🎯 [PARALLEL] Consumer INDEPENDENTE iniciado para campanha {campaign_id}")
-                    campaign_channel.start_consuming()
-                    break  # Sucesso - sair do loop de retry
-                    
-                except Exception as e:
-                    error_msg = str(e)
-                    
-                    # Detectar bugs conhecidos do Pika
-                    if ("pop from an empty deque" in error_msg or 
-                        "IndexError" in error_msg or 
-                        "Stream connection lost" in error_msg or
-                        "StreamLostError" in error_msg or
-                        "_CallbackResult was not set" in error_msg or
-                        "CallbackResult" in error_msg or
-                        "tx buffer size underflow" in error_msg):
-                        
-                        logger.error(f"🐛 [PIKA_BUG] Erro conhecido do pika no consumer independente (tentativa {attempt + 1}/{max_retries}): {e}")
-                        logger.info(f"🔧 [PIKA_BUG] Tentando reconexão do consumer independente em {retry_delay}s...")
-                        
-                        # Limpar conexão atual
-                        try:
-                            if campaign_channel and not campaign_channel.is_closed:
-                                campaign_channel.stop_consuming()
-                                campaign_channel.close()
-                        except:
-                            pass
-                            
-                        try:
-                            if campaign_connection and not campaign_connection.is_closed:
-                                campaign_connection.close()
-                        except:
-                            pass
-                        
-                        # Aguardar antes de tentar novamente
-                        if attempt < max_retries - 1:
-                            import time
-                            time.sleep(retry_delay)
-                            retry_delay *= 2  # Backoff exponencial
-                            continue
-                    else:
-                        logger.error(f"❌ [PARALLEL] Erro não relacionado ao Pika no consumer independente da campanha {campaign_id}: {e}")
-                        break
-            else:
-                logger.error(f"❌ [PARALLEL] Falha após {max_retries} tentativas no consumer independente da campanha {campaign_id}")
-            
-            # Limpar conexão independente
-            try:
-                if campaign_channel and not campaign_channel.is_closed:
-                    campaign_channel.stop_consuming()
-                    campaign_channel.close()
-            except:
-                pass
-                
-            try:
-                if campaign_connection and not campaign_connection.is_closed:
-                    campaign_connection.close()
-            except:
-                pass
-            
-            # Remover da lista de consumers ativos
+            logger.error(f"❌ [AIO-PIKA] Erro no processamento da campanha {campaign_id}: {e}")
+        finally:
+            # Limpar thread
             if campaign_id in self.consumer_threads:
                 del self.consumer_threads[campaign_id]
-                logger.info(f"🧹 [PARALLEL] Consumer independente da campanha {campaign_id} finalizado")
-        
-        # Iniciar em thread separada - AGORA TOTALMENTE INDEPENDENTE
-        thread = threading.Thread(target=start_consuming, daemon=True)
-        thread.start()
-        
-        self.consumer_threads[campaign_id] = thread
-        logger.info(f"🚀 [PARALLEL] Thread INDEPENDENTE iniciada para campanha {campaign_id}")
     
-    def _process_message(self, message_data: Dict[str, Any]) -> bool:
-        """Processa uma mensagem individual - USA INSTÂNCIA PRÉ-SELECIONADA COM DELAY"""
+    async def _process_campaign_async(self, campaign_id: str):
+        """Processa campanha de forma assíncrona"""
         try:
-            campaign_id = message_data['campaign_id']
-            contact_id = message_data['contact_id']
-            campaign_contact_id = message_data['campaign_contact_id']
-            message_content = message_data['message_content']
-            contact_phone = message_data.get('contact_phone')
-            scheduled_delay = message_data.get('scheduled_delay_seconds', 0)
+            logger.info(f"🔄 [AIO-PIKA] Iniciando processamento da campanha {campaign_id}")
             
-            # Buscar dados
-            campaign = Campaign.objects.get(id=campaign_id)
-            contact = CampaignContact.objects.get(id=campaign_contact_id)
-            
-            # ⏰ APLICAR DELAY ANTES DO PROCESSAMENTO COM CONTADOR REGRESSIVO
-            if scheduled_delay > 0:
-                logger.info(f"⏰ [DELAY] Aguardando {scheduled_delay}s antes de processar {contact.contact.name}")
-                
-                # Atualizar informações da próxima mensagem na campanha
-                with transaction.atomic():
-                    campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=scheduled_delay)
-                    campaign.next_contact_name = contact.contact.name
-                    campaign.next_contact_phone = contact.contact.phone
-                    campaign.save(update_fields=['next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
-                
-                # WebSocket será enviado apenas nos gatilhos específicos (sem spam)
-                
-                # Aplicar delay com contador regressivo
-                for remaining_seconds in range(scheduled_delay, 0, -1):
-                    # Verificar se campanha ainda está ativa a cada segundo
-                    campaign.refresh_from_db()
-                    if campaign.status != 'running':
-                        logger.warning(f"⚠️ [DELAY] Campanha {campaign.name} pausada durante delay - {remaining_seconds}s restantes")
-                        return False
+            while True:
+                try:
+                    # Verificar conexão
+                    if not await self._check_connection():
+                        logger.warning("⚠️ [AIO-PIKA] Aguardando reconexão...")
+                        await asyncio.sleep(5)
+                        continue
                     
-                    # Log a cada 10 segundos ou nos últimos 10 segundos
-                    if remaining_seconds % 10 == 0 or remaining_seconds <= 10:
-                        logger.info(f"⏰ [DELAY] {remaining_seconds}s restantes para {contact.contact.name}")
+                    # Buscar campanha
+                    campaign = await self._get_campaign_async(campaign_id)
+                    if not campaign:
+                        logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                        break
                     
-                    time.sleep(1)
-                
-                logger.info(f"✅ [DELAY] Delay concluído - processando {contact.contact.name}")
-                
-                # 🚀 GATILHO: Próximo disparo iniciando (frontend fará contagem)
-                self._send_websocket_update(campaign, 'campaign_update', {
-                    'event': 'next_message_starting',
-                    'contact_name': contact.contact.name,
-                    'contact_phone': contact.contact.phone
-                })
-            
-            # Verificar se campanha ainda está ativa após delay
-            campaign.refresh_from_db()
-            if campaign.status != 'running':
-                logger.warning(f"⚠️ [DELAY] Campanha {campaign.name} não está mais ativa após delay")
-                return False
-            
-            # 🎯 USAR INSTÂNCIA PRÉ-SELECIONADA (rotação já calculada)
-            instance = self._get_pre_selected_instance(message_data)
-            if not instance:
-                logger.error(f"❌ [PROCESSING] Instância pré-selecionada não disponível para campanha {campaign.name}")
-                return False
-            
-            # 🔒 VALIDAÇÕES CRÍTICAS DE SEGURANÇA
-            logger.info(f"🔍 [VALIDATION] Validando dados para {contact.contact.name}")
-            validation_result = self._validate_message_data(campaign, contact, instance, message_data)
-            logger.info(f"📋 [VALIDATION] Resultado da validação: {validation_result}")
-            if not validation_result:
-                logger.error(f"❌ [SECURITY] Validação de segurança falhou para campanha {campaign.name}")
-                return False
-            
-            logger.info(f"📤 [MESSAGE] Enviando para {contact.contact.name} ({contact_phone}) via {instance.friendly_name} (delay: {scheduled_delay}s)")
-            logger.info(f"🔒 [SECURITY] Tenant: {campaign.tenant.name} | Instância: {instance.tenant.name}")
-            
-            # 🛡️ TESTAR INSTÂNCIA ANTES DE ENVIAR
-            instance_status = self._check_instance_status(instance)
-            if not instance_status['is_active']:
-                logger.error(f"❌ [INSTANCE] Instância {instance.friendly_name} não está ativa: {instance_status['reason']}")
-                
-                # Pausar campanha imediatamente
-                campaign.status = 'paused'
-                campaign.save(update_fields=['status'])
-                
-                # Log da pausa
-                CampaignLog.log_campaign_paused(campaign, f"Instância {instance.friendly_name} desconectada: {instance_status['reason']}")
-                
-                logger.error(f"⏸️ [AUTO-PAUSE] Campanha {campaign.name} pausada - instância desconectada")
-                
-                # WebSocket para notificar pausa
-                self._send_websocket_update(campaign, 'campaign_update', {
-                    'event': 'campaign_auto_paused',
-                    'reason': f'Instância {instance.friendly_name} desconectada',
-                    'instance_name': instance.friendly_name,
-                    'instance_status': instance_status['reason']
-                })
-                
-                return False
-            
-            # Enviar mensagem via API com retry
-            logger.info(f"🚀 [SEND] Iniciando envio para {contact.contact.name} via {instance.friendly_name}")
-            send_result = self._send_whatsapp_message_with_retry(instance, contact_phone, message_content, campaign)
-            success = send_result.get('success', False)
-            message_id = send_result.get('message_id')
-            logger.info(f"📊 [SEND] Resultado do envio: {success} para {contact.contact.name}, MessageID: {message_id}")
-            
-            if success:
-                # Atualizar status
-                with transaction.atomic():
-                    contact.status = 'sent'
-                    contact.sent_at = timezone.now()
-                    # 🆕 SALVAR WHATSAPP MESSAGE ID
-                    if message_id:
-                        contact.whatsapp_message_id = message_id
-                        logger.info(f"💾 [SAVE] WhatsApp Message ID salvo: {message_id}")
-                    contact.save()
+                    # Verificar status
+                    if campaign.status not in ['active', 'running']:
+                        logger.info(f"⏸️ [AIO-PIKA] Campanha {campaign_id} pausada/parada")
+                        break
                     
-                    campaign.messages_sent += 1
+                    # Processar próxima mensagem
+                    await self._process_next_message_async(campaign)
                     
-                    # Atualizar informações do ÚLTIMO disparo
-                    campaign.last_contact_name = contact.contact.name
-                    campaign.last_contact_phone = contact.contact.phone
-                    campaign.last_message_sent_at = timezone.now()
+                    # Aguardar antes da próxima iteração
+                    await asyncio.sleep(1)
                     
-                    # Atualizar informações da próxima mensagem
-                    next_contact = CampaignContact.objects.filter(
-                        campaign=campaign,
-                        status__in=['pending', 'sending']
-                    ).select_related('contact').first()
+                except Exception as e:
+                    logger.error(f"❌ [AIO-PIKA] Erro no loop da campanha {campaign_id}: {e}")
+                    await asyncio.sleep(5)
                     
-                    if next_contact:
-                        campaign.next_contact_name = next_contact.contact.name
-                        campaign.next_contact_phone = next_contact.contact.phone
-                        # Calcular próximo delay
-                        next_delay = random.randint(campaign.interval_min, campaign.interval_max)
-                        campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=next_delay)
-                    else:
-                        # Nenhum contato pendente - campanha concluída
-                        campaign.next_contact_name = None
-                        campaign.next_contact_phone = None
-                        campaign.next_message_scheduled_at = None
-                        campaign.status = 'completed'
-                        campaign.completed_at = timezone.now()
-                    
-                    campaign.save(update_fields=['messages_sent', 'last_contact_name', 'last_contact_phone', 'last_message_sent_at', 'next_contact_name', 'next_contact_phone', 'next_message_scheduled_at', 'status', 'completed_at'])
-                
-                # WebSocket será enviado apenas nos gatilhos específicos (sem spam)
-                
-                logger.info(f"✅ [MESSAGE] Mensagem enviada com sucesso via {instance.friendly_name}")
-                
-                # 🚀 GATILHO: Mensagem enviada - frontend atualiza e faz nova contagem
-                self._send_websocket_update(campaign, 'campaign_update', {
-                    'event': 'message_sent',
-                    'contact_name': contact.contact.name,
-                    'contact_phone': contact.contact.phone,
-                    'instance_name': instance.friendly_name
-                })
-                
-                return True
-            else:
-                # Marcar como falha (após 3 tentativas)
-                with transaction.atomic():
-                    contact.status = 'failed'
-                    contact.save()
-                    
-                    campaign.messages_failed += 1
-                    campaign.save(update_fields=['messages_failed'])
-                
-                logger.error(f"❌ [MESSAGE] Falha ao enviar mensagem após 3 tentativas via {instance.friendly_name}")
-                
-                # 🚀 GATILHO: Falha no envio
-                self._send_websocket_update(campaign, 'campaign_update', {
-                    'event': 'message_failed',
-                    'contact_name': contact.contact.name,
-                    'contact_phone': contact.contact.phone,
-                    'instance_name': instance.friendly_name
-                })
-                
-                return False
-                
         except Exception as e:
-            logger.error(f"❌ [MESSAGE] Erro ao processar mensagem: {e}")
-            return False
+            logger.error(f"❌ [AIO-PIKA] Erro crítico no processamento da campanha {campaign_id}: {e}")
     
-    def _check_instance_status(self, instance):
-        """Verifica se a instância está ativa fazendo um teste de conectividade"""
+    async def _get_campaign_async(self, campaign_id: str):
+        """Busca campanha de forma assíncrona"""
         try:
-            import requests
+            # Usar sync_to_async para operações Django
+            from asgiref.sync import sync_to_async
             
-            # URL de teste de status da instância
-            test_url = f"{instance.api_url}/instance/connectionState/{instance.instance_name}"
-            headers = {
-                'apikey': instance.api_key,
-                'Content-Type': 'application/json'
-            }
+            @sync_to_async
+            def get_campaign():
+                try:
+                    return Campaign.objects.get(id=campaign_id)
+                except Campaign.DoesNotExist:
+                    return None
             
-            logger.info(f"🔍 [INSTANCE] Testando conectividade da instância {instance.friendly_name}")
+            return await get_campaign()
             
-            # Fazer requisição de teste com timeout curto
-            response = requests.get(test_url, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                data = response.json()
-                
-                # Verificar se a instância está conectada
-                if data.get('instance', {}).get('state') == 'open':
-                    logger.info(f"✅ [INSTANCE] Instância {instance.friendly_name} está ativa e conectada")
-                    return {
-                        'is_active': True,
-                        'reason': 'Conectada',
-                        'state': 'open'
-                    }
-                else:
-                    state = data.get('instance', {}).get('state', 'unknown')
-                    logger.warning(f"⚠️ [INSTANCE] Instância {instance.friendly_name} não está conectada: {state}")
-                    return {
-                        'is_active': False,
-                        'reason': f'Estado: {state}',
-                        'state': state
-                    }
-            else:
-                logger.error(f"❌ [INSTANCE] Erro ao verificar instância {instance.friendly_name}: HTTP {response.status_code}")
-                return {
-                    'is_active': False,
-                    'reason': f'Erro HTTP {response.status_code}',
-                    'state': 'error'
-                }
-                
-        except requests.exceptions.Timeout:
-            logger.error(f"❌ [INSTANCE] Timeout ao verificar instância {instance.friendly_name}")
-            return {
-                'is_active': False,
-                'reason': 'Timeout na verificação',
-                'state': 'timeout'
-            }
-        except requests.exceptions.ConnectionError:
-            logger.error(f"❌ [INSTANCE] Erro de conexão ao verificar instância {instance.friendly_name}")
-            return {
-                'is_active': False,
-                'reason': 'Erro de conexão',
-                'state': 'connection_error'
-            }
         except Exception as e:
-            logger.error(f"❌ [INSTANCE] Erro inesperado ao verificar instância {instance.friendly_name}: {e}")
-            return {
-                'is_active': False,
-                'reason': f'Erro inesperado: {str(e)}',
-                'state': 'error'
-            }
+            logger.error(f"❌ [AIO-PIKA] Erro ao buscar campanha {campaign_id}: {e}")
+            return None
     
-    def _check_auto_pause_campaign(self, campaign, instance):
-        """Verifica se deve pausar campanha automaticamente por muitas falhas"""
+    async def _process_next_message_async(self, campaign):
+        """Processa próxima mensagem da campanha"""
         try:
-            # Calcular taxa de falha
-            total_messages = campaign.messages_sent + campaign.messages_failed
-            if total_messages == 0:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def get_next_contact():
+                return campaign.contacts.filter(
+                    status='pending'
+                ).order_by('created_at').first()
+            
+            contact = await get_next_contact()
+            
+            if not contact:
+                logger.info(f"✅ [AIO-PIKA] Campanha {campaign.id} - Todos os contatos processados")
+                # Pausar campanha
+                campaign.status = 'completed'
+                campaign.save()
                 return
             
-            failure_rate = (campaign.messages_failed / total_messages) * 100
+            # Processar mensagem
+            await self._send_message_async(campaign, contact)
             
-            # Pausar se taxa de falha > 80% E pelo menos 5 mensagens tentadas
-            if failure_rate > 80 and total_messages >= 5:
-                logger.warning(f"🛡️ [AUTO-PAUSE] Taxa de falha crítica: {failure_rate:.1f}% ({campaign.messages_failed}/{total_messages})")
-                logger.warning(f"🛡️ [AUTO-PAUSE] Instância {instance.friendly_name} pode estar suspensa")
-                
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao processar próxima mensagem: {e}")
+    
+    async def _send_message_async(self, campaign, contact):
+        """Envia mensagem de forma assíncrona"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            logger.info(f"📤 [AIO-PIKA] Enviando mensagem para {contact.phone} - Campanha {campaign.id}")
+            
+            # Buscar instância ativa
+            @sync_to_async
+            def get_active_instance():
+                return WhatsAppInstance.objects.filter(
+                    tenant=campaign.tenant,
+                    is_active=True
+                ).first()
+            
+            instance = await get_active_instance()
+            
+            if not instance:
+                logger.error(f"❌ [AIO-PIKA] Nenhuma instância ativa para campanha {campaign.id}")
                 # Pausar campanha
                 campaign.status = 'paused'
-                campaign.save(update_fields=['status'])
-                
-                # Log da pausa
-                CampaignLog.log_campaign_paused(campaign, f"Pausada automaticamente: {failure_rate:.1f}% de falhas ({campaign.messages_failed}/{total_messages})")
-                
-                logger.error(f"⏸️ [AUTO-PAUSE] Campanha {campaign.name} pausada automaticamente por muitas falhas")
-                
-                # WebSocket para notificar pausa
-                self._send_websocket_update(campaign, 'campaign_update', {
-                    'event': 'campaign_auto_paused',
-                    'reason': f'Taxa de falha crítica: {failure_rate:.1f}%',
-                    'failure_count': campaign.messages_failed,
-                    'total_attempts': total_messages,
-                    'instance_name': instance.friendly_name
-                })
-                
-            elif failure_rate > 60 and total_messages >= 3:
-                logger.warning(f"⚠️ [AUTO-PAUSE] Taxa de falha alta: {failure_rate:.1f}% - monitorando...")
-                
-        except Exception as e:
-            logger.error(f"❌ [AUTO-PAUSE] Erro ao verificar auto-pause: {e}")
-    
-    def _get_pre_selected_instance(self, message_data: Dict[str, Any]):
-        """Busca instância pré-selecionada baseada na rotação calculada"""
-        try:
-            logger.info(f"🔍 [INSTANCE] Buscando instância pré-selecionada...")
-            logger.info(f"🔍 [INSTANCE] message_data keys: {list(message_data.keys())}")
-            
-            campaign_settings = message_data.get('campaign_settings', {})
-            logger.info(f"🔍 [INSTANCE] campaign_settings keys: {list(campaign_settings.keys())}")
-            
-            selected_instance_id = campaign_settings.get('selected_instance_id')
-            logger.info(f"🔍 [INSTANCE] selected_instance_id: {selected_instance_id}")
-            
-            if not selected_instance_id:
-                logger.error("❌ [INSTANCE] selected_instance_id não encontrado na mensagem")
-                logger.error(f"❌ [INSTANCE] campaign_settings completo: {campaign_settings}")
-                return None
-            
-            # Buscar instância específica
-            instance = WhatsAppInstance.objects.get(
-                id=selected_instance_id,
-                is_active=True
-            )
-            
-            logger.info(f"🎯 [INSTANCE] Usando instância pré-selecionada: {instance.friendly_name}")
-            return instance
-            
-        except WhatsAppInstance.DoesNotExist:
-            logger.error(f"❌ [INSTANCE] Instância {selected_instance_id} não encontrada ou inativa")
-            # Fallback: tentar selecionar uma instância disponível
-            return self._select_instance_fallback(message_data.get('campaign_settings', {}))
-        except Exception as e:
-            logger.error(f"❌ [INSTANCE] Erro ao buscar instância pré-selecionada: {e}")
-            return None
-    
-    def _select_instance_fallback(self, campaign_settings: Dict[str, Any]):
-        """Fallback: seleciona primeira instância disponível"""
-        try:
-            selected_instances = campaign_settings.get('selected_instances', [])
-            if not selected_instances:
-                return None
-            
-            # Tentar primeira instância disponível
-            for instance_id in selected_instances:
-                try:
-                    instance = WhatsAppInstance.objects.get(
-                        id=instance_id,
-                        is_active=True
-                    )
-                    logger.info(f"🔄 [FALLBACK] Usando instância alternativa: {instance.friendly_name}")
-                    return instance
-                except WhatsAppInstance.DoesNotExist:
-                    continue
-            
-            logger.error("❌ [FALLBACK] Nenhuma instância disponível encontrada")
-            return None
-            
-        except Exception as e:
-            logger.error(f"❌ [FALLBACK] Erro no fallback de instância: {e}")
-            return None
-    
-    def _schedule_next_message(self, campaign: Campaign):
-        """Agenda próxima mensagem respeitando intervalos da campanha"""
-        try:
-            # Buscar próximo contato pendente
-            next_contact = CampaignContact.objects.filter(
-                campaign=campaign,
-                status__in=['pending', 'sending']
-            ).select_related('contact').first()
-            
-            if not next_contact:
-                logger.info(f"🏁 [CAMPAIGN] Campanha {campaign.name} concluída - sem mais contatos")
-                # Marcar campanha como concluída
-                campaign.status = 'completed'
-                campaign.completed_at = timezone.now()
-                campaign.save(update_fields=['status', 'completed_at'])
+                campaign.save()
                 return
             
-            # Calcular delay baseado nos intervalos da campanha
-            import random
-            delay_seconds = random.randint(campaign.interval_min, campaign.interval_max)
+            # Enviar mensagem
+            success = await self._send_whatsapp_message_async(campaign, contact, instance)
             
-            logger.info(f"⏰ [SCHEDULE] Próxima mensagem em {delay_seconds}s para {next_contact.contact.name}")
-            
-            # Agendar próxima mensagem com delay
-            self._schedule_message_with_delay(campaign, next_contact, delay_seconds)
-            
+            if success:
+                # Marcar como enviado
+                @sync_to_async
+                def mark_sent():
+                    contact.status = 'sent'
+                    contact.sent_at = timezone.now()
+                    contact.save()
+                
+                await mark_sent()
+                
+                # Aguardar delay da campanha
+                delay_seconds = campaign.delay_between_messages or 30
+                logger.info(f"⏳ [AIO-PIKA] Aguardando {delay_seconds}s antes da próxima mensagem")
+                await asyncio.sleep(delay_seconds)
+                
+            else:
+                logger.error(f"❌ [AIO-PIKA] Falha ao enviar mensagem para {contact.phone}")
+                # Marcar como falha
+                @sync_to_async
+                def mark_failed():
+                    contact.status = 'failed'
+                    contact.save()
+                
+                await mark_failed()
+                
         except Exception as e:
-            logger.error(f"❌ [SCHEDULE] Erro ao agendar próxima mensagem: {e}")
-            # 🔄 RETRY: Tentar agendar novamente em 30 segundos
-            self._schedule_retry_next_message(campaign, 30, 1)
+            logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem: {e}")
     
-    def _schedule_message_with_delay(self, campaign: Campaign, contact: CampaignContact, delay_seconds: int):
-        """Agenda mensagem com delay específico"""
+    async def _send_whatsapp_message_async(self, campaign, contact, instance):
+        """Envia mensagem WhatsApp de forma assíncrona"""
         try:
-            import threading
-            import time
+            # Buscar mensagem da campanha
+            from asgiref.sync import sync_to_async
             
-            def delayed_message():
-                # Aguardar o delay
-                time.sleep(delay_seconds)
-                
-                # Verificar se campanha ainda está ativa
-                campaign.refresh_from_db()
-                if campaign.status != 'running':
-                    logger.info(f"⏹️ [SCHEDULE] Campanha {campaign.name} não está mais ativa - cancelando agendamento")
-                    return
-                
-                # Criar próxima mensagem
-                message = {
-                    'campaign_id': str(campaign.id),
-                    'contact_id': str(contact.contact.id),
-                    'campaign_contact_id': str(contact.id),
-                    'instance_id': 'SELECT_AT_PROCESSING',
-                    'message_content': self._get_message_content(campaign, 0, contact.contact),
-                    'created_at': timezone.now().isoformat(),
-                    'campaign_interval_min': campaign.interval_min,
-                    'campaign_interval_max': campaign.interval_max,
-                    'campaign_rotation_mode': campaign.rotation_mode
-                }
-                
-                # Verificar conexão antes de publicar
-                self._check_connection()
-                
-                # Publicar mensagem agendada
-                queue_name = f"campaign.{campaign.id}.messages"
-                self.channel.basic_publish(
-                    exchange='campaigns',
-                    routing_key=queue_name,
-                    body=json.dumps(message),
-                    properties=pika.BasicProperties(
-                        delivery_mode=2,
-                        timestamp=int(time.time())
-                    )
-                )
-                
-                logger.info(f"📤 [SCHEDULE] Mensagem agendada publicada para {contact.contact.name}")
+            @sync_to_async
+            def get_message():
+                return campaign.messages.first()
             
-            # Executar em thread separada
-            thread = threading.Thread(target=delayed_message, daemon=True)
-            thread.start()
+            message = await get_message()
             
-        except Exception as e:
-            logger.error(f"❌ [SCHEDULE] Erro ao agendar mensagem com delay: {e}")
-    
-    def _schedule_retry_next_message(self, campaign: Campaign, retry_delay: int, attempt: int = 1):
-        """Retry para agendar próxima mensagem em caso de erro"""
-        try:
-            import threading
-            import time
-            
-            def retry_schedule():
-                logger.info(f"🔄 [RETRY] Tentativa {attempt} - agendando em {retry_delay}s para campanha {campaign.name}")
-                time.sleep(retry_delay)
-                
-                # Verificar se campanha ainda está ativa
-                campaign.refresh_from_db()
-                if campaign.status != 'running':
-                    logger.info(f"⏹️ [RETRY] Campanha {campaign.name} não está mais ativa - cancelando retry")
-                    return
-                
-                # Tentar agendar novamente
-                try:
-                    self._schedule_next_message(campaign)
-                    logger.info(f"✅ [RETRY] Próxima mensagem agendada com sucesso após retry")
-                except Exception as retry_error:
-                    logger.error(f"❌ [RETRY] Falha no retry: {retry_error}")
-                    # 🔄 RETRY LIMITADO - máximo 3 tentativas
-                    if attempt < 3:
-                        next_delay = retry_delay * 2  # 30s, 60s, 120s
-                        logger.info(f"🔄 [RETRY] Tentativa {attempt + 1}/3 em {next_delay}s")
-                        self._schedule_retry_next_message(campaign, next_delay, attempt + 1)
-                    else:
-                        logger.error(f"❌ [RETRY] Máximo de 3 tentativas atingido para campanha {campaign.name} - PARANDO RETRY")
-                        # Marcar campanha como pausada por erro
-                        campaign.status = 'paused'
-                        campaign.save(update_fields=['status'])
-                        CampaignLog.log_error(campaign, f"Campanha pausada após 3 tentativas de retry falharem")
-            
-            # Executar retry em thread separada
-            thread = threading.Thread(target=retry_schedule, daemon=True)
-            thread.start()
-            
-        except Exception as e:
-            logger.error(f"❌ [RETRY] Erro no sistema de retry: {e}")
-    
-    def _validate_message_data(self, campaign: Campaign, contact: CampaignContact, instance: WhatsAppInstance, message_data: Dict) -> bool:
-        """Validações críticas de segurança antes do envio"""
-        try:
-            # 1. Verificar se a instância pertence ao mesmo tenant da campanha
-            if campaign.tenant != instance.tenant:
-                logger.error(f"❌ [SECURITY] VIOLAÇÃO: Instância {instance.friendly_name} não pertence ao tenant {campaign.tenant.name}")
+            if not message:
+                logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
                 return False
             
-            # 2. Verificar se o contato pertence à campanha
-            if contact.campaign != campaign:
-                logger.error(f"❌ [SECURITY] VIOLAÇÃO: Contato {contact.contact.name} não pertence à campanha {campaign.name}")
-                return False
+            # Preparar dados da mensagem
+            message_data = {
+                "number": contact.phone,
+                "text": message.content,
+                "instance": instance.instance_id
+            }
             
-            # 3. Verificar se o contato pertence ao mesmo tenant
-            if contact.contact.tenant != campaign.tenant:
-                logger.error(f"❌ [SECURITY] VIOLAÇÃO: Contato {contact.contact.name} não pertence ao tenant {campaign.tenant.name}")
-                return False
-            
-            # 4. Verificar se a instância está ativa
-            if not instance.is_active:
-                logger.error(f"❌ [SECURITY] Instância {instance.friendly_name} não está ativa")
-                return False
-            
-            # 5. Verificar se o telefone é válido
-            if not contact.contact.phone or len(contact.contact.phone) < 10:
-                logger.error(f"❌ [SECURITY] Telefone inválido: {contact.contact.phone}")
-                return False
-            
-            # 6. Verificar se a mensagem não está vazia
-            if not message_data.get('message_content') or len(message_data.get('message_content', '').strip()) == 0:
-                logger.error(f"❌ [SECURITY] Mensagem vazia ou inválida")
-                return False
-            
-            # 7. Verificar IDs da mensagem
-            expected_contact_id = str(contact.contact.id)
-            if message_data.get('contact_id') != expected_contact_id:
-                logger.error(f"❌ [SECURITY] ID do contato não confere: esperado {expected_contact_id}, recebido {message_data.get('contact_id')}")
-                return False
-            
-            expected_instance_id = str(instance.id)
-            # Verificar se a instância está na lista de instâncias selecionadas da campanha
-            campaign_settings = message_data.get('campaign_settings', {})
-            selected_instance_id = campaign_settings.get('selected_instance_id')
-            
-            if selected_instance_id != expected_instance_id:
-                logger.error(f"❌ [SECURITY] ID da instância não confere: esperado {expected_instance_id}, recebido {selected_instance_id}")
-                return False
-            
-            # Verificar se a instância está na lista de instâncias selecionadas
-            selected_instances = campaign_settings.get('selected_instances', [])
-            if expected_instance_id not in selected_instances:
-                logger.error(f"❌ [SECURITY] Instância {expected_instance_id} não está na lista de instâncias selecionadas: {selected_instances}")
-                return False
-            
-            logger.info(f"✅ [SECURITY] Todas as validações passaram para {contact.contact.name}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ [SECURITY] Erro nas validações: {e}")
-            return False
-
-    def _send_whatsapp_message_with_retry(self, instance: WhatsAppInstance, phone: str, message: str, campaign: Campaign) -> dict:
-        """Envia mensagem via API do WhatsApp com 3 tentativas e retorna response com messageId"""
-        import time
-        
-        for attempt in range(1, 4):  # 3 tentativas
-            try:
-                url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
-                headers = {
-                    'apikey': instance.api_key,
-                    'Content-Type': 'application/json'
-                }
-                payload = {
-                    'number': phone,
-                    'text': message
-                }
-                
-                # Log detalhado do envio
-                logger.info(f"📤 [API] Tentativa {attempt}/3 - Enviando via {instance.friendly_name} para {phone}")
-                logger.info(f"🔗 [API] URL: {url}")
-                logger.info(f"📝 [API] Conteúdo: {message[:100]}...")
-                logger.info(f"🆔 [INSTANCE] ID: {instance.id} | Nome: {instance.friendly_name} | Instance: {instance.instance_name}")
-                
-                response = requests.post(url, json=payload, headers=headers, timeout=30)
-                response.raise_for_status()
-                
-                # Capturar response JSON para obter messageId
-                response_data = response.json()
-                message_id = response_data.get('key', {}).get('id') if response_data.get('key') else None
-                
-                logger.info(f"✅ [API] Mensagem enviada com sucesso na tentativa {attempt}")
-                logger.info(f"🆔 [MESSAGE_ID] ID retornado: {message_id}")
-                
-                return {
-                    'success': True,
-                    'message_id': message_id,
-                    'response_data': response_data
-                }
-                
-            except Exception as e:
-                logger.error(f"❌ [API] Tentativa {attempt}/3 falhou via {instance.friendly_name}: {e}")
-                logger.error(f"🆔 [INSTANCE] ID: {instance.id} | Nome: {instance.friendly_name} | Instance: {instance.instance_name}")
-                
-                if attempt < 3:
-                    # Delay entre tentativas: 2s, 4s
-                    delay = 2 ** attempt
-                    logger.info(f"⏰ [RETRY] Aguardando {delay}s antes da próxima tentativa")
-                    time.sleep(delay)
-                else:
-                    logger.error(f"❌ [API] Todas as 3 tentativas falharam para {phone}")
-                    return {
-                        'success': False,
-                        'message_id': None,
-                        'error': str(e)
-                    }
-        
-        return {
-            'success': False,
-            'message_id': None,
-            'error': 'All attempts failed'
-        }
-
-    def _send_whatsapp_message(self, instance: WhatsAppInstance, phone: str, message: str) -> bool:
-        """Envia mensagem via API do WhatsApp (método simples para compatibilidade)"""
-        try:
-            url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
+            # Enviar via Evolution API
+            url = f"{instance.server_url}/message/sendText/{instance.instance_id}"
             headers = {
-                'apikey': instance.api_key,
-                'Content-Type': 'application/json'
-            }
-            payload = {
-                'number': phone,
-                'text': message
+                "Content-Type": "application/json",
+                "apikey": instance.api_key
             }
             
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            response.raise_for_status()
-            
-            return True
-            
-        except Exception as e:
-            logger.error(f"❌ [WHATSAPP] Erro ao enviar mensagem: {e}")
-            return False
-    
-    def _select_instance(self, campaign: Campaign) -> Optional[WhatsAppInstance]:
-        """Seleciona instância disponível - APENAS INSTÂNCIAS SELECIONADAS NA CAMPANHA"""
-        try:
-            # 🎯 USAR APENAS INSTÂNCIAS SELECIONADAS NA CAMPANHA (como o Celery fazia)
-            available_instances = campaign.instances.filter(
-                is_active=True,
-                health_score__gte=campaign.pause_on_health_below
+            # Usar requests de forma assíncrona
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: requests.post(url, json=message_data, headers=headers, timeout=30)
             )
             
-            if not available_instances.exists():
-                logger.warning(f"⚠️ [CONSUMER] Nenhuma instância disponível para tenant {campaign.tenant.name}")
-                return None
-            
-            logger.info(f"🔒 [SEGURANÇA] Selecionando instância para tenant: {campaign.tenant.name}")
-            
-            # Implementar lógica baseada no modo de rotação da campanha
-            if campaign.rotation_mode == 'round_robin':
-                # Round robin baseado em contador sequencial
-                if not hasattr(self, '_round_robin_counter'):
-                    self._round_robin_counter = 0
-                
-                self._round_robin_counter += 1
-                index = self._round_robin_counter % available_instances.count()
-                instance = available_instances[index]
-                logger.info(f"🔄 [ROUND_ROBIN] Selecionada instância: {instance.friendly_name} (index: {index})")
-                return instance
-            elif campaign.rotation_mode == 'intelligent':
-                # Selecionar instância com melhor health_score
-                instance = available_instances.order_by('-health_score').first()
-                logger.info(f"🧠 [INTELLIGENT] Selecionada instância: {instance.friendly_name} (health: {instance.health_score})")
-                return instance
-            else:
-                # Fallback para primeira instância
-                instance = available_instances.first()
-                logger.info(f"📱 [DEFAULT] Selecionada instância: {instance.friendly_name}")
-                return instance
-            
-        except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao selecionar instância: {e}")
-            return None
-    
-    def _get_message_content(self, campaign: Campaign, contact_position: int = 0, contact=None) -> str:
-        """Obtém conteúdo da mensagem com rotação baseada na posição do contato e substitui variáveis"""
-        try:
-            # Buscar mensagens da campanha
-            from .models import CampaignMessage
-            messages = CampaignMessage.objects.filter(campaign=campaign).order_by('order', 'created_at')
-            
-            if messages.exists():
-                # Implementar rotação de mensagens baseada na posição do contato
-                message_count = messages.count()
-                message_index = contact_position % message_count
-                selected_message = messages[message_index]
-                
-                logger.info(f"🔄 [MESSAGE_ROTATION] Contato posição {contact_position}: usando mensagem {message_index + 1}/{message_count} (ID: {selected_message.id})")
-                
-                # Substituir variáveis na mensagem se contato for fornecido
-                content = selected_message.content
-                if contact:
-                    content = self._replace_message_variables(content, contact)
-                    logger.info(f"🔧 [TEMPLATE] Variáveis substituídas para {contact.name}")
-                
-                return content
-            else:
-                logger.warning(f"⚠️ [CONSUMER] Nenhuma mensagem encontrada para campanha {campaign.name}")
-                return f"Mensagem da campanha {campaign.name}"
-        except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao obter conteúdo: {e}")
-            return f"Mensagem da campanha {campaign.name}"
-    
-    def _replace_message_variables(self, message_content: str, contact) -> str:
-        """Substitui variáveis na mensagem com dados do contato"""
-        try:
-            # Extrair primeiro nome do nome completo
-            primeiro_nome = contact.name.split()[0] if contact.name else ''
-            
-            # Obter saudação baseada no horário atual
-            from datetime import datetime
-            hora_atual = datetime.now().hour
-            if 5 <= hora_atual < 12:
-                saudacao = "Bom dia"
-            elif 12 <= hora_atual < 18:
-                saudacao = "Boa tarde"
-            else:
-                saudacao = "Boa noite"
-            
-            # Obter dia da semana atual
-            dias_semana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
-            dia_semana = dias_semana[datetime.now().weekday()]
-            
-            # Obter dados do indicador do contato
-            quem_indicou = contact.referred_by or 'amigo'
-            primeiro_nome_indicador = quem_indicou.split()[0] if quem_indicou else 'amigo'
-            
-            # Variáveis disponíveis (baseadas nos dados do contato + data atual)
-            variables = {
-                '{{nome}}': contact.name,
-                '{{primeiro_nome}}': primeiro_nome,
-                '{{saudacao}}': saudacao,
-                '{{dia_semana}}': dia_semana,
-                '{{quem_indicou}}': quem_indicou,
-                '{{primeiro_nome_indicador}}': primeiro_nome_indicador,
-                # Suporte também para formato sem chaves duplas (compatibilidade)
-                '{nome}': contact.name,
-                '{primeiro_nome}': primeiro_nome,
-                '{saudacao}': saudacao,
-                '{dia_semana}': dia_semana,
-                '{quem_indicou}': quem_indicou,
-                '{primeiro_nome_indicador}': primeiro_nome_indicador,
-            }
-            
-            # Substituir variáveis
-            processed_content = message_content
-            for variable, value in variables.items():
-                processed_content = processed_content.replace(variable, str(value))
-            
-            # Log da substituição
-            if processed_content != message_content:
-                logger.info(f"🔧 [TEMPLATE] Substituição aplicada: {contact.name}")
-                logger.debug(f"📝 [TEMPLATE] Original: {message_content[:100]}...")
-                logger.debug(f"📝 [TEMPLATE] Processado: {processed_content[:100]}...")
-            
-            return processed_content
-            
-        except Exception as e:
-            logger.error(f"❌ [TEMPLATE] Erro ao substituir variáveis: {e}")
-            return message_content
-    
-    def _send_websocket_update(self, campaign, event_type, extra_data=None):
-        """Envia atualização WebSocket apenas em eventos específicos - VERSÃO OTIMIZADA COM THROTTLING"""
-        try:
-            campaign_id = str(campaign.id)
-            current_time = timezone.now()
-            
-            # Verificar throttling - evitar spam de updates
-            if campaign_id in self.last_websocket_update:
-                time_since_last = (current_time - self.last_websocket_update[campaign_id]).total_seconds()
-                if time_since_last < self.websocket_throttle_seconds:
-                    logger.debug(f"🚫 [WEBSOCKET] Throttling update para {campaign.name} ({time_since_last:.1f}s)")
-                    return
-            
-            # Atualizar timestamp do último update
-            self.last_websocket_update[campaign_id] = current_time
-            
-            logger.info(f"🔧 [WEBSOCKET] Enviando {event_type} para campanha {campaign.name}")
-            logger.info(f"📊 [WEBSOCKET] Dados: sent={campaign.messages_sent}, total={campaign.total_contacts}, status={campaign.status}")
-            
-            # Dados básicos da campanha
-            campaign_data = {
-                'type': event_type,
-                'campaign_id': str(campaign.id),
-                'campaign_name': campaign.name,
-                'status': campaign.status,
-                'messages_sent': campaign.messages_sent,
-                'messages_delivered': campaign.messages_delivered,
-                'messages_read': campaign.messages_read,
-                'messages_failed': campaign.messages_failed,
-                'total_contacts': campaign.total_contacts,
-                'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
-                'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
-                'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
-                'next_contact_name': campaign.next_contact_name,
-                'next_contact_phone': campaign.next_contact_phone,
-                'last_contact_name': campaign.last_contact_name,
-                'last_contact_phone': campaign.last_contact_phone,
-                'updated_at': campaign.updated_at.isoformat(),
-                'timestamp': timezone.now().isoformat()
-            }
-            
-            # Adicionar dados extras se fornecidos
-            if extra_data:
-                campaign_data.update(extra_data)
-            
-            # Usar async_to_sync para execução mais confiável
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
-            
-            def send_websocket():
-                channel_layer = get_channel_layer()
-                if channel_layer:
-                    async_to_sync(channel_layer.group_send)(
-                        f"tenant_{campaign.tenant.id}",
-                        {
-                            "type": "campaign_update",
-                            "payload": campaign_data
-                        }
-                    )
-                    logger.info(f"📡 [WEBSOCKET] {event_type} enviado para campanha {campaign.name}")
-                    logger.info(f"✅ [WEBSOCKET] Dados enviados: {campaign_data}")
-            
-            # Executar em thread separada para evitar bloqueios
-            import threading
-            thread = threading.Thread(target=send_websocket, daemon=True)
-            thread.start()
-                
-        except Exception as e:
-            logger.error(f"❌ [WEBSOCKET] Erro ao enviar {event_type}: {e}")
-
-    async def _send_campaign_update_websocket(self, campaign):
-        """Envia atualização da campanha via WebSocket"""
-        try:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
-            
-            # Calcular tempo restante
-            time_remaining = None
-            if campaign.next_message_scheduled_at and campaign.status == 'running':
-                from django.utils import timezone
-                now = timezone.now()
-                if campaign.next_message_scheduled_at > now:
-                    delta = campaign.next_message_scheduled_at - now
-                    time_remaining = int(delta.total_seconds())
+            if response.status_code == 200:
+                response_data = response.json()
+                if response_data.get('sent'):
+                    logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact.phone}")
+                    
+                    # Salvar message_id
+                    message_id = response_data.get('messageId')
+                    if message_id:
+                        @sync_to_async
+                        def save_message_id():
+                            contact.whatsapp_message_id = message_id
+                            contact.save()
+                        
+                        await save_message_id()
+                    
+                    return True
                 else:
-                    time_remaining = 0
-            
-            # Dados da campanha para WebSocket
-            campaign_data = {
-                'type': 'campaign_update',
-                'campaign_id': str(campaign.id),
-                'status': campaign.status,
-                'messages_sent': campaign.messages_sent,
-                'messages_delivered': campaign.messages_delivered,
-                'messages_read': campaign.messages_read,
-                'messages_failed': campaign.messages_failed,
-                'total_contacts': campaign.total_contacts,
-                'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
-                'last_message': {
-                    'contact_name': campaign.last_contact_name,
-                    'contact_phone': campaign.last_contact_phone,
-                    'sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None
-                },
-                'next_message': {
-                    'contact_name': campaign.next_contact_name,
-                    'contact_phone': campaign.next_contact_phone,
-                    'scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
-                    'time_remaining_seconds': time_remaining
-                },
-                'updated_at': campaign.updated_at.isoformat()
-            }
-            
-            # Enviar via WebSocket
-            channel_layer = get_channel_layer()
-            if channel_layer:
-                await channel_layer.group_send(
-                    f"tenant_{campaign.tenant.id}",
-                    {
-                        "type": "broadcast_notification",
-                        "payload": campaign_data
-                    }
-                )
-                
-                logger.info(f"📡 [WEBSOCKET] Atualização enviada para campanha {campaign.name}")
-                
-        except Exception as e:
-            logger.error(f"❌ [WEBSOCKET] Erro ao enviar atualização: {e}")
-    
-    def _handle_failed_message(self, message_data: Dict[str, Any]):
-        """Trata mensagem que falhou"""
-        try:
-            # Adicionar contador de retry
-            message_data['retry_count'] = message_data.get('retry_count', 0) + 1
-            message_data['max_retries'] = 3
-            
-            if message_data['retry_count'] <= message_data['max_retries']:
-                # Reenviar para retry
-                self.channel.basic_publish(
-                    exchange='campaigns',
-                    routing_key='campaign.retry',
-                    body=json.dumps(message_data),
-                    properties=pika.BasicProperties(
-                        delivery_mode=2,
-                        timestamp=int(time.time())
-                    )
-                )
-                logger.info(f"🔄 [RETRY] Reenviando mensagem (tentativa {message_data['retry_count']})")
+                    logger.error(f"❌ [AIO-PIKA] API retornou erro: {response_data}")
+                    return False
             else:
-                # Enviar para DLQ
-                self.channel.basic_publish(
-                    exchange='campaigns',
-                    routing_key='campaign.dlq',
-                    body=json.dumps(message_data),
-                    properties=pika.BasicProperties(
-                        delivery_mode=2,
-                        timestamp=int(time.time())
-                    )
-                )
-                logger.error(f"💀 [DLQ] Mensagem enviada para dead letter queue")
+                logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code}: {response.text}")
+                return False
                 
         except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao tratar mensagem falhada: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem WhatsApp: {e}")
+            return False
     
     def pause_campaign(self, campaign_id: str):
         """Pausa uma campanha"""
         try:
-            campaign = Campaign.objects.get(id=campaign_id)
-            campaign.status = 'paused'
-            campaign.save(update_fields=['status'])
+            logger.info(f"⏸️ [AIO-PIKA] Pausando campanha {campaign_id}")
             
-            CampaignLog.log_campaign_paused(campaign)
-            logger.info(f"⏸️ [CONSUMER] Campanha {campaign.name} pausada")
+            # Parar thread se estiver rodando
+            if campaign_id in self.consumer_threads:
+                # A thread vai parar naturalmente no próximo loop
+                logger.info(f"🔄 [AIO-PIKA] Thread da campanha {campaign_id} será finalizada")
             
-        except Campaign.DoesNotExist:
-            logger.error(f"❌ [CONSUMER] Campanha {campaign_id} não encontrada")
+            # Atualizar status no banco
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                campaign.status = 'paused'
+                campaign.save()
+                logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} pausada com sucesso")
+                return True
+            except Campaign.DoesNotExist:
+                logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                return False
+                
         except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao pausar campanha: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha {campaign_id}: {e}")
+            return False
     
     def resume_campaign(self, campaign_id: str):
-        """Resume uma campanha e inicia automaticamente o consumer"""
+        """Retoma uma campanha pausada"""
         try:
-            campaign = Campaign.objects.get(id=campaign_id)
-            campaign.status = 'running'
-            campaign.save(update_fields=['status'])
+            logger.info(f"▶️ [AIO-PIKA] Retomando campanha {campaign_id}")
             
-            CampaignLog.log_campaign_resumed(campaign)
-            logger.info(f"▶️ [RESUME] Campanha {campaign.name} resumida")
-            
-            # 🚀 REINICIAR AUTOMATICAMENTE o consumer para campanhas resumidas
-            if campaign_id not in self.consumer_threads:
-                logger.info(f"🚀 [RESUME] Iniciando consumer automaticamente para campanha {campaign.name}")
-                self._start_campaign_consumer(campaign_id)
-            else:
-                logger.info(f"✅ [RESUME] Consumer já ativo para campanha {campaign.name}")
-            
-        except Campaign.DoesNotExist:
-            logger.error(f"❌ [RESUME] Campanha {campaign_id} não encontrada")
+            # Atualizar status no banco
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                campaign.status = 'active'
+                campaign.save()
+                
+                # Iniciar processamento
+                return self.start_campaign(campaign_id)
+                
+            except Campaign.DoesNotExist:
+                logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                return False
+                
         except Exception as e:
-            logger.error(f"❌ [RESUME] Erro ao resumir campanha: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao retomar campanha {campaign_id}: {e}")
+            return False
     
     def stop_campaign(self, campaign_id: str):
-        """Para uma campanha"""
+        """Para uma campanha definitivamente"""
         try:
-            campaign = Campaign.objects.get(id=campaign_id)
-            campaign.status = 'completed'
-            campaign.save(update_fields=['status'])
+            logger.info(f"⏹️ [AIO-PIKA] Parando campanha {campaign_id}")
             
-            # Parar consumer se ativo
+            # Parar thread se estiver rodando
             if campaign_id in self.consumer_threads:
-                del self.consumer_threads[campaign_id]
+                # A thread vai parar naturalmente no próximo loop
+                logger.info(f"🔄 [AIO-PIKA] Thread da campanha {campaign_id} será finalizada")
             
-            CampaignLog.log_campaign_completed(campaign)
-            logger.info(f"🛑 [CONSUMER] Campanha {campaign.name} parada")
-            
-        except Campaign.DoesNotExist:
-            logger.error(f"❌ [CONSUMER] Campanha {campaign_id} não encontrada")
+            # Atualizar status no banco
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                campaign.status = 'stopped'
+                campaign.save()
+                logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} parada com sucesso")
+                return True
+            except Campaign.DoesNotExist:
+                logger.error(f"❌ [AIO-PIKA] Campanha {campaign_id} não encontrada")
+                return False
+                
         except Exception as e:
-            logger.error(f"❌ [CONSUMER] Erro ao parar campanha: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao parar campanha {campaign_id}: {e}")
+            return False
     
-    def get_active_campaigns(self) -> list:
-        """Lista campanhas ativas"""
-        return list(self.consumer_threads.keys())
-    
-    def force_start(self):
-        """Força o início do consumer (para uso via admin)"""
-        try:
-            if not self.is_running:
-                self.start(auto_start_campaigns=True)
-                return True, "Consumer iniciado com sucesso"
-            else:
-                return False, "Consumer já está rodando"
-        except Exception as e:
-            return False, f"Erro ao iniciar consumer: {str(e)}"
-    
-    def force_stop(self):
-        """Força a parada do consumer (para uso via admin)"""
-        try:
-            if self.is_running:
-                self.stop()
-                return True, "Consumer parado com sucesso"
-            else:
-                return False, "Consumer já está parado"
-        except Exception as e:
-            return False, f"Erro ao parar consumer: {str(e)}"
-    
-    def force_restart(self):
-        """Força o reinício do consumer (para uso via admin)"""
-        try:
-            if self.is_running:
-                self.stop()
-                time.sleep(2)  # Aguardar um pouco
-            self.start(auto_start_campaigns=True)
-            return True, "Consumer reiniciado com sucesso"
-        except Exception as e:
-            return False, f"Erro ao reiniciar consumer: {str(e)}"
-    
-    def get_detailed_status(self):
-        """Retorna status detalhado do consumer"""
-        try:
-            active_campaigns = self.get_active_campaigns()
-            campaign_details = []
-            
-            for campaign_id in active_campaigns:
-                status = self.get_campaign_status(campaign_id)
-                campaign_details.append({
-                    'campaign_id': campaign_id,
-                    'status': status.get('status', 'unknown'),
-                    'is_running': status.get('is_running', False),
-                    'messages_processed': status.get('messages_processed', 0),
-                    'last_activity': status.get('last_activity', None),
-                })
-            
-            return {
-                'is_running': self.is_running,
-                'connection_status': 'connected' if self.connection and not self.connection.is_closed else 'disconnected',
-                'active_campaigns_count': len(active_campaigns),
-                'active_campaigns': active_campaigns,
-                'campaign_details': campaign_details,
-                'monitor_running': self.monitor_thread and self.monitor_thread.is_alive() if self.monitor_thread else False,
-            }
-        except Exception as e:
-            return {
-                'is_running': False,
-                'connection_status': 'error',
-                'error': str(e),
-                'active_campaigns_count': 0,
-                'active_campaigns': [],
-                'campaign_details': [],
-                'monitor_running': False,
-            }
-    
-    def get_campaign_status(self, campaign_id: str) -> Optional[Dict[str, Any]]:
+    def get_campaign_status(self, campaign_id: str):
         """Retorna status de uma campanha"""
         try:
-            campaign = Campaign.objects.get(id=campaign_id)
-            is_active = campaign_id in self.consumer_threads
-            
-            return {
-                'campaign_id': campaign_id,
-                'campaign_name': campaign.name,
-                'status': campaign.status,
-                'is_consumer_active': is_active,
-                'messages_sent': campaign.messages_sent,
-                'messages_delivered': campaign.messages_delivered,
-                'messages_failed': campaign.messages_failed
-            }
-            
-        except Campaign.DoesNotExist:
-            return None
-    
-    def start_health_monitor(self):
-        """Inicia monitor de saúde"""
-        def health_monitor():
-            while self.running:
-                try:
-                    self._perform_health_check()
-                    time.sleep(30)  # Verificar a cada 30 segundos
-                except Exception as e:
-                    logger.error(f"❌ [HEALTH] Erro no monitor: {e}")
-                    time.sleep(10)
-        
-        thread = threading.Thread(target=health_monitor, daemon=True)
-        thread.start()
-        logger.info("🔍 [HEALTH] Monitor de saúde iniciado")
-    
-    def _perform_health_check(self):
-        """Executa verificação de saúde"""
-        try:
-            # Verificar campanhas que deveriam estar rodando
-            running_campaigns = Campaign.objects.filter(status='running')
-            
-            for campaign in running_campaigns:
-                campaign_id = str(campaign.id)
-                
-                if campaign_id not in self.consumer_threads:
-                    logger.warning(f"⚠️ [HEALTH] Campanha {campaign.name} deveria estar rodando mas consumer não está ativo")
-                    
-                    # Tentar reiniciar
-                    self.start_campaign(campaign_id)
-            
-            # Verificar contatos pendentes
-            for campaign in running_campaigns:
-                pending_count = CampaignContact.objects.filter(
-                    campaign=campaign,
-                    status__in=['pending', 'sending']
-                ).count()
-                
-                if pending_count == 0:
-                    logger.info(f"🎯 [HEALTH] Campanha {campaign.name} completada")
-                    campaign.complete()
-                
-        except Exception as e:
-            logger.error(f"❌ [HEALTH] Erro na verificação: {e}")
-    
-    def start(self, auto_start_campaigns=False):
-        """Inicia o consumer"""
-        self.running = True
-        self.start_health_monitor()
-        logger.info("🚀 [CONSUMER] RabbitMQ Consumer iniciado")
-        
-        # Iniciar campanhas ativas automaticamente se solicitado
-        if auto_start_campaigns:
-            self._auto_start_active_campaigns()
-    
-    def _auto_start_active_campaigns(self):
-        """Inicia automaticamente campanhas que estão em execução - AGORA EM PARALELO"""
-        try:
-            from .models import Campaign
-            
-            logger.info("🔄 [AUTO-START] Verificando campanhas ativas para PARALELISMO...")
-            running_campaigns = Campaign.objects.filter(status='running')
-            
-            logger.info(f"📊 [PARALLEL] Encontradas {running_campaigns.count()} campanhas ativas")
-            
-            for campaign in running_campaigns:
-                campaign_id = str(campaign.id)
-                if campaign_id not in self.consumer_threads:
-                    logger.info(f"🚀 [PARALLEL] Iniciando consumer INDEPENDENTE para campanha {campaign.name}")
-                    self.start_campaign(campaign_id)
+            if campaign_id in self.consumer_threads:
+                thread = self.consumer_threads[campaign_id]
+                if thread.is_alive():
+                    return "running"
                 else:
-                    logger.info(f"✅ [PARALLEL] Consumer já ativo para campanha {campaign.name}")
-                    
-            # Log do status final
-            active_consumers = len(self.consumer_threads)
-            logger.info(f"🎯 [PARALLEL] STATUS FINAL: {active_consumers} consumers independentes ativos")
-            
-            # 🔄 RECOVERY: Verificar campanhas travadas a cada 5 minutos
-            self._start_campaign_recovery_monitor()
-                    
+                    # Thread morta, remover
+                    del self.consumer_threads[campaign_id]
+                    return "stopped"
+            else:
+                return "stopped"
+                
         except Exception as e:
-            logger.error(f"❌ [AUTO-START] Erro ao iniciar campanhas: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao verificar status da campanha {campaign_id}: {e}")
+            return "error"
     
-    def _start_campaign_recovery_monitor(self):
-        """Monitor para recuperar campanhas travadas"""
-        import threading
-        import time
-        
-        def recovery_monitor():
-            while self.running:
-                try:
-                    time.sleep(60)  # Verificar a cada 1 minuto (mais frequente)
-                    
-                    from .models import Campaign
-                    running_campaigns = Campaign.objects.filter(status='running')
-                    
-                    for campaign in running_campaigns:
-                        campaign_id = str(campaign.id)
-                        
-                        # Se campanha está rodando mas sem consumer ativo
-                        if campaign_id not in self.consumer_threads:
-                            logger.warning(f"🔄 [RECOVERY] Campanha {campaign.name} sem consumer - reiniciando")
-                            self.start_campaign(campaign_id)
-                        
-                        # Verificar se tem contatos pendentes mas sem processamento
-                        pending_contacts = CampaignContact.objects.filter(
-                            campaign=campaign,
-                            status__in=['pending', 'sending']
-                        ).count()
-                        
-                        if pending_contacts > 0:
-                            # Verificar se consumer está ativo mas não processando
-                            if campaign_id in self.consumer_threads:
-                                thread = self.consumer_threads[campaign_id]
-                                if not thread.is_alive():
-                                    logger.warning(f"🔄 [RECOVERY] Consumer morto para {campaign.name} - reiniciando")
-                                    del self.consumer_threads[campaign_id]
-                                    self.start_campaign(campaign_id)
-                                    
-                except Exception as e:
-                    logger.error(f"❌ [RECOVERY] Erro no monitor de recuperação: {e}")
-                    time.sleep(60)  # Aguardar 1 minuto antes de tentar novamente
-        
-        # Iniciar monitor em thread separada
-        thread = threading.Thread(target=recovery_monitor, daemon=True)
-        thread.start()
-        logger.info("🔄 [RECOVERY] Monitor de recuperação de campanhas iniciado")
-    
-    def stop(self):
-        """Para o consumer"""
-        self.running = False
-        
-        if self.connection and not self.connection.is_closed:
-            self.connection.close()
-        
-        logger.info("🛑 [CONSUMER] RabbitMQ Consumer parado")
-
-
-# Instância global do consumer - inicializada apenas quando necessário
-rabbitmq_consumer = None
-
-def get_rabbitmq_consumer():
-    """Obtém instância do consumer, criando se necessário"""
-    global rabbitmq_consumer
-    if rabbitmq_consumer is None:
+    def get_all_campaigns_status(self):
+        """Retorna status de todas as campanhas"""
         try:
-            rabbitmq_consumer = RabbitMQConsumer()
+            status = {}
+            for campaign_id in list(self.consumer_threads.keys()):
+                status[campaign_id] = self.get_campaign_status(campaign_id)
+            return status
         except Exception as e:
-            print(f"⚠️ [RABBITMQ] Consumer não pode ser inicializado: {e}")
-            rabbitmq_consumer = None
-    return rabbitmq_consumer
+            logger.error(f"❌ [AIO-PIKA] Erro ao verificar status das campanhas: {e}")
+            return {}
+    
+    async def close(self):
+        """Fecha conexões"""
+        try:
+            logger.info("🔄 [AIO-PIKA] Fechando conexões...")
+            
+            # Parar todas as threads
+            for campaign_id in list(self.consumer_threads.keys()):
+                self.stop_campaign(campaign_id)
+            
+            # Fechar conexão
+            if self.channel:
+                await self.channel.close()
+            if self.connection:
+                await self.connection.close()
+            
+            logger.info("✅ [AIO-PIKA] Conexões fechadas com sucesso")
+            
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao fechar conexões: {e}")
+
+
+# Instância global
+consumer = RabbitMQConsumer()
