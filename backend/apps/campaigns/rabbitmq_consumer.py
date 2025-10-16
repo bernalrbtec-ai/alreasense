@@ -482,20 +482,20 @@ class RabbitMQConsumer:
         
         contact_phone = await get_contact_phone()
         logger.info(f"🔍 [DEBUG] Iniciando envio de mensagem para {contact_phone}")
-        logger.info(f"🔍 [DEBUG] Campanha: {campaign.name} - Instância: {instance.instance_id}")
+        logger.info(f"🔍 [DEBUG] Campanha: {campaign.name} - Instância: {instance.instance_name}")
         
         for attempt in range(1, max_retries + 1):
             try:
                 logger.info(f"🔍 [DEBUG] Tentativa {attempt}/{max_retries} de envio")
                 
                 # Verificar se instância ainda está ativa
-                logger.info(f"🔍 [DEBUG] Verificando se instância {instance.instance_id} está ativa")
+                logger.info(f"🔍 [DEBUG] Verificando se instância {instance.instance_name} está ativa")
                 if not await self._check_instance_active(instance):
-                    logger.error(f"❌ [AIO-PIKA] Instância {instance.instance_id} inativa - pausando campanha")
+                    logger.error(f"❌ [AIO-PIKA] Instância {instance.instance_name} inativa - pausando campanha")
                     await self._auto_pause_campaign(campaign, "instância desconectada")
                     return False
                 
-                logger.info(f"🔍 [DEBUG] Instância {instance.instance_id} está ativa")
+                logger.info(f"🔍 [DEBUG] Instância {instance.instance_name} está ativa")
                 
                 # Buscar mensagem da campanha
                 from asgiref.sync import sync_to_async
@@ -514,11 +514,11 @@ class RabbitMQConsumer:
                 message_data = {
                     "number": contact_phone,
                     "text": message.content,
-                    "instance": instance.instance_id
+                    "instance": instance.instance_name
                 }
                 
                 # Enviar via Evolution API
-                url = f"{instance.server_url}/message/sendText/{instance.instance_id}"
+                url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
                 headers = {
                     "Content-Type": "application/json",
                     "apikey": instance.api_key
@@ -665,7 +665,7 @@ class RabbitMQConsumer:
                     extra_data={
                         'contact_id': str(contact.id),
                         'phone': contact_phone,
-                        'instance_id': instance.instance_id,
+                        'instance_id': instance.instance_name,
                         'message_id': message_id
                     }
                 )
@@ -689,7 +689,7 @@ class RabbitMQConsumer:
                     extra_data={
                         'contact_id': str(contact.id),
                         'phone': contact_phone,
-                        'instance_id': instance.instance_id,
+                        'instance_id': instance.instance_name,
                         'error': error_msg
                     }
                 )
