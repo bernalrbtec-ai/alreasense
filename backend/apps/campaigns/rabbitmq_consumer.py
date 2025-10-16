@@ -573,23 +573,23 @@ class RabbitMQConsumer:
                         # Log de falha final
                         await self._log_message_failed(campaign, contact, instance, f"HTTP {response.status_code}")
                         return False
-                        
-                except Exception as e:
-                    logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem WhatsApp (tentativa {attempt}): {e}")
-                    logger.error(f"🔍 [DEBUG] Tipo do erro no WhatsApp: {type(e).__name__}")
-                    logger.error(f"🔍 [DEBUG] Detalhes do erro no WhatsApp: {str(e)}")
-                    import traceback
-                    logger.error(f"🔍 [DEBUG] Stack trace WhatsApp: {traceback.format_exc()}")
 
-                    if attempt < max_retries:
-                        delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
-                        logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
-                        await asyncio.sleep(delay)
-                        continue
-                    else:
-                        # Log de falha final
-                        await self._log_message_failed(campaign, contact, instance, str(e))
-                        return False
+            except Exception as e:
+                logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem WhatsApp (tentativa {attempt}): {e}")
+                logger.error(f"🔍 [DEBUG] Tipo do erro no WhatsApp: {type(e).__name__}")
+                logger.error(f"🔍 [DEBUG] Detalhes do erro no WhatsApp: {str(e)}")
+                import traceback
+                logger.error(f"🔍 [DEBUG] Stack trace WhatsApp: {traceback.format_exc()}")
+
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
+                    logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
+                    await asyncio.sleep(delay)
+                    continue
+                else:
+                    # Log de falha final
+                    await self._log_message_failed(campaign, contact, instance, str(e))
+                    return False
         
         return False
     
