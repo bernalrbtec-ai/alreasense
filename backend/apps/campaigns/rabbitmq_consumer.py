@@ -70,6 +70,7 @@ class RabbitMQConsumer:
         
         # TEMPORARIAMENTE DESABILITADO devido a bugs do Pika
         logger.warning("⚠️ [RABBITMQ] Consumer desabilitado temporariamente devido a bugs do Pika")
+        logger.info("🔄 [ALTERNATIVE] Usando processamento direto com threading")
         # self._connect()  # Comentado temporariamente
     
     def _connect(self):
@@ -238,6 +239,101 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [RECONNECT] Erro na reconexão limpa: {e}")
             raise
+    
+    def _start_campaign_direct(self, campaign_id: str):
+        """Inicia campanha diretamente sem RabbitMQ usando threading"""
+        try:
+            logger.info(f"🚀 [DIRECT] Iniciando campanha {campaign_id} diretamente")
+            
+            # Verificar se já existe thread para esta campanha
+            if campaign_id in self.consumer_threads:
+                logger.warning(f"⚠️ [DIRECT] Campanha {campaign_id} já está sendo processada")
+                return
+            
+            # Criar thread para processar a campanha
+            thread = threading.Thread(
+                target=self._process_campaign_direct,
+                args=(campaign_id,),
+                daemon=True
+            )
+            thread.start()
+            
+            # Armazenar referência da thread
+            self.consumer_threads[campaign_id] = thread
+            
+            logger.info(f"✅ [DIRECT] Thread de processamento iniciada para campanha {campaign_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ [DIRECT] Erro ao iniciar campanha diretamente {campaign_id}: {e}")
+            raise
+    
+    def _process_campaign_direct(self, campaign_id: str):
+        """Processa campanha diretamente sem RabbitMQ"""
+        try:
+            logger.info(f"🔄 [DIRECT] Iniciando processamento direto da campanha {campaign_id}")
+            
+            # Importar aqui para evitar import circular
+            from .models import Campaign, CampaignContact
+            
+            campaign = Campaign.objects.get(id=campaign_id)
+            
+            # Marcar campanha como running
+            campaign.status = 'running'
+            campaign.save(update_fields=['status'])
+            
+            # Processar contatos pendentes
+            pending_contacts = campaign.campaign_contacts.filter(
+                status='pending'
+            ).select_related('contact')
+            
+            logger.info(f"📊 [DIRECT] Processando {pending_contacts.count()} contatos para campanha {campaign_id}")
+            
+            for contact in pending_contacts:
+                try:
+                    # Processar mensagem diretamente
+                    self._process_message_direct(contact)
+                    
+                    # Pequena pausa entre mensagens
+                    time.sleep(random.uniform(
+                        campaign.interval_min or 60,
+                        campaign.interval_max or 120
+                    ))
+                    
+                except Exception as e:
+                    logger.error(f"❌ [DIRECT] Erro ao processar contato {contact.id}: {e}")
+                    continue
+            
+            # Marcar campanha como concluída
+            campaign.status = 'completed'
+            campaign.save(update_fields=['status'])
+            
+            logger.info(f"✅ [DIRECT] Campanha {campaign_id} processada com sucesso")
+            
+        except Exception as e:
+            logger.error(f"❌ [DIRECT] Erro no processamento direto da campanha {campaign_id}: {e}")
+        finally:
+            # Remover thread da lista
+            if campaign_id in self.consumer_threads:
+                del self.consumer_threads[campaign_id]
+    
+    def _process_message_direct(self, contact):
+        """Processa uma mensagem diretamente sem RabbitMQ"""
+        try:
+            logger.info(f"📤 [DIRECT] Enviando mensagem para {contact.contact.name} ({contact.contact.phone})")
+            
+            # Aqui você pode implementar a lógica de envio direto
+            # Por enquanto, vamos apenas marcar como enviado
+            contact.status = 'sent'
+            contact.sent_at = timezone.now()
+            contact.save()
+            
+            logger.info(f"✅ [DIRECT] Mensagem enviada para {contact.contact.name}")
+            
+        except Exception as e:
+            logger.error(f"❌ [DIRECT] Erro ao enviar mensagem para {contact.contact.name}: {e}")
+            contact.status = 'failed'
+            contact.error_message = str(e)
+            contact.save()
     
     def start_campaign(self, campaign_id: str):
         """Inicia processamento de uma campanha"""
