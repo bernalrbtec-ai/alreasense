@@ -24,15 +24,35 @@ class CampaignsConfig(AppConfig):
                 from .models import Campaign
                 from .rabbitmq_consumer import get_rabbitmq_consumer
                 
-                # Buscar campanhas ativas
+                # Buscar campanhas que realmente precisam ser processadas
+                # Só recuperar campanhas que têm contatos pendentes
+                from .models import CampaignContact
+                
+                campaigns_to_recover = []
                 active_campaigns = Campaign.objects.filter(status__in=['active', 'running'])
                 
-                if active_campaigns.exists():
-                    logger.info(f"🔄 [RECOVERY] Encontradas {active_campaigns.count()} campanhas ativas para recuperar")
+                for campaign in active_campaigns:
+                    # Verificar se tem contatos pendentes
+                    pending_contacts = CampaignContact.objects.filter(
+                        campaign=campaign, 
+                        status='pending'
+                    ).count()
+                    
+                    if pending_contacts > 0:
+                        campaigns_to_recover.append(campaign)
+                        logger.info(f"🔄 [RECOVERY] Campanha {campaign.id} - {campaign.name} tem {pending_contacts} contatos pendentes")
+                    else:
+                        logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} não tem contatos pendentes - marcando como concluída")
+                        # Marcar como concluída se não tem contatos pendentes
+                        campaign.status = 'completed'
+                        campaign.save()
+                
+                if campaigns_to_recover:
+                    logger.info(f"🔄 [RECOVERY] Encontradas {len(campaigns_to_recover)} campanhas para recuperar")
                     
                     consumer = get_rabbitmq_consumer()
                     
-                    for campaign in active_campaigns:
+                    for campaign in campaigns_to_recover:
                         try:
                             logger.info(f"🚀 [RECOVERY] Recuperando campanha {campaign.id} - {campaign.name}")
                             success = consumer.start_campaign(str(campaign.id))
@@ -44,10 +64,10 @@ class CampaignsConfig(AppConfig):
                                 
                         except Exception as e:
                             logger.error(f"❌ [RECOVERY] Erro ao recuperar campanha {campaign.id}: {e}")
-                    
-                    logger.info("✅ [RECOVERY] Processo de recuperação de campanhas concluído")
                 else:
-                    logger.info("ℹ️ [RECOVERY] Nenhuma campanha ativa encontrada para recuperar")
+                    logger.info("ℹ️ [RECOVERY] Nenhuma campanha com contatos pendentes encontrada")
+                
+                logger.info("✅ [RECOVERY] Processo de recuperação de campanhas concluído")
                     
             except Exception as e:
                 logger.error(f"❌ [RECOVERY] Erro no processo de recuperação: {e}")
