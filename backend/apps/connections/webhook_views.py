@@ -34,7 +34,6 @@ def get_client_ip(request):
     else:
         ip = request.META.get('REMOTE_ADDR')
     
-    # Log detalhado do IP
     # IP detection logs removed for cleaner output
     
     return ip
@@ -51,14 +50,14 @@ class EvolutionWebhookView(APIView):
     def post(self, request):
         try:
             # Log básico do webhook
-            logger.info(f"📥 Webhook received: {request.path}")
+            # Webhook received - log removed for cleaner output
             
             # Parse JSON data
             data = json.loads(request.body)
             
             # Generate unique event ID
             event_id = generate_event_id(data)
-            logger.info(f"📥 Webhook received: {event_id} - {data.get('event', 'unknown')}")
+            # Webhook received - log removed for cleaner output
             
             # Log completo do JSON para debug
             # Full webhook data logging removed for cleaner output
@@ -123,7 +122,7 @@ class EvolutionWebhookView(APIView):
             # GET webhook debug logs removed for cleaner output
             
             # 🚫 VALIDAÇÃO DE ORIGEM REMOVIDA COMPLETAMENTE
-            logger.info(f"✅ GET Webhook allowed: NO VALIDATION - ALL ORIGINS ACCEPTED")
+            # GET Webhook allowed - log removed for cleaner output
             
             return Response({
                 'status': 'success',

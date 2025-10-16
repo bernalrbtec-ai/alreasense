@@ -37,6 +37,7 @@ class RabbitMQConsumer:
         # Usar aio-pika para conexão assíncrona robusta
         logger.info("🔄 [AIO-PIKA] Iniciando sistema RabbitMQ assíncrono")
         # Conexão será estabelecida quando necessário (lazy connection)
+        logger.info("🔍 [DEBUG] Consumer inicializado - conexão será lazy")
     
     async def _connect_async(self):
         """Estabelece conexão assíncrona com RabbitMQ"""
