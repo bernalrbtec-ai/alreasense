@@ -67,7 +67,10 @@ class RabbitMQConsumer:
         # Controle de throttling para WebSocket
         self.last_websocket_update = {}  # {campaign_id: timestamp}
         self.websocket_throttle_seconds = 1  # Mínimo 1 segundo entre updates (mais responsivo)
-        self._connect()
+        
+        # TEMPORARIAMENTE DESABILITADO devido a bugs do Pika
+        logger.warning("⚠️ [RABBITMQ] Consumer desabilitado temporariamente devido a bugs do Pika")
+        # self._connect()  # Comentado temporariamente
     
     def _connect(self):
         """Estabelece conexão com RabbitMQ com retry automático"""
