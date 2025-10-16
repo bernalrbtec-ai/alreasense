@@ -25,11 +25,16 @@ class CampaignsConfig(AppConfig):
                 from .rabbitmq_consumer import get_rabbitmq_consumer
                 
                 # Buscar campanhas que realmente precisam ser processadas
-                # Só recuperar campanhas que têm contatos pendentes
+                # Só recuperar campanhas que têm contatos pendentes E foram interrompidas por erro (não pelo usuário)
                 from .models import CampaignContact
                 
                 campaigns_to_recover = []
-                active_campaigns = Campaign.objects.filter(status__in=['active', 'running'])
+                
+                # Buscar campanhas que podem precisar de recuperação
+                # 'running' = estava rodando quando o sistema parou (recuperar)
+                # 'paused' = foi pausada pelo usuário (NÃO recuperar)
+                # 'stopped' = foi parada pelo usuário (NÃO recuperar)
+                active_campaigns = Campaign.objects.filter(status='running')
                 
                 for campaign in active_campaigns:
                     # Verificar se tem contatos pendentes
@@ -40,12 +45,25 @@ class CampaignsConfig(AppConfig):
                     
                     if pending_contacts > 0:
                         campaigns_to_recover.append(campaign)
-                        logger.info(f"🔄 [RECOVERY] Campanha {campaign.id} - {campaign.name} tem {pending_contacts} contatos pendentes")
+                        logger.info(f"🔄 [RECOVERY] Campanha {campaign.id} - {campaign.name} tem {pending_contacts} contatos pendentes - RECUPERANDO")
                     else:
                         logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} não tem contatos pendentes - marcando como concluída")
                         # Marcar como concluída se não tem contatos pendentes
                         campaign.status = 'completed'
                         campaign.save()
+                
+                # Verificar campanhas pausadas/paradas que podem ter sido afetadas
+                user_stopped_campaigns = Campaign.objects.filter(status__in=['paused', 'stopped'])
+                for campaign in user_stopped_campaigns:
+                    pending_contacts = CampaignContact.objects.filter(
+                        campaign=campaign, 
+                        status='pending'
+                    ).count()
+                    
+                    if pending_contacts > 0:
+                        logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} tem {pending_contacts} contatos pendentes mas foi pausada/parada pelo usuário - MANTENDO status")
+                    else:
+                        logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} foi pausada/parada pelo usuário e não tem contatos pendentes - MANTENDO status")
                 
                 if campaigns_to_recover:
                     logger.info(f"🔄 [RECOVERY] Encontradas {len(campaigns_to_recover)} campanhas para recuperar")

@@ -20,12 +20,14 @@ class Command(BaseCommand):
         
         self.stdout.write("🔍 Analisando campanhas com status incorreto...")
         
-        # Buscar campanhas ativas/running que não têm contatos pendentes
+        # Buscar campanhas que podem precisar de correção
         campaigns_to_fix = []
+        campaigns_paused_by_user = []
         
-        active_campaigns = Campaign.objects.filter(status__in=['active', 'running'])
+        # Campanhas 'running' sem contatos pendentes = devem ser marcadas como concluídas
+        running_campaigns = Campaign.objects.filter(status='running')
         
-        for campaign in active_campaigns:
+        for campaign in running_campaigns:
             pending_contacts = CampaignContact.objects.filter(
                 campaign=campaign, 
                 status='pending'
@@ -35,16 +37,35 @@ class Command(BaseCommand):
                 campaigns_to_fix.append(campaign)
                 self.stdout.write(
                     f"📋 Campanha '{campaign.name}' (ID: {campaign.id}) - "
-                    f"Status: {campaign.status}, Contatos pendentes: {pending_contacts}"
+                    f"Status: {campaign.status}, Contatos pendentes: {pending_contacts} - MARCADA PARA CONCLUÍDA"
                 )
+        
+        # Campanhas 'paused' ou 'stopped' = foram pausadas pelo usuário (manter status)
+        paused_campaigns = Campaign.objects.filter(status__in=['paused', 'stopped'])
+        
+        for campaign in paused_campaigns:
+            pending_contacts = CampaignContact.objects.filter(
+                campaign=campaign, 
+                status='pending'
+            ).count()
+            
+            campaigns_paused_by_user.append(campaign)
+            self.stdout.write(
+                f"⏸️ Campanha '{campaign.name}' (ID: {campaign.id}) - "
+                f"Status: {campaign.status}, Contatos pendentes: {pending_contacts} - PAUSADA PELO USUÁRIO (manter status)"
+            )
+        
+        self.stdout.write(f"\n📊 RESUMO:")
+        self.stdout.write(f"  🔄 Campanhas para marcar como concluídas: {len(campaigns_to_fix)}")
+        self.stdout.write(f"  ⏸️ Campanhas pausadas pelo usuário: {len(campaigns_paused_by_user)}")
         
         if not campaigns_to_fix:
             self.stdout.write(
-                self.style.SUCCESS("✅ Todas as campanhas estão com status correto!")
+                self.style.SUCCESS("\n✅ Todas as campanhas estão com status correto!")
             )
             return
         
-        self.stdout.write(f"\n📊 Encontradas {len(campaigns_to_fix)} campanhas para corrigir:")
+        self.stdout.write(f"\n📋 Campanhas que serão marcadas como concluídas:")
         
         for campaign in campaigns_to_fix:
             self.stdout.write(f"  • {campaign.name} (ID: {campaign.id})")
