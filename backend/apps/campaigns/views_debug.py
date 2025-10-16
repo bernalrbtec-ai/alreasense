@@ -20,6 +20,8 @@ def debug_campaigns(request):
         'tenant_id': user.tenant.id if user.tenant else None,
         'tenant_name': user.tenant.name if user.tenant else None,
         'is_superuser': user.is_superuser,
+        'request_tenant': getattr(request, 'tenant', None),
+        'request_tenant_id': getattr(request, 'tenant_id', None),
     }
     
     # Buscar TODAS as campanhas (sem filtro de tenant)

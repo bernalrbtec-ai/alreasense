@@ -35,9 +35,7 @@ def get_client_ip(request):
         ip = request.META.get('REMOTE_ADDR')
     
     # Log detalhado do IP
-    logger.info(f"🔍 IP Detection - REMOTE_ADDR: {request.META.get('REMOTE_ADDR')}")
-    logger.info(f"🔍 IP Detection - X_FORWARDED_FOR: {x_forwarded_for}")
-    logger.info(f"🔍 IP Detection - Final IP: {ip}")
+    # IP detection logs removed for cleaner output
     
     return ip
 
@@ -52,27 +50,8 @@ class EvolutionWebhookView(APIView):
     
     def post(self, request):
         try:
-            # 🔍 LOG DETALHADO PARA DEBUG
-            client_ip = get_client_ip(request)
-            logger.info(f"🔍 POST Webhook - IP: {client_ip}, Path: {request.path}, Method: {request.method}")
-            logger.info(f"🔍 Headers: {dict(request.headers)}")
-            logger.info(f"🔍 META keys: {list(request.META.keys())}")
-            logger.info(f"🔍 REMOTE_ADDR: {request.META.get('REMOTE_ADDR')}")
-            logger.info(f"🔍 HTTP_X_FORWARDED_FOR: {request.META.get('HTTP_X_FORWARDED_FOR')}")
-            logger.info(f"🔍 HTTP_HOST: {request.META.get('HTTP_HOST')}")
-            logger.info(f"🔍 CONTENT_TYPE: {request.META.get('CONTENT_TYPE')}")
-            
-            # Log do body
-            if request.body:
-                try:
-                    body_str = request.body.decode('utf-8')
-                    logger.info(f"🔍 Body length: {len(body_str)}")
-                    logger.info(f"🔍 Body preview: {body_str[:200]}...")
-                except Exception as e:
-                    logger.error(f"🔍 Error decoding body: {str(e)}")
-            
-            # 🚫 VALIDAÇÃO DE ORIGEM REMOVIDA COMPLETAMENTE
-            logger.info(f"✅ Webhook allowed: NO VALIDATION - ALL ORIGINS ACCEPTED")
+            # Log básico do webhook
+            logger.info(f"📥 Webhook received: {request.path}")
             
             # Parse JSON data
             data = json.loads(request.body)
@@ -82,7 +61,7 @@ class EvolutionWebhookView(APIView):
             logger.info(f"📥 Webhook received: {event_id} - {data.get('event', 'unknown')}")
             
             # Log completo do JSON para debug
-            logger.info(f"🔍 FULL WEBHOOK DATA: {json.dumps(data, indent=2)}")
+            # Full webhook data logging removed for cleaner output
             
             # Store event in Redis cache (24h)
             WebhookCache.store_event(event_id, data)
@@ -141,7 +120,7 @@ class EvolutionWebhookView(APIView):
         try:
             # 🔍 LOG DO IP PARA DEBUG
             client_ip = get_client_ip(request)
-            logger.info(f"🔍 GET Webhook IP: {client_ip}")
+            # GET webhook debug logs removed for cleaner output
             
             # 🚫 VALIDAÇÃO DE ORIGEM REMOVIDA COMPLETAMENTE
             logger.info(f"✅ GET Webhook allowed: NO VALIDATION - ALL ORIGINS ACCEPTED")
@@ -412,7 +391,7 @@ class EvolutionWebhookView(APIView):
         try:
             from apps.campaigns.models import CampaignContact
             
-            logger.info(f"🔍 Searching for CampaignContact with whatsapp_message_id: {message_id}")
+            # Debug search logs removed for cleaner output
             
             # Find campaign contact by WhatsApp message ID
             campaign_contact = CampaignContact.objects.filter(
@@ -451,7 +430,7 @@ class EvolutionWebhookView(APIView):
                 
                 # Update delivery status in the log
                 from apps.campaigns.models import CampaignLog
-                logger.info(f"🔍 [WEBHOOK] Chamando update_message_delivery_status para status: {status}")
+                # Webhook delivery status logs removed for cleaner output
                 if status in ['delivered', 'delivery_ack']:
                     CampaignLog.update_message_delivery_status(campaign_contact, 'delivered')
                     logger.info(f"✅ [WEBHOOK] Log de entrega processado")
@@ -464,16 +443,7 @@ class EvolutionWebhookView(APIView):
                 logger.warning(f"❌ No CampaignContact found for message_id: {message_id}")
                 # Debug: List all CampaignContacts with whatsapp_message_id
                 all_contacts = CampaignContact.objects.filter(whatsapp_message_id__isnull=False)
-                logger.info(f"🔍 Available whatsapp_message_ids: {[c.whatsapp_message_id for c in all_contacts]}")
-                
-                # Debug: Show recent campaign contacts
-                recent_contacts = CampaignContact.objects.filter(
-                    campaign__tenant__isnull=False
-                ).order_by('-created_at')[:5]
-                
-                logger.info(f"🔍 Recent CampaignContacts:")
-                for contact in recent_contacts:
-                    logger.info(f"   ID: {contact.id}, WhatsApp ID: {contact.whatsapp_message_id}, Status: {contact.status}, Campaign: {contact.campaign.id}")
+                # Debug logs removed for cleaner output
                 return False
                 
         except Exception as e:
