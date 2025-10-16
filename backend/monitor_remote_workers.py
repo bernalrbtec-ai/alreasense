@@ -35,7 +35,7 @@ def monitor_remote():
         print("-" * 30)
         
         try:
-            response = requests.get(f"{backend_url}/api/campaigns/campaigns/", timeout=10)
+            response = requests.get(f"{backend_url}/api/campaigns/", timeout=10)
             if response.status_code == 200:
                 campaigns = response.json()
                 

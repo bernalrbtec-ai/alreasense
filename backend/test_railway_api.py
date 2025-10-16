@@ -9,7 +9,7 @@ def test_railway_api():
     """Testa a API do Railway para verificar os novos campos"""
     
     # URL da API do Railway
-    url = "https://alreasense-backend-production.up.railway.app/api/campaigns/campaigns/"
+    url = "https://alreasense-backend-production.up.railway.app/api/campaigns/"
     
     print("🔍 Testando API do Railway...")
     print(f"URL: {url}")
