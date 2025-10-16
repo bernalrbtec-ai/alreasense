@@ -57,7 +57,7 @@ class RabbitMQConsumer:
                     await asyncio.sleep(delay)
                 
                 # Tentar conexão com aio-pika
-                rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+                rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@shinkansen.proxy.rlwy.net:30709')
                 logger.info(f"🔍 [DEBUG] RabbitMQ URL: {rabbitmq_url[:50]}...")
                 
                 logger.info("🔍 [DEBUG] Chamando aio_pika.connect_robust...")
@@ -319,7 +319,12 @@ class RabbitMQConsumer:
     async def _create_thread_connection(self):
         """Cria uma conexão específica para uma thread"""
         try:
-            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://guest:guest@localhost:5672/')
+            # Verificar se estamos em desenvolvimento local
+            if settings.DEBUG:
+                logger.info("🔍 [DEBUG] Modo DEBUG - RabbitMQ desabilitado localmente")
+                return None
+            
+            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@shinkansen.proxy.rlwy.net:30709')
             
             logger.info("🔍 [DEBUG] Criando conexão da thread...")
             connection = await aio_pika.connect_robust(
