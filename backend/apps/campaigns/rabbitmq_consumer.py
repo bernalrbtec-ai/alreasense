@@ -543,14 +543,20 @@ class RabbitMQConsumer:
             
             # Enviar mensagem via API com retry
             logger.info(f"🚀 [SEND] Iniciando envio para {contact.contact.name} via {instance.friendly_name}")
-            success = self._send_whatsapp_message_with_retry(instance, contact_phone, message_content, campaign)
-            logger.info(f"📊 [SEND] Resultado do envio: {success} para {contact.contact.name}")
+            send_result = self._send_whatsapp_message_with_retry(instance, contact_phone, message_content, campaign)
+            success = send_result.get('success', False)
+            message_id = send_result.get('message_id')
+            logger.info(f"📊 [SEND] Resultado do envio: {success} para {contact.contact.name}, MessageID: {message_id}")
             
             if success:
                 # Atualizar status
                 with transaction.atomic():
                     contact.status = 'sent'
                     contact.sent_at = timezone.now()
+                    # 🆕 SALVAR WHATSAPP MESSAGE ID
+                    if message_id:
+                        contact.whatsapp_message_id = message_id
+                        logger.info(f"💾 [SAVE] WhatsApp Message ID salvo: {message_id}")
                     contact.save()
                     
                     campaign.messages_sent += 1
@@ -971,8 +977,8 @@ class RabbitMQConsumer:
             logger.error(f"❌ [SECURITY] Erro nas validações: {e}")
             return False
 
-    def _send_whatsapp_message_with_retry(self, instance: WhatsAppInstance, phone: str, message: str, campaign: Campaign) -> bool:
-        """Envia mensagem via API do WhatsApp com 3 tentativas"""
+    def _send_whatsapp_message_with_retry(self, instance: WhatsAppInstance, phone: str, message: str, campaign: Campaign) -> dict:
+        """Envia mensagem via API do WhatsApp com 3 tentativas e retorna response com messageId"""
         import time
         
         for attempt in range(1, 4):  # 3 tentativas
@@ -996,8 +1002,18 @@ class RabbitMQConsumer:
                 response = requests.post(url, json=payload, headers=headers, timeout=30)
                 response.raise_for_status()
                 
+                # Capturar response JSON para obter messageId
+                response_data = response.json()
+                message_id = response_data.get('key', {}).get('id') if response_data.get('key') else None
+                
                 logger.info(f"✅ [API] Mensagem enviada com sucesso na tentativa {attempt}")
-                return True
+                logger.info(f"🆔 [MESSAGE_ID] ID retornado: {message_id}")
+                
+                return {
+                    'success': True,
+                    'message_id': message_id,
+                    'response_data': response_data
+                }
                 
             except Exception as e:
                 logger.error(f"❌ [API] Tentativa {attempt}/3 falhou via {instance.friendly_name}: {e}")
@@ -1010,9 +1026,17 @@ class RabbitMQConsumer:
                     time.sleep(delay)
                 else:
                     logger.error(f"❌ [API] Todas as 3 tentativas falharam para {phone}")
-                    return False
+                    return {
+                        'success': False,
+                        'message_id': None,
+                        'error': str(e)
+                    }
         
-        return False
+        return {
+            'success': False,
+            'message_id': None,
+            'error': 'All attempts failed'
+        }
 
     def _send_whatsapp_message(self, instance: WhatsAppInstance, phone: str, message: str) -> bool:
         """Envia mensagem via API do WhatsApp (método simples para compatibilidade)"""
