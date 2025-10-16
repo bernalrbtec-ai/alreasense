@@ -389,6 +389,21 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao processar próxima mensagem: {e}")
     
+    async def _update_campaign_status_async(self, campaign, status):
+        """Atualiza o status da campanha de forma assíncrona"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def update_status():
+                campaign.status = status
+                campaign.save()
+            
+            await update_status()
+            logger.info(f"✅ [AIO-PIKA] Status da campanha {campaign.id} atualizado para {status}")
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao atualizar status da campanha {campaign.id}: {e}")
+    
     async def _send_message_async(self, campaign, contact):
         """Envia mensagem de forma assíncrona"""
         try:
@@ -479,7 +494,7 @@ class RabbitMQConsumer:
                 
                 # Preparar dados da mensagem
                 message_data = {
-                    "number": contact.contact.contact.phone,
+                    "number": contact.contact.phone,
                     "text": message.content,
                     "instance": instance.instance_id
                 }
