@@ -6,7 +6,7 @@ import { Input } from '../components/ui/Input'
 import { showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import { api } from '../lib/api'
 import CampaignWizardModal from '../components/campaigns/CampaignWizardModal'
-import CampaignCard from '../components/campaigns/CampaignCard'
+import CampaignCardOptimized from '../components/campaigns/CampaignCardOptimized'
 
 interface Campaign {
   id: string
@@ -347,7 +347,7 @@ const CampaignsPage: React.FC = () => {
       {/* Lista de Campanhas */}
       <div className="grid gap-6">
         {filteredCampaigns.map((campaign) => (
-          <CampaignCard
+          <CampaignCardOptimized
             key={campaign.id}
             campaign={campaign}
             onStart={handleStart}
