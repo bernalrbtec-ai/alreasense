@@ -11,8 +11,13 @@ logger = logging.getLogger(__name__)
 @permission_classes([IsAuthenticated])
 def campaign_retry_info(request, campaign_id):
     """Retorna informações de retry para uma campanha específica"""
-    tenant = request.tenant
+    # Tentar obter tenant de múltiplas formas
+    tenant = getattr(request, 'tenant', None)
+    if not tenant and hasattr(request.user, 'tenant'):
+        tenant = request.user.tenant
+    
     if not tenant:
+        logger.error(f"❌ [RETRY_INFO] Tenant não encontrado - User: {getattr(request.user, 'email', 'anonymous')}")
         return Response({'success': False, 'error': 'Tenant não encontrado'}, status=status.HTTP_400_BAD_REQUEST)
     
     try:

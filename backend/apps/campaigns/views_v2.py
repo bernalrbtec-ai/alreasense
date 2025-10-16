@@ -50,14 +50,24 @@ class CampaignControlView(generics.GenericAPIView):
                 
                 # Iniciar campanha
                 consumer = get_rabbitmq_consumer()
-                success = consumer.start_campaign(str(campaign.id)) if consumer else False
+                logger.info(f"🔍 [DEBUG] Consumer obtido: {consumer is not None}")
+                
+                if consumer:
+                    logger.info(f"🔍 [DEBUG] Iniciando campanha {campaign.id}")
+                    success = consumer.start_campaign(str(campaign.id))
+                    logger.info(f"🔍 [DEBUG] Resultado do start_campaign: {success}")
+                else:
+                    logger.error("❌ [DEBUG] Consumer é None")
+                    success = False
                 
                 if success:
+                    logger.info(f"✅ [DEBUG] Campanha {campaign.name} iniciada com sucesso")
                     return Response({
                         'message': f'Campanha {campaign.name} iniciada com sucesso',
                         'campaign_id': str(campaign.id)
                     })
                 else:
+                    logger.error(f"❌ [DEBUG] Erro ao iniciar campanha {campaign.id}")
                     return Response(
                         {'error': 'Erro ao iniciar campanha'},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR

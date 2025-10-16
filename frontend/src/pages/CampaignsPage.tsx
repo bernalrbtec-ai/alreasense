@@ -101,7 +101,7 @@ const CampaignsPage: React.FC = () => {
         campaigns.map(async (campaign: Campaign) => {
           if (campaign.status === 'running') {
             try {
-              const retryResponse = await api.get(`/api/campaigns/${campaign.id}/retry-info/`)
+              const retryResponse = await api.get(`/campaigns/${campaign.id}/retry-info/`)
               if (retryResponse.data.success) {
                 campaign.retryInfo = retryResponse.data.retry_info
               }

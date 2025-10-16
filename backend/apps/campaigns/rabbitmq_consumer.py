@@ -288,6 +288,7 @@ class RabbitMQConsumer:
                     
                     # Processar próxima mensagem
                     logger.info(f"🔍 [DEBUG] Processando próxima mensagem da campanha {campaign_id}")
+                    logger.info(f"🔍 [DEBUG] Campanha status: {campaign.status}, total_contacts: {campaign.total_contacts}")
                     await self._process_next_message_async(campaign)
                     
                     # Aguardar antes da próxima iteração
@@ -319,9 +320,11 @@ class RabbitMQConsumer:
     async def _create_thread_connection(self):
         """Cria uma conexão específica para uma thread"""
         try:
-            # Verificar se estamos em desenvolvimento local
-            if settings.DEBUG:
-                logger.info("🔍 [DEBUG] Modo DEBUG - RabbitMQ desabilitado localmente")
+            # Verificar se estamos em desenvolvimento local (localhost)
+            import socket
+            hostname = socket.gethostname()
+            if settings.DEBUG and ('localhost' in hostname or '127.0.0.1' in hostname):
+                logger.info("🔍 [DEBUG] Ambiente local - RabbitMQ desabilitado")
                 return None
             
             rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672')
@@ -376,14 +379,20 @@ class RabbitMQConsumer:
                 ).order_by('created_at').first()
             
             contact = await get_next_contact()
-            
+
             if not contact:
                 logger.info(f"✅ [AIO-PIKA] Campanha {campaign.id} - Todos os contatos processados")
+                logger.info(f"🔍 [DEBUG] Campanha {campaign.id} - Status atual: {campaign.status}")
                 # Atualizar status da campanha
                 await self._update_campaign_status_async(campaign, 'completed')
                 return
             
-            # Processar mensagem
+            logger.info(f"🔍 [DEBUG] Próximo contato encontrado: {contact.id} - Status: {contact.status}")
+            
+            # Marcar contato como enviando
+            await self._update_contact_status_async(contact, 'sending')
+
+            # Enviar mensagem
             await self._send_message_async(campaign, contact)
             
         except Exception as e:

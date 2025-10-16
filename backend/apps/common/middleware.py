@@ -48,13 +48,14 @@ class TenantMiddleware(MiddlewareMixin):
             request.tenant = getattr(request.user, 'tenant', None)
             request.tenant_id = str(request.tenant.id) if request.tenant else None
         
-        # Log request with context
-        logger.info(
-            f"Request {request.request_id} - "
-            f"User: {getattr(request.user, 'username', 'anonymous') if hasattr(request, 'user') else 'anonymous'} - "
-            f"Tenant: {getattr(request.tenant, 'name', 'none')} - "
-            f"Path: {request.path}"
-        )
+        # Log request with context - só logar se não for webhook
+        if not request.path.startswith('/webhooks/'):
+            logger.info(
+                f"Request {request.request_id} - "
+                f"User: {getattr(request.user, 'username', 'anonymous') if hasattr(request, 'user') else 'anonymous'} - "
+                f"Tenant: {getattr(request.tenant, 'name', 'none')} - "
+                f"Path: {request.path}"
+            )
     
     def process_response(self, request, response):
         """Add request ID to response headers."""
