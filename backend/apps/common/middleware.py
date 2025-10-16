@@ -47,13 +47,35 @@ class TenantMiddleware(MiddlewareMixin):
         if hasattr(request, 'user') and request.user.is_authenticated:
             request.tenant = getattr(request.user, 'tenant', None)
             request.tenant_id = str(request.tenant.id) if request.tenant else None
+        else:
+            # Se não há usuário autenticado, tentar obter do token JWT manualmente
+            try:
+                from rest_framework_simplejwt.authentication import JWTAuthentication
+                jwt_auth = JWTAuthentication()
+                auth_result = jwt_auth.authenticate(request)
+                if auth_result:
+                    user, token = auth_result
+                    request.user = user
+                    request.tenant = getattr(user, 'tenant', None)
+                    request.tenant_id = str(request.tenant.id) if request.tenant else None
+            except Exception as e:
+                # Se falhar, continuar sem tenant
+                pass
         
         # Log request with context - só logar se não for webhook
         if not request.path.startswith('/webhooks/'):
+            user_info = 'anonymous'
+            if hasattr(request, 'user') and request.user.is_authenticated:
+                user_info = getattr(request.user, 'email', getattr(request.user, 'username', 'authenticated'))
+            
+            tenant_info = 'none'
+            if hasattr(request, 'tenant') and request.tenant:
+                tenant_info = getattr(request.tenant, 'name', 'unknown')
+            
             logger.info(
                 f"Request {request.request_id} - "
-                f"User: {getattr(request.user, 'username', 'anonymous') if hasattr(request, 'user') else 'anonymous'} - "
-                f"Tenant: {getattr(request.tenant, 'name', 'none')} - "
+                f"User: {user_info} - "
+                f"Tenant: {tenant_info} - "
                 f"Path: {request.path}"
             )
     
