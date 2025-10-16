@@ -68,9 +68,10 @@ class RabbitMQConsumer:
         self.last_websocket_update = {}  # {campaign_id: timestamp}
         self.websocket_throttle_seconds = 1  # Mínimo 1 segundo entre updates (mais responsivo)
         
-        # Usar SelectConnection em vez de BlockingConnection para evitar bugs do Pika
-        logger.info("🔄 [RABBITMQ] Iniciando com SelectConnection para evitar bugs do Pika")
-        self._connect_select()
+        # TEMPORARIAMENTE DESABILITADO devido a bugs persistentes do Pika
+        logger.warning("⚠️ [RABBITMQ] Consumer desabilitado temporariamente devido a bugs persistentes do Pika")
+        logger.info("🔄 [ALTERNATIVE] Usando sistema de processamento direto com threading")
+        # self._connect_select()  # Comentado temporariamente
     
     def _connect(self):
         """Estabelece conexão com RabbitMQ com retry automático"""
@@ -441,6 +442,12 @@ class RabbitMQConsumer:
         """Inicia processamento de uma campanha"""
         try:
             logger.info(f"🚀 [START] Iniciando campanha {campaign_id}")
+            
+            # Verificar se RabbitMQ está disponível
+            if not self.connection or not self.channel:
+                logger.warning("⚠️ [START] RabbitMQ não disponível, iniciando campanha diretamente")
+                self._start_campaign_direct(campaign_id)
+                return
             
             # Verificar conexão antes de iniciar campanha
             logger.info(f"🔍 [START] Verificando conexão RabbitMQ...")
