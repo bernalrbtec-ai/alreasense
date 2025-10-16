@@ -33,6 +33,10 @@ class CampaignViewSet(viewsets.ModelViewSet):
         if status_param:
             status_list = [s.strip() for s in status_param.split(',')]
             queryset = queryset.filter(status__in=status_list)
+        else:
+            # Por padrão, excluir campanhas 'stopped' da lista principal
+            # Para ver campanhas stopped, usar ?status=stopped explicitamente
+            queryset = queryset.exclude(status='stopped')
         
         return queryset
     
