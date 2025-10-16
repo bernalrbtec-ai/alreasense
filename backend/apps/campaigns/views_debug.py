@@ -1,5 +1,5 @@
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from .models import Campaign
@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
-@permission_classes([IsAuthenticated])
+@permission_classes([AllowAny])  # Temporariamente público para debug
 def debug_campaigns(request):
     """Endpoint de debug para investigar problemas com campanhas"""
     user = request.user
