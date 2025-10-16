@@ -21,11 +21,20 @@ class CampaignViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Filtrar por tenant"""
+        """Filtrar por tenant e status"""
         user = self.request.user
         if user.is_superuser and not user.tenant:
             return Campaign.objects.none()  # Superadmin não vê campanhas individuais
-        return Campaign.objects.filter(tenant=user.tenant).prefetch_related('instances', 'messages')
+        
+        queryset = Campaign.objects.filter(tenant=user.tenant).prefetch_related('instances', 'messages')
+        
+        # Suporte a filtro de status: ?status=active,paused
+        status_param = self.request.query_params.get('status')
+        if status_param:
+            status_list = [s.strip() for s in status_param.split(',')]
+            queryset = queryset.filter(status__in=status_list)
+        
+        return queryset
     
     def perform_create(self, serializer):
         """Criar campanha associada ao tenant e usuário"""

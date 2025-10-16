@@ -93,7 +93,8 @@ export default function DashboardPage() {
 
         setData({
           metrics: metricsRes.data,
-          campaigns: campaignsRes.data.results || campaignsRes.data,
+          campaigns: Array.isArray(campaignsRes.data.results) ? campaignsRes.data.results : 
+                    Array.isArray(campaignsRes.data) ? campaignsRes.data : [],
           contacts: [], // Não precisamos mais dos contatos individuais
           contactsStats: contactsStatsRes.data // Usar stats do backend
         })
@@ -163,12 +164,12 @@ export default function DashboardPage() {
 
   // Campanhas
   const getActiveCampaigns = (): number => {
-    if (!data?.campaigns) return 0
+    if (!data?.campaigns || !Array.isArray(data.campaigns)) return 0
     return data.campaigns.filter(c => c.status === 'active').length
   }
 
   const getPausedCampaigns = (): number => {
-    if (!data?.campaigns) return 0
+    if (!data?.campaigns || !Array.isArray(data.campaigns)) return 0
     return data.campaigns.filter(c => c.status === 'paused').length
   }
 
