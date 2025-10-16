@@ -145,10 +145,20 @@ class EvolutionWebhookView(APIView):
         try:
             # Extract relevant data from webhook
             event_type = data.get('event', 'unknown')
-            instance = data.get('data', {}).get('instance', 'default')
             
-            # Extract message info if available
+            # Extract instance safely
             data_content = data.get('data', {})
+            if isinstance(data_content, dict):
+                instance = data_content.get('instance', 'default')
+            else:
+                # For events where data is a list, try to get instance from first item or use default
+                instance = 'default'
+                if isinstance(data_content, list) and len(data_content) > 0:
+                    first_item = data_content[0]
+                    if isinstance(first_item, dict) and 'instanceId' in first_item:
+                        instance = first_item.get('instanceId', 'default')
+            
+            # Extract message info if available (data_content já foi definido acima)
             
             # Determine contact and message info
             contact_phone = None
