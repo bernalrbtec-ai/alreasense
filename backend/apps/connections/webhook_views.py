@@ -451,10 +451,13 @@ class EvolutionWebhookView(APIView):
                 
                 # Update delivery status in the log
                 from apps.campaigns.models import CampaignLog
+                logger.info(f"🔍 [WEBHOOK] Chamando update_message_delivery_status para status: {status}")
                 if status in ['delivered', 'delivery_ack']:
                     CampaignLog.update_message_delivery_status(campaign_contact, 'delivered')
+                    logger.info(f"✅ [WEBHOOK] Log de entrega processado")
                 elif status in ['read', 'read_ack']:
                     CampaignLog.update_message_delivery_status(campaign_contact, 'read')
+                    logger.info(f"✅ [WEBHOOK] Log de leitura processado")
                 
                 return True
             else:
