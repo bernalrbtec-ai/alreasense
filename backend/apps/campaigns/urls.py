@@ -11,6 +11,7 @@ from .views_events_debug import campaign_events_debug
 from .views_status import campaign_status
 from .views_logs import campaign_logs as campaign_logs_new, campaign_logs_stats
 from .views_retry import campaign_retry_info
+from .views_debug import debug_campaigns
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
@@ -32,6 +33,9 @@ urlpatterns = [
     
     # API de informações de retry
     path('campaigns/<uuid:campaign_id>/retry-info/', campaign_retry_info, name='campaign-retry-info'),
+    
+    # API de debug para campanhas
+    path('campaigns/debug/', debug_campaigns, name='campaigns-debug'),
     
     # Router deve vir depois das URLs específicas
     path('', include(router.urls)),
