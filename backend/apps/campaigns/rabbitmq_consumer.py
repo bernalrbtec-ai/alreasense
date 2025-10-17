@@ -291,9 +291,15 @@ class RabbitMQConsumer:
                     logger.info(f"🔍 [DEBUG] Campanha status: {campaign.status}, total_contacts: {campaign.total_contacts}")
                     await self._process_next_message_async(campaign)
                     
-                    # Aguardar antes da próxima iteração
-                    logger.info(f"🔍 [DEBUG] Aguardando 1s antes da próxima iteração")
-                    await asyncio.sleep(1)
+                    # 🎯 HUMANIZAÇÃO: Aguardar intervalo aleatório entre min e max configurados
+                    # Adicionar +20% ao intervalo máximo para parecer mais humano
+                    import random
+                    min_interval = campaign.interval_min
+                    max_interval = int(campaign.interval_max * 1.2)  # 20% a mais
+                    random_interval = random.uniform(min_interval, max_interval)
+                    
+                    logger.info(f"⏰ [INTERVAL] Aguardando {random_interval:.1f}s antes do próximo disparo (min={min_interval}s, max={max_interval}s)")
+                    await asyncio.sleep(random_interval)
                     
                 except Exception as e:
                     logger.error(f"❌ [AIO-PIKA] Erro no loop da campanha {campaign_id}: {e}")
@@ -493,9 +499,41 @@ class RabbitMQConsumer:
             import traceback
             logger.error(f"🔍 [DEBUG] Stack trace: {traceback.format_exc()}")
     
+    async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
+        """Envia status 'digitando' antes da mensagem para parecer mais humano"""
+        try:
+            presence_url = f"{instance.api_url}/chat/sendPresence/{instance.instance_name}"
+            presence_data = {
+                "number": contact_phone,
+                "options": {
+                    "delay": int(typing_seconds * 1000),  # Converter para milissegundos
+                    "presence": "composing"
+                }
+            }
+            headers = {
+                "Content-Type": "application/json",
+                "apikey": instance.api_key
+            }
+            
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: requests.post(presence_url, json=presence_data, headers=headers, timeout=10)
+            )
+            
+            logger.info(f"✍️ [PRESENCE] Enviando status 'digitando' para {contact_phone} por {typing_seconds}s")
+            
+            # Aguardar o tempo de digitação
+            await asyncio.sleep(typing_seconds)
+            
+        except Exception as e:
+            logger.warning(f"⚠️ [PRESENCE] Erro ao enviar status 'digitando': {e}")
+            # Não falhar o envio se o presence falhar
+
     async def _send_whatsapp_message_async(self, campaign, contact, instance):
         """Envia mensagem WhatsApp com retry e controle de erros"""
         from asgiref.sync import sync_to_async
+        import random
         
         max_retries = 3
         base_delay = 2
@@ -534,6 +572,10 @@ class RabbitMQConsumer:
                 if not message:
                     logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
                     return False
+                
+                # 🎯 HUMANIZAÇÃO: Enviar status "digitando" com tempo aleatório entre 1.5s e 4s
+                typing_seconds = random.uniform(1.5, 4.0)
+                await self._send_typing_presence(instance, contact_phone, typing_seconds)
                 
                 # Preparar dados da mensagem
                 message_data = {
