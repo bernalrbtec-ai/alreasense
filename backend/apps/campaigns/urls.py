@@ -21,44 +21,44 @@ router.register(r'', CampaignViewSet, basename='campaign')
 router.register(r'notifications', CampaignNotificationViewSet, basename='notification')
 
 urlpatterns = [
+    # APIs de logs de campanhas - DEVE VIR ANTES DE TUDO
+    path('logs/', campaign_logs_new, name='campaign-logs'),
+    path('logs/stats/', campaign_logs_stats, name='campaign-logs-stats'),
+    
     # APIs de status simples - DEVE VIR ANTES DO ROUTER
-    path('campaigns/status/', campaign_status, name='campaign-status'),
+    path('status/', campaign_status, name='campaign-status'),
     
     # APIs de eventos para contador real - DEVE VIR ANTES DO ROUTER
-    path('campaigns/events/', campaign_events, name='campaign-events'),
-    path('campaigns/events-debug/', campaign_events_debug, name='campaign-events-debug'),
-    path('campaigns/<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
-    
-    # APIs de logs de campanhas
-    path('campaigns/logs/', campaign_logs_new, name='campaign-logs'),
-    path('campaigns/logs/stats/', campaign_logs_stats, name='campaign-logs-stats'),
+    path('events/', campaign_events, name='campaign-events'),
+    path('events-debug/', campaign_events_debug, name='campaign-events-debug'),
+    path('<uuid:campaign_id>/events-status/', campaign_events_status, name='campaign-events-status'),
     
     # API de informações de retry
-    path('campaigns/<uuid:campaign_id>/retry-info/', campaign_retry_info, name='campaign-retry-info'),
+    path('<uuid:campaign_id>/retry-info/', campaign_retry_info, name='campaign-retry-info'),
     
     # API de debug para campanhas
-    path('campaigns/debug/', debug_campaigns, name='campaigns-debug'),
-    path('campaigns/<uuid:campaign_id>/test-retry/', test_retry_endpoint, name='test-retry-endpoint'),
-    path('campaigns/<uuid:campaign_id>/debug/', debug_campaign_state, name='debug-campaign-state'),
+    path('debug/', debug_campaigns, name='campaigns-debug'),
+    path('<uuid:campaign_id>/test-retry/', test_retry_endpoint, name='test-retry-endpoint'),
+    path('<uuid:campaign_id>/debug/', debug_campaign_state, name='debug-campaign-state'),
     
     # API de teste de presença (digitando)
-    path('campaigns/test-presence/', test_send_presence, name='test-presence'),
-    path('campaigns/test-presence/instances/', list_instances_for_test, name='test-presence-instances'),
+    path('test-presence/', test_send_presence, name='test-presence'),
+    path('test-presence/instances/', list_instances_for_test, name='test-presence-instances'),
     
     # Router deve vir depois das URLs específicas
     path('', include(router.urls)),
     
     # V2 - Sistema com RabbitMQ
-    path('v2/campaigns/<uuid:campaign_id>/<str:action>/', CampaignControlView.as_view(), name='campaign-control'),
-    path('v2/campaigns/<uuid:campaign_id>/health/', campaign_health, name='campaign-health'),
-    path('v2/campaigns/<uuid:campaign_id>/metrics/', campaign_metrics, name='campaign-metrics'),
-    path('v2/campaigns/<uuid:campaign_id>/alerts/<str:alert_id>/resolve/', resolve_alert, name='resolve-alert'),
-    path('v2/campaigns/active/', active_campaigns, name='active-campaigns'),
+    path('v2/<uuid:campaign_id>/<str:action>/', CampaignControlView.as_view(), name='campaign-control'),
+    path('v2/<uuid:campaign_id>/health/', campaign_health, name='campaign-health'),
+    path('v2/<uuid:campaign_id>/metrics/', campaign_metrics, name='campaign-metrics'),
+    path('v2/<uuid:campaign_id>/alerts/<str:alert_id>/resolve/', resolve_alert, name='resolve-alert'),
+    path('v2/active/', active_campaigns, name='active-campaigns'),
     path('v2/system/health/', system_health, name='system-health'),
     
     # APIs de status em tempo real
-    path('campaigns/<uuid:campaign_id>/realtime/', campaign_realtime_status, name='campaign-realtime'),
-    path('campaigns/<uuid:campaign_id>/progress/', campaign_realtime_progress, name='campaign-progress'),
+    path('<uuid:campaign_id>/realtime/', campaign_realtime_status, name='campaign-realtime'),
+    path('<uuid:campaign_id>/progress/', campaign_realtime_progress, name='campaign-progress'),
 ]
 
 
