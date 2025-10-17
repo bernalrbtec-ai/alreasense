@@ -322,18 +322,18 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {/* Gráfico Circular de Progresso */}
           <div className="flex justify-center">
-            <div className="relative w-48 h-48">
+            <div className="relative w-36 h-36">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={pieData}
                     cx="50%"
                     cy="50%"
-                    innerRadius={60}
-                    outerRadius={80}
+                    innerRadius={45}
+                    outerRadius={60}
                     paddingAngle={2}
                     dataKey="value"
                   >
@@ -346,8 +346,8 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
               
               {/* Centro do gráfico com percentual */}
               <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-2xl font-bold text-gray-900">{sentPercentage}%</div>
-                <div className="text-sm text-gray-600">Enviadas</div>
+                <div className="text-xl font-bold text-gray-900">{sentPercentage}%</div>
+                <div className="text-xs text-gray-600">Enviadas</div>
               </div>
             </div>
           </div>

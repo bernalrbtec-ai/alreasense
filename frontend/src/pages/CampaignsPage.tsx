@@ -78,6 +78,7 @@ const CampaignsPage: React.FC = () => {
   const [showLogsModal, setShowLogsModal] = useState(false)
   const [selectedCampaignForLogs, setSelectedCampaignForLogs] = useState<Campaign | null>(null)
   const [logs, setLogs] = useState<any[]>([])
+  const [showStoppedCampaigns, setShowStoppedCampaigns] = useState(false)
 
   useEffect(() => {
     fetchData(true) // Primeira carga com loading
@@ -85,14 +86,16 @@ const CampaignsPage: React.FC = () => {
     // Polling a cada 30 segundos SEM loading
     const interval = setInterval(() => fetchData(false), 30000)
     return () => clearInterval(interval)
-  }, [])
+  }, [showStoppedCampaigns])
 
   const fetchData = async (showLoading = false) => {
     try {
       if (showLoading) {
         setLoading(true)
       }
-      const response = await api.get('/campaigns/')
+      // Incluir campanhas paradas se solicitado
+      const url = showStoppedCampaigns ? '/campaigns/?status=stopped' : '/campaigns/'
+      const response = await api.get(url)
       const campaigns = Array.isArray(response.data.results) ? response.data.results : 
                        Array.isArray(response.data) ? response.data : []
       
@@ -284,14 +287,15 @@ const CampaignsPage: React.FC = () => {
     campaign.description.toLowerCase().includes(searchTerm.toLowerCase())
   )
     .sort((a, b) => {
-      // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS
+      // Ordem: RASCUNHOS -> ATIVAS -> CONCLUÍDAS -> PARADAS
       const statusOrder = {
         'draft': 1,        // RASCUNHOS primeiro
         'scheduled': 2,    // AGENDADAS
         'running': 3,      // ATIVAS
         'paused': 4,       // PAUSADAS
         'completed': 5,    // CONCLUÍDAS
-        'cancelled': 6     // CANCELADAS
+        'stopped': 6,      // PARADAS
+        'cancelled': 7     // CANCELADAS
       }
 
       const aOrder = statusOrder[a.status as keyof typeof statusOrder] || 999
@@ -332,8 +336,8 @@ const CampaignsPage: React.FC = () => {
 
       {/* Filtros */}
       <Card className="p-4">
-        <div className="flex gap-4">
-        <div className="flex-1">
+        <div className="flex gap-4 items-center">
+          <div className="flex-1">
             <Input
               placeholder="Buscar campanhas..."
               value={searchTerm}
@@ -341,11 +345,23 @@ const CampaignsPage: React.FC = () => {
               className="w-full"
             />
           </div>
+          <Button
+            variant={showStoppedCampaigns ? "default" : "outline"}
+            onClick={() => setShowStoppedCampaigns(!showStoppedCampaigns)}
+            className="whitespace-nowrap"
+          >
+            {showStoppedCampaigns ? "🔒 Ocultar Paradas" : "📋 Ver Paradas"}
+          </Button>
         </div>
+        {showStoppedCampaigns && (
+          <div className="mt-2 text-sm text-gray-600">
+            ℹ️ Mostrando campanhas que foram paradas intencionalmente
+          </div>
+        )}
       </Card>
 
       {/* Lista de Campanhas */}
-      <div className="grid gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {filteredCampaigns.map((campaign) => (
           <CampaignCardOptimized
             key={campaign.id}
