@@ -664,8 +664,8 @@ class RabbitMQConsumer:
                             
                             await save_message_id()
                         
-                        # Log de sucesso
-                        await self._log_message_sent(campaign, contact, instance, message_id, contact_phone)
+                        # Log de sucesso (passar message_text também)
+                        await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
                         
                         return True
                     else:
@@ -769,8 +769,8 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha automaticamente: {e}")
     
-    async def _log_message_sent(self, campaign, contact, instance, message_id, contact_phone):
-        """Log de mensagem enviada com todas as informações"""
+    async def _log_message_sent(self, campaign, contact, instance, message_id, contact_phone, message_text):
+        """Log de mensagem enviada com todas as informações incluindo o texto da mensagem"""
         try:
             from asgiref.sync import sync_to_async
             
@@ -793,6 +793,7 @@ class RabbitMQConsumer:
                         'instance_id': instance.instance_name,
                         'instance_name': instance.friendly_name,
                         'message_id': message_id,
+                        'message_text': message_text,  # ✅ TEXTO DA MENSAGEM
                         'sent_at': timezone.now().isoformat()
                     }
                 )

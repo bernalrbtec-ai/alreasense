@@ -466,6 +466,14 @@ const CampaignsPage: React.FC = () => {
                               )}
                             </div>
 
+                            {/* Mensagem Enviada */}
+                            {log.extra_data?.message_text && (
+                              <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                                <div className="text-xs text-blue-600 font-medium mb-1">💬 Mensagem:</div>
+                                <div className="text-sm text-gray-700 whitespace-pre-wrap">{log.extra_data.message_text}</div>
+                              </div>
+                            )}
+
                             {/* Timeline de Status */}
                             <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded">
                               <div className="text-center">
@@ -500,7 +508,7 @@ const CampaignsPage: React.FC = () => {
                           /* Card de Log Padrão (Campanha criada, iniciada, etc) */
                           <div className="flex items-start gap-3">
                             {getLogIcon(log.log_type)}
-                            <div className="flex-1">
+                          <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-medium text-gray-900">
                                   {log.log_type_display}
@@ -508,16 +516,16 @@ const CampaignsPage: React.FC = () => {
                                 {log.instance_name && (
                                   <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
                                     {log.instance_name}
-                                  </span>
+                              </span>
                                 )}
-                              </div>
+                            </div>
                               <p className="text-gray-700 mb-2">{log.message}</p>
                               <div className="flex items-center gap-4 text-sm text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
                                   {formatDate(log.created_at)}
                                 </span>
-                                {log.contact_name && (
+                            {log.contact_name && (
                                   <span className="flex items-center gap-1">
                                     <Users className="h-3 w-3" />
                                     {log.contact_name}
@@ -526,7 +534,7 @@ const CampaignsPage: React.FC = () => {
                                 )}
                                 <span>por {log.user_name}</span>
                               </div>
-                            </div>
+                              </div>
                           </div>
                         )}
                       </div>
