@@ -13,6 +13,7 @@ from .views_logs import campaign_logs as campaign_logs_new, campaign_logs_stats
 from .views_retry import campaign_retry_info
 from .views_debug import debug_campaigns, test_retry_endpoint
 from .views_debug_campaign import debug_campaign_state
+from .views_test_presence import test_send_presence, list_instances_for_test
 # CampaignNotificationViewSet reativado
 
 router = DefaultRouter()
@@ -39,6 +40,10 @@ urlpatterns = [
     path('campaigns/debug/', debug_campaigns, name='campaigns-debug'),
     path('campaigns/<uuid:campaign_id>/test-retry/', test_retry_endpoint, name='test-retry-endpoint'),
     path('campaigns/<uuid:campaign_id>/debug/', debug_campaign_state, name='debug-campaign-state'),
+    
+    # API de teste de presença (digitando)
+    path('campaigns/test-presence/', test_send_presence, name='test-presence'),
+    path('campaigns/test-presence/instances/', list_instances_for_test, name='test-presence-instances'),
     
     # Router deve vir depois das URLs específicas
     path('', include(router.urls)),

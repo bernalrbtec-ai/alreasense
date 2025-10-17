@@ -23,6 +23,7 @@ import ConfigurationsPage from './pages/ConfigurationsPage'
 import ContactsPage from './pages/ContactsPage'
 import CampaignsPage from './pages/CampaignsPage'
 import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
+import TestPresencePage from './pages/TestPresencePage'
 
 // Components
 import Layout from './components/Layout'
@@ -99,6 +100,11 @@ function App() {
           <Route path="/campaigns/logs" element={
             <ProtectedRoute requiredProduct="flow">
               <CampaignLogsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/campaigns/test-presence" element={
+            <ProtectedRoute requiredProduct="flow">
+              <TestPresencePage />
             </ProtectedRoute>
           } />
           <Route path="/connections" element={

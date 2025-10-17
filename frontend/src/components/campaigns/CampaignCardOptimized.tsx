@@ -282,7 +282,8 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                 </Tooltip>
               )}
               
-              {campaign.status !== 'running' && (
+              {/* Botão Editar: apenas em rascunho */}
+              {campaign.status === 'draft' && (
                 <Tooltip content="Editar campanha">
                   <Button
                     size="sm"
