@@ -392,6 +392,8 @@ class RabbitMQConsumer:
                 logger.info(f"🔍 [DEBUG] Campanha {campaign.id} - Status atual: {campaign.status}")
                 # Atualizar status da campanha
                 await self._update_campaign_status_async(campaign, 'completed')
+                # Log de encerramento
+                await self._log_campaign_completed(campaign)
                 return
             
             logger.info(f"🔍 [DEBUG] Próximo contato encontrado: {contact.id} - Status: {contact.status}")
@@ -768,31 +770,79 @@ class RabbitMQConsumer:
             logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha automaticamente: {e}")
     
     async def _log_message_sent(self, campaign, contact, instance, message_id, contact_phone):
-        """Log de mensagem enviada"""
+        """Log de mensagem enviada com todas as informações"""
         try:
             from asgiref.sync import sync_to_async
             
             @sync_to_async
             def create_log():
+                # Buscar dados do contato
+                contact_name = contact.contact.name if hasattr(contact, 'contact') else 'Desconhecido'
+                
                 CampaignLog.objects.create(
                     campaign=campaign,
-                    event_type='message_sent',
-                    message=f'Mensagem enviada para {contact_phone}',
-                    extra_data={
-                        'contact_id': str(contact.id),
+                    campaign_contact=contact,
+                    instance=instance,
+                    log_type='message_sent',  # ✅ CORRIGIDO: era event_type
+                    severity='info',
+                    message=f'Mensagem enviada para {contact_name} ({contact_phone})',
+                    details={
+                        'contact_id': str(contact.contact.id if hasattr(contact, 'contact') else None),
+                        'contact_name': contact_name,
                         'phone': contact_phone,
                         'instance_id': instance.instance_name,
-                        'message_id': message_id
+                        'instance_name': instance.friendly_name,
+                        'message_id': message_id,
+                        'sent_at': timezone.now().isoformat()
                     }
                 )
             
             await create_log()
+            logger.info(f"✅ [LOG] Log de envio criado para {contact_phone}")
             
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem enviada: {e}")
+            import traceback
+            logger.error(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
     
     async def _log_message_failed(self, campaign, contact, instance, error_msg, contact_phone):
-        """Log de mensagem falhada"""
+        """Log de mensagem falhada com todas as informações"""
+        try:
+            from asgiref.sync import sync_to_async
+            
+            @sync_to_async
+            def create_log():
+                # Buscar dados do contato
+                contact_name = contact.contact.name if hasattr(contact, 'contact') else 'Desconhecido'
+                
+                CampaignLog.objects.create(
+                    campaign=campaign,
+                    campaign_contact=contact,
+                    instance=instance,
+                    log_type='message_failed',  # ✅ CORRIGIDO: era event_type
+                    severity='error',
+                    message=f'Falha ao enviar para {contact_name} ({contact_phone}): {error_msg}',
+                    details={
+                        'contact_id': str(contact.contact.id if hasattr(contact, 'contact') else None),
+                        'contact_name': contact_name,
+                        'phone': contact_phone,
+                        'instance_id': instance.instance_name,
+                        'instance_name': instance.friendly_name,
+                        'error': error_msg,
+                        'failed_at': timezone.now().isoformat()
+                    }
+                )
+            
+            await create_log()
+            logger.info(f"✅ [LOG] Log de falha criado para {contact_phone}")
+            
+        except Exception as e:
+            logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem falhada: {e}")
+            import traceback
+            logger.error(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
+    
+    async def _log_campaign_completed(self, campaign):
+        """Log de campanha concluída com estatísticas"""
         try:
             from asgiref.sync import sync_to_async
             
@@ -800,20 +850,28 @@ class RabbitMQConsumer:
             def create_log():
                 CampaignLog.objects.create(
                     campaign=campaign,
-                    event_type='message_failed',
-                    message=f'Falha ao enviar mensagem para {contact_phone}: {error_msg}',
-                    extra_data={
-                        'contact_id': str(contact.id),
-                        'phone': contact_phone,
-                        'instance_id': instance.instance_name,
-                        'error': error_msg
+                    log_type='completed',
+                    severity='info',
+                    message=f'Campanha "{campaign.name}" concluída com sucesso',
+                    details={
+                        'total_contacts': campaign.total_contacts,
+                        'messages_sent': campaign.messages_sent,
+                        'messages_delivered': campaign.messages_delivered,
+                        'messages_read': campaign.messages_read,
+                        'messages_failed': campaign.messages_failed,
+                        'success_rate': campaign.success_rate,
+                        'read_rate': campaign.read_rate,
+                        'completed_at': timezone.now().isoformat()
                     }
                 )
             
             await create_log()
+            logger.info(f"✅ [LOG] Log de conclusão criado para campanha {campaign.name}")
             
         except Exception as e:
-            logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem falhada: {e}")
+            logger.error(f"❌ [AIO-PIKA] Erro ao criar log de conclusão: {e}")
+            import traceback
+            logger.error(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
     
     def pause_campaign(self, campaign_id: str):
         """Pausa uma campanha"""

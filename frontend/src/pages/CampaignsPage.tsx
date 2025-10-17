@@ -447,10 +447,60 @@ const CampaignsPage: React.FC = () => {
                         key={log.id || idx}
                         className={`border-l-4 p-4 rounded-r-lg ${getLogColor(log.log_type)}`}
                       >
-                        <div className="flex items-start justify-between">
+                        {/* Card de Disparo com Detalhes */}
+                        {(log.log_type === 'message_sent' || log.log_type === 'message_failed') && log.contact_name ? (
+                          <div className="space-y-3">
+                            {/* Header com Contato e Instância */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                {getLogIcon(log.log_type)}
+                                <div>
+                                  <div className="font-medium text-gray-900">{log.contact_name}</div>
+                                  <div className="text-sm text-gray-500">{log.contact_phone}</div>
+                                </div>
+                              </div>
+                              {log.instance_name && (
+                                <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                                  {log.instance_name}
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Timeline de Status */}
+                            <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded">
+                              <div className="text-center">
+                                <div className="text-xs text-gray-500 mb-1">📤 Enviada em</div>
+                                <div className="text-sm font-medium text-gray-900">
+                                  {log.extra_data?.sent_at ? formatDate(log.extra_data.sent_at) : formatDate(log.created_at)}
+                                </div>
+                              </div>
+                              <div className="text-center border-l border-gray-200">
+                                <div className="text-xs text-gray-500 mb-1">✅ Entregue em</div>
+                                <div className="text-sm font-medium text-gray-600">
+                                  {log.extra_data?.delivered_at ? formatDate(log.extra_data.delivered_at) : '---'}
+                                </div>
+                              </div>
+                              <div className="text-center border-l border-gray-200">
+                                <div className="text-xs text-gray-500 mb-1">👁️ Visto em</div>
+                                <div className="text-sm font-medium text-gray-600">
+                                  {log.extra_data?.read_at ? formatDate(log.extra_data.read_at) : '---'}
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Erro se houver */}
+                            {log.log_type === 'message_failed' && log.extra_data?.error && (
+                              <div className="bg-red-50 border border-red-200 rounded p-2">
+                                <div className="text-xs text-red-600 font-medium mb-1">❌ Motivo da Falha:</div>
+                                <div className="text-sm text-red-700">{log.extra_data.error}</div>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* Card de Log Padrão (Campanha criada, iniciada, etc) */
                           <div className="flex items-start gap-3">
                             {getLogIcon(log.log_type)}
-                          <div className="flex-1">
+                            <div className="flex-1">
                               <div className="flex items-center gap-2 mb-1">
                                 <span className="font-medium text-gray-900">
                                   {log.log_type_display}
@@ -458,16 +508,16 @@ const CampaignsPage: React.FC = () => {
                                 {log.instance_name && (
                                   <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
                                     {log.instance_name}
-                              </span>
+                                  </span>
                                 )}
-                            </div>
+                              </div>
                               <p className="text-gray-700 mb-2">{log.message}</p>
                               <div className="flex items-center gap-4 text-sm text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Clock className="h-3 w-3" />
                                   {formatDate(log.created_at)}
                                 </span>
-                            {log.contact_name && (
+                                {log.contact_name && (
                                   <span className="flex items-center gap-1">
                                     <Users className="h-3 w-3" />
                                     {log.contact_name}
@@ -476,9 +526,9 @@ const CampaignsPage: React.FC = () => {
                                 )}
                                 <span>por {log.user_name}</span>
                               </div>
-                              </div>
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     ))}
                   </div>
