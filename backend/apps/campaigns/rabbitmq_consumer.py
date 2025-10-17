@@ -503,12 +503,11 @@ class RabbitMQConsumer:
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
             presence_url = f"{instance.api_url}/chat/sendPresence/{instance.instance_name}"
+            # 🔧 CORREÇÃO: Evolution API espera delay e presence direto no root (não dentro de options)
             presence_data = {
                 "number": contact_phone,
-                "options": {
-                    "delay": int(typing_seconds * 1000),  # Converter para milissegundos
-                    "presence": "composing"
-                }
+                "delay": int(typing_seconds * 1000),  # Converter para milissegundos
+                "presence": "composing"
             }
             headers = {
                 "Content-Type": "application/json",
@@ -516,12 +515,12 @@ class RabbitMQConsumer:
             }
             
             loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
+            response = await loop.run_in_executor(
                 None,
                 lambda: requests.post(presence_url, json=presence_data, headers=headers, timeout=10)
             )
             
-            logger.info(f"✍️ [PRESENCE] Enviando status 'digitando' para {contact_phone} por {typing_seconds}s")
+            logger.info(f"✍️ [PRESENCE] Status 'digitando' enviado para {contact_phone} por {typing_seconds}s - Status: {response.status_code}")
             
             # Aguardar o tempo de digitação
             await asyncio.sleep(typing_seconds)
