@@ -598,13 +598,18 @@ class RabbitMQConsumer:
                     lambda: requests.post(url, json=message_data, headers=headers, timeout=30)
                 )
                 
-                if response.status_code == 200:
+                # ✅ Aceitar status 200 (OK) e 201 (Created) como sucesso
+                if response.status_code in [200, 201]:
                     response_data = response.json()
-                    if response_data.get('sent'):
+                    # Evolution API pode retornar 'sent' ou 'key' (ambos indicam sucesso)
+                    if response_data.get('sent') or response_data.get('key'):
                         logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact_phone} (tentativa {attempt})")
                         
-                        # Salvar message_id
+                        # Salvar message_id (pode estar em 'messageId' ou 'key.id')
                         message_id = response_data.get('messageId')
+                        if not message_id and response_data.get('key'):
+                            message_id = response_data['key'].get('id')
+                        
                         if message_id:
                             @sync_to_async
                             def save_message_id():
