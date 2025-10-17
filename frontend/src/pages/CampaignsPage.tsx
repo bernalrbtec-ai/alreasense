@@ -83,8 +83,8 @@ const CampaignsPage: React.FC = () => {
   useEffect(() => {
     fetchData(true) // Primeira carga com loading
     
-    // Polling a cada 30 segundos SEM loading
-    const interval = setInterval(() => fetchData(false), 30000)
+    // Polling a cada 5 segundos para campanhas em execução (atualização em tempo real)
+    const interval = setInterval(() => fetchData(false), 5000)
     return () => clearInterval(interval)
   }, [showStoppedCampaigns])
 

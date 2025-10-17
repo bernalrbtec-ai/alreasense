@@ -424,6 +424,9 @@ class EvolutionWebhookView(APIView):
                 
                 campaign_contact.save()
                 
+                # 📊 ATUALIZAR LOG COM INFORMAÇÕES DE ENTREGA/LEITURA
+                self.update_campaign_log(campaign_contact, status)
+                
                 # Update campaign stats
                 self.update_campaign_stats(campaign_contact.campaign)
                 
@@ -482,6 +485,41 @@ class EvolutionWebhookView(APIView):
                 
         except Exception as e:
             logger.error(f"Error updating campaign contact status: {str(e)}")
+    
+    def update_campaign_log(self, campaign_contact, status):
+        """Atualizar log existente com informações de entrega/leitura"""
+        try:
+            from apps.campaigns.models import CampaignLog
+            
+            # Buscar log de envio para este contato
+            log = CampaignLog.objects.filter(
+                campaign=campaign_contact.campaign,
+                campaign_contact=campaign_contact,
+                log_type='message_sent'
+            ).first()
+            
+            if log:
+                # Atualizar details com informações de entrega/leitura
+                if not log.details:
+                    log.details = {}
+                
+                if status in ['delivered', 'delivery_ack']:
+                    log.details['delivered_at'] = timezone.now().isoformat()
+                    logger.info(f"📬 Log atualizado: Mensagem entregue para {campaign_contact.contact.name}")
+                    
+                elif status in ['read', 'read_ack']:
+                    # Se ainda não tem delivered_at, adicionar
+                    if 'delivered_at' not in log.details:
+                        log.details['delivered_at'] = timezone.now().isoformat()
+                    log.details['read_at'] = timezone.now().isoformat()
+                    logger.info(f"👁️ Log atualizado: Mensagem lida por {campaign_contact.contact.name}")
+                
+                log.save()
+            else:
+                logger.warning(f"⚠️ Log de envio não encontrado para contato {campaign_contact.id}")
+                
+        except Exception as e:
+            logger.error(f"❌ Erro ao atualizar log: {str(e)}")
     
     def update_campaign_stats(self, campaign):
         """Update campaign statistics."""
