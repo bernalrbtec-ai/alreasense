@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
@@ -337,7 +337,7 @@ const CampaignsPage: React.FC = () => {
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex gap-4 items-center">
-          <div className="flex-1">
+        <div className="flex-1">
             <Input
               placeholder="Buscar campanhas..."
               value={searchTerm}
