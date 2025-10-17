@@ -229,13 +229,26 @@ export default function ContactsPage() {
     const toastId = showLoadingToast(editingContact ? 'atualizar' : 'criar', 'Contato')
     
     try {
+      // 🔧 CORREÇÃO: Normalizar telefone para formato E.164
+      let normalizedPhone = formData.phone.replace(/\D/g, '') // Remove tudo que não é número
+      
+      // Se não começar com código do país, adicionar +55 (Brasil)
+      if (normalizedPhone && !normalizedPhone.startsWith('55')) {
+        normalizedPhone = '55' + normalizedPhone
+      }
+      
+      // Adicionar o +
+      if (normalizedPhone && !normalizedPhone.startsWith('+')) {
+        normalizedPhone = '+' + normalizedPhone
+      }
+      
       // 🔧 CORREÇÃO: Garantir que tag_ids seja sempre array
       const dataToSend = {
         ...formData,
         tag_ids: Array.isArray(formData.tag_ids) ? formData.tag_ids : [],
         // Garantir que campos vazios sejam strings vazias, não null
         name: formData.name || '',
-        phone: formData.phone || '',
+        phone: normalizedPhone || '',
         email: formData.email || '',
         birth_date: formData.birth_date || '',
         gender: formData.gender || '',
