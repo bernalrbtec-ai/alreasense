@@ -1,7 +1,44 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from .models import User
+from .models import User, Department
 from apps.tenancy.serializers import TenantSerializer
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    """
+    Serializer para o modelo Department.
+    Retorna informações básicas do departamento.
+    """
+    
+    class Meta:
+        model = Department
+        fields = [
+            'id', 'tenant', 'name', 'color', 'ai_enabled',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def validate(self, attrs):
+        """Valida que não pode criar departamento duplicado no mesmo tenant."""
+        tenant = attrs.get('tenant')
+        name = attrs.get('name')
+        
+        # Se está atualizando, pega o tenant da instância
+        if self.instance:
+            tenant = self.instance.tenant if not tenant else tenant
+        
+        # Verifica duplicidade
+        if tenant and name:
+            exists = Department.objects.filter(tenant=tenant, name=name)
+            if self.instance:
+                exists = exists.exclude(pk=self.instance.pk)
+            
+            if exists.exists():
+                raise serializers.ValidationError({
+                    'name': f'Já existe um departamento "{name}" neste tenant.'
+                })
+        
+        return attrs
 
 
 class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -71,6 +108,7 @@ class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model."""
     
     tenant = TenantSerializer(read_only=True)
+    departments = DepartmentSerializer(many=True, read_only=True)
     is_admin = serializers.ReadOnlyField()
     is_operator = serializers.ReadOnlyField()
     avatar = serializers.SerializerMethodField()
@@ -79,7 +117,7 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'tenant', 'role', 'is_active', 'date_joined',
+            'tenant', 'role', 'departments', 'is_active', 'date_joined',
             'is_admin', 'is_operator', 'is_superuser', 'is_staff',
             'avatar', 'display_name', 'phone', 'birth_date',
             'notify_email', 'notify_whatsapp'

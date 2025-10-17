@@ -1,6 +1,6 @@
-from rest_framework import generics, status
+from rest_framework import generics, status, viewsets
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.response import Response
 from rest_framework_simplejwt.views import TokenObtainPairView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -9,12 +9,15 @@ from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 import uuid
 
-from .models import User
+from .models import User, Department
+from apps.tenancy.models import Tenant
 from .serializers import (
     CustomTokenObtainPairSerializer, 
     UserSerializer, 
-    UserCreateSerializer
+    UserCreateSerializer,
+    DepartmentSerializer
 )
+from apps.tenancy.serializers import TenantSerializer
 
 
 class CustomTokenObtainPairView(TokenObtainPairView):
@@ -224,3 +227,60 @@ def upload_avatar(request):
             {'detail': f'Erro ao fazer upload: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ============================================
+# ViewSets REST para Tenants, Departments, Users
+# ============================================
+
+class TenantViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar Tenants.
+    Acesso restrito a superadmins.
+    """
+    queryset = Tenant.objects.all()
+    serializer_class = TenantSerializer
+    permission_classes = [IsAuthenticated, IsAdminUser]
+    
+    def get_queryset(self):
+        """Superadmins veem todos, outros só o próprio tenant."""
+        user = self.request.user
+        if user.is_superuser:
+            return Tenant.objects.all()
+        return Tenant.objects.filter(id=user.tenant.id)
+
+
+class DepartmentViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar Departamentos.
+    Filtrado automaticamente por tenant do usuário autenticado.
+    """
+    serializer_class = DepartmentSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Retorna apenas departamentos do tenant do usuário."""
+        user = self.request.user
+        if user.is_superuser:
+            return Department.objects.select_related('tenant').all()
+        return Department.objects.filter(tenant=user.tenant).select_related('tenant')
+    
+    def perform_create(self, serializer):
+        """Ao criar, associa automaticamente ao tenant do usuário."""
+        serializer.save(tenant=self.request.user.tenant)
+
+
+class UserViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar Usuários.
+    Filtrado automaticamente por tenant do usuário autenticado.
+    """
+    serializer_class = UserSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        """Retorna apenas usuários do tenant do usuário."""
+        user = self.request.user
+        if user.is_superuser:
+            return User.objects.select_related('tenant').prefetch_related('departments').all()
+        return User.objects.filter(tenant=user.tenant).select_related('tenant').prefetch_related('departments')

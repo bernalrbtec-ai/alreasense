@@ -17,13 +17,22 @@ class TenantUserInline(admin.TabularInline):
         return False
 
 
+class TenantDepartmentInline(admin.TabularInline):
+    """Inline para mostrar departamentos do tenant"""
+    from apps.authn.models import Department
+    model = Department
+    extra = 0
+    fields = ['name', 'color', 'ai_enabled']
+    can_delete = True
+
+
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
     list_display = ['name', 'current_plan', 'status', 'ui_access', 'products_display', 'created_at']
     list_filter = ['current_plan', 'status', 'ui_access', 'created_at']
     search_fields = ['name']
     readonly_fields = ['id', 'created_at', 'updated_at', 'products_display', 'monthly_total_display']
-    inlines = [TenantUserInline]
+    inlines = [TenantDepartmentInline, TenantUserInline]
     
     fieldsets = (
         ('📋 Informações Básicas', {
