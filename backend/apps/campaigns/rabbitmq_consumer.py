@@ -499,6 +499,40 @@ class RabbitMQConsumer:
             import traceback
             logger.error(f"🔍 [DEBUG] Stack trace: {traceback.format_exc()}")
     
+    async def _replace_variables(self, message_text, contact_data):
+        """Substitui variáveis na mensagem com dados do contato"""
+        from datetime import datetime
+        
+        # Saudação baseada no horário
+        hour = datetime.now().hour
+        if hour < 12:
+            saudacao = 'Bom dia'
+        elif hour < 18:
+            saudacao = 'Boa tarde'
+        else:
+            saudacao = 'Boa noite'
+        
+        # Dia da semana
+        dias_semana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
+        dia_semana = dias_semana[datetime.now().weekday()]
+        
+        # Processar nomes
+        nome_completo = contact_data.get('name', '')
+        primeiro_nome = nome_completo.split()[0] if nome_completo else ''
+        
+        quem_indicou = contact_data.get('referred_by', '')
+        primeiro_nome_indicador = quem_indicou.split()[0] if quem_indicou else ''
+        
+        # Substituir variáveis
+        message_text = message_text.replace('{{nome}}', nome_completo)
+        message_text = message_text.replace('{{primeiro_nome}}', primeiro_nome)
+        message_text = message_text.replace('{{saudacao}}', saudacao)
+        message_text = message_text.replace('{{dia_semana}}', dia_semana)
+        message_text = message_text.replace('{{quem_indicou}}', quem_indicou)
+        message_text = message_text.replace('{{primeiro_nome_indicador}}', primeiro_nome_indicador)
+        
+        return message_text
+    
     async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
@@ -572,14 +606,25 @@ class RabbitMQConsumer:
                     logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
                     return False
                 
-                # 🎯 HUMANIZAÇÃO: Enviar status "digitando" com tempo aleatório entre 1.5s e 4s
-                typing_seconds = random.uniform(1.5, 4.0)
+                # 🎯 HUMANIZAÇÃO: Enviar status "digitando" com tempo aleatório entre 5s e 10s
+                typing_seconds = random.uniform(5.0, 10.0)
                 await self._send_typing_presence(instance, contact_phone, typing_seconds)
+                
+                # 🔧 SUBSTITUIR VARIÁVEIS NA MENSAGEM
+                @sync_to_async
+                def get_contact_data():
+                    return {
+                        'name': contact.contact.name or '',
+                        'referred_by': contact.contact.referred_by or ''
+                    }
+                
+                contact_data = await get_contact_data()
+                message_text = await self._replace_variables(message.content, contact_data)
                 
                 # Preparar dados da mensagem
                 message_data = {
                     "number": contact_phone,
-                    "text": message.content,
+                    "text": message_text,
                     "instance": instance.instance_name
                 }
                 
