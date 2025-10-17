@@ -424,6 +424,14 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
           {/* Footer info */}
           <div className="pt-4 border-t border-gray-200">
             <div className="space-y-2 text-sm">
+              {/* Countdown para próximo disparo */}
+              {campaign.status === 'running' && countdown > 0 && (
+                <div className="flex items-center gap-2 text-orange-600 bg-orange-50 p-2 rounded">
+                  <Clock className="h-4 w-4 animate-pulse" />
+                  <span><strong>Próximo disparo em:</strong> {formatCountdown(countdown)}</span>
+                </div>
+              )}
+              
               {campaign.next_contact_name && (
                 <div className="flex items-center gap-2 text-gray-600">
                   <Users className="h-4 w-4 text-blue-500" />
