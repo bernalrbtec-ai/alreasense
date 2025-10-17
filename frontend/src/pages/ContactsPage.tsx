@@ -229,11 +229,28 @@ export default function ContactsPage() {
     const toastId = showLoadingToast(editingContact ? 'atualizar' : 'criar', 'Contato')
     
     try {
+      // 🔧 CORREÇÃO: Garantir que tag_ids seja sempre array
+      const dataToSend = {
+        ...formData,
+        tag_ids: Array.isArray(formData.tag_ids) ? formData.tag_ids : [],
+        // Garantir que campos vazios sejam strings vazias, não null
+        name: formData.name || '',
+        phone: formData.phone || '',
+        email: formData.email || '',
+        birth_date: formData.birth_date || '',
+        gender: formData.gender || '',
+        city: formData.city || '',
+        state: formData.state || '',
+        zipcode: formData.zipcode || '',
+        referred_by: formData.referred_by || '',
+        notes: formData.notes || ''
+      }
+      
       if (editingContact) {
-        await api.put(`/contacts/contacts/${editingContact.id}/`, formData)
+        await api.put(`/contacts/contacts/${editingContact.id}/`, dataToSend)
         updateToastSuccess(toastId, 'atualizar', 'Contato')
       } else {
-        await api.post('/contacts/contacts/', formData)
+        await api.post('/contacts/contacts/', dataToSend)
         updateToastSuccess(toastId, 'criar', 'Contato')
       }
       
