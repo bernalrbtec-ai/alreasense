@@ -66,10 +66,37 @@ export function DepartmentsManager() {
       fetchDepartments();
       handleCloseModal();
     } catch (error: any) {
-      console.error('Erro ao salvar departamento:', error.response?.data);
-      const errorMsg = error.response?.data?.name?.[0] 
-        || error.response?.data?.detail 
-        || 'Erro ao salvar departamento';
+      console.error('Erro ao salvar departamento:', error);
+      console.error('Erro detalhado:', error.response?.data);
+      
+      // Extrair mensagem de erro de forma segura
+      const errorData = error.response?.data;
+      let errorMsg = 'Erro ao salvar departamento';
+      
+      if (typeof errorData === 'string') {
+        errorMsg = errorData;
+      } else if (errorData && typeof errorData === 'object') {
+        if (errorData.detail) {
+          errorMsg = errorData.detail;
+        } else if (errorData.error) {
+          errorMsg = errorData.error;
+        } else if (errorData.name) {
+          errorMsg = Array.isArray(errorData.name) ? errorData.name[0] : errorData.name;
+        } else {
+          // Pegar primeira mensagem de qualquer campo
+          const errors = Object.entries(errorData).map(([field, msgs]: [string, any]) => {
+            const message = Array.isArray(msgs) ? msgs[0] : msgs;
+            return `${field}: ${message}`;
+          });
+          errorMsg = errors[0] || errorMsg;
+        }
+      }
+      
+      // Garantir que seja string
+      if (typeof errorMsg !== 'string') {
+        errorMsg = 'Erro ao salvar departamento';
+      }
+      
       toast.error(errorMsg);
     }
   };

@@ -104,8 +104,12 @@ export function UsersManager() {
         await api.patch(`/auth/users-api/${editingUser.id}/`, updateData);
         toast.success('Usuário atualizado!');
       } else {
-        // Create user
-        await api.post('/auth/users-api/', formData);
+        // Create user - garantir que username seja o email
+        const payload = {
+          ...formData,
+          username: formData.email, // Garantir que username seja definido
+        };
+        await api.post('/auth/users-api/', payload);
         toast.success('Usuário criado!');
       }
       
@@ -113,10 +117,35 @@ export function UsersManager() {
       handleCloseModal();
     } catch (error: any) {
       console.error('Erro ao salvar usuário:', error);
-      const errorMsg = error.response?.data?.detail 
-        || error.response?.data?.password?.[0]
-        || error.response?.data?.email?.[0]
-        || 'Erro ao salvar usuário';
+      console.error('Erro detalhado:', error.response?.data);
+      
+      // Extrair mensagem de erro mais específica
+      const errorData = error.response?.data;
+      let errorMsg = 'Erro ao salvar usuário';
+      
+      if (typeof errorData === 'string') {
+        errorMsg = errorData;
+      } else if (errorData && typeof errorData === 'object') {
+        // Tentar extrair mensagens de erro dos campos
+        if (errorData.detail) {
+          errorMsg = errorData.detail;
+        } else if (errorData.error) {
+          errorMsg = errorData.error;
+        } else {
+          // Pegar a primeira mensagem de erro de qualquer campo
+          const errors = Object.entries(errorData).map(([field, msgs]: [string, any]) => {
+            const message = Array.isArray(msgs) ? msgs[0] : msgs;
+            return `${field}: ${message}`;
+          });
+          errorMsg = errors[0] || errorMsg;
+        }
+      }
+      
+      // Garantir que errorMsg seja sempre uma string
+      if (typeof errorMsg !== 'string') {
+        errorMsg = 'Erro ao salvar usuário';
+      }
+      
       toast.error(errorMsg);
     }
   };
