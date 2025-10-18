@@ -60,10 +60,15 @@ export function UsersManager() {
   const fetchUsers = async () => {
     try {
       const response = await api.get('/auth/users-api/');
-      setUsers(response.data);
+      // Garantir que sempre temos um array
+      const data = Array.isArray(response.data) 
+        ? response.data 
+        : (response.data?.results || []);
+      setUsers(data);
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
       toast.error('Erro ao carregar usuários');
+      setUsers([]); // Garantir array vazio em caso de erro
     } finally {
       setLoading(false);
     }
@@ -72,9 +77,14 @@ export function UsersManager() {
   const fetchDepartments = async () => {
     try {
       const response = await api.get('/auth/departments/');
-      setDepartments(response.data);
+      // Garantir que sempre temos um array
+      const data = Array.isArray(response.data) 
+        ? response.data 
+        : (response.data?.results || []);
+      setDepartments(data);
     } catch (error) {
       console.error('Erro ao buscar departamentos:', error);
+      setDepartments([]); // Garantir array vazio em caso de erro
     }
   };
 
@@ -161,7 +171,7 @@ export function UsersManager() {
       </div>
 
       <div className="space-y-2">
-        {users.map((user) => (
+        {Array.isArray(users) && users.map((user) => (
           <div
             key={user.id}
             className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
@@ -324,7 +334,7 @@ export function UsersManager() {
                   Departamentos
                 </label>
                 <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                  {departments.map((dept) => (
+                  {Array.isArray(departments) && departments.map((dept) => (
                     <label key={dept.id} className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"

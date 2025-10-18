@@ -30,10 +30,15 @@ export function DepartmentsManager() {
   const fetchDepartments = async () => {
     try {
       const response = await api.get('/auth/departments/');
-      setDepartments(response.data);
+      // Garantir que sempre temos um array
+      const data = Array.isArray(response.data) 
+        ? response.data 
+        : (response.data?.results || []);
+      setDepartments(data);
     } catch (error) {
       console.error('Erro ao buscar departamentos:', error);
       toast.error('Erro ao carregar departamentos');
+      setDepartments([]); // Garantir array vazio em caso de erro
     } finally {
       setLoading(false);
     }
@@ -102,7 +107,7 @@ export function DepartmentsManager() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-        {departments.map((dept) => (
+        {Array.isArray(departments) && departments.map((dept) => (
           <div
             key={dept.id}
             className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow"
