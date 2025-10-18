@@ -51,21 +51,32 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
   useEffect(() => {
     // Só buscar se houver token de autenticação
     const authStorage = localStorage.getItem('auth-storage');
-    if (authStorage) {
-      try {
-        const auth = JSON.parse(authStorage);
-        if (auth?.state?.token) {
-          fetchProducts();
-          return;
-        }
-      } catch (e) {
-        console.warn('Erro ao parsear auth-storage:', e);
-      }
+    if (!authStorage) {
+      console.log('⚠️ Sem auth-storage, não buscando produtos');
+      setProducts([]);
+      setLoading(false);
+      return;
     }
     
-    // Se não houver token, setar como não loading e array vazio
-    setProducts([]);
-    setLoading(false);
+    try {
+      const auth = JSON.parse(authStorage);
+      const token = auth?.state?.token;
+      const user = auth?.state?.user;
+      
+      if (!token || !user) {
+        console.log('⚠️ Token ou user não encontrado no storage');
+        setProducts([]);
+        setLoading(false);
+        return;
+      }
+      
+      console.log('✅ Token encontrado, buscando produtos...');
+      fetchProducts();
+    } catch (e) {
+      console.warn('❌ Erro ao parsear auth-storage:', e);
+      setProducts([]);
+      setLoading(false);
+    }
   }, []);
 
   const hasProduct = (productSlug: string): boolean => {

@@ -47,11 +47,17 @@ interface Tenant {
 export default function BillingPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const { user } = useAuthStore()
+  const { user, token } = useAuthStore()
 
   useEffect(() => {
-    fetchTenantData()
-  }, [])
+    // Só buscar se estiver autenticado
+    if (token && user) {
+      fetchTenantData()
+    } else {
+      console.log('⚠️ Usuário não autenticado, não buscando dados do tenant')
+      setIsLoading(false)
+    }
+  }, [token, user])
 
   const fetchTenantData = async () => {
     try {
@@ -69,6 +75,28 @@ export default function BillingPage() {
     return (
       <div className="flex items-center justify-center h-64">
         <LoadingSpinner size="lg" />
+      </div>
+    )
+  }
+
+  if (!token || !user) {
+    return (
+      <div className="text-center py-12">
+        <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+        <h2 className="text-xl font-semibold text-gray-700 mb-2">Sessão Expirada</h2>
+        <p className="text-gray-600 mb-4">Por favor, faça login novamente para ver seus produtos e planos.</p>
+        <Button onClick={() => window.location.href = '/login'}>
+          Fazer Login
+        </Button>
+      </div>
+    )
+  }
+
+  if (!tenant) {
+    return (
+      <div className="text-center py-8">
+        <Package className="h-12 w-12 text-gray-400 mx-auto mb-2" />
+        <p className="text-gray-600">Erro ao carregar informações do tenant</p>
       </div>
     )
   }
