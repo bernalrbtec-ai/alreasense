@@ -31,7 +31,7 @@ class Migration(migrations.Migration):
                 ('assigned_to', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assigned_conversations', to=settings.AUTH_USER_MODEL, verbose_name='Responsável')),
                 ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='authn.Department', verbose_name='Departamento')),
                 ('participants', models.ManyToManyField(blank=True, related_name='conversations', to=settings.AUTH_USER_MODEL, verbose_name='Participantes')),
-                ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='tenancy.tenant', verbose_name='Tenant')),
+                ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='tenancy.Tenant', verbose_name='Tenant')),
             ],
             options={
                 'verbose_name': 'Conversa',
@@ -77,7 +77,7 @@ class Migration(migrations.Migration):
                 ('expires_at', models.DateTimeField(help_text='Cache local expira após 7 dias', verbose_name='Expira em')),
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
                 ('message', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='chat.message', verbose_name='Mensagem')),
-                ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chat_attachments', to='tenancy.tenant', verbose_name='Tenant')),
+                ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chat_attachments', to='tenancy.Tenant', verbose_name='Tenant')),
             ],
             options={
                 'verbose_name': 'Anexo',
