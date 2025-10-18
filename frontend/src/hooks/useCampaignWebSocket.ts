@@ -56,7 +56,8 @@ export function useCampaignWebSocket(
   const reconnectDelay = 3000 // 3 segundos
 
   const connect = useCallback(() => {
-    if (!user?.tenant?.id || wsRef.current?.readyState === WebSocket.CONNECTING || wsRef.current?.readyState === WebSocket.OPEN) {
+    const tenantId = user?.tenant_id || user?.tenant?.id
+    if (!tenantId || wsRef.current?.readyState === WebSocket.CONNECTING || wsRef.current?.readyState === WebSocket.OPEN) {
       return
     }
 
@@ -65,7 +66,8 @@ export function useCampaignWebSocket(
     const WS_BASE_URL = isProduction 
       ? `wss://${window.location.hostname.replace('alreasense-production', 'alreasense-backend-production')}`
       : (import.meta as any).env.VITE_WS_BASE_URL || 'ws://localhost:8000'
-    const wsUrl = `${WS_BASE_URL}/ws/tenant/${user.tenant.id}/`
+    const tenantId = user.tenant_id || user.tenant?.id
+    const wsUrl = `${WS_BASE_URL}/ws/tenant/${tenantId}/`
     
     console.log('🔌 [CAMPAIGN-WS] Conectando em:', wsUrl)
     setConnectionStatus('connecting')

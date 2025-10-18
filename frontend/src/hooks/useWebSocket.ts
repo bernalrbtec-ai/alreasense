@@ -14,14 +14,15 @@ export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null)
 
   useEffect(() => {
-    if (!user?.tenant?.id) return
+    const tenantId = user?.tenant_id || user?.tenant?.id
+    if (!tenantId) return
 
     // Detectar URL base do WebSocket baseado no ambiente
     const isProduction = window.location.hostname !== 'localhost'
     const WS_BASE_URL = isProduction 
       ? `wss://${window.location.hostname.replace('alreasense-production', 'alreasense-backend-production')}`
       : (import.meta as any).env.VITE_WS_BASE_URL || 'ws://localhost:8000'
-    const wsUrl = `${WS_BASE_URL}/ws/tenant/${user.tenant.id}/`
+    const wsUrl = `${WS_BASE_URL}/ws/tenant/${tenantId}/`
     
     console.log('🔌 [WEBSOCKET] Conectando em:', wsUrl)
 
@@ -69,7 +70,7 @@ export function useWebSocket() {
         wsRef.current.close()
       }
     }
-  }, [user?.tenant?.id])
+  }, [user?.tenant_id, user?.tenant?.id])
 
   const sendMessage = (message: any) => {
     if (wsRef.current && isConnected) {
