@@ -1,0 +1,2 @@
+"""Migrations para Flow Chat."""
+

@@ -46,6 +46,7 @@ LOCAL_APPS = [
     'apps.notifications',
     'apps.contacts',
     'apps.campaigns',
+    'apps.chat',  # Flow Chat
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -396,6 +397,20 @@ if IS_PRODUCTION:
     
     # Additional Security Headers
     SECURE_REFERRER_POLICY = 'same-origin'
+
+# ============================
+# FLOW CHAT - Storage Configuration
+# ============================
+
+# Local storage (Railway Volume) para cache quente
+CHAT_LOCAL_STORAGE_PATH = config('CHAT_LOCAL_STORAGE_PATH', default='/mnt/storage/whatsapp/')
+
+# MinIO (S3-compatible) para storage definitivo
+S3_BUCKET = config('S3_BUCKET', default='flow-attachments')
+S3_ENDPOINT_URL = config('S3_ENDPOINT_URL', default='https://bucket-production-8fb1.up.railway.app')
+S3_ACCESS_KEY = config('S3_ACCESS_KEY', default='u2gh8aomMEdqPFW1JIlTn7VcCUhRCobL')
+S3_SECRET_KEY = config('S3_SECRET_KEY', default='zSMwLiOH1fURqSNX8zMtMYKBjrScDQYynCW2TbI2UuXM7Bti')
+S3_REGION = config('S3_REGION', default='us-east-1')
 
 # Debug settings for Railway deploy - AFTER all configurations are loaded
 print("🚀 [SETTINGS] ==========================================")

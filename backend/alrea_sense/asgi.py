@@ -21,7 +21,11 @@ django_asgi_app = get_asgi_application()
 print("✅ [ASGI] Aplicação Django carregada!")
 
 print("🚀 [ASGI] Carregando rotas WebSocket...")
-from apps.chat_messages.routing import websocket_urlpatterns
+from apps.chat_messages.routing import websocket_urlpatterns as chat_messages_ws
+from apps.chat.routing import websocket_urlpatterns as flow_chat_ws
+
+# Combina rotas WebSocket
+websocket_urlpatterns = chat_messages_ws + flow_chat_ws
 print(f"✅ [ASGI] {len(websocket_urlpatterns)} rotas WebSocket carregadas!")
 
 print("🚀 [ASGI] Configurando ProtocolTypeRouter...")
@@ -60,8 +64,30 @@ def start_rabbitmq_consumer():
     except Exception as e:
         print(f"❌ [RABBITMQ] Erro ao iniciar RabbitMQ Consumer: {e}")
 
-# Iniciar consumer apenas se não estiver em DEBUG (produção)
+
+def start_flow_chat_consumer():
+    """Inicia o Flow Chat Consumer em thread separada"""
+    try:
+        import asyncio
+        time.sleep(12)  # Espera um pouco mais que o consumer de campanhas
+        
+        from apps.chat.tasks import start_chat_consumers
+        
+        print("🚀 [FLOW CHAT] Iniciando Flow Chat Consumer...")
+        asyncio.run(start_chat_consumers())
+        print("✅ [FLOW CHAT] Consumer pronto para processar mensagens!")
+            
+    except Exception as e:
+        print(f"❌ [FLOW CHAT] Erro ao iniciar Flow Chat Consumer: {e}")
+
+# Iniciar consumers apenas se não estiver em DEBUG (produção)
 if not os.environ.get('DEBUG', 'False').lower() == 'true':
+    # Consumer de campanhas
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, daemon=True)
     consumer_thread.start()
     print("🧵 [RABBITMQ] Thread do RabbitMQ Consumer iniciada")
+    
+    # Consumer do Flow Chat
+    flow_chat_thread = threading.Thread(target=start_flow_chat_consumer, daemon=True)
+    flow_chat_thread.start()
+    print("🧵 [FLOW CHAT] Thread do Flow Chat Consumer iniciada")
