@@ -108,8 +108,10 @@ class CustomTokenObtainPairSerializer(TokenObtainPairSerializer):
 class UserSerializer(serializers.ModelSerializer):
     """Serializer for User model."""
     
-    tenant = TenantSerializer(read_only=True)
-    departments = DepartmentSerializer(many=True, read_only=True)
+    tenant_id = serializers.UUIDField(source='tenant.id', read_only=True)
+    tenant_name = serializers.CharField(source='tenant.name', read_only=True)
+    department_ids = serializers.SerializerMethodField()
+    department_names = serializers.SerializerMethodField()
     is_admin = serializers.ReadOnlyField()
     is_operator = serializers.ReadOnlyField()
     avatar = serializers.SerializerMethodField()
@@ -118,12 +120,22 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
-            'tenant', 'role', 'departments', 'is_active', 'date_joined',
+            'tenant_id', 'tenant_name', 'role', 
+            'department_ids', 'department_names',
+            'is_active', 'date_joined',
             'is_admin', 'is_operator', 'is_superuser', 'is_staff',
             'avatar', 'display_name', 'phone', 'birth_date',
             'notify_email', 'notify_whatsapp'
         ]
         read_only_fields = ['id', 'date_joined', 'is_superuser', 'is_staff']
+    
+    def get_department_ids(self, obj):
+        """Retorna lista de IDs dos departamentos."""
+        return [str(dept.id) for dept in obj.departments.all()]
+    
+    def get_department_names(self, obj):
+        """Retorna lista de nomes dos departamentos."""
+        return [dept.name for dept in obj.departments.all()]
     
     def get_avatar(self, obj):
         """Return the full URL for the avatar."""
@@ -140,17 +152,24 @@ class UserCreateSerializer(serializers.ModelSerializer):
     
     password = serializers.CharField(write_only=True)
     password_confirm = serializers.CharField(write_only=True)
+    department_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
     
     class Meta:
         model = User
         fields = [
             'username', 'email', 'first_name', 'last_name',
-            'password', 'password_confirm', 'role'
+            'password', 'password_confirm', 'role', 'department_ids',
+            'phone', 'is_active'
         ]
     
     def validate(self, attrs):
         if attrs['password'] != attrs['password_confirm']:
-            raise serializers.ValidationError("Passwords don't match")
+            raise serializers.ValidationError({"password": "As senhas não coincidem"})
         
         # Set username to email if not provided
         if not attrs.get('username'):
@@ -161,6 +180,7 @@ class UserCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data.pop('password_confirm')
         password = validated_data.pop('password')
+        department_ids = validated_data.pop('department_ids', [])
         
         # Get tenant from context
         tenant = self.context['request'].user.tenant
@@ -176,4 +196,67 @@ class UserCreateSerializer(serializers.ModelSerializer):
         user.set_password(password)
         user.save()
         
+        # Associar departamentos
+        if department_ids:
+            departments = Department.objects.filter(
+                id__in=department_ids,
+                tenant=tenant
+            )
+            user.departments.set(departments)
+        
         return user
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    """Serializer para atualizar usuários."""
+    
+    department_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        write_only=True,
+        required=False,
+        allow_empty=True
+    )
+    password = serializers.CharField(write_only=True, required=False)
+    password_confirm = serializers.CharField(write_only=True, required=False)
+    
+    class Meta:
+        model = User
+        fields = [
+            'username', 'email', 'first_name', 'last_name',
+            'role', 'department_ids', 'phone', 'is_active',
+            'password', 'password_confirm'
+        ]
+    
+    def validate(self, attrs):
+        password = attrs.get('password')
+        password_confirm = attrs.get('password_confirm')
+        
+        if password and password != password_confirm:
+            raise serializers.ValidationError({"password": "As senhas não coincidem"})
+        
+        return attrs
+    
+    def update(self, instance, validated_data):
+        password = validated_data.pop('password', None)
+        validated_data.pop('password_confirm', None)
+        department_ids = validated_data.pop('department_ids', None)
+        
+        # Atualizar campos básicos
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Atualizar senha se fornecida
+        if password:
+            instance.set_password(password)
+        
+        instance.save()
+        
+        # Atualizar departamentos se fornecidos
+        if department_ids is not None:
+            departments = Department.objects.filter(
+                id__in=department_ids,
+                tenant=instance.tenant
+            )
+            instance.departments.set(departments)
+        
+        return instance

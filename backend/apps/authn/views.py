@@ -15,6 +15,7 @@ from .serializers import (
     CustomTokenObtainPairSerializer, 
     UserSerializer, 
     UserCreateSerializer,
+    UserUpdateSerializer,
     DepartmentSerializer
 )
 from apps.tenancy.serializers import TenantSerializer
@@ -283,8 +284,17 @@ class UserViewSet(viewsets.ModelViewSet):
     ViewSet para gerenciar Usuários.
     Filtrado automaticamente por tenant do usuário autenticado.
     """
-    serializer_class = UserSerializer
     permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        """Retorna o serializer apropriado para cada ação."""
+        if self.action == 'create':
+            from .serializers import UserCreateSerializer
+            return UserCreateSerializer
+        elif self.action in ['update', 'partial_update']:
+            from .serializers import UserUpdateSerializer
+            return UserUpdateSerializer
+        return UserSerializer
     
     def get_queryset(self):
         """Retorna apenas usuários do tenant do usuário."""
