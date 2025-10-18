@@ -85,8 +85,9 @@ export default function DashboardPage() {
         }
         
         // Fetch paralelo de todas as APIs
+        const tenantId = user?.tenant_id || user?.tenant?.id;
         const [metricsRes, campaignsRes, contactsStatsRes] = await Promise.all([
-          api.get(`/tenants/tenants/${user?.tenant?.id}/metrics/`),
+          api.get(`/tenants/tenants/${tenantId}/metrics/`),
           api.get('/campaigns/?status=active,paused'),
           api.get('/contacts/contacts/stats/') // Usar endpoint de stats em vez de buscar todos
         ])
@@ -111,11 +112,12 @@ export default function DashboardPage() {
       }
     }
 
-    if (user?.tenant?.id) {
+    const tenantId = user?.tenant_id || user?.tenant?.id;
+    if (tenantId) {
       fetchDashboardData()
       // Removido auto-refresh para evitar refresh visual
     }
-  }, [user?.tenant?.id])
+  }, [user?.tenant_id, user?.tenant?.id])
 
   // ==================== HELPER FUNCTIONS ====================
 
