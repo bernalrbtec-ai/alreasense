@@ -131,6 +131,122 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         serializer = self.get_serializer(conversations, many=True)
         return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def transfer(self, request, pk=None):
+        """
+        Transfere conversa para outro agente ou departamento.
+        
+        Body: {
+            "new_department": "uuid" (opcional),
+            "new_agent": "uuid" (opcional),
+            "reason": "string" (opcional)
+        }
+        """
+        conversation = self.get_object()
+        user = request.user
+        
+        # Validar permissão
+        if not (user.is_admin or user.is_gerente):
+            return Response(
+                {'error': 'Sem permissão para transferir conversas'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        new_department_id = request.data.get('new_department')
+        new_agent_id = request.data.get('new_agent')
+        reason = request.data.get('reason', '')
+        
+        if not new_department_id and not new_agent_id:
+            return Response(
+                {'error': 'Informe o novo departamento ou agente'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar novo agente pertence ao departamento
+        if new_agent_id and new_department_id:
+            from apps.authn.models import User
+            try:
+                agent = User.objects.get(id=new_agent_id)
+                if not agent.departments.filter(id=new_department_id).exists():
+                    return Response(
+                        {'error': 'Agente não pertence ao departamento selecionado'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'Agente não encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        # Salvar dados anteriores para log
+        old_department = conversation.department
+        old_agent = conversation.assigned_to
+        
+        # Atualizar conversa
+        if new_department_id:
+            from apps.authn.models import Department
+            try:
+                new_dept = Department.objects.get(id=new_department_id, tenant=user.tenant)
+                conversation.department = new_dept
+            except Department.DoesNotExist:
+                return Response(
+                    {'error': 'Departamento não encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        if new_agent_id:
+            from apps.authn.models import User
+            try:
+                new_agent = User.objects.get(id=new_agent_id, tenant=user.tenant)
+                conversation.assigned_to = new_agent
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'Agente não encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        conversation.save()
+        
+        # Criar mensagem interna de transferência
+        Message.objects.create(
+            conversation=conversation,
+            sender=user,
+            content=f"Conversa transferida de {old_department.name} para {conversation.department.name}. Motivo: {reason}",
+            direction='outgoing',
+            status='sent',
+            is_internal=True
+        )
+        
+        # Broadcast via WebSocket
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        
+        channel_layer = get_channel_layer()
+        room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+        
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'conversation_transferred',
+                'conversation_id': str(conversation.id),
+                'new_agent': conversation.assigned_to.email if conversation.assigned_to else None,
+                'new_department': conversation.department.name,
+                'transferred_by': user.email
+            }
+        )
+        
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"✅ [TRANSFER] Conversa {conversation.id} transferida por {user.email} "
+            f"para {conversation.department.name}"
+        )
+        
+        return Response(
+            ConversationSerializer(conversation).data,
+            status=status.HTTP_200_OK
+        )
 
 
 class MessageViewSet(viewsets.ModelViewSet):
@@ -235,4 +351,47 @@ class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
             return self.queryset
         
         return self.queryset.filter(tenant=user.tenant)
+    
+    @action(detail=False, methods=['post'])
+    def upload(self, request):
+        """
+        Upload de arquivo para chat.
+        Salva localmente e retorna URL.
+        """
+        file = request.FILES.get('file')
+        
+        if not file:
+            return Response(
+                {'error': 'Nenhum arquivo enviado'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validação de tamanho (max 50MB)
+        if file.size > 50 * 1024 * 1024:
+            return Response(
+                {'error': 'Arquivo muito grande (max 50MB)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Salvar localmente
+        from apps.chat.utils.storage import save_upload_temporarily
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        try:
+            file_url = save_upload_temporarily(file, request.user.tenant)
+            
+            return Response({
+                'url': file_url,
+                'filename': file.name,
+                'size': file.size,
+                'mime_type': file.content_type
+            }, status=status.HTTP_200_OK)
+        
+        except Exception as e:
+            logger.error(f"❌ [UPLOAD] Erro ao fazer upload: {e}", exc_info=True)
+            return Response(
+                {'error': 'Erro ao fazer upload do arquivo'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 

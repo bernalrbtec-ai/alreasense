@@ -28,19 +28,31 @@ class ChatConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         """
         Aceita conexão WebSocket e adiciona ao grupo da conversa.
+        Autentica via JWT no query string.
         """
-        self.user = self.scope.get("user")
+        # Extrair e validar token JWT
+        from urllib.parse import parse_qs
+        query_string = self.scope.get("query_string", b"").decode()
+        params = parse_qs(query_string)
+        token = params.get('token', [None])[0]
+        
+        if not token:
+            logger.warning(f"❌ [CHAT WS] Token JWT não fornecido")
+            await self.close(code=4001)
+            return
+        
+        # Autenticar usuário via token
+        self.user = await self.authenticate_token(token)
+        if not self.user:
+            logger.warning(f"❌ [CHAT WS] Token JWT inválido")
+            await self.close(code=4001)
+            return
+        
         self.tenant_id = self.scope['url_route']['kwargs']['tenant_id']
         self.conversation_id = self.scope['url_route']['kwargs']['conversation_id']
         
         # Nome do grupo
         self.room_group_name = f"chat_tenant_{self.tenant_id}_conversation_{self.conversation_id}"
-        
-        # Validações
-        if isinstance(self.user, AnonymousUser) or not self.user.is_authenticated:
-            logger.warning(f"❌ [CHAT WS] Usuário não autenticado tentou conectar")
-            await self.close()
-            return
         
         # Verifica se o usuário tem acesso à conversa
         has_access = await self.check_conversation_access()
@@ -48,7 +60,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             logger.warning(
                 f"❌ [CHAT WS] Usuário {self.user.email} sem acesso à conversa {self.conversation_id}"
             )
-            await self.close()
+            await self.close(code=4003)
             return
         
         # Adiciona ao grupo
@@ -219,7 +231,46 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'is_typing': event['is_typing']
             }))
     
+    async def conversation_transferred(self, event):
+        """Broadcast quando conversa é transferida."""
+        await self.send(text_data=json.dumps({
+            'type': 'conversation_transferred',
+            'conversation_id': event['conversation_id'],
+            'new_agent': event.get('new_agent'),
+            'new_department': event.get('new_department'),
+            'transferred_by': event.get('transferred_by')
+        }))
+    
     # Database queries (sync_to_async)
+    
+    @database_sync_to_async
+    def authenticate_token(self, token):
+        """
+        Autentica usuário via token JWT.
+        
+        Args:
+            token: Token JWT string
+        
+        Returns:
+            User instance ou None
+        """
+        try:
+            from rest_framework_simplejwt.tokens import AccessToken
+            from django.contrib.auth import get_user_model
+            
+            # Validar token
+            access_token = AccessToken(token)
+            user_id = access_token['user_id']
+            
+            # Buscar usuário
+            User = get_user_model()
+            user = User.objects.select_related('tenant').get(id=user_id)
+            
+            return user
+        
+        except Exception as e:
+            logger.error(f"❌ [CHAT WS] Erro ao autenticar token: {e}")
+            return None
     
     @database_sync_to_async
     def check_conversation_access(self):

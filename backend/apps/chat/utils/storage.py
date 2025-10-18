@@ -180,6 +180,44 @@ def generate_presigned_url(s3_key: str, expires_in: int = 604800) -> str:
         return ""
 
 
+def save_upload_temporarily(file, tenant):
+    """
+    Salva arquivo de upload temporariamente e retorna URL.
+    
+    Args:
+        file: Arquivo do request.FILES
+        tenant: Instância do Tenant
+    
+    Returns:
+        URL relativa do arquivo
+    """
+    import uuid
+    from django.core.files.storage import default_storage
+    
+    try:
+        # Gerar nome único
+        ext = file.name.split('.')[-1] if '.' in file.name else 'bin'
+        unique_name = f"{uuid.uuid4()}.{ext}"
+        
+        # Caminho local
+        local_path = get_local_path(tenant.slug, unique_name)
+        
+        # Salvar arquivo
+        with open(local_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        
+        # Retornar URL relativa
+        file_url = f"/api/chat/attachments/download/{tenant.slug}/{unique_name}"
+        
+        logger.info(f"✅ [STORAGE] Upload salvo: {local_path}")
+        return file_url
+    
+    except Exception as e:
+        logger.error(f"❌ [STORAGE] Erro ao salvar upload: {e}", exc_info=True)
+        raise
+
+
 def cleanup_expired_local_files():
     """
     Remove arquivos locais expirados (>7 dias).
