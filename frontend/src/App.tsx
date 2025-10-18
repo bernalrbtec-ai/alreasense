@@ -25,6 +25,7 @@ import CampaignsPage from './pages/CampaignsPage'
 import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
 import TestPresencePage from './pages/TestPresencePage'
 import DepartmentsPage from './pages/DepartmentsPage'
+import { ChatPage } from './modules/chat'
 
 // Components
 import Layout from './components/Layout'
@@ -106,6 +107,11 @@ function App() {
           <Route path="/campaigns/test-presence" element={
             <ProtectedRoute requiredProduct="flow">
               <TestPresencePage />
+            </ProtectedRoute>
+          } />
+          <Route path="/chat" element={
+            <ProtectedRoute requiredProduct="flow">
+              <ChatPage />
             </ProtectedRoute>
           } />
           <Route path="/connections" element={

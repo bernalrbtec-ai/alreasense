@@ -1,0 +1,249 @@
+/**
+ * Hook WebSocket para Flow Chat
+ * Gerencia conexão, reconexão automática e eventos
+ */
+import { useEffect, useRef, useCallback } from 'react';
+import { useChatStore } from '../store/chatStore';
+import { WebSocketMessage } from '../types';
+
+const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
+
+export function useChatSocket(conversationId?: string) {
+  const socketRef = useRef<WebSocket | null>(null);
+  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectAttemptsRef = useRef(0);
+
+  const {
+    addMessage,
+    updateMessageStatus,
+    setTyping,
+    setConnectionStatus,
+    updateConversation
+  } = useChatStore();
+
+  const handleWebSocketMessage = useCallback((data: WebSocketMessage) => {
+    console.log('📨 [WS] Mensagem recebida:', data);
+
+    switch (data.type) {
+      case 'message_received':
+        if (data.message) {
+          addMessage(data.message);
+          // Auto-scroll para última mensagem
+          setTimeout(() => {
+            const messagesContainer = document.querySelector('.chat-messages');
+            if (messagesContainer) {
+              messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+          }, 100);
+        }
+        break;
+
+      case 'message_status_update':
+        if (data.message_id && data.status) {
+          updateMessageStatus(data.message_id, data.status);
+        }
+        break;
+
+      case 'typing_status':
+        setTyping(data.is_typing || false, data.user_email);
+        // Auto-limpar typing após 3s
+        if (data.is_typing) {
+          setTimeout(() => setTyping(false), 3000);
+        }
+        break;
+
+      case 'conversation_transferred':
+        console.log('🔄 [WS] Conversa transferida:', data);
+        // Mostrar notificação
+        if (data.new_department || data.new_agent) {
+          const message = `Conversa transferida para ${data.new_department || 'outro departamento'}`;
+          // Usar toast notification
+          if (window.toast) {
+            window.toast.info(message);
+          }
+        }
+        break;
+
+      case 'user_joined':
+        console.log('👋 [WS] Usuário entrou:', data.user_email);
+        break;
+
+      default:
+        console.warn('⚠️ [WS] Evento desconhecido:', data.type);
+    }
+  }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
+
+  const connect = useCallback(() => {
+    if (!conversationId) {
+      console.log('⏸️ [WS] Sem conversationId, aguardando...');
+      return;
+    }
+
+    // Não reconectar se já está conectando/conectado
+    if (socketRef.current?.readyState === WebSocket.CONNECTING ||
+        socketRef.current?.readyState === WebSocket.OPEN) {
+      console.log('⏸️ [WS] Já conectado/conectando');
+      return;
+    }
+
+    setConnectionStatus('connecting');
+
+    // Obter token e tenant do localStorage
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    
+    if (!token || !userStr) {
+      console.error('❌ [WS] Token ou user não encontrado');
+      setConnectionStatus('disconnected');
+      return;
+    }
+
+    const user = JSON.parse(userStr);
+    const tenantId = user.tenant_id;
+
+    if (!tenantId) {
+      console.error('❌ [WS] Tenant ID não encontrado');
+      setConnectionStatus('disconnected');
+      return;
+    }
+
+    const wsUrl = `${WS_BASE_URL}/ws/chat/${tenantId}/${conversationId}/?token=${token}`;
+    console.log('🔌 [WS] Conectando:', wsUrl);
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      socketRef.current = ws;
+
+      ws.onopen = () => {
+        console.log('✅ [WS] Conectado com sucesso!');
+        setConnectionStatus('connected');
+        reconnectAttemptsRef.current = 0;
+
+        if (reconnectTimeoutRef.current) {
+          clearTimeout(reconnectTimeoutRef.current);
+          reconnectTimeoutRef.current = null;
+        }
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data: WebSocketMessage = JSON.parse(event.data);
+          handleWebSocketMessage(data);
+        } catch (error) {
+          console.error('❌ [WS] Erro ao parsear mensagem:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('❌ [WS] Erro:', error);
+        setConnectionStatus('disconnected');
+      };
+
+      ws.onclose = (event) => {
+        console.warn('🔌 [WS] Conexão fechada:', event.code, event.reason);
+        setConnectionStatus('disconnected');
+        socketRef.current = null;
+
+        // Reconectar com backoff exponencial
+        if (reconnectAttemptsRef.current < 5) {
+          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+          console.log(`🔄 [WS] Reconectando em ${delay}ms (tentativa ${reconnectAttemptsRef.current + 1})...`);
+          
+          reconnectTimeoutRef.current = setTimeout(() => {
+            reconnectAttemptsRef.current++;
+            connect();
+          }, delay);
+        } else {
+          console.error('❌ [WS] Máximo de tentativas de reconexão atingido');
+        }
+      };
+
+    } catch (error) {
+      console.error('❌ [WS] Erro ao criar WebSocket:', error);
+      setConnectionStatus('disconnected');
+    }
+  }, [conversationId, setConnectionStatus, handleWebSocketMessage]);
+
+  const disconnect = useCallback(() => {
+    console.log('🔌 [WS] Desconectando...');
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+
+    if (socketRef.current) {
+      socketRef.current.close();
+      socketRef.current = null;
+    }
+
+    setConnectionStatus('disconnected');
+  }, [setConnectionStatus]);
+
+  const sendMessage = useCallback((content: string, isInternal = false) => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      console.error('❌ [WS] WebSocket não conectado');
+      return false;
+    }
+
+    try {
+      socketRef.current.send(JSON.stringify({
+        type: 'send_message',
+        content,
+        is_internal: isInternal
+      }));
+      console.log('📤 [WS] Mensagem enviada');
+      return true;
+    } catch (error) {
+      console.error('❌ [WS] Erro ao enviar mensagem:', error);
+      return false;
+    }
+  }, []);
+
+  const sendTyping = useCallback((isTyping: boolean) => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      socketRef.current.send(JSON.stringify({
+        type: 'typing',
+        is_typing: isTyping
+      }));
+    } catch (error) {
+      console.error('❌ [WS] Erro ao enviar typing:', error);
+    }
+  }, []);
+
+  const markAsSeen = useCallback((messageId: string) => {
+    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    try {
+      socketRef.current.send(JSON.stringify({
+        type: 'mark_as_seen',
+        message_id: messageId
+      }));
+    } catch (error) {
+      console.error('❌ [WS] Erro ao marcar como vista:', error);
+    }
+  }, []);
+
+  // Conectar quando conversation mudar
+  useEffect(() => {
+    connect();
+
+    return () => {
+      disconnect();
+    };
+  }, [connect, disconnect]);
+
+  return {
+    sendMessage,
+    sendTyping,
+    markAsSeen,
+    isConnected: socketRef.current?.readyState === WebSocket.OPEN
+  };
+}
+
