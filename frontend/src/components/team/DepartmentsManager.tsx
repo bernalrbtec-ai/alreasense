@@ -48,18 +48,28 @@ export function DepartmentsManager() {
     e.preventDefault();
     
     try {
+      // Criar payload sem o tenant (backend adiciona automaticamente)
+      const payload = {
+        name: formData.name,
+        color: formData.color,
+        ai_enabled: false // Sempre false até implementar IA
+      };
+      
       if (editingDept) {
-        await api.patch(`/auth/departments/${editingDept.id}/`, formData);
+        await api.patch(`/auth/departments/${editingDept.id}/`, payload);
         toast.success('Departamento atualizado!');
       } else {
-        await api.post('/auth/departments/', formData);
+        await api.post('/auth/departments/', payload);
         toast.success('Departamento criado!');
       }
       
       fetchDepartments();
       handleCloseModal();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.name?.[0] || 'Erro ao salvar';
+      console.error('Erro ao salvar departamento:', error.response?.data);
+      const errorMsg = error.response?.data?.name?.[0] 
+        || error.response?.data?.detail 
+        || 'Erro ao salvar departamento';
       toast.error(errorMsg);
     }
   };
@@ -204,16 +214,16 @@ export function DepartmentsManager() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 opacity-50 cursor-not-allowed">
                 <input
                   type="checkbox"
                   id="ai_enabled"
-                  checked={formData.ai_enabled}
-                  onChange={(e) => setFormData({ ...formData, ai_enabled: e.target.checked })}
+                  checked={false}
+                  disabled
                   className="w-4 h-4 text-blue-600 rounded"
                 />
                 <label htmlFor="ai_enabled" className="text-sm text-gray-700">
-                  Habilitar IA
+                  Habilitar IA <span className="text-xs text-blue-600 font-medium">(Em breve)</span>
                 </label>
               </div>
 
