@@ -9,30 +9,31 @@ class DepartmentSerializer(serializers.ModelSerializer):
     Serializer para o modelo Department.
     Retorna informações básicas do departamento.
     """
+    tenant_id = serializers.UUIDField(source='tenant.id', read_only=True)
     
     class Meta:
         model = Department
         fields = [
-            'id', 'tenant', 'name', 'color', 'ai_enabled',
+            'id', 'tenant_id', 'name', 'color', 'ai_enabled',
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant_id', 'created_at', 'updated_at']
     
     def validate(self, attrs):
         """Valida que não pode criar departamento duplicado no mesmo tenant."""
-        tenant = attrs.get('tenant')
         name = attrs.get('name')
         
-        # Se está atualizando, pega o tenant da instância
+        # Pega o tenant da instância (update) ou do contexto (create)
         if self.instance:
-            tenant = self.instance.tenant if not tenant else tenant
+            tenant = self.instance.tenant
+        else:
+            # Tenant será adicionado pelo perform_create do ViewSet
+            # Não validamos duplicidade aqui pois não temos o tenant ainda
+            return attrs
         
-        # Verifica duplicidade
-        if tenant and name:
-            exists = Department.objects.filter(tenant=tenant, name=name)
-            if self.instance:
-                exists = exists.exclude(pk=self.instance.pk)
-            
+        # Verifica duplicidade apenas em updates
+        if name:
+            exists = Department.objects.filter(tenant=tenant, name=name).exclude(pk=self.instance.pk)
             if exists.exists():
                 raise serializers.ValidationError({
                     'name': f'Já existe um departamento "{name}" neste tenant.'

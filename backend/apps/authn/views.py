@@ -267,7 +267,15 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Ao criar, associa automaticamente ao tenant do usuário."""
-        serializer.save(tenant=self.request.user.tenant)
+        tenant = self.request.user.tenant
+        name = serializer.validated_data.get('name')
+        
+        # Validar duplicidade antes de salvar
+        if Department.objects.filter(tenant=tenant, name=name).exists():
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'name': f'Já existe um departamento "{name}" neste tenant.'})
+        
+        serializer.save(tenant=tenant)
 
 
 class UserViewSet(viewsets.ModelViewSet):
