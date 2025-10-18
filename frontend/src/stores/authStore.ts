@@ -13,7 +13,7 @@ interface User {
   birth_date?: string
   notify_email?: boolean
   notify_whatsapp?: boolean
-  role: 'admin' | 'operator' | 'superadmin' | 'owner' | 'agent' | 'finance'
+  role: 'admin' | 'gerente' | 'agente'
   is_superuser?: boolean
   is_staff?: boolean
   avatar?: string

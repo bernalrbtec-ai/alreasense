@@ -50,12 +50,9 @@ class User(AbstractUser):
     """Custom User model with tenant and role."""
     
     ROLE_CHOICES = [
-        ('superadmin', 'Super Admin'),  # Admin do sistema
-        ('admin', 'Admin'),              # Admin do cliente
-        ('user', 'User'),                # Usuário do cliente
-        ('owner', 'Owner'),              # Proprietário do tenant
-        ('agent', 'Agent'),              # Agente de atendimento
-        ('finance', 'Finance'),          # Financeiro
+        ('admin', 'Administrador'),       # Admin do tenant (acesso total)
+        ('gerente', 'Gerente'),           # Gerente de departamento (métricas do depto)
+        ('agente', 'Agente'),             # Agente (apenas chat do seu depto)
     ]
     
     # Override email to make it unique (required for USERNAME_FIELD)
@@ -76,7 +73,7 @@ class User(AbstractUser):
     role = models.CharField(
         max_length=16, 
         choices=ROLE_CHOICES, 
-        default='user'
+        default='agente'
     )
     departments = models.ManyToManyField(
         'Department',
@@ -125,10 +122,44 @@ class User(AbstractUser):
     
     @property
     def is_admin(self):
-        """Check if user is admin."""
-        return self.role == 'admin'
+        """Check if user is admin (acesso total ao tenant)."""
+        return self.role == 'admin' or self.is_superuser
+    
+    @property
+    def is_gerente(self):
+        """Check if user is gerente (métricas do departamento)."""
+        return self.role == 'gerente'
+    
+    @property
+    def is_agente(self):
+        """Check if user is agente (apenas chat)."""
+        return self.role == 'agente'
     
     @property
     def is_operator(self):
-        """Check if user is operator."""
-        return self.role == 'operator'
+        """Deprecated: mantido para compatibilidade."""
+        return self.is_agente or self.is_gerente
+    
+    def can_access_all_departments(self):
+        """Admin pode acessar todos os departamentos do tenant."""
+        return self.is_admin
+    
+    def can_view_department_metrics(self, department=None):
+        """Gerente pode ver métricas dos seus departamentos."""
+        if self.is_admin:
+            return True
+        if self.is_gerente:
+            if department is None:
+                return self.departments.exists()
+            return self.departments.filter(id=department.id).exists()
+        return False
+    
+    def can_access_chat(self, department=None):
+        """Agente e Gerente podem acessar chat dos seus departamentos."""
+        if self.is_admin:
+            return True
+        if self.is_gerente or self.is_agente:
+            if department is None:
+                return self.departments.exists()
+            return self.departments.filter(id=department.id).exists()
+        return False

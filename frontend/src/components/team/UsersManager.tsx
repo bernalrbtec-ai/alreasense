@@ -23,19 +23,15 @@ interface User {
 }
 
 const ROLE_LABELS: Record<string, string> = {
-  'owner': 'Proprietário',
   'admin': 'Administrador',
-  'user': 'Usuário',
-  'agent': 'Agente',
-  'finance': 'Financeiro'
+  'gerente': 'Gerente',
+  'agente': 'Agente'
 };
 
 const ROLE_COLORS: Record<string, string> = {
-  'owner': 'bg-purple-100 text-purple-700',
-  'admin': 'bg-blue-100 text-blue-700',
-  'user': 'bg-gray-100 text-gray-700',
-  'agent': 'bg-green-100 text-green-700',
-  'finance': 'bg-yellow-100 text-yellow-700'
+  'admin': 'bg-purple-100 text-purple-700',
+  'gerente': 'bg-blue-100 text-blue-700',
+  'agente': 'bg-green-100 text-green-700'
 };
 
 export function UsersManager() {
@@ -48,7 +44,7 @@ export function UsersManager() {
     email: '',
     first_name: '',
     last_name: '',
-    role: 'user',
+    role: 'agente',
     password: '',
     password_confirm: '',
     department_ids: [] as string[]
@@ -183,7 +179,7 @@ export function UsersManager() {
       email: '',
       first_name: '',
       last_name: '',
-      role: 'user',
+      role: 'agente',
       password: '',
       password_confirm: '',
       department_ids: []
@@ -326,12 +322,15 @@ export function UsersManager() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
                   required
                 >
-                  <option value="user">Usuário</option>
-                  <option value="agent">Agente</option>
-                  <option value="finance">Financeiro</option>
-                  <option value="admin">Administrador</option>
-                  <option value="owner">Proprietário</option>
+                  <option value="agente">Agente - Acesso ao chat dos seus departamentos</option>
+                  <option value="gerente">Gerente - Métricas do departamento + chat</option>
+                  <option value="admin">Administrador - Acesso total ao tenant</option>
                 </select>
+                <p className="mt-1 text-xs text-gray-500">
+                  {formData.role === 'agente' && '• Agente tem acesso apenas ao chat dos departamentos que pertence'}
+                  {formData.role === 'gerente' && '• Gerente pode visualizar métricas e acessar chat dos seus departamentos'}
+                  {formData.role === 'admin' && '• Administrador tem acesso completo a todos os recursos do tenant'}
+                </p>
               </div>
 
               {!editingUser && (
