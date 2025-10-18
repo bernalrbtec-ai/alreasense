@@ -1,9 +1,6 @@
 # Generated manually on 2025-10-18
 
-from django.conf import settings
-from django.db import migrations, models
-import django.db.models.deletion
-import uuid
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -13,110 +10,92 @@ class Migration(migrations.Migration):
     dependencies = [
         ('tenancy', '0001_initial'),
         ('authn', '0003_add_departments'),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
     operations = [
-        migrations.CreateModel(
-            name='Conversation',
-            fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('contact_phone', models.CharField(db_index=True, help_text='Formato E.164: +5517999999999', max_length=20, verbose_name='Telefone do Contato')),
-                ('contact_name', models.CharField(blank=True, max_length=255, verbose_name='Nome do Contato')),
-                ('status', models.CharField(choices=[('open', 'Aberta'), ('closed', 'Fechada')], db_index=True, default='open', max_length=20, verbose_name='Status')),
-                ('last_message_at', models.DateTimeField(blank=True, db_index=True, null=True, verbose_name='Última Mensagem')),
-                ('metadata', models.JSONField(blank=True, default=dict, help_text='Dados extras da Evolution API', verbose_name='Metadados')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
-                ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
-                ('assigned_to', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assigned_conversations', to=settings.AUTH_USER_MODEL, verbose_name='Responsável')),
-                ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='authn.department', verbose_name='Departamento')),
-                ('participants', models.ManyToManyField(blank=True, related_name='conversations', to=settings.AUTH_USER_MODEL, verbose_name='Participantes')),
-                ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='tenancy.tenant', verbose_name='Tenant')),
-            ],
-            options={
-                'verbose_name': 'Conversa',
-                'verbose_name_plural': 'Conversas',
-                'db_table': 'chat_conversation',
-                'ordering': ['-last_message_at', '-created_at'],
-            },
-        ),
-        migrations.CreateModel(
-            name='Message',
-            fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('content', models.TextField(blank=True, verbose_name='Conteúdo')),
-                ('direction', models.CharField(choices=[('incoming', 'Recebida'), ('outgoing', 'Enviada')], db_index=True, max_length=10, verbose_name='Direção')),
-                ('message_id', models.CharField(blank=True, db_index=True, help_text='ID único para idempotência', max_length=255, null=True, unique=True, verbose_name='ID da Evolution')),
-                ('evolution_status', models.CharField(blank=True, help_text='Status raw da API Evolution', max_length=50, verbose_name='Status Evolution')),
-                ('error_message', models.TextField(blank=True, help_text='Mensagem de erro se falhar', verbose_name='Erro')),
-                ('status', models.CharField(choices=[('pending', 'Pendente'), ('sent', 'Enviada'), ('delivered', 'Entregue'), ('seen', 'Vista'), ('failed', 'Falhou')], db_index=True, default='pending', max_length=20, verbose_name='Status')),
-                ('is_internal', models.BooleanField(default=False, help_text='Notas internas não são enviadas para WhatsApp', verbose_name='Nota Interna')),
-                ('metadata', models.JSONField(blank=True, default=dict, help_text='Dados extras (attachment_urls, etc)', verbose_name='Metadados')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Criado em')),
-                ('conversation', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='messages', to='chat.conversation', verbose_name='Conversa')),
-                ('sender', models.ForeignKey(blank=True, help_text='NULL para mensagens incoming', null=True, on_delete=django.db.models.deletion.SET_NULL, to=settings.AUTH_USER_MODEL, verbose_name='Remetente')),
-            ],
-            options={
-                'verbose_name': 'Mensagem',
-                'verbose_name_plural': 'Mensagens',
-                'db_table': 'chat_message',
-                'ordering': ['created_at'],
-            },
-        ),
-        migrations.CreateModel(
-            name='MessageAttachment',
-            fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('original_filename', models.CharField(max_length=255, verbose_name='Nome Original')),
-                ('mime_type', models.CharField(max_length=100, verbose_name='Tipo MIME')),
-                ('file_path', models.CharField(max_length=500, verbose_name='Caminho do Arquivo')),
-                ('file_url', models.CharField(max_length=500, verbose_name='URL de Acesso')),
-                ('thumbnail_path', models.CharField(blank=True, help_text='Miniatura para imagens/vídeos', max_length=500, verbose_name='Caminho da Thumbnail')),
-                ('storage_type', models.CharField(choices=[('local', 'Local'), ('s3', 'S3')], db_index=True, default='local', max_length=10, verbose_name='Tipo de Armazenamento')),
-                ('size_bytes', models.BigIntegerField(default=0, verbose_name='Tamanho (bytes)')),
-                ('expires_at', models.DateTimeField(help_text='Cache local expira após 7 dias', verbose_name='Expira em')),
-                ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
-                ('message', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='attachments', to='chat.message', verbose_name='Mensagem')),
-                ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='chat_attachments', to='tenancy.tenant', verbose_name='Tenant')),
-            ],
-            options={
-                'verbose_name': 'Anexo',
-                'verbose_name_plural': 'Anexos',
-                'db_table': 'chat_attachment',
-                'ordering': ['-created_at'],
-            },
-        ),
-        migrations.AddIndex(
-            model_name='conversation',
-            index=models.Index(fields=['tenant', 'department', 'status'], name='chat_conver_tenant__b8e5c6_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='conversation',
-            index=models.Index(fields=['tenant', 'contact_phone'], name='chat_conver_tenant__84c8ab_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='conversation',
-            index=models.Index(fields=['assigned_to', 'status'], name='chat_conver_assigne_c28e30_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='message',
-            index=models.Index(fields=['conversation', 'created_at'], name='chat_messag_convers_3eb4b5_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='message',
-            index=models.Index(fields=['message_id'], name='chat_messag_message_58cc5e_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='message',
-            index=models.Index(fields=['status', 'direction'], name='chat_messag_status_e7aa0d_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='messageattachment',
-            index=models.Index(fields=['tenant', 'storage_type'], name='chat_messag_tenant__a41bf4_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='messageattachment',
-            index=models.Index(fields=['expires_at'], name='chat_messag_expires_e58dc8_idx'),
+        migrations.RunSQL(
+            # SQL para criar as tabelas
+            sql="""
+            -- Tabela de conversas
+            CREATE TABLE IF NOT EXISTS chat_conversation (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                tenant_id UUID NOT NULL REFERENCES tenancy_tenant(id) ON DELETE CASCADE,
+                department_id UUID NOT NULL REFERENCES authn_department(id) ON DELETE CASCADE,
+                contact_phone VARCHAR(20) NOT NULL,
+                contact_name VARCHAR(255) DEFAULT '',
+                assigned_to_id UUID REFERENCES authn_user(id) ON DELETE SET NULL,
+                status VARCHAR(20) NOT NULL DEFAULT 'open',
+                last_message_at TIMESTAMP WITH TIME ZONE,
+                metadata JSONB DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            );
+
+            -- Índices para conversation
+            CREATE INDEX IF NOT EXISTS chat_conver_tenant__b8e5c6_idx ON chat_conversation(tenant_id, department_id, status);
+            CREATE INDEX IF NOT EXISTS chat_conver_tenant__84c8ab_idx ON chat_conversation(tenant_id, contact_phone);
+            CREATE INDEX IF NOT EXISTS chat_conver_assigne_c28e30_idx ON chat_conversation(assigned_to_id, status);
+            CREATE INDEX IF NOT EXISTS chat_conver_last_msg_idx ON chat_conversation(last_message_at DESC);
+
+            -- Tabela de mensagens
+            CREATE TABLE IF NOT EXISTS chat_message (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                conversation_id UUID NOT NULL REFERENCES chat_conversation(id) ON DELETE CASCADE,
+                sender_id UUID REFERENCES authn_user(id) ON DELETE SET NULL,
+                content TEXT DEFAULT '',
+                direction VARCHAR(10) NOT NULL,
+                message_id VARCHAR(255) UNIQUE,
+                evolution_status VARCHAR(50) DEFAULT '',
+                error_message TEXT DEFAULT '',
+                status VARCHAR(20) NOT NULL DEFAULT 'pending',
+                is_internal BOOLEAN NOT NULL DEFAULT FALSE,
+                metadata JSONB DEFAULT '{}',
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            );
+
+            -- Índices para message
+            CREATE INDEX IF NOT EXISTS chat_messag_convers_3eb4b5_idx ON chat_message(conversation_id, created_at);
+            CREATE INDEX IF NOT EXISTS chat_messag_message_58cc5e_idx ON chat_message(message_id);
+            CREATE INDEX IF NOT EXISTS chat_messag_status_e7aa0d_idx ON chat_message(status, direction);
+            CREATE INDEX IF NOT EXISTS chat_messag_created_idx ON chat_message(created_at);
+
+            -- Tabela de anexos
+            CREATE TABLE IF NOT EXISTS chat_attachment (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                message_id UUID NOT NULL REFERENCES chat_message(id) ON DELETE CASCADE,
+                tenant_id UUID NOT NULL REFERENCES tenancy_tenant(id) ON DELETE CASCADE,
+                original_filename VARCHAR(255) NOT NULL,
+                mime_type VARCHAR(100) NOT NULL,
+                file_path VARCHAR(500) NOT NULL,
+                file_url VARCHAR(500) NOT NULL,
+                thumbnail_path VARCHAR(500) DEFAULT '',
+                storage_type VARCHAR(10) NOT NULL DEFAULT 'local',
+                size_bytes BIGINT NOT NULL DEFAULT 0,
+                expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            );
+
+            -- Índices para attachment
+            CREATE INDEX IF NOT EXISTS chat_messag_tenant__a41bf4_idx ON chat_attachment(tenant_id, storage_type);
+            CREATE INDEX IF NOT EXISTS chat_messag_expires_e58dc8_idx ON chat_attachment(expires_at);
+
+            -- Tabela many-to-many para participantes
+            CREATE TABLE IF NOT EXISTS chat_conversation_participants (
+                id SERIAL PRIMARY KEY,
+                conversation_id UUID NOT NULL REFERENCES chat_conversation(id) ON DELETE CASCADE,
+                user_id UUID NOT NULL REFERENCES authn_user(id) ON DELETE CASCADE,
+                UNIQUE(conversation_id, user_id)
+            );
+
+            CREATE INDEX IF NOT EXISTS chat_conv_part_conv_idx ON chat_conversation_participants(conversation_id);
+            CREATE INDEX IF NOT EXISTS chat_conv_part_user_idx ON chat_conversation_participants(user_id);
+            """,
+            # SQL reverso para desfazer
+            reverse_sql="""
+            DROP TABLE IF EXISTS chat_conversation_participants CASCADE;
+            DROP TABLE IF EXISTS chat_attachment CASCADE;
+            DROP TABLE IF EXISTS chat_message CASCADE;
+            DROP TABLE IF EXISTS chat_conversation CASCADE;
+            """
         ),
     ]
-
