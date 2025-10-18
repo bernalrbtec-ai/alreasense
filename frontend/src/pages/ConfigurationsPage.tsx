@@ -20,7 +20,9 @@ import {
   TestTube,
   Send,
   Save,
-  Crown
+  Crown,
+  Users,
+  Building2
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -29,6 +31,8 @@ import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantLimits } from '../hooks/useTenantLimits'
+import { DepartmentsManager } from '../components/team/DepartmentsManager'
+import { UsersManager } from '../components/team/UsersManager'
 
 interface WhatsAppInstance {
   id: string
@@ -85,7 +89,7 @@ interface EvolutionConfig {
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -504,6 +508,17 @@ export default function ConfigurationsPage() {
             <CreditCard className="h-4 w-4 inline mr-2" />
             Meu Plano
           </button>
+          <button
+            onClick={() => setActiveTab('team')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'team'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Users className="h-4 w-4 inline mr-2" />
+            Equipe
+          </button>
         </nav>
       </div>
 
@@ -771,6 +786,18 @@ export default function ConfigurationsPage() {
                 ))}
               </div>
             )}
+          </Card>
+        </div>
+      )}
+
+      {/* Tab Content - Equipe */}
+      {activeTab === 'team' && (
+        <div className="space-y-6">
+          <Card className="p-6">
+            <UsersManager />
+          </Card>
+          <Card className="p-6">
+            <DepartmentsManager />
           </Card>
         </div>
       )}

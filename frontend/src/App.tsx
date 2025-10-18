@@ -24,6 +24,7 @@ import ContactsPage from './pages/ContactsPage'
 import CampaignsPage from './pages/CampaignsPage'
 import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
 import TestPresencePage from './pages/TestPresencePage'
+import DepartmentsPage from './pages/DepartmentsPage'
 
 // Components
 import Layout from './components/Layout'
