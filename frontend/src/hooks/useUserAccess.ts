@@ -24,9 +24,9 @@ export const useUserAccess = () => {
       return { canAccess: true, isActive: true }
     }
 
-    // Se não tem tenant ou produtos carregando, não tem acesso
-    if (!user?.tenant || loading) {
-      console.log(`   ❌ Sem tenant ou carregando - sem acesso`)
+    // Se não tem tenant_id ou produtos carregando, não tem acesso
+    if (!user?.tenant_id || loading) {
+      console.log(`   ❌ Sem tenant_id (${user?.tenant_id}) ou carregando (${loading}) - sem acesso`)
       return { canAccess: false, isActive: false }
     }
 

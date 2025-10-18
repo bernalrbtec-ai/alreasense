@@ -13,15 +13,19 @@ interface User {
   birth_date?: string
   notify_email?: boolean
   notify_whatsapp?: boolean
-  role: 'admin' | 'operator'
+  role: 'admin' | 'operator' | 'superadmin' | 'owner' | 'agent' | 'finance'
   is_superuser?: boolean
   is_staff?: boolean
   avatar?: string
-  tenant: {
+  // Novos campos retornados pelo backend (formato simplificado)
+  tenant_id?: string
+  tenant_name?: string
+  // Campo legado (ainda pode ser retornado em alguns endpoints)
+  tenant?: {
     id: string
     name: string
-    plan: string
-    status: string
+    plan?: string
+    status?: string
   }
 }
 
