@@ -16,10 +16,24 @@ interface User {
   role: 'admin' | 'gerente' | 'agente'
   is_superuser?: boolean
   is_staff?: boolean
+  is_admin?: boolean
+  is_gerente?: boolean
+  is_agente?: boolean
   avatar?: string
   // Novos campos retornados pelo backend (formato simplificado)
   tenant_id?: string
   tenant_name?: string
+  department_ids?: string[]
+  department_names?: string[]
+  permissions?: {
+    can_access_all_departments: boolean
+    can_view_metrics: boolean
+    can_access_chat: boolean
+    can_manage_users: boolean
+    can_manage_departments: boolean
+    can_manage_campaigns: boolean
+    can_view_all_contacts: boolean
+  }
   // Campo legado (ainda pode ser retornado em alguns endpoints)
   tenant?: {
     id: string

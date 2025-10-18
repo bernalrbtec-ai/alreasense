@@ -113,8 +113,11 @@ class UserSerializer(serializers.ModelSerializer):
     department_ids = serializers.SerializerMethodField()
     department_names = serializers.SerializerMethodField()
     is_admin = serializers.ReadOnlyField()
+    is_gerente = serializers.ReadOnlyField()
+    is_agente = serializers.ReadOnlyField()
     is_operator = serializers.ReadOnlyField()
     avatar = serializers.SerializerMethodField()
+    permissions = serializers.SerializerMethodField()
     
     class Meta:
         model = User
@@ -123,7 +126,8 @@ class UserSerializer(serializers.ModelSerializer):
             'tenant_id', 'tenant_name', 'role', 
             'department_ids', 'department_names',
             'is_active', 'date_joined',
-            'is_admin', 'is_operator', 'is_superuser', 'is_staff',
+            'is_admin', 'is_gerente', 'is_agente', 'is_operator', 
+            'is_superuser', 'is_staff', 'permissions',
             'avatar', 'display_name', 'phone', 'birth_date',
             'notify_email', 'notify_whatsapp'
         ]
@@ -136,6 +140,18 @@ class UserSerializer(serializers.ModelSerializer):
     def get_department_names(self, obj):
         """Retorna lista de nomes dos departamentos."""
         return [dept.name for dept in obj.departments.all()]
+    
+    def get_permissions(self, obj):
+        """Retorna permissões do usuário baseado no role."""
+        return {
+            'can_access_all_departments': obj.can_access_all_departments(),
+            'can_view_metrics': obj.is_admin or obj.is_gerente,
+            'can_access_chat': obj.is_admin or obj.is_gerente or obj.is_agente,
+            'can_manage_users': obj.is_admin,
+            'can_manage_departments': obj.is_admin,
+            'can_manage_campaigns': obj.is_admin,
+            'can_view_all_contacts': obj.is_admin,
+        }
     
     def get_avatar(self, obj):
         """Return the full URL for the avatar."""
