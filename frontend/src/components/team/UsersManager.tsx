@@ -17,7 +17,8 @@ interface User {
   first_name: string;
   last_name: string;
   role: string;
-  departments: Department[];
+  department_ids: string[];
+  department_names: string[];
   is_active: boolean;
 }
 
@@ -104,14 +105,18 @@ export function UsersManager() {
         toast.success('Usuário atualizado!');
       } else {
         // Create user
-        await api.post('/auth/users/', formData);
+        await api.post('/auth/users-api/', formData);
         toast.success('Usuário criado!');
       }
       
       fetchUsers();
       handleCloseModal();
     } catch (error: any) {
-      const errorMsg = error.response?.data?.detail || 'Erro ao salvar';
+      console.error('Erro ao salvar usuário:', error);
+      const errorMsg = error.response?.data?.detail 
+        || error.response?.data?.password?.[0]
+        || error.response?.data?.email?.[0]
+        || 'Erro ao salvar usuário';
       toast.error(errorMsg);
     }
   };
@@ -137,7 +142,7 @@ export function UsersManager() {
       role: user.role,
       password: '',
       password_confirm: '',
-      department_ids: user.departments.map(d => d.id)
+      department_ids: user.department_ids || []
     });
     setShowModal(true);
   };
@@ -197,10 +202,10 @@ export function UsersManager() {
                       <Mail className="w-3.5 h-3.5" />
                       {user.email}
                     </div>
-                    {user.departments.length > 0 && (
+                    {user.department_names && user.department_names.length > 0 && (
                       <div className="flex items-center gap-1">
                         <Building2 className="w-3.5 h-3.5" />
-                        {user.departments.map(d => d.name).join(', ')}
+                        {user.department_names.join(', ')}
                       </div>
                     )}
                   </div>
