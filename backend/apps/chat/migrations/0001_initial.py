@@ -12,7 +12,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ('tenancy', '0001_initial'),
-        ('authn', '0003_add_departments'),
+        ('authn', '0003_add_departments'),  # Garante que Department existe
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
@@ -29,7 +29,7 @@ class Migration(migrations.Migration):
                 ('created_at', models.DateTimeField(auto_now_add=True, verbose_name='Criado em')),
                 ('updated_at', models.DateTimeField(auto_now=True, verbose_name='Atualizado em')),
                 ('assigned_to', models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.SET_NULL, related_name='assigned_conversations', to=settings.AUTH_USER_MODEL, verbose_name='Responsável')),
-                ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='authn.department', verbose_name='Departamento')),
+                ('department', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='authn.Department', verbose_name='Departamento')),
                 ('participants', models.ManyToManyField(blank=True, related_name='conversations', to=settings.AUTH_USER_MODEL, verbose_name='Participantes')),
                 ('tenant', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='conversations', to='tenancy.tenant', verbose_name='Tenant')),
             ],
