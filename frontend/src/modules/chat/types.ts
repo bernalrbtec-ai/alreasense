@@ -1,0 +1,103 @@
+/**
+ * Types para o módulo Flow Chat
+ */
+
+export interface Department {
+  id: string;
+  name: string;
+  color?: string;
+  ai_enabled: boolean;
+}
+
+export interface User {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: 'admin' | 'gerente' | 'agente';
+}
+
+export interface Conversation {
+  id: string;
+  tenant: string;
+  department: string;
+  department_name: string;
+  contact_phone: string;
+  contact_name: string;
+  assigned_to?: string;
+  assigned_to_data?: User;
+  status: 'open' | 'closed';
+  last_message_at?: string;
+  metadata: Record<string, any>;
+  participants: string[];
+  participants_data?: User[];
+  created_at: string;
+  updated_at: string;
+  last_message?: Message;
+  unread_count: number;
+}
+
+export interface Message {
+  id: string;
+  conversation: string;
+  sender?: string;
+  sender_data?: User;
+  content: string;
+  direction: 'incoming' | 'outgoing';
+  message_id?: string;
+  evolution_status?: string;
+  error_message?: string;
+  status: 'pending' | 'sent' | 'delivered' | 'seen' | 'failed';
+  is_internal: boolean;
+  attachments: MessageAttachment[];
+  metadata?: Record<string, any>;
+  created_at: string;
+}
+
+export interface MessageAttachment {
+  id: string;
+  message: string;
+  tenant: string;
+  original_filename: string;
+  mime_type: string;
+  file_path: string;
+  file_url: string;
+  thumbnail_path?: string;
+  storage_type: 'local' | 's3';
+  size_bytes: number;
+  expires_at: string;
+  created_at: string;
+  is_expired: boolean;
+  is_image: boolean;
+  is_video: boolean;
+  is_audio: boolean;
+  is_document: boolean;
+}
+
+export interface WebSocketMessage {
+  type: 'message_received' | 'message_status_update' | 'typing_status' | 'conversation_transferred' | 'user_joined';
+  message?: Message;
+  message_id?: string;
+  status?: string;
+  user_id?: string;
+  user_email?: string;
+  is_typing?: boolean;
+  conversation_id?: string;
+  new_agent?: string;
+  new_department?: string;
+  transferred_by?: string;
+}
+
+export interface TransferPayload {
+  new_department?: string;
+  new_agent?: string;
+  reason?: string;
+}
+
+export interface UploadResponse {
+  url: string;
+  filename: string;
+  size: number;
+  mime_type: string;
+}
+
