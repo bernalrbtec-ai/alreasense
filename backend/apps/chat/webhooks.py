@@ -215,6 +215,8 @@ def handle_message_update(data, tenant):
     Atualiza status: delivered, read
     """
     try:
+        logger.info(f"📥 [WEBHOOK UPDATE] Dados recebidos: {data}")
+        
         message_data = data.get('data', {})
         
         # Estrutura pode variar: key.id ou messageId direto
@@ -225,8 +227,11 @@ def handle_message_update(data, tenant):
         update = message_data.get('update', {})
         status_value = update.get('status') or message_data.get('status', '').upper()
         
+        logger.info(f"🔍 [WEBHOOK UPDATE] message_id={message_id}, status_value={status_value}")
+        
         if not message_id or not status_value:
             logger.warning(f"⚠️ [WEBHOOK] Dados insuficientes: message_id={message_id}, status={status_value}")
+            logger.warning(f"⚠️ [WEBHOOK] Data completa: {message_data}")
             return
         
         # Busca mensagem

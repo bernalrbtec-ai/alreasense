@@ -3,6 +3,7 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { useChatStore } from '../store/chatStore';
+import { useChatSocket } from '../hooks/useChatSocket';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { TransferModal } from './TransferModal';
@@ -18,6 +19,9 @@ export function ChatWindow() {
   const [showMenu, setShowMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // 🔌 Conectar WebSocket para receber atualizações em tempo real
+  const { isConnected } = useChatSocket(activeConversation?.id);
 
   // Fecha menu ao clicar fora
   useEffect(() => {
