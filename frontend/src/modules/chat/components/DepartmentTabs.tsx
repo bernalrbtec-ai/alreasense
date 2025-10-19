@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { useChatStore } from "../store/chatStore";
 import { Department } from "../types";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Loader2 } from "lucide-react";
+import { Loader2, Inbox } from "lucide-react";
 
 export function DepartmentTabs() {
   const [loading, setLoading] = useState(true);
@@ -32,9 +32,9 @@ export function DepartmentTabs() {
 
         setDepartments(allDepartments);
 
-        // Selecionar primeiro departamento
-        if (allDepartments.length > 0 && !activeDepartment) {
-          setActiveDepartment(allDepartments[0]);
+        // Selecionar Inbox por padrão
+        if (!activeDepartment) {
+          setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department);
         }
       } catch (error) {
         console.error("Erro ao buscar departamentos:", error);
@@ -63,7 +63,23 @@ export function DepartmentTabs() {
   }
 
   return (
-    <div className="flex items-center gap-2 px-4 py-3 bg-[#1f262e] border-b border-gray-800 overflow-x-auto">
+    <div className="flex items-center gap-2 px-4 md:px-6 py-3 bg-[#1f262e] border-b border-gray-800 overflow-x-auto">
+      {/* Tab Inbox */}
+      <button
+        onClick={() => setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department)}
+        className={`
+          flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap
+          ${activeDepartment?.id === 'inbox'
+            ? 'bg-orange-600 text-white shadow-lg'
+            : 'bg-[#2b2f36] text-gray-300 hover:bg-[#363c46]'
+          }
+        `}
+      >
+        <Inbox className="w-4 h-4" />
+        Inbox
+      </button>
+      
+      {/* Tabs Departamentos */}
       {departments.map((dept) => (
         <button
           key={dept.id}

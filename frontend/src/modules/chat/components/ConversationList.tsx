@@ -73,12 +73,21 @@ export function ConversationList() {
     const fetchConversations = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/chat/conversations/', {
-          params: {
-            department: activeDepartment.id,
-            ordering: '-last_message_at'
-          }
-        });
+        
+        // Parâmetros de filtro
+        const params: any = {
+          ordering: '-last_message_at'
+        };
+        
+        // Se Inbox, filtrar por status=pending
+        if (activeDepartment.id === 'inbox') {
+          params.status = 'pending';
+        } else {
+          // Se departamento normal, filtrar por department
+          params.department = activeDepartment.id;
+        }
+        
+        const response = await api.get('/chat/conversations/', { params });
         
         const convs = response.data.results || response.data;
         setConversations(convs);
