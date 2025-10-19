@@ -145,7 +145,7 @@ async def handle_send_message(message_id: str):
         
         # Envia via Evolution API
         async with httpx.AsyncClient(timeout=30.0) as client:
-            base_url = f"{connection.evolution_url}/message"
+            base_url = connection.base_url.rstrip('/')
             headers = {
                 'apikey': connection.api_key,
                 'Content-Type': 'application/json'
@@ -164,7 +164,7 @@ async def handle_send_message(message_id: str):
                         payload['mediaMessage']['caption'] = content
                     
                     response = await client.post(
-                        f"{base_url}/sendMedia/{connection.instance_name}",
+                        f"{base_url}/message/sendMedia/{connection.name}",
                         headers=headers,
                         json=payload
                     )
@@ -184,7 +184,7 @@ async def handle_send_message(message_id: str):
                 }
                 
                 response = await client.post(
-                    f"{base_url}/sendText/{connection.instance_name}",
+                    f"{base_url}/message/sendText/{connection.name}",
                     headers=headers,
                     json=payload
                 )
