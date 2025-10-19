@@ -43,17 +43,30 @@ def evolution_webhook(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Busca conexão pelo instance_name
+        # Busca conexão pelo nome da instância (field 'name' no modelo)
         try:
             connection = EvolutionConnection.objects.select_related('tenant').get(
-                instance_name=instance_name
+                name=instance_name,
+                is_active=True
             )
+            logger.info(f"✅ [WEBHOOK] Conexão encontrada: {connection.name} - Tenant: {connection.tenant.name}")
         except EvolutionConnection.DoesNotExist:
-            logger.warning(f"⚠️ [WEBHOOK] Conexão não encontrada: {instance_name}")
-            return Response(
-                {'error': 'Conexão não encontrada'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            logger.warning(f"⚠️ [WEBHOOK] Conexão não encontrada ou inativa: {instance_name}")
+            logger.warning(f"   Tentando buscar qualquer conexão ativa do tenant...")
+            
+            # Fallback: buscar qualquer conexão ativa (se o instance_name não for exato)
+            connection = EvolutionConnection.objects.filter(
+                is_active=True
+            ).select_related('tenant').first()
+            
+            if not connection:
+                logger.error(f"❌ [WEBHOOK] Nenhuma conexão ativa encontrada!")
+                return Response(
+                    {'error': 'Conexão não encontrada'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            logger.info(f"✅ [WEBHOOK] Usando conexão ativa encontrada: {connection.name} - Tenant: {connection.tenant.name}")
         
         # Roteamento por tipo de evento
         if event_type == 'messages.upsert':
@@ -83,6 +96,8 @@ def handle_message_upsert(data, tenant):
     - Message
     - MessageAttachment (se houver)
     """
+    logger.info(f"📥 [WEBHOOK UPSERT] ====== INICIANDO PROCESSAMENTO ======")
+    logger.info(f"📥 [WEBHOOK UPSERT] Tenant: {tenant.name} (ID: {tenant.id})")
     logger.info(f"📥 [WEBHOOK UPSERT] Dados recebidos: {data}")
     
     try:

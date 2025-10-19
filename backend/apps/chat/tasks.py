@@ -199,17 +199,23 @@ async def handle_send_message(message_id: str):
             
             # Envia texto (se não tiver anexo ou como caption separado)
             if content and not attachment_urls:
+                # Formatar número corretamente (Evolution precisa do + e formato E.164)
+                # Se não tiver +, adicionar
+                formatted_phone = phone if phone.startswith('+') else f'+{phone}'
+                
                 # Usar mesmo formato das campanhas
                 payload = {
-                    'number': phone,  # Evolution API aceita com ou sem '+'
+                    'number': formatted_phone,
                     'text': content,
                     'instance': instance.instance_name
                 }
                 
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                logger.info(f"   Phone: {phone}")
+                logger.info(f"   Phone original: {phone}")
+                logger.info(f"   Phone formatado: {formatted_phone}")
                 logger.info(f"   Text: {content[:50]}...")
+                logger.info(f"   Payload completo: {payload}")
                 
                 response = await client.post(
                     f"{base_url}/message/sendText/{instance.instance_name}",

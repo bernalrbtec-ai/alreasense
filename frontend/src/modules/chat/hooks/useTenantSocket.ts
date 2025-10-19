@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from 'sonner';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
 
@@ -25,12 +26,45 @@ export function useTenantSocket() {
         console.log('🆕 [TENANT WS] Nova conversa:', data.conversation);
         if (data.conversation) {
           addConversation(data.conversation);
-          // Mostrar notificação
-          if ('Notification' in window && Notification.permission === 'granted') {
-            new Notification('Nova Conversa', {
-              body: `${data.conversation.contact_name || data.conversation.contact_phone}`,
-              icon: '/logo.png'
-            });
+          
+          const contactName = data.conversation.contact_name || data.conversation.contact_phone;
+          
+          // 🔔 Toast notification - sempre mostrar
+          toast.success('Nova Mensagem Recebida! 💬', {
+            description: `De: ${contactName}`,
+            duration: 6000,
+            action: {
+              label: 'Abrir',
+              onClick: () => {
+                // Se já estiver na página de chat, apenas selecionar a conversa
+                const currentPath = window.location.pathname;
+                if (currentPath === '/chat') {
+                  const { setActiveConversation } = useChatStore.getState();
+                  setActiveConversation(data.conversation);
+                } else {
+                  // Navegar para o chat
+                  window.location.href = '/chat';
+                }
+              }
+            }
+          });
+          
+          // 🔔 Desktop notification (se permitido)
+          if ('Notification' in window) {
+            if (Notification.permission === 'granted') {
+              new Notification('Nova Mensagem no Chat', {
+                body: `De: ${contactName}`,
+                icon: data.conversation.profile_pic_url || '/logo.png',
+                badge: '/logo.png',
+                tag: `chat-${data.conversation.id}`, // Evita duplicar notificações
+                requireInteraction: false
+              });
+            } else if (Notification.permission === 'default') {
+              // Pedir permissão na primeira vez (não bloqueia)
+              Notification.requestPermission().then(permission => {
+                console.log('🔔 [NOTIFICAÇÃO] Permissão:', permission);
+              });
+            }
           }
         }
         break;

@@ -24,6 +24,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
 import { useUserAccess } from '../hooks/useUserAccess'
 import { useNotificationCount } from '../hooks/useNotifications'
+import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
@@ -71,6 +72,9 @@ export default function Layout() {
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
   const { hasProductAccess } = useUserAccess()
   const { unreadCount } = useNotificationCount()
+  
+  // 🔔 WebSocket global do tenant - fica sempre conectado para receber notificações
+  useTenantSocket()
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
   
