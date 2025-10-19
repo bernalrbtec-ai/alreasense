@@ -111,6 +111,7 @@ export function useTenantSocket() {
 
       ws.onopen = () => {
         console.log('✅ [TENANT WS] Conectado ao grupo do tenant!');
+        console.log('   🔔 NOTIFICAÇÕES TOAST ATIVAS - Aguardando mensagens...');
         setConnectionStatus('connected');
         reconnectAttemptsRef.current = 0;
 
