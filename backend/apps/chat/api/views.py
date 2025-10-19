@@ -394,6 +394,19 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         return message
     
+    def create(self, request, *args, **kwargs):
+        """
+        Override create para retornar o serializer completo na resposta.
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        message = self.perform_create(serializer)
+        
+        # Retorna com o MessageSerializer completo
+        output_serializer = MessageSerializer(message)
+        headers = self.get_success_headers(output_serializer.data)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+    
     @action(detail=True, methods=['post'])
     def mark_as_seen(self, request, pk=None):
         """Marca mensagem como vista (incoming)."""
