@@ -170,7 +170,7 @@ export function ConversationList() {
   }
 
   return (
-    <div className="flex flex-col w-96 bg-[#141a20] border-r border-gray-800">
+    <div className="flex flex-col w-full md:w-96 lg:w-[420px] bg-[#141a20] border-r border-gray-800">
       {/* Header com busca e botão Nova Conversa */}
       <div className="p-4 border-b border-gray-800 space-y-3">
         <button

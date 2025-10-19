@@ -6,7 +6,7 @@ import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { TransferModal } from './TransferModal';
-import { ArrowLeftRight, MoreVertical, User, Info, CheckCircle, XCircle, BellOff } from 'lucide-react';
+import { ArrowLeftRight, MoreVertical, User, Info, CheckCircle, XCircle, BellOff, ArrowLeft } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -83,8 +83,16 @@ export function ChatWindow() {
   return (
     <div className="flex flex-col h-full bg-[#0e1115]">
       {/* Header */}
-      <div className="flex items-center justify-between px-6 py-4 bg-[#1f262e] border-b border-gray-800">
+      <div className="flex items-center justify-between px-4 md:px-6 py-4 bg-[#1f262e] border-b border-gray-800">
         <div className="flex items-center gap-3">
+          {/* Botão Voltar (mobile) */}
+          <button
+            onClick={() => setActiveConversation(null)}
+            className="md:hidden p-2 hover:bg-[#2b2f36] rounded-lg transition-colors text-gray-400 hover:text-white"
+            title="Voltar"
+          >
+            <ArrowLeft className="w-5 h-5" />
+          </button>
           {/* Avatar */}
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center text-white font-semibold">
             {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
