@@ -465,8 +465,8 @@ def send_read_receipt(conversation: Conversation, message: Message):
         
         # Endpoint da Evolution API para marcar como lida
         # Formato: POST /chat/markMessageAsRead/{instance}
-        base_url = instance.api_url.rstrip('/')
-        url = f"{base_url}/chat/markMessageAsRead/{instance.instance_name}"
+        base_url = instance.base_url.rstrip('/')
+        url = f"{base_url}/chat/markMessageAsRead/{instance.name}"
         
         # Payload para marcar mensagem como lida
         payload = {
