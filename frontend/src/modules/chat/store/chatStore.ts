@@ -16,6 +16,7 @@ interface ChatState {
   activeConversation: Conversation | null;
   setConversations: (conversations: Conversation[]) => void;
   setActiveConversation: (conversation: Conversation | null) => void;
+  addConversation: (conversation: Conversation) => void;
   updateConversation: (conversation: Conversation) => void;
 
   // Mensagens
@@ -56,6 +57,17 @@ export const useChatStore = create<ChatState>((set) => ({
   setActiveConversation: (conversation) => set({ 
     activeConversation: conversation,
     messages: [] // Limpa mensagens ao trocar conversa
+  }),
+  addConversation: (conversation) => set((state) => {
+    // Evitar duplicatas
+    const exists = state.conversations.some(c => c.id === conversation.id);
+    if (exists) {
+      return state;
+    }
+    // Adicionar no início da lista (conversas mais recentes primeiro)
+    return {
+      conversations: [conversation, ...state.conversations]
+    };
   }),
   updateConversation: (conversation) => set((state) => ({
     conversations: state.conversations.map(c => 

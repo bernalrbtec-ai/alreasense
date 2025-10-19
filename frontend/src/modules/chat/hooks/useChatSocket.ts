@@ -68,6 +68,18 @@ export function useChatSocket(conversationId?: string) {
         }
         break;
 
+      case 'new_conversation':
+        console.log('🆕 [WS] Nova conversa criada:', data.conversation);
+        // Adicionar conversa à lista (via store)
+        if (data.conversation) {
+          // Usar função do store para adicionar conversa
+          const { addConversation } = useChatStore.getState();
+          if (addConversation) {
+            addConversation(data.conversation);
+          }
+        }
+        break;
+
       case 'user_joined':
         console.log('👋 [WS] Usuário entrou:', data.user_email);
         break;

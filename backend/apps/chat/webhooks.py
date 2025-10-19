@@ -140,6 +140,40 @@ def handle_message_upsert(data, tenant):
         
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} (Inbox)")
+            
+            # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
+            try:
+                from apps.chat.api.serializers import ConversationSerializer
+                conv_data = ConversationSerializer(conversation).data
+                
+                # Converter UUIDs para string
+                def convert_uuids_to_str(obj):
+                    import uuid
+                    if isinstance(obj, uuid.UUID):
+                        return str(obj)
+                    elif isinstance(obj, dict):
+                        return {k: convert_uuids_to_str(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [convert_uuids_to_str(item) for item in obj]
+                    return obj
+                
+                conv_data_serializable = convert_uuids_to_str(conv_data)
+                
+                # Broadcast para todo o tenant (Inbox é visível para todos)
+                channel_layer = get_channel_layer()
+                tenant_group = f"chat_tenant_{tenant.id}"
+                
+                async_to_sync(channel_layer.group_send)(
+                    tenant_group,
+                    {
+                        'type': 'new_conversation',
+                        'conversation': conv_data_serializable
+                    }
+                )
+                
+                logger.info(f"📡 [WEBSOCKET] Nova conversa broadcast para tenant {tenant.name}")
+            except Exception as e:
+                logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de nova conversa: {e}", exc_info=True)
         else:
             # Se conversa estava fechada, reabrir automaticamente
             if conversation.status == 'closed':
@@ -230,14 +264,20 @@ def handle_message_update(data, tenant):
         message_data = data.get('data', {})
         
         # Estrutura pode variar: key.id ou messageId direto
+        # IMPORTANTE: Usar keyId (ID real) ao invés de messageId (ID interno Evolution)
         key = message_data.get('key', {})
-        message_id = key.get('id') or message_data.get('messageId')
+        key_id = message_data.get('keyId')  # ID real da mensagem WhatsApp
+        message_id_evo = message_data.get('messageId')  # ID interno Evolution
+        message_id = key.get('id') or key_id or message_id_evo
         
         # Status: delivered, read
         update = message_data.get('update', {})
         status_value = update.get('status') or message_data.get('status', '').upper()
         
-        logger.info(f"🔍 [WEBHOOK UPDATE] Buscando mensagem: {message_id}")
+        logger.info(f"🔍 [WEBHOOK UPDATE] Buscando mensagem...")
+        logger.info(f"   key.id: {key.get('id')}")
+        logger.info(f"   keyId: {key_id}")
+        logger.info(f"   messageId (evo): {message_id_evo}")
         logger.info(f"   Status recebido: {status_value}")
         
         if not message_id or not status_value:
@@ -246,15 +286,42 @@ def handle_message_update(data, tenant):
             logger.warning(f"   status: {status_value}")
             return
         
-        # Busca mensagem
-        try:
-            message = Message.objects.select_related('conversation').get(message_id=message_id)
-            logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada!")
-            logger.info(f"   Conversa: {message.conversation.contact_phone}")
-            logger.info(f"   Status atual: {message.status}")
-        except Message.DoesNotExist:
-            logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco: {message_id}")
+        # Busca mensagem - tentar com keyId primeiro
+        message = None
+        
+        # Tentar com keyId
+        if key_id:
+            try:
+                message = Message.objects.select_related('conversation').get(message_id=key_id)
+                logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via keyId!")
+            except Message.DoesNotExist:
+                pass
+        
+        # Se não encontrou, tentar com key.id
+        if not message and key.get('id'):
+            try:
+                message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
+                logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via key.id!")
+            except Message.DoesNotExist:
+                pass
+        
+        # Se não encontrou, tentar com messageId do Evolution
+        if not message and message_id_evo:
+            try:
+                message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
+                logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via messageId!")
+            except Message.DoesNotExist:
+                pass
+        
+        if not message:
+            logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco!")
+            logger.warning(f"   Tentou: keyId={key_id}, key.id={key.get('id')}, messageId={message_id_evo}")
             return
+        
+        logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada!")
+        logger.info(f"   ID no banco: {message.id}")
+        logger.info(f"   Conversa: {message.conversation.contact_phone}")
+        logger.info(f"   Status atual: {message.status}")
         
         # Mapeia status (aceita múltiplos formatos)
         status_map = {

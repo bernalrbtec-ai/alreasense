@@ -241,6 +241,13 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'transferred_by': event.get('transferred_by')
         }))
     
+    async def new_conversation(self, event):
+        """Broadcast quando uma nova conversa é criada (Inbox)."""
+        await self.send(text_data=json.dumps({
+            'type': 'new_conversation',
+            'conversation': event['conversation']
+        }))
+    
     # Database queries (sync_to_async)
     
     @database_sync_to_async
