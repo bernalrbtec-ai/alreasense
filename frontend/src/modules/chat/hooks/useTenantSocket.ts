@@ -21,6 +21,23 @@ export function useTenantSocket() {
   const handleWebSocketMessage = useCallback((data: any) => {
     console.log('📨 [TENANT WS] Mensagem recebida:', data);
 
+    // Helper para navegar para o chat
+    const navigateToChat = (conversation: any) => {
+      const currentPath = window.location.pathname;
+      if (currentPath === '/chat') {
+        // Já está no chat, só selecionar a conversa
+        const { setActiveConversation } = useChatStore.getState();
+        setActiveConversation(conversation);
+      } else {
+        // Precisa navegar - usar pushState para não perder o estado
+        const { setActiveConversation } = useChatStore.getState();
+        setActiveConversation(conversation);
+        window.history.pushState({}, '', '/chat');
+        // Disparar evento de navegação para o React Router detectar
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    };
+
     switch (data.type) {
       case 'new_conversation':
         console.log('🆕 [TENANT WS] Nova conversa:', data.conversation);
@@ -35,17 +52,7 @@ export function useTenantSocket() {
             duration: 6000,
             action: {
               label: 'Abrir',
-              onClick: () => {
-                // Se já estiver na página de chat, apenas selecionar a conversa
-                const currentPath = window.location.pathname;
-                if (currentPath === '/chat') {
-                  const { setActiveConversation } = useChatStore.getState();
-                  setActiveConversation(data.conversation);
-                } else {
-                  // Navegar para o chat
-                  window.location.href = '/chat';
-                }
-              }
+              onClick: () => navigateToChat(data.conversation)
             }
           });
           
@@ -85,15 +92,7 @@ export function useTenantSocket() {
             duration: 5000,
             action: {
               label: 'Ver',
-              onClick: () => {
-                const currentPath = window.location.pathname;
-                if (currentPath === '/chat') {
-                  const { setActiveConversation } = useChatStore.getState();
-                  setActiveConversation(data.conversation);
-                } else {
-                  window.location.href = '/chat';
-                }
-              }
+              onClick: () => navigateToChat(data.conversation)
             }
           });
           
