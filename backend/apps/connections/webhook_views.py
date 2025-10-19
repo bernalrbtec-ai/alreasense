@@ -243,7 +243,23 @@ class EvolutionWebhookView(APIView):
         try:
             messages = data.get('data', {}).get('messages', [])
             instance = data.get('data', {}).get('instance', 'default')
+            instance_name = data.get('instance', 'default')
             
+            # 💬 FLOW CHAT: Processar mensagem para o chat em tempo real
+            try:
+                from apps.chat.webhooks import handle_message_upsert as chat_handle_message
+                # Buscar tenant pela instância
+                connection = EvolutionConnection.objects.select_related('tenant').filter(
+                    instance_name=instance_name
+                ).first()
+                
+                if connection:
+                    chat_handle_message(data, connection.tenant)
+                    logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {connection.tenant.name}")
+            except Exception as e:
+                logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}")
+            
+            # Processar mensagem normalmente para analytics/campaigns
             for msg_data in messages:
                 self.process_message(msg_data, instance)
             

@@ -114,8 +114,16 @@ export function ConversationList() {
 
   return (
     <div className="flex flex-col w-80 bg-[#141a20] border-r border-gray-800">
-      {/* Header com busca */}
-      <div className="p-4 border-b border-gray-800">
+      {/* Header com busca e botão Nova Conversa */}
+      <div className="p-4 border-b border-gray-800 space-y-3">
+        <button
+          onClick={() => setShowNewChatModal(true)}
+          className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors font-medium"
+        >
+          <Plus className="w-4 h-4" />
+          Nova Conversa
+        </button>
+        
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
           <input
@@ -148,6 +156,89 @@ export function ConversationList() {
           ))
         )}
       </div>
+
+      {/* Modal Nova Conversa */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-md border border-gray-800">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
+              <h2 className="text-lg font-semibold text-white">Nova Conversa</h2>
+              <button
+                onClick={() => {
+                  setShowNewChatModal(false);
+                  setNewChatPhone('');
+                  setNewChatName('');
+                }}
+                className="p-1 hover:bg-gray-700 rounded transition-colors"
+              >
+                <Plus className="w-5 h-5 text-gray-400 rotate-45" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Telefone (obrigatório)
+                </label>
+                <input
+                  type="text"
+                  value={newChatPhone}
+                  onChange={(e) => setNewChatPhone(e.target.value)}
+                  placeholder="+5517999999999"
+                  className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Formato: +55 DDD NÚMERO
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Nome (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={newChatName}
+                  onChange={(e) => setNewChatName(e.target.value)}
+                  placeholder="João Silva"
+                  className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-800">
+              <button
+                onClick={() => {
+                  setShowNewChatModal(false);
+                  setNewChatPhone('');
+                  setNewChatName('');
+                }}
+                disabled={creating}
+                className="px-4 py-2 hover:bg-gray-700 rounded-lg transition-colors text-gray-300 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleStartNewChat}
+                disabled={creating || !newChatPhone.trim()}
+                className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {creating ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Criando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4" />
+                    <span>Iniciar</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
