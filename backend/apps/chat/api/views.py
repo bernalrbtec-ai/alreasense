@@ -307,6 +307,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(conversations, many=True)
         return Response(serializer.data)
     
+    @action(detail=True, methods=['get'])
+    def messages(self, request, pk=None):
+        """
+        Lista mensagens de uma conversa específica.
+        GET /conversations/{id}/messages/
+        """
+        conversation = self.get_object()
+        messages = Message.objects.filter(
+            conversation=conversation
+        ).select_related('sender').prefetch_related('attachments').order_by('created_at')
+        
+        serializer = MessageSerializer(messages, many=True)
+        return Response(serializer.data)
+    
     @action(detail=True, methods=['post'])
     def transfer(self, request, pk=None):
         """
