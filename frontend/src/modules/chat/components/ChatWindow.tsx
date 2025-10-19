@@ -85,7 +85,7 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#efeae2]">
+    <div className="flex flex-col h-full w-full bg-[#efeae2]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300">
         <div className="flex items-center gap-3 flex-1 min-w-0">

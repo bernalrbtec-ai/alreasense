@@ -22,19 +22,19 @@ export function ChatPage() {
 
       {/* Content: Conversations + Chat Window - OCUPA TODO ESPAÇO */}
       <div className="flex flex-1 overflow-hidden min-h-0">
-        {/* Lista de conversas */}
+        {/* Lista de conversas - REDUZIDA para dar mais espaço ao chat */}
         <div className={`
           ${activeConversation ? 'hidden lg:flex' : 'flex'}
-          w-full lg:w-[380px] xl:w-[420px]
+          w-full lg:w-[320px] xl:w-[360px]
           flex-shrink-0 border-r border-gray-200
         `}>
           <ConversationList />
         </div>
         
-        {/* Chat window - EXPANDE PARA OCUPAR TODO ESPAÇO DISPONÍVEL */}
+        {/* Chat window - EXPANDE AO MÁXIMO (flex-1 = todo espaço restante) */}
         <div className={`
           ${activeConversation ? 'flex' : 'hidden lg:flex'}
-          flex-1 min-w-0
+          flex-1 min-w-0 max-w-full
         `}>
           <ChatWindow />
         </div>

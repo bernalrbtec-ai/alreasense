@@ -334,11 +334,17 @@ export default function Layout() {
         </div>
 
         {/* Page content */}
-        <main className={`${location.pathname === '/chat' ? 'p-0 h-[calc(100vh-64px)]' : 'py-4 sm:py-6'}`}>
-          <div className={`${location.pathname === '/chat' ? 'h-full w-full' : 'mx-auto max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8'}`}>
+        {location.pathname === '/chat' ? (
+          <main className="p-0 h-[calc(100vh-64px)] overflow-hidden">
             <Outlet />
-          </div>
-        </main>
+          </main>
+        ) : (
+          <main className="py-4 sm:py-6">
+            <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
+              <Outlet />
+            </div>
+          </main>
+        )}
       </div>
     </div>
   )
