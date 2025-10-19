@@ -383,11 +383,16 @@ class EvolutionWebhookView(APIView):
                     name=instance_name
                 ).first()
                 
+                logger.info(f"🔍 [FLOW CHAT] Buscando connection para instance: {instance_name}")
+                
                 if connection:
+                    logger.info(f"✅ [FLOW CHAT] Connection encontrada: {connection.tenant.name}")
                     chat_handle_update(data, connection.tenant)
                     logger.info(f"💬 [FLOW CHAT] Status atualizado para tenant {connection.tenant.name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma connection encontrada para instance: {instance_name}")
             except Exception as e:
-                logger.error(f"❌ [FLOW CHAT] Erro ao atualizar status: {e}")
+                logger.error(f"❌ [FLOW CHAT] Erro ao atualizar status: {e}", exc_info=True)
             
             # Find message in database by chat_id and text content
             # Since we don't have message_id field, we'll need to match differently

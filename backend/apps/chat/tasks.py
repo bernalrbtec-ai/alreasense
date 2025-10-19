@@ -214,12 +214,26 @@ async def handle_send_message(message_id: str):
         message.evolution_status = 'sent'
         await sync_to_async(message.save)(update_fields=['status', 'evolution_status', 'message_id'])
         
-        # Broadcast via WebSocket
+        # Broadcast via WebSocket (convertendo UUIDs para string)
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
         
         from apps.chat.api.serializers import MessageSerializer
         message_data = await sync_to_async(lambda: MessageSerializer(message).data)()
+        
+        # Converter UUIDs para string para serialização msgpack
+        def convert_uuids_to_str(obj):
+            """Recursivamente converte UUIDs para string."""
+            import uuid
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_uuids_to_str(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_uuids_to_str(item) for item in obj]
+            return obj
+        
+        message_data_serializable = convert_uuids_to_str(message_data)
         
         await channel_layer.group_send(
             room_group_name,
@@ -227,7 +241,7 @@ async def handle_send_message(message_id: str):
                 'type': 'message_status_update',
                 'message_id': str(message.id),
                 'status': 'sent',
-                'message': message_data
+                'message': message_data_serializable
             }
         )
     
