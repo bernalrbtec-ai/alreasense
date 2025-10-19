@@ -2,7 +2,7 @@
  * Tabs de departamentos (topo do chat)
  */
 import React, { useEffect, useState } from "react";
-import api from "@/utils/api";
+import { api } from "@/lib/api";
 import { useChatStore } from "../store/chatStore";
 import { Department } from "../types";
 import { usePermissions } from "@/hooks/usePermissions";

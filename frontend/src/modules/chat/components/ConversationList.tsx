@@ -2,7 +2,7 @@
  * Lista de conversas (sidebar esquerda)
  */
 import React, { useEffect, useState } from 'react';
-import api from '@/utils/api';
+import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Conversation } from '../types';
 import { Loader2, Search, MessageCircle } from 'lucide-react';

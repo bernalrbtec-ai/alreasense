@@ -2,7 +2,7 @@
  * Modal de transferência de conversa
  */
 import React, { useState, useEffect } from 'react';
-import api from '@/utils/api';
+import { api } from '@/lib/api';
 import { Conversation, Department, User } from '../types';
 import { X, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';

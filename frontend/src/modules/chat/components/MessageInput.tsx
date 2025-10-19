@@ -2,7 +2,7 @@
  * Input de mensagem com upload
  */
 import React, { useState, useRef } from 'react';
-import api from '@/utils/api';
+import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Paperclip, Send, X, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';

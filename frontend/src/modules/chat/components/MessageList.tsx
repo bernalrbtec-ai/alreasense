@@ -2,7 +2,7 @@
  * Lista de mensagens (bolhas estilo WhatsApp)
  */
 import React, { useEffect, useRef } from 'react';
-import api from '@/utils/api';
+import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { StatusIcon } from './StatusIcon';
 import { Loader2, Download, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
