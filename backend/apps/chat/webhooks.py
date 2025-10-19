@@ -87,7 +87,7 @@ def evolution_webhook(request):
 
 
 @transaction.atomic
-def handle_message_upsert(data, tenant):
+def handle_message_upsert(data, tenant, connection=None):
     """
     Processa evento de nova mensagem (messages.upsert).
     
@@ -99,6 +99,10 @@ def handle_message_upsert(data, tenant):
     logger.info(f"📥 [WEBHOOK UPSERT] ====== INICIANDO PROCESSAMENTO ======")
     logger.info(f"📥 [WEBHOOK UPSERT] Tenant: {tenant.name} (ID: {tenant.id})")
     logger.info(f"📥 [WEBHOOK UPSERT] Dados recebidos: {data}")
+    
+    # Nome da instância (ex: "Comercial", "Suporte")
+    instance_name = data.get('instance', '')
+    logger.info(f"📱 [WEBHOOK UPSERT] Instância: {instance_name}")
     
     try:
         message_data = data.get('data', {})
@@ -154,6 +158,7 @@ def handle_message_upsert(data, tenant):
                 'department': None,  # Inbox: sem departamento
                 'contact_name': push_name,
                 'profile_pic_url': profile_pic_url if profile_pic_url else None,
+                'instance_name': instance_name,  # Salvar instância de origem
                 'status': 'pending'  # Pendente para classificação
             }
         )

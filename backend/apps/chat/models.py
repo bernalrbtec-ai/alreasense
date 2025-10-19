@@ -69,6 +69,13 @@ class Conversation(models.Model):
         verbose_name='Foto de Perfil',
         help_text='URL da foto de perfil do WhatsApp'
     )
+    instance_name = models.CharField(
+        max_length=255,
+        blank=True,
+        db_index=True,
+        verbose_name='Instância de Origem',
+        help_text='Nome da instância Evolution que recebeu a mensagem (ex: Comercial, Suporte)'
+    )
     assigned_to = models.ForeignKey(
         'authn.User',
         null=True,

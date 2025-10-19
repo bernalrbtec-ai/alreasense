@@ -130,6 +130,7 @@ export function ConversationList() {
 
               {/* Info */}
               <div className="flex-1 min-w-0 text-left">
+                {/* Nome + Hora */}
                 <div className="flex items-baseline justify-between mb-1">
                   <h3 className="font-medium text-gray-900 truncate text-sm">
                     {conv.contact_name || conv.contact_phone}
@@ -139,6 +140,33 @@ export function ConversationList() {
                   </span>
                 </div>
 
+                {/* Tags: Instância + Tags do Contato */}
+                {(conv.instance_name || (conv.contact_tags && conv.contact_tags.length > 0)) && (
+                  <div className="flex items-center gap-1 flex-wrap mb-1">
+                    {/* Tag da Instância (azul) */}
+                    {conv.instance_name && (
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
+                        📱 {conv.instance_name}
+                      </span>
+                    )}
+                    
+                    {/* Tags do Contato */}
+                    {conv.contact_tags && conv.contact_tags.map((tag) => (
+                      <span 
+                        key={tag.id}
+                        className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                        style={{
+                          backgroundColor: `${tag.color}20`,
+                          color: tag.color
+                        }}
+                      >
+                        🏷️ {tag.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Última mensagem + Badge de não lidas */}
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-600 truncate">
                     {conv.last_message?.content || 'Sem mensagens'}

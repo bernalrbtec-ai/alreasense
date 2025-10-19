@@ -134,14 +134,40 @@ export function ChatWindow() {
             )}
           </div>
 
-          {/* Nome */}
+          {/* Nome e Tags */}
           <div className="flex-1 min-w-0">
+            {/* Nome */}
             <h2 className="text-base font-medium text-gray-900 truncate">
               {activeConversation.contact_name || activeConversation.contact_phone}
             </h2>
-            <p className="text-xs text-gray-500">
-              {isConnected ? 'online' : 'conectando...'}
-            </p>
+            
+            {/* Tags: Instância + Tags do Contato */}
+            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+              {/* Tag da Instância (azul) */}
+              {activeConversation.instance_name && (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
+                  📱 {activeConversation.instance_name}
+                </span>
+              )}
+              
+              {/* Tags do Contato (customizadas por cor) */}
+              {activeConversation.contact_tags && activeConversation.contact_tags.length > 0 && (
+                <>
+                  {activeConversation.contact_tags.map((tag) => (
+                    <span 
+                      key={tag.id}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                      style={{
+                        backgroundColor: `${tag.color}20`,
+                        color: tag.color
+                      }}
+                    >
+                      🏷️ {tag.name}
+                    </span>
+                  ))}
+                </>
+              )}
+            </div>
           </div>
         </div>
 

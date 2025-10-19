@@ -17,6 +17,12 @@ export interface User {
   role: 'admin' | 'gerente' | 'agente';
 }
 
+export interface ContactTag {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface Conversation {
   id: string;
   tenant: string;
@@ -25,6 +31,7 @@ export interface Conversation {
   contact_phone: string;
   contact_name: string;
   profile_pic_url?: string | null;
+  instance_name?: string;
   assigned_to?: string;
   assigned_to_data?: User;
   status: 'pending' | 'open' | 'closed';
@@ -36,6 +43,7 @@ export interface Conversation {
   updated_at: string;
   last_message?: Message;
   unread_count: number;
+  contact_tags?: ContactTag[];
 }
 
 export interface Message {

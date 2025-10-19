@@ -4,6 +4,7 @@ Serializers para o módulo Flow Chat.
 from rest_framework import serializers
 from apps.chat.models import Conversation, Message, MessageAttachment
 from apps.authn.serializers import UserSerializer
+from apps.contacts.models import Contact
 
 
 class MessageAttachmentSerializer(serializers.ModelSerializer):
@@ -94,19 +95,22 @@ class ConversationSerializer(serializers.ModelSerializer):
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.ReadOnlyField()
     department_name = serializers.CharField(source='department.name', read_only=True)
+    contact_tags = serializers.SerializerMethodField()
     
     class Meta:
         model = Conversation
         fields = [
             'id', 'tenant', 'department', 'department_name',
-            'contact_phone', 'contact_name', 'profile_pic_url', 'assigned_to', 'assigned_to_data',
+            'contact_phone', 'contact_name', 'profile_pic_url', 'instance_name',
+            'assigned_to', 'assigned_to_data',
             'status', 'last_message_at', 'metadata', 'participants',
             'participants_data', 'created_at', 'updated_at',
-            'last_message', 'unread_count'
+            'last_message', 'unread_count', 'contact_tags'
         ]
         read_only_fields = [
             'id', 'tenant', 'created_at', 'updated_at', 'last_message_at',
-            'unread_count', 'assigned_to_data', 'participants_data', 'department_name', 'profile_pic_url'
+            'unread_count', 'assigned_to_data', 'participants_data', 'department_name', 
+            'profile_pic_url', 'instance_name', 'contact_tags'
         ]
     
     def get_participants_data(self, obj):
@@ -119,6 +123,25 @@ class ConversationSerializer(serializers.ModelSerializer):
         if last_message:
             return MessageSerializer(last_message).data
         return None
+    
+    def get_contact_tags(self, obj):
+        """Busca as tags do contato pelo telefone."""
+        try:
+            contact = Contact.objects.prefetch_related('tags').get(
+                tenant=obj.tenant,
+                phone=obj.contact_phone,
+                is_active=True
+            )
+            return [
+                {
+                    'id': str(tag.id),
+                    'name': tag.name,
+                    'color': tag.color
+                }
+                for tag in contact.tags.all()
+            ]
+        except Contact.DoesNotExist:
+            return []
 
 
 class ConversationDetailSerializer(ConversationSerializer):
