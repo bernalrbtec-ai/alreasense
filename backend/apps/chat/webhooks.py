@@ -139,6 +139,12 @@ def handle_message_upsert(data, tenant):
         
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone}")
+        else:
+            # Se conversa estava fechada, reabrir automaticamente
+            if conversation.status == 'closed':
+                conversation.status = 'open'
+                conversation.save(update_fields=['status'])
+                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente")
         
         # Atualiza nome se mudou
         if push_name and conversation.contact_name != push_name:

@@ -151,6 +151,7 @@ class UserSerializer(serializers.ModelSerializer):
             'can_manage_departments': obj.is_admin,
             'can_manage_campaigns': obj.is_admin,
             'can_view_all_contacts': obj.is_admin,
+            'can_transfer_conversations': True,  # Todos podem transferir conversas
         }
     
     def get_avatar(self, obj):
