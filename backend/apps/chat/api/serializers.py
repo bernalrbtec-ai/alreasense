@@ -90,7 +90,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     """Serializer para conversas."""
     
     assigned_to_data = UserSerializer(source='assigned_to', read_only=True)
-    participants_data = UserSerializer(source='participants', many=True, read_only=True)
+    participants_data = serializers.SerializerMethodField()
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.ReadOnlyField()
     department_name = serializers.CharField(source='department.name', read_only=True)
@@ -108,6 +108,10 @@ class ConversationSerializer(serializers.ModelSerializer):
             'id', 'tenant', 'created_at', 'updated_at', 'last_message_at',
             'unread_count', 'assigned_to_data', 'participants_data', 'department_name'
         ]
+    
+    def get_participants_data(self, obj):
+        """Retorna os participantes da conversa."""
+        return UserSerializer(obj.participants.all(), many=True).data
     
     def get_last_message(self, obj):
         """Retorna a última mensagem da conversa."""

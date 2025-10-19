@@ -32,13 +32,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     
     queryset = Conversation.objects.select_related(
         'tenant', 'department', 'assigned_to'
-    ).prefetch_related(
-        'participants',
-        Prefetch(
-            'messages',
-            queryset=Message.objects.select_related('sender').order_by('-created_at')[:1]
-        )
-    )
+    ).prefetch_related('participants')
     serializer_class = ConversationSerializer
     permission_classes = [IsAuthenticated, CanAccessChat]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
