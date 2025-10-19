@@ -22,7 +22,7 @@ export function DepartmentTabs() {
     const fetchDepartments = async () => {
       try {
         setLoading(true);
-        const response = await api.get("/api/auth/departments/");
+        const response = await api.get("/auth/departments/");
         let allDepartments: Department[] = response.data.results || response.data;
 
         // Filtrar por permissões

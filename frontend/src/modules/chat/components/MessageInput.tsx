@@ -37,7 +37,7 @@ export function MessageInput() {
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await api.post('/api/chat/attachments/upload/', formData, {
+      const response = await api.post('/chat/attachments/upload/', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
 
@@ -74,7 +74,7 @@ export function MessageInput() {
         payload.attachment_urls = [attachmentPreview.url];
       }
 
-      const response = await api.post('/api/chat/messages/', payload);
+      const response = await api.post('/chat/messages/', payload);
       
       addMessage(response.data);
       

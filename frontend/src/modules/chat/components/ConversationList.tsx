@@ -27,7 +27,7 @@ export function ConversationList() {
     const fetchConversations = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/api/chat/conversations/', {
+        const response = await api.get('/chat/conversations/', {
           params: {
             department: activeDepartment.id,
             ordering: '-last_message_at'

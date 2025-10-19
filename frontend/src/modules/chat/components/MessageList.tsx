@@ -29,7 +29,7 @@ export function MessageList() {
     const fetchMessages = async () => {
       try {
         setLoading(true);
-        const response = await api.get('/api/chat/messages/', {
+        const response = await api.get('/chat/messages/', {
           params: {
             conversation: activeConversation.id,
             ordering: 'created_at'

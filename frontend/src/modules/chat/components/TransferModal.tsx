@@ -35,7 +35,7 @@ export function TransferModal({ conversation, onClose }: TransferModalProps) {
 
   const fetchDepartments = async () => {
     try {
-      const response = await api.get('/api/auth/departments/');
+      const response = await api.get('/auth/departments/');
       const depts = response.data.results || response.data;
       setDepartments(depts);
     } catch (error) {
@@ -45,7 +45,7 @@ export function TransferModal({ conversation, onClose }: TransferModalProps) {
 
   const fetchUsers = async (departmentId: string) => {
     try {
-      const response = await api.get('/api/auth/users-api/', {
+      const response = await api.get('/auth/users-api/', {
         params: { department: departmentId }
       });
       const usersData = response.data.results || response.data;
@@ -68,7 +68,7 @@ export function TransferModal({ conversation, onClose }: TransferModalProps) {
       if (selectedDepartment) payload.new_department = selectedDepartment;
       if (selectedAgent) payload.new_agent = selectedAgent;
 
-      await api.post(`/api/chat/conversations/${conversation.id}/transfer/`, payload);
+      await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
 
       toast.success('Conversa transferida com sucesso! ✅');
       onClose();
