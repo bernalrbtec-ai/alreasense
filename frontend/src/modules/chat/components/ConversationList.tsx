@@ -18,6 +18,13 @@ export function ConversationList() {
   const [newChatName, setNewChatName] = useState('');
   const [creating, setCreating] = useState(false);
   
+  // Busca de contatos
+  const [contactSearchMode, setContactSearchMode] = useState<'manual' | 'search'>('search');
+  const [contactSearch, setContactSearch] = useState('');
+  const [contacts, setContacts] = useState<any[]>([]);
+  const [loadingContacts, setLoadingContacts] = useState(false);
+  const [selectedContact, setSelectedContact] = useState<any>(null);
+  
   const {
     activeDepartment,
     conversations,
@@ -25,6 +32,40 @@ export function ConversationList() {
     setConversations,
     setActiveConversation
   } = useChatStore();
+  
+  // Buscar contatos do tenant
+  const fetchContacts = async (search: string) => {
+    if (!search || search.length < 2) {
+      setContacts([]);
+      return;
+    }
+    
+    try {
+      setLoadingContacts(true);
+      const response = await api.get('/contacts/contacts/', {
+        params: {
+          search,
+          page_size: 10
+        }
+      });
+      setContacts(response.data.results || response.data);
+    } catch (error) {
+      console.error('Erro ao buscar contatos:', error);
+      setContacts([]);
+    } finally {
+      setLoadingContacts(false);
+    }
+  };
+  
+  // Debounce na busca
+  useEffect(() => {
+    if (contactSearchMode === 'search') {
+      const timer = setTimeout(() => {
+        fetchContacts(contactSearch);
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [contactSearch, contactSearchMode]);
 
   useEffect(() => {
     if (!activeDepartment) return;
@@ -62,23 +103,39 @@ export function ConversationList() {
   });
 
   const handleStartNewChat = async () => {
-    if (!newChatPhone.trim()) {
-      toast.error('Telefone é obrigatório');
+    let phone = '';
+    let name = '';
+    
+    if (contactSearchMode === 'search' && selectedContact) {
+      phone = selectedContact.phone;
+      name = selectedContact.name || selectedContact.phone;
+    } else {
+      phone = newChatPhone.trim();
+      name = newChatName.trim();
+    }
+    
+    if (!phone) {
+      toast.error('Selecione um contato ou digite um telefone');
       return;
     }
 
     try {
       setCreating(true);
       const response = await api.post('/chat/conversations/start/', {
-        contact_phone: newChatPhone,
-        contact_name: newChatName,
+        contact_phone: phone,
+        contact_name: name,
         department: activeDepartment?.id
       });
 
       toast.success(response.data.message || 'Conversa iniciada!');
+      
+      // Resetar form
       setShowNewChatModal(false);
       setNewChatPhone('');
       setNewChatName('');
+      setContactSearch('');
+      setSelectedContact(null);
+      setContacts([]);
 
       // Recarregar conversas
       const convResponse = await api.get('/chat/conversations/', {
@@ -176,34 +233,127 @@ export function ConversationList() {
             </div>
 
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Telefone (obrigatório)
-                </label>
-                <input
-                  type="text"
-                  value={newChatPhone}
-                  onChange={(e) => setNewChatPhone(e.target.value)}
-                  placeholder="+5517999999999"
-                  className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
-                />
-                <p className="mt-1 text-xs text-gray-500">
-                  Formato: +55 DDD NÚMERO
-                </p>
+              {/* Tabs: Buscar / Manual */}
+              <div className="flex gap-2 border-b border-gray-700 pb-2">
+                <button
+                  onClick={() => {
+                    setContactSearchMode('search');
+                    setNewChatPhone('');
+                    setNewChatName('');
+                  }}
+                  className={`px-4 py-2 rounded-t-lg transition-colors ${
+                    contactSearchMode === 'search'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Search className="w-4 h-4 inline-block mr-2" />
+                  Buscar Contato
+                </button>
+                <button
+                  onClick={() => {
+                    setContactSearchMode('manual');
+                    setContactSearch('');
+                    setSelectedContact(null);
+                    setContacts([]);
+                  }}
+                  className={`px-4 py-2 rounded-t-lg transition-colors ${
+                    contactSearchMode === 'manual'
+                      ? 'bg-green-600 text-white'
+                      : 'text-gray-400 hover:text-gray-200'
+                  }`}
+                >
+                  <Plus className="w-4 h-4 inline-block mr-2" />
+                  Digitar Número
+                </button>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nome (opcional)
-                </label>
-                <input
-                  type="text"
-                  value={newChatName}
-                  onChange={(e) => setNewChatName(e.target.value)}
-                  placeholder="João Silva"
-                  className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
-                />
-              </div>
+              {/* Modo: Buscar Contato */}
+              {contactSearchMode === 'search' && (
+                <div className="space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      value={contactSearch}
+                      onChange={(e) => setContactSearch(e.target.value)}
+                      placeholder="Buscar por nome ou telefone..."
+                      className="w-full pl-10 pr-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
+                    />
+                    {loadingContacts && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-gray-500" />
+                    )}
+                  </div>
+
+                  {/* Lista de resultados */}
+                  {contacts.length > 0 && (
+                    <div className="max-h-48 overflow-y-auto space-y-2 border border-gray-700 rounded-lg p-2">
+                      {contacts.map((contact) => (
+                        <div
+                          key={contact.id}
+                          onClick={() => setSelectedContact(contact)}
+                          className={`p-3 rounded-lg cursor-pointer transition-colors ${
+                            selectedContact?.id === contact.id
+                              ? 'bg-green-600 text-white'
+                              : 'bg-gray-700 hover:bg-gray-600 text-gray-100'
+                          }`}
+                        >
+                          <div className="font-medium">{contact.name || 'Sem nome'}</div>
+                          <div className="text-sm opacity-80">{contact.phone}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {contactSearch.length >= 2 && contacts.length === 0 && !loadingContacts && (
+                    <p className="text-sm text-gray-400 text-center py-4">
+                      Nenhum contato encontrado
+                    </p>
+                  )}
+
+                  {selectedContact && (
+                    <div className="p-3 bg-green-600/20 border border-green-600 rounded-lg">
+                      <p className="text-sm text-gray-300">Selecionado:</p>
+                      <p className="text-white font-medium">{selectedContact.name || 'Sem nome'}</p>
+                      <p className="text-sm text-gray-400">{selectedContact.phone}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Modo: Digitar Manual */}
+              {contactSearchMode === 'manual' && (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Telefone (obrigatório)
+                    </label>
+                    <input
+                      type="text"
+                      value={newChatPhone}
+                      onChange={(e) => setNewChatPhone(e.target.value)}
+                      placeholder="+5517999999999"
+                      className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      Formato: +55 DDD NÚMERO
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Nome (opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={newChatName}
+                      onChange={(e) => setNewChatName(e.target.value)}
+                      placeholder="João Silva"
+                      className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-600"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-gray-800">
@@ -220,7 +370,11 @@ export function ConversationList() {
               </button>
               <button
                 onClick={handleStartNewChat}
-                disabled={creating || !newChatPhone.trim()}
+                disabled={
+                  creating ||
+                  (contactSearchMode === 'search' && !selectedContact) ||
+                  (contactSearchMode === 'manual' && !newChatPhone.trim())
+                }
                 className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 {creating ? (
@@ -230,8 +384,8 @@ export function ConversationList() {
                   </>
                 ) : (
                   <>
-                    <Plus className="w-4 h-4" />
-                    <span>Iniciar</span>
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Iniciar Conversa</span>
                   </>
                 )}
               </button>
