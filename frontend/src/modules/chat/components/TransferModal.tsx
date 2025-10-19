@@ -6,13 +6,16 @@ import { api } from '@/lib/api';
 import { Conversation, Department, User } from '../types';
 import { X, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
+import { useChatStore } from '../store/chatStore';
 
 interface TransferModalProps {
   conversation: Conversation;
   onClose: () => void;
+  onTransferSuccess?: () => void;
 }
 
-export function TransferModal({ conversation, onClose }: TransferModalProps) {
+export function TransferModal({ conversation, onClose, onTransferSuccess }: TransferModalProps) {
+  const { updateConversation, setActiveConversation } = useChatStore();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
@@ -68,13 +71,25 @@ export function TransferModal({ conversation, onClose }: TransferModalProps) {
       if (selectedDepartment) payload.new_department = selectedDepartment;
       if (selectedAgent) payload.new_agent = selectedAgent;
 
-      await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
+      const response = await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
+
+      // Atualizar conversa no store (sem reload!)
+      const updatedConversation = response.data;
+      updateConversation(updatedConversation);
+      
+      // Se for a conversa ativa, atualizar também
+      if (conversation.id === updatedConversation.id) {
+        setActiveConversation(updatedConversation);
+      }
 
       toast.success('Conversa transferida com sucesso! ✅');
-      onClose();
       
-      // Refresh conversation list
-      window.location.reload(); // Simple refresh, or use state management
+      // Chamar callback se fornecido
+      if (onTransferSuccess) {
+        onTransferSuccess();
+      }
+      
+      onClose();
     } catch (error: any) {
       console.error('Erro ao transferir:', error);
       toast.error(error.response?.data?.error || 'Erro ao transferir conversa');

@@ -7,9 +7,13 @@ import { ConversationList } from './ConversationList';
 import { ChatWindow } from './ChatWindow';
 import { MessageSquare } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
+import { useTenantSocket } from '../hooks/useTenantSocket';
 
 export function ChatPage() {
   const { activeConversation } = useChatStore();
+  
+  // 🔌 Conectar WebSocket global do tenant (novas conversas)
+  useTenantSocket();
   
   return (
     <div className="flex flex-col h-screen bg-[#0e1115]">
