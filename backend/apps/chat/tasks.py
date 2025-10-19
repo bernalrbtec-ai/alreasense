@@ -109,20 +109,30 @@ async def handle_send_message(message_id: str):
     from asgiref.sync import sync_to_async
     import httpx
     
+    logger.info(f"📤 [CHAT ENVIO] Iniciando envio de mensagem...")
+    logger.info(f"   Message ID: {message_id}")
+    
     try:
         # Busca mensagem
         message = await sync_to_async(
             Message.objects.select_related('conversation', 'conversation__tenant').get
         )(id=message_id)
         
+        logger.info(f"✅ [CHAT ENVIO] Mensagem encontrada no banco")
+        logger.info(f"   Conversa: {message.conversation.contact_phone}")
+        logger.info(f"   Tenant: {message.conversation.tenant.name}")
+        logger.info(f"   Content: {message.content[:50]}...")
+        
         # Se for nota interna, não envia
         if message.is_internal:
             message.status = 'sent'
             await sync_to_async(message.save)(update_fields=['status'])
-            logger.info(f"📝 [CHAT] Nota interna criada: {message_id}")
+            logger.info(f"📝 [CHAT ENVIO] Nota interna criada (não enviada ao WhatsApp)")
             return
         
         # Busca instância WhatsApp ativa do tenant (mesmo modelo das campanhas)
+        logger.info(f"🔍 [CHAT ENVIO] Buscando instância WhatsApp ativa...")
+        
         instance = await sync_to_async(
             WhatsAppInstance.objects.filter(
                 tenant=message.conversation.tenant,
@@ -134,8 +144,14 @@ async def handle_send_message(message_id: str):
             message.status = 'failed'
             message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
             await sync_to_async(message.save)(update_fields=['status', 'error_message'])
-            logger.error(f"❌ [CHAT] Sem instância WhatsApp para tenant {message.conversation.tenant.name}")
+            logger.error(f"❌ [CHAT ENVIO] Nenhuma instância WhatsApp ativa!")
+            logger.error(f"   Tenant: {message.conversation.tenant.name}")
             return
+        
+        logger.info(f"✅ [CHAT ENVIO] Instância encontrada!")
+        logger.info(f"   Nome: {instance.friendly_name}")
+        logger.info(f"   UUID: {instance.instance_name}")
+        logger.info(f"   API URL: {instance.api_url}")
         
         # Prepara dados
         phone = message.conversation.contact_phone
@@ -190,9 +206,10 @@ async def handle_send_message(message_id: str):
                     'instance': instance.instance_name
                 }
                 
-                logger.info(f"🔍 [CHAT] Enviando para Evolution API:")
+                logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                logger.info(f"   Payload: {payload}")
+                logger.info(f"   Phone: {phone}")
+                logger.info(f"   Text: {content[:50]}...")
                 
                 response = await client.post(
                     f"{base_url}/message/sendText/{instance.instance_name}",
@@ -200,23 +217,31 @@ async def handle_send_message(message_id: str):
                     json=payload
                 )
                 
-                logger.info(f"🔍 [CHAT] Resposta Evolution API: {response.status_code}")
-                logger.info(f"   Body: {response.text[:500]}")
+                logger.info(f"📥 [CHAT ENVIO] Resposta da Evolution API:")
+                logger.info(f"   Status: {response.status_code}")
+                logger.info(f"   Body: {response.text[:300]}")
                 
                 response.raise_for_status()
                 
                 data = response.json()
                 message.message_id = data.get('key', {}).get('id')
-                logger.info(f"✅ [CHAT] Texto enviado: {message_id}")
+                logger.info(f"✅ [CHAT ENVIO] Mensagem enviada com sucesso!")
+                logger.info(f"   Message ID Evolution: {message.message_id}")
         
         # Atualiza status
         message.status = 'sent'
         message.evolution_status = 'sent'
         await sync_to_async(message.save)(update_fields=['status', 'evolution_status', 'message_id'])
         
+        logger.info(f"💾 [CHAT ENVIO] Status atualizado no banco para 'sent'")
+        
         # Broadcast via WebSocket (convertendo UUIDs para string)
+        logger.info(f"📡 [CHAT ENVIO] Preparando broadcast via WebSocket...")
+        
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+        
+        logger.info(f"   Room: {room_group_name}")
         
         from apps.chat.api.serializers import MessageSerializer
         message_data = await sync_to_async(lambda: MessageSerializer(message).data)()
@@ -244,6 +269,11 @@ async def handle_send_message(message_id: str):
                 'message': message_data_serializable
             }
         )
+        
+        logger.info(f"✅ [CHAT ENVIO] Mensagem enviada e broadcast com sucesso!")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   Phone: {message.conversation.contact_phone}")
+        logger.info(f"   Status: {message.status}")
     
     except Exception as e:
         logger.error(f"❌ [CHAT] Erro ao enviar mensagem {message_id}: {e}", exc_info=True)

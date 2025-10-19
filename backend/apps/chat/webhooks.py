@@ -82,6 +82,8 @@ def handle_message_upsert(data, tenant):
     - Message
     - MessageAttachment (se houver)
     """
+    logger.info(f"📥 [WEBHOOK UPSERT] Dados recebidos: {data}")
+    
     try:
         message_data = data.get('data', {})
         key = message_data.get('key', {})
@@ -119,6 +121,11 @@ def handle_message_upsert(data, tenant):
         # Nome do contato
         push_name = message_data.get('pushName', '')
         
+        # Log da mensagem recebida
+        direction_str = "📤 ENVIADA" if from_me else "📥 RECEBIDA"
+        logger.info(f"{direction_str} [WEBHOOK] {phone}: {content[:50]}...")
+        logger.info(f"   Tenant: {tenant.name} | Message ID: {message_id}")
+        
         # Busca ou cria conversa
         # Nova conversa vai para INBOX (pending) sem departamento
         conversation, created = Conversation.objects.get_or_create(
@@ -132,13 +139,14 @@ def handle_message_upsert(data, tenant):
         )
         
         if created:
-            logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone}")
+            logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} (Inbox)")
         else:
             # Se conversa estava fechada, reabrir automaticamente
             if conversation.status == 'closed':
-                conversation.status = 'open'
+                conversation.status = 'pending' if not from_me else 'open'
                 conversation.save(update_fields=['status'])
-                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente")
+                status_str = "Inbox" if not from_me else "Aberta"
+                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente ({status_str})")
         
         # Atualiza nome se mudou
         if push_name and conversation.contact_name != push_name:
@@ -160,7 +168,8 @@ def handle_message_upsert(data, tenant):
         )
         
         if msg_created:
-            logger.info(f"✅ [WEBHOOK] Nova mensagem criada: {message_id}")
+            logger.info(f"✅ [WEBHOOK] Mensagem {direction} salva no banco")
+            logger.info(f"   ID: {message.id} | Conversa: {conversation.id}")
             
             # Se tiver anexo, processa
             attachment_url = None
@@ -200,10 +209,11 @@ def handle_message_upsert(data, tenant):
                 logger.info(f"📎 [WEBHOOK] Anexo enfileirado para download: {filename}")
             
             # Broadcast via WebSocket
+            logger.info(f"📡 [WEBHOOK] Enviando para WebSocket...")
             broadcast_message_to_websocket(message, conversation)
         
         else:
-            logger.info(f"ℹ️ [WEBHOOK] Mensagem já existe: {message_id}")
+            logger.info(f"ℹ️ [WEBHOOK] Mensagem já existe no banco: {message_id}")
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)
@@ -214,9 +224,9 @@ def handle_message_update(data, tenant):
     Processa evento de atualização de status (messages.update).
     Atualiza status: delivered, read
     """
+    logger.info(f"🔄 [WEBHOOK UPDATE] Iniciando processamento...")
+    
     try:
-        logger.info(f"📥 [WEBHOOK UPDATE] Dados recebidos: {data}")
-        
         message_data = data.get('data', {})
         
         # Estrutura pode variar: key.id ou messageId direto
@@ -227,18 +237,23 @@ def handle_message_update(data, tenant):
         update = message_data.get('update', {})
         status_value = update.get('status') or message_data.get('status', '').upper()
         
-        logger.info(f"🔍 [WEBHOOK UPDATE] message_id={message_id}, status_value={status_value}")
+        logger.info(f"🔍 [WEBHOOK UPDATE] Buscando mensagem: {message_id}")
+        logger.info(f"   Status recebido: {status_value}")
         
         if not message_id or not status_value:
-            logger.warning(f"⚠️ [WEBHOOK] Dados insuficientes: message_id={message_id}, status={status_value}")
-            logger.warning(f"⚠️ [WEBHOOK] Data completa: {message_data}")
+            logger.warning(f"⚠️ [WEBHOOK UPDATE] Dados insuficientes!")
+            logger.warning(f"   message_id: {message_id}")
+            logger.warning(f"   status: {status_value}")
             return
         
         # Busca mensagem
         try:
-            message = Message.objects.get(message_id=message_id)
+            message = Message.objects.select_related('conversation').get(message_id=message_id)
+            logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada!")
+            logger.info(f"   Conversa: {message.conversation.contact_phone}")
+            logger.info(f"   Status atual: {message.status}")
         except Message.DoesNotExist:
-            logger.warning(f"⚠️ [WEBHOOK] Mensagem não encontrada: {message_id}")
+            logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco: {message_id}")
             return
         
         # Mapeia status (aceita múltiplos formatos)
@@ -257,15 +272,25 @@ def handle_message_update(data, tenant):
         
         new_status = status_map.get(status_value.lower()) or status_map.get(status_value)
         
-        if new_status and message.status != new_status:
+        if not new_status:
+            logger.warning(f"⚠️ [WEBHOOK UPDATE] Status não mapeado: {status_value}")
+            return
+        
+        if message.status != new_status:
+            old_status = message.status
             message.status = new_status
             message.evolution_status = status_value
             message.save(update_fields=['status', 'evolution_status'])
             
-            logger.info(f"✅ [WEBHOOK] Status atualizado: {message_id} -> {new_status} (raw: {status_value})")
+            logger.info(f"✅ [WEBHOOK UPDATE] Status atualizado!")
+            logger.info(f"   {old_status} → {new_status}")
+            logger.info(f"   Evolution status: {status_value}")
             
             # Broadcast via WebSocket
+            logger.info(f"📡 [WEBHOOK UPDATE] Enviando atualização via WebSocket...")
             broadcast_status_update(message)
+        else:
+            logger.info(f"ℹ️ [WEBHOOK UPDATE] Status já está como '{new_status}', sem alteração")
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.update: {e}", exc_info=True)
@@ -280,6 +305,10 @@ def broadcast_message_to_websocket(message, conversation):
         from apps.chat.api.serializers import MessageSerializer
         message_data = MessageSerializer(message).data
         
+        logger.info(f"📡 [WEBSOCKET] Preparando broadcast...")
+        logger.info(f"   Room: {room_group_name}")
+        logger.info(f"   Direction: {message.direction}")
+        
         async_to_sync(channel_layer.group_send)(
             room_group_name,
             {
@@ -288,7 +317,8 @@ def broadcast_message_to_websocket(message, conversation):
             }
         )
         
-        logger.info(f"📡 [WEBSOCKET] Mensagem broadcast: {message.id}")
+        logger.info(f"✅ [WEBSOCKET] Mensagem broadcast com sucesso!")
+        logger.info(f"   Message ID: {message.id} | Content: {message.content[:30]}...")
     
     except Exception as e:
         logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast: {e}", exc_info=True)
@@ -300,6 +330,11 @@ def broadcast_status_update(message):
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
         
+        logger.info(f"📡 [WEBSOCKET STATUS] Preparando broadcast...")
+        logger.info(f"   Room: {room_group_name}")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   Novo status: {message.status}")
+        
         async_to_sync(channel_layer.group_send)(
             room_group_name,
             {
@@ -309,8 +344,8 @@ def broadcast_status_update(message):
             }
         )
         
-        logger.info(f"📡 [WEBSOCKET] Status broadcast: {message.id} -> {message.status}")
+        logger.info(f"✅ [WEBSOCKET STATUS] Atualização broadcast com sucesso!")
     
     except Exception as e:
-        logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de status: {e}", exc_info=True)
+        logger.error(f"❌ [WEBSOCKET STATUS] Erro ao fazer broadcast: {e}", exc_info=True)
 
