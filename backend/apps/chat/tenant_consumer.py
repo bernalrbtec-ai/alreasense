@@ -98,6 +98,16 @@ class TenantChatConsumer(AsyncWebsocketConsumer):
             'type': 'new_conversation',
             'conversation': event['conversation']
         }))
+        logger.info(f"🆕 [TENANT WS] Nova conversa enviada para cliente")
+    
+    async def new_message_notification(self, event):
+        """Broadcast de nova mensagem em conversa existente."""
+        await self.send(text_data=json.dumps({
+            'type': 'new_message_notification',
+            'conversation': event['conversation'],
+            'message': event['message']
+        }))
+        logger.info(f"💬 [TENANT WS] Notificação de nova mensagem enviada")
     
     async def conversation_updated(self, event):
         """Broadcast quando uma conversa é atualizada."""
@@ -105,6 +115,7 @@ class TenantChatConsumer(AsyncWebsocketConsumer):
             'type': 'conversation_updated',
             'conversation': event['conversation']
         }))
+        logger.info(f"🔄 [TENANT WS] Conversa atualizada enviada")
     
     # Database queries (sync_to_async)
     

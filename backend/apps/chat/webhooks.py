@@ -270,9 +270,49 @@ def handle_message_upsert(data, tenant):
                 download_attachment.delay(str(attachment.id), attachment_url)
                 logger.info(f"📎 [WEBHOOK] Anexo enfileirado para download: {filename}")
             
-            # Broadcast via WebSocket
-            logger.info(f"📡 [WEBHOOK] Enviando para WebSocket...")
+            # Broadcast via WebSocket (mensagem específica)
+            logger.info(f"📡 [WEBHOOK] Enviando para WebSocket da conversa...")
             broadcast_message_to_websocket(message, conversation)
+            
+            # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós), também notificar o tenant
+            if not from_me:
+                logger.info(f"📬 [WEBHOOK] Notificando tenant sobre nova mensagem...")
+                try:
+                    from apps.chat.api.serializers import ConversationSerializer
+                    conv_data = ConversationSerializer(conversation).data
+                    
+                    # Converter UUIDs para string
+                    def convert_uuids_to_str(obj):
+                        import uuid
+                        if isinstance(obj, uuid.UUID):
+                            return str(obj)
+                        elif isinstance(obj, dict):
+                            return {k: convert_uuids_to_str(v) for k, v in obj.items()}
+                        elif isinstance(obj, list):
+                            return [convert_uuids_to_str(item) for item in obj]
+                        return obj
+                    
+                    conv_data_serializable = convert_uuids_to_str(conv_data)
+                    
+                    # Broadcast para todo o tenant (notificação de nova mensagem)
+                    channel_layer = get_channel_layer()
+                    tenant_group = f"chat_tenant_{tenant.id}"
+                    
+                    async_to_sync(channel_layer.group_send)(
+                        tenant_group,
+                        {
+                            'type': 'new_message_notification',
+                            'conversation': conv_data_serializable,
+                            'message': {
+                                'content': content[:100],  # Primeiros 100 caracteres
+                                'created_at': message.created_at.isoformat()
+                            }
+                        }
+                    )
+                    
+                    logger.info(f"📡 [WEBSOCKET] Notificação de nova mensagem broadcast para tenant {tenant.name}")
+                except Exception as e:
+                    logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de notificação: {e}", exc_info=True)
         
         else:
             logger.info(f"ℹ️ [WEBHOOK] Mensagem já existe no banco: {message_id}")

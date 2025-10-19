@@ -69,6 +69,47 @@ export function useTenantSocket() {
         }
         break;
 
+      case 'new_message_notification':
+        console.log('💬 [TENANT WS] Nova mensagem em conversa existente:', data);
+        if (data.conversation) {
+          // Atualizar conversa na lista (mover para o topo, atualizar última mensagem)
+          const { updateConversation } = useChatStore.getState();
+          updateConversation(data.conversation);
+          
+          const contactName = data.conversation.contact_name || data.conversation.contact_phone;
+          const messagePreview = data.message?.content || 'Nova mensagem';
+          
+          // 🔔 Toast notification
+          toast.info('Nova Mensagem! 💬', {
+            description: `${contactName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
+            duration: 5000,
+            action: {
+              label: 'Ver',
+              onClick: () => {
+                const currentPath = window.location.pathname;
+                if (currentPath === '/chat') {
+                  const { setActiveConversation } = useChatStore.getState();
+                  setActiveConversation(data.conversation);
+                } else {
+                  window.location.href = '/chat';
+                }
+              }
+            }
+          });
+          
+          // 🔔 Desktop notification
+          if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification(`${contactName}`, {
+              body: messagePreview.substring(0, 100),
+              icon: data.conversation.profile_pic_url || '/logo.png',
+              badge: '/logo.png',
+              tag: `chat-msg-${data.conversation.id}`,
+              requireInteraction: false
+            });
+          }
+        }
+        break;
+
       case 'conversation_updated':
         console.log('🔄 [TENANT WS] Conversa atualizada:', data.conversation);
         // Atualizar conversa na lista
