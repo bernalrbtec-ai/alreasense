@@ -121,6 +121,9 @@ def handle_message_upsert(data, tenant):
         # Nome do contato
         push_name = message_data.get('pushName', '')
         
+        # Foto de perfil (se disponível)
+        profile_pic_url = message_data.get('profilePicUrl', '')
+        
         # Log da mensagem recebida
         direction_str = "📤 ENVIADA" if from_me else "📥 RECEBIDA"
         logger.info(f"{direction_str} [WEBHOOK] {phone}: {content[:50]}...")
@@ -134,6 +137,7 @@ def handle_message_upsert(data, tenant):
             defaults={
                 'department': None,  # Inbox: sem departamento
                 'contact_name': push_name,
+                'profile_pic_url': profile_pic_url if profile_pic_url else None,
                 'status': 'pending'  # Pendente para classificação
             }
         )
@@ -182,10 +186,18 @@ def handle_message_upsert(data, tenant):
                 status_str = "Inbox" if not from_me else "Aberta"
                 logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente ({status_str})")
         
-        # Atualiza nome se mudou
+        # Atualiza nome e foto se mudaram
+        update_fields = []
         if push_name and conversation.contact_name != push_name:
             conversation.contact_name = push_name
-            conversation.save(update_fields=['contact_name'])
+            update_fields.append('contact_name')
+        
+        if profile_pic_url and conversation.profile_pic_url != profile_pic_url:
+            conversation.profile_pic_url = profile_pic_url
+            update_fields.append('profile_pic_url')
+        
+        if update_fields:
+            conversation.save(update_fields=update_fields)
         
         # Cria mensagem
         direction = 'outgoing' if from_me else 'incoming'

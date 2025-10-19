@@ -62,6 +62,13 @@ class Conversation(models.Model):
         blank=True,
         verbose_name='Nome do Contato'
     )
+    profile_pic_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        verbose_name='Foto de Perfil',
+        help_text='URL da foto de perfil do WhatsApp'
+    )
     assigned_to = models.ForeignKey(
         'authn.User',
         null=True,

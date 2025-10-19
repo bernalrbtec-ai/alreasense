@@ -1,101 +1,71 @@
 /**
- * Tabs de departamentos (topo do chat)
+ * Tabs de departamentos - Estilo WhatsApp Web
  */
-import React, { useEffect, useState } from "react";
-import { api } from "@/lib/api";
-import { useChatStore } from "../store/chatStore";
-import { Department } from "../types";
-import { usePermissions } from "@/hooks/usePermissions";
-import { Loader2, Inbox } from "lucide-react";
+import React, { useEffect } from 'react';
+import { Inbox } from 'lucide-react';
+import { api } from '@/lib/api';
+import { useChatStore } from '../store/chatStore';
+import { Department } from '../types';
+import { usePermissions } from '@/hooks/usePermissions';
 
 export function DepartmentTabs() {
-  const [loading, setLoading] = useState(true);
-  const { departmentIds, can_access_all_departments } = usePermissions();
-  const { 
-    departments, 
-    activeDepartment, 
-    setDepartments, 
-    setActiveDepartment 
-  } = useChatStore();
+  const { departments, activeDepartment, setDepartments, setActiveDepartment } = useChatStore();
+  const { can_access_all_departments, departmentIds } = usePermissions();
 
   useEffect(() => {
     const fetchDepartments = async () => {
       try {
-        setLoading(true);
-        const response = await api.get("/auth/departments/");
-        let allDepartments: Department[] = response.data.results || response.data;
-
-        // Filtrar por permissões
-        if (!can_access_all_departments) {
-          allDepartments = allDepartments.filter(d => departmentIds.includes(d.id));
+        const response = await api.get('/auth/departments/');
+        const depts = response.data.results || response.data;
+        
+        let filteredDepts = depts;
+        if (!can_access_all_departments && departmentIds) {
+          filteredDepts = depts.filter((d: Department) => departmentIds.includes(d.id));
         }
-
-        setDepartments(allDepartments);
-
-        // Selecionar Inbox por padrão
+        
+        setDepartments(filteredDepts);
+        
+        // Se não tem departamento ativo, selecionar Inbox
         if (!activeDepartment) {
           setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department);
         }
       } catch (error) {
-        console.error("Erro ao buscar departamentos:", error);
-      } finally {
-        setLoading(false);
+        console.error('Erro ao carregar departamentos:', error);
       }
     };
 
     fetchDepartments();
   }, [can_access_all_departments, departmentIds, setDepartments, setActiveDepartment, activeDepartment]);
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center p-4 bg-[#1f262e] border-b border-gray-800">
-        <Loader2 className="w-5 h-5 text-gray-400 animate-spin" />
-      </div>
-    );
-  }
-
-  if (departments.length === 0) {
-    return (
-      <div className="p-4 bg-[#1f262e] border-b border-gray-800 text-center text-gray-500 text-sm">
-        Nenhum departamento disponível
-      </div>
-    );
-  }
-
   return (
-    <div className="flex items-center gap-2 px-4 md:px-6 py-3 bg-[#1f262e] border-b border-gray-800 overflow-x-auto">
+    <div className="flex items-center gap-1 px-2 py-2 bg-white border-b border-gray-200 overflow-x-auto">
       {/* Tab Inbox */}
       <button
         onClick={() => setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department)}
         className={`
-          flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap
+          flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap
           ${activeDepartment?.id === 'inbox'
-            ? 'bg-orange-600 text-white shadow-lg'
-            : 'bg-[#2b2f36] text-gray-300 hover:bg-[#363c46]'
+            ? 'bg-orange-50 text-orange-600 border border-orange-200'
+            : 'text-gray-600 hover:bg-gray-100'
           }
         `}
       >
         <Inbox className="w-4 h-4" />
         Inbox
       </button>
-      
+
       {/* Tabs Departamentos */}
       {departments.map((dept) => (
         <button
           key={dept.id}
           onClick={() => setActiveDepartment(dept)}
           className={`
-            px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap
+            px-3 py-1.5 rounded-md text-sm font-medium transition-all whitespace-nowrap
             ${activeDepartment?.id === dept.id
-              ? 'bg-green-600 text-white shadow-lg'
-              : 'bg-[#2b2f36] text-gray-300 hover:bg-[#363c46]'
+              ? 'bg-green-50 text-green-600 border border-green-200'
+              : 'text-gray-600 hover:bg-gray-100'
             }
           `}
-          style={
-            activeDepartment?.id === dept.id && dept.color
-              ? { backgroundColor: dept.color }
-              : {}
-          }
         >
           {dept.name}
         </button>

@@ -1,41 +1,38 @@
 /**
- * Janela de chat (header + messages + input)
+ * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect } from 'react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, Info, ArrowRightLeft, CheckCircle, XCircle } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
-import { useChatSocket } from '../hooks/useChatSocket';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { TransferModal } from './TransferModal';
-import { ArrowLeftRight, MoreVertical, User, Info, CheckCircle, XCircle, BellOff, ArrowLeft } from 'lucide-react';
 import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
+import { useChatSocket } from '../hooks/useChatSocket';
 
 export function ChatWindow() {
-  const { activeConversation, updateConversation, setActiveConversation } = useChatStore();
+  const { activeConversation, setActiveConversation } = useChatStore();
   const { can_transfer_conversations } = usePermissions();
-  const [showTransferModal, setShowTransferModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
-  // 🔌 Conectar WebSocket para receber atualizações em tempo real
+  // 🔌 Conectar WebSocket para esta conversa
   const { isConnected } = useChatSocket(activeConversation?.id);
 
-  // Fecha menu ao clicar fora
+  // Fechar menu ao clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setShowMenu(false);
       }
     }
-    
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showMenu]);
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleCloseConversation = async () => {
     if (!activeConversation) return;
@@ -44,12 +41,9 @@ export function ChatWindow() {
       await api.patch(`/chat/conversations/${activeConversation.id}/`, {
         status: 'closed'
       });
-      
-      const updated = { ...activeConversation, status: 'closed' as const };
-      updateConversation(updated);
-      setActiveConversation(null);
-      toast.success('Conversa fechada com sucesso!');
+      toast.success('Conversa fechada!');
       setShowMenu(false);
+      setActiveConversation(null);
     } catch (error) {
       console.error('Erro ao fechar conversa:', error);
       toast.error('Erro ao fechar conversa');
@@ -63,9 +57,6 @@ export function ChatWindow() {
       await api.patch(`/chat/conversations/${activeConversation.id}/`, {
         status: 'closed'
       });
-      
-      const updated = { ...activeConversation, status: 'closed' as const };
-      updateConversation(updated);
       toast.success('Conversa marcada como resolvida!');
       setShowMenu(false);
     } catch (error) {
@@ -76,76 +67,93 @@ export function ChatWindow() {
 
   if (!activeConversation) {
     return (
-      <div className="flex flex-col items-center justify-center h-full bg-[#0e1115] text-gray-500">
-        <User className="w-16 h-16 mb-4 text-gray-700" />
-        <p className="text-lg">Selecione uma conversa</p>
-        <p className="text-sm">Escolha uma conversa da lista para começar</p>
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
+        <div className="max-w-md text-center">
+          <div className="w-64 h-64 mx-auto mb-8 opacity-20">
+            <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400">
+              <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
+            </svg>
+          </div>
+          <h2 className="text-2xl font-light text-gray-700 mb-2">Flow Chat Web</h2>
+          <p className="text-gray-500 text-sm">
+            Envie e receba mensagens sem manter seu celular conectado.<br/>
+            Selecione uma conversa para começar.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#0e1115]">
+    <div className="flex flex-col h-full bg-[#efeae2]">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 md:px-6 py-4 bg-[#1f262e] border-b border-gray-800">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Botão Voltar (mobile) */}
           <button
             onClick={() => setActiveConversation(null)}
-            className="md:hidden p-2 hover:bg-[#2b2f36] rounded-lg transition-colors text-gray-400 hover:text-white"
+            className="md:hidden p-2 hover:bg-gray-200 rounded-full transition-colors"
             title="Voltar"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <ArrowLeft className="w-5 h-5 text-gray-600" />
           </button>
+
           {/* Avatar */}
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-600 to-green-700 flex items-center justify-center text-white font-semibold">
-            {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
+          <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
+            {activeConversation.profile_pic_url ? (
+              <img 
+                src={activeConversation.profile_pic_url} 
+                alt={activeConversation.contact_name || activeConversation.contact_phone}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = 'none';
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center text-gray-600 font-medium text-lg">
+                {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
+              </div>
+            )}
           </div>
 
-          {/* Info */}
-          <div>
-            <h2 className="font-semibold text-white">
+          {/* Nome */}
+          <div className="flex-1 min-w-0">
+            <h2 className="text-base font-medium text-gray-900 truncate">
               {activeConversation.contact_name || activeConversation.contact_phone}
             </h2>
-            <p className="text-xs text-gray-400">
-              {activeConversation.contact_phone}
+            <p className="text-xs text-gray-500">
+              {isConnected ? 'online' : 'conectando...'}
             </p>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 relative">
-          {can_transfer_conversations && (
-            <button
-              onClick={() => setShowTransferModal(true)}
-              className="flex items-center gap-2 px-3 py-2 hover:bg-[#2b2f36] rounded-lg transition-colors text-gray-300 hover:text-white"
-              title="Transferir conversa"
-            >
-              <ArrowLeftRight className="w-4 h-4" />
-              <span className="text-sm">Transferir</span>
-            </button>
-          )}
-
-          <div ref={menuRef} className="relative">
+        <div className="flex items-center gap-2">
+          <button className="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Buscar">
+            <Search className="w-5 h-5 text-gray-600" />
+          </button>
+          
+          {/* Menu 3 pontos */}
+          <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-[#2b2f36] rounded-lg transition-colors text-gray-400 hover:text-white"
+              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+              title="Menu"
             >
-              <MoreVertical className="w-5 h-5" />
+              <MoreVertical className="w-5 h-5 text-gray-600" />
             </button>
 
-            {/* Dropdown Menu */}
             {showMenu && (
-              <div className="absolute right-0 mt-2 w-56 bg-[#1f262e] border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
                 <button
                   onClick={() => {
                     setShowInfoModal(true);
                     setShowMenu(false);
                   }}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#2b2f36] transition-colors text-gray-300 hover:text-white text-left"
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
                 >
                   <Info className="w-4 h-4" />
-                  <span className="text-sm">Informações</span>
+                  Informações do contato
                 </button>
 
                 {can_transfer_conversations && (
@@ -154,27 +162,27 @@ export function ChatWindow() {
                       setShowTransferModal(true);
                       setShowMenu(false);
                     }}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#2b2f36] transition-colors text-gray-300 hover:text-white text-left border-t border-gray-800"
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
                   >
-                    <ArrowLeftRight className="w-4 h-4" />
-                    <span className="text-sm">Transferir conversa</span>
+                    <ArrowRightLeft className="w-4 h-4" />
+                    Transferir conversa
                   </button>
                 )}
 
                 <button
                   onClick={handleMarkAsResolved}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#2b2f36] transition-colors text-gray-300 hover:text-white text-left border-t border-gray-800"
+                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
                 >
-                  <CheckCircle className="w-4 h-4 text-green-500" />
-                  <span className="text-sm">Marcar como resolvida</span>
+                  <CheckCircle className="w-4 h-4" />
+                  Marcar como resolvida
                 </button>
 
                 <button
                   onClick={handleCloseConversation}
-                  className="w-full flex items-center gap-3 px-4 py-3 hover:bg-[#2b2f36] transition-colors text-red-400 hover:text-red-300 text-left border-t border-gray-800"
+                  className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 flex items-center gap-3"
                 >
                   <XCircle className="w-4 h-4" />
-                  <span className="text-sm">Fechar conversa</span>
+                  Fechar conversa
                 </button>
               </div>
             )}
@@ -182,115 +190,78 @@ export function ChatWindow() {
         </div>
       </div>
 
-      {/* Agente atribuído badge */}
-      {activeConversation.assigned_to_data && (
-        <div className="px-6 py-2 bg-[#1f262e] border-b border-gray-800">
-          <p className="text-xs text-gray-400">
-            📍 Atendido por:{' '}
-            <span className="text-green-500 font-medium">
-              {activeConversation.assigned_to_data.first_name || activeConversation.assigned_to_data.email}
-            </span>
-          </p>
-        </div>
-      )}
-
       {/* Messages */}
-      <MessageList />
+      <div className="flex-1 overflow-hidden">
+        <MessageList />
+      </div>
 
       {/* Input */}
       <MessageInput />
 
-      {/* Transfer Modal */}
+      {/* Modals */}
+      {showInfoModal && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-6 py-4 border-b">
+              <h2 className="text-lg font-semibold text-gray-900">Informações da Conversa</h2>
+              <button
+                onClick={() => setShowInfoModal(false)}
+                className="p-1 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-500" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="flex flex-col items-center pb-4 border-b">
+                <div className="w-24 h-24 rounded-full bg-gray-300 mb-3 overflow-hidden">
+                  {activeConversation.profile_pic_url ? (
+                    <img 
+                      src={activeConversation.profile_pic_url} 
+                      alt={activeConversation.contact_name || activeConversation.contact_phone}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-gray-600 font-medium text-3xl">
+                      {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <h3 className="text-xl font-medium text-gray-900">
+                  {activeConversation.contact_name || activeConversation.contact_phone}
+                </h3>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Telefone</p>
+                <p className="text-base text-gray-900">{activeConversation.contact_phone}</p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Departamento</p>
+                <p className="text-base text-gray-900">
+                  {activeConversation.department_name || 'Inbox (Não atribuído)'}
+                </p>
+              </div>
+
+              <div>
+                <p className="text-sm text-gray-500 mb-1">Status</p>
+                <p className="text-base text-gray-900 capitalize">{activeConversation.status}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showTransferModal && (
         <TransferModal
           conversation={activeConversation}
           onClose={() => setShowTransferModal(false)}
           onTransferSuccess={() => {
-            // Recarregar conversas
             setShowTransferModal(false);
           }}
         />
       )}
-
-      {/* Info Modal */}
-      {showInfoModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-[#1f262e] rounded-xl shadow-2xl w-full max-w-md border border-gray-800">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800">
-              <h2 className="text-lg font-semibold text-white">Informações da Conversa</h2>
-              <button
-                onClick={() => setShowInfoModal(false)}
-                className="p-1 hover:bg-gray-700 rounded transition-colors"
-              >
-                <XCircle className="w-5 h-5 text-gray-400" />
-              </button>
-            </div>
-
-            <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Nome</label>
-                <p className="text-white">{activeConversation.contact_name || 'Não informado'}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Telefone</label>
-                <p className="text-white font-mono">{activeConversation.contact_phone}</p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Departamento</label>
-                <p className="text-white">{activeConversation.department_name}</p>
-              </div>
-
-              {activeConversation.assigned_to_data && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Atribuído a</label>
-                  <p className="text-white">
-                    {activeConversation.assigned_to_data.first_name || activeConversation.assigned_to_data.email}
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Status</label>
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                  activeConversation.status === 'open'
-                    ? 'bg-green-600/20 text-green-400'
-                    : 'bg-gray-600/20 text-gray-400'
-                }`}>
-                  {activeConversation.status === 'open' ? 'Aberta' : 'Fechada'}
-                </span>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-400 mb-1">Criada em</label>
-                <p className="text-white text-sm">
-                  {new Date(activeConversation.created_at).toLocaleString('pt-BR')}
-                </p>
-              </div>
-
-              {activeConversation.last_message_at && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Última mensagem</label>
-                  <p className="text-white text-sm">
-                    {new Date(activeConversation.last_message_at).toLocaleString('pt-BR')}
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <div className="flex justify-end px-6 py-4 border-t border-gray-800">
-              <button
-                onClick={() => setShowInfoModal(false)}
-                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg transition-colors text-white"
-              >
-                Fechar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
-

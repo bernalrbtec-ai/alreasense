@@ -24,9 +24,10 @@ export interface Conversation {
   department_name: string;
   contact_phone: string;
   contact_name: string;
+  profile_pic_url?: string | null;
   assigned_to?: string;
   assigned_to_data?: User;
-  status: 'open' | 'closed';
+  status: 'pending' | 'open' | 'closed';
   last_message_at?: string;
   metadata: Record<string, any>;
   participants: string[];

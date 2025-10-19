@@ -99,14 +99,14 @@ class ConversationSerializer(serializers.ModelSerializer):
         model = Conversation
         fields = [
             'id', 'tenant', 'department', 'department_name',
-            'contact_phone', 'contact_name', 'assigned_to', 'assigned_to_data',
+            'contact_phone', 'contact_name', 'profile_pic_url', 'assigned_to', 'assigned_to_data',
             'status', 'last_message_at', 'metadata', 'participants',
             'participants_data', 'created_at', 'updated_at',
             'last_message', 'unread_count'
         ]
         read_only_fields = [
             'id', 'tenant', 'created_at', 'updated_at', 'last_message_at',
-            'unread_count', 'assigned_to_data', 'participants_data', 'department_name'
+            'unread_count', 'assigned_to_data', 'participants_data', 'department_name', 'profile_pic_url'
         ]
     
     def get_participants_data(self, obj):
