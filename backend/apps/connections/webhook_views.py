@@ -250,7 +250,7 @@ class EvolutionWebhookView(APIView):
                 from apps.chat.webhooks import handle_message_upsert as chat_handle_message
                 # Buscar tenant pela instância
                 connection = EvolutionConnection.objects.select_related('tenant').filter(
-                    instance_name=instance_name
+                    name=instance_name
                 ).first()
                 
                 if connection:
