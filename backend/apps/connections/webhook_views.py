@@ -363,9 +363,13 @@ class EvolutionWebhookView(APIView):
     
     def handle_message_update(self, data):
         """Handle message status updates (delivered, read, etc.)."""
+        logger.info(f"🔄 [WEBHOOK] handle_message_update INICIADO")
         try:
             update_data = data.get('data', {})
             instance_name = data.get('instance', 'default')
+            
+            logger.info(f"🔍 [WEBHOOK] instance_name: {instance_name}")
+            logger.info(f"🔍 [WEBHOOK] update_data: {update_data}")
             
             # Extract message info from Evolution API structure
             chat_id = update_data.get('remoteJid', '')
@@ -376,6 +380,7 @@ class EvolutionWebhookView(APIView):
             logger.info(f"Message update: messageId={message_id}, keyId={key_id}, status={status}, chat_id={chat_id}")
             
             # 💬 FLOW CHAT: Atualizar status da mensagem no chat
+            logger.info(f"🚀 [FLOW CHAT] Iniciando processamento do chat...")
             try:
                 from apps.chat.webhooks import handle_message_update as chat_handle_update
                 # Buscar tenant pela instância
