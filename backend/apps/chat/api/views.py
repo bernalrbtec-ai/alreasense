@@ -398,10 +398,21 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.save()
         
         # Criar mensagem interna de transferência
+        old_dept_name = old_department.name if old_department else 'Inbox'
+        new_dept_name = conversation.department.name if conversation.department else 'Sem departamento'
+        old_agent_name = old_agent.get_full_name() if old_agent else 'Não atribuído'
+        new_agent_name = conversation.assigned_to.get_full_name() if conversation.assigned_to else 'Não atribuído'
+        
+        transfer_msg = f"Conversa transferida:\n"
+        transfer_msg += f"De: {old_dept_name} ({old_agent_name})\n"
+        transfer_msg += f"Para: {new_dept_name} ({new_agent_name})"
+        if reason:
+            transfer_msg += f"\nMotivo: {reason}"
+        
         Message.objects.create(
             conversation=conversation,
             sender=user,
-            content=f"Conversa transferida de {old_department.name} para {conversation.department.name}. Motivo: {reason}",
+            content=transfer_msg,
             direction='outgoing',
             status='sent',
             is_internal=True
