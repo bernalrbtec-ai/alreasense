@@ -75,10 +75,16 @@ export function UsersManager() {
     try {
       const response = await api.get('/auth/departments/');
       // Garantir que sempre temos um array
-      const data = Array.isArray(response.data) 
+      let data = Array.isArray(response.data) 
         ? response.data 
         : (response.data?.results || []);
-      setDepartments(data);
+      
+      // Remover duplicatas baseando-se no ID
+      const uniqueDepartments = data.filter((dept, index, self) => 
+        index === self.findIndex((d) => d.id === dept.id)
+      );
+      
+      setDepartments(uniqueDepartments);
     } catch (error) {
       console.error('Erro ao buscar departamentos:', error);
       setDepartments([]); // Garantir array vazio em caso de erro
@@ -365,34 +371,48 @@ export function UsersManager() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Departamentos
-                </label>
-                <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
-                  {Array.isArray(departments) && departments.map((dept) => (
-                    <label key={dept.id} className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.department_ids.includes(dept.id)}
-                        onChange={(e) => {
-                          const newIds = e.target.checked
-                            ? [...formData.department_ids, dept.id]
-                            : formData.department_ids.filter(id => id !== dept.id);
-                          setFormData({ ...formData, department_ids: newIds });
-                        }}
-                        className="w-4 h-4 text-blue-600 rounded"
-                      />
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded"
-                          style={{ backgroundColor: dept.color }}
-                        />
-                        <span className="text-sm text-gray-700">{dept.name}</span>
-                      </div>
-                    </label>
-                  ))}
-                  {departments.length === 0 && (
-                    <p className="text-sm text-gray-500">Nenhum departamento disponível</p>
+                  {formData.role === 'admin' && (
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      (Admin tem acesso a todos automaticamente)
+                    </span>
                   )}
-                </div>
+                </label>
+                
+                {formData.role === 'admin' ? (
+                  <div className="border border-gray-200 rounded-lg p-3 bg-gray-50">
+                    <p className="text-sm text-gray-600 text-center">
+                      ✓ Administradores têm acesso automático a todos os departamentos
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-3">
+                    {Array.isArray(departments) && departments.map((dept) => (
+                      <label key={dept.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.department_ids.includes(dept.id)}
+                          onChange={(e) => {
+                            const newIds = e.target.checked
+                              ? [...formData.department_ids, dept.id]
+                              : formData.department_ids.filter(id => id !== dept.id);
+                            setFormData({ ...formData, department_ids: newIds });
+                          }}
+                          className="w-4 h-4 text-blue-600 rounded"
+                        />
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded"
+                            style={{ backgroundColor: dept.color }}
+                          />
+                          <span className="text-sm text-gray-700">{dept.name}</span>
+                        </div>
+                      </label>
+                    ))}
+                    {departments.length === 0 && (
+                      <p className="text-sm text-gray-500">Nenhum departamento disponível</p>
+                    )}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-4">
