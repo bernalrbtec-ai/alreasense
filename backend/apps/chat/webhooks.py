@@ -309,11 +309,25 @@ def broadcast_message_to_websocket(message, conversation):
         logger.info(f"   Room: {room_group_name}")
         logger.info(f"   Direction: {message.direction}")
         
+        # Converter UUIDs para string para serialização msgpack
+        def convert_uuids_to_str(obj):
+            """Recursivamente converte UUIDs para string."""
+            import uuid
+            if isinstance(obj, uuid.UUID):
+                return str(obj)
+            elif isinstance(obj, dict):
+                return {k: convert_uuids_to_str(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_uuids_to_str(item) for item in obj]
+            return obj
+        
+        message_data_serializable = convert_uuids_to_str(message_data)
+        
         async_to_sync(channel_layer.group_send)(
             room_group_name,
             {
                 'type': 'message_received',
-                'message': message_data
+                'message': message_data_serializable
             }
         )
         
@@ -335,13 +349,16 @@ def broadcast_status_update(message):
         logger.info(f"   Message ID: {message.id}")
         logger.info(f"   Novo status: {message.status}")
         
+        # Payload simples, mas garantir que IDs sejam strings
+        payload = {
+            'type': 'message_status_update',
+            'message_id': str(message.id),  # UUID convertido para string
+            'status': message.status
+        }
+        
         async_to_sync(channel_layer.group_send)(
             room_group_name,
-            {
-                'type': 'message_status_update',
-                'message_id': str(message.id),
-                'status': message.status
-            }
+            payload
         )
         
         logger.info(f"✅ [WEBSOCKET STATUS] Atualização broadcast com sucesso!")
