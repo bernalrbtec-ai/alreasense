@@ -5,13 +5,18 @@ import React, { useEffect, useState } from 'react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Conversation } from '../types';
-import { Loader2, Search, MessageCircle } from 'lucide-react';
+import { Loader2, Search, MessageCircle, Plus } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 
 export function ConversationList() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [newChatPhone, setNewChatPhone] = useState('');
+  const [newChatName, setNewChatName] = useState('');
+  const [creating, setCreating] = useState(false);
   
   const {
     activeDepartment,
@@ -55,6 +60,48 @@ export function ConversationList() {
       conv.contact_phone.includes(searchLower)
     );
   });
+
+  const handleStartNewChat = async () => {
+    if (!newChatPhone.trim()) {
+      toast.error('Telefone é obrigatório');
+      return;
+    }
+
+    try {
+      setCreating(true);
+      const response = await api.post('/chat/conversations/start/', {
+        contact_phone: newChatPhone,
+        contact_name: newChatName,
+        department: activeDepartment?.id
+      });
+
+      toast.success(response.data.message || 'Conversa iniciada!');
+      setShowNewChatModal(false);
+      setNewChatPhone('');
+      setNewChatName('');
+
+      // Recarregar conversas
+      const convResponse = await api.get('/chat/conversations/', {
+        params: {
+          department: activeDepartment?.id,
+          ordering: '-last_message_at'
+        }
+      });
+      const convs = convResponse.data.results || convResponse.data;
+      setConversations(convs);
+
+      // Selecionar a nova conversa
+      const newConv = response.data.conversation;
+      if (newConv) {
+        setActiveConversation(newConv);
+      }
+    } catch (error: any) {
+      console.error('Erro ao iniciar conversa:', error);
+      toast.error(error.response?.data?.error || 'Erro ao iniciar conversa');
+    } finally {
+      setCreating(false);
+    }
+  };
 
   if (loading) {
     return (

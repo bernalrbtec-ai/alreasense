@@ -55,7 +55,99 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Associa conversa ao tenant do usuário."""
-        serializer.save(tenant=self.request.user.tenant)
+        serializer.save(
+            tenant=self.request.user.tenant,
+            assigned_to=self.request.user
+        )
+    
+    @action(detail=False, methods=['post'])
+    def start(self, request):
+        """
+        Inicia uma nova conversa com um contato.
+        Body: { 
+            "contact_phone": "+5517999999999", 
+            "contact_name": "João Silva" (opcional),
+            "department": "uuid" (opcional, usa o primeiro se não informado)
+        }
+        """
+        contact_phone = request.data.get('contact_phone')
+        contact_name = request.data.get('contact_name', '')
+        department_id = request.data.get('department')
+        
+        if not contact_phone:
+            return Response(
+                {'error': 'contact_phone é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Normalizar telefone (remover espaços, garantir +)
+        contact_phone = contact_phone.strip()
+        if not contact_phone.startswith('+'):
+            contact_phone = f'+{contact_phone}'
+        
+        # Selecionar departamento
+        from apps.authn.models import Department
+        if department_id:
+            try:
+                department = Department.objects.get(
+                    id=department_id,
+                    tenant=request.user.tenant
+                )
+            except Department.DoesNotExist:
+                return Response(
+                    {'error': 'Departamento não encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        else:
+            # Usar primeiro departamento do tenant ou do usuário
+            if request.user.is_admin:
+                department = Department.objects.filter(
+                    tenant=request.user.tenant
+                ).first()
+            else:
+                department = request.user.departments.first()
+            
+            if not department:
+                return Response(
+                    {'error': 'Nenhum departamento disponível'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Verificar se já existe conversa
+        existing = Conversation.objects.filter(
+            tenant=request.user.tenant,
+            contact_phone=contact_phone
+        ).first()
+        
+        if existing:
+            return Response(
+                {
+                    'message': 'Conversa já existe',
+                    'conversation': ConversationSerializer(existing).data
+                },
+                status=status.HTTP_200_OK
+            )
+        
+        # Criar nova conversa
+        conversation = Conversation.objects.create(
+            tenant=request.user.tenant,
+            department=department,
+            contact_phone=contact_phone,
+            contact_name=contact_name,
+            assigned_to=request.user,
+            status='open'
+        )
+        
+        # Adicionar usuário como participante
+        conversation.participants.add(request.user)
+        
+        return Response(
+            {
+                'message': 'Conversa criada com sucesso!',
+                'conversation': ConversationSerializer(conversation).data
+            },
+            status=status.HTTP_201_CREATED
+        )
     
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
