@@ -126,7 +126,8 @@ async def handle_send_message(message_id: str):
         connection = await sync_to_async(
             EvolutionConnection.objects.filter(
                 tenant=message.conversation.tenant,
-                status='connected'
+                is_active=True,
+                status='active'
             ).first
         )()
         

@@ -25,7 +25,7 @@ class Command(BaseCommand):
         self.stdout.write(f'📡 Webhook URL: {webhook_url}\n')
         
         # Buscar todas as instâncias ativas
-        instances = EvolutionConnection.objects.filter(status='connected')
+        instances = EvolutionConnection.objects.filter(is_active=True, status='active')
         
         if not instances.exists():
             self.stdout.write(self.style.WARNING('⚠️  Nenhuma instância conectada encontrada'))
