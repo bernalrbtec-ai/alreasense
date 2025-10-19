@@ -74,8 +74,25 @@ export function useChatSocket(conversationId?: string) {
   }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
 
   const connect = useCallback(() => {
+    // Obter token e tenant do localStorage PRIMEIRO
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    
+    if (!token || !userStr) {
+      console.log('⏸️ [WS] Aguardando autenticação...');
+      return;
+    }
+
+    const user = JSON.parse(userStr);
+    const tenantId = user.tenant_id;
+
+    if (!tenantId) {
+      console.log('⏸️ [WS] Aguardando tenant_id...');
+      return;
+    }
+
     if (!conversationId) {
-      console.log('⏸️ [WS] Sem conversationId, aguardando...');
+      console.log('⏸️ [WS] Aguardando conversationId...');
       return;
     }
 
@@ -87,25 +104,6 @@ export function useChatSocket(conversationId?: string) {
     }
 
     setConnectionStatus('connecting');
-
-    // Obter token e tenant do localStorage
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
-    if (!token || !userStr) {
-      console.error('❌ [WS] Token ou user não encontrado');
-      setConnectionStatus('disconnected');
-      return;
-    }
-
-    const user = JSON.parse(userStr);
-    const tenantId = user.tenant_id;
-
-    if (!tenantId) {
-      console.error('❌ [WS] Tenant ID não encontrado');
-      setConnectionStatus('disconnected');
-      return;
-    }
 
     const wsUrl = `${WS_BASE_URL}/ws/chat/${tenantId}/${conversationId}/?token=${token}`;
     console.log('🔌 [WS] Conectando:', wsUrl);
