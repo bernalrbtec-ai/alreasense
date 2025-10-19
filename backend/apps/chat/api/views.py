@@ -47,12 +47,101 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             return ConversationDetailSerializer
         return ConversationSerializer
     
+    def get_queryset(self):
+        """
+        Override para incluir conversas pending (Inbox) no filtro.
+        Admin: vê tudo do tenant (incluindo pending)
+        Gerente/Agente: vê apenas dos seus departamentos + pending do tenant
+        """
+        queryset = super().get_queryset()
+        user = self.request.user
+        
+        # Admin vê tudo (incluindo pending)
+        if user.is_admin:
+            return queryset
+        
+        # Gerente e Agente vêem:
+        # 1. Conversas dos seus departamentos
+        # 2. Conversas pending (sem departamento) do tenant
+        if user.is_gerente or user.is_agente:
+            department_ids = user.departments.values_list('id', flat=True)
+            
+            return queryset.filter(
+                Q(department__in=department_ids) |  # Suas conversas
+                Q(department__isnull=True, status='pending')  # Inbox do tenant
+            )
+        
+        return queryset.none()
+    
     def perform_create(self, serializer):
         """Associa conversa ao tenant do usuário."""
         serializer.save(
             tenant=self.request.user.tenant,
             assigned_to=self.request.user
         )
+    
+    @action(detail=True, methods=['post'])
+    def claim(self, request, pk=None):
+        """
+        Pega (claim) uma conversa pendente do Inbox e atribui a um departamento/agente.
+        Body: {
+            "department": "uuid",  # obrigatório
+            "assigned_to": "user_id" (opcional, se não informado usa o usuário atual)
+        }
+        """
+        conversation = self.get_object()
+        
+        # Verificar se está pendente
+        if conversation.status != 'pending':
+            return Response(
+                {'error': 'Conversa não está pendente'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        department_id = request.data.get('department')
+        assigned_to_id = request.data.get('assigned_to')
+        
+        if not department_id:
+            return Response(
+                {'error': 'department é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar departamento
+        from apps.authn.models import Department, User
+        try:
+            department = Department.objects.get(
+                id=department_id,
+                tenant=request.user.tenant
+            )
+        except Department.DoesNotExist:
+            return Response(
+                {'error': 'Departamento não encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Validar usuário atribuído (se fornecido)
+        assigned_to = request.user  # Padrão: quem está pegando
+        if assigned_to_id:
+            try:
+                assigned_to = User.objects.get(
+                    id=assigned_to_id,
+                    tenant=request.user.tenant
+                )
+            except User.DoesNotExist:
+                return Response(
+                    {'error': 'Usuário não encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
+        # Atualizar conversa
+        conversation.department = department
+        conversation.assigned_to = assigned_to
+        conversation.status = 'open'
+        conversation.save(update_fields=['department', 'assigned_to', 'status'])
+        
+        serializer = self.get_serializer(conversation)
+        return Response(serializer.data)
     
     @action(detail=False, methods=['post'])
     def start(self, request):

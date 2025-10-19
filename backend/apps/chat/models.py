@@ -26,6 +26,7 @@ class Conversation(models.Model):
     """
     
     STATUS_CHOICES = [
+        ('pending', 'Pendente (Inbox)'),
         ('open', 'Aberta'),
         ('closed', 'Fechada'),
     ]
@@ -45,7 +46,10 @@ class Conversation(models.Model):
         'authn.Department',
         on_delete=models.CASCADE,
         related_name='conversations',
-        verbose_name='Departamento'
+        verbose_name='Departamento',
+        null=True,
+        blank=True,
+        help_text='Null = Conversa pendente no Inbox'
     )
     contact_phone = models.CharField(
         max_length=20,

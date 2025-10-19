@@ -120,20 +120,14 @@ def handle_message_upsert(data, tenant):
         push_name = message_data.get('pushName', '')
         
         # Busca ou cria conversa
-        # Assume departamento padrão (primeiro do tenant)
-        default_dept = tenant.departments.first()
-        
-        if not default_dept:
-            logger.error(f"❌ [WEBHOOK] Tenant {tenant.name} não tem departamentos")
-            return
-        
+        # Nova conversa vai para INBOX (pending) sem departamento
         conversation, created = Conversation.objects.get_or_create(
             tenant=tenant,
             contact_phone=phone,
             defaults={
-                'department': default_dept,
+                'department': None,  # Inbox: sem departamento
                 'contact_name': push_name,
-                'status': 'open'
+                'status': 'pending'  # Pendente para classificação
             }
         )
         
