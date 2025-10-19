@@ -4,6 +4,7 @@
  */
 import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '@/stores/authStore';
 import { WebSocketMessage } from '../types';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
@@ -20,6 +21,9 @@ export function useChatSocket(conversationId?: string) {
     setConnectionStatus,
     updateConversation
   } = useChatStore();
+
+  // Obter dados de autenticação do Zustand
+  const { token, user } = useAuthStore();
 
   const handleWebSocketMessage = useCallback((data: WebSocketMessage) => {
     console.log('📨 [WS] Mensagem recebida:', data);
@@ -74,24 +78,18 @@ export function useChatSocket(conversationId?: string) {
   }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
 
   const connect = useCallback(() => {
-    // Obter token e tenant do localStorage PRIMEIRO
-    const token = localStorage.getItem('token');
-    const userStr = localStorage.getItem('user');
-    
     console.log('🔍 [WS DEBUG] token:', token ? `${token.substring(0, 20)}...` : 'null');
-    console.log('🔍 [WS DEBUG] userStr:', userStr ? 'exists' : 'null');
+    console.log('🔍 [WS DEBUG] user:', user);
+    console.log('🔍 [WS DEBUG] conversationId:', conversationId);
     
-    if (!token || !userStr) {
-      console.log('⏸️ [WS] Aguardando autenticação...', { token: !!token, userStr: !!userStr });
+    if (!token || !user) {
+      console.log('⏸️ [WS] Aguardando autenticação...', { token: !!token, user: !!user });
       return;
     }
 
-    const user = JSON.parse(userStr);
     const tenantId = user.tenant_id;
     
-    console.log('🔍 [WS DEBUG] user:', user);
     console.log('🔍 [WS DEBUG] tenantId:', tenantId);
-    console.log('🔍 [WS DEBUG] conversationId:', conversationId);
 
     if (!tenantId) {
       console.log('⏸️ [WS] Aguardando tenant_id...');
@@ -167,7 +165,7 @@ export function useChatSocket(conversationId?: string) {
       console.error('❌ [WS] Erro ao criar WebSocket:', error);
       setConnectionStatus('disconnected');
     }
-  }, [conversationId, setConnectionStatus, handleWebSocketMessage]);
+  }, [conversationId, token, user, setConnectionStatus, handleWebSocketMessage]);
 
   const disconnect = useCallback(() => {
     console.log('🔌 [WS] Desconectando...');
