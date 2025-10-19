@@ -292,6 +292,42 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, pk=None):
+        """
+        Marca todas as mensagens recebidas (não enviadas por nós) como lidas.
+        Envia confirmação de leitura para Evolution API.
+        """
+        from apps.chat.webhooks import send_read_receipt
+        
+        conversation = self.get_object()
+        
+        # Buscar mensagens recebidas (direction='incoming') que ainda não foram marcadas como lidas
+        unread_messages = Message.objects.filter(
+            conversation=conversation,
+            direction='incoming',
+            status__in=['sent', 'delivered']  # Ainda não lidas
+        ).order_by('-created_at')
+        
+        marked_count = 0
+        for message in unread_messages:
+            # Enviar confirmação de leitura para Evolution API
+            send_read_receipt(conversation, message)
+            
+            # Atualizar status local
+            message.status = 'seen'
+            message.save(update_fields=['status'])
+            marked_count += 1
+        
+        return Response(
+            {
+                'success': True,
+                'marked_count': marked_count,
+                'message': f'{marked_count} mensagens marcadas como lidas'
+            },
+            status=status.HTTP_200_OK
+        )
+    
     @action(detail=False, methods=['get'])
     def my_conversations(self, request):
         """Lista conversas atribuídas ao usuário logado."""

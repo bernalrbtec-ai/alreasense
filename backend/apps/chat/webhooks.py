@@ -3,6 +3,7 @@ Webhook handler para Evolution API.
 Recebe eventos de mensagens e atualiza o banco.
 """
 import logging
+import httpx
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -444,4 +445,61 @@ def broadcast_status_update(message):
     
     except Exception as e:
         logger.error(f"❌ [WEBSOCKET STATUS] Erro ao fazer broadcast: {e}", exc_info=True)
+
+
+def send_read_receipt(conversation: Conversation, message: Message):
+    """
+    Envia confirmação de leitura para Evolution API.
+    Isso fará com que o remetente veja ✓✓ azul no WhatsApp dele.
+    """
+    try:
+        # Buscar instância ativa do tenant
+        instance = EvolutionConnection.objects.filter(
+            tenant=conversation.tenant,
+            is_active=True
+        ).first()
+        
+        if not instance:
+            logger.warning(f"⚠️ [READ RECEIPT] Nenhuma instância ativa para tenant {conversation.tenant.name}")
+            return
+        
+        # Endpoint da Evolution API para marcar como lida
+        # Formato: POST /chat/markMessageAsRead/{instance}
+        base_url = instance.api_url.rstrip('/')
+        url = f"{base_url}/chat/markMessageAsRead/{instance.instance_name}"
+        
+        # Payload para marcar mensagem como lida
+        payload = {
+            "readMessages": [
+                {
+                    "remoteJid": f"{conversation.contact_phone.replace('+', '')}@s.whatsapp.net",
+                    "id": message.message_id,
+                    "fromMe": False
+                }
+            ]
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": instance.api_key
+        }
+        
+        logger.info(f"📖 [READ RECEIPT] Enviando confirmação de leitura...")
+        logger.info(f"   URL: {url}")
+        logger.info(f"   Message ID: {message.message_id}")
+        logger.info(f"   Contact: {conversation.contact_phone}")
+        
+        # Enviar request de forma síncrona
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200 or response.status_code == 201:
+                logger.info(f"✅ [READ RECEIPT] Confirmação enviada com sucesso!")
+                logger.info(f"   Response: {response.text[:200]}")
+            else:
+                logger.warning(f"⚠️ [READ RECEIPT] Resposta não esperada: {response.status_code}")
+                logger.warning(f"   Response: {response.text[:300]}")
+    
+    except Exception as e:
+        logger.error(f"❌ [READ RECEIPT] Erro ao enviar confirmação de leitura: {e}", exc_info=True)
 

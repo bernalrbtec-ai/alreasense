@@ -23,6 +23,24 @@ export function ChatWindow() {
   // 🔌 Conectar WebSocket para esta conversa
   const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversation?.id);
 
+  // 📖 Marcar mensagens como lidas quando abre a conversa
+  useEffect(() => {
+    if (activeConversation) {
+      const markAsRead = async () => {
+        try {
+          await api.post(`/chat/conversations/${activeConversation.id}/mark_as_read/`);
+          console.log('✅ Mensagens marcadas como lidas');
+        } catch (error) {
+          console.error('❌ Erro ao marcar como lidas:', error);
+        }
+      };
+      
+      // Marcar como lida após 1 segundo (simular visualização)
+      const timeout = setTimeout(markAsRead, 1000);
+      return () => clearTimeout(timeout);
+    }
+  }, [activeConversation?.id]);
+
   // Fechar menu ao clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
