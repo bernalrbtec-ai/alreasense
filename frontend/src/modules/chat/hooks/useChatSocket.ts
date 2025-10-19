@@ -78,13 +78,20 @@ export function useChatSocket(conversationId?: string) {
     const token = localStorage.getItem('token');
     const userStr = localStorage.getItem('user');
     
+    console.log('🔍 [WS DEBUG] token:', token ? `${token.substring(0, 20)}...` : 'null');
+    console.log('🔍 [WS DEBUG] userStr:', userStr ? 'exists' : 'null');
+    
     if (!token || !userStr) {
-      console.log('⏸️ [WS] Aguardando autenticação...');
+      console.log('⏸️ [WS] Aguardando autenticação...', { token: !!token, userStr: !!userStr });
       return;
     }
 
     const user = JSON.parse(userStr);
     const tenantId = user.tenant_id;
+    
+    console.log('🔍 [WS DEBUG] user:', user);
+    console.log('🔍 [WS DEBUG] tenantId:', tenantId);
+    console.log('🔍 [WS DEBUG] conversationId:', conversationId);
 
     if (!tenantId) {
       console.log('⏸️ [WS] Aguardando tenant_id...');
