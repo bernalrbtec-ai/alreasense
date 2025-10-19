@@ -274,8 +274,16 @@ def handle_message_upsert(data, tenant):
             logger.info(f"📡 [WEBHOOK] Enviando para WebSocket da conversa...")
             broadcast_message_to_websocket(message, conversation)
             
-            # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós), também notificar o tenant
+            # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós)
             if not from_me:
+                # 1. Enviar ACK de entrega automático para o WhatsApp
+                logger.info(f"📬 [WEBHOOK] Enviando ACK de entrega automático...")
+                try:
+                    send_delivery_receipt(conversation, message)
+                except Exception as ack_error:
+                    logger.error(f"❌ [WEBHOOK] Erro ao enviar ACK de entrega: {ack_error}", exc_info=True)
+                
+                # 2. Notificar tenant sobre nova mensagem (toast)
                 logger.info(f"📬 [WEBHOOK] Notificando tenant sobre nova mensagem...")
                 try:
                     from apps.chat.api.serializers import ConversationSerializer
@@ -502,9 +510,70 @@ def broadcast_status_update(message):
         logger.error(f"❌ [WEBSOCKET STATUS] Erro ao fazer broadcast: {e}", exc_info=True)
 
 
+def send_delivery_receipt(conversation: Conversation, message: Message):
+    """
+    Envia ACK de ENTREGA (delivered) para Evolution API.
+    Isso fará com que o remetente veja ✓✓ cinza no WhatsApp dele.
+    """
+    try:
+        # Buscar instância ativa do tenant
+        instance = EvolutionConnection.objects.filter(
+            tenant=conversation.tenant,
+            is_active=True
+        ).first()
+        
+        if not instance:
+            logger.warning(f"⚠️ [DELIVERY ACK] Nenhuma instância ativa para tenant {conversation.tenant.name}")
+            return
+        
+        # Endpoint da Evolution API para enviar ACK de entrega
+        base_url = instance.base_url.rstrip('/')
+        url = f"{base_url}/chat/markMessageAsRead/{instance.name}"
+        
+        # Payload para ACK de entrega (só marca como delivered, não como read)
+        # Na Evolution API, geralmente o endpoint é o mesmo, mas há diferença no payload
+        payload = {
+            "readMessages": [
+                {
+                    "remoteJid": f"{conversation.contact_phone.replace('+', '')}@s.whatsapp.net",
+                    "id": message.message_id,
+                    "fromMe": False
+                }
+            ]
+        }
+        
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": instance.api_key
+        }
+        
+        logger.info(f"📬 [DELIVERY ACK] Enviando ACK de entrega...")
+        logger.info(f"   URL: {url}")
+        logger.info(f"   Message ID: {message.message_id}")
+        logger.info(f"   Contact: {conversation.contact_phone}")
+        
+        # Enviar request de forma síncrona
+        with httpx.Client(timeout=10.0) as client:
+            response = client.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200 or response.status_code == 201:
+                logger.info(f"✅ [DELIVERY ACK] ACK de entrega enviado!")
+                logger.info(f"   Response: {response.text[:200]}")
+                
+                # Atualizar status local da mensagem
+                message.status = 'delivered'
+                message.save(update_fields=['status'])
+            else:
+                logger.warning(f"⚠️ [DELIVERY ACK] Resposta não esperada: {response.status_code}")
+                logger.warning(f"   Response: {response.text[:300]}")
+    
+    except Exception as e:
+        logger.error(f"❌ [DELIVERY ACK] Erro ao enviar ACK de entrega: {e}", exc_info=True)
+
+
 def send_read_receipt(conversation: Conversation, message: Message):
     """
-    Envia confirmação de leitura para Evolution API.
+    Envia confirmação de LEITURA (read) para Evolution API.
     Isso fará com que o remetente veja ✓✓ azul no WhatsApp dele.
     """
     try:
