@@ -18,6 +18,7 @@ interface ChatState {
   setActiveConversation: (conversation: Conversation | null) => void;
   addConversation: (conversation: Conversation) => void;
   updateConversation: (conversation: Conversation) => void;
+  removeConversation: (conversationId: string) => void;
 
   // Mensagens
   messages: Message[];
@@ -75,6 +76,13 @@ export const useChatStore = create<ChatState>((set) => ({
     ),
     activeConversation: state.activeConversation?.id === conversation.id 
       ? conversation 
+      : state.activeConversation
+  })),
+  removeConversation: (conversationId) => set((state) => ({
+    conversations: state.conversations.filter(c => c.id !== conversationId),
+    // Se a conversa removida era a ativa, limpar
+    activeConversation: state.activeConversation?.id === conversationId 
+      ? null 
       : state.activeConversation
   })),
 

@@ -15,7 +15,7 @@ interface TransferModalProps {
 }
 
 export function TransferModal({ conversation, onClose, onTransferSuccess }: TransferModalProps) {
-  const { updateConversation, setActiveConversation } = useChatStore();
+  const { updateConversation, setActiveConversation, removeConversation } = useChatStore();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
@@ -73,14 +73,11 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
 
       const response = await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
 
-      // Atualizar conversa no store (sem reload!)
-      const updatedConversation = response.data;
-      updateConversation(updatedConversation);
+      // Remover conversa da lista atual (mudou de departamento)
+      removeConversation(conversation.id);
       
-      // Se for a conversa ativa, atualizar também
-      if (conversation.id === updatedConversation.id) {
-        setActiveConversation(updatedConversation);
-      }
+      // Fechar a conversa ativa
+      setActiveConversation(null);
 
       toast.success('Conversa transferida com sucesso! ✅');
       
