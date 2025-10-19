@@ -59,22 +59,22 @@ export function ConversationList() {
   };
 
   return (
-    <div className="flex flex-col w-full md:w-96 lg:w-[420px] bg-white border-r border-gray-200">
-      {/* Search + New */}
-      <div className="flex items-center gap-2 p-3 border-b border-gray-200">
-        <div className="flex-1 relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+    <div className="flex flex-col h-full w-full bg-white">
+      {/* Search + New - Responsivo */}
+      <div className="flex-shrink-0 flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200">
+        <div className="flex-1 relative min-w-0">
+          <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
             placeholder="Buscar ou iniciar conversa"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[#f0f2f5] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+            className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white transition-colors"
           />
         </div>
         <button
           onClick={() => setShowNewConversation(true)}
-          className="p-2 hover:bg-gray-100 rounded-full transition-colors"
+          className="flex-shrink-0 p-2 hover:bg-gray-100 rounded-full transition-all active:scale-95"
           title="Nova conversa"
         >
           <Plus className="w-5 h-5 text-gray-600" />
@@ -82,7 +82,7 @@ export function ConversationList() {
       </div>
 
       {/* Conversations */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading ? (
           <div className="flex items-center justify-center py-8">
             <div className="text-sm text-gray-500">Carregando...</div>
@@ -100,12 +100,12 @@ export function ConversationList() {
               key={conv.id}
               onClick={() => setActiveConversation(conv)}
               className={`
-                w-full flex items-start gap-3 px-4 py-3 hover:bg-[#f0f2f5] transition-colors border-b border-gray-100
+                w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 hover:bg-[#f0f2f5] transition-colors border-b border-gray-100
                 ${activeConversation?.id === conv.id ? 'bg-[#f0f2f5]' : ''}
               `}
             >
-              {/* Avatar com foto */}
-              <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-200 overflow-hidden">
+              {/* Avatar com foto - responsivo */}
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden">
                 {conv.profile_pic_url ? (
                   <img 
                     src={conv.profile_pic_url} 
