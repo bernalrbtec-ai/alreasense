@@ -216,14 +216,17 @@ def handle_message_update(data, tenant):
     """
     try:
         message_data = data.get('data', {})
+        
+        # Estrutura pode variar: key.id ou messageId direto
         key = message_data.get('key', {})
-        message_id = key.get('id')
+        message_id = key.get('id') or message_data.get('messageId')
         
         # Status: delivered, read
         update = message_data.get('update', {})
-        status_value = update.get('status')
+        status_value = update.get('status') or message_data.get('status', '').upper()
         
         if not message_id or not status_value:
+            logger.warning(f"⚠️ [WEBHOOK] Dados insuficientes: message_id={message_id}, status={status_value}")
             return
         
         # Busca mensagem
@@ -233,22 +236,28 @@ def handle_message_update(data, tenant):
             logger.warning(f"⚠️ [WEBHOOK] Mensagem não encontrada: {message_id}")
             return
         
-        # Mapeia status
+        # Mapeia status (aceita múltiplos formatos)
         status_map = {
             'PENDING': 'pending',
             'SERVER_ACK': 'sent',
             'DELIVERY_ACK': 'delivered',
-            'READ': 'seen'
+            'READ': 'seen',
+            # Formatos alternativos
+            'delivered': 'delivered',
+            'delivery_ack': 'delivered',
+            'read': 'seen',
+            'read_ack': 'seen',
+            'sent': 'sent'
         }
         
-        new_status = status_map.get(status_value)
+        new_status = status_map.get(status_value.lower()) or status_map.get(status_value)
         
         if new_status and message.status != new_status:
             message.status = new_status
             message.evolution_status = status_value
             message.save(update_fields=['status', 'evolution_status'])
             
-            logger.info(f"✅ [WEBHOOK] Status atualizado: {message_id} -> {new_status}")
+            logger.info(f"✅ [WEBHOOK] Status atualizado: {message_id} -> {new_status} (raw: {status_value})")
             
             # Broadcast via WebSocket
             broadcast_status_update(message)
