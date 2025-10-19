@@ -81,20 +81,20 @@ function App() {
         }}
       />
       <Routes>
-        {/* Rota do Chat - SEM Layout (tela cheia) */}
-        <Route path="/chat" element={
-          <ProtectedRoute requiredProduct="flow">
-            <ChatPage />
-          </ProtectedRoute>
-        } />
-        
-        {/* Todas as outras rotas - COM Layout */}
+        {/* Todas as rotas - COM Layout */}
         <Route path="/" element={<Layout />}>
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="billing" element={<BillingPage />} />
           <Route path="profile" element={<ProfilePage />} />
           <Route path="configurations" element={<ConfigurationsPage />} />
+          
+          {/* Chat - COM Layout mas tela cheia */}
+          <Route path="chat" element={
+            <ProtectedRoute requiredProduct="flow">
+              <ChatPage />
+            </ProtectedRoute>
+          } />
           
           {/* Rotas Protegidas por Produto */}
           <Route path="contacts" element={
