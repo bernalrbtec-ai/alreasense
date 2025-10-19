@@ -3,30 +3,35 @@
  */
 import React, { useState } from 'react';
 import { Send, Smile, Paperclip } from 'lucide-react';
-import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 
-export function MessageInput() {
+interface MessageInputProps {
+  sendMessage: (content: string) => boolean;
+  isConnected: boolean;
+}
+
+export function MessageInput({ sendMessage, isConnected }: MessageInputProps) {
   const { activeConversation } = useChatStore();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
 
-  const handleSend = async () => {
-    if (!message.trim() || !activeConversation || sending) return;
+  const handleSend = () => {
+    if (!message.trim() || !activeConversation || sending || !isConnected) return;
 
     try {
       setSending(true);
       
-      await api.post(`/chat/conversations/${activeConversation.id}/messages/`, {
-        content: message.trim(),
-        direction: 'outgoing'
-      });
-
-      setMessage('');
+      const success = sendMessage(message.trim());
+      
+      if (success) {
+        setMessage('');
+      } else {
+        toast.error('Erro ao enviar mensagem. WebSocket desconectado.');
+      }
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);
-      toast.error(error.response?.data?.error || 'Erro ao enviar mensagem');
+      toast.error('Erro ao enviar mensagem');
     } finally {
       setSending(false);
     }
@@ -81,9 +86,9 @@ export function MessageInput() {
       {/* Send button */}
       <button
         onClick={handleSend}
-        disabled={!message.trim() || sending}
+        disabled={!message.trim() || sending || !isConnected}
         className="p-2 bg-[#00a884] hover:bg-[#008f6f] rounded-full transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
-        title="Enviar"
+        title={isConnected ? "Enviar" : "Conectando..."}
       >
         <Send className="w-6 h-6 text-white" />
       </button>

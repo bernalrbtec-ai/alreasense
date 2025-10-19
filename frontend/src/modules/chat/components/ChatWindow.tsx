@@ -21,7 +21,7 @@ export function ChatWindow() {
   const menuRef = useRef<HTMLDivElement>(null);
 
   // 🔌 Conectar WebSocket para esta conversa
-  const { isConnected } = useChatSocket(activeConversation?.id);
+  const { isConnected, sendMessage } = useChatSocket(activeConversation?.id);
 
   // Fechar menu ao clicar fora
   useEffect(() => {
@@ -196,7 +196,10 @@ export function ChatWindow() {
       </div>
 
       {/* Input */}
-      <MessageInput />
+      <MessageInput 
+        sendMessage={sendMessage}
+        isConnected={isConnected}
+      />
 
       {/* Modals */}
       {showInfoModal && (
