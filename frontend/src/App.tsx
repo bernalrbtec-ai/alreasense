@@ -89,68 +89,66 @@ function App() {
         } />
         
         {/* Todas as outras rotas - COM Layout */}
-        <Route path="*" element={
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<DashboardPage />} />
-              <Route path="/billing" element={<BillingPage />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/configurations" element={<ConfigurationsPage />} />
-              
-              {/* Rotas Protegidas por Produto */}
-              <Route path="/contacts" element={
-                <ProtectedRoute requiredProduct="flow">
-                  <ContactsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/campaigns" element={
-                <ProtectedRoute requiredProduct="flow">
-                  <CampaignsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/campaigns/logs" element={
-                <ProtectedRoute requiredProduct="flow">
-                  <CampaignLogsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/campaigns/test-presence" element={
-                <ProtectedRoute requiredProduct="flow">
-                  <TestPresencePage />
-                </ProtectedRoute>
-              } />
-              <Route path="/connections" element={
-                <ProtectedRoute requiredProduct="flow">
-                  <ConnectionsPage />
-                </ProtectedRoute>
-              } />
-              <Route path="/experiments" element={
-                <ProtectedRoute requiredProduct="sense">
-                  <ExperimentsPage />
-                </ProtectedRoute>
-              } />
-              
-              {/* Notificações - Acesso para usuários com Flow */}
-              <Route path="/admin/notifications" element={
-                <ProtectedRoute requiredProduct="flow">
-                  <NotificationsPage />
-                </ProtectedRoute>
-              } />
-              
-              {/* Super Admin Routes */}
-              {isSuperAdmin && (
-                <>
-                  <Route path="/admin/tenants" element={<TenantsPage />} />
-                  <Route path="/admin/products" element={<ProductsPage />} />
-                  <Route path="/admin/plans" element={<PlansPage />} />
-                  <Route path="/admin/system" element={<SystemStatusPage />} />
-                  <Route path="/admin/evolution" element={<EvolutionConfigPage />} />
-                  <Route path="/admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
-                </>
-              )}
-            </Routes>
-          </Layout>
-        } />
+        <Route path="/" element={<Layout />}>
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="billing" element={<BillingPage />} />
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="configurations" element={<ConfigurationsPage />} />
+          
+          {/* Rotas Protegidas por Produto */}
+          <Route path="contacts" element={
+            <ProtectedRoute requiredProduct="flow">
+              <ContactsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="campaigns" element={
+            <ProtectedRoute requiredProduct="flow">
+              <CampaignsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="campaigns/logs" element={
+            <ProtectedRoute requiredProduct="flow">
+              <CampaignLogsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="campaigns/test-presence" element={
+            <ProtectedRoute requiredProduct="flow">
+              <TestPresencePage />
+            </ProtectedRoute>
+          } />
+          <Route path="connections" element={
+            <ProtectedRoute requiredProduct="flow">
+              <ConnectionsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="experiments" element={
+            <ProtectedRoute requiredProduct="sense">
+              <ExperimentsPage />
+            </ProtectedRoute>
+          } />
+          
+          {/* Notificações - Acesso para usuários com Flow */}
+          <Route path="admin/notifications" element={
+            <ProtectedRoute requiredProduct="flow">
+              <NotificationsPage />
+            </ProtectedRoute>
+          } />
+          
+          {/* Super Admin Routes */}
+          {isSuperAdmin && (
+            <>
+              <Route path="admin/tenants" element={<TenantsPage />} />
+              <Route path="admin/products" element={<ProductsPage />} />
+              <Route path="admin/plans" element={<PlansPage />} />
+              <Route path="admin/system" element={<SystemStatusPage />} />
+              <Route path="admin/evolution" element={<EvolutionConfigPage />} />
+              <Route path="admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
+            </>
+          )}
+          
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Route>
       </Routes>
     </ErrorBoundary>
   )

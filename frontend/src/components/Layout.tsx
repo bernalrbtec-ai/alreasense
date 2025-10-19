@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, Outlet } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   MessageSquare, 
@@ -63,11 +63,7 @@ const adminNavigation = [
   { name: 'Monitoramento Webhooks', href: '/admin/webhook-monitoring', icon: Database },
 ]
 
-interface LayoutProps {
-  children: React.ReactNode
-}
-
-export default function Layout({ children }: LayoutProps) {
+export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const location = useLocation()
@@ -340,7 +336,7 @@ export default function Layout({ children }: LayoutProps) {
         {/* Page content */}
         <main className="py-4 sm:py-6">
           <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
-            {children}
+            <Outlet />
           </div>
         </main>
       </div>
