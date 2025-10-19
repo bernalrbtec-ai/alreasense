@@ -248,16 +248,21 @@ class EvolutionWebhookView(APIView):
             # 💬 FLOW CHAT: Processar mensagem para o chat em tempo real
             try:
                 from apps.chat.webhooks import handle_message_upsert as chat_handle_message
-                # Buscar tenant pela instância
-                connection = EvolutionConnection.objects.select_related('tenant').filter(
-                    name=instance_name
+                from apps.notifications.models import WhatsAppInstance
+                
+                # Buscar tenant pela instância UUID (mesmo padrão do envio)
+                whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                    instance_name=instance_name,
+                    is_active=True
                 ).first()
                 
-                if connection:
-                    chat_handle_message(data, connection.tenant)
-                    logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {connection.tenant.name}")
+                if whatsapp_instance:
+                    chat_handle_message(data, whatsapp_instance.tenant)
+                    logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {whatsapp_instance.tenant.name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para UUID: {instance_name}")
             except Exception as e:
-                logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}")
+                logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}", exc_info=True)
             
             # Processar mensagem normalmente para analytics/campaigns
             for msg_data in messages:
@@ -383,19 +388,22 @@ class EvolutionWebhookView(APIView):
             logger.info(f"🚀 [FLOW CHAT] Iniciando processamento do chat...")
             try:
                 from apps.chat.webhooks import handle_message_update as chat_handle_update
-                # Buscar tenant pela instância
-                connection = EvolutionConnection.objects.select_related('tenant').filter(
-                    name=instance_name
+                from apps.notifications.models import WhatsAppInstance
+                
+                # Buscar tenant pela instância UUID (mesmo padrão do envio)
+                instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                    instance_name=instance_name,
+                    is_active=True
                 ).first()
                 
-                logger.info(f"🔍 [FLOW CHAT] Buscando connection para instance: {instance_name}")
+                logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance para UUID: {instance_name}")
                 
-                if connection:
-                    logger.info(f"✅ [FLOW CHAT] Connection encontrada: {connection.tenant.name}")
-                    chat_handle_update(data, connection.tenant)
-                    logger.info(f"💬 [FLOW CHAT] Status atualizado para tenant {connection.tenant.name}")
+                if instance:
+                    logger.info(f"✅ [FLOW CHAT] Instance encontrada: {instance.friendly_name} - Tenant: {instance.tenant.name}")
+                    chat_handle_update(data, instance.tenant)
+                    logger.info(f"💬 [FLOW CHAT] Status atualizado para tenant {instance.tenant.name}")
                 else:
-                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma connection encontrada para instance: {instance_name}")
+                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma instance encontrada para UUID: {instance_name}")
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao atualizar status: {e}", exc_info=True)
             
