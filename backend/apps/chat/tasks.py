@@ -104,7 +104,7 @@ async def handle_send_message(message_id: str):
     5. Broadcast via WebSocket
     """
     from apps.chat.models import Message
-    from apps.connections.models import EvolutionConnection
+    from apps.notifications.models import WhatsAppInstance
     from channels.layers import get_channel_layer
     from asgiref.sync import sync_to_async
     import httpx
@@ -122,20 +122,19 @@ async def handle_send_message(message_id: str):
             logger.info(f"📝 [CHAT] Nota interna criada: {message_id}")
             return
         
-        # Busca conexão Evolution do tenant
-        connection = await sync_to_async(
-            EvolutionConnection.objects.filter(
+        # Busca instância WhatsApp ativa do tenant (mesmo modelo das campanhas)
+        instance = await sync_to_async(
+            WhatsAppInstance.objects.filter(
                 tenant=message.conversation.tenant,
-                is_active=True,
-                status='active'
+                is_active=True
             ).first
         )()
         
-        if not connection:
+        if not instance:
             message.status = 'failed'
-            message.error_message = 'Nenhuma conexão ativa encontrada'
+            message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
             await sync_to_async(message.save)(update_fields=['status', 'error_message'])
-            logger.error(f"❌ [CHAT] Sem conexão para tenant {message.conversation.tenant.name}")
+            logger.error(f"❌ [CHAT] Sem instância WhatsApp para tenant {message.conversation.tenant.name}")
             return
         
         # Prepara dados
@@ -145,9 +144,9 @@ async def handle_send_message(message_id: str):
         
         # Envia via Evolution API
         async with httpx.AsyncClient(timeout=30.0) as client:
-            base_url = connection.base_url.rstrip('/')
+            base_url = instance.api_url.rstrip('/')
             headers = {
-                'apikey': connection.api_key,
+                'apikey': instance.api_key,
                 'Content-Type': 'application/json'
             }
             
@@ -164,7 +163,7 @@ async def handle_send_message(message_id: str):
                         payload['mediaMessage']['caption'] = content
                     
                     response = await client.post(
-                        f"{base_url}/message/sendMedia/{connection.name}",
+                        f"{base_url}/message/sendMedia/{instance.instance_name}",
                         headers=headers,
                         json=payload
                     )
@@ -184,7 +183,7 @@ async def handle_send_message(message_id: str):
                 }
                 
                 response = await client.post(
-                    f"{base_url}/message/sendText/{connection.name}",
+                    f"{base_url}/message/sendText/{instance.instance_name}",
                     headers=headers,
                     json=payload
                 )
