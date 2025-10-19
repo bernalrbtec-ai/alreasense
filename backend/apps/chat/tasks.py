@@ -11,6 +11,7 @@ Consumers:
 """
 import logging
 import json
+import asyncio
 import aio_pika
 from typing import Optional
 from django.conf import settings
