@@ -154,7 +154,7 @@ async def handle_send_message(message_id: str):
             if attachment_urls:
                 for url in attachment_urls:
                     payload = {
-                        'number': phone.replace('+', ''),
+                        'number': phone,  # Evolution API aceita com ou sem '+'
                         'mediaMessage': {
                             'mediaUrl': url
                         }
@@ -162,11 +162,19 @@ async def handle_send_message(message_id: str):
                     if content:
                         payload['mediaMessage']['caption'] = content
                     
+                    logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
+                    logger.info(f"   URL: {base_url}/message/sendMedia/{instance.instance_name}")
+                    logger.info(f"   Payload: {payload}")
+                    
                     response = await client.post(
                         f"{base_url}/message/sendMedia/{instance.instance_name}",
                         headers=headers,
                         json=payload
                     )
+                    
+                    logger.info(f"🔍 [CHAT] Resposta Evolution API: {response.status_code}")
+                    logger.info(f"   Body: {response.text[:500]}")
+                    
                     response.raise_for_status()
                     
                     data = response.json()
@@ -175,18 +183,26 @@ async def handle_send_message(message_id: str):
             
             # Envia texto (se não tiver anexo ou como caption separado)
             if content and not attachment_urls:
+                # Usar mesmo formato das campanhas
                 payload = {
-                    'number': phone.replace('+', ''),
-                    'textMessage': {
-                        'text': content
-                    }
+                    'number': phone,  # Evolution API aceita com ou sem '+'
+                    'text': content,
+                    'instance': instance.instance_name
                 }
+                
+                logger.info(f"🔍 [CHAT] Enviando para Evolution API:")
+                logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
+                logger.info(f"   Payload: {payload}")
                 
                 response = await client.post(
                     f"{base_url}/message/sendText/{instance.instance_name}",
                     headers=headers,
                     json=payload
                 )
+                
+                logger.info(f"🔍 [CHAT] Resposta Evolution API: {response.status_code}")
+                logger.info(f"   Body: {response.text[:500]}")
+                
                 response.raise_for_status()
                 
                 data = response.json()
