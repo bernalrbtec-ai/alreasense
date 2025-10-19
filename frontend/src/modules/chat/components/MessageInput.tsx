@@ -1,26 +1,69 @@
 /**
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
-import React, { useState } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Send, Smile, Paperclip } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 
 interface MessageInputProps {
   sendMessage: (content: string) => boolean;
+  sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
 }
 
-export function MessageInput({ sendMessage, isConnected }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageInputProps) {
   const { activeConversation } = useChatStore();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Limpar timeout de digitando ao desmontar
+  useEffect(() => {
+    return () => {
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+        sendTyping(false);
+      }
+    };
+  }, [sendTyping]);
+
+  const handleMessageChange = useCallback((value: string) => {
+    setMessage(value);
+    
+    // Enviar "digitando" quando começa a digitar
+    if (value.length > 0 && isConnected) {
+      sendTyping(true);
+      
+      // Limpar timeout anterior
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      
+      // Parar de enviar "digitando" após 3 segundos de inatividade
+      typingTimeoutRef.current = setTimeout(() => {
+        sendTyping(false);
+      }, 3000);
+    } else if (value.length === 0) {
+      // Parar de enviar "digitando" quando apaga tudo
+      sendTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    }
+  }, [isConnected, sendTyping]);
 
   const handleSend = () => {
     if (!message.trim() || !activeConversation || sending || !isConnected) return;
 
     try {
       setSending(true);
+      
+      // Parar "digitando" antes de enviar
+      sendTyping(false);
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
       
       const success = sendMessage(message.trim());
       
@@ -70,7 +113,7 @@ export function MessageInput({ sendMessage, isConnected }: MessageInputProps) {
       <div className="flex-1 bg-white rounded-lg shadow-sm">
         <textarea
           value={message}
-          onChange={(e) => setMessage(e.target.value)}
+          onChange={(e) => handleMessageChange(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="Digite uma mensagem"
           rows={1}

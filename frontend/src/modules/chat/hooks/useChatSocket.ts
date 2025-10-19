@@ -43,8 +43,13 @@ export function useChatSocket(conversationId?: string) {
         break;
 
       case 'message_status_update':
+        console.log('📊 [WS] Atualização de status recebida:', data);
         if (data.message_id && data.status) {
+          console.log(`   Atualizando mensagem ${data.message_id} para status: ${data.status}`);
           updateMessageStatus(data.message_id, data.status);
+          console.log('   ✅ Status atualizado no store');
+        } else {
+          console.warn('   ⚠️ Dados incompletos para atualização de status:', data);
         }
         break;
 

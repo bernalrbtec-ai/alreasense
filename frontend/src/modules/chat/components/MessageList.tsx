@@ -8,7 +8,7 @@ import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
 
 export function MessageList() {
-  const { activeConversation, messages, setMessages } = useChatStore();
+  const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -110,6 +110,25 @@ export function MessageList() {
               </div>
             </div>
           ))}
+          
+          {/* Indicador de digitando */}
+          {typing && (
+            <div className="flex justify-start">
+              <div className="bg-white rounded-lg px-4 py-3 shadow-sm">
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                  </div>
+                  {typingUser && (
+                    <span className="text-xs text-gray-500 ml-2">{typingUser} está digitando...</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+          
           <div ref={messagesEndRef} />
         </>
       )}
