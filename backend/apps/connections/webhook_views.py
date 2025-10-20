@@ -172,10 +172,12 @@ class EvolutionWebhookView(APIView):
                 # 📸 Atualizar foto de perfil nas conversas
                 if profile_pic and remote_jid:
                     try:
-                        # Buscar instância WhatsApp pelo nome
+                        # Buscar instância WhatsApp pelo nome (pode ser UUID ou friendly_name)
                         from apps.notifications.models import WhatsAppInstance
+                        from django.db.models import Q
+                        
                         whatsapp_instance = WhatsAppInstance.objects.filter(
-                            instance_name=instance,
+                            Q(instance_name=instance) | Q(friendly_name=instance),
                             is_active=True
                         ).first()
                         
