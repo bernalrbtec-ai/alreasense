@@ -189,14 +189,31 @@ class EvolutionWebhookView(APIView):
                             
                             # Atualizar todas as conversas com esse telefone
                             from apps.chat.models import Conversation
-                            updated_count = Conversation.objects.filter(
+                            
+                            # Buscar conversas para verificar se URL mudou
+                            conversations = Conversation.objects.filter(
                                 tenant=whatsapp_instance.tenant,
                                 contact_phone=phone
-                            ).update(profile_pic_url=profile_pic)
+                            )
+                            
+                            old_profile_pics = {conv.id: conv.profile_pic_url for conv in conversations}
+                            
+                            updated_count = conversations.update(profile_pic_url=profile_pic)
                             
                             if updated_count > 0:
                                 logger.info(f"✅ [FOTO] Atualizada foto de perfil para {phone}: {profile_pic[:50]}...")
                                 logger.info(f"   {updated_count} conversa(s) atualizada(s)")
+                                
+                                # Invalidar cache Redis se URL mudou
+                                from django.core.cache import cache
+                                import hashlib
+                                
+                                for conv_id, old_url in old_profile_pics.items():
+                                    if old_url and old_url != profile_pic:
+                                        # Invalidar cache da URL antiga
+                                        old_cache_key = f"profile_pic:{hashlib.md5(old_url.encode()).hexdigest()}"
+                                        cache.delete(old_cache_key)
+                                        logger.info(f"🗑️ [CACHE] Invalidado cache da URL antiga: {old_cache_key}")
                                 
                                 # Broadcast atualização via WebSocket
                                 try:

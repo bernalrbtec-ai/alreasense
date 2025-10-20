@@ -331,16 +331,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     @action(detail=False, methods=['get'], url_path='profile-pic-proxy')
     def profile_pic_proxy(self, request):
         """
-        Proxy para fotos de perfil do WhatsApp.
-        Resolve problemas de CORS e adiciona cache.
+        Proxy para fotos de perfil do WhatsApp com cache Redis.
         
         Query params:
         - url: URL da foto de perfil
         """
         import httpx
         from django.http import HttpResponse
-        from django.views.decorators.cache import cache_page
+        from django.core.cache import cache
         import logging
+        import hashlib
         
         logger = logging.getLogger(__name__)
         
@@ -353,36 +353,69 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        logger.info(f'🖼️ [PROXY] Buscando imagem: {profile_url[:100]}...')
+        # Gerar chave Redis baseada na URL
+        cache_key = f"profile_pic:{hashlib.md5(profile_url.encode()).hexdigest()}"
+        
+        # Tentar buscar do cache Redis
+        cached_data = cache.get(cache_key)
+        
+        if cached_data:
+            logger.info(f'✅ [PROXY CACHE] Imagem servida do Redis: {profile_url[:80]}...')
+            
+            http_response = HttpResponse(
+                cached_data['content'],
+                content_type=cached_data['content_type']
+            )
+            http_response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
+            http_response['Access-Control-Allow-Origin'] = '*'
+            http_response['X-Cache'] = 'HIT'
+            
+            return http_response
+        
+        # Não está no cache, buscar do WhatsApp
+        logger.info(f'🔄 [PROXY] Baixando imagem do WhatsApp: {profile_url[:80]}...')
         
         try:
-            # Buscar imagem com timeout
             with httpx.Client(timeout=10.0, follow_redirects=True) as client:
                 response = client.get(profile_url)
                 response.raise_for_status()
                 
-                logger.info(f'✅ [PROXY] Imagem carregada com sucesso! Content-Type: {response.headers.get("content-type")} | Size: {len(response.content)} bytes')
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                content = response.content
                 
-                # Retornar imagem com headers apropriados
-                http_response = HttpResponse(
-                    response.content,
-                    content_type=response.headers.get('content-type', 'image/jpeg')
+                logger.info(f'✅ [PROXY] Imagem baixada! Content-Type: {content_type} | Size: {len(content)} bytes')
+                
+                # Cachear no Redis por 7 dias
+                cache.set(
+                    cache_key,
+                    {
+                        'content': content,
+                        'content_type': content_type
+                    },
+                    timeout=604800  # 7 dias
                 )
                 
-                # Cache por 1 hora
-                http_response['Cache-Control'] = 'public, max-age=3600'
+                logger.info(f'💾 [PROXY] Imagem cacheada no Redis com chave: {cache_key}')
+                
+                # Retornar imagem
+                http_response = HttpResponse(
+                    content,
+                    content_type=content_type
+                )
+                http_response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
                 http_response['Access-Control-Allow-Origin'] = '*'
+                http_response['X-Cache'] = 'MISS'
                 
                 return http_response
         
         except httpx.HTTPStatusError as e:
-            logger.error(f'❌ [PROXY] Erro HTTP {e.response.status_code}: {profile_url[:100]}...')
+            logger.error(f'❌ [PROXY] Erro HTTP {e.response.status_code}: {profile_url[:80]}...')
             return Response(
                 {'error': f'Erro ao buscar imagem: {e.response.status_code}'},
                 status=status.HTTP_502_BAD_GATEWAY
             )
         except Exception as e:
-            logger.error(f'❌ [PROXY] Erro: {str(e)} | URL: {profile_url[:100]}...', exc_info=True)
+            logger.error(f'❌ [PROXY] Erro: {str(e)} | URL: {profile_url[:80]}...', exc_info=True)
             return Response(
                 {'error': f'Erro ao buscar imagem: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
