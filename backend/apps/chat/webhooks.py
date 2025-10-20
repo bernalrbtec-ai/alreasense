@@ -167,10 +167,61 @@ def handle_message_upsert(data, tenant, connection=None):
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} (Inbox)")
             
-            # 📸 Enfileira busca de foto de perfil
-            from apps.chat.tasks import fetch_profile_pic
-            fetch_profile_pic.delay(str(conversation.id), phone)
-            logger.info(f"📸 [WEBHOOK] Foto de perfil enfileirada para busca")
+            # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
+            try:
+                import httpx
+                from apps.connections.models import EvolutionConnection
+                
+                # Buscar instância Evolution ativa
+                instance = EvolutionConnection.objects.filter(
+                    tenant=tenant,
+                    is_active=True
+                ).first()
+                
+                if instance:
+                    logger.info(f"📸 [WEBHOOK] Buscando foto de perfil...")
+                    
+                    # Formatar telefone (sem + e sem @s.whatsapp.net)
+                    clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                    
+                    # Endpoint Evolution API
+                    base_url = instance.base_url.rstrip('/')
+                    endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+                    
+                    headers = {
+                        'apikey': instance.api_key,
+                        'Content-Type': 'application/json'
+                    }
+                    
+                    # Buscar foto (timeout curto de 5s)
+                    with httpx.Client(timeout=5.0) as client:
+                        response = client.get(
+                            endpoint,
+                            params={'number': clean_phone},
+                            headers=headers
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            profile_url = (
+                                data.get('profilePictureUrl') or
+                                data.get('profilePicUrl') or
+                                data.get('url') or
+                                data.get('picture')
+                            )
+                            
+                            if profile_url:
+                                conversation.profile_pic_url = profile_url
+                                conversation.save(update_fields=['profile_pic_url'])
+                                logger.info(f"✅ [WEBHOOK] Foto de perfil salva: {profile_url[:50]}...")
+                            else:
+                                logger.info(f"ℹ️ [WEBHOOK] Foto de perfil não disponível")
+                        else:
+                            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar foto: {response.status_code}")
+                else:
+                    logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
+            except Exception as e:
+                logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
