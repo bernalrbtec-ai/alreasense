@@ -3,7 +3,7 @@ Views para o módulo Flow Chat.
 Integra com permissões multi-tenant e departamentos.
 """
 from rest_framework import viewsets, status, filters
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
@@ -746,4 +746,104 @@ class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
                 {'error': 'Erro ao fazer upload do arquivo'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+# ==========================================
+# VIEW FUNCTION PARA PROXY DE FOTOS
+# ==========================================
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def profile_pic_proxy_view(request):
+    """
+    Proxy público para fotos de perfil do WhatsApp com cache Redis.
+    Endpoint completamente público (sem autenticação) para permitir carregamento em <img> tags.
+    
+    Query params:
+    - url: URL da foto de perfil
+    """
+    import httpx
+    from django.http import HttpResponse
+    from django.core.cache import cache
+    import logging
+    import hashlib
+    
+    logger = logging.getLogger(__name__)
+    
+    profile_url = request.GET.get('url')
+    
+    if not profile_url:
+        logger.warning('🖼️ [PROXY] URL não fornecida')
+        return Response(
+            {'error': 'URL é obrigatória'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Gerar chave Redis baseada na URL
+    cache_key = f"profile_pic:{hashlib.md5(profile_url.encode()).hexdigest()}"
+    
+    # Tentar buscar do cache Redis
+    cached_data = cache.get(cache_key)
+    
+    if cached_data:
+        logger.info(f'✅ [PROXY CACHE] Imagem servida do Redis: {profile_url[:80]}...')
+        
+        http_response = HttpResponse(
+            cached_data['content'],
+            content_type=cached_data['content_type']
+        )
+        http_response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
+        http_response['Access-Control-Allow-Origin'] = '*'
+        http_response['X-Cache'] = 'HIT'
+        
+        return http_response
+    
+    # Não está no cache, buscar do WhatsApp
+    logger.info(f'🔄 [PROXY] Baixando imagem do WhatsApp: {profile_url[:80]}...')
+    
+    try:
+        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
+            response = client.get(profile_url)
+            response.raise_for_status()
+            
+            content_type = response.headers.get('content-type', 'image/jpeg')
+            content = response.content
+            
+            logger.info(f'✅ [PROXY] Imagem baixada! Content-Type: {content_type} | Size: {len(content)} bytes')
+            
+            # Cachear no Redis por 7 dias
+            cache.set(
+                cache_key,
+                {
+                    'content': content,
+                    'content_type': content_type
+                },
+                timeout=604800  # 7 dias
+            )
+            
+            logger.info(f'💾 [PROXY] Imagem cacheada no Redis com chave: {cache_key}')
+            
+            # Retornar imagem
+            http_response = HttpResponse(
+                content,
+                content_type=content_type
+            )
+            http_response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
+            http_response['Access-Control-Allow-Origin'] = '*'
+            http_response['X-Cache'] = 'MISS'
+            
+            return http_response
+    
+    except httpx.HTTPStatusError as e:
+        logger.error(f'❌ [PROXY] Erro HTTP {e.response.status_code}: {profile_url[:80]}...')
+        return Response(
+            {'error': f'Erro ao buscar imagem: {e.response.status_code}'},
+            status=status.HTTP_502_BAD_GATEWAY
+        )
+    except Exception as e:
+        logger.error(f'❌ [PROXY] Erro: {str(e)} | URL: {profile_url[:80]}...', exc_info=True)
+        return Response(
+            {'error': f'Erro ao buscar imagem: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
