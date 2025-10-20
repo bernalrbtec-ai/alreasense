@@ -318,18 +318,22 @@ def handle_message_upsert(data, tenant, connection=None):
                 filename = f"{message.id}.ogg"
             
             if attachment_url:
-                attachment = MessageAttachment.objects.create(
-                    message=message,
-                    tenant=tenant,
-                    original_filename=filename,
-                    mime_type=mime_type,
-                    file_path='',  # Será preenchido após download
-                    file_url=attachment_url,
-                    storage_type='local'
-                )
-                
-                # Enfileira download
-                download_attachment.delay(str(attachment.id), attachment_url)
+                # Usar transaction para garantir que o anexo seja salvo antes de enfileirar
+                from django.db import transaction
+                with transaction.atomic():
+                    attachment = MessageAttachment.objects.create(
+                        message=message,
+                        tenant=tenant,
+                        original_filename=filename,
+                        mime_type=mime_type,
+                        file_path='',  # Será preenchido após download
+                        file_url=attachment_url,
+                        storage_type='local'
+                    )
+                    # Força commit antes de enfileirar
+                    transaction.on_commit(
+                        lambda: download_attachment.delay(str(attachment.id), attachment_url)
+                    )
                 logger.info(f"📎 [WEBHOOK] Anexo enfileirado para download: {filename}")
             
             # Broadcast via WebSocket (mensagem específica)

@@ -168,9 +168,75 @@ class EvolutionWebhookView(APIView):
                 profile_pic = contact_data.get('profilePicUrl', '')
                 
                 logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
-            
-            # TODO: Update contact information in database if needed
-            # This could be used to sync contact names and profile pictures
+                
+                # 📸 Atualizar foto de perfil nas conversas
+                if profile_pic and remote_jid:
+                    try:
+                        # Buscar instância Evolution
+                        evo_instance = EvolutionConnection.objects.filter(
+                            instance_id=instance
+                        ).first()
+                        
+                        if evo_instance:
+                            # Extrair telefone (remover @s.whatsapp.net)
+                            phone = remote_jid.replace('@s.whatsapp.net', '')
+                            if not phone.startswith('+'):
+                                phone = f'+{phone}'
+                            
+                            # Atualizar todas as conversas com esse telefone
+                            from apps.chat.models import Conversation
+                            updated_count = Conversation.objects.filter(
+                                tenant=evo_instance.tenant,
+                                contact_phone=phone
+                            ).update(profile_pic_url=profile_pic)
+                            
+                            if updated_count > 0:
+                                logger.info(f"✅ [FOTO] Atualizada foto de perfil para {phone}: {profile_pic[:50]}...")
+                                logger.info(f"   {updated_count} conversa(s) atualizada(s)")
+                                
+                                # Broadcast atualização via WebSocket
+                                try:
+                                    from channels.layers import get_channel_layer
+                                    from asgiref.sync import async_to_sync
+                                    from apps.chat.api.serializers import ConversationSerializer
+                                    
+                                    channel_layer = get_channel_layer()
+                                    
+                                    # Buscar e enviar atualização de cada conversa
+                                    conversations = Conversation.objects.filter(
+                                        tenant=evo_instance.tenant,
+                                        contact_phone=phone
+                                    )
+                                    
+                                    for conv in conversations:
+                                        conv_data = ConversationSerializer(conv).data
+                                        
+                                        # Converter UUIDs
+                                        def convert_uuids(obj):
+                                            import uuid
+                                            if isinstance(obj, uuid.UUID):
+                                                return str(obj)
+                                            elif isinstance(obj, dict):
+                                                return {k: convert_uuids(v) for k, v in obj.items()}
+                                            elif isinstance(obj, list):
+                                                return [convert_uuids(item) for item in obj]
+                                            return obj
+                                        
+                                        conv_data_clean = convert_uuids(conv_data)
+                                        
+                                        tenant_group = f"chat_tenant_{evo_instance.tenant_id}"
+                                        async_to_sync(channel_layer.group_send)(
+                                            tenant_group,
+                                            {
+                                                'type': 'conversation_updated',
+                                                'conversation': conv_data_clean
+                                            }
+                                        )
+                                        logger.info(f"📡 [FOTO] Atualização broadcast para tenant via WebSocket")
+                                except Exception as e:
+                                    logger.error(f"❌ [FOTO] Erro ao broadcast: {e}")
+                    except Exception as e:
+                        logger.error(f"❌ [FOTO] Erro ao atualizar foto: {e}", exc_info=True)
             
             return JsonResponse({'status': 'success', 'event': 'contacts.update'})
             
