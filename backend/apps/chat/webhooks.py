@@ -148,6 +148,7 @@ def handle_message_upsert(data, tenant, connection=None):
         direction_str = "📤 ENVIADA" if from_me else "📥 RECEBIDA"
         logger.info(f"{direction_str} [WEBHOOK] {phone}: {content[:50]}...")
         logger.info(f"   Tenant: {tenant.name} | Message ID: {message_id}")
+        logger.info(f"   👤 Nome: {push_name} | 📸 Foto de Perfil: {profile_pic_url[:100] if profile_pic_url else 'NÃO ENVIADA'}")
         
         # Busca ou cria conversa
         # Nova conversa vai para INBOX (pending) sem departamento
@@ -165,6 +166,11 @@ def handle_message_upsert(data, tenant, connection=None):
         
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} (Inbox)")
+            
+            # 📸 Enfileira busca de foto de perfil
+            from apps.chat.tasks import fetch_profile_pic
+            fetch_profile_pic.delay(str(conversation.id), phone)
+            logger.info(f"📸 [WEBHOOK] Foto de perfil enfileirada para busca")
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
