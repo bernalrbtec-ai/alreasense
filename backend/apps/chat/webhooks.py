@@ -273,9 +273,43 @@ def handle_message_upsert(data, tenant, connection=None):
         if profile_pic_url and conversation.profile_pic_url != profile_pic_url:
             conversation.profile_pic_url = profile_pic_url
             update_fields.append('profile_pic_url')
+            logger.info(f"📸 [WEBHOOK] Foto de perfil atualizada: {profile_pic_url[:50]}...")
         
         if update_fields:
             conversation.save(update_fields=update_fields)
+            
+            # 📡 Broadcast atualização via WebSocket
+            try:
+                from apps.chat.api.serializers import ConversationSerializer
+                conv_data = ConversationSerializer(conversation).data
+                
+                # Converter UUIDs para string
+                def convert_uuids_to_str(obj):
+                    import uuid
+                    if isinstance(obj, uuid.UUID):
+                        return str(obj)
+                    elif isinstance(obj, dict):
+                        return {k: convert_uuids_to_str(v) for k, v in obj.items()}
+                    elif isinstance(obj, list):
+                        return [convert_uuids_to_str(item) for item in obj]
+                    return obj
+                
+                conv_data_serializable = convert_uuids_to_str(conv_data)
+                
+                channel_layer = get_channel_layer()
+                tenant_group = f"chat_tenant_{tenant.id}"
+                
+                async_to_sync(channel_layer.group_send)(
+                    tenant_group,
+                    {
+                        'type': 'conversation_updated',
+                        'conversation': conv_data_serializable
+                    }
+                )
+                
+                logger.info(f"📡 [WEBSOCKET] Atualização de conversa broadcast (nome/foto)")
+            except Exception as e:
+                logger.error(f"❌ [WEBSOCKET] Erro ao broadcast atualização: {e}", exc_info=True)
         
         # Cria mensagem
         direction = 'outgoing' if from_me else 'incoming'
