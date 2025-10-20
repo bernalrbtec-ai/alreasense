@@ -340,20 +340,28 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         import httpx
         from django.http import HttpResponse
         from django.views.decorators.cache import cache_page
+        import logging
+        
+        logger = logging.getLogger(__name__)
         
         profile_url = request.query_params.get('url')
         
         if not profile_url:
+            logger.warning('🖼️ [PROXY] URL não fornecida')
             return Response(
                 {'error': 'URL é obrigatória'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        logger.info(f'🖼️ [PROXY] Buscando imagem: {profile_url[:100]}...')
+        
         try:
             # Buscar imagem com timeout
-            with httpx.Client(timeout=10.0) as client:
+            with httpx.Client(timeout=10.0, follow_redirects=True) as client:
                 response = client.get(profile_url)
                 response.raise_for_status()
+                
+                logger.info(f'✅ [PROXY] Imagem carregada com sucesso! Content-Type: {response.headers.get("content-type")} | Size: {len(response.content)} bytes')
                 
                 # Retornar imagem com headers apropriados
                 http_response = HttpResponse(
@@ -363,15 +371,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 
                 # Cache por 1 hora
                 http_response['Cache-Control'] = 'public, max-age=3600'
+                http_response['Access-Control-Allow-Origin'] = '*'
                 
                 return http_response
         
         except httpx.HTTPStatusError as e:
+            logger.error(f'❌ [PROXY] Erro HTTP {e.response.status_code}: {profile_url[:100]}...')
             return Response(
                 {'error': f'Erro ao buscar imagem: {e.response.status_code}'},
                 status=status.HTTP_502_BAD_GATEWAY
             )
         except Exception as e:
+            logger.error(f'❌ [PROXY] Erro: {str(e)} | URL: {profile_url[:100]}...', exc_info=True)
             return Response(
                 {'error': f'Erro ao buscar imagem: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
