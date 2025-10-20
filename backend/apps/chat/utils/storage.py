@@ -66,9 +66,10 @@ async def download_and_save_attachment(attachment, evolution_url: str) -> bool:
         True se sucesso, False se falhou
     """
     try:
-        tenant_slug = attachment.tenant.slug
+        # Usar tenant.id ao invés de slug
+        tenant_id = str(attachment.tenant.id)
         filename = f"{attachment.id}_{attachment.original_filename}"
-        local_path = get_local_path(tenant_slug, filename)
+        local_path = get_local_path(tenant_id, filename)
         
         # Download do arquivo
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -118,8 +119,8 @@ async def migrate_to_minio(attachment) -> bool:
             return False
         
         # Upload para MinIO
-        tenant_slug = attachment.tenant.slug
-        s3_key = get_s3_key(tenant_slug, local_path.name)
+        tenant_id = str(attachment.tenant.id)
+        s3_key = get_s3_key(tenant_id, local_path.name)
         
         with open(local_path, 'rb') as f:
             s3_client.put_object(
@@ -200,7 +201,8 @@ def save_upload_temporarily(file, tenant):
         unique_name = f"{uuid.uuid4()}.{ext}"
         
         # Caminho local
-        local_path = get_local_path(tenant.slug, unique_name)
+        tenant_id = str(tenant.id)
+        local_path = get_local_path(tenant_id, unique_name)
         
         # Salvar arquivo
         with open(local_path, 'wb+') as destination:
@@ -208,7 +210,7 @@ def save_upload_temporarily(file, tenant):
                 destination.write(chunk)
         
         # Retornar URL relativa
-        file_url = f"/api/chat/attachments/download/{tenant.slug}/{unique_name}"
+        file_url = f"/api/chat/attachments/download/{tenant_id}/{unique_name}"
         
         logger.info(f"✅ [STORAGE] Upload salvo: {local_path}")
         return file_url
