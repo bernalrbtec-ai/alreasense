@@ -172,12 +172,14 @@ class EvolutionWebhookView(APIView):
                 # 📸 Atualizar foto de perfil nas conversas
                 if profile_pic and remote_jid:
                     try:
-                        # Buscar instância Evolution pelo nome
-                        evo_instance = EvolutionConnection.objects.filter(
-                            name=instance
+                        # Buscar instância WhatsApp pelo nome
+                        from apps.notifications.models import WhatsAppInstance
+                        whatsapp_instance = WhatsAppInstance.objects.filter(
+                            instance_name=instance,
+                            is_active=True
                         ).first()
                         
-                        if evo_instance:
+                        if whatsapp_instance:
                             # Extrair telefone (remover @s.whatsapp.net)
                             phone = remote_jid.replace('@s.whatsapp.net', '')
                             if not phone.startswith('+'):
@@ -186,7 +188,7 @@ class EvolutionWebhookView(APIView):
                             # Atualizar todas as conversas com esse telefone
                             from apps.chat.models import Conversation
                             updated_count = Conversation.objects.filter(
-                                tenant=evo_instance.tenant,
+                                tenant=whatsapp_instance.tenant,
                                 contact_phone=phone
                             ).update(profile_pic_url=profile_pic)
                             
@@ -204,7 +206,7 @@ class EvolutionWebhookView(APIView):
                                     
                                     # Buscar e enviar atualização de cada conversa
                                     conversations = Conversation.objects.filter(
-                                        tenant=evo_instance.tenant,
+                                        tenant=whatsapp_instance.tenant,
                                         contact_phone=phone
                                     )
                                     
@@ -224,7 +226,7 @@ class EvolutionWebhookView(APIView):
                                         
                                         conv_data_clean = convert_uuids(conv_data)
                                         
-                                        tenant_group = f"chat_tenant_{evo_instance.tenant_id}"
+                                        tenant_group = f"chat_tenant_{whatsapp_instance.tenant_id}"
                                         async_to_sync(channel_layer.group_send)(
                                             tenant_group,
                                             {
