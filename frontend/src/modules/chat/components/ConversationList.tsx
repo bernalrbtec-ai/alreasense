@@ -121,7 +121,9 @@ export function ConversationList() {
                     src={`/api/chat/conversations/profile-pic-proxy/?url=${encodeURIComponent(conv.profile_pic_url)}`}
                     alt={conv.contact_name || conv.contact_phone}
                     className="w-full h-full object-cover"
+                    onLoad={() => console.log(`✅ [IMG LIST] Foto carregada: ${conv.contact_name}`)}
                     onError={(e) => {
+                      console.error(`❌ [IMG LIST] Erro ao carregar foto: ${conv.contact_name}`, e.currentTarget.src);
                       // Fallback se imagem não carregar
                       e.currentTarget.style.display = 'none';
                       e.currentTarget.parentElement!.innerHTML = `

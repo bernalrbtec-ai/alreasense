@@ -130,12 +130,15 @@ export function ChatWindow() {
                 src={`/api/chat/conversations/profile-pic-proxy/?url=${encodeURIComponent(activeConversation.profile_pic_url)}`}
                 alt={activeConversation.contact_name || activeConversation.contact_phone}
                 className="w-full h-full object-cover"
+                onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
                 onError={(e) => {
+                  console.error('❌ [IMG] Erro ao carregar foto:', e);
+                  console.error('   URL:', e.currentTarget.src);
                   e.currentTarget.style.display = 'none';
                 }}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center text-gray-600 font-medium text-lg">
+              <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
                 {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
               </div>
             )}
