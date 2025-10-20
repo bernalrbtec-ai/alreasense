@@ -6,9 +6,9 @@ from rest_framework.routers import DefaultRouter
 from apps.chat.api.views import (
     ConversationViewSet,
     MessageViewSet,
-    MessageAttachmentViewSet,
-    profile_pic_proxy_view
+    MessageAttachmentViewSet
 )
+from apps.chat.views import profile_pic_proxy_django_view
 from apps.chat.webhooks import evolution_webhook
 
 # Router REST
@@ -21,8 +21,8 @@ urlpatterns = [
     # REST API
     path('', include(router.urls)),
     
-    # Proxy público para fotos de perfil (sem autenticação)
-    path('profile-pic-proxy/', profile_pic_proxy_view, name='profile-pic-proxy'),
+    # Proxy público para fotos de perfil (sem autenticação - Django puro, não DRF)
+    path('profile-pic-proxy/', profile_pic_proxy_django_view, name='profile-pic-proxy'),
     
     # Webhook Evolution
     path('webhooks/evolution/', evolution_webhook, name='evolution-webhook'),
