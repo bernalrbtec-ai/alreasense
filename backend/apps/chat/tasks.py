@@ -351,11 +351,10 @@ async def handle_download_attachment(attachment_id: str, evolution_url: str):
                     await sync_to_async(attachment.save)(update_fields=['error_message'])
                     return False
             
-            # Download com timeout
+            # Download
             success = await download_and_save_attachment(
                 attachment, 
-                evolution_url, 
-                timeout=TIMEOUT
+                evolution_url
             )
             
             if success:
