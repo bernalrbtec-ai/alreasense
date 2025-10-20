@@ -118,8 +118,10 @@ async def migrate_to_minio(attachment) -> bool:
             logger.error(f"❌ [STORAGE] Arquivo local não encontrado: {local_path}")
             return False
         
-        # Upload para MinIO
-        tenant_id = str(attachment.tenant.id)
+        # Upload para MinIO - acessar tenant de forma assíncrona
+        from asgiref.sync import sync_to_async
+        tenant = await sync_to_async(lambda: attachment.tenant)()
+        tenant_id = str(tenant.id)
         s3_key = get_s3_key(tenant_id, local_path.name)
         
         with open(local_path, 'rb') as f:
@@ -138,7 +140,6 @@ async def migrate_to_minio(attachment) -> bool:
         )
         
         # Atualiza attachment
-        from asgiref.sync import sync_to_async
         attachment.file_path = s3_key
         attachment.file_url = presigned_url
         attachment.storage_type = 's3'
