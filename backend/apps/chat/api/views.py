@@ -328,6 +328,55 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
+    @action(detail=False, methods=['get'], url_path='profile-pic-proxy')
+    def profile_pic_proxy(self, request):
+        """
+        Proxy para fotos de perfil do WhatsApp.
+        Resolve problemas de CORS e adiciona cache.
+        
+        Query params:
+        - url: URL da foto de perfil
+        """
+        import httpx
+        from django.http import HttpResponse
+        from django.views.decorators.cache import cache_page
+        
+        profile_url = request.query_params.get('url')
+        
+        if not profile_url:
+            return Response(
+                {'error': 'URL é obrigatória'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Buscar imagem com timeout
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(profile_url)
+                response.raise_for_status()
+                
+                # Retornar imagem com headers apropriados
+                http_response = HttpResponse(
+                    response.content,
+                    content_type=response.headers.get('content-type', 'image/jpeg')
+                )
+                
+                # Cache por 1 hora
+                http_response['Cache-Control'] = 'public, max-age=3600'
+                
+                return http_response
+        
+        except httpx.HTTPStatusError as e:
+            return Response(
+                {'error': f'Erro ao buscar imagem: {e.response.status_code}'},
+                status=status.HTTP_502_BAD_GATEWAY
+            )
+        except Exception as e:
+            return Response(
+                {'error': f'Erro ao buscar imagem: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=False, methods=['get'])
     def my_conversations(self, request):
         """Lista conversas atribuídas ao usuário logado."""

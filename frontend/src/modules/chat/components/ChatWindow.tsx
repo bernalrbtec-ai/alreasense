@@ -120,7 +120,7 @@ export function ChatWindow() {
           <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
             {activeConversation.profile_pic_url ? (
               <img 
-                src={activeConversation.profile_pic_url} 
+                src={`/api/chat/conversations/profile-pic-proxy/?url=${encodeURIComponent(activeConversation.profile_pic_url)}`}
                 alt={activeConversation.contact_name || activeConversation.contact_phone}
                 className="w-full h-full object-cover"
                 onError={(e) => {
@@ -265,7 +265,7 @@ export function ChatWindow() {
                 <div className="w-24 h-24 rounded-full bg-gray-300 mb-3 overflow-hidden">
                   {activeConversation.profile_pic_url ? (
                     <img 
-                      src={activeConversation.profile_pic_url} 
+                      src={`/api/chat/conversations/profile-pic-proxy/?url=${encodeURIComponent(activeConversation.profile_pic_url)}`}
                       alt={activeConversation.contact_name || activeConversation.contact_phone}
                       className="w-full h-full object-cover"
                     />

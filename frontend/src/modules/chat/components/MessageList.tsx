@@ -2,10 +2,11 @@
  * Lista de mensagens - Estilo WhatsApp Web
  */
 import React, { useEffect, useRef } from 'react';
-import { Check, CheckCheck, Clock } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
+import type { MessageAttachment } from '../types';
 
 export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
@@ -62,6 +63,73 @@ export function MessageList() {
     }
   };
 
+  const getAttachmentIcon = (attachment: MessageAttachment) => {
+    if (attachment.is_image) return <ImageIcon className="w-5 h-5" />;
+    if (attachment.is_video) return <Video className="w-5 h-5" />;
+    if (attachment.is_audio) return <Music className="w-5 h-5" />;
+    return <FileText className="w-5 h-5" />;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const renderAttachment = (attachment: MessageAttachment) => {
+    const isDownloading = !attachment.file_url || attachment.file_url === '';
+    
+    // Imagem
+    if (attachment.is_image && !isDownloading) {
+      return (
+        <a
+          href={attachment.file_url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block mb-2"
+        >
+          <img
+            src={attachment.file_url}
+            alt={attachment.original_filename}
+            className="max-w-full rounded-lg max-h-64 object-contain"
+            loading="lazy"
+          />
+        </a>
+      );
+    }
+
+    // Arquivo (qualquer tipo) ou baixando
+    return (
+      <div className="flex items-center gap-3 p-3 bg-white/50 dark:bg-black/20 rounded-lg mb-2">
+        <div className="flex-shrink-0 p-2 bg-white dark:bg-gray-700 rounded-full">
+          {isDownloading ? (
+            <Download className="w-5 h-5 animate-pulse text-gray-400" />
+          ) : (
+            getAttachmentIcon(attachment)
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">
+            {attachment.original_filename}
+          </p>
+          <p className="text-xs text-gray-500">
+            {isDownloading ? 'Baixando...' : formatFileSize(attachment.size_bytes)}
+          </p>
+        </div>
+        {!isDownloading && (
+          <a
+            href={attachment.file_url}
+            download={attachment.original_filename}
+            className="flex-shrink-0 p-2 hover:bg-white/50 dark:hover:bg-black/30 rounded-full transition-colors"
+            title="Baixar arquivo"
+          >
+            <Download className="w-4 h-4" />
+          </a>
+        )}
+      </div>
+    );
+  };
+
   if (!activeConversation) {
     return null;
   }
@@ -93,9 +161,23 @@ export function MessageList() {
                   }
                 `}
               >
-                <p className="text-sm whitespace-pre-wrap break-words">
-                  {msg.content}
-                </p>
+                {/* Anexos */}
+                {msg.attachments && msg.attachments.length > 0 && (
+                  <div className="mb-2">
+                    {msg.attachments.map((attachment) => (
+                      <div key={attachment.id}>
+                        {renderAttachment(attachment)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Texto (se houver) */}
+                {msg.content && (
+                  <p className="text-sm whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </p>
+                )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${msg.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   <span className="text-xs text-gray-600">

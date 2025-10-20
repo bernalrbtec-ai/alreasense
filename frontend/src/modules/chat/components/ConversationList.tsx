@@ -108,7 +108,7 @@ export function ConversationList() {
               <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden">
                 {conv.profile_pic_url ? (
                   <img 
-                    src={conv.profile_pic_url} 
+                    src={`/api/chat/conversations/profile-pic-proxy/?url=${encodeURIComponent(conv.profile_pic_url)}`}
                     alt={conv.contact_name || conv.contact_phone}
                     className="w-full h-full object-cover"
                     onError={(e) => {
