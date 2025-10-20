@@ -5,7 +5,7 @@ Integra com permissões multi-tenant e departamentos.
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
 
@@ -328,10 +328,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
-    @action(detail=False, methods=['get'], url_path='profile-pic-proxy')
+    @action(detail=False, methods=['get'], url_path='profile-pic-proxy', permission_classes=[AllowAny])
     def profile_pic_proxy(self, request):
         """
         Proxy para fotos de perfil do WhatsApp com cache Redis.
+        Endpoint público (sem autenticação) para permitir carregamento em <img> tags.
         
         Query params:
         - url: URL da foto de perfil
