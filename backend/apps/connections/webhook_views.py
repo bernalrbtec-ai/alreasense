@@ -172,9 +172,9 @@ class EvolutionWebhookView(APIView):
                 # 📸 Atualizar foto de perfil nas conversas
                 if profile_pic and remote_jid:
                     try:
-                        # Buscar instância Evolution
+                        # Buscar instância Evolution pelo nome
                         evo_instance = EvolutionConnection.objects.filter(
-                            instance_id=instance
+                            name=instance
                         ).first()
                         
                         if evo_instance:
