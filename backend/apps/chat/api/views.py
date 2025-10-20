@@ -41,6 +41,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     ordering_fields = ['last_message_at', 'created_at']
     ordering = ['-last_message_at']
     
+    def get_permissions(self):
+        """
+        Permite acesso público ao endpoint profile-pic-proxy.
+        Todos os outros endpoints requerem autenticação.
+        """
+        if self.action == 'profile_pic_proxy':
+            return [AllowAny()]
+        return super().get_permissions()
+    
     def get_serializer_class(self):
         """Usa serializer detalhado no retrieve."""
         if self.action == 'retrieve':
@@ -328,7 +337,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
-    @action(detail=False, methods=['get'], url_path='profile-pic-proxy', permission_classes=[AllowAny])
+    @action(detail=False, methods=['get'], url_path='profile-pic-proxy')
     def profile_pic_proxy(self, request):
         """
         Proxy para fotos de perfil do WhatsApp com cache Redis.
