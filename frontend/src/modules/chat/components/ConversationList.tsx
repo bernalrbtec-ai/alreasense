@@ -14,6 +14,16 @@ export function ConversationList() {
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewConversation, setShowNewConversation] = useState(false);
+  
+  // 🔍 Debug: Log quando conversations mudam
+  useEffect(() => {
+    console.log('📋 [ConversationList] Conversas atualizadas:', conversations.length);
+    conversations.forEach(conv => {
+      if (conv.profile_pic_url) {
+        console.log(`  ✅ ${conv.contact_name}: tem foto`);
+      }
+    });
+  }, [conversations]);
 
   useEffect(() => {
     if (!activeDepartment) return;
