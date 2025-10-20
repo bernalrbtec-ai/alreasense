@@ -19,6 +19,13 @@ export function ChatWindow() {
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  
+  // 🔍 Debug: Log quando profile_pic_url muda
+  useEffect(() => {
+    if (activeConversation) {
+      console.log('🖼️ [ChatWindow] profile_pic_url atual:', activeConversation.profile_pic_url);
+    }
+  }, [activeConversation?.profile_pic_url]);
 
   // 🔌 Conectar WebSocket para esta conversa
   const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversation?.id);
