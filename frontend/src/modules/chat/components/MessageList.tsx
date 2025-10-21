@@ -7,10 +7,13 @@ import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
 import type { MessageAttachment } from '../types';
+import { AttachmentPreview } from './AttachmentPreview';
+import { useUserAccess } from '@/hooks/useUserAccess';
 
 export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
 
   useEffect(() => {
     if (!activeConversation) return;
@@ -170,11 +173,13 @@ export function MessageList() {
                 
                 {/* Anexos */}
                 {msg.attachments && msg.attachments.length > 0 && (
-                  <div className="mb-2">
+                  <div className="message-attachments mb-2 space-y-2">
                     {msg.attachments.map((attachment) => (
-                      <div key={attachment.id}>
-                        {renderAttachment(attachment)}
-                      </div>
+                      <AttachmentPreview
+                        key={attachment.id}
+                        attachment={attachment}
+                        showAI={hasFlowAI}
+                      />
                     ))}
                   </div>
                 )}

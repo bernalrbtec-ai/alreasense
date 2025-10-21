@@ -2,9 +2,10 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip } from 'lucide-react';
+import { Send, Smile } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
+import { AttachmentUpload } from './AttachmentUpload';
 
 interface MessageInputProps {
   sendMessage: (content: string) => boolean;
@@ -93,20 +94,20 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
   return (
     <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300">
+      {/* Attach button */}
+      <AttachmentUpload
+        conversationId={activeConversation.id}
+        onUploadComplete={() => {
+          console.log('✅ Upload completo! WebSocket vai atualizar UI');
+        }}
+      />
+
       {/* Emoji button */}
       <button
         className="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
         title="Emoji"
       >
         <Smile className="w-6 h-6 text-gray-600" />
-      </button>
-
-      {/* Attach button */}
-      <button
-        className="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
-        title="Anexar"
-      >
-        <Paperclip className="w-6 h-6 text-gray-600" />
       </button>
 
       {/* Input */}

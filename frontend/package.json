@@ -23,6 +23,7 @@
     "recharts": "^2.8.0",
     "sonner": "^2.0.7",
     "tailwind-merge": "^2.0.0",
+    "wavesurfer.js": "^7.11.0",
     "zustand": "^4.4.7"
   },
   "devDependencies": {

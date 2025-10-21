@@ -92,6 +92,15 @@ export interface MessageAttachment {
   is_video: boolean;
   is_audio: boolean;
   is_document: boolean;
+  // ✨ Campos IA
+  transcription?: string | null;
+  transcription_language?: string | null;
+  ai_summary?: string | null;
+  ai_tags?: string[] | null;
+  ai_sentiment?: 'positive' | 'neutral' | 'negative' | null;
+  ai_metadata?: any | null;
+  processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
+  processed_at?: string | null;
 }
 
 export interface WebSocketMessage {
