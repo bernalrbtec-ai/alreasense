@@ -19,6 +19,7 @@ export function useChatSocket(conversationId?: string) {
     updateMessageStatus,
     setTyping,
     setConnectionStatus,
+    connectionStatus,
     updateConversation
   } = useChatStore();
 
