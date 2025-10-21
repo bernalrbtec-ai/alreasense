@@ -168,7 +168,7 @@ class EvolutionWebhookView(APIView):
                 profile_pic = contact_data.get('profilePicUrl', '')
                 
                 logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
-                
+            
                 # 📸 Atualizar foto de perfil nas conversas
                 if profile_pic and remote_jid:
                     try:
@@ -268,11 +268,53 @@ class EvolutionWebhookView(APIView):
     def handle_message_delete(self, data):
         """Handle messages.delete events."""
         logger.info(f"🗑️ Message deleted: {data.get('event')}")
+        
+        # 💬 FLOW CHAT: Processar deleção de mensagem
+        try:
+            instance_name = data.get('instance')
+            if instance_name:
+                from apps.notifications.models import WhatsAppInstance
+                from django.db.models import Q
+                
+                whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
+                    is_active=True
+                ).first()
+                
+                if whatsapp_instance:
+                    # TODO: Implementar lógica de deleção de mensagem no chat
+                    logger.info(f"🗑️ [FLOW CHAT] Mensagem deletada para tenant {whatsapp_instance.tenant.name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
+        except Exception as e:
+            logger.error(f"❌ [FLOW CHAT] Erro ao processar messages.delete: {e}", exc_info=True)
+        
         return JsonResponse({'status': 'success', 'event': 'messages.delete'})
     
     def handle_message_edited(self, data):
         """Handle messages.edited events."""
         logger.info(f"✏️ Message edited: {data.get('event')}")
+        
+        # 💬 FLOW CHAT: Processar edição de mensagem
+        try:
+            instance_name = data.get('instance')
+            if instance_name:
+                from apps.notifications.models import WhatsAppInstance
+                from django.db.models import Q
+                
+                whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
+                    is_active=True
+                ).first()
+                
+                if whatsapp_instance:
+                    # TODO: Implementar lógica de edição de mensagem no chat
+                    logger.info(f"✏️ [FLOW CHAT] Mensagem editada para tenant {whatsapp_instance.tenant.name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
+        except Exception as e:
+            logger.error(f"❌ [FLOW CHAT] Erro ao processar messages.edited: {e}", exc_info=True)
+        
         return JsonResponse({'status': 'success', 'event': 'messages.edited'})
     
     def handle_contacts_upsert(self, data):
@@ -288,11 +330,58 @@ class EvolutionWebhookView(APIView):
     def handle_chats_update(self, data):
         """Handle chats.update events."""
         logger.info(f"💬 Chat updated: {data.get('event')}")
+        
+        # 💬 FLOW CHAT: Processar atualização de chat para o módulo de chat
+        try:
+            instance_name = data.get('instance')
+            if not instance_name:
+                logger.warning("⚠️ [FLOW CHAT] chats.update sem instance_name")
+                return JsonResponse({'status': 'success', 'event': 'chats.update'})
+            
+            from apps.chat.webhooks import handle_message_update as chat_handle_update
+            from apps.notifications.models import WhatsAppInstance
+            from django.db.models import Q
+            
+            # Buscar instância - Evolution API envia o "nome da instância" (ex: "RBTec")
+            # Pode ser friendly_name OU instance_name (depende da configuração)
+            whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                Q(instance_name=instance_name) | Q(friendly_name=instance_name),
+                is_active=True
+            ).first()
+            
+            if whatsapp_instance:
+                chat_handle_update(data, whatsapp_instance.tenant)
+                logger.info(f"💬 [FLOW CHAT] Chat atualizado para tenant {whatsapp_instance.tenant.name}")
+            else:
+                logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
+        except Exception as e:
+            logger.error(f"❌ [FLOW CHAT] Erro ao processar chats.update: {e}", exc_info=True)
+        
         return JsonResponse({'status': 'success', 'event': 'chats.update'})
     
     def handle_chats_upsert(self, data):
         """Handle chats.upsert events."""
         logger.info(f"💬 Chat upsert: {data.get('event')}")
+        
+        # 💬 FLOW CHAT: Processar novo chat
+        try:
+            instance_name = data.get('instance')
+            if instance_name:
+                from apps.notifications.models import WhatsAppInstance
+                from django.db.models import Q
+                
+                whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
+                    is_active=True
+                ).first()
+                
+                if whatsapp_instance:
+                    logger.info(f"💬 [FLOW CHAT] Chat upsert para tenant {whatsapp_instance.tenant.name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
+        except Exception as e:
+            logger.error(f"❌ [FLOW CHAT] Erro ao processar chats.upsert: {e}", exc_info=True)
+        
         return JsonResponse({'status': 'success', 'event': 'chats.upsert'})
     
     def handle_chats_delete(self, data):
@@ -313,6 +402,26 @@ class EvolutionWebhookView(APIView):
     def handle_groups_update(self, data):
         """Handle groups.update events."""
         logger.info(f"👥 Group updated: {data.get('event')}")
+        
+        # 💬 FLOW CHAT: Processar atualização de grupo
+        try:
+            instance_name = data.get('instance')
+            if instance_name:
+                from apps.notifications.models import WhatsAppInstance
+                from django.db.models import Q
+                
+                whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
+                    is_active=True
+                ).first()
+                
+                if whatsapp_instance:
+                    logger.info(f"👥 [FLOW CHAT] Grupo atualizado para tenant {whatsapp_instance.tenant.name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
+        except Exception as e:
+            logger.error(f"❌ [FLOW CHAT] Erro ao processar groups.update: {e}", exc_info=True)
+        
         return JsonResponse({'status': 'success', 'event': 'groups.update'})
     
     def handle_group_participants_update(self, data):
