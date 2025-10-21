@@ -13,6 +13,11 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
     Inclui campos para IA (transcrição, resumo, tags, sentiment).
     """
     
+    # Serializar UUIDs como strings
+    id = serializers.UUIDField(read_only=True)
+    message = serializers.UUIDField(read_only=True)
+    tenant = serializers.UUIDField(read_only=True)
+    
     is_expired = serializers.ReadOnlyField()
     is_image = serializers.ReadOnlyField()
     is_video = serializers.ReadOnlyField()
@@ -32,7 +37,7 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
             'processing_status', 'processed_at'
         ]
         read_only_fields = [
-            'id', 'tenant', 'created_at', 'is_expired',
+            'id', 'message', 'tenant', 'created_at', 'is_expired',
             'is_image', 'is_video', 'is_audio', 'is_document',
             # IA fields são read-only (processados pelo backend)
             'transcription', 'transcription_language', 'ai_summary',
@@ -44,6 +49,11 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
 class MessageSerializer(serializers.ModelSerializer):
     """Serializer para mensagens."""
     
+    # Serializar UUIDs como strings
+    id = serializers.UUIDField(read_only=True)
+    conversation = serializers.UUIDField(read_only=True)
+    sender = serializers.UUIDField(read_only=True)
+    
     sender_data = UserSerializer(source='sender', read_only=True)
     attachments = MessageAttachmentSerializer(many=True, read_only=True)
     
@@ -52,9 +62,9 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'conversation', 'sender', 'sender_data', 'sender_name', 'sender_phone',
             'content', 'direction', 'message_id', 'evolution_status', 'error_message',
-            'status', 'is_internal', 'attachments', 'created_at'
+            'status', 'is_internal', 'attachments', 'metadata', 'created_at'
         ]
-        read_only_fields = ['id', 'created_at', 'sender_data', 'attachments']
+        read_only_fields = ['id', 'conversation', 'sender', 'created_at', 'sender_data', 'attachments']
 
 
 class MessageCreateSerializer(serializers.ModelSerializer):
