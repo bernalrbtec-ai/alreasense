@@ -461,4 +461,43 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         """Enfileira mensagem para envio via Evolution API."""
         from apps.chat.tasks import send_message_to_evolution
         send_message_to_evolution.delay(str(message.id))
+    
+    # ========== HANDLERS PARA BROADCASTS ==========
+    
+    async def chat_message(self, event):
+        """
+        Handler para broadcasts de novas mensagens.
+        Enviado quando alguém envia uma mensagem (via API ou WebSocket).
+        """
+        # Extrair mensagem do event
+        message_data = event.get('message')
+        
+        if message_data:
+            # Enviar para o cliente WebSocket
+            await self.send(text_data=json.dumps({
+                'type': 'message_received',
+                'message': message_data
+            }))
+            logger.debug(f"📨 [CHAT WS V2] Broadcast de mensagem enviado para {self.user.email}")
+    
+    async def message_status_update(self, event):
+        """
+        Handler para atualizações de status de mensagem.
+        """
+        await self.send(text_data=json.dumps({
+            'type': 'message_status_update',
+            'message_id': event.get('message_id'),
+            'status': event.get('status')
+        }))
+    
+    async def typing_status(self, event):
+        """
+        Handler para status de digitação.
+        """
+        await self.send(text_data=json.dumps({
+            'type': 'typing_status',
+            'user_email': event.get('user_email'),
+            'is_typing': event.get('is_typing'),
+            'conversation_id': event.get('conversation_id')
+        }))
 
