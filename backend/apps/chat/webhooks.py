@@ -188,10 +188,12 @@ def handle_message_upsert(data, tenant, connection=None):
         }
         
         # Para grupos, adicionar metadados
+        # ⚠️ pushName é de quem ENVIOU, não do grupo! Nome real virá da API
         if is_group:
+            defaults['contact_name'] = 'Grupo WhatsApp'  # Placeholder até buscar da API
             defaults['group_metadata'] = {
                 'group_id': remote_jid,
-                'group_name': push_name or 'Grupo WhatsApp',
+                'group_name': 'Grupo WhatsApp',  # Placeholder - será atualizado pela API
                 'is_group': True,
             }
         
@@ -316,80 +318,98 @@ def handle_message_upsert(data, tenant, connection=None):
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
         
-        # 📸 Para conversas EXISTENTES de GRUPO sem foto OU sem nome correto, buscar agora
-        elif is_group and (not conversation.profile_pic_url or not conversation.group_metadata.get('group_name')):
-            logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
-            try:
-                import httpx
-                from apps.connections.models import EvolutionConnection
-                
-                instance = EvolutionConnection.objects.filter(
-                    tenant=tenant,
-                    is_active=True
-                ).first()
-                
-                if instance:
-                    group_jid = remote_jid
-                    logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
+        # 📸 Para conversas EXISTENTES de GRUPO: atualizar periodicamente
+        elif is_group:
+            from datetime import timedelta
+            from django.utils import timezone
+            
+            needs_update = False
+            
+            # 1. Sem foto ou sem nome → buscar AGORA
+            if not conversation.profile_pic_url or not conversation.group_metadata.get('group_name'):
+                needs_update = True
+                logger.info(f"📸 [GRUPO] Precisa atualizar: falta foto ou nome")
+            
+            # 2. Última atualização há mais de 6h → buscar para pegar mudanças
+            elif conversation.updated_at:
+                time_since_update = timezone.now() - conversation.updated_at
+                if time_since_update > timedelta(hours=6):
+                    needs_update = True
+                    logger.info(f"📸 [GRUPO] Desatualizado há {time_since_update.total_seconds() / 3600:.1f}h → buscando")
+            
+            if needs_update:
+                logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
+                try:
+                    import httpx
+                    from apps.connections.models import EvolutionConnection
                     
-                    base_url = instance.base_url.rstrip('/')
-                    # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
-                    endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+                    instance = EvolutionConnection.objects.filter(
+                        tenant=tenant,
+                        is_active=True
+                    ).first()
                     
-                    headers = {
-                        'apikey': instance.api_key,
-                        'Content-Type': 'application/json'
-                    }
-                    
-                    with httpx.Client(timeout=5.0) as client:
-                        response = client.get(
-                            endpoint,
-                            params={'groupJid': group_jid},
-                            headers=headers
-                        )
+                    if instance:
+                        group_jid = remote_jid
+                        logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
                         
-                        if response.status_code == 200:
-                            group_info = response.json()
-                            logger.info(f"✅ [GRUPO INFO] Informações recebidas: {group_info}")
+                        base_url = instance.base_url.rstrip('/')
+                        # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
+                        endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+                        
+                        headers = {
+                            'apikey': instance.api_key,
+                            'Content-Type': 'application/json'
+                        }
+                        
+                        with httpx.Client(timeout=5.0) as client:
+                            response = client.get(
+                                endpoint,
+                                params={'groupJid': group_jid},
+                                headers=headers
+                            )
                             
-                            # Extrair dados do grupo
-                            group_name = group_info.get('subject', '')
-                            group_pic_url = group_info.get('pictureUrl')
-                            participants_count = group_info.get('size', 0)
-                            group_desc = group_info.get('desc', '')
-                            
-                            # Atualizar conversa
-                            update_fields = []
-                            
-                            if group_name:
-                                conversation.contact_name = group_name
-                                update_fields.append('contact_name')
-                                logger.info(f"✅ [GRUPO INFO] Nome do grupo: {group_name}")
-                            
-                            if group_pic_url:
-                                conversation.profile_pic_url = group_pic_url
-                                update_fields.append('profile_pic_url')
-                                logger.info(f"✅ [GRUPO INFO] Foto do grupo: {group_pic_url[:50]}...")
-                            
-                            # Atualizar metadados
-                            conversation.group_metadata = {
-                                'group_id': remote_jid,
-                                'group_name': group_name,
-                                'group_pic_url': group_pic_url,
-                                'participants_count': participants_count,
-                                'description': group_desc,
-                                'is_group': True,
-                            }
-                            update_fields.append('group_metadata')
-                            
-                            if update_fields:
-                                conversation.save(update_fields=update_fields)
-                                logger.info(f"✅ [GRUPO INFO] Conversa atualizada com {len(update_fields)} campos")
-                        else:
-                            logger.warning(f"⚠️ [GRUPO INFO] Erro ao buscar: {response.status_code}")
-                            logger.warning(f"   Response: {response.text[:200]}")
-            except Exception as e:
-                logger.error(f"❌ [GRUPO INFO] Erro ao buscar informações: {e}", exc_info=True)
+                            if response.status_code == 200:
+                                group_info = response.json()
+                                logger.info(f"✅ [GRUPO INFO] Informações recebidas: {group_info}")
+                                
+                                # Extrair dados do grupo
+                                group_name = group_info.get('subject', '')
+                                group_pic_url = group_info.get('pictureUrl')
+                                participants_count = group_info.get('size', 0)
+                                group_desc = group_info.get('desc', '')
+                                
+                                # Atualizar conversa
+                                update_fields = []
+                                
+                                if group_name:
+                                    conversation.contact_name = group_name
+                                    update_fields.append('contact_name')
+                                    logger.info(f"✅ [GRUPO INFO] Nome do grupo: {group_name}")
+                                
+                                if group_pic_url:
+                                    conversation.profile_pic_url = group_pic_url
+                                    update_fields.append('profile_pic_url')
+                                    logger.info(f"✅ [GRUPO INFO] Foto do grupo: {group_pic_url[:50]}...")
+                                
+                                # Atualizar metadados
+                                conversation.group_metadata = {
+                                    'group_id': remote_jid,
+                                    'group_name': group_name,
+                                    'group_pic_url': group_pic_url,
+                                    'participants_count': participants_count,
+                                    'description': group_desc,
+                                    'is_group': True,
+                                }
+                                update_fields.append('group_metadata')
+                                
+                                if update_fields:
+                                    conversation.save(update_fields=update_fields)
+                                    logger.info(f"✅ [GRUPO INFO] Conversa atualizada com {len(update_fields)} campos")
+                            else:
+                                logger.warning(f"⚠️ [GRUPO INFO] Erro ao buscar: {response.status_code}")
+                                logger.warning(f"   Response: {response.text[:200]}")
+                except Exception as e:
+                    logger.error(f"❌ [GRUPO INFO] Erro ao buscar informações: {e}", exc_info=True)
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
