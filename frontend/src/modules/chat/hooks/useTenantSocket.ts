@@ -127,10 +127,13 @@ export function useTenantSocket() {
       case 'conversation_updated':
         console.log('🔄 [TENANT WS] Conversa atualizada:', data.conversation);
         console.log('🖼️ [DEBUG] profile_pic_url:', data.conversation?.profile_pic_url);
+        console.log('🖼️ [DEBUG] contact_name:', data.conversation?.contact_name);
         // Atualizar conversa na lista
         const { updateConversation } = useChatStore.getState();
         if (data.conversation) {
+          console.log('✅ [TENANT WS] Chamando updateConversation...');
           updateConversation(data.conversation);
+          console.log('✅ [TENANT WS] Store atualizada!');
         }
         break;
 
