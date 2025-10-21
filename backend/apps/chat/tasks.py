@@ -213,9 +213,21 @@ async def handle_send_message(message_id: str):
         logger.info(f"   API URL: {instance.api_url}")
         
         # Prepara dados
-        phone = message.conversation.contact_phone
+        conversation = message.conversation
+        
+        # 🔍 PARA GRUPOS: usar group_id ao invés de contact_phone
+        if conversation.conversation_type == 'group' and conversation.group_metadata:
+            phone = conversation.group_metadata.get('group_id', conversation.contact_phone)
+            # Remover '+' se tiver (grupos não usam +)
+            phone = phone.replace('+', '')
+        else:
+            phone = conversation.contact_phone
+        
         content = message.content
         attachment_urls = message.metadata.get('attachment_urls', []) if message.metadata else []
+        
+        logger.info(f"📱 [CHAT ENVIO] Telefone/Grupo: {phone}")
+        logger.info(f"   Tipo: {conversation.conversation_type}")
         
         # Envia via Evolution API
         async with httpx.AsyncClient(timeout=30.0) as client:
@@ -258,9 +270,12 @@ async def handle_send_message(message_id: str):
             
             # Envia texto (se não tiver anexo ou como caption separado)
             if content and not attachment_urls:
-                # Formatar número corretamente (Evolution precisa do + e formato E.164)
-                # Se não tiver +, adicionar
-                formatted_phone = phone if phone.startswith('+') else f'+{phone}'
+                # 🔍 PARA GRUPOS: não formatar (já vem como "120363...@g.us")
+                # Para contatos individuais: adicionar + se não tiver
+                if conversation.conversation_type == 'group':
+                    formatted_phone = phone  # Grupos: usar como está (ex: "120363...@g.us")
+                else:
+                    formatted_phone = phone if phone.startswith('+') else f'+{phone}'
                 
                 # Usar mesmo formato das campanhas
                 payload = {
@@ -270,6 +285,7 @@ async def handle_send_message(message_id: str):
                 }
                 
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
+                logger.info(f"   Tipo: {conversation.conversation_type}")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
                 logger.info(f"   Phone original: {phone}")
                 logger.info(f"   Phone formatado: {formatted_phone}")
