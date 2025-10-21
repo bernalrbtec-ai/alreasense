@@ -39,6 +39,69 @@ class S3Manager:
             )
         )
         self.bucket = settings.S3_BUCKET
+        self._bucket_checked = False  # Flag para evitar múltiplas verificações
+    
+    def ensure_bucket_exists(self) -> bool:
+        """
+        Garante que o bucket existe, criando se necessário.
+        Só verifica uma vez por instância.
+        
+        Returns:
+            True se bucket existe ou foi criado, False em caso de erro
+        """
+        if self._bucket_checked:
+            return True
+        
+        try:
+            # Verificar se bucket existe
+            self.s3_client.head_bucket(Bucket=self.bucket)
+            logger.info(f"✅ [S3] Bucket '{self.bucket}' já existe")
+            self._bucket_checked = True
+            return True
+            
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+            
+            if error_code == '404':
+                # Bucket não existe, tentar criar
+                logger.warning(f"⚠️ [S3] Bucket '{self.bucket}' não existe, tentando criar...")
+                
+                try:
+                    self.s3_client.create_bucket(Bucket=self.bucket)
+                    logger.info(f"✅ [S3] Bucket '{self.bucket}' criado com sucesso")
+                    
+                    # Configurar CORS para permitir uploads do frontend
+                    try:
+                        cors_configuration = {
+                            'CORSRules': [{
+                                'AllowedHeaders': ['*'],
+                                'AllowedMethods': ['GET', 'PUT', 'POST', 'DELETE'],
+                                'AllowedOrigins': ['*'],
+                                'ExposeHeaders': ['ETag'],
+                                'MaxAgeSeconds': 3600
+                            }]
+                        }
+                        self.s3_client.put_bucket_cors(
+                            Bucket=self.bucket,
+                            CORSConfiguration=cors_configuration
+                        )
+                        logger.info(f"✅ [S3] CORS configurado no bucket")
+                    except Exception as cors_error:
+                        logger.warning(f"⚠️ [S3] Erro ao configurar CORS (não crítico): {cors_error}")
+                    
+                    self._bucket_checked = True
+                    return True
+                    
+                except ClientError as create_error:
+                    logger.error(f"❌ [S3] Erro ao criar bucket: {create_error}")
+                    return False
+            else:
+                logger.error(f"❌ [S3] Erro ao verificar bucket: {error_code}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ [S3] Erro inesperado ao verificar bucket: {e}")
+            return False
     
     def upload_to_s3(
         self,
@@ -60,6 +123,10 @@ class S3Manager:
             (sucesso: bool, mensagem: str)
         """
         try:
+            # Garantir que bucket existe
+            if not self.ensure_bucket_exists():
+                return False, "Bucket não existe e não pôde ser criado"
+            
             # Auto-detectar content_type se não fornecido
             if not content_type:
                 content_type = mimetypes.guess_type(file_path)[0] or 'application/octet-stream'
@@ -164,6 +231,11 @@ class S3Manager:
             URL assinada ou None em caso de erro
         """
         try:
+            # Garantir que bucket existe
+            if not self.ensure_bucket_exists():
+                logger.error("❌ [S3] Não foi possível garantir que o bucket existe")
+                return None
+            
             url = self.s3_client.generate_presigned_url(
                 'put_object' if http_method == 'PUT' else 'get_object',
                 Params={
