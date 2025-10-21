@@ -982,6 +982,209 @@ class MessageViewSet(viewsets.ModelViewSet):
             MessageSerializer(message).data,
             status=status.HTTP_200_OK
         )
+    
+    @action(detail=False, methods=['post'], url_path='upload-presigned-url')
+    def get_upload_presigned_url(self, request):
+        """
+        Gera presigned URL para upload direto no S3/MinIO.
+        
+        Body:
+        {
+            "conversation_id": "uuid",
+            "filename": "foto.jpg",
+            "content_type": "image/jpeg",
+            "file_size": 1024000
+        }
+        
+        Returns:
+        {
+            "upload_url": "https://s3.../...",
+            "attachment_id": "uuid",
+            "expires_in": 300
+        }
+        """
+        import logging
+        import uuid
+        from datetime import timedelta
+        from django.utils import timezone
+        from apps.chat.utils.s3 import S3Manager
+        
+        logger = logging.getLogger(__name__)
+        
+        # Validar dados
+        conversation_id = request.data.get('conversation_id')
+        filename = request.data.get('filename')
+        content_type = request.data.get('content_type')
+        file_size = request.data.get('file_size', 0)
+        
+        if not all([conversation_id, filename, content_type]):
+            return Response(
+                {'error': 'conversation_id, filename e content_type são obrigatórios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar tamanho (max 50MB)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if file_size > max_size:
+            return Response(
+                {'error': f'Arquivo muito grande. Máximo: {max_size / 1024 / 1024}MB'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar conversa
+        try:
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                tenant=request.user.tenant
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {'error': 'Conversa não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Gerar caminho S3
+        attachment_id = uuid.uuid4()
+        file_ext = filename.split('.')[-1] if '.' in filename else ''
+        s3_key = f"chat/{request.user.tenant.id}/attachments/{attachment_id}.{file_ext}"
+        
+        # Gerar presigned URL
+        try:
+            s3_manager = S3Manager()
+            upload_url = s3_manager.generate_presigned_url(
+                s3_key,
+                expiration=300,  # 5 minutos
+                http_method='PUT',
+                content_type=content_type
+            )
+            
+            logger.info(f"✅ [PRESIGNED] URL gerada: {s3_key}")
+            
+            return Response({
+                'upload_url': upload_url,
+                'attachment_id': str(attachment_id),
+                's3_key': s3_key,
+                'expires_in': 300,
+                'instructions': {
+                    'method': 'PUT',
+                    'headers': {
+                        'Content-Type': content_type
+                    }
+                }
+            })
+        
+        except Exception as e:
+            logger.error(f"❌ [PRESIGNED] Erro ao gerar URL: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao gerar URL de upload: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    @action(detail=False, methods=['post'], url_path='confirm-upload')
+    def confirm_upload(self, request):
+        """
+        Confirma upload e cria MessageAttachment + envia para Evolution API.
+        
+        Body:
+        {
+            "conversation_id": "uuid",
+            "attachment_id": "uuid",
+            "s3_key": "chat/.../...",
+            "filename": "foto.jpg",
+            "content_type": "image/jpeg",
+            "file_size": 1024000
+        }
+        
+        Returns:
+        {
+            "message": {...},
+            "attachment": {...}
+        }
+        """
+        import logging
+        from django.utils import timezone
+        from datetime import timedelta
+        from apps.chat.utils.s3 import S3Manager
+        
+        logger = logging.getLogger(__name__)
+        
+        # Validar dados
+        conversation_id = request.data.get('conversation_id')
+        attachment_id = request.data.get('attachment_id')
+        s3_key = request.data.get('s3_key')
+        filename = request.data.get('filename')
+        content_type = request.data.get('content_type')
+        file_size = request.data.get('file_size', 0)
+        
+        if not all([conversation_id, attachment_id, s3_key, filename, content_type]):
+            return Response(
+                {'error': 'Dados incompletos'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar conversa
+        try:
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                tenant=request.user.tenant
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {'error': 'Conversa não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Criar mensagem
+        message = Message.objects.create(
+            id=attachment_id,  # Usar mesmo ID do attachment
+            conversation=conversation,
+            sender=request.user,
+            content=f'📎 {filename}',
+            direction='outgoing',
+            status='pending',
+            is_internal=False
+        )
+        
+        # Gerar URL pública do S3
+        try:
+            s3_manager = S3Manager()
+            file_url = s3_manager.get_public_url(s3_key)
+            
+            # Criar attachment
+            attachment = MessageAttachment.objects.create(
+                id=attachment_id,
+                message=message,
+                tenant=request.user.tenant,
+                original_filename=filename,
+                mime_type=content_type,
+                file_path=s3_key,
+                file_url=file_url,
+                storage_type='s3',
+                size_bytes=file_size,
+                expires_at=timezone.now() + timedelta(days=365),  # 1 ano
+                processing_status='pending'  # Para IA futura
+            )
+            
+            logger.info(f"✅ [UPLOAD] Anexo criado: {attachment_id}")
+            
+            # Enfileirar para envio Evolution API
+            from apps.chat.tasks import send_message_to_evolution
+            send_message_to_evolution.delay(str(message.id))
+            
+            # Retornar resposta
+            return Response({
+                'message': MessageSerializer(message).data,
+                'attachment': MessageAttachmentSerializer(attachment).data
+            }, status=status.HTTP_201_CREATED)
+        
+        except Exception as e:
+            logger.error(f"❌ [UPLOAD] Erro ao confirmar upload: {e}", exc_info=True)
+            # Deletar mensagem se falhou
+            message.delete()
+            return Response(
+                {'error': f'Erro ao confirmar upload: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):

@@ -385,6 +385,71 @@ class MessageAttachment(models.Model):
         verbose_name='Criado em'
     )
     
+    # ✨ Campos para IA (Flow AI addon)
+    transcription = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name='Transcrição',
+        help_text='Transcrição de áudio (se aplicável)'
+    )
+    transcription_language = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        verbose_name='Idioma da Transcrição',
+        help_text='Código do idioma (pt-BR, en-US, etc)'
+    )
+    ai_summary = models.TextField(
+        null=True,
+        blank=True,
+        verbose_name='Resumo IA',
+        help_text='Resumo gerado pela IA'
+    )
+    ai_tags = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Tags IA',
+        help_text='Tags extraídas pela IA'
+    )
+    ai_sentiment = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[
+            ('positive', 'Positivo'),
+            ('neutral', 'Neutro'),
+            ('negative', 'Negativo'),
+        ],
+        verbose_name='Sentimento',
+        help_text='Análise de sentimento pela IA'
+    )
+    ai_metadata = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name='Metadados IA',
+        help_text='Dados adicionais da IA (ações, entidades, etc)'
+    )
+    processing_status = models.CharField(
+        max_length=20,
+        choices=[
+            ('pending', 'Pendente'),
+            ('processing', 'Processando'),
+            ('completed', 'Concluído'),
+            ('failed', 'Falhou'),
+            ('skipped', 'Ignorado'),
+        ],
+        default='pending',
+        db_index=True,
+        verbose_name='Status de Processamento',
+        help_text='Status do processamento de IA'
+    )
+    processed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Processado em',
+        help_text='Quando foi processado pela IA'
+    )
+    
     class Meta:
         db_table = 'chat_attachment'
         verbose_name = 'Anexo'

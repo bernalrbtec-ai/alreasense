@@ -8,7 +8,10 @@ from apps.contacts.models import Contact
 
 
 class MessageAttachmentSerializer(serializers.ModelSerializer):
-    """Serializer para anexos de mensagem."""
+    """
+    Serializer para anexos de mensagem.
+    Inclui campos para IA (transcrição, resumo, tags, sentiment).
+    """
     
     is_expired = serializers.ReadOnlyField()
     is_image = serializers.ReadOnlyField()
@@ -22,11 +25,19 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
             'id', 'message', 'tenant', 'original_filename', 'mime_type',
             'file_path', 'file_url', 'thumbnail_path', 'storage_type',
             'size_bytes', 'expires_at', 'created_at',
-            'is_expired', 'is_image', 'is_video', 'is_audio', 'is_document'
+            'is_expired', 'is_image', 'is_video', 'is_audio', 'is_document',
+            # ✨ Campos IA
+            'transcription', 'transcription_language', 'ai_summary',
+            'ai_tags', 'ai_sentiment', 'ai_metadata',
+            'processing_status', 'processed_at'
         ]
         read_only_fields = [
             'id', 'tenant', 'created_at', 'is_expired',
-            'is_image', 'is_video', 'is_audio', 'is_document'
+            'is_image', 'is_video', 'is_audio', 'is_document',
+            # IA fields são read-only (processados pelo backend)
+            'transcription', 'transcription_language', 'ai_summary',
+            'ai_tags', 'ai_sentiment', 'ai_metadata',
+            'processing_status', 'processed_at'
         ]
 
 
