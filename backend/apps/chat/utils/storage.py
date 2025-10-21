@@ -13,6 +13,7 @@ from django.conf import settings
 from django.utils import timezone
 import boto3
 from botocore.exceptions import ClientError
+from botocore.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,11 @@ s3_client = boto3.client(
     endpoint_url=S3_ENDPOINT,
     aws_access_key_id=S3_ACCESS_KEY,
     aws_secret_access_key=S3_SECRET_KEY,
-    region_name=S3_REGION
+    region_name=S3_REGION,
+    config=Config(
+        signature_version='s3v4',
+        s3={'addressing_style': 'path'}  # Force path-style URLs for MinIO
+    )
 )
 
 
