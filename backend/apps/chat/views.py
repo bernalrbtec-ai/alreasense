@@ -1,47 +1,55 @@
 """
-Views Django puras (sem DRF) para endpoints públicos.
+Views Django puras (não DRF) para endpoints públicos.
+
+Endpoints:
+- media_proxy: Proxy universal para mídia (fotos, áudios, docs)
 """
+import httpx
+import logging
+import hashlib
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
-import httpx
-import logging
-import hashlib
-
 
 logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
 @require_http_methods(["GET"])
-def profile_pic_proxy_django_view(request):
+def media_proxy(request):
     """
-    Proxy PÚBLICO para fotos de perfil do WhatsApp com cache Redis.
+    Proxy universal para servir mídia (fotos, áudios, documentos).
     
-    Esta é uma view Django PURA (não DRF) para evitar a autenticação global do DRF.
+    IMPORTANTE: Este endpoint é PÚBLICO (não requer autenticação)!
     
     Query params:
-    - url: URL da foto de perfil do WhatsApp
+        url: URL da mídia (S3, WhatsApp, etc)
+    
+    Headers de resposta:
+        X-Cache: HIT (Redis) ou MISS (Download)
+        Cache-Control: public, max-age=604800 (7 dias)
+        Content-Type: Detectado automaticamente
+    
+    Fluxo:
+        1. Tenta buscar no Redis cache
+        2. Se não encontrar, baixa da URL original
+        3. Cacheia no Redis (7 dias)
+        4. Retorna conteúdo
     """
-    profile_url = request.GET.get('url')
+    media_url = request.GET.get('url')
     
-    if not profile_url:
-        logger.warning('🖼️ [PROXY] URL não fornecida')
-        return JsonResponse(
-            {'error': 'URL é obrigatória'},
-            status=400
-        )
+    if not media_url:
+        logger.warning('📦 [MEDIA PROXY] URL não fornecida')
+        return JsonResponse({'error': 'URL é obrigatória'}, status=400)
     
-    # Gerar chave Redis baseada na URL
-    cache_key = f"profile_pic:{hashlib.md5(profile_url.encode()).hexdigest()}"
-    
-    # Tentar buscar do cache Redis
+    # Cache key (hash da URL)
+    cache_key = f"media:{hashlib.md5(media_url.encode()).hexdigest()}"
     cached_data = cache.get(cache_key)
     
+    # Cache HIT
     if cached_data:
-        logger.info(f'✅ [PROXY CACHE] Imagem servida do Redis: {profile_url[:80]}...')
-        
+        logger.info(f'✅ [MEDIA PROXY CACHE] Servido do Redis: {media_url[:80]}...')
         response = HttpResponse(
             cached_data['content'],
             content_type=cached_data['content_type']
@@ -49,55 +57,58 @@ def profile_pic_proxy_django_view(request):
         response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
         response['Access-Control-Allow-Origin'] = '*'
         response['X-Cache'] = 'HIT'
-        
+        response['X-Content-Size'] = len(cached_data['content'])
         return response
     
-    # Não está no cache, buscar do WhatsApp
-    logger.info(f'🔄 [PROXY] Baixando imagem do WhatsApp: {profile_url[:80]}...')
+    # Cache MISS - Download
+    logger.info(f'🔄 [MEDIA PROXY] Baixando mídia: {media_url[:80]}...')
     
     try:
-        with httpx.Client(timeout=10.0, follow_redirects=True) as client:
-            http_response = client.get(profile_url)
+        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+            http_response = client.get(media_url)
             http_response.raise_for_status()
             
-            content_type = http_response.headers.get('content-type', 'image/jpeg')
+            content_type = http_response.headers.get('content-type', 'application/octet-stream')
             content = http_response.content
             
-            logger.info(f'✅ [PROXY] Imagem baixada! Content-Type: {content_type} | Size: {len(content)} bytes')
+            logger.info(
+                f'✅ [MEDIA PROXY] Download concluído! '
+                f'Content-Type: {content_type} | Size: {len(content)} bytes'
+            )
             
-            # Cachear no Redis por 7 dias
+            # Cachear no Redis (7 dias)
             cache.set(
                 cache_key,
-                {
-                    'content': content,
-                    'content_type': content_type
-                },
+                {'content': content, 'content_type': content_type},
                 timeout=604800  # 7 dias
             )
+            logger.info(f'💾 [MEDIA PROXY] Cacheado no Redis: {cache_key}')
             
-            logger.info(f'💾 [PROXY] Imagem cacheada no Redis com chave: {cache_key}')
-            
-            # Retornar imagem
-            response = HttpResponse(
-                content,
-                content_type=content_type
-            )
-            response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
+            response = HttpResponse(content, content_type=content_type)
+            response['Cache-Control'] = 'public, max-age=604800'
             response['Access-Control-Allow-Origin'] = '*'
             response['X-Cache'] = 'MISS'
-            
+            response['X-Content-Size'] = len(content)
             return response
-    
+            
     except httpx.HTTPStatusError as e:
-        logger.error(f'❌ [PROXY] Erro HTTP {e.response.status_code}: {profile_url[:80]}...')
+        logger.error(
+            f'❌ [MEDIA PROXY] Erro HTTP {e.response.status_code}: {media_url[:80]}...'
+        )
         return JsonResponse(
-            {'error': f'Erro ao buscar imagem: {e.response.status_code}'},
+            {'error': f'Erro ao buscar mídia: {e.response.status_code}'},
             status=502
         )
+    except httpx.TimeoutException:
+        logger.error(f'⏱️ [MEDIA PROXY] Timeout ao baixar: {media_url[:80]}...')
+        return JsonResponse({'error': 'Timeout ao baixar mídia'}, status=504)
     except Exception as e:
-        logger.error(f'❌ [PROXY] Erro: {str(e)} | URL: {profile_url[:80]}...', exc_info=True)
-        return JsonResponse(
-            {'error': f'Erro ao buscar imagem: {str(e)}'},
-            status=500
+        logger.error(
+            f'❌ [MEDIA PROXY] Erro: {str(e)} | URL: {media_url[:80]}...',
+            exc_info=True
         )
+        return JsonResponse({'error': f'Erro ao buscar mídia: {str(e)}'}, status=500)
 
+
+# Alias para compatibilidade (pode ser removido depois)
+profile_pic_proxy_django_view = media_proxy

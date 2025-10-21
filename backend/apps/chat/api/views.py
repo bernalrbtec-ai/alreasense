@@ -337,6 +337,115 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
+    @action(detail=False, methods=['post'], url_path='upload-media')
+    def upload_media(self, request):
+        """
+        Upload de arquivo para enviar via chat.
+        
+        Body (multipart/form-data):
+            file: Arquivo binário
+        
+        Returns:
+            {
+                'success': true,
+                'file_url': 'https://...',
+                'thumbnail_url': 'https://...',
+                'file_size': 123456,
+                'file_type': 'image'
+            }
+        """
+        import base64
+        from apps.chat.media_tasks import handle_process_uploaded_file
+        import asyncio
+        
+        file_obj = request.FILES.get('file')
+        
+        if not file_obj:
+            return Response(
+                {'error': 'Arquivo não fornecido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Ler arquivo
+        file_data = file_obj.read()
+        file_data_b64 = base64.b64encode(file_data).decode('utf-8')
+        
+        # Processar assincronamente
+        result = asyncio.run(handle_process_uploaded_file(
+            tenant_id=str(request.user.tenant_id),
+            file_data=file_data_b64,
+            filename=file_obj.name,
+            content_type=file_obj.content_type
+        ))
+        
+        if result['success']:
+            return Response(result, status=status.HTTP_200_OK)
+        else:
+            return Response(
+                {'error': result.get('error', 'Erro ao processar arquivo')},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    @action(detail=False, methods=['post'], url_path='get-upload-url')
+    def get_upload_url(self, request):
+        """
+        Gera URL pré-assinada para upload direto ao S3.
+        
+        Body:
+            filename: Nome do arquivo
+            content_type: MIME type
+        
+        Returns:
+            {
+                'upload_url': 'https://...',
+                'file_key': 'chat_images/tenant/...',
+                'expires_in': 3600
+            }
+        """
+        from apps.chat.utils.s3 import get_s3_manager, generate_media_path
+        
+        filename = request.data.get('filename')
+        content_type = request.data.get('content_type', 'application/octet-stream')
+        
+        if not filename:
+            return Response(
+                {'error': 'Filename é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Detectar tipo de mídia
+        if content_type.startswith('image/'):
+            media_type = 'image'
+        elif content_type.startswith('audio/'):
+            media_type = 'audio'
+        elif content_type.startswith('video/'):
+            media_type = 'video'
+        else:
+            media_type = 'document'
+        
+        # Gerar path no S3
+        file_key = generate_media_path(
+            str(request.user.tenant_id),
+            f'chat_{media_type}s',
+            filename
+        )
+        
+        # Gerar URL presigned
+        s3_manager = get_s3_manager()
+        upload_url = s3_manager.generate_presigned_url(file_key, expiration=3600)
+        
+        if not upload_url:
+            return Response(
+                {'error': 'Erro ao gerar URL de upload'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        return Response({
+            'upload_url': upload_url,
+            'file_key': file_key,
+            'expires_in': 3600
+        }, status=status.HTTP_200_OK)
+    
     @action(detail=False, methods=['get'], url_path='profile-pic-proxy')
     def profile_pic_proxy(self, request):
         """

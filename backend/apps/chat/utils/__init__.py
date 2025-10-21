@@ -1,2 +1,1 @@
-"""Utils para Flow Chat."""
-
+# Chat utilities package

@@ -3,8 +3,9 @@ Tasks assíncronas para Flow Chat via RabbitMQ.
 
 Producers:
 - send_message_to_evolution: Envia mensagem para Evolution API
-- download_attachment: Baixa anexo da Evolution
-- migrate_to_s3: Migra anexos locais para MinIO
+- process_profile_pic: Processa foto de perfil do WhatsApp
+- process_incoming_media: Processa mídia recebida do WhatsApp
+- process_uploaded_file: Processa arquivo enviado pelo usuário
 
 Consumers:
 - Processa mensagens das filas dedicadas ao chat
@@ -13,8 +14,10 @@ import logging
 import json
 import asyncio
 import aio_pika
+import httpx
 from typing import Optional
 from django.conf import settings
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +26,8 @@ QUEUE_SEND_MESSAGE = 'chat_send_message'
 QUEUE_DOWNLOAD_ATTACHMENT = 'chat_download_attachment'
 QUEUE_MIGRATE_S3 = 'chat_migrate_s3'
 QUEUE_FETCH_PROFILE_PIC = 'chat_fetch_profile_pic'
+QUEUE_PROCESS_INCOMING_MEDIA = 'chat_process_incoming_media'
+QUEUE_PROCESS_UPLOADED_FILE = 'chat_process_uploaded_file'
 
 
 # ========== PRODUCERS (enfileirar tasks) ==========
@@ -100,6 +105,47 @@ class fetch_profile_pic:
         delay(QUEUE_FETCH_PROFILE_PIC, {
             'conversation_id': conversation_id,
             'phone': phone
+        })
+
+
+class process_profile_pic:
+    """Producer: Processa foto de perfil do WhatsApp."""
+    
+    @staticmethod
+    def delay(tenant_id: str, phone: str, profile_url: str):
+        """Enfileira processamento de foto de perfil."""
+        delay(QUEUE_FETCH_PROFILE_PIC, {
+            'tenant_id': tenant_id,
+            'phone': phone,
+            'profile_url': profile_url
+        })
+
+
+class process_incoming_media:
+    """Producer: Processa mídia recebida do WhatsApp."""
+    
+    @staticmethod
+    def delay(tenant_id: str, message_id: str, media_url: str, media_type: str):
+        """Enfileira processamento de mídia recebida."""
+        delay(QUEUE_PROCESS_INCOMING_MEDIA, {
+            'tenant_id': tenant_id,
+            'message_id': message_id,
+            'media_url': media_url,
+            'media_type': media_type
+        })
+
+
+class process_uploaded_file:
+    """Producer: Processa arquivo enviado pelo usuário."""
+    
+    @staticmethod
+    def delay(tenant_id: str, file_data: str, filename: str, content_type: str):
+        """Enfileira processamento de arquivo enviado (base64)."""
+        delay(QUEUE_PROCESS_UPLOADED_FILE, {
+            'tenant_id': tenant_id,
+            'file_data': file_data,  # base64
+            'filename': filename,
+            'content_type': content_type
         })
 
 

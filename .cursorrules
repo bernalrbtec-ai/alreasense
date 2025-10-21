@@ -1,0 +1,36 @@
+# 🚦 CURSOR RULES - ALREA SENSE
+
+Este projeto segue as regras definidas em `rules.md`.
+
+## 📚 Documentação Principal
+
+Leia SEMPRE antes de fazer mudanças:
+- `rules.md` - Regras de desenvolvimento e arquitetura atual
+- `IMPLEMENTACAO_SISTEMA_MIDIA.md` - Guia completo do sistema de mídia
+- `ANALISE_COMPLETA_PROJETO_2025.md` - Análise arquitetural
+
+## ⚠️ REGRAS CRÍTICAS
+
+1. **NÃO USE CELERY** - O projeto usa RabbitMQ + aio-pika
+2. **SEMPRE TESTE ANTES DE COMMIT** - Crie scripts de teste locais
+3. **MULTI-TENANT FIRST** - Todo modelo precisa de `tenant_id`
+4. **WEBSOCKET PARA REAL-TIME** - Use Channels, não polling
+
+## 🎯 STACK ATUAL
+
+- Backend: Django 5 + DRF + Channels + RabbitMQ
+- Frontend: React 18 + TypeScript + Vite + Zustand
+- Database: PostgreSQL 15 + pgvector
+- Cache: Redis 7
+- Storage: MinIO/S3 (Railway)
+- Queue: RabbitMQ (NÃO Celery!)
+
+## 📦 PRODUTOS ATIVOS
+
+- Flow (Campanhas + Chat + Contatos)
+- Sense (IA - legado)
+- Notifications
+- API Pública
+
+Para detalhes completos, consulte `rules.md`.
+
