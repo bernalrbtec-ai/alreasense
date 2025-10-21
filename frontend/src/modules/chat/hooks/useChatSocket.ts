@@ -276,7 +276,7 @@ export function useChatSocket(conversationId?: string) {
     sendMessage,
     sendTyping,
     markAsSeen,
-    isConnected: socketRef.current?.readyState === WebSocket.OPEN
+    isConnected: connectionStatus === 'connected'
   };
 }
 
