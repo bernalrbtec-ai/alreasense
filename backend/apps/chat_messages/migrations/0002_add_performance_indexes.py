@@ -14,13 +14,13 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
                 CREATE INDEX IF NOT EXISTS idx_message_tenant_created 
-                ON chat_messages_message(tenant_id, created_at);
+                ON messages_message(tenant_id, created_at);
                 
                 CREATE INDEX IF NOT EXISTS idx_message_tenant_sentiment 
-                ON chat_messages_message(tenant_id, sentiment);
+                ON messages_message(tenant_id, sentiment);
                 
                 CREATE INDEX IF NOT EXISTS idx_message_tenant_satisfaction 
-                ON chat_messages_message(tenant_id, satisfaction);
+                ON messages_message(tenant_id, satisfaction);
             """,
             reverse_sql="""
                 DROP INDEX IF EXISTS idx_message_tenant_created;
