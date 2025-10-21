@@ -25,6 +25,18 @@ export function useChatSocket(conversationId?: string) {
 
   // Obter dados de autenticação do Zustand
   const { token, user } = useAuthStore();
+  
+  // useRef para evitar re-criação do callback connect
+  const conversationIdRef = useRef(conversationId);
+  const tokenRef = useRef(token);
+  const userRef = useRef(user);
+  
+  // Atualizar refs quando valores mudarem
+  useEffect(() => {
+    conversationIdRef.current = conversationId;
+    tokenRef.current = token;
+    userRef.current = user;
+  }, [conversationId, token, user]);
 
   const handleWebSocketMessage = useCallback((data: WebSocketMessage) => {
     console.log('📨 [WS] Mensagem recebida:', data);
@@ -96,16 +108,20 @@ export function useChatSocket(conversationId?: string) {
   }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
 
   const connect = useCallback(() => {
-    console.log('🔍 [WS DEBUG] token:', token ? `${token.substring(0, 20)}...` : 'null');
-    console.log('🔍 [WS DEBUG] user:', user);
-    console.log('🔍 [WS DEBUG] conversationId:', conversationId);
+    const currentToken = tokenRef.current;
+    const currentUser = userRef.current;
+    const currentConversationId = conversationIdRef.current;
     
-    if (!token || !user) {
-      console.log('⏸️ [WS] Aguardando autenticação...', { token: !!token, user: !!user });
+    console.log('🔍 [WS DEBUG] token:', currentToken ? `${currentToken.substring(0, 20)}...` : 'null');
+    console.log('🔍 [WS DEBUG] user:', currentUser);
+    console.log('🔍 [WS DEBUG] conversationId:', currentConversationId);
+    
+    if (!currentToken || !currentUser) {
+      console.log('⏸️ [WS] Aguardando autenticação...', { token: !!currentToken, user: !!currentUser });
       return;
     }
 
-    const tenantId = user.tenant_id;
+    const tenantId = currentUser.tenant_id;
     
     console.log('🔍 [WS DEBUG] tenantId:', tenantId);
 
@@ -114,7 +130,7 @@ export function useChatSocket(conversationId?: string) {
       return;
     }
 
-    if (!conversationId) {
+    if (!currentConversationId) {
       console.log('⏸️ [WS] Aguardando conversationId...');
       return;
     }
@@ -138,7 +154,7 @@ export function useChatSocket(conversationId?: string) {
 
     setConnectionStatus('connecting');
 
-    const wsUrl = `${WS_BASE_URL}/ws/chat/${tenantId}/${conversationId}/?token=${token}`;
+    const wsUrl = `${WS_BASE_URL}/ws/chat/${tenantId}/${currentConversationId}/?token=${currentToken}`;
     console.log('🔌 [WS] Conectando:', wsUrl);
 
     try {
@@ -193,7 +209,7 @@ export function useChatSocket(conversationId?: string) {
       console.error('❌ [WS] Erro ao criar WebSocket:', error);
       setConnectionStatus('disconnected');
     }
-  }, [conversationId, token, user, setConnectionStatus, handleWebSocketMessage]);
+  }, [setConnectionStatus, handleWebSocketMessage]); // ✅ Dependências estáveis
 
   const disconnect = useCallback(() => {
     console.log('🔌 [WS] Desconectando...');
@@ -269,12 +285,19 @@ export function useChatSocket(conversationId?: string) {
 
   // Conectar quando conversation mudar
   useEffect(() => {
+    if (!conversationId) {
+      console.log('⏸️ [WS] Sem conversationId, não conectando');
+      return;
+    }
+
+    console.log(`🔄 [WS] Trocando para conversa: ${conversationId}`);
     connect();
 
     return () => {
+      console.log(`🔌 [WS] Limpando conversa: ${conversationId}`);
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [conversationId]); // ✅ CORRETO: Só reconecta quando conversationId muda
 
   return {
     sendMessage,
