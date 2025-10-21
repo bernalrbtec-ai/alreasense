@@ -36,6 +36,14 @@ export interface Conversation {
   assigned_to?: string;
   assigned_to_data?: User;
   status: 'pending' | 'open' | 'closed';
+  conversation_type?: 'individual' | 'group' | 'broadcast';
+  group_metadata?: {
+    group_id?: string;
+    group_name?: string;
+    group_pic_url?: string;
+    participants_count?: number;
+    is_group?: boolean;
+  };
   last_message_at?: string;
   metadata: Record<string, any>;
   participants: string[];
@@ -52,6 +60,8 @@ export interface Message {
   conversation: string;
   sender?: string;
   sender_data?: User;
+  sender_name?: string;  // Nome de quem enviou (para grupos)
+  sender_phone?: string; // Telefone de quem enviou (para grupos)
   content: string;
   direction: 'incoming' | 'outgoing';
   message_id?: string;

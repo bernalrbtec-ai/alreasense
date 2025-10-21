@@ -130,22 +130,30 @@ export function ChatWindow() {
           </button>
 
           {/* Avatar */}
-          <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
+          <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 relative">
             {activeConversation.profile_pic_url ? (
-              <img 
-                src={getMediaProxyUrl(activeConversation.profile_pic_url)}
-                alt={activeConversation.contact_name || activeConversation.contact_phone}
-                className="w-full h-full object-cover"
-                onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
+              <>
+                <img 
+                  src={getMediaProxyUrl(activeConversation.profile_pic_url)}
+                  alt={activeConversation.contact_name || activeConversation.contact_phone}
+                  className="w-full h-full object-cover"
+                  onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
                 onError={(e) => {
                   console.error('❌ [IMG] Erro ao carregar foto:', e);
                   console.error('   URL:', e.currentTarget.src);
                   e.currentTarget.style.display = 'none';
                 }}
               />
+                {/* Badge de grupo */}
+                {activeConversation.conversation_type === 'group' && (
+                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px]">
+                    👥
+                  </div>
+                )}
+              </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
+                {activeConversation.conversation_type === 'group' ? '👥' : (activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
               </div>
             )}
           </div>
@@ -153,8 +161,12 @@ export function ChatWindow() {
           {/* Nome e Tags */}
           <div className="flex-1 min-w-0">
             {/* Nome */}
-            <h2 className="text-base font-medium text-gray-900 truncate">
-              {activeConversation.contact_name || activeConversation.contact_phone}
+            <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
+              {activeConversation.conversation_type === 'group' && <span>👥</span>}
+              {activeConversation.conversation_type === 'group'
+                ? (activeConversation.group_metadata?.group_name || activeConversation.contact_name || 'Grupo WhatsApp')
+                : (activeConversation.contact_name || activeConversation.contact_phone)
+              }
             </h2>
             
             {/* Tags: Instância + Tags do Contato */}

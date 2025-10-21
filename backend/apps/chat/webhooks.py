@@ -110,14 +110,38 @@ def handle_message_upsert(data, tenant, connection=None):
         message_info = message_data.get('message', {})
         
         # Extrai dados
-        remote_jid = key.get('remoteJid', '')  # Ex: 5517999999999@s.whatsapp.net
+        remote_jid = key.get('remoteJid', '')  # Ex: 5517999999999@s.whatsapp.net ou 120363123456789012@g.us (grupo)
         from_me = key.get('fromMe', False)
         message_id = key.get('id')
+        participant = key.get('participant', '')  # Quem enviou no grupo (apenas em grupos)
         
-        # Telefone (remove @s.whatsapp.net)
+        # 🔍 Detectar tipo de conversa
+        is_group = remote_jid.endswith('@g.us')
+        is_broadcast = remote_jid.endswith('@broadcast')
+        
+        if is_group:
+            conversation_type = 'group'
+        elif is_broadcast:
+            conversation_type = 'broadcast'
+        else:
+            conversation_type = 'individual'
+        
+        logger.info(f"🔍 [TIPO] Conversa: {conversation_type} | RemoteJID: {remote_jid}")
+        
+        # Telefone (remove sufixos @s.whatsapp.net, @g.us, @broadcast)
         phone = remote_jid.split('@')[0]
         if not phone.startswith('+'):
             phone = '+' + phone
+        
+        # Para grupos, extrair quem enviou
+        sender_phone = ''
+        sender_name = ''
+        if is_group and participant:
+            sender_phone = participant.split('@')[0]
+            if not sender_phone.startswith('+'):
+                sender_phone = '+' + sender_phone
+            sender_name = message_data.get('pushName', '')  # Nome de quem enviou
+            logger.info(f"👥 [GRUPO] Enviado por: {sender_name} ({sender_phone})")
         
         # Tipo de mensagem
         message_type = message_data.get('messageType', 'text')
@@ -152,16 +176,29 @@ def handle_message_upsert(data, tenant, connection=None):
         
         # Busca ou cria conversa
         # Nova conversa vai para INBOX (pending) sem departamento
+        
+        # Para grupos, usar o ID do grupo como identificador único
+        defaults = {
+            'department': None,  # Inbox: sem departamento
+            'contact_name': push_name,
+            'profile_pic_url': profile_pic_url if profile_pic_url else None,
+            'instance_name': instance_name,  # Salvar instância de origem
+            'status': 'pending',  # Pendente para classificação
+            'conversation_type': conversation_type,
+        }
+        
+        # Para grupos, adicionar metadados
+        if is_group:
+            defaults['group_metadata'] = {
+                'group_id': remote_jid,
+                'group_name': push_name or 'Grupo WhatsApp',
+                'is_group': True,
+            }
+        
         conversation, created = Conversation.objects.get_or_create(
             tenant=tenant,
             contact_phone=phone,
-            defaults={
-                'department': None,  # Inbox: sem departamento
-                'contact_name': push_name,
-                'profile_pic_url': profile_pic_url if profile_pic_url else None,
-                'instance_name': instance_name,  # Salvar instância de origem
-                'status': 'pending'  # Pendente para classificação
-            }
+            defaults=defaults
         )
         
         if created:
@@ -314,15 +351,22 @@ def handle_message_upsert(data, tenant, connection=None):
         # Cria mensagem
         direction = 'outgoing' if from_me else 'incoming'
         
+        message_defaults = {
+            'conversation': conversation,
+            'content': content,
+            'direction': direction,
+            'status': 'sent',
+            'evolution_status': 'sent'
+        }
+        
+        # Para grupos, adicionar quem enviou
+        if is_group and sender_phone:
+            message_defaults['sender_name'] = sender_name
+            message_defaults['sender_phone'] = sender_phone
+        
         message, msg_created = Message.objects.get_or_create(
             message_id=message_id,
-            defaults={
-                'conversation': conversation,
-                'content': content,
-                'direction': direction,
-                'status': 'sent',
-                'evolution_status': 'sent'
-            }
+            defaults=message_defaults
         )
         
         if msg_created:

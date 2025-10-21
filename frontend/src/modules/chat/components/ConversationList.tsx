@@ -121,7 +121,7 @@ export function ConversationList() {
               `}
             >
               {/* Avatar com foto - responsivo */}
-              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden">
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden relative">
                 {conv.profile_pic_url ? (
                   <img 
                     src={getMediaProxyUrl(conv.profile_pic_url)}
@@ -134,14 +134,21 @@ export function ConversationList() {
                       e.currentTarget.style.display = 'none';
                       e.currentTarget.parentElement!.innerHTML = `
                         <div class="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                          ${(conv.contact_name || conv.contact_phone)[0].toUpperCase()}
+                          ${conv.conversation_type === 'group' ? '👥' : (conv.contact_name || conv.contact_phone)[0].toUpperCase()}
                         </div>
                       `;
                     }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                    {(conv.contact_name || conv.contact_phone)[0].toUpperCase()}
+                    {conv.conversation_type === 'group' ? '👥' : (conv.contact_name || conv.contact_phone)[0].toUpperCase()}
+                  </div>
+                )}
+                
+                {/* Badge de grupo no canto inferior direito */}
+                {conv.conversation_type === 'group' && (
+                  <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[10px]">
+                    👥
                   </div>
                 )}
               </div>
@@ -150,8 +157,12 @@ export function ConversationList() {
               <div className="flex-1 min-w-0 text-left">
                 {/* Nome + Hora */}
                 <div className="flex items-baseline justify-between mb-1">
-                  <h3 className="font-medium text-gray-900 truncate text-sm">
-                    {conv.contact_name || conv.contact_phone}
+                  <h3 className="font-medium text-gray-900 truncate text-sm flex items-center gap-1">
+                    {conv.conversation_type === 'group' && <span>👥</span>}
+                    {conv.conversation_type === 'group' 
+                      ? (conv.group_metadata?.group_name || conv.contact_name || 'Grupo WhatsApp')
+                      : (conv.contact_name || conv.contact_phone)
+                    }
                   </h3>
                   <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
                     {formatTime(conv.last_message_at)}
@@ -187,7 +198,11 @@ export function ConversationList() {
                 {/* Última mensagem + Badge de não lidas */}
                 <div className="flex items-center justify-between">
                   <p className="text-sm text-gray-600 truncate">
-                    {conv.last_message?.content || 'Sem mensagens'}
+                    {/* Para grupos, mostrar "Nome: mensagem" */}
+                    {conv.conversation_type === 'group' && conv.last_message?.sender_name
+                      ? `${conv.last_message.sender_name}: ${conv.last_message.content || ''}`
+                      : (conv.last_message?.content || 'Sem mensagens')
+                    }
                   </p>
                   {conv.unread_count > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium flex-shrink-0">

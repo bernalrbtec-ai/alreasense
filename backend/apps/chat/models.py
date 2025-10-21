@@ -31,6 +31,12 @@ class Conversation(models.Model):
         ('closed', 'Fechada'),
     ]
     
+    TYPE_CHOICES = [
+        ('individual', 'Individual (1:1)'),
+        ('group', 'Grupo do WhatsApp'),
+        ('broadcast', 'Lista de Transmissão'),
+    ]
+    
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -75,6 +81,20 @@ class Conversation(models.Model):
         db_index=True,
         verbose_name='Instância de Origem',
         help_text='Nome da instância Evolution que recebeu a mensagem (ex: Comercial, Suporte)'
+    )
+    conversation_type = models.CharField(
+        max_length=20,
+        choices=TYPE_CHOICES,
+        default='individual',
+        db_index=True,
+        verbose_name='Tipo de Conversa',
+        help_text='Individual (1:1), Grupo ou Lista de Transmissão'
+    )
+    group_metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Metadados do Grupo',
+        help_text='Nome, foto, participantes, etc (apenas para grupos)'
     )
     assigned_to = models.ForeignKey(
         'authn.User',
@@ -193,6 +213,18 @@ class Message(models.Model):
         on_delete=models.SET_NULL,
         verbose_name='Remetente',
         help_text='NULL para mensagens incoming'
+    )
+    sender_name = models.CharField(
+        max_length=255,
+        blank=True,
+        verbose_name='Nome do Remetente',
+        help_text='Nome de quem enviou (para grupos WhatsApp)'
+    )
+    sender_phone = models.CharField(
+        max_length=20,
+        blank=True,
+        verbose_name='Telefone do Remetente',
+        help_text='Telefone de quem enviou (para grupos WhatsApp)'
     )
     content = models.TextField(
         blank=True,

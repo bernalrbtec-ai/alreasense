@@ -39,8 +39,8 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            'id', 'conversation', 'sender', 'sender_data', 'content',
-            'direction', 'message_id', 'evolution_status', 'error_message',
+            'id', 'conversation', 'sender', 'sender_data', 'sender_name', 'sender_phone',
+            'content', 'direction', 'message_id', 'evolution_status', 'error_message',
             'status', 'is_internal', 'attachments', 'created_at'
         ]
         read_only_fields = ['id', 'created_at', 'sender_data', 'attachments']
@@ -106,6 +106,7 @@ class ConversationSerializer(serializers.ModelSerializer):
             'assigned_to', 'assigned_to_data',
             'status', 'last_message_at', 'metadata', 'participants',
             'participants_data', 'created_at', 'updated_at',
+            'conversation_type', 'group_metadata',
             'last_message', 'unread_count', 'contact_tags'
         ]
         read_only_fields = [
