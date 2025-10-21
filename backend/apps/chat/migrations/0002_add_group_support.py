@@ -1,5 +1,5 @@
 # Generated manually by Paulo Bernal
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -9,47 +9,30 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='conversation',
-            name='conversation_type',
-            field=models.CharField(
-                choices=[('individual', 'Individual (1:1)'), ('group', 'Grupo do WhatsApp'), ('broadcast', 'Lista de Transmissão')],
-                db_index=True,
-                default='individual',
-                help_text='Individual (1:1), Grupo ou Lista de Transmissão',
-                max_length=20,
-                verbose_name='Tipo de Conversa'
-            ),
-        ),
-        migrations.AddField(
-            model_name='conversation',
-            name='group_metadata',
-            field=models.JSONField(
-                blank=True,
-                default=dict,
-                help_text='Nome, foto, participantes, etc (apenas para grupos)',
-                verbose_name='Metadados do Grupo'
-            ),
-        ),
-        migrations.AddField(
-            model_name='message',
-            name='sender_name',
-            field=models.CharField(
-                blank=True,
-                help_text='Nome de quem enviou (para grupos WhatsApp)',
-                max_length=255,
-                verbose_name='Nome do Remetente'
-            ),
-        ),
-        migrations.AddField(
-            model_name='message',
-            name='sender_phone',
-            field=models.CharField(
-                blank=True,
-                help_text='Telefone de quem enviou (para grupos WhatsApp)',
-                max_length=20,
-                verbose_name='Telefone do Remetente'
-            ),
-        ),
+        migrations.RunSQL(
+            sql="""
+            -- Adicionar campos para suporte a grupos
+            ALTER TABLE chat_conversation 
+            ADD COLUMN IF NOT EXISTS conversation_type VARCHAR(20) NOT NULL DEFAULT 'individual',
+            ADD COLUMN IF NOT EXISTS group_metadata JSONB NOT NULL DEFAULT '{}';
+            
+            CREATE INDEX IF NOT EXISTS idx_chat_conversation_type ON chat_conversation(conversation_type);
+            
+            -- Adicionar campos para remetente em grupos
+            ALTER TABLE chat_message
+            ADD COLUMN IF NOT EXISTS sender_name VARCHAR(255) DEFAULT '',
+            ADD COLUMN IF NOT EXISTS sender_phone VARCHAR(20) DEFAULT '';
+            """,
+            reverse_sql="""
+            ALTER TABLE chat_conversation 
+            DROP COLUMN IF EXISTS conversation_type,
+            DROP COLUMN IF EXISTS group_metadata;
+            
+            DROP INDEX IF EXISTS idx_chat_conversation_type;
+            
+            ALTER TABLE chat_message
+            DROP COLUMN IF EXISTS sender_name,
+            DROP COLUMN IF EXISTS sender_phone;
+            """
+        )
     ]
-
