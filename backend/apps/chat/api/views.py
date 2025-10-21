@@ -1054,8 +1054,7 @@ class MessageViewSet(viewsets.ModelViewSet):
             upload_url = s3_manager.generate_presigned_url(
                 s3_key,
                 expiration=300,  # 5 minutos
-                http_method='PUT',
-                content_type=content_type
+                http_method='PUT'
             )
             
             logger.info(f"✅ [PRESIGNED] URL gerada: {s3_key}")
