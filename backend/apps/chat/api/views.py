@@ -1133,23 +1133,49 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Criar mensagem
-        message = Message.objects.create(
-            id=attachment_id,  # Usar mesmo ID do attachment
-            conversation=conversation,
-            sender=request.user,
-            content=f'📎 {filename}',
-            direction='outgoing',
-            status='pending',
-            is_internal=False
-        )
-        
-        # Gerar URL pública do S3
+        # Gerar presigned URL para Evolution API (curta: 1 hora)
         try:
             s3_manager = S3Manager()
+            
+            # URL para Evolution API baixar o arquivo
+            evolution_url = s3_manager.generate_presigned_url(
+                s3_key,
+                expiration=3600,  # 1 hora
+                http_method='GET'
+            )
+            
+            if not evolution_url:
+                raise Exception("Não foi possível gerar presigned URL")
+            
+            # URL pública para exibir no frontend (via proxy)
             file_url = s3_manager.get_public_url(s3_key)
             
-            # Criar attachment
+            logger.info(f"✅ [UPLOAD] URLs geradas: Evolution + Proxy")
+            
+        except Exception as url_error:
+            logger.error(f"❌ [UPLOAD] Erro ao gerar URLs: {url_error}")
+            return Response(
+                {'error': f'Erro ao gerar URLs: {str(url_error)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Criar mensagem (com UUID próprio)
+        import uuid
+        message = Message.objects.create(
+            conversation=conversation,
+            sender=request.user,
+            content='',  # Vazio, apenas anexo
+            direction='outgoing',
+            status='pending',
+            is_internal=False,
+            metadata={
+                'attachment_urls': [evolution_url],  # URL para Evolution API
+                'attachment_filename': filename
+            }
+        )
+        
+        # Criar attachment
+        try:
             attachment = MessageAttachment.objects.create(
                 id=attachment_id,
                 message=message,
@@ -1157,18 +1183,37 @@ class MessageViewSet(viewsets.ModelViewSet):
                 original_filename=filename,
                 mime_type=content_type,
                 file_path=s3_key,
-                file_url=file_url,
+                file_url=file_url,  # URL pública via proxy
                 storage_type='s3',
                 size_bytes=file_size,
                 expires_at=timezone.now() + timedelta(days=365),  # 1 ano
                 processing_status='pending'  # Para IA futura
             )
             
-            logger.info(f"✅ [UPLOAD] Anexo criado: {attachment_id}")
+            logger.info(f"✅ [UPLOAD] Mensagem + Anexo criados")
+            logger.info(f"   Message ID: {message.id}")
+            logger.info(f"   Attachment ID: {attachment_id}")
             
             # Enfileirar para envio Evolution API
             from apps.chat.tasks import send_message_to_evolution
             send_message_to_evolution.delay(str(message.id))
+            logger.info(f"✅ [UPLOAD] Task enfileirada para envio")
+            
+            # Broadcast via WebSocket
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            
+            channel_layer = get_channel_layer()
+            group_name = f"chat_tenant_{request.user.tenant.id}"
+            
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {
+                    'type': 'chat_message',
+                    'message': MessageSerializer(message).data
+                }
+            )
+            logger.info(f"✅ [UPLOAD] WebSocket broadcast enviado")
             
             # Retornar resposta
             return Response({
