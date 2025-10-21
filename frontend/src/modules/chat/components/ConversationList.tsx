@@ -9,6 +9,12 @@ import { Conversation } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// Helper para gerar URL do media proxy
+const getMediaProxyUrl = (externalUrl: string) => {
+  const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+  return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
+};
+
 export function ConversationList() {
   const { conversations, setConversations, activeConversation, setActiveConversation, activeDepartment } = useChatStore();
   const [loading, setLoading] = useState(false);
@@ -118,7 +124,7 @@ export function ConversationList() {
               <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden">
                 {conv.profile_pic_url ? (
                   <img 
-                    src={`/api/chat/media-proxy/?url=${encodeURIComponent(conv.profile_pic_url)}`}
+                    src={getMediaProxyUrl(conv.profile_pic_url)}
                     alt={conv.contact_name || conv.contact_phone}
                     className="w-full h-full object-cover"
                     onLoad={() => console.log(`✅ [IMG LIST] Foto carregada: ${conv.contact_name}`)}

@@ -12,6 +12,12 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { useChatSocket } from '../hooks/useChatSocket';
 
+// Helper para gerar URL do media proxy
+const getMediaProxyUrl = (externalUrl: string) => {
+  const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+  return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
+};
+
 export function ChatWindow() {
   const { activeConversation, setActiveConversation } = useChatStore();
   const { can_transfer_conversations } = usePermissions();
@@ -127,7 +133,7 @@ export function ChatWindow() {
           <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0">
             {activeConversation.profile_pic_url ? (
               <img 
-                src={`/api/chat/media-proxy/?url=${encodeURIComponent(activeConversation.profile_pic_url)}`}
+                src={getMediaProxyUrl(activeConversation.profile_pic_url)}
                 alt={activeConversation.contact_name || activeConversation.contact_phone}
                 className="w-full h-full object-cover"
                 onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
