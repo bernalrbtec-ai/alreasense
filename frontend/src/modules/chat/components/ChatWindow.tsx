@@ -72,6 +72,11 @@ export function ChatWindow() {
       await api.patch(`/chat/conversations/${activeConversation.id}/`, {
         status: 'closed'
       });
+      
+      // Remover conversa da lista imediatamente
+      const { removeConversation } = useChatStore.getState();
+      removeConversation(activeConversation.id);
+      
       toast.success('Conversa fechada!');
       setShowMenu(false);
       setActiveConversation(null);
