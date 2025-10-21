@@ -68,45 +68,39 @@ def check_rabbitmq():
         consumer = get_rabbitmq_consumer()
         
         if consumer:
-            # Check if consumer is running
-            active_campaigns = consumer.get_active_campaigns()
+            # Check if consumer is initialized and has connection
+            has_connection = consumer.connection is not None
+            has_channel = consumer.channel is not None
+            is_running = consumer.running
             
-            # Obter estatísticas detalhadas
-            campaign_details = []
-            for campaign_id in active_campaigns:
-                try:
-                    campaign_status = consumer.get_campaign_status(campaign_id)
-                    campaign_details.append({
-                        'campaign_id': campaign_id,
-                        'status': campaign_status.get('status', 'unknown'),
-                        'is_running': campaign_status.get('is_running', False),
-                        'messages_processed': campaign_status.get('messages_processed', 0),
-                    })
-                except Exception as e:
-                    campaign_details.append({
-                        'campaign_id': campaign_id,
-                        'status': 'error',
-                        'error': str(e)
-                    })
+            # Count active campaign threads
+            active_threads = len(consumer.consumer_threads) if hasattr(consumer, 'consumer_threads') else 0
+            
+            # Determine status
+            if has_connection and has_channel:
+                status = 'healthy'
+            elif has_connection or has_channel:
+                status = 'degraded'
+            else:
+                status = 'disconnected'
             
             return {
-                'status': 'healthy',
-                'active_campaigns': len(active_campaigns),
-                'consumer_running': True,
-                'campaign_details': campaign_details,
+                'status': status,
+                'connection': has_connection,
+                'channel': has_channel,
+                'consumer_running': is_running,
+                'active_campaign_threads': active_threads,
             }
         else:
             return {
                 'status': 'not_configured',
                 'error': 'RabbitMQ consumer not available',
-                'active_campaigns': 0,
                 'consumer_running': False,
             }
     except Exception as e:
         return {
             'status': 'unhealthy',
             'error': str(e),
-            'active_campaigns': 0,
             'consumer_running': False,
         }
 

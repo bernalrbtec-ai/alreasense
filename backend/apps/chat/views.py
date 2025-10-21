@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
-@require_http_methods(["GET"])
+@require_http_methods(["GET", "HEAD"])
 def media_proxy(request):
     """
     Proxy universal para servir mídia (fotos, áudios, documentos).
@@ -50,14 +50,19 @@ def media_proxy(request):
     # Cache HIT
     if cached_data:
         logger.info(f'✅ [MEDIA PROXY CACHE] Servido do Redis: {media_url[:80]}...')
+        
+        # Para HEAD request, retornar só headers
+        content = b'' if request.method == 'HEAD' else cached_data['content']
+        
         response = HttpResponse(
-            cached_data['content'],
+            content,
             content_type=cached_data['content_type']
         )
         response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
         response['Access-Control-Allow-Origin'] = '*'
         response['X-Cache'] = 'HIT'
         response['X-Content-Size'] = len(cached_data['content'])
+        response['Content-Length'] = len(cached_data['content'])
         return response
     
     # Cache MISS - Download
@@ -84,11 +89,15 @@ def media_proxy(request):
             )
             logger.info(f'💾 [MEDIA PROXY] Cacheado no Redis: {cache_key}')
             
-            response = HttpResponse(content, content_type=content_type)
+            # Para HEAD request, retornar só headers
+            response_content = b'' if request.method == 'HEAD' else content
+            
+            response = HttpResponse(response_content, content_type=content_type)
             response['Cache-Control'] = 'public, max-age=604800'
             response['Access-Control-Allow-Origin'] = '*'
             response['X-Cache'] = 'MISS'
             response['X-Content-Size'] = len(content)
+            response['Content-Length'] = len(content)
             return response
             
     except httpx.HTTPStatusError as e:
