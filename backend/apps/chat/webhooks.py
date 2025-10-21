@@ -221,58 +221,104 @@ def handle_message_upsert(data, tenant, connection=None):
                 if instance:
                     logger.info(f"📸 [WEBHOOK] Buscando foto de perfil...")
                     
-                    # Formatar número dependendo do tipo de conversa
-                    if is_group:
-                        # Para grupos, usar o remoteJid completo (ex: 120363123456789012@g.us)
-                        clean_phone = remote_jid
-                        logger.info(f"👥 [GRUPO] Buscando foto com Group JID: {clean_phone}")
-                    else:
-                        # Para conversas individuais, remover + e @s.whatsapp.net
-                        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
-                        logger.info(f"👤 [INDIVIDUAL] Buscando foto com número: {clean_phone}")
-                    
-                    # Endpoint Evolution API
                     base_url = instance.base_url.rstrip('/')
-                    endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
-                    
                     headers = {
                         'apikey': instance.api_key,
                         'Content-Type': 'application/json'
                     }
                     
-                    # Buscar foto (timeout curto de 5s)
-                    with httpx.Client(timeout=5.0) as client:
-                        response = client.get(
-                            endpoint,
-                            params={'number': clean_phone},
-                            headers=headers
-                        )
+                    # 👥 Para GRUPOS: usar endpoint /group/findGroupInfos
+                    if is_group:
+                        group_jid = remote_jid
+                        logger.info(f"👥 [GRUPO NOVO] Buscando informações com Group JID: {group_jid}")
                         
-                        if response.status_code == 200:
-                            data = response.json()
-                            profile_url = (
-                                data.get('profilePictureUrl') or
-                                data.get('profilePicUrl') or
-                                data.get('url') or
-                                data.get('picture')
+                        endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+                        
+                        with httpx.Client(timeout=5.0) as client:
+                            response = client.get(
+                                endpoint,
+                                params={'groupJid': group_jid},
+                                headers=headers
                             )
                             
-                            if profile_url:
-                                conversation.profile_pic_url = profile_url
-                                conversation.save(update_fields=['profile_pic_url'])
-                                logger.info(f"✅ [WEBHOOK] Foto de perfil salva: {profile_url[:50]}...")
+                            if response.status_code == 200:
+                                group_info = response.json()
+                                logger.info(f"✅ [GRUPO NOVO] Informações recebidas!")
+                                
+                                # Extrair dados
+                                group_name = group_info.get('subject', '')
+                                group_pic_url = group_info.get('pictureUrl')
+                                participants_count = group_info.get('size', 0)
+                                group_desc = group_info.get('desc', '')
+                                
+                                # Atualizar conversa
+                                update_fields = []
+                                
+                                if group_name:
+                                    conversation.contact_name = group_name
+                                    update_fields.append('contact_name')
+                                    logger.info(f"✅ [GRUPO NOVO] Nome: {group_name}")
+                                
+                                if group_pic_url:
+                                    conversation.profile_pic_url = group_pic_url
+                                    update_fields.append('profile_pic_url')
+                                    logger.info(f"✅ [GRUPO NOVO] Foto: {group_pic_url[:50]}...")
+                                
+                                # Atualizar metadados
+                                conversation.group_metadata = {
+                                    'group_id': remote_jid,
+                                    'group_name': group_name,
+                                    'group_pic_url': group_pic_url,
+                                    'participants_count': participants_count,
+                                    'description': group_desc,
+                                    'is_group': True,
+                                }
+                                update_fields.append('group_metadata')
+                                
+                                if update_fields:
+                                    conversation.save(update_fields=update_fields)
                             else:
-                                logger.info(f"ℹ️ [WEBHOOK] Foto de perfil não disponível")
-                        else:
-                            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar foto: {response.status_code}")
+                                logger.warning(f"⚠️ [GRUPO NOVO] Erro ao buscar: {response.status_code}")
+                    
+                    # 👤 Para INDIVIDUAIS: usar endpoint /chat/fetchProfilePictureUrl
+                    else:
+                        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                        logger.info(f"👤 [INDIVIDUAL] Buscando foto com número: {clean_phone}")
+                        
+                        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+                        
+                        with httpx.Client(timeout=5.0) as client:
+                            response = client.get(
+                                endpoint,
+                                params={'number': clean_phone},
+                                headers=headers
+                            )
+                            
+                            if response.status_code == 200:
+                                data = response.json()
+                                profile_url = (
+                                    data.get('profilePictureUrl') or
+                                    data.get('profilePicUrl') or
+                                    data.get('url') or
+                                    data.get('picture')
+                                )
+                                
+                                if profile_url:
+                                    conversation.profile_pic_url = profile_url
+                                    conversation.save(update_fields=['profile_pic_url'])
+                                    logger.info(f"✅ [INDIVIDUAL] Foto salva: {profile_url[:50]}...")
+                                else:
+                                    logger.info(f"ℹ️ [INDIVIDUAL] Foto não disponível")
+                            else:
+                                logger.warning(f"⚠️ [INDIVIDUAL] Erro ao buscar foto: {response.status_code}")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
         
-        # 📸 Para conversas EXISTENTES de GRUPO sem foto, buscar agora
-        elif is_group and not conversation.profile_pic_url:
-            logger.info(f"📸 [FOTO GRUPO] Conversa existente SEM foto, buscando agora...")
+        # 📸 Para conversas EXISTENTES de GRUPO sem foto OU sem nome correto, buscar agora
+        elif is_group and (not conversation.profile_pic_url or not conversation.group_metadata.get('group_name')):
+            logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
             try:
                 import httpx
                 from apps.connections.models import EvolutionConnection
@@ -283,11 +329,12 @@ def handle_message_upsert(data, tenant, connection=None):
                 ).first()
                 
                 if instance:
-                    clean_phone = remote_jid
-                    logger.info(f"👥 [GRUPO EXISTENTE] Buscando foto com Group JID: {clean_phone}")
+                    group_jid = remote_jid
+                    logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
                     
                     base_url = instance.base_url.rstrip('/')
-                    endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+                    # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
+                    endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
                     
                     headers = {
                         'apikey': instance.api_key,
@@ -297,29 +344,52 @@ def handle_message_upsert(data, tenant, connection=None):
                     with httpx.Client(timeout=5.0) as client:
                         response = client.get(
                             endpoint,
-                            params={'number': clean_phone},
+                            params={'groupJid': group_jid},
                             headers=headers
                         )
                         
                         if response.status_code == 200:
-                            data = response.json()
-                            profile_url = (
-                                data.get('profilePictureUrl') or
-                                data.get('profilePicUrl') or
-                                data.get('url') or
-                                data.get('picture')
-                            )
+                            group_info = response.json()
+                            logger.info(f"✅ [GRUPO INFO] Informações recebidas: {group_info}")
                             
-                            if profile_url:
-                                conversation.profile_pic_url = profile_url
-                                conversation.save(update_fields=['profile_pic_url'])
-                                logger.info(f"✅ [FOTO GRUPO] Foto salva: {profile_url[:50]}...")
-                            else:
-                                logger.info(f"ℹ️ [FOTO GRUPO] Foto não disponível na API")
+                            # Extrair dados do grupo
+                            group_name = group_info.get('subject', '')
+                            group_pic_url = group_info.get('pictureUrl')
+                            participants_count = group_info.get('size', 0)
+                            group_desc = group_info.get('desc', '')
+                            
+                            # Atualizar conversa
+                            update_fields = []
+                            
+                            if group_name:
+                                conversation.contact_name = group_name
+                                update_fields.append('contact_name')
+                                logger.info(f"✅ [GRUPO INFO] Nome do grupo: {group_name}")
+                            
+                            if group_pic_url:
+                                conversation.profile_pic_url = group_pic_url
+                                update_fields.append('profile_pic_url')
+                                logger.info(f"✅ [GRUPO INFO] Foto do grupo: {group_pic_url[:50]}...")
+                            
+                            # Atualizar metadados
+                            conversation.group_metadata = {
+                                'group_id': remote_jid,
+                                'group_name': group_name,
+                                'group_pic_url': group_pic_url,
+                                'participants_count': participants_count,
+                                'description': group_desc,
+                                'is_group': True,
+                            }
+                            update_fields.append('group_metadata')
+                            
+                            if update_fields:
+                                conversation.save(update_fields=update_fields)
+                                logger.info(f"✅ [GRUPO INFO] Conversa atualizada com {len(update_fields)} campos")
                         else:
-                            logger.warning(f"⚠️ [FOTO GRUPO] Erro ao buscar foto: {response.status_code}")
+                            logger.warning(f"⚠️ [GRUPO INFO] Erro ao buscar: {response.status_code}")
+                            logger.warning(f"   Response: {response.text[:200]}")
             except Exception as e:
-                logger.error(f"❌ [FOTO GRUPO] Erro ao buscar foto: {e}")
+                logger.error(f"❌ [GRUPO INFO] Erro ao buscar informações: {e}", exc_info=True)
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
