@@ -6,6 +6,7 @@ import { Send, Smile } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { AttachmentUpload } from './AttachmentUpload';
+import { VoiceRecorder } from './VoiceRecorder';
 
 interface MessageInputProps {
   sendMessage: (content: string) => boolean;
@@ -99,6 +100,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         conversationId={activeConversation.id}
         onUploadComplete={() => {
           console.log('✅ Upload completo! WebSocket vai atualizar UI');
+        }}
+      />
+
+      {/* Voice Recorder button */}
+      <VoiceRecorder
+        conversationId={activeConversation.id}
+        onRecordingComplete={() => {
+          console.log('✅ Áudio enviado! WebSocket vai atualizar UI');
         }}
       />
 
