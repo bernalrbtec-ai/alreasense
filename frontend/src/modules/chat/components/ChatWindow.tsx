@@ -54,30 +54,32 @@ export function ChatWindow() {
     }
   }, [activeConversation?.id]);
 
-  // 🔄 Atualizar informações do grupo quando abre (se for grupo)
+  // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
   useEffect(() => {
-    if (activeConversation && activeConversation.conversation_type === 'group') {
-      const refreshGroupInfo = async () => {
+    if (activeConversation) {
+      const refreshInfo = async () => {
         try {
-          console.log('🔄 [GRUPO] Atualizando informações...');
-          const response = await api.post(`/chat/conversations/${activeConversation.id}/refresh-group-info/`);
+          const type = activeConversation.conversation_type === 'group' ? 'GRUPO' : 'CONTATO';
+          console.log(`🔄 [${type}] Atualizando informações...`);
+          
+          const response = await api.post(`/chat/conversations/${activeConversation.id}/refresh-info/`);
           
           if (response.data.from_cache) {
-            console.log('✅ [GRUPO] Informações em cache (atualizadas recentemente)');
+            console.log(`✅ [${type}] Informações em cache (atualizadas recentemente)`);
           } else {
-            console.log('✅ [GRUPO] Informações atualizadas:', response.data.updated_fields);
+            console.log(`✅ [${type}] Informações atualizadas:`, response.data.updated_fields);
             // Store será atualizado via WebSocket broadcast
           }
         } catch (error: any) {
           // Silencioso: não mostrar toast se falhar (não crítico)
-          console.warn('⚠️ [GRUPO] Erro ao atualizar:', error.response?.data?.error || error.message);
+          console.warn('⚠️ Erro ao atualizar:', error.response?.data?.error || error.message);
         }
       };
       
       // Executar imediatamente
-      refreshGroupInfo();
+      refreshInfo();
     }
-  }, [activeConversation?.id, activeConversation?.conversation_type]);
+  }, [activeConversation?.id]);
 
   // Fechar menu ao clicar fora
   useEffect(() => {
