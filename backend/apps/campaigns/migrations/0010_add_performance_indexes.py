@@ -29,10 +29,10 @@ class Migration(migrations.Migration):
         migrations.RunSQL(
             sql="""
                 CREATE INDEX IF NOT EXISTS idx_campaign_contact_campaign_status 
-                ON campaigns_campaigncontact(campaign_id, status);
+                ON campaigns_contact(campaign_id, status);
                 
                 CREATE INDEX IF NOT EXISTS idx_campaign_contact_campaign_sent 
-                ON campaigns_campaigncontact(campaign_id, sent_at);
+                ON campaigns_contact(campaign_id, sent_at);
             """,
             reverse_sql="""
                 DROP INDEX IF EXISTS idx_campaign_contact_campaign_status;
