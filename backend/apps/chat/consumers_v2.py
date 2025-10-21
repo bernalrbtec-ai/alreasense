@@ -326,6 +326,21 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'conversation': event['conversation']
         }))
     
+    async def new_message_notification(self, event):
+        """Broadcast quando há nova mensagem em conversa existente."""
+        await self.send(text_data=json.dumps({
+            'type': 'new_message_notification',
+            'conversation': event.get('conversation'),
+            'message': event.get('message')
+        }))
+    
+    async def conversation_updated(self, event):
+        """Broadcast quando conversa é atualizada."""
+        await self.send(text_data=json.dumps({
+            'type': 'conversation_updated',
+            'conversation': event.get('conversation')
+        }))
+    
     # Database queries (sync_to_async)
     
     @database_sync_to_async
