@@ -269,9 +269,9 @@ async def handle_send_message(message_id: str):
                     payload = {
                         'number': phone,  # Evolution API aceita com ou sem '+'
                         'mediaMessage': {
-                            'mediaUrl': url,
-                            'mediatype': mediatype,  # OBRIGATÓRIO!
-                            'fileName': filename  # Nome do arquivo
+                            'media': url,              # ✅ "media" (não "mediaUrl")
+                            'mediaType': mediatype,     # ✅ camelCase (não "mediatype")
+                            'fileName': filename        # Nome do arquivo
                         }
                     }
                     if content:
