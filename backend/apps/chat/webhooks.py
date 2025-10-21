@@ -201,10 +201,13 @@ def handle_message_upsert(data, tenant, connection=None):
             defaults=defaults
         )
         
+        logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {phone} | Tipo: {conversation_type}")
+        
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} (Inbox)")
             
             # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
+            logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")
             try:
                 import httpx
                 from apps.connections.models import EvolutionConnection
@@ -266,6 +269,57 @@ def handle_message_upsert(data, tenant, connection=None):
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
+        
+        # 📸 Para conversas EXISTENTES de GRUPO sem foto, buscar agora
+        elif is_group and not conversation.profile_pic_url:
+            logger.info(f"📸 [FOTO GRUPO] Conversa existente SEM foto, buscando agora...")
+            try:
+                import httpx
+                from apps.connections.models import EvolutionConnection
+                
+                instance = EvolutionConnection.objects.filter(
+                    tenant=tenant,
+                    is_active=True
+                ).first()
+                
+                if instance:
+                    clean_phone = remote_jid
+                    logger.info(f"👥 [GRUPO EXISTENTE] Buscando foto com Group JID: {clean_phone}")
+                    
+                    base_url = instance.base_url.rstrip('/')
+                    endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+                    
+                    headers = {
+                        'apikey': instance.api_key,
+                        'Content-Type': 'application/json'
+                    }
+                    
+                    with httpx.Client(timeout=5.0) as client:
+                        response = client.get(
+                            endpoint,
+                            params={'number': clean_phone},
+                            headers=headers
+                        )
+                        
+                        if response.status_code == 200:
+                            data = response.json()
+                            profile_url = (
+                                data.get('profilePictureUrl') or
+                                data.get('profilePicUrl') or
+                                data.get('url') or
+                                data.get('picture')
+                            )
+                            
+                            if profile_url:
+                                conversation.profile_pic_url = profile_url
+                                conversation.save(update_fields=['profile_pic_url'])
+                                logger.info(f"✅ [FOTO GRUPO] Foto salva: {profile_url[:50]}...")
+                            else:
+                                logger.info(f"ℹ️ [FOTO GRUPO] Foto não disponível na API")
+                        else:
+                            logger.warning(f"⚠️ [FOTO GRUPO] Erro ao buscar foto: {response.status_code}")
+            except Exception as e:
+                logger.error(f"❌ [FOTO GRUPO] Erro ao buscar foto: {e}")
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
@@ -488,14 +542,29 @@ def handle_message_update(data, tenant):
     logger.info(f"🔄 [WEBHOOK UPDATE] Iniciando processamento...")
     
     try:
-        message_data = data.get('data', {})
+        # 🔧 Evolution API pode enviar 'data' como LISTA ou DICT
+        raw_data = data.get('data', {})
+        
+        # Se for lista, pegar o primeiro item
+        if isinstance(raw_data, list):
+            if len(raw_data) == 0:
+                logger.warning(f"⚠️ [WEBHOOK UPDATE] data está vazio")
+                return
+            message_data = raw_data[0]
+            logger.info(f"📋 [WEBHOOK UPDATE] data é LISTA, usando primeiro item")
+        else:
+            message_data = raw_data
+            logger.info(f"📋 [WEBHOOK UPDATE] data é DICT")
         
         # Estrutura pode variar: key.id ou messageId direto
         # IMPORTANTE: Usar keyId (ID real) ao invés de messageId (ID interno Evolution)
-        key = message_data.get('key', {})
-        key_id = message_data.get('keyId')  # ID real da mensagem WhatsApp
-        message_id_evo = message_data.get('messageId')  # ID interno Evolution
-        message_id = key.get('id') or key_id or message_id_evo
+        key = message_data.get('key', {}) if isinstance(message_data, dict) else {}
+        key_id = message_data.get('keyId') if isinstance(message_data, dict) else None
+        message_id_evo = message_data.get('messageId') if isinstance(message_data, dict) else None
+        message_id = key.get('id') if isinstance(key, dict) else None
+        
+        if not message_id:
+            message_id = key_id or message_id_evo
         
         # Status: delivered, read
         update = message_data.get('update', {})
