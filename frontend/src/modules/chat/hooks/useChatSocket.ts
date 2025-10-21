@@ -216,7 +216,10 @@ export function useChatSocket(conversationId?: string) {
 
   const sendMessage = useCallback((content: string, isInternal = false) => {
     if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      console.error('❌ [WS] WebSocket não conectado');
+      // Só logar erro se não estiver em transição (conectando)
+      if (socketRef.current?.readyState !== WebSocket.CONNECTING) {
+        console.warn('⚠️ [WS] WebSocket não conectado (ignorando envio)');
+      }
       return false;
     }
 
