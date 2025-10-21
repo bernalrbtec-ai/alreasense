@@ -96,12 +96,13 @@ class ConversationSerializer(serializers.ModelSerializer):
     unread_count = serializers.ReadOnlyField()
     department_name = serializers.CharField(source='department.name', read_only=True)
     contact_tags = serializers.SerializerMethodField()
+    instance_friendly_name = serializers.SerializerMethodField()
     
     class Meta:
         model = Conversation
         fields = [
             'id', 'tenant', 'department', 'department_name',
-            'contact_phone', 'contact_name', 'profile_pic_url', 'instance_name',
+            'contact_phone', 'contact_name', 'profile_pic_url', 'instance_name', 'instance_friendly_name',
             'assigned_to', 'assigned_to_data',
             'status', 'last_message_at', 'metadata', 'participants',
             'participants_data', 'created_at', 'updated_at',
@@ -110,7 +111,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'id', 'tenant', 'created_at', 'updated_at', 'last_message_at',
             'unread_count', 'assigned_to_data', 'participants_data', 'department_name', 
-            'profile_pic_url', 'instance_name', 'contact_tags'
+            'profile_pic_url', 'instance_name', 'instance_friendly_name', 'contact_tags'
         ]
     
     def get_participants_data(self, obj):
@@ -123,6 +124,23 @@ class ConversationSerializer(serializers.ModelSerializer):
         if last_message:
             return MessageSerializer(last_message).data
         return None
+    
+    def get_instance_friendly_name(self, obj):
+        """Retorna nome amigável da instância."""
+        if not obj.instance_name:
+            return None
+        
+        # Buscar no banco
+        from apps.notifications.models import WhatsAppInstance
+        instance = WhatsAppInstance.objects.filter(
+            instance_name=obj.instance_name,
+            is_active=True
+        ).values('friendly_name').first()
+        
+        if instance:
+            return instance['friendly_name']
+        
+        return obj.instance_name  # Fallback para UUID
     
     def get_contact_tags(self, obj):
         """Busca as tags do contato pelo telefone."""

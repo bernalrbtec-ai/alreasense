@@ -159,10 +159,10 @@ export function ChatWindow() {
             
             {/* Tags: Instância + Tags do Contato */}
             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-              {/* Tag da Instância (azul) */}
-              {activeConversation.instance_name && (
+              {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
+              {(activeConversation.instance_friendly_name || activeConversation.instance_name) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  📱 {activeConversation.instance_name}
+                  📱 {activeConversation.instance_friendly_name || activeConversation.instance_name}
                 </span>
               )}
               

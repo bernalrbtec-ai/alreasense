@@ -32,6 +32,7 @@ export interface Conversation {
   contact_name: string;
   profile_pic_url?: string | null;
   instance_name?: string;
+  instance_friendly_name?: string;
   assigned_to?: string;
   assigned_to_data?: User;
   status: 'pending' | 'open' | 'closed';

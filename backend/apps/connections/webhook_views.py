@@ -477,20 +477,21 @@ class EvolutionWebhookView(APIView):
                 from apps.chat.webhooks import handle_message_update as chat_handle_update
                 from apps.notifications.models import WhatsAppInstance
                 
-                # Buscar tenant pela instância UUID (mesmo padrão do envio)
+                # Buscar tenant pela instância UUID (campo instance_name armazena o UUID)
                 instance = WhatsAppInstance.objects.select_related('tenant').filter(
                     instance_name=instance_name,
                     is_active=True
                 ).first()
                 
-                logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance para UUID: {instance_name}")
+                logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance onde instance_name={instance_name}")
                 
                 if instance:
-                    logger.info(f"✅ [FLOW CHAT] Instance encontrada: {instance.friendly_name} - Tenant: {instance.tenant.name}")
+                    logger.info(f"✅ [FLOW CHAT] Instance encontrada: {instance.friendly_name} (UUID: {instance.instance_name}) - Tenant: {instance.tenant.name}")
                     chat_handle_update(data, instance.tenant)
                     logger.info(f"💬 [FLOW CHAT] Status atualizado para tenant {instance.tenant.name}")
                 else:
-                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma instance encontrada para UUID: {instance_name}")
+                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma WhatsAppInstance ativa encontrada com instance_name={instance_name}")
+                    logger.warning(f"   Verifique se a instância foi criada em Admin → Instâncias do WhatsApp")
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao atualizar status: {e}", exc_info=True)
             

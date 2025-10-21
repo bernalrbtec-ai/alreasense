@@ -159,12 +159,12 @@ export function ConversationList() {
                 </div>
 
                 {/* Tags: Instância + Tags do Contato */}
-                {(conv.instance_name || (conv.contact_tags && conv.contact_tags.length > 0)) && (
+                {((conv.instance_friendly_name || conv.instance_name) || (conv.contact_tags && conv.contact_tags.length > 0)) && (
                   <div className="flex items-center gap-1 flex-wrap mb-1">
-                    {/* Tag da Instância (azul) */}
-                    {conv.instance_name && (
+                    {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
+                    {(conv.instance_friendly_name || conv.instance_name) && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
-                        📱 {conv.instance_name}
+                        📱 {conv.instance_friendly_name || conv.instance_name}
                       </span>
                     )}
                     
