@@ -299,9 +299,15 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if self.user.is_admin:
                 return True
             
-            # Gerente/Agente: verifica departamento
+            # Gerente/Agente: verifica departamento OU conversa pending (Inbox)
             if self.user.is_gerente or self.user.is_agente:
-                return self.user.departments.filter(id=conversation.department_id).exists()
+                # Pode acessar conversas do seu departamento OU conversas pending (Inbox)
+                if conversation.department_id is None:
+                    # Inbox: todos do tenant podem acessar
+                    return True
+                else:
+                    # Conversa atribuída: só se estiver no departamento
+                    return self.user.departments.filter(id=conversation.department_id).exists()
             
             return False
         
