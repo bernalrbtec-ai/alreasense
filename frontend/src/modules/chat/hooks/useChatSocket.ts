@@ -1,309 +1,137 @@
 /**
- * Hook WebSocket para Flow Chat
- * Gerencia conexão, reconexão automática e eventos
+ * 🎣 useChatSocket - Hook para gerenciar WebSocket de chat
+ * 
+ * Usa o ChatWebSocketManager global (1 conexão persistente)
+ * ao invés de criar/destruir conexões a cada troca de conversa.
+ * 
+ * Arquitetura:
+ * - 1 WebSocket por usuário (não por conversa)
+ * - Subscribe/Unsubscribe para trocar conversas
+ * - Escalável para 10-20+ conversas simultâneas
  */
-import { useEffect, useRef, useCallback } from 'react';
-import { useChatStore } from '../store/chatStore';
-import { useAuthStore } from '@/stores/authStore';
-import { WebSocketMessage } from '../types';
 
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
+import { useEffect, useCallback, useState } from 'react';
+import { useAuthStore } from '@/stores/authStore';
+import { useChatStore } from '../store/chatStore';
+import { chatWebSocketManager, WebSocketMessage } from '../services/ChatWebSocketManager';
 
 export function useChatSocket(conversationId?: string) {
-  const socketRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const reconnectAttemptsRef = useRef(0);
-
-  const {
-    addMessage,
-    updateMessageStatus,
-    setTyping,
-    setConnectionStatus,
-    connectionStatus,
-    updateConversation
-  } = useChatStore();
-
-  // Obter dados de autenticação do Zustand
+  const [isConnected, setIsConnected] = useState(false);
   const { token, user } = useAuthStore();
-  
-  // useRef para evitar re-criação do callback connect
-  const conversationIdRef = useRef(conversationId);
-  const tokenRef = useRef(token);
-  const userRef = useRef(user);
-  
-  // Atualizar refs quando valores mudarem
+  const { addMessage, updateMessageStatus, setTyping, updateConversation } = useChatStore();
+
+  // Conectar ao manager global (1 vez por sessão)
   useEffect(() => {
-    conversationIdRef.current = conversationId;
-    tokenRef.current = token;
-    userRef.current = user;
-  }, [conversationId, token, user]);
-
-  const handleWebSocketMessage = useCallback((data: WebSocketMessage) => {
-    console.log('📨 [WS] Mensagem recebida:', data);
-
-    switch (data.type) {
-      case 'message_received':
-        if (data.message) {
-          addMessage(data.message);
-          // Auto-scroll para última mensagem
-          setTimeout(() => {
-            const messagesContainer = document.querySelector('.chat-messages');
-            if (messagesContainer) {
-              messagesContainer.scrollTop = messagesContainer.scrollHeight;
-            }
-          }, 100);
-        }
-        break;
-
-      case 'message_status_update':
-        console.log('📊 [WS] Atualização de status recebida:', data);
-        if (data.message_id && data.status) {
-          console.log(`   Atualizando mensagem ${data.message_id} para status: ${data.status}`);
-          updateMessageStatus(data.message_id, data.status);
-          console.log('   ✅ Status atualizado no store');
-        } else {
-          console.warn('   ⚠️ Dados incompletos para atualização de status:', data);
-        }
-        break;
-
-      case 'typing_status':
-        setTyping(data.is_typing || false, data.user_email);
-        // Auto-limpar typing após 3s
-        if (data.is_typing) {
-          setTimeout(() => setTyping(false), 3000);
-        }
-        break;
-
-      case 'conversation_transferred':
-        console.log('🔄 [WS] Conversa transferida:', data);
-        // Mostrar notificação
-        if (data.new_department || data.new_agent) {
-          const message = `Conversa transferida para ${data.new_department || 'outro departamento'}`;
-          // Usar toast notification
-          if (window.toast) {
-            window.toast.info(message);
-          }
-        }
-        break;
-
-      case 'new_conversation':
-        console.log('🆕 [WS] Nova conversa criada:', data.conversation);
-        // Adicionar conversa à lista (via store)
-        if (data.conversation) {
-          // Usar função do store para adicionar conversa
-          const { addConversation } = useChatStore.getState();
-          if (addConversation) {
-            addConversation(data.conversation);
-          }
-        }
-        break;
-
-      case 'user_joined':
-        console.log('👋 [WS] Usuário entrou:', data.user_email);
-        break;
-
-      default:
-        console.warn('⚠️ [WS] Evento desconhecido:', data.type);
-    }
-  }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
-
-  const connect = useCallback(() => {
-    const currentToken = tokenRef.current;
-    const currentUser = userRef.current;
-    const currentConversationId = conversationIdRef.current;
-    
-    console.log('🔍 [WS DEBUG] token:', currentToken ? `${currentToken.substring(0, 20)}...` : 'null');
-    console.log('🔍 [WS DEBUG] user:', currentUser);
-    console.log('🔍 [WS DEBUG] conversationId:', currentConversationId);
-    
-    if (!currentToken || !currentUser) {
-      console.log('⏸️ [WS] Aguardando autenticação...', { token: !!currentToken, user: !!currentUser });
+    if (!token || !user || !user.tenant_id) {
+      console.log('⏸️ [HOOK] Aguardando autenticação...');
       return;
     }
 
-    const tenantId = currentUser.tenant_id;
-    
-    console.log('🔍 [WS DEBUG] tenantId:', tenantId);
+    console.log('🔌 [HOOK] Conectando ao manager global...');
+    chatWebSocketManager.connect(user.tenant_id, token);
 
-    if (!tenantId) {
-      console.log('⏸️ [WS] Aguardando tenant_id...');
-      return;
-    }
-
-    if (!currentConversationId) {
-      console.log('⏸️ [WS] Aguardando conversationId...');
-      return;
-    }
-
-    // Limpar WebSocket antigo se estiver fechado/fechando
-    if (socketRef.current) {
-      const state = socketRef.current.readyState;
-      
-      // Se já está conectado/conectando para a MESMA conversa, não reconectar
-      if ((state === WebSocket.CONNECTING || state === WebSocket.OPEN)) {
-        console.log('⏸️ [WS] Já conectado/conectando');
-        return;
-      }
-      
-      // Se está fechando/fechado, limpar referência
-      if (state === WebSocket.CLOSING || state === WebSocket.CLOSED) {
-        console.log('🧹 [WS] Limpando WebSocket antigo (estado:', state, ')');
-        socketRef.current = null;
-      }
-    }
-
-    setConnectionStatus('connecting');
-
-    const wsUrl = `${WS_BASE_URL}/ws/chat/${tenantId}/${currentConversationId}/?token=${currentToken}`;
-    console.log('🔌 [WS] Conectando:', wsUrl);
-
-    try {
-      const ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
-
-      ws.onopen = () => {
-        console.log('✅ [WS] Conectado com sucesso!');
-        setConnectionStatus('connected');
-        reconnectAttemptsRef.current = 0;
-
-        if (reconnectTimeoutRef.current) {
-          clearTimeout(reconnectTimeoutRef.current);
-          reconnectTimeoutRef.current = null;
-        }
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data: WebSocketMessage = JSON.parse(event.data);
-          handleWebSocketMessage(data);
-        } catch (error) {
-          console.error('❌ [WS] Erro ao parsear mensagem:', error);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('❌ [WS] Erro:', error);
-        setConnectionStatus('disconnected');
-      };
-
-      ws.onclose = (event) => {
-        console.warn('🔌 [WS] Conexão fechada:', event.code, event.reason);
-        setConnectionStatus('disconnected');
-        socketRef.current = null;
-
-        // Reconectar com backoff exponencial
-        if (reconnectAttemptsRef.current < 5) {
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
-          console.log(`🔄 [WS] Reconectando em ${delay}ms (tentativa ${reconnectAttemptsRef.current + 1})...`);
-          
-          reconnectTimeoutRef.current = setTimeout(() => {
-            reconnectAttemptsRef.current++;
-            connect();
-          }, delay);
-        } else {
-          console.error('❌ [WS] Máximo de tentativas de reconexão atingido');
-        }
-      };
-
-    } catch (error) {
-      console.error('❌ [WS] Erro ao criar WebSocket:', error);
-      setConnectionStatus('disconnected');
-    }
-  }, [setConnectionStatus, handleWebSocketMessage]); // ✅ Dependências estáveis
-
-  const disconnect = useCallback(() => {
-    console.log('🔌 [WS] Desconectando...');
-    
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-
-    if (socketRef.current) {
-      socketRef.current.close();
-      socketRef.current = null;
-    }
-
-    // Resetar contador de reconexão ao desconectar manualmente
-    reconnectAttemptsRef.current = 0;
-
-    setConnectionStatus('disconnected');
-  }, [setConnectionStatus]);
-
-  const sendMessage = useCallback((content: string, isInternal = false) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      // Só logar erro se não estiver em transição (conectando)
-      if (socketRef.current?.readyState !== WebSocket.CONNECTING) {
-        console.warn('⚠️ [WS] WebSocket não conectado (ignorando envio)');
-      }
-      return false;
-    }
-
-    try {
-      socketRef.current.send(JSON.stringify({
-        type: 'send_message',
-        content,
-        is_internal: isInternal
-      }));
-      console.log('📤 [WS] Mensagem enviada');
-      return true;
-    } catch (error) {
-      console.error('❌ [WS] Erro ao enviar mensagem:', error);
-      return false;
-    }
-  }, []);
-
-  const sendTyping = useCallback((isTyping: boolean) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    try {
-      socketRef.current.send(JSON.stringify({
-        type: 'typing',
-        is_typing: isTyping
-      }));
-    } catch (error) {
-      console.error('❌ [WS] Erro ao enviar typing:', error);
-    }
-  }, []);
-
-  const markAsSeen = useCallback((messageId: string) => {
-    if (!socketRef.current || socketRef.current.readyState !== WebSocket.OPEN) {
-      return;
-    }
-
-    try {
-      socketRef.current.send(JSON.stringify({
-        type: 'mark_as_seen',
-        message_id: messageId
-      }));
-    } catch (error) {
-      console.error('❌ [WS] Erro ao marcar como vista:', error);
-    }
-  }, []);
-
-  // Conectar quando conversation mudar
-  useEffect(() => {
-    if (!conversationId) {
-      console.log('⏸️ [WS] Sem conversationId, não conectando');
-      return;
-    }
-
-    console.log(`🔄 [WS] Trocando para conversa: ${conversationId}`);
-    connect();
+    // Atualizar estado de conexão
+    const checkConnection = setInterval(() => {
+      setIsConnected(chatWebSocketManager.getIsConnected());
+    }, 500);
 
     return () => {
-      console.log(`🔌 [WS] Limpando conversa: ${conversationId}`);
-      disconnect();
+      clearInterval(checkConnection);
     };
-  }, [conversationId]); // ✅ CORRETO: Só reconecta quando conversationId muda
+  }, [token, user]);
+
+  // Subscribe/Unsubscribe quando conversationId muda
+  useEffect(() => {
+    if (!conversationId) {
+      console.log('⏸️ [HOOK] Sem conversationId');
+      return;
+    }
+
+    if (!chatWebSocketManager.getIsConnected()) {
+      console.log('⏸️ [HOOK] Aguardando conexão...');
+      return;
+    }
+
+    console.log(`🔄 [HOOK] Subscrevendo à conversa: ${conversationId}`);
+    chatWebSocketManager.subscribe(conversationId);
+
+    return () => {
+      console.log(`🔌 [HOOK] Desinscrevendo da conversa: ${conversationId}`);
+      chatWebSocketManager.unsubscribe(conversationId);
+    };
+  }, [conversationId]);
+
+  // Registrar listeners de eventos
+  useEffect(() => {
+    const handleMessageReceived = (data: WebSocketMessage) => {
+      if (data.message) {
+        console.log('💬 [HOOK] Nova mensagem recebida:', data.message);
+        addMessage(data.message);
+      }
+    };
+
+    const handleStatusUpdate = (data: WebSocketMessage) => {
+      if (data.message_id && data.status) {
+        console.log(`📊 [HOOK] Status atualizado: ${data.message_id} → ${data.status}`);
+        updateMessageStatus(data.message_id, data.status);
+      }
+    };
+
+    const handleTyping = (data: WebSocketMessage) => {
+      if (data.user_id) {
+        console.log(`✍️ [HOOK] Typing: ${data.user_email} (${data.is_typing ? 'start' : 'stop'})`);
+        setTyping(data.user_id, data.is_typing || false);
+      }
+    };
+
+    const handleConversationUpdate = (data: WebSocketMessage) => {
+      if (data.conversation) {
+        console.log('🔄 [HOOK] Conversa atualizada:', data.conversation);
+        updateConversation(data.conversation);
+      }
+    };
+
+    // Registrar listeners
+    chatWebSocketManager.on('message_received', handleMessageReceived);
+    chatWebSocketManager.on('message_status_update', handleStatusUpdate);
+    chatWebSocketManager.on('typing', handleTyping);
+    chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
+
+    // Cleanup
+    return () => {
+      chatWebSocketManager.off('message_received', handleMessageReceived);
+      chatWebSocketManager.off('message_status_update', handleStatusUpdate);
+      chatWebSocketManager.off('typing', handleTyping);
+      chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
+    };
+  }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
+
+  // API pública
+  const sendMessage = useCallback((content: string, isInternal = false): boolean => {
+    if (!isConnected) {
+      console.warn('⚠️ [HOOK] WebSocket não conectado (ignorando envio)');
+      return false;
+    }
+
+    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50));
+    return chatWebSocketManager.sendChatMessage(content, isInternal);
+  }, [isConnected]);
+
+  const sendTyping = useCallback((isTyping: boolean) => {
+    if (!isConnected) return;
+    chatWebSocketManager.sendTyping(isTyping);
+  }, [isConnected]);
+
+  const markAsSeen = useCallback((messageId: string) => {
+    if (!isConnected) return;
+    chatWebSocketManager.markAsSeen(messageId);
+  }, [isConnected]);
 
   return {
     sendMessage,
     sendTyping,
     markAsSeen,
-    isConnected: connectionStatus === 'connected'
+    isConnected,
   };
 }
 

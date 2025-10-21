@@ -10,7 +10,7 @@ import { TransferModal } from './TransferModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { useChatSocketV2 } from '../hooks/useChatSocketV2';
+import { useChatSocket } from '../hooks/useChatSocket';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -33,8 +33,8 @@ export function ChatWindow() {
     }
   }, [activeConversation?.profile_pic_url]);
 
-  // 🔌 Conectar WebSocket para esta conversa (V2: usa manager global)
-  const { isConnected, sendMessage, sendTyping } = useChatSocketV2(activeConversation?.id);
+  // 🔌 Conectar WebSocket para esta conversa (usa manager global)
+  const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversation?.id);
 
   // 📖 Marcar mensagens como lidas quando abre a conversa
   useEffect(() => {

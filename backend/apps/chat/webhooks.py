@@ -218,8 +218,15 @@ def handle_message_upsert(data, tenant, connection=None):
                 if instance:
                     logger.info(f"📸 [WEBHOOK] Buscando foto de perfil...")
                     
-                    # Formatar telefone (sem + e sem @s.whatsapp.net)
-                    clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                    # Formatar número dependendo do tipo de conversa
+                    if is_group:
+                        # Para grupos, usar o remoteJid completo (ex: 120363123456789012@g.us)
+                        clean_phone = remote_jid
+                        logger.info(f"👥 [GRUPO] Buscando foto com Group JID: {clean_phone}")
+                    else:
+                        # Para conversas individuais, remover + e @s.whatsapp.net
+                        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                        logger.info(f"👤 [INDIVIDUAL] Buscando foto com número: {clean_phone}")
                     
                     # Endpoint Evolution API
                     base_url = instance.base_url.rstrip('/')
