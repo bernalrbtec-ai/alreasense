@@ -31,15 +31,29 @@ class ProductViewSet(viewsets.ModelViewSet):
     queryset = Product.objects.all()
     
     def get_queryset(self):
-        """Filtrar produtos baseado no usuário"""
+        """Filtrar produtos baseado no usuário (COM CACHE)"""
+        from django.core.cache import cache
+        
         user = self.request.user
         
-        if user.is_superuser or user.is_staff:
-            # Super admin vê todos os produtos
-            return Product.objects.all()
-        else:
-            # Usuário comum só vê produtos ativos
-            return Product.objects.filter(is_active=True)
+        # Cache key baseado no tipo de usuário
+        cache_key = f"products:{'all' if (user.is_superuser or user.is_staff) else 'active'}"
+        
+        # Tentar buscar do cache
+        products = cache.get(cache_key)
+        
+        if products is None:
+            # Cache MISS - buscar do banco
+            if user.is_superuser or user.is_staff:
+                products = list(Product.objects.all())
+            else:
+                products = list(Product.objects.filter(is_active=True))
+            
+            # Cachear por 24 horas (86400 segundos)
+            cache.set(cache_key, products, timeout=86400)
+        
+        # Retornar como queryset para compatibilidade
+        return Product.objects.filter(id__in=[p.id for p in products])
     
     @action(detail=False, methods=['get'])
     def available(self, request):
@@ -72,15 +86,29 @@ class PlanViewSet(viewsets.ModelViewSet):
         return PlanSerializer
     
     def get_queryset(self):
-        """Filtrar planos baseado no usuário"""
+        """Filtrar planos baseado no usuário (COM CACHE)"""
+        from django.core.cache import cache
+        
         user = self.request.user
         
-        if user.is_superuser or user.is_staff:
-            # Super admin vê todos os planos
-            return Plan.objects.all().order_by('sort_order')
-        else:
-            # Usuário comum só vê planos ativos
-            return Plan.objects.filter(is_active=True).order_by('sort_order')
+        # Cache key baseado no tipo de usuário
+        cache_key = f"plans:{'all' if (user.is_superuser or user.is_staff) else 'active'}"
+        
+        # Tentar buscar do cache
+        plans = cache.get(cache_key)
+        
+        if plans is None:
+            # Cache MISS - buscar do banco
+            if user.is_superuser or user.is_staff:
+                plans = list(Plan.objects.all().order_by('sort_order'))
+            else:
+                plans = list(Plan.objects.filter(is_active=True).order_by('sort_order'))
+            
+            # Cachear por 12 horas (43200 segundos)
+            cache.set(cache_key, plans, timeout=43200)
+        
+        # Retornar como queryset para compatibilidade
+        return Plan.objects.filter(id__in=[p.id for p in plans]).order_by('sort_order')
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTenantMember, IsAdminUser])
     def select(self, request, pk=None):
@@ -143,8 +171,35 @@ class TenantProductViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated, IsTenantMember]
     
     def get_queryset(self):
+        """Get tenant products (COM CACHE)"""
+        from django.core.cache import cache
+        
+        tenant = self.request.user.tenant
+        if not tenant:
+            return TenantProduct.objects.none()
+        
+        # Cache key por tenant
+        cache_key = f"tenant_products:{tenant.id}"
+        
+        # Tentar buscar do cache
+        tenant_product_ids = cache.get(cache_key)
+        
+        if tenant_product_ids is None:
+            # Cache MISS - buscar do banco
+            tenant_products = list(
+                TenantProduct.objects.filter(
+                    tenant=tenant,
+                    is_active=True
+                ).select_related('product').values_list('id', flat=True)
+            )
+            
+            # Cachear por 5 minutos (300 segundos)
+            cache.set(cache_key, tenant_products, timeout=300)
+            tenant_product_ids = tenant_products
+        
+        # Retornar queryset completo
         return TenantProduct.objects.filter(
-            tenant=self.request.user.tenant
+            id__in=tenant_product_ids
         ).select_related('product')
     
     def perform_create(self, serializer):

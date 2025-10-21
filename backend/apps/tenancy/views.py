@@ -25,11 +25,17 @@ class TenantViewSet(viewsets.ModelViewSet):
         """Filtrar tenants baseado no usuário"""
         user = self.request.user
         
+        # Otimização: select_related + prefetch_related para evitar N+1 queries
+        base_queryset = Tenant.objects.select_related('current_plan').prefetch_related(
+            'tenant_products__product',
+            'users'
+        )
+        
         if user.is_superuser:
-            return Tenant.objects.all()
+            return base_queryset
         else:
             # Usuário comum só vê seu próprio tenant
-            return Tenant.objects.filter(users=user)
+            return base_queryset.filter(users=user)
     
     def create(self, request, *args, **kwargs):
         """Criar tenant com usuário principal"""
@@ -329,10 +335,12 @@ class TenantViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['get'])
     def metrics(self, request, pk=None):
-        """Retorna métricas do tenant"""
+        """Retorna métricas do tenant (OTIMIZADO)"""
         from datetime import timedelta
         from django.utils import timezone
+        from django.db.models import Count, Avg, Q, Case, When, IntegerField
         from apps.chat_messages.models import Message
+        from apps.campaigns.models import CampaignContact
         from apps.notifications.models import WhatsAppInstance
         
         tenant = self.get_object()
@@ -341,68 +349,38 @@ class TenantViewSet(viewsets.ModelViewSet):
         thirty_days_ago = timezone.now() - timedelta(days=30)
         today_start = timezone.now().replace(hour=0, minute=0, second=0, microsecond=0)
         
-        # Mensagens (incluindo campanhas)
-        total_messages = Message.objects.filter(tenant=tenant).count()
-        messages_today = Message.objects.filter(
-            tenant=tenant,
-            created_at__gte=today_start
-        ).count()
-        messages_last_30_days = Message.objects.filter(
-            tenant=tenant,
-            created_at__gte=thirty_days_ago
-        ).count()
+        # OTIMIZAÇÃO: Consolidar todas as queries de Message em UMA ÚNICA query
+        message_metrics = Message.objects.filter(tenant=tenant).aggregate(
+            total=Count('id'),
+            today=Count('id', filter=Q(created_at__gte=today_start)),
+            last_30=Count('id', filter=Q(created_at__gte=thirty_days_ago)),
+            avg_sentiment=Avg('sentiment'),
+            positive=Count('id', filter=Q(sentiment__gt=0.3)),
+            sentiment_count=Count('id', filter=Q(sentiment__isnull=False)),
+            avg_satisfaction=Avg('satisfaction')
+        )
         
-        # Adicionar mensagens de campanhas se não estiverem no modelo Message
-        from apps.campaigns.models import CampaignContact
-        campaign_messages_sent = CampaignContact.objects.filter(
+        # OTIMIZAÇÃO: Consolidar queries de CampaignContact em UMA query
+        campaign_metrics = CampaignContact.objects.filter(
             campaign__tenant=tenant,
             status='sent'
-        ).count()
-        
-        # Se houver mensagens de campanha que não estão no modelo Message, incluir
-        if campaign_messages_sent > 0:
-            # Para hoje
-            campaign_messages_today = CampaignContact.objects.filter(
-                campaign__tenant=tenant,
-                status='sent',
-                sent_at__gte=today_start
-            ).count()
-            
-            # Para últimos 30 dias
-            campaign_messages_30_days = CampaignContact.objects.filter(
-                campaign__tenant=tenant,
-                status='sent',
-                sent_at__gte=thirty_days_ago
-            ).count()
-            
-            # Adicionar aos contadores se não estiverem duplicados
-            messages_today += campaign_messages_today
-            messages_last_30_days += campaign_messages_30_days
-        
-        # Sentimento (análise básica)
-        messages_with_sentiment = Message.objects.filter(
-            tenant=tenant,
-            sentiment__isnull=False
+        ).aggregate(
+            total=Count('id'),
+            today=Count('id', filter=Q(sent_at__gte=today_start)),
+            last_30=Count('id', filter=Q(sent_at__gte=thirty_days_ago))
         )
-        avg_sentiment = 0.0
-        positive_messages_pct = 0.0
-        if messages_with_sentiment.exists():
-            from django.db.models import Avg
-            avg_sentiment = messages_with_sentiment.aggregate(Avg('sentiment'))['sentiment__avg'] or 0.0
-            positive_count = messages_with_sentiment.filter(sentiment__gt=0.3).count()
-            positive_messages_pct = (positive_count / messages_with_sentiment.count()) * 100 if messages_with_sentiment.count() > 0 else 0.0
         
-        # Satisfação (análise básica)
-        messages_with_satisfaction = Message.objects.filter(
-            tenant=tenant,
-            satisfaction__isnull=False
-        )
-        avg_satisfaction = 0.0
-        if messages_with_satisfaction.exists():
-            from django.db.models import Avg
-            avg_satisfaction = messages_with_satisfaction.aggregate(Avg('satisfaction'))['satisfaction__avg'] or 0.0
+        # Calcular totais combinados
+        total_messages = (message_metrics['total'] or 0) + (campaign_metrics['total'] or 0)
+        messages_today = (message_metrics['today'] or 0) + (campaign_metrics['today'] or 0)
+        messages_last_30_days = (message_metrics['last_30'] or 0) + (campaign_metrics['last_30'] or 0)
         
-        # Conexões ativas
+        # Calcular percentual de mensagens positivas
+        sentiment_count = message_metrics['sentiment_count'] or 0
+        positive_count = message_metrics['positive'] or 0
+        positive_messages_pct = (positive_count / sentiment_count * 100) if sentiment_count > 0 else 0.0
+        
+        # Conexões ativas (já é uma query simples)
         active_connections = WhatsAppInstance.objects.filter(
             tenant=tenant,
             connection_state='connected'
@@ -415,9 +393,9 @@ class TenantViewSet(viewsets.ModelViewSet):
             'total_messages': total_messages,
             'messages_today': messages_today,
             'messages_last_30_days': messages_last_30_days,
-            'avg_sentiment': float(avg_sentiment),
+            'avg_sentiment': float(message_metrics['avg_sentiment'] or 0.0),
             'positive_messages_pct': float(positive_messages_pct),
-            'avg_satisfaction': float(avg_satisfaction),
+            'avg_satisfaction': float(message_metrics['avg_satisfaction'] or 0.0),
             'active_connections': active_connections,
             'avg_latency_ms': avg_latency_ms,
         }
