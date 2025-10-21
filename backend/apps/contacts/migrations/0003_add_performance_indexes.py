@@ -19,21 +19,21 @@ class Migration(migrations.Migration):
                 CREATE INDEX IF NOT EXISTS idx_contact_tenant_email 
                 ON contacts_contact(tenant_id, email);
                 
-                CREATE INDEX IF NOT EXISTS idx_contact_tenant_lifecycle 
-                ON contacts_contact(tenant_id, lifecycle_stage);
-                
                 CREATE INDEX IF NOT EXISTS idx_contact_tenant_active 
                 ON contacts_contact(tenant_id, is_active);
                 
                 CREATE INDEX IF NOT EXISTS idx_contact_tenant_created 
                 ON contacts_contact(tenant_id, created_at);
+                
+                CREATE INDEX IF NOT EXISTS idx_contact_tenant_last_purchase 
+                ON contacts_contact(tenant_id, last_purchase_date);
             """,
             reverse_sql="""
                 DROP INDEX IF EXISTS idx_contact_tenant_phone;
                 DROP INDEX IF EXISTS idx_contact_tenant_email;
-                DROP INDEX IF EXISTS idx_contact_tenant_lifecycle;
                 DROP INDEX IF EXISTS idx_contact_tenant_active;
                 DROP INDEX IF EXISTS idx_contact_tenant_created;
+                DROP INDEX IF EXISTS idx_contact_tenant_last_purchase;
             """
         ),
     ]
