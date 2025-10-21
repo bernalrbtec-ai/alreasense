@@ -161,6 +161,13 @@ export function MessageList() {
                   }
                 `}
               >
+                {/* Nome do remetente (apenas para GRUPOS e mensagens RECEBIDAS) */}
+                {activeConversation.conversation_type === 'group' && msg.direction === 'incoming' && (msg.sender_name || msg.sender_phone) && (
+                  <p className="text-xs font-semibold text-green-600 mb-1">
+                    {msg.sender_name || msg.sender_phone}
+                  </p>
+                )}
+                
                 {/* Anexos */}
                 {msg.attachments && msg.attachments.length > 0 && (
                   <div className="mb-2">
