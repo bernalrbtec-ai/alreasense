@@ -318,26 +318,11 @@ def handle_message_upsert(data, tenant, connection=None):
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
         
-        # 📸 Para conversas EXISTENTES de GRUPO: atualizar periodicamente
-        elif is_group:
-            from datetime import timedelta
-            from django.utils import timezone
-            
-            needs_update = False
-            
-            # 1. Sem foto ou sem nome → buscar AGORA
-            if not conversation.profile_pic_url or not conversation.group_metadata.get('group_name'):
-                needs_update = True
-                logger.info(f"📸 [GRUPO] Precisa atualizar: falta foto ou nome")
-            
-            # 2. Última atualização há mais de 6h → buscar para pegar mudanças
-            elif conversation.updated_at:
-                time_since_update = timezone.now() - conversation.updated_at
-                if time_since_update > timedelta(hours=6):
-                    needs_update = True
-                    logger.info(f"📸 [GRUPO] Desatualizado há {time_since_update.total_seconds() / 3600:.1f}h → buscando")
-            
-            if needs_update:
+        # 📸 Para conversas EXISTENTES de GRUPO: atualizar APENAS se falta dados
+        # (Atualização on-demand acontece quando usuário ABRE o grupo no frontend)
+        elif is_group and (not conversation.profile_pic_url or not conversation.group_metadata.get('group_name')):
+            logger.info(f"📸 [GRUPO] Falta dados básicos → buscando agora")
+            if True:  # Manter indentação do bloco try/except abaixo
                 logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
                 try:
                     import httpx

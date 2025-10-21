@@ -54,6 +54,31 @@ export function ChatWindow() {
     }
   }, [activeConversation?.id]);
 
+  // 🔄 Atualizar informações do grupo quando abre (se for grupo)
+  useEffect(() => {
+    if (activeConversation && activeConversation.conversation_type === 'group') {
+      const refreshGroupInfo = async () => {
+        try {
+          console.log('🔄 [GRUPO] Atualizando informações...');
+          const response = await api.post(`/chat/conversations/${activeConversation.id}/refresh-group-info/`);
+          
+          if (response.data.from_cache) {
+            console.log('✅ [GRUPO] Informações em cache (atualizadas recentemente)');
+          } else {
+            console.log('✅ [GRUPO] Informações atualizadas:', response.data.updated_fields);
+            // Store será atualizado via WebSocket broadcast
+          }
+        } catch (error: any) {
+          // Silencioso: não mostrar toast se falhar (não crítico)
+          console.warn('⚠️ [GRUPO] Erro ao atualizar:', error.response?.data?.error || error.message);
+        }
+      };
+      
+      // Executar imediatamente
+      refreshGroupInfo();
+    }
+  }, [activeConversation?.id, activeConversation?.conversation_type]);
+
   // Fechar menu ao clicar fora
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {

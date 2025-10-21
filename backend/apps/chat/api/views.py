@@ -165,6 +165,161 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(conversation)
         return Response(serializer.data)
     
+    @action(detail=True, methods=['post'], url_path='refresh-group-info')
+    def refresh_group_info(self, request, pk=None):
+        """
+        Atualiza informações do grupo (nome, foto, participantes) sob demanda.
+        
+        Usado quando o usuário ABRE uma conversa de grupo.
+        Cache Redis de 5min para evitar requisições repetidas.
+        
+        Returns:
+            - 200: Informações atualizadas
+            - 400: Não é um grupo
+            - 404: Instância Evolution não encontrada
+            - 500: Erro ao buscar da API
+        """
+        import logging
+        import httpx
+        from django.core.cache import cache
+        from apps.connections.models import EvolutionConnection
+        
+        logger = logging.getLogger(__name__)
+        conversation = self.get_object()
+        
+        # Validar se é um grupo
+        if conversation.conversation_type != 'group':
+            return Response(
+                {'error': 'Esta conversa não é um grupo'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verificar cache (5min)
+        cache_key = f"group_info_{conversation.id}"
+        cached = cache.get(cache_key)
+        if cached:
+            logger.info(f"✅ [REFRESH GROUP] Cache hit para {conversation.id}")
+            return Response({
+                'message': 'Informações em cache (atualizadas recentemente)',
+                'conversation': ConversationSerializer(conversation).data,
+                'from_cache': True
+            })
+        
+        # Buscar instância Evolution ativa
+        instance = EvolutionConnection.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True
+        ).first()
+        
+        if not instance:
+            logger.warning(f"⚠️ [REFRESH GROUP] Nenhuma instância ativa para tenant {request.user.tenant.name}")
+            return Response(
+                {'error': 'Nenhuma instância WhatsApp ativa encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Buscar informações do grupo na Evolution API
+        try:
+            group_jid = conversation.contact_phone.replace('+', '') + '@g.us'
+            
+            base_url = instance.base_url.rstrip('/')
+            endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+            
+            headers = {
+                'apikey': instance.api_key,
+                'Content-Type': 'application/json'
+            }
+            
+            logger.info(f"🔄 [REFRESH GROUP] Buscando info do grupo {group_jid}")
+            
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(
+                    endpoint,
+                    params={'groupJid': group_jid},
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    group_info = response.json()
+                    
+                    # Extrair dados
+                    group_name = group_info.get('subject', '')
+                    group_pic_url = group_info.get('pictureUrl')
+                    participants_count = group_info.get('size', 0)
+                    group_desc = group_info.get('desc', '')
+                    
+                    # Atualizar conversa
+                    update_fields = []
+                    
+                    if group_name and group_name != conversation.contact_name:
+                        conversation.contact_name = group_name
+                        update_fields.append('contact_name')
+                        logger.info(f"✅ [REFRESH GROUP] Nome atualizado: {group_name}")
+                    
+                    if group_pic_url and group_pic_url != conversation.profile_pic_url:
+                        conversation.profile_pic_url = group_pic_url
+                        update_fields.append('profile_pic_url')
+                        logger.info(f"✅ [REFRESH GROUP] Foto atualizada")
+                    
+                    # Atualizar metadados
+                    conversation.group_metadata = {
+                        'group_id': group_jid,
+                        'group_name': group_name,
+                        'group_pic_url': group_pic_url,
+                        'participants_count': participants_count,
+                        'description': group_desc,
+                        'is_group': True,
+                    }
+                    update_fields.append('group_metadata')
+                    
+                    if update_fields:
+                        conversation.save(update_fields=update_fields)
+                        logger.info(f"✅ [REFRESH GROUP] {len(update_fields)} campos atualizados")
+                    
+                    # Salvar no cache por 5min
+                    cache.set(cache_key, True, 300)
+                    
+                    # Broadcast atualização via WebSocket
+                    from channels.layers import get_channel_layer
+                    from asgiref.sync import async_to_sync
+                    
+                    channel_layer = get_channel_layer()
+                    if channel_layer:
+                        serializer = ConversationSerializer(conversation)
+                        async_to_sync(channel_layer.group_send)(
+                            f"tenant_{request.user.tenant.id}",
+                            {
+                                'type': 'conversation_updated',
+                                'conversation': serializer.data
+                            }
+                        )
+                    
+                    return Response({
+                        'message': 'Informações do grupo atualizadas com sucesso',
+                        'conversation': ConversationSerializer(conversation).data,
+                        'updated_fields': update_fields,
+                        'from_cache': False
+                    })
+                else:
+                    logger.error(f"❌ [REFRESH GROUP] Erro API: {response.status_code}")
+                    return Response(
+                        {'error': f'Erro ao buscar informações: {response.status_code}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+        
+        except httpx.TimeoutException:
+            logger.error(f"⏱️ [REFRESH GROUP] Timeout ao buscar grupo {conversation.id}")
+            return Response(
+                {'error': 'Timeout ao buscar informações do grupo'},
+                status=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except Exception as e:
+            logger.error(f"❌ [REFRESH GROUP] Erro: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro interno: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=False, methods=['post'])
     def start(self, request):
         """
