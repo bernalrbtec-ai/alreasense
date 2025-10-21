@@ -336,10 +336,12 @@ class EvolutionWebhookView(APIView):
             try:
                 from apps.chat.webhooks import handle_message_upsert as chat_handle_message
                 from apps.notifications.models import WhatsAppInstance
+                from django.db.models import Q
                 
-                # Buscar tenant pela instância UUID (mesmo padrão do envio)
+                # Buscar instância - Evolution API envia o "nome da instância" (ex: "RBTec")
+                # Pode ser friendly_name OU instance_name (depende da configuração)
                 whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
-                    instance_name=instance_name,
+                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
                     is_active=True
                 ).first()
                 
@@ -476,22 +478,24 @@ class EvolutionWebhookView(APIView):
             try:
                 from apps.chat.webhooks import handle_message_update as chat_handle_update
                 from apps.notifications.models import WhatsAppInstance
+                from django.db.models import Q
                 
-                # Buscar tenant pela instância UUID (campo instance_name armazena o UUID)
+                # Buscar instância - Evolution API envia o "nome da instância" (ex: "RBTec")
+                # Pode ser friendly_name OU instance_name (depende da configuração)
+                logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance com: {instance_name}")
+                
                 instance = WhatsAppInstance.objects.select_related('tenant').filter(
-                    instance_name=instance_name,
+                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
                     is_active=True
                 ).first()
-                
-                logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance onde instance_name={instance_name}")
                 
                 if instance:
                     logger.info(f"✅ [FLOW CHAT] Instance encontrada: {instance.friendly_name} (UUID: {instance.instance_name}) - Tenant: {instance.tenant.name}")
                     chat_handle_update(data, instance.tenant)
                     logger.info(f"💬 [FLOW CHAT] Status atualizado para tenant {instance.tenant.name}")
                 else:
-                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma WhatsAppInstance ativa encontrada com instance_name={instance_name}")
-                    logger.warning(f"   Verifique se a instância foi criada em Admin → Instâncias do WhatsApp")
+                    logger.warning(f"⚠️ [FLOW CHAT] Nenhuma WhatsAppInstance ativa encontrada com: {instance_name}")
+                    logger.warning(f"   Verifique se existe uma instância com instance_name='{instance_name}' OU friendly_name='{instance_name}'")
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao atualizar status: {e}", exc_info=True)
             
