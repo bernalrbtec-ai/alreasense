@@ -45,18 +45,24 @@ export function useTenantSocket() {
           addConversation(data.conversation);
           
           const contactName = data.conversation.contact_name || data.conversation.contact_phone;
+          const currentPath = window.location.pathname;
+          const isOnChatPage = currentPath === '/chat';
           
-          // 🔔 Toast notification - sempre mostrar
-          toast.success('Nova Mensagem Recebida! 💬', {
-            description: `De: ${contactName}`,
-            duration: 6000,
-            action: {
-              label: 'Abrir',
-              onClick: () => navigateToChat(data.conversation)
-            }
-          });
+          // 🔔 Toast notification - NÃO mostrar se já está na página do chat
+          if (!isOnChatPage) {
+            toast.success('Nova Mensagem Recebida! 💬', {
+              description: `De: ${contactName}`,
+              duration: 6000,
+              action: {
+                label: 'Abrir',
+                onClick: () => navigateToChat(data.conversation)
+              }
+            });
+          } else {
+            console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
+          }
           
-          // 🔔 Desktop notification (se permitido)
+          // 🔔 Desktop notification (se permitido) - sempre mostrar para não perder
           if ('Notification' in window) {
             if (Notification.permission === 'granted') {
               new Notification('Nova Mensagem no Chat', {
@@ -80,24 +86,33 @@ export function useTenantSocket() {
         console.log('💬 [TENANT WS] Nova mensagem em conversa existente:', data);
         if (data.conversation) {
           // Atualizar conversa na lista (mover para o topo, atualizar última mensagem)
-          const { updateConversation } = useChatStore.getState();
+          const { updateConversation, activeConversation } = useChatStore.getState();
           updateConversation(data.conversation);
           
           const contactName = data.conversation.contact_name || data.conversation.contact_phone;
           const messagePreview = data.message?.content || 'Nova mensagem';
+          const currentPath = window.location.pathname;
+          const isOnChatPage = currentPath === '/chat';
+          const isActiveConversation = activeConversation?.id === data.conversation.id;
           
-          // 🔔 Toast notification
-          toast.info('Nova Mensagem! 💬', {
-            description: `${contactName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
-            duration: 5000,
-            action: {
-              label: 'Ver',
-              onClick: () => navigateToChat(data.conversation)
-            }
-          });
+          // 🔔 Toast notification - NÃO mostrar se:
+          // 1. Já está na página do chat E
+          // 2. É a conversa ativa (usuário já está vendo)
+          if (!isOnChatPage || !isActiveConversation) {
+            toast.info('Nova Mensagem! 💬', {
+              description: `${contactName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
+              duration: 5000,
+              action: {
+                label: 'Ver',
+                onClick: () => navigateToChat(data.conversation)
+              }
+            });
+          } else {
+            console.log('🔕 [TOAST] Não exibido - usuário já está na conversa ativa');
+          }
           
-          // 🔔 Desktop notification
-          if ('Notification' in window && Notification.permission === 'granted') {
+          // 🔔 Desktop notification - apenas se não estiver na conversa ativa
+          if (!isActiveConversation && 'Notification' in window && Notification.permission === 'granted') {
             new Notification(`${contactName}`, {
               body: messagePreview.substring(0, 100),
               icon: data.conversation.profile_pic_url || '/logo.png',

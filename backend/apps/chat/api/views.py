@@ -61,9 +61,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Override para incluir conversas pending (Inbox) no filtro.
         Admin: vê tudo do tenant (incluindo pending)
         Gerente/Agente: vê apenas dos seus departamentos + pending do tenant
+        
+        REGRA IMPORTANTE: Conversas com departamento NÃO aparecem no Inbox,
+        mesmo que tenham status='pending'
         """
         queryset = super().get_queryset()
         user = self.request.user
+        
+        # 🔍 Verificar se está filtrando por status=pending (Inbox)
+        status_filter = self.request.query_params.get('status')
+        
+        # Se filtrando por pending (Inbox), garantir que NÃO tenha departamento
+        if status_filter == 'pending':
+            queryset = queryset.filter(
+                status='pending',
+                department__isnull=True  # ← CRÍTICO: Apenas conversas SEM departamento no Inbox
+            )
         
         # Admin vê tudo (incluindo pending)
         if user.is_admin:
