@@ -229,6 +229,14 @@ async def handle_send_message(message_id: str):
         logger.info(f"📱 [CHAT ENVIO] Telefone/Grupo: {phone}")
         logger.info(f"   Tipo: {conversation.conversation_type}")
         
+        # Buscar attachments para obter mime_type
+        attachments_list = []
+        if attachment_urls:
+            from apps.chat.models import MessageAttachment
+            attachments_list = await sync_to_async(list)(
+                MessageAttachment.objects.filter(message=message)
+            )
+        
         # Envia via Evolution API
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = instance.api_url.rstrip('/')
@@ -239,11 +247,31 @@ async def handle_send_message(message_id: str):
             
             # Se tiver anexos, envia cada um
             if attachment_urls:
-                for url in attachment_urls:
+                for idx, url in enumerate(attachment_urls):
+                    # Detectar mediatype e filename baseado no attachment
+                    mime_type = 'application/pdf'  # default
+                    filename = 'file'
+                    
+                    if attachments_list and idx < len(attachments_list):
+                        mime_type = attachments_list[idx].mime_type
+                        filename = attachments_list[idx].original_filename
+                    
+                    # Mapear mime_type para mediatype da Evolution API
+                    if mime_type.startswith('image/'):
+                        mediatype = 'image'
+                    elif mime_type.startswith('video/'):
+                        mediatype = 'video'
+                    elif mime_type.startswith('audio/'):
+                        mediatype = 'audio'
+                    else:
+                        mediatype = 'document'
+                    
                     payload = {
                         'number': phone,  # Evolution API aceita com ou sem '+'
                         'mediaMessage': {
-                            'mediaUrl': url
+                            'mediaUrl': url,
+                            'mediatype': mediatype,  # OBRIGATÓRIO!
+                            'fileName': filename  # Nome do arquivo
                         }
                     }
                     if content:
