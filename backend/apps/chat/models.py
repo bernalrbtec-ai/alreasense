@@ -58,10 +58,10 @@ class Conversation(models.Model):
         help_text='Null = Conversa pendente no Inbox'
     )
     contact_phone = models.CharField(
-        max_length=20,
+        max_length=50,
         db_index=True,
         verbose_name='Telefone do Contato',
-        help_text='Formato E.164: +5517999999999'
+        help_text='Formato E.164 ou Group ID: +5517999999999 ou +5517999999999-1234567890'
     )
     contact_name = models.CharField(
         max_length=255,
