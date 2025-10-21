@@ -118,11 +118,21 @@ export function useChatSocket(conversationId?: string) {
       return;
     }
 
-    // Não reconectar se já está conectando/conectado
-    if (socketRef.current?.readyState === WebSocket.CONNECTING ||
-        socketRef.current?.readyState === WebSocket.OPEN) {
-      console.log('⏸️ [WS] Já conectado/conectando');
-      return;
+    // Limpar WebSocket antigo se estiver fechado/fechando
+    if (socketRef.current) {
+      const state = socketRef.current.readyState;
+      
+      // Se já está conectado/conectando para a MESMA conversa, não reconectar
+      if ((state === WebSocket.CONNECTING || state === WebSocket.OPEN)) {
+        console.log('⏸️ [WS] Já conectado/conectando');
+        return;
+      }
+      
+      // Se está fechando/fechado, limpar referência
+      if (state === WebSocket.CLOSING || state === WebSocket.CLOSED) {
+        console.log('🧹 [WS] Limpando WebSocket antigo (estado:', state, ')');
+        socketRef.current = null;
+      }
     }
 
     setConnectionStatus('connecting');
@@ -196,6 +206,9 @@ export function useChatSocket(conversationId?: string) {
       socketRef.current.close();
       socketRef.current = null;
     }
+
+    // Resetar contador de reconexão ao desconectar manualmente
+    reconnectAttemptsRef.current = 0;
 
     setConnectionStatus('disconnected');
   }, [setConnectionStatus]);
