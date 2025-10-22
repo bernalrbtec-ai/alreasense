@@ -1152,8 +1152,11 @@ class MessageViewSet(viewsets.ModelViewSet):
                 if not success:
                     raise Exception(f"Erro ao baixar OGG: {msg}")
                 
-                # 2. Converter OGG → MP3
-                success, mp3_data, msg = convert_ogg_to_mp3(ogg_data)
+                # 2. Detectar formato do áudio (WEBM ou OGG)
+                source_format = "webm" if ("webm" in content_type.lower() or filename.lower().endswith(".webm")) else "ogg"
+                
+                # 3. Converter para MP3
+                success, mp3_data, msg = convert_ogg_to_mp3(ogg_data, source_format=source_format)
                 
                 if not success:
                     logger.warning(f"⚠️ [AUDIO] Conversão falhou: {msg}. Usando OGG original.")

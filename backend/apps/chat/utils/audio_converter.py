@@ -20,12 +20,13 @@ from typing import Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-def convert_ogg_to_mp3(ogg_data: bytes) -> Tuple[bool, Optional[bytes], str]:
+def convert_ogg_to_mp3(ogg_data: bytes, source_format: str = "ogg") -> Tuple[bool, Optional[bytes], str]:
     """
-    Converte áudio OGG para MP3.
+    Converte áudio OGG/WEBM para MP3.
     
     Args:
-        ogg_data: Bytes do arquivo OGG
+        ogg_data: Bytes do arquivo OGG/WEBM
+        source_format: Formato do áudio de origem ("ogg" ou "webm")
     
     Returns:
         (sucesso: bool, mp3_data: bytes | None, mensagem: str)
@@ -33,12 +34,12 @@ def convert_ogg_to_mp3(ogg_data: bytes) -> Tuple[bool, Optional[bytes], str]:
     try:
         from pydub import AudioSegment
         
-        logger.info("🔄 [AUDIO] Convertendo OGG → MP3...")
+        logger.info(f"🔄 [AUDIO] Convertendo {source_format.upper()} → MP3...")
         
-        # Carregar OGG
+        # Carregar áudio (especificar formato ajuda FFmpeg)
         audio = AudioSegment.from_file(
             io.BytesIO(ogg_data),
-            format="ogg"
+            format=source_format
         )
         
         # Converter para MP3
