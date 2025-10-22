@@ -141,27 +141,39 @@ export function VoiceRecorder({
 
     console.log('⏹️ [VOICE] Parando gravação e enviando...');
 
-    // Parar gravação
-    mediaRecorderRef.current.stop();
-    setIsRecording(false);
+    return new Promise<void>((resolve) => {
+      const mediaRecorder = mediaRecorderRef.current!;
+      
+      // Listener para quando MediaRecorder finalizar
+      mediaRecorder.onstop = async () => {
+        console.log('✅ [VOICE] MediaRecorder finalizado');
+        
+        // Criar Blob do áudio (usar o mimeType do MediaRecorder)
+        const mimeType = mediaRecorder.mimeType || 'audio/ogg';
+        const blob = new Blob(audioChunksRef.current, { type: mimeType });
+        
+        console.log(`📦 [VOICE] Blob criado: ${blob.size} bytes, tipo: ${blob.type}`);
+        
+        // Limpar stream
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
+          streamRef.current = null;
+        }
 
-    if (timerRef.current) {
-      clearInterval(timerRef.current);
-      timerRef.current = null;
-    }
+        // Enviar automaticamente (SEM PREVIEW)
+        await sendAudioDirectly(blob);
+        resolve();
+      };
+      
+      // Parar gravação (vai disparar onstop)
+      mediaRecorder.stop();
+      setIsRecording(false);
 
-    // Criar Blob do áudio (usar o mimeType do MediaRecorder)
-    const mimeType = mediaRecorderRef.current.mimeType || 'audio/ogg';
-    const blob = new Blob(audioChunksRef.current, { type: mimeType });
-    
-    // Limpar stream
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
-      streamRef.current = null;
-    }
-
-    // Enviar automaticamente (SEM PREVIEW)
-    await sendAudioDirectly(blob);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    });
   };
 
   // 3️⃣ CANCELAR (X button)
