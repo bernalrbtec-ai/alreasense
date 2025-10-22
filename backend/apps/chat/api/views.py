@@ -1133,6 +1133,47 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # 🎵 CONVERTER ÁUDIO OGG/WEBM → MP3 (para compatibilidade universal)
+        from apps.chat.utils.audio_converter import should_convert_audio, convert_ogg_to_mp3, get_converted_filename
+        
+        if should_convert_audio(content_type, filename):
+            logger.info(f"🔄 [AUDIO] Detectado áudio OGG/WEBM, convertendo para MP3...")
+            
+            try:
+                # 1. Baixar OGG do S3
+                s3_manager = S3Manager()
+                success, ogg_data, msg = s3_manager.download_from_s3(s3_key)
+                
+                if not success:
+                    raise Exception(f"Erro ao baixar OGG: {msg}")
+                
+                # 2. Converter OGG → MP3
+                success, mp3_data, msg = convert_ogg_to_mp3(ogg_data)
+                
+                if not success:
+                    logger.warning(f"⚠️ [AUDIO] Conversão falhou: {msg}. Usando OGG original.")
+                else:
+                    # 3. Re-upload MP3 (substituir OGG)
+                    mp3_key = s3_key.replace('.ogg', '.mp3').replace('.webm', '.mp3')
+                    success, msg = s3_manager.upload_to_s3(mp3_data, mp3_key, 'audio/mpeg')
+                    
+                    if success:
+                        # Deletar OGG antigo
+                        s3_manager.delete_from_s3(s3_key)
+                        
+                        # Atualizar variáveis
+                        s3_key = mp3_key
+                        content_type = 'audio/mpeg'
+                        filename = get_converted_filename(filename)
+                        file_size = len(mp3_data)
+                        
+                        logger.info(f"✅ [AUDIO] Áudio convertido para MP3!")
+                    else:
+                        logger.warning(f"⚠️ [AUDIO] Erro ao fazer re-upload: {msg}. Usando OGG.")
+            
+            except Exception as conv_error:
+                logger.error(f"❌ [AUDIO] Erro na conversão: {conv_error}. Continuando com OGG.")
+        
         # Gerar presigned URL para Evolution API (curta: 1 hora)
         try:
             s3_manager = S3Manager()
