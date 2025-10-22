@@ -12,6 +12,7 @@ RUN apt-get update \
         build-essential \
         libpq-dev \
         curl \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 # Set work directory
