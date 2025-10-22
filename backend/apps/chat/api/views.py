@@ -222,10 +222,21 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             
             # 👥 GRUPOS: Endpoint /group/findGroupInfos
             if conversation.conversation_type == 'group':
-                group_jid = conversation.contact_phone.replace('+', '') + '@g.us'
+                # Montar group_jid corretamente
+                raw_phone = conversation.contact_phone
+                
+                # Se já termina com @g.us, usar como está
+                if '@g.us' in raw_phone:
+                    group_jid = raw_phone
+                else:
+                    # Remover + e adicionar @g.us
+                    group_jid = raw_phone.replace('+', '') + '@g.us'
+                
                 endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
                 
                 logger.info(f"🔄 [REFRESH GRUPO] Buscando info do grupo {group_jid}")
+                logger.info(f"   Raw phone: {raw_phone}")
+                logger.info(f"   Formatted JID: {group_jid}")
                 
                 with httpx.Client(timeout=10.0) as client:
                     response = client.get(
@@ -264,8 +275,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             'is_group': True,
                         }
                         update_fields.append('group_metadata')
+                    elif response.status_code == 404:
+                        # Grupo não encontrado (pode ter sido deletado ou instância saiu)
+                        logger.warning(f"⚠️ [REFRESH GRUPO] Grupo não encontrado (404) - pode ter sido deletado ou instância não tem acesso")
+                        logger.warning(f"   JID: {group_jid}")
+                        logger.warning(f"   Instance: {instance.name}")
+                        
+                        # Retornar sucesso mas com aviso (não quebrar UI)
+                        return Response({
+                            'message': 'Grupo não encontrado - pode ter sido deletado ou instância não tem acesso',
+                            'conversation': ConversationSerializer(conversation).data,
+                            'warning': 'group_not_found',
+                            'from_cache': False
+                        })
                     else:
                         logger.error(f"❌ [REFRESH GRUPO] Erro API: {response.status_code}")
+                        logger.error(f"   Response: {response.text[:200]}")
                         return Response(
                             {'error': f'Erro ao buscar grupo: {response.status_code}'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR

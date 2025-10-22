@@ -67,6 +67,10 @@ export function ChatWindow() {
           
           if (response.data.from_cache) {
             console.log(`✅ [${type}] Informações em cache (atualizadas recentemente)`);
+          } else if (response.data.warning === 'group_not_found') {
+            console.warn(`⚠️ [${type}] ${response.data.message}`);
+            // Grupo não encontrado - pode ter sido deletado ou instância saiu
+            // Não mostrar erro para não alarmar usuário
           } else {
             console.log(`✅ [${type}] Informações atualizadas:`, response.data.updated_fields);
             // Store será atualizado via WebSocket broadcast
