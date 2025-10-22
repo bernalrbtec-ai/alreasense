@@ -255,19 +255,33 @@ class S3Manager:
         """
         Retorna URL pública via proxy Django.
         
+        IMPORTANTE: Gera presigned URL de longa duração (7 dias) para o proxy.
+        Isso evita erro 403 ao acessar o S3.
+        
         Args:
             file_path: Caminho no S3
         
         Returns:
             URL do proxy Django
         """
-        # URL interna do S3
-        s3_url = f"{settings.S3_ENDPOINT_URL}/{self.bucket}/{file_path}"
+        # Gerar presigned URL de longa duração (7 dias = 604800 segundos)
+        # para o proxy conseguir acessar o arquivo no S3
+        presigned_url = self.generate_presigned_url(
+            file_path,
+            expiration=604800,  # 7 dias
+            http_method='GET'
+        )
         
-        # URL do proxy
+        if not presigned_url:
+            # Fallback: URL direta (pode não funcionar se bucket não for público)
+            presigned_url = f"{settings.S3_ENDPOINT_URL}/{self.bucket}/{file_path}"
+        
+        # URL do proxy (passa a presigned URL como parâmetro)
         from urllib.parse import urlencode
-        params = urlencode({'url': s3_url})
+        params = urlencode({'url': presigned_url})
         proxy_url = f"{settings.BASE_URL}/api/chat/media-proxy/?{params}"
+        
+        logger.info(f"📎 [S3] URL proxy gerada para: {file_path}")
         
         return proxy_url
     
