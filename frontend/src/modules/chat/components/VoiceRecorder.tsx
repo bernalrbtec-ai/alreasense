@@ -1,15 +1,16 @@
 /**
  * VoiceRecorder - Gravação de áudio estilo WhatsApp Web
  * 
- * Funcionalidades:
- * - Gravar áudio pelo microfone
- * - Timer de gravação
- * - Preview antes de enviar
- * - Upload automático para S3
- * - Visualização de waveform durante gravação
+ * UX:
+ * 1. Apertar botão → Inicia gravação
+ * 2. Ícone muda (Mic → Square pulsante vermelho)
+ * 3. Soltar botão → Para e ENVIA automaticamente (sem preview)
+ * 4. Clicar X → Cancela gravação
+ * 5. Timer em tempo real
+ * 6. Feedback visual (animação pulsante)
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, Square, Trash2, Send, Loader2 } from 'lucide-react';
+import { Mic, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -25,11 +26,8 @@ export function VoiceRecorder({
   onRecordingError,
 }: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
-  const [isPreviewing, setIsPreviewing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
-  const [audioUrl, setAudioUrl] = useState<string | null>(null);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -39,15 +37,9 @@ export function VoiceRecorder({
   // Limpar ao desmontar
   useEffect(() => {
     return () => {
-      stopRecording();
-      if (audioUrl) {
-        URL.revokeObjectURL(audioUrl);
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop());
-      }
+      cleanup();
     };
-  }, [audioUrl]);
+  }, []);
 
   // Formatar tempo (MM:SS)
   const formatTime = (seconds: number) => {
@@ -56,11 +48,37 @@ export function VoiceRecorder({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Iniciar gravação
-  const startRecording = async () => {
+  // Limpar recursos
+  const cleanup = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current = null;
+    }
+    audioChunksRef.current = [];
+  };
+
+  // 1️⃣ APERTAR botão → Iniciar gravação
+  const handleMouseDown = async () => {
+    if (isRecording || isUploading) return;
+
     try {
-      // Solicitar permissão do microfone
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('🎤 [VOICE] Solicitando permissão do microfone...');
+      
+      // Solicitar permissão
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
       streamRef.current = stream;
 
       // Criar MediaRecorder
@@ -71,24 +89,10 @@ export function VoiceRecorder({
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
 
-      // Coletar chunks de áudio
+      // Coletar chunks
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
           audioChunksRef.current.push(event.data);
-        }
-      };
-
-      // Quando parar a gravação
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        setAudioBlob(blob);
-        setAudioUrl(URL.createObjectURL(blob));
-        setIsPreviewing(true);
-        
-        // Parar stream
-        if (streamRef.current) {
-          streamRef.current.getTracks().forEach(track => track.stop());
-          streamRef.current = null;
         }
       };
 
@@ -97,14 +101,14 @@ export function VoiceRecorder({
       setIsRecording(true);
       setRecordingTime(0);
 
-      // Iniciar timer
+      // Timer
       timerRef.current = setInterval(() => {
         setRecordingTime(prev => prev + 1);
       }, 1000);
 
-      console.log('🎤 [VOICE] Gravação iniciada');
+      console.log('🎤 [VOICE] Gravação iniciada!');
     } catch (error: any) {
-      console.error('❌ [VOICE] Erro ao iniciar gravação:', error);
+      console.error('❌ [VOICE] Erro ao iniciar:', error);
       
       if (error.name === 'NotAllowedError') {
         toast.error('Permissão de microfone negada');
@@ -116,53 +120,65 @@ export function VoiceRecorder({
     }
   };
 
-  // Parar gravação
-  const stopRecording = () => {
+  // 2️⃣ SOLTAR botão → Parar e ENVIAR automaticamente
+  const handleMouseUp = async () => {
+    if (!isRecording || !mediaRecorderRef.current) return;
+
+    console.log('✋ [VOICE] Soltou botão - parando gravação...');
+
+    // Parar gravação
+    mediaRecorderRef.current.stop();
+    setIsRecording(false);
+
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+
+    // Criar Blob do áudio
+    const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    
+    // Limpar stream
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+
+    // Enviar automaticamente (SEM PREVIEW)
+    await sendAudioDirectly(blob);
+  };
+
+  // 3️⃣ CANCELAR (X button)
+  const handleCancel = () => {
+    console.log('❌ [VOICE] Cancelando gravação...');
+    
     if (mediaRecorderRef.current && isRecording) {
       mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      
-      console.log('⏹️ [VOICE] Gravação parada');
-    }
-  };
-
-  // Cancelar gravação
-  const cancelRecording = () => {
-    if (isRecording) {
-      stopRecording();
     }
     
-    if (audioUrl) {
-      URL.revokeObjectURL(audioUrl);
-    }
-    
-    setAudioBlob(null);
-    setAudioUrl(null);
-    setIsPreviewing(false);
+    cleanup();
+    setIsRecording(false);
     setRecordingTime(0);
-    audioChunksRef.current = [];
     
-    console.log('🗑️ [VOICE] Gravação cancelada');
+    toast.info('Gravação cancelada');
   };
 
-  // Enviar áudio
-  const sendAudio = async () => {
-    if (!audioBlob) return;
+  // Enviar áudio direto (sem preview)
+  const sendAudioDirectly = async (blob: Blob) => {
+    if (blob.size === 0) {
+      toast.error('Áudio muito curto');
+      cleanup();
+      return;
+    }
 
     setIsUploading(true);
 
     try {
-      // Converter Blob para File
-      const file = new File([audioBlob], `voice-${Date.now()}.webm`, {
+      const file = new File([blob], `voice-${Date.now()}.webm`, {
         type: 'audio/webm'
       });
 
-      console.log('📤 [VOICE] Enviando áudio gravado...');
+      console.log('📤 [VOICE] Enviando áudio...', file.size, 'bytes');
 
       // 1️⃣ Obter presigned URL
       const { data: presignedData } = await api.post('/chat/messages/upload-presigned-url/', {
@@ -172,9 +188,9 @@ export function VoiceRecorder({
         file_size: file.size,
       });
 
-      console.log('✅ [VOICE] Presigned URL obtida:', presignedData.attachment_id);
+      console.log('✅ [VOICE] Presigned URL obtida');
 
-      // 2️⃣ Upload para S3
+      // 2️⃣ Upload S3
       const xhr = new XMLHttpRequest();
       
       await new Promise<void>((resolve, reject) => {
@@ -187,7 +203,7 @@ export function VoiceRecorder({
         });
 
         xhr.addEventListener('error', () => {
-          reject(new Error('Erro de rede ao fazer upload'));
+          reject(new Error('Erro de rede'));
         });
 
         xhr.open('PUT', presignedData.upload_url);
@@ -195,9 +211,9 @@ export function VoiceRecorder({
         xhr.send(file);
       });
 
-      console.log('✅ [VOICE] Áudio enviado para S3');
+      console.log('✅ [VOICE] Upload S3 completo');
 
-      // 3️⃣ Confirmar no backend
+      // 3️⃣ Confirmar backend
       const { data: confirmData } = await api.post('/chat/messages/confirm-upload/', {
         conversation_id: conversationId,
         attachment_id: presignedData.attachment_id,
@@ -207,124 +223,76 @@ export function VoiceRecorder({
         file_size: file.size,
       });
 
-      console.log('✅ [VOICE] Upload confirmado:', confirmData);
-
-      toast.success('Áudio enviado com sucesso!');
+      console.log('✅ [VOICE] Áudio enviado com sucesso!');
       onRecordingComplete?.(confirmData.attachment);
 
-      // Limpar
-      cancelRecording();
     } catch (error: any) {
       console.error('❌ [VOICE] Erro ao enviar:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Erro ao enviar áudio';
       toast.error(errorMsg);
       onRecordingError?.(errorMsg);
     } finally {
+      cleanup();
       setIsUploading(false);
+      setRecordingTime(0);
     }
   };
 
-  // UI: Botão normal (não gravando)
-  if (!isRecording && !isPreviewing) {
+  // UI: Não gravando → Botão simples de Microfone
+  if (!isRecording && !isUploading) {
     return (
       <button
-        onClick={startRecording}
-        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition"
-        title="Gravar áudio"
-        disabled={isUploading}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp} // Se sair com mouse pressionado, para também
+        className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+        title="Segurar para gravar áudio"
       >
         <Mic size={20} />
       </button>
     );
   }
 
-  // UI: Gravando
+  // UI: Gravando → Timer + Botão X (cancelar)
   if (isRecording) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full">
-          <div className="text-center">
-            {/* Ícone pulsante */}
-            <div className="relative inline-flex mb-4">
-              <div className="absolute inset-0 bg-red-500 rounded-full animate-ping opacity-75"></div>
-              <div className="relative bg-red-600 p-6 rounded-full">
-                <Mic className="text-white" size={32} />
-              </div>
-            </div>
-
-            {/* Timer */}
-            <h3 className="text-2xl font-bold mb-2">{formatTime(recordingTime)}</h3>
-            <p className="text-sm text-gray-600 mb-6">Gravando áudio...</p>
-
-            {/* Botões */}
-            <div className="flex gap-3 justify-center">
-              <button
-                onClick={cancelRecording}
-                className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
-              >
-                <Trash2 size={18} />
-                Cancelar
-              </button>
-              <button
-                onClick={stopRecording}
-                className="flex-1 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 flex items-center justify-center gap-2"
-              >
-                <Square size={18} />
-                Parar
-              </button>
-            </div>
+      <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200">
+        {/* Ícone pulsante */}
+        <div className="relative flex items-center justify-center">
+          <div className="absolute w-8 h-8 bg-red-500 rounded-full animate-ping opacity-75"></div>
+          <div className="relative w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
+            <Mic className="text-white" size={16} />
           </div>
         </div>
+
+        {/* Timer */}
+        <span className="text-red-700 font-mono font-semibold">
+          {formatTime(recordingTime)}
+        </span>
+
+        {/* Dica */}
+        <span className="text-xs text-red-600 ml-2">
+          Solte para enviar
+        </span>
+
+        {/* Botão Cancelar */}
+        <button
+          onClick={handleCancel}
+          className="ml-auto p-1.5 hover:bg-red-100 rounded-full transition-colors"
+          title="Cancelar gravação"
+        >
+          <X size={18} className="text-red-700" />
+        </button>
       </div>
     );
   }
 
-  // UI: Preview (após gravar)
-  if (isPreviewing && audioUrl) {
+  // UI: Enviando → Loader
+  if (isUploading) {
     return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg p-6 max-w-md w-full">
-          <div className="text-center">
-            <h3 className="text-lg font-semibold mb-4">Preview do Áudio</h3>
-
-            {/* Player */}
-            <div className="mb-6">
-              <audio controls className="w-full" src={audioUrl}>
-                Seu navegador não suporta áudio.
-              </audio>
-            </div>
-
-            {/* Info */}
-            <p className="text-sm text-gray-600 mb-6">
-              Duração: {formatTime(recordingTime)}
-            </p>
-
-            {/* Botões */}
-            {isUploading ? (
-              <div className="flex items-center justify-center gap-2 py-3">
-                <Loader2 className="animate-spin text-indigo-600" size={20} />
-                <span className="text-sm">Enviando...</span>
-              </div>
-            ) : (
-              <div className="flex gap-3">
-                <button
-                  onClick={cancelRecording}
-                  className="flex-1 px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2"
-                >
-                  <Trash2 size={18} />
-                  Descartar
-                </button>
-                <button
-                  onClick={sendAudio}
-                  className="flex-1 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center justify-center gap-2"
-                >
-                  <Send size={18} />
-                  Enviar
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+      <div className="flex items-center gap-2 px-3 py-2 bg-gray-100 rounded-lg">
+        <div className="w-4 h-4 border-2 border-gray-400 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-sm text-gray-600">Enviando...</span>
       </div>
     );
   }
