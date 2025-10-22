@@ -1136,6 +1136,11 @@ class MessageViewSet(viewsets.ModelViewSet):
         # 🎵 CONVERTER ÁUDIO OGG/WEBM → MP3 (para compatibilidade universal)
         from apps.chat.utils.audio_converter import should_convert_audio, convert_ogg_to_mp3, get_converted_filename
         
+        logger.info(f"🔍 [AUDIO] Verificando se precisa converter...")
+        logger.info(f"   Content-Type: {content_type}")
+        logger.info(f"   Filename: {filename}")
+        logger.info(f"   Should convert: {should_convert_audio(content_type, filename)}")
+        
         if should_convert_audio(content_type, filename):
             logger.info(f"🔄 [AUDIO] Detectado áudio OGG/WEBM, convertendo para MP3...")
             
@@ -1214,8 +1219,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                 'attachment_filename': filename
             }
         )
-        
-        # Criar attachment
+            
+            # Criar attachment
         try:
             attachment = MessageAttachment.objects.create(
                 id=attachment_id,
