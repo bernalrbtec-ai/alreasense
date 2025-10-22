@@ -241,15 +241,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 # Montar group_jid corretamente
                 raw_phone = conversation.contact_phone
                 
-                # ✅ USAR JID COMPLETO - Evolution API aceita formato telefone-id@g.us
-                if '@g.us' in raw_phone:
-                    # Já tem @g.us, usar como está
+                # ✅ USAR JID COMPLETO - Evolution API aceita:
+                # - Grupos: xxx@g.us
+                # - Comunidades: xxx@lid
+                if '@g.us' in raw_phone or '@lid' in raw_phone:
+                    # Já tem @g.us ou @lid, usar como está
                     group_jid = raw_phone
                 elif '@s.whatsapp.net' in raw_phone:
                     # Formato errado (individual), corrigir para grupo
                     group_jid = raw_phone.replace('@s.whatsapp.net', '@g.us')
                 else:
-                    # Adicionar @g.us se não tiver
+                    # Adicionar @g.us se não tiver (padrão para grupos)
                     clean_id = raw_phone.replace('+', '').strip()
                     group_jid = f"{clean_id}@g.us"
                 

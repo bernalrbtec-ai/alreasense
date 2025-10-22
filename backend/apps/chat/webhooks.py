@@ -117,7 +117,7 @@ def handle_message_upsert(data, tenant, connection=None):
         participant = key.get('participant', '')  # Quem enviou no grupo (apenas em grupos)
         
         # 🔍 Detectar tipo de conversa
-        is_group = remote_jid.endswith('@g.us')
+        is_group = remote_jid.endswith('@g.us') or remote_jid.endswith('@lid')  # @g.us = grupos, @lid = comunidades
         is_broadcast = remote_jid.endswith('@broadcast')
         
         if is_group:
@@ -131,10 +131,12 @@ def handle_message_upsert(data, tenant, connection=None):
         
         # Telefone/ID (depende do tipo)
         if is_group:
-            # 👥 GRUPOS: Usar ID completo do grupo
-            # Evolution API retorna: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
-            # Precisamos manter o formato completo com @g.us para usar na API depois
-            phone = remote_jid  # Mantém formato completo: xxx@g.us
+            # 👥 GRUPOS/COMUNIDADES: Usar ID completo
+            # Evolution API retorna:
+            # - Grupos: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
+            # - Comunidades: 7658094465252@lid ou 219356931838077@lid
+            # Precisamos manter o formato completo (@g.us ou @lid) para usar na API depois
+            phone = remote_jid  # Mantém formato completo: xxx@g.us ou xxx@lid
         else:
             # 👤 INDIVIDUAIS: Extrair número e adicionar +
             phone = remote_jid.split('@')[0]
