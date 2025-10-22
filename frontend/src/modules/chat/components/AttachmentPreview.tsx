@@ -40,26 +40,39 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   const waveformRef = useRef<HTMLDivElement>(null);
   const wavesurferRef = useRef<WaveSurfer | null>(null);
 
-  // 🎵 Inicializar WaveSurfer para áudios
+  const [useNativePlayer, setUseNativePlayer] = useState(false);
+
+  // 🎵 Inicializar WaveSurfer para áudios (com fallback para player nativo)
   useEffect(() => {
-    if (attachment.is_audio && waveformRef.current && !wavesurferRef.current) {
-      wavesurferRef.current = WaveSurfer.create({
-        container: waveformRef.current,
-        waveColor: '#4F46E5',
-        progressColor: '#818CF8',
-        cursorColor: '#312E81',
-        barWidth: 2,
-        barRadius: 3,
-        cursorWidth: 1,
-        height: 60,
-        barGap: 2,
-      });
+    if (attachment.is_audio && waveformRef.current && !wavesurferRef.current && !useNativePlayer) {
+      try {
+        wavesurferRef.current = WaveSurfer.create({
+          container: waveformRef.current,
+          waveColor: '#4F46E5',
+          progressColor: '#818CF8',
+          cursorColor: '#312E81',
+          barWidth: 2,
+          barRadius: 3,
+          cursorWidth: 1,
+          height: 60,
+          barGap: 2,
+        });
 
-      wavesurferRef.current.load(attachment.file_url);
+        wavesurferRef.current.load(attachment.file_url);
 
-      wavesurferRef.current.on('play', () => setAudioPlaying(true));
-      wavesurferRef.current.on('pause', () => setAudioPlaying(false));
-      wavesurferRef.current.on('finish', () => setAudioPlaying(false));
+        wavesurferRef.current.on('play', () => setAudioPlaying(true));
+        wavesurferRef.current.on('pause', () => setAudioPlaying(false));
+        wavesurferRef.current.on('finish', () => setAudioPlaying(false));
+        
+        // Se WaveSurfer falhar ao carregar, usa player nativo
+        wavesurferRef.current.on('error', (error) => {
+          console.warn('⚠️ [AUDIO] WaveSurfer error, usando player nativo:', error);
+          setUseNativePlayer(true);
+        });
+      } catch (error) {
+        console.warn('⚠️ [AUDIO] WaveSurfer init error, usando player nativo:', error);
+        setUseNativePlayer(true);
+      }
     }
 
     return () => {
@@ -68,7 +81,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         wavesurferRef.current = null;
       }
     };
-  }, [attachment.is_audio, attachment.file_url]);
+  }, [attachment.is_audio, attachment.file_url, useNativePlayer]);
 
   // 🖼️ IMAGEM
   if (attachment.is_image) {
@@ -135,29 +148,43 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           </div>
         </div>
 
-        {/* Waveform */}
-        <div ref={waveformRef} className="mb-2"></div>
+        {/* Player Nativo HTML5 (fallback ou principal) */}
+        {useNativePlayer ? (
+          <audio
+            controls
+            className="w-full mb-2"
+            preload="metadata"
+          >
+            <source src={attachment.file_url} type={attachment.mime_type} />
+            Seu navegador não suporta áudio.
+          </audio>
+        ) : (
+          <>
+            {/* Waveform WaveSurfer */}
+            <div ref={waveformRef} className="mb-2"></div>
 
-        {/* Controles */}
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              if (wavesurferRef.current) {
-                wavesurferRef.current.playPause();
-              }
-            }}
-            className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
-          >
-            {audioPlaying ? 'Pausar' : 'Reproduzir'}
-          </button>
-          <a
-            href={attachment.file_url}
-            download={attachment.original_filename}
-            className="p-2 text-gray-600 hover:text-gray-900"
-          >
-            <Download size={18} />
-          </a>
-        </div>
+            {/* Controles WaveSurfer */}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => {
+                  if (wavesurferRef.current) {
+                    wavesurferRef.current.playPause();
+                  }
+                }}
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm"
+              >
+                {audioPlaying ? 'Pausar' : 'Reproduzir'}
+              </button>
+              <a
+                href={attachment.file_url}
+                download={attachment.original_filename}
+                className="p-2 text-gray-600 hover:text-gray-900"
+              >
+                <Download size={18} />
+              </a>
+            </div>
+          </>
+        )}
 
         {/* ✨ TRANSCRIÇÃO IA (se disponível e addon ativo) */}
         {showAI && attachment.transcription && (
@@ -212,4 +239,5 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     </div>
   );
 }
+
 
