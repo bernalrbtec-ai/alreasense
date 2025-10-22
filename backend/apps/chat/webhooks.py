@@ -129,10 +129,17 @@ def handle_message_upsert(data, tenant, connection=None):
         
         logger.info(f"🔍 [TIPO] Conversa: {conversation_type} | RemoteJID: {remote_jid}")
         
-        # Telefone (remove sufixos @s.whatsapp.net, @g.us, @broadcast)
-        phone = remote_jid.split('@')[0]
-        if not phone.startswith('+'):
-            phone = '+' + phone
+        # Telefone/ID (depende do tipo)
+        if is_group:
+            # 👥 GRUPOS: Usar ID completo do grupo
+            # Evolution API retorna: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
+            # Precisamos manter o formato completo com @g.us para usar na API depois
+            phone = remote_jid  # Mantém formato completo: xxx@g.us
+        else:
+            # 👤 INDIVIDUAIS: Extrair número e adicionar +
+            phone = remote_jid.split('@')[0]
+            if not phone.startswith('+'):
+                phone = '+' + phone
         
         # Para grupos, extrair quem enviou
         sender_phone = ''
