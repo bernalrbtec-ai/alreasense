@@ -90,9 +90,16 @@ export function VoiceRecorder({
       streamRef.current = stream;
 
       // Criar MediaRecorder
-      const mediaRecorder = new MediaRecorder(stream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
+      // Tentar OGG primeiro (compatível com WhatsApp), fallback para WEBM
+      let mimeType = 'audio/ogg;codecs=opus';
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm;codecs=opus';
+        console.warn('⚠️ [VOICE] OGG não suportado, usando WEBM (pode não funcionar no WhatsApp)');
+      }
+      
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
+      
+      console.log(`🎤 [VOICE] Formato selecionado: ${mimeType}`);
       
       mediaRecorderRef.current = mediaRecorder;
       audioChunksRef.current = [];
@@ -143,8 +150,9 @@ export function VoiceRecorder({
       timerRef.current = null;
     }
 
-    // Criar Blob do áudio
-    const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+    // Criar Blob do áudio (usar o mimeType do MediaRecorder)
+    const mimeType = mediaRecorderRef.current.mimeType || 'audio/ogg';
+    const blob = new Blob(audioChunksRef.current, { type: mimeType });
     
     // Limpar stream
     if (streamRef.current) {
@@ -183,8 +191,10 @@ export function VoiceRecorder({
     setIsUploading(true);
 
     try {
-      const file = new File([blob], `voice-${Date.now()}.webm`, {
-        type: 'audio/webm'
+      // Detectar extensão baseada no mime type
+      const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
+      const file = new File([blob], `voice-${Date.now()}.${extension}`, {
+        type: blob.type
       });
 
       console.log('📤 [VOICE] Enviando áudio...', file.size, 'bytes');
