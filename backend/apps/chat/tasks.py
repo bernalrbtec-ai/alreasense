@@ -266,16 +266,16 @@ async def handle_send_message(message_id: str):
                     else:
                         mediatype = 'document'
                     
+                    # ✅ Evolution API NÃO usa mediaMessage wrapper!
+                    # Estrutura correta: direto no root
                     payload = {
-                        'number': phone,  # Evolution API aceita com ou sem '+'
-                        'mediaMessage': {
-                            'media': url,              # ✅ "media" (não "mediaUrl")
-                            'mediaType': mediatype,     # ✅ camelCase (não "mediatype")
-                            'fileName': filename        # Nome do arquivo
-                        }
+                        'number': phone,
+                        'media': url,           # URL do arquivo
+                        'mediatype': mediatype,  # lowercase!
+                        'fileName': filename     # Nome do arquivo
                     }
                     if content:
-                        payload['mediaMessage']['caption'] = content
+                        payload['caption'] = content  # Caption direto no root também
                     
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
                     logger.info(f"   URL: {base_url}/message/sendMedia/{instance.instance_name}")
