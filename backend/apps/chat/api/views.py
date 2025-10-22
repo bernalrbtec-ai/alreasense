@@ -241,31 +241,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 # Montar group_jid corretamente
                 raw_phone = conversation.contact_phone
                 
-                # Limpar formato do JID
+                # ✅ USAR JID COMPLETO - Evolution API aceita formato telefone-id@g.us
                 if '@g.us' in raw_phone:
-                    # Se tem @g.us, extrair apenas o ID do grupo
-                    # Formato pode ser: "5517991512559-1497390180@g.us" ou "1497390180@g.us"
-                    jid_part = raw_phone.split('@')[0]  # Pegar parte antes do @
-                    
-                    # Se tem hífen, pegar apenas a parte DEPOIS do hífen (ID do grupo)
-                    if '-' in jid_part:
-                        group_id = jid_part.split('-')[-1]  # Última parte após hífen
-                    else:
-                        group_id = jid_part
-                    
-                    group_jid = f"{group_id}@g.us"
+                    # Já tem @g.us, usar como está
+                    group_jid = raw_phone
+                elif '@s.whatsapp.net' in raw_phone:
+                    # Formato errado (individual), corrigir para grupo
+                    group_jid = raw_phone.replace('@s.whatsapp.net', '@g.us')
                 else:
-                    # Se não tem @g.us, assumir que é o ID e adicionar
-                    # Remover + se tiver
-                    clean_id = raw_phone.replace('+', '')
-                    
-                    # Se tem hífen, pegar última parte
-                    if '-' in clean_id:
-                        group_id = clean_id.split('-')[-1]
-                    else:
-                        group_id = clean_id
-                    
-                    group_jid = f"{group_id}@g.us"
+                    # Adicionar @g.us se não tiver
+                    clean_id = raw_phone.replace('+', '').strip()
+                    group_jid = f"{clean_id}@g.us"
                 
                 endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
                 
