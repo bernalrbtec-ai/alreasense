@@ -145,32 +145,32 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     );
   }
 
-  // 🎵 ÁUDIO (player customizado estilo WhatsApp)
+  // 🎵 ÁUDIO (player customizado estilo WhatsApp - responsivo)
   if (attachment.is_audio) {
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
     return (
-      <div className="attachment-preview audio w-full max-w-md">
-        {/* Player estilo WhatsApp */}
-        <div className="flex items-center gap-3 bg-white rounded-lg p-4 shadow-sm">
-          {/* Botão Play/Pause */}
+      <div className="attachment-preview audio w-full sm:max-w-sm md:max-w-md">
+        {/* Player estilo WhatsApp - responsivo */}
+        <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg p-3 sm:p-4 shadow-sm">
+          {/* Botão Play/Pause - responsivo */}
           <button
             onClick={togglePlay}
-            className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors"
+            className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors"
             title={isPlaying ? 'Pausar' : 'Reproduzir'}
           >
             {isPlaying ? (
-              <Pause className="text-white" size={20} fill="white" />
+              <Pause className="text-white" size={18} fill="white" />
             ) : (
-              <Play className="text-white ml-0.5" size={20} fill="white" />
+              <Play className="text-white ml-0.5" size={18} fill="white" />
             )}
           </button>
           
           {/* Progress Bar + Tempo */}
           <div className="flex-1 min-w-0">
-            {/* Progress Bar */}
+            {/* Progress Bar - mais alta em mobile */}
             <div
-              className="h-1 bg-gray-200 rounded-full cursor-pointer mb-1"
+              className="h-1.5 sm:h-1 bg-gray-200 rounded-full cursor-pointer mb-1.5 sm:mb-1"
               onClick={handleSeek}
             >
               <div
@@ -179,8 +179,8 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               />
             </div>
             
-            {/* Tempo atual / total */}
-            <div className="flex items-center justify-between text-xs text-gray-500">
+            {/* Tempo atual / total - ajustado para mobile */}
+            <div className="flex items-center justify-between text-[10px] sm:text-xs text-gray-500">
               <span>{formatTime(currentTime)}</span>
               <span>{formatTime(duration)}</span>
             </div>
