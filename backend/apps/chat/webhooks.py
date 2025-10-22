@@ -484,6 +484,12 @@ def handle_message_upsert(data, tenant, connection=None):
                 channel_layer = get_channel_layer()
                 tenant_group = f"chat_tenant_{tenant.id}"
                 
+                logger.info(f"🚀 [WEBSOCKET] Enviando broadcast de NOVA CONVERSA...")
+                logger.info(f"   Tenant ID: {tenant.id}")
+                logger.info(f"   Tenant Group: {tenant_group}")
+                logger.info(f"   Conversation ID: {conversation.id}")
+                logger.info(f"   Contact: {conversation.contact_name or phone}")
+                
                 async_to_sync(channel_layer.group_send)(
                     tenant_group,
                     {
@@ -492,7 +498,7 @@ def handle_message_upsert(data, tenant, connection=None):
                     }
                 )
                 
-                logger.info(f"📡 [WEBSOCKET] Nova conversa broadcast para tenant {tenant.name}")
+                logger.info(f"✅ [WEBSOCKET] Broadcast de nova conversa enviado com sucesso!")
             except Exception as e:
                 logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de nova conversa: {e}", exc_info=True)
         else:
@@ -652,14 +658,22 @@ def handle_message_upsert(data, tenant, connection=None):
                     channel_layer = get_channel_layer()
                     tenant_group = f"chat_tenant_{tenant.id}"
                     
+                    # 📱 Para GRUPOS: mostrar apenas "MSG DO GRUPO X"
+                    if is_group:
+                        group_name = conversation.group_metadata.get('group_name', 'Grupo WhatsApp') if conversation.group_metadata else 'Grupo WhatsApp'
+                        notification_text = f"MSG DO GRUPO {group_name}"
+                    else:
+                        notification_text = content[:100]  # Primeiros 100 caracteres para contatos individuais
+                    
                     async_to_sync(channel_layer.group_send)(
                         tenant_group,
                         {
                             'type': 'new_message_notification',
                             'conversation': conv_data_serializable,
                             'message': {
-                                'content': content[:100],  # Primeiros 100 caracteres
-                                'created_at': message.created_at.isoformat()
+                                'content': notification_text,
+                                'created_at': message.created_at.isoformat(),
+                                'is_group': is_group
                             }
                         }
                     )
