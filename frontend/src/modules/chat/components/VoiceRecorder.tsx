@@ -1,16 +1,17 @@
 /**
  * VoiceRecorder - Gravação de áudio estilo WhatsApp Web
  * 
- * UX (Toggle Mode):
- * 1. Clicar UMA VEZ no microfone → Inicia gravação
- * 2. Gravando: Mostra timer + botão verde "enviar" + botão vermelho "X"
- * 3. Clicar no botão VERDE (ou no microfone novamente) → Para e ENVIA automaticamente
+ * UX (Toggle Mode - Botão Único):
+ * 1. Clicar UMA VEZ no microfone (cinza) → Inicia gravação
+ * 2. Gravando: Microfone vira VERMELHO PULSANTE + Timer + Botão X
+ * 3. Clicar NO MICROFONE VERMELHO novamente → Para e ENVIA automaticamente
  * 4. Clicar no X → Cancela gravação
  * 5. Timer em tempo real (MM:SS)
- * 6. Feedback visual (fundo vermelho + ícone pulsante)
+ * 6. Validação: Mínimo 1 segundo de áudio
+ * 7. Feedback visual: bg-red-50 + animação pulsante
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, X, Send } from 'lucide-react';
+import { Mic, X } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -172,8 +173,9 @@ export function VoiceRecorder({
 
   // Enviar áudio direto (sem preview)
   const sendAudioDirectly = async (blob: Blob) => {
-    if (blob.size === 0) {
-      toast.error('Áudio muito curto');
+    // Validar duração (não blob.size, pois o MediaRecorder pode ter tamanho > 0 mesmo vazio)
+    if (recordingTime < 1) {
+      toast.error('Áudio muito curto (mínimo 1 segundo)');
       cleanup();
       return;
     }
@@ -258,17 +260,21 @@ export function VoiceRecorder({
     );
   }
 
-  // UI: Gravando → Timer + Botão X (cancelar)
+  // UI: Gravando → Microfone vermelho pulsante (clica nele para enviar) + Timer + X
   if (isRecording) {
     return (
       <div className="flex items-center gap-2 px-3 py-2 bg-red-50 rounded-lg border border-red-200">
-        {/* Ícone pulsante */}
-        <div className="relative flex items-center justify-center">
+        {/* Microfone pulsante (clicável para enviar) */}
+        <button
+          onClick={handleClick}
+          className="relative flex items-center justify-center flex-shrink-0"
+          title="Clique para parar e enviar"
+        >
           <div className="absolute w-8 h-8 bg-red-500 rounded-full animate-ping opacity-75"></div>
-          <div className="relative w-8 h-8 bg-red-600 rounded-full flex items-center justify-center">
+          <div className="relative w-8 h-8 bg-red-600 hover:bg-red-700 rounded-full flex items-center justify-center transition-colors cursor-pointer">
             <Mic className="text-white" size={16} />
           </div>
-        </div>
+        </button>
 
         {/* Timer */}
         <span className="text-red-700 font-mono font-semibold">
@@ -277,22 +283,13 @@ export function VoiceRecorder({
 
         {/* Dica */}
         <span className="text-xs text-red-600 ml-2">
-          Clique novamente para enviar
+          Clique no microfone para enviar
         </span>
-
-        {/* Botão enviar (mesmo ícone do microfone) */}
-        <button
-          onClick={handleClick}
-          className="ml-auto p-2 bg-green-600 hover:bg-green-700 rounded-full transition-colors"
-          title="Parar e enviar"
-        >
-          <Send size={16} className="text-white" />
-        </button>
 
         {/* Botão Cancelar */}
         <button
           onClick={handleCancel}
-          className="p-1.5 hover:bg-red-100 rounded-full transition-colors"
+          className="ml-auto p-1.5 hover:bg-red-100 rounded-full transition-colors"
           title="Cancelar gravação"
         >
           <X size={18} className="text-red-700" />
