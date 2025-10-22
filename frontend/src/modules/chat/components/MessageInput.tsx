@@ -2,10 +2,9 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile } from 'lucide-react';
+import { Send, Smile, Paperclip } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
-import { AttachmentUpload } from './AttachmentUpload';
 import { VoiceRecorder } from './VoiceRecorder';
 
 interface MessageInputProps {
@@ -95,21 +94,13 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
   return (
     <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300">
-      {/* Attach button */}
-      <AttachmentUpload
-        conversationId={activeConversation.id}
-        onUploadComplete={() => {
-          console.log('✅ Upload completo! WebSocket vai atualizar UI');
-        }}
-      />
-
-      {/* Voice Recorder button */}
-      <VoiceRecorder
-        conversationId={activeConversation.id}
-        onRecordingComplete={() => {
-          console.log('✅ Áudio enviado! WebSocket vai atualizar UI');
-        }}
-      />
+      {/* Attach button (placeholder) */}
+      <button
+        className="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
+        title="Anexar arquivo"
+      >
+        <Paperclip className="w-6 h-6 text-gray-600" />
+      </button>
 
       {/* Emoji button */}
       <button
@@ -135,6 +126,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
           disabled={sending}
         />
       </div>
+
+      {/* Voice Recorder button - ao lado do Send */}
+      <VoiceRecorder
+        conversationId={activeConversation.id}
+        onRecordingComplete={() => {
+          console.log('✅ Áudio enviado! WebSocket vai atualizar UI');
+        }}
+      />
 
       {/* Send button */}
       <button
