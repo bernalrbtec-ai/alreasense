@@ -42,13 +42,17 @@ def convert_ogg_to_mp3(ogg_data: bytes, source_format: str = "ogg") -> Tuple[boo
             format=source_format
         )
         
-        # Converter para MP3
+        # Converter para MP3 (otimizado para qualidade de voz)
         mp3_buffer = io.BytesIO()
         audio.export(
             mp3_buffer,
             format="mp3",
-            bitrate="128k",  # Boa qualidade, tamanho razoável
-            parameters=["-q:a", "2"]  # Qualidade VBR
+            codec="libmp3lame",
+            bitrate="128k",
+            parameters=[
+                "-ar", "44100",  # Sample rate: 44.1kHz (padrão CD)
+                "-ac", "1",      # Forçar mono (áudios de voz são mono)
+            ]
         )
         
         mp3_data = mp3_buffer.getvalue()
