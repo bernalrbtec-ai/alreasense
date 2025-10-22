@@ -236,3 +236,4 @@ if __name__ == '__main__':
         print("\n❌ Falha na verificação/criação do bucket")
         sys.exit(1)
 
+

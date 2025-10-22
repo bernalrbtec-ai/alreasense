@@ -423,3 +423,4 @@ O sistema de anexos está **100% FUNCIONAL** e **PRONTO PARA PRODUÇÃO**!
 **Desenvolvedor:** Paulo Bernal + AI Assistant  
 **Empresa:** RBTec Informática
 
+

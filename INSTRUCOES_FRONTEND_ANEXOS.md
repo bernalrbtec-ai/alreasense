@@ -817,3 +817,4 @@ Antes de considerar completo:
 3. Verifique logs Railway para erros backend
 4. Teste endpoints backend com Postman primeiro
 
+

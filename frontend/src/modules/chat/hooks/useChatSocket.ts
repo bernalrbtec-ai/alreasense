@@ -14,11 +14,13 @@ import { useEffect, useCallback, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
 import { useChatStore } from '../store/chatStore';
 import { chatWebSocketManager, WebSocketMessage } from '../services/ChatWebSocketManager';
+import { useDesktopNotifications } from '@/hooks/useDesktopNotifications';
 
 export function useChatSocket(conversationId?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const { token, user } = useAuthStore();
   const { addMessage, updateMessageStatus, setTyping, updateConversation } = useChatStore();
+  const { showNotification, isEnabled: notificationsEnabled } = useDesktopNotifications();
 
   // Conectar ao manager global (1 vez por sessão)
   useEffect(() => {
@@ -67,6 +69,24 @@ export function useChatSocket(conversationId?: string) {
       if (data.message) {
         console.log('💬 [HOOK] Nova mensagem recebida:', data.message);
         addMessage(data.message);
+        
+        // 🔔 Notificar desktop (apenas se for mensagem recebida e notificações estão habilitadas)
+        if (notificationsEnabled && data.message.direction === 'inbound') {
+          const conversationName = data.message.conversation || 'Nova mensagem';
+          const senderName = data.message.sender_name || data.message.sender_phone || 'Contato';
+          const preview = data.message.content 
+            ? data.message.content.substring(0, 100) 
+            : data.message.attachments?.length 
+            ? '📎 Anexo' 
+            : 'Nova mensagem';
+          
+          showNotification({
+            title: conversationName,
+            body: `${senderName}: ${preview}`,
+            tag: data.message.conversation,
+            conversationId: data.message.conversation,
+          });
+        }
       }
     };
 
@@ -104,7 +124,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
     };
-  }, [addMessage, updateMessageStatus, setTyping, updateConversation]);
+  }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);
 
   // API pública
   const sendMessage = useCallback((content: string, isInternal = false): boolean => {

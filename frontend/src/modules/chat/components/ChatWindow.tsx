@@ -7,6 +7,7 @@ import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { TransferModal } from './TransferModal';
+import { NotificationToggle } from './NotificationToggle';
 import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
@@ -233,6 +234,9 @@ export function ChatWindow() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Botão de Notificações */}
+          <NotificationToggle />
+          
           <button className="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Buscar">
             <Search className="w-5 h-5 text-gray-600" />
           </button>

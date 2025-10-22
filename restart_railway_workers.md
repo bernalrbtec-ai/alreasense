@@ -118,3 +118,4 @@ Deve ter:
 
 Se o worker não está rodando, as tasks RabbitMQ ficam na fila mas não são processadas!
 
+

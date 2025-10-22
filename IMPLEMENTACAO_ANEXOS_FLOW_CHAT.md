@@ -376,3 +376,4 @@ curl -X POST https://.../api/chat/messages/confirm-upload/ \
 
 **🚀 BACKEND 100% PRONTO! FRONTEND EM PROGRESSO...**
 
+
