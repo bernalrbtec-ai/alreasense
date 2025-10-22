@@ -355,9 +355,8 @@ class MessageAttachment(models.Model):
         max_length=500,
         verbose_name='Caminho do Arquivo'
     )
-    file_url = models.CharField(
-        max_length=500,
-        verbose_name='URL de Acesso'
+    file_url = models.TextField(
+        verbose_name='URL de Acesso (pode ser longa: presigned URLs S3)'
     )
     thumbnail_path = models.CharField(
         max_length=500,
