@@ -4,12 +4,12 @@
  * Suporta:
  * - Imagens: Preview inline + lightbox
  * - Vídeos: Player HTML5
- * - Áudios: Player HTML5 nativo (mais confiável que WaveSurfer)
+ * - Áudios: Player customizado estilo WhatsApp
  * - Documentos: Ícone + download
  * - IA: Transcrição + Resumo (se addon ativo)
  */
-import React, { useState } from 'react';
-import { Download, FileText, Image, Video, Music, X } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Download, FileText, Image, Video, Music, X, Play, Pause } from 'lucide-react';
 
 interface Attachment {
   id: string;
@@ -35,6 +35,64 @@ interface AttachmentPreviewProps {
 
 export function AttachmentPreview({ attachment, showAI = false }: AttachmentPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  
+  // 🎵 Estados do player de áudio
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  
+  // Atualizar progresso do áudio
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    const updateTime = () => setCurrentTime(audio.currentTime);
+    const updateDuration = () => setDuration(audio.duration);
+    const handleEnded = () => setIsPlaying(false);
+    
+    audio.addEventListener('timeupdate', updateTime);
+    audio.addEventListener('loadedmetadata', updateDuration);
+    audio.addEventListener('ended', handleEnded);
+    
+    return () => {
+      audio.removeEventListener('timeupdate', updateTime);
+      audio.removeEventListener('loadedmetadata', updateDuration);
+      audio.removeEventListener('ended', handleEnded);
+    };
+  }, []);
+  
+  // Formatar tempo (segundos → MM:SS)
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds)) return '0:00';
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // Toggle play/pause
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+    setIsPlaying(!isPlaying);
+  };
+  
+  // Seek no áudio
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const percentage = x / rect.width;
+    audio.currentTime = percentage * duration;
+  };
 
   // 🖼️ IMAGEM
   if (attachment.is_image) {
@@ -87,23 +145,55 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     );
   }
 
-  // 🎵 ÁUDIO (estilo WhatsApp - compacto)
+  // 🎵 ÁUDIO (player customizado estilo WhatsApp)
   if (attachment.is_audio) {
+    const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+    
     return (
-      <div className="attachment-preview audio max-w-sm bg-white rounded-lg shadow-sm p-3">
-        {/* Player estilo WhatsApp: compacto e minimalista */}
+      <div className="attachment-preview audio max-w-sm">
+        {/* Player estilo WhatsApp */}
+        <div className="flex items-center gap-3 bg-white rounded-lg p-3 shadow-sm">
+          {/* Botão Play/Pause */}
+          <button
+            onClick={togglePlay}
+            className="flex-shrink-0 w-10 h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors"
+            title={isPlaying ? 'Pausar' : 'Reproduzir'}
+          >
+            {isPlaying ? (
+              <Pause className="text-white" size={20} fill="white" />
+            ) : (
+              <Play className="text-white ml-0.5" size={20} fill="white" />
+            )}
+          </button>
+          
+          {/* Progress Bar + Tempo */}
+          <div className="flex-1 min-w-0">
+            {/* Progress Bar */}
+            <div
+              className="h-1 bg-gray-200 rounded-full cursor-pointer mb-1"
+              onClick={handleSeek}
+            >
+              <div
+                className="h-full bg-green-500 rounded-full transition-all"
+                style={{ width: `${progress}%` }}
+              />
+            </div>
+            
+            {/* Tempo atual / total */}
+            <div className="flex items-center justify-between text-xs text-gray-500">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Áudio HTML5 (hidden - só para controle) */}
         <audio
-          controls
-          className="w-full"
+          ref={audioRef}
+          src={attachment.file_url}
           preload="metadata"
-          style={{
-            height: '40px',
-            borderRadius: '20px',
-          }}
-        >
-          <source src={attachment.file_url} type={attachment.mime_type} />
-          Seu navegador não suporta áudio.
-        </audio>
+          className="hidden"
+        />
 
         {/* ✨ TRANSCRIÇÃO IA (se disponível e addon ativo) */}
         {showAI && attachment.transcription && (
