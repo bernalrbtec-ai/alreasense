@@ -358,6 +358,12 @@ LOGGING = {
             'level': config('LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
+        # Logger específico para chat (webhook) - menos verboso em produção
+        'apps.chat': {
+            'handlers': ['console'],
+            'level': config('CHAT_LOG_LEVEL', default='WARNING'),  # WARNING em prod, INFO em dev
+            'propagate': False,
+        },
     },
 }
 

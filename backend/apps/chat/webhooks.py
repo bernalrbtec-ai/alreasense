@@ -177,10 +177,14 @@ def handle_message_upsert(data, tenant, connection=None):
         # Busca ou cria conversa
         # Nova conversa vai para INBOX (pending) sem departamento
         
+        # 🔧 FIX: Só usar pushName se mensagem veio do contato (not from_me)
+        # Se você enviou a primeira mensagem, deixar vazio e buscar via API
+        contact_name_to_save = push_name if not from_me else ''
+        
         # Para grupos, usar o ID do grupo como identificador único
         defaults = {
             'department': None,  # Inbox: sem departamento
-            'contact_name': push_name,
+            'contact_name': contact_name_to_save,
             'profile_pic_url': profile_pic_url if profile_pic_url else None,
             'instance_name': instance_name,  # Salvar instância de origem
             'status': 'pending',  # Pendente para classificação
@@ -282,11 +286,14 @@ def handle_message_upsert(data, tenant, connection=None):
                             else:
                                 logger.warning(f"⚠️ [GRUPO NOVO] Erro ao buscar: {response.status_code}")
                     
-                    # 👤 Para INDIVIDUAIS: usar endpoint /chat/fetchProfilePictureUrl
+                    # 👤 Para INDIVIDUAIS: buscar foto E nome do contato via API
                     else:
                         clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
-                        logger.info(f"👤 [INDIVIDUAL] Buscando foto com número: {clean_phone}")
+                        logger.info(f"👤 [INDIVIDUAL] Buscando informações do contato: {clean_phone}")
                         
+                        update_fields = []
+                        
+                        # 1️⃣ Buscar foto de perfil
                         endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
                         
                         with httpx.Client(timeout=5.0) as client:
@@ -307,12 +314,57 @@ def handle_message_upsert(data, tenant, connection=None):
                                 
                                 if profile_url:
                                     conversation.profile_pic_url = profile_url
-                                    conversation.save(update_fields=['profile_pic_url'])
-                                    logger.info(f"✅ [INDIVIDUAL] Foto salva: {profile_url[:50]}...")
+                                    update_fields.append('profile_pic_url')
+                                    logger.info(f"✅ [INDIVIDUAL] Foto encontrada: {profile_url[:50]}...")
                                 else:
                                     logger.info(f"ℹ️ [INDIVIDUAL] Foto não disponível")
                             else:
                                 logger.warning(f"⚠️ [INDIVIDUAL] Erro ao buscar foto: {response.status_code}")
+                        
+                        # 2️⃣ Buscar nome do contato (se não tiver)
+                        if not conversation.contact_name:
+                            logger.info(f"👤 [INDIVIDUAL] Nome vazio, buscando na API...")
+                            endpoint = f"{base_url}/chat/whatsappNumbers/{instance.name}"
+                            
+                            with httpx.Client(timeout=5.0) as client:
+                                try:
+                                    response = client.post(
+                                        endpoint,
+                                        json={'numbers': [clean_phone]},
+                                        headers=headers
+                                    )
+                                    
+                                    if response.status_code == 200:
+                                        data = response.json()
+                                        # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
+                                        if data and len(data) > 0:
+                                            contact_info = data[0]
+                                            contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                                            
+                                            if contact_name:
+                                                conversation.contact_name = contact_name
+                                                update_fields.append('contact_name')
+                                                logger.info(f"✅ [INDIVIDUAL] Nome encontrado via API: {contact_name}")
+                                            else:
+                                                # Fallback: usar o número
+                                                conversation.contact_name = clean_phone
+                                                update_fields.append('contact_name')
+                                                logger.info(f"ℹ️ [INDIVIDUAL] Nome não disponível, usando número")
+                                    else:
+                                        logger.warning(f"⚠️ [INDIVIDUAL] Erro ao buscar nome: {response.status_code}")
+                                        # Fallback: usar o número
+                                        conversation.contact_name = clean_phone
+                                        update_fields.append('contact_name')
+                                except Exception as e:
+                                    logger.error(f"❌ [INDIVIDUAL] Erro ao buscar nome: {e}")
+                                    # Fallback: usar o número
+                                    conversation.contact_name = clean_phone
+                                    update_fields.append('contact_name')
+                        
+                        # Salvar atualizações
+                        if update_fields:
+                            conversation.save(update_fields=update_fields)
+                            logger.info(f"✅ [INDIVIDUAL] Conversa atualizada: {', '.join(update_fields)}")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
