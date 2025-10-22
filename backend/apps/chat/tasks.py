@@ -536,29 +536,45 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
             Conversation.objects.select_related('tenant').get
         )(id=conversation_id)
         
-        # Busca instância Evolution ativa
-        instance = await sync_to_async(
-            EvolutionConnection.objects.filter(
+        # Busca instância WhatsApp ativa
+        from apps.notifications.models import WhatsAppInstance
+        from apps.connections.models import EvolutionConnection
+        
+        wa_instance = await sync_to_async(
+            WhatsAppInstance.objects.filter(
                 tenant=conversation.tenant,
-                is_active=True
+                is_active=True,
+                status='active'
             ).first
         )()
         
-        if not instance:
-            logger.warning(f"⚠️ [PROFILE PIC] Nenhuma instância Evolution ativa")
+        if not wa_instance:
+            logger.warning(f"⚠️ [PROFILE PIC] Nenhuma instância WhatsApp ativa")
             return
         
-        logger.info(f"✅ [PROFILE PIC] Instância encontrada: {instance.name}")
+        # Buscar servidor Evolution
+        evolution_server = await sync_to_async(
+            EvolutionConnection.objects.filter(is_active=True).first
+        )()
+        
+        if not evolution_server:
+            logger.warning(f"⚠️ [PROFILE PIC] Servidor Evolution não configurado")
+            return
+        
+        logger.info(f"✅ [PROFILE PIC] Instância encontrada: {wa_instance.friendly_name}")
         
         # Formatar telefone (sem + e sem @s.whatsapp.net)
         clean_phone = phone.replace('+', '')
         
         # Endpoint Evolution API
-        base_url = instance.base_url.rstrip('/')
-        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = wa_instance.api_key or evolution_server.api_key
+        instance_name = wa_instance.instance_name
+        
+        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
         
         headers = {
-            'apikey': instance.api_key,
+            'apikey': api_key,
             'Content-Type': 'application/json'
         }
         
