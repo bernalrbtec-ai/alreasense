@@ -665,10 +665,12 @@ def handle_message_upsert(data, tenant, connection=None):
                     channel_layer = get_channel_layer()
                     tenant_group = f"chat_tenant_{tenant.id}"
                     
-                    # 📱 Para GRUPOS: mostrar apenas "MSG DO GRUPO X"
+                    # 📱 Para GRUPOS: Nome do grupo + quem enviou
                     if is_group:
                         group_name = conversation.group_metadata.get('group_name', 'Grupo WhatsApp') if conversation.group_metadata else 'Grupo WhatsApp'
-                        notification_text = f"MSG DO GRUPO {group_name}"
+                        # Pegar nome de quem enviou (sender_name já foi extraído no início)
+                        sender_display = sender_name if sender_name else 'Alguém'
+                        notification_text = f"📱 {group_name}\n{sender_display} enviou uma mensagem"
                     else:
                         notification_text = content[:100]  # Primeiros 100 caracteres para contatos individuais
                     
