@@ -528,6 +528,83 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_200_OK
         )
     
+    @action(detail=False, methods=['get'])
+    def debug_list_groups(self, request):
+        """
+        🔧 DEBUG: Lista todos os grupos da instância Evolution.
+        
+        Útil para comparar JIDs reais vs JIDs salvos no banco.
+        """
+        import logging
+        import httpx
+        from apps.connections.models import EvolutionConnection
+        
+        logger = logging.getLogger(__name__)
+        
+        # Buscar instância Evolution ativa
+        instance = EvolutionConnection.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True
+        ).first()
+        
+        if not instance:
+            return Response(
+                {'error': 'Nenhuma instância WhatsApp ativa encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        try:
+            base_url = instance.base_url.rstrip('/')
+            headers = {
+                'apikey': instance.api_key,
+                'Content-Type': 'application/json'
+            }
+            
+            # Endpoint: /group/fetchAllGroups/{instance}
+            endpoint = f"{base_url}/group/fetchAllGroups/{instance.name}"
+            
+            logger.info(f"🔍 [DEBUG] Listando todos os grupos da instância {instance.name}")
+            logger.info(f"   URL: {endpoint}")
+            
+            with httpx.Client(timeout=10.0) as client:
+                response = client.get(endpoint, headers=headers)
+                
+                if response.status_code == 200:
+                    groups = response.json()
+                    
+                    logger.info(f"✅ [DEBUG] {len(groups)} grupos encontrados")
+                    
+                    # Formatar resposta para debug
+                    debug_data = []
+                    for group in groups:
+                        debug_data.append({
+                            'id': group.get('id'),
+                            'subject': group.get('subject'),
+                            'participants_count': len(group.get('participants', [])),
+                            'owner': group.get('owner'),
+                            'creation': group.get('creation'),
+                        })
+                    
+                    return Response({
+                        'instance': instance.name,
+                        'total_groups': len(groups),
+                        'groups': debug_data,
+                        'raw_response': groups  # Resposta completa para análise
+                    })
+                else:
+                    logger.error(f"❌ [DEBUG] Erro ao listar grupos: {response.status_code}")
+                    logger.error(f"   Response: {response.text[:500]}")
+                    return Response(
+                        {'error': f'Erro ao listar grupos: {response.status_code}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+        except Exception as e:
+            logger.exception(f"❌ [DEBUG] Exceção ao listar grupos")
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=True, methods=['post'])
     def reopen(self, request, pk=None):
         """Reabre uma conversa."""
