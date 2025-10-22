@@ -16,6 +16,7 @@ from apps.chat.models import Conversation, Message, MessageAttachment
 from apps.chat.tasks import download_attachment
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
+from apps.notifications.models import WhatsAppInstance
 
 logger = logging.getLogger(__name__)
 
@@ -216,20 +217,26 @@ def handle_message_upsert(data, tenant, connection=None):
             logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")
             try:
                 import httpx
-                from apps.connections.models import EvolutionConnection
                 
-                # Buscar instância Evolution ativa
-                instance = EvolutionConnection.objects.filter(
+                # Buscar instância WhatsApp ativa do tenant
+                wa_instance = WhatsAppInstance.objects.filter(
                     tenant=tenant,
-                    is_active=True
+                    is_active=True,
+                    status='active'
                 ).first()
                 
-                if instance:
+                # Buscar servidor Evolution
+                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+                
+                if wa_instance and evolution_server:
                     logger.info(f"📸 [WEBHOOK] Buscando foto de perfil...")
                     
-                    base_url = instance.base_url.rstrip('/')
+                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                    api_key = wa_instance.api_key or evolution_server.api_key
+                    instance_name = wa_instance.instance_name
+                    
                     headers = {
-                        'apikey': instance.api_key,
+                        'apikey': api_key,
                         'Content-Type': 'application/json'
                     }
                     
@@ -238,7 +245,7 @@ def handle_message_upsert(data, tenant, connection=None):
                         group_jid = remote_jid
                         logger.info(f"👥 [GRUPO NOVO] Buscando informações com Group JID: {group_jid}")
                         
-                        endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+                        endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
                         
                         with httpx.Client(timeout=5.0) as client:
                             response = client.get(
@@ -378,23 +385,30 @@ def handle_message_upsert(data, tenant, connection=None):
                 logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
                 try:
                     import httpx
-                    from apps.connections.models import EvolutionConnection
                     
-                    instance = EvolutionConnection.objects.filter(
+                    # Buscar instância WhatsApp ativa do tenant
+                    wa_instance = WhatsAppInstance.objects.filter(
                         tenant=tenant,
-                        is_active=True
+                        is_active=True,
+                        status='active'
                     ).first()
                     
-                    if instance:
+                    # Buscar servidor Evolution
+                    evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+                    
+                    if wa_instance and evolution_server:
                         group_jid = remote_jid
                         logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
                         
-                        base_url = instance.base_url.rstrip('/')
+                        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                        api_key = wa_instance.api_key or evolution_server.api_key
+                        instance_name = wa_instance.instance_name
+                        
                         # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
-                        endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+                        endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
                         
                         headers = {
-                            'apikey': instance.api_key,
+                            'apikey': api_key,
                             'Content-Type': 'application/json'
                         }
                         
@@ -863,19 +877,29 @@ def send_delivery_receipt(conversation: Conversation, message: Message):
     Isso fará com que o remetente veja ✓✓ cinza no WhatsApp dele.
     """
     try:
-        # Buscar instância ativa do tenant
-        instance = EvolutionConnection.objects.filter(
+        # Buscar instância WhatsApp ativa do tenant
+        wa_instance = WhatsAppInstance.objects.filter(
             tenant=conversation.tenant,
-            is_active=True
+            is_active=True,
+            status='active'
         ).first()
         
-        if not instance:
-            logger.warning(f"⚠️ [DELIVERY ACK] Nenhuma instância ativa para tenant {conversation.tenant.name}")
+        if not wa_instance:
+            logger.warning(f"⚠️ [DELIVERY ACK] Nenhuma instância WhatsApp ativa para tenant {conversation.tenant.name}")
+            return
+        
+        # Buscar servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server:
+            logger.warning(f"⚠️ [DELIVERY ACK] Servidor Evolution não configurado")
             return
         
         # Endpoint da Evolution API para enviar ACK de entrega
-        base_url = instance.base_url.rstrip('/')
-        url = f"{base_url}/chat/markMessageAsRead/{instance.name}"
+        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = wa_instance.api_key or evolution_server.api_key
+        instance_name = wa_instance.instance_name
+        
+        url = f"{base_url}/chat/markMessageAsRead/{instance_name}"
         
         # Payload para ACK de entrega (só marca como delivered, não como read)
         # Na Evolution API, geralmente o endpoint é o mesmo, mas há diferença no payload
@@ -891,7 +915,7 @@ def send_delivery_receipt(conversation: Conversation, message: Message):
         
         headers = {
             "Content-Type": "application/json",
-            "apikey": instance.api_key
+            "apikey": api_key
         }
         
         logger.info(f"📬 [DELIVERY ACK] Enviando ACK de entrega...")
@@ -924,20 +948,30 @@ def send_read_receipt(conversation: Conversation, message: Message):
     Isso fará com que o remetente veja ✓✓ azul no WhatsApp dele.
     """
     try:
-        # Buscar instância ativa do tenant
-        instance = EvolutionConnection.objects.filter(
+        # Buscar instância WhatsApp ativa do tenant
+        wa_instance = WhatsAppInstance.objects.filter(
             tenant=conversation.tenant,
-            is_active=True
+            is_active=True,
+            status='active'
         ).first()
         
-        if not instance:
-            logger.warning(f"⚠️ [READ RECEIPT] Nenhuma instância ativa para tenant {conversation.tenant.name}")
+        if not wa_instance:
+            logger.warning(f"⚠️ [READ RECEIPT] Nenhuma instância WhatsApp ativa para tenant {conversation.tenant.name}")
+            return
+        
+        # Buscar servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server:
+            logger.warning(f"⚠️ [READ RECEIPT] Servidor Evolution não configurado")
             return
         
         # Endpoint da Evolution API para marcar como lida
         # Formato: POST /chat/markMessageAsRead/{instance}
-        base_url = instance.base_url.rstrip('/')
-        url = f"{base_url}/chat/markMessageAsRead/{instance.name}"
+        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = wa_instance.api_key or evolution_server.api_key
+        instance_name = wa_instance.instance_name
+        
+        url = f"{base_url}/chat/markMessageAsRead/{instance_name}"
         
         # Payload para marcar mensagem como lida
         payload = {
@@ -952,7 +986,7 @@ def send_read_receipt(conversation: Conversation, message: Message):
         
         headers = {
             "Content-Type": "application/json",
-            "apikey": instance.api_key
+            "apikey": api_key
         }
         
         logger.info(f"📖 [READ RECEIPT] Enviando confirmação de leitura...")

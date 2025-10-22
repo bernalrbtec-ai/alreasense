@@ -19,6 +19,8 @@ from apps.chat.api.serializers import (
 )
 from apps.authn.permissions import CanAccessChat
 from apps.authn.mixins import DepartmentFilterMixin
+from apps.notifications.models import WhatsAppInstance
+from apps.connections.models import EvolutionConnection
 
 
 class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
@@ -198,24 +200,38 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 'from_cache': True
             })
         
-        # Buscar instância Evolution ativa
-        instance = EvolutionConnection.objects.filter(
+        # Buscar instância WhatsApp ativa (NÃO Evolution Connection)
+        wa_instance = WhatsAppInstance.objects.filter(
             tenant=request.user.tenant,
-            is_active=True
+            is_active=True,
+            status='active'
         ).first()
         
-        if not instance:
-            logger.warning(f"⚠️ [REFRESH] Nenhuma instância ativa para tenant {request.user.tenant.name}")
+        if not wa_instance:
+            logger.warning(f"⚠️ [REFRESH] Nenhuma instância WhatsApp ativa para tenant {request.user.tenant.name}")
             return Response(
                 {'error': 'Nenhuma instância WhatsApp ativa encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Buscar configuração do servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server:
+            logger.error(f"❌ [REFRESH] Nenhum servidor Evolution configurado!")
+            return Response(
+                {'error': 'Servidor Evolution não configurado'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
         # Buscar informações na Evolution API
         try:
-            base_url = instance.base_url.rstrip('/')
+            # Usar Evolution Server config + WhatsApp Instance name (UUID)
+            base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+            api_key = wa_instance.api_key or evolution_server.api_key
+            instance_name = wa_instance.instance_name  # UUID da instância
+            
             headers = {
-                'apikey': instance.api_key,
+                'apikey': api_key,
                 'Content-Type': 'application/json'
             }
             update_fields = []
@@ -251,7 +267,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     
                     group_jid = f"{group_id}@g.us"
                 
-                endpoint = f"{base_url}/group/findGroupInfos/{instance.name}"
+                endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
                 
                 logger.info(f"🔄 [REFRESH GRUPO] Buscando info do grupo {group_jid}")
                 logger.info(f"   Raw phone: {raw_phone}")
@@ -298,7 +314,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         # Grupo não encontrado (pode ter sido deletado ou instância saiu)
                         logger.warning(f"⚠️ [REFRESH GRUPO] Grupo não encontrado (404) - pode ter sido deletado ou instância não tem acesso")
                         logger.warning(f"   JID: {group_jid}")
-                        logger.warning(f"   Instance: {instance.name}")
+                        logger.warning(f"   Instance: {instance_name}")
                         
                         # Retornar sucesso mas com aviso (não quebrar UI)
                         return Response({
@@ -318,7 +334,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # 👤 CONTATOS INDIVIDUAIS: Endpoint /chat/fetchProfilePictureUrl
             else:
                 clean_phone = conversation.contact_phone.replace('+', '').replace('@s.whatsapp.net', '')
-                endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+                endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
                 
                 logger.info(f"🔄 [REFRESH CONTATO] Buscando foto do contato {clean_phone}")
                 
@@ -541,31 +557,43 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         logger = logging.getLogger(__name__)
         
-        # Buscar instância Evolution ativa
-        instance = EvolutionConnection.objects.filter(
+        # Buscar instância WhatsApp ativa
+        wa_instance = WhatsAppInstance.objects.filter(
             tenant=request.user.tenant,
-            is_active=True
+            is_active=True,
+            status='active'
         ).first()
         
-        if not instance:
+        if not wa_instance:
             return Response(
                 {'error': 'Nenhuma instância WhatsApp ativa encontrada'},
                 status=status.HTTP_404_NOT_FOUND
             )
         
+        # Buscar servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server:
+            return Response(
+                {'error': 'Servidor Evolution não configurado'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
         try:
-            base_url = instance.base_url.rstrip('/')
+            base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+            api_key = wa_instance.api_key or evolution_server.api_key
+            instance_name = wa_instance.instance_name
+            
             headers = {
-                'apikey': instance.api_key,
+                'apikey': api_key,
                 'Content-Type': 'application/json'
             }
             
             # Endpoint: /group/fetchAllGroups/{instance}
             # REQUER query param: getParticipants (true ou false)
-            endpoint = f"{base_url}/group/fetchAllGroups/{instance.name}"
+            endpoint = f"{base_url}/group/fetchAllGroups/{instance_name}"
             params = {'getParticipants': 'false'}  # Obrigatório! Não precisamos dos participantes detalhados
             
-            logger.info(f"🔍 [DEBUG] Listando todos os grupos da instância {instance.name}")
+            logger.info(f"🔍 [DEBUG] Listando todos os grupos da instância {instance_name}")
             logger.info(f"   URL: {endpoint}")
             logger.info(f"   Params: {params}")
             
@@ -589,7 +617,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         })
                     
                     return Response({
-                        'instance': instance.name,
+                        'instance': instance_name,
                         'total_groups': len(groups),
                         'groups': debug_data,
                         'raw_response': groups  # Resposta completa para análise
