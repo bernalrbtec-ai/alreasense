@@ -1,16 +1,16 @@
 /**
  * VoiceRecorder - Gravação de áudio estilo WhatsApp Web
  * 
- * UX:
- * 1. Apertar botão → Inicia gravação
- * 2. Ícone muda (Mic → Square pulsante vermelho)
- * 3. Soltar botão → Para e ENVIA automaticamente (sem preview)
- * 4. Clicar X → Cancela gravação
- * 5. Timer em tempo real
- * 6. Feedback visual (animação pulsante)
+ * UX (Toggle Mode):
+ * 1. Clicar UMA VEZ no microfone → Inicia gravação
+ * 2. Gravando: Mostra timer + botão verde "enviar" + botão vermelho "X"
+ * 3. Clicar no botão VERDE (ou no microfone novamente) → Para e ENVIA automaticamente
+ * 4. Clicar no X → Cancela gravação
+ * 5. Timer em tempo real (MM:SS)
+ * 6. Feedback visual (fundo vermelho + ícone pulsante)
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Mic, X } from 'lucide-react';
+import { Mic, X, Send } from 'lucide-react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 
@@ -64,10 +64,17 @@ export function VoiceRecorder({
     audioChunksRef.current = [];
   };
 
-  // 1️⃣ APERTAR botão → Iniciar gravação
-  const handleMouseDown = async () => {
-    if (isRecording || isUploading) return;
+  // 1️⃣ CLICAR botão → Iniciar gravação (se não está gravando) OU Parar e enviar (se está gravando)
+  const handleClick = async () => {
+    if (isUploading) return;
 
+    // Se já está gravando, para e envia
+    if (isRecording) {
+      await stopAndSend();
+      return;
+    }
+
+    // Se não está gravando, inicia
     try {
       console.log('🎤 [VOICE] Solicitando permissão do microfone...');
       
@@ -120,11 +127,11 @@ export function VoiceRecorder({
     }
   };
 
-  // 2️⃣ SOLTAR botão → Parar e ENVIAR automaticamente
-  const handleMouseUp = async () => {
+  // 2️⃣ Parar e ENVIAR automaticamente
+  const stopAndSend = async () => {
     if (!isRecording || !mediaRecorderRef.current) return;
 
-    console.log('✋ [VOICE] Soltou botão - parando gravação...');
+    console.log('⏹️ [VOICE] Parando gravação e enviando...');
 
     // Parar gravação
     mediaRecorderRef.current.stop();
@@ -242,11 +249,9 @@ export function VoiceRecorder({
   if (!isRecording && !isUploading) {
     return (
       <button
-        onMouseDown={handleMouseDown}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp} // Se sair com mouse pressionado, para também
+        onClick={handleClick}
         className="p-2 text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
-        title="Segurar para gravar áudio"
+        title="Clique para gravar áudio"
       >
         <Mic size={20} />
       </button>
@@ -272,13 +277,22 @@ export function VoiceRecorder({
 
         {/* Dica */}
         <span className="text-xs text-red-600 ml-2">
-          Solte para enviar
+          Clique novamente para enviar
         </span>
+
+        {/* Botão enviar (mesmo ícone do microfone) */}
+        <button
+          onClick={handleClick}
+          className="ml-auto p-2 bg-green-600 hover:bg-green-700 rounded-full transition-colors"
+          title="Parar e enviar"
+        >
+          <Send size={16} className="text-white" />
+        </button>
 
         {/* Botão Cancelar */}
         <button
           onClick={handleCancel}
-          className="ml-auto p-1.5 hover:bg-red-100 rounded-full transition-colors"
+          className="p-1.5 hover:bg-red-100 rounded-full transition-colors"
           title="Cancelar gravação"
         >
           <X size={18} className="text-red-700" />
