@@ -117,7 +117,9 @@ def handle_message_upsert(data, tenant, connection=None):
         participant = key.get('participant', '')  # Quem enviou no grupo (apenas em grupos)
         
         # 🔍 Detectar tipo de conversa
-        is_group = remote_jid.endswith('@g.us') or remote_jid.endswith('@lid')  # @g.us = grupos, @lid = comunidades
+        # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE, não tipo de grupo!
+        # Apenas @g.us indica grupos normais do WhatsApp
+        is_group = remote_jid.endswith('@g.us')  # @g.us = grupos
         is_broadcast = remote_jid.endswith('@broadcast')
         
         if is_group:
@@ -131,12 +133,10 @@ def handle_message_upsert(data, tenant, connection=None):
         
         # Telefone/ID (depende do tipo)
         if is_group:
-            # 👥 GRUPOS/COMUNIDADES: Usar ID completo
-            # Evolution API retorna:
-            # - Grupos: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
-            # - Comunidades: 7658094465252@lid ou 219356931838077@lid
-            # Precisamos manter o formato completo (@g.us ou @lid) para usar na API depois
-            phone = remote_jid  # Mantém formato completo: xxx@g.us ou xxx@lid
+            # 👥 GRUPOS: Usar ID completo
+            # Evolution API retorna: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
+            # Precisamos manter o formato completo (@g.us) para usar na API depois
+            phone = remote_jid  # Mantém formato completo: xxx@g.us
         else:
             # 👤 INDIVIDUAIS: Extrair número e adicionar +
             phone = remote_jid.split('@')[0]
@@ -147,7 +147,10 @@ def handle_message_upsert(data, tenant, connection=None):
         sender_phone = ''
         sender_name = ''
         if is_group and participant:
-            sender_phone = participant.split('@')[0]
+            # 🆕 Usar participantAlt se disponível (formato @s.whatsapp.net = número real)
+            # Caso contrário, usar participant (pode ser @lid = novo formato de ID)
+            participant_to_use = key.get('participantAlt', participant)
+            sender_phone = participant_to_use.split('@')[0]
             if not sender_phone.startswith('+'):
                 sender_phone = '+' + sender_phone
             sender_name = message_data.get('pushName', '')  # Nome de quem enviou

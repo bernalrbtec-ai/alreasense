@@ -243,9 +243,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 
                 # ✅ USAR JID COMPLETO - Evolution API aceita:
                 # - Grupos: xxx@g.us
-                # - Comunidades: xxx@lid
-                if '@g.us' in raw_phone or '@lid' in raw_phone:
-                    # Já tem @g.us ou @lid, usar como está
+                # ⚠️ IMPORTANTE: @lid é formato de participante, NÃO de grupo!
+                if '@g.us' in raw_phone:
+                    # Já tem @g.us, usar como está
                     group_jid = raw_phone
                 elif '@s.whatsapp.net' in raw_phone:
                     # Formato errado (individual), corrigir para grupo
