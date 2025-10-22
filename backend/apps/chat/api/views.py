@@ -560,14 +560,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 'Content-Type': 'application/json'
             }
             
-            # Endpoint: /group/fetchAllGroups/{instance}
-            endpoint = f"{base_url}/group/fetchAllGroups/{instance.name}"
+            # Endpoint: /group/fetchAllGroups
+            # Nota: Alguns endpoints aceitam instance no path, outros como query param
+            endpoint = f"{base_url}/group/fetchAllGroups"
+            params = {'getParticipants': 'false'}  # Não precisamos dos participantes detalhados
             
             logger.info(f"🔍 [DEBUG] Listando todos os grupos da instância {instance.name}")
             logger.info(f"   URL: {endpoint}")
+            logger.info(f"   Instance: {instance.name}")
             
             with httpx.Client(timeout=10.0) as client:
-                response = client.get(endpoint, headers=headers)
+                response = client.get(endpoint, headers=headers, params=params)
                 
                 if response.status_code == 200:
                     groups = response.json()
