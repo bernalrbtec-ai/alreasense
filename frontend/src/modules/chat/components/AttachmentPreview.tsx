@@ -87,41 +87,23 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     );
   }
 
-  // 🎵 ÁUDIO
+  // 🎵 ÁUDIO (estilo WhatsApp - compacto)
   if (attachment.is_audio) {
     return (
-      <div className="attachment-preview audio max-w-md bg-gray-50 p-4 rounded-lg">
-        <div className="flex items-center gap-3 mb-2">
-          <Music className="text-indigo-600" size={20} />
-          <div className="flex-1">
-            <p className="text-sm font-medium">{attachment.original_filename}</p>
-            <p className="text-xs text-gray-500">
-              {(attachment.size_bytes / 1024 / 1024).toFixed(2)} MB
-            </p>
-          </div>
-        </div>
-
-        {/* Player Nativo HTML5 (mais confiável para MP3) */}
+      <div className="attachment-preview audio max-w-sm bg-white rounded-lg shadow-sm p-3">
+        {/* Player estilo WhatsApp: compacto e minimalista */}
         <audio
           controls
-          className="w-full mb-2"
+          className="w-full"
           preload="metadata"
+          style={{
+            height: '40px',
+            borderRadius: '20px',
+          }}
         >
           <source src={attachment.file_url} type={attachment.mime_type} />
           Seu navegador não suporta áudio.
         </audio>
-        
-        {/* Botão Download */}
-        <div className="flex justify-end">
-          <a
-            href={attachment.file_url}
-            download={attachment.original_filename}
-            className="p-2 text-gray-600 hover:text-gray-900 inline-flex items-center gap-1 text-sm"
-          >
-            <Download size={16} />
-            Download
-          </a>
-        </div>
 
         {/* ✨ TRANSCRIÇÃO IA (se disponível e addon ativo) */}
         {showAI && attachment.transcription && (
