@@ -171,7 +171,7 @@ def handle_message_upsert(data, tenant, connection=None):
         elif message_type == 'documentMessage':
             content = message_info.get('documentMessage', {}).get('caption', '')
         elif message_type == 'audioMessage':
-            content = '[Áudio]'
+            content = ''  # Player de áudio já é auto-explicativo, não precisa de texto
         else:
             content = f'[{message_type}]'
         

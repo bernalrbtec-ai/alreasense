@@ -150,9 +150,9 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
     return (
-      <div className="attachment-preview audio w-full sm:max-w-sm md:max-w-md">
-        {/* Player estilo WhatsApp - responsivo */}
-        <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg p-3 sm:p-4 shadow-sm">
+      <div className="attachment-preview audio w-full max-w-[280px]">
+        {/* Player estilo WhatsApp - responsivo e com largura fixa */}
+        <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg p-3 sm:p-4 shadow-sm w-full">
           {/* Botão Play/Pause - responsivo */}
           <button
             onClick={togglePlay}
