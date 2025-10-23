@@ -23,47 +23,69 @@ export function ConversationList() {
   
   // 🔍 Debug: Log quando conversations mudam
   useEffect(() => {
-    console.log('📋 [ConversationList] Conversas atualizadas:', conversations.length);
-    conversations.forEach(conv => {
-      if (conv.profile_pic_url) {
-        console.log(`  ✅ ${conv.contact_name}: tem foto`);
-      }
-    });
-  }, [conversations]);
+    console.log('📋 [ConversationList] Conversas no store:', conversations.length);
+    if (activeDepartment) {
+      const filtered = conversations.filter(conv => {
+        if (activeDepartment.id === 'inbox') {
+          return conv.status === 'pending' && !conv.department;
+        } else {
+          return conv.department?.id === activeDepartment.id;
+        }
+      });
+      console.log(`   📂 Filtradas para ${activeDepartment.name}:`, filtered.length);
+    }
+  }, [conversations, activeDepartment]);
 
+  // 🔄 FIX: Buscar conversas APENAS UMA VEZ ao montar componente
+  // WebSocket adicionará novas conversas automaticamente ao Zustand Store
+  // Filtro por departamento é feito localmente (mais rápido e mantém conversas do WebSocket)
   useEffect(() => {
-    if (!activeDepartment) return;
-
     const fetchConversations = async () => {
       try {
         setLoading(true);
-        const params: any = {
-          ordering: '-last_message_at'
-        };
-
-        if (activeDepartment.id === 'inbox') {
-          params.status = 'pending';
-        } else {
-          params.department = activeDepartment.id;
-        }
-
-        const response = await api.get('/chat/conversations/', { params });
+        console.log('🔄 [ConversationList] Carregando conversas iniciais...');
+        
+        // Buscar TODAS as conversas (sem filtro de departamento)
+        const response = await api.get('/chat/conversations/', {
+          params: { ordering: '-last_message_at' }
+        });
+        
         const convs = response.data.results || response.data;
+        console.log(`✅ [ConversationList] ${convs.length} conversas carregadas`);
         setConversations(convs);
       } catch (error) {
-        console.error('❌ Erro ao carregar conversas:', error);
+        console.error('❌ [ConversationList] Erro ao carregar conversas:', error);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchConversations();
-  }, [activeDepartment, setConversations]);
+    // Buscar apenas se não houver conversas (primeira vez)
+    if (conversations.length === 0) {
+      fetchConversations();
+    }
+  }, [setConversations]); // SEM activeDepartment!
 
-  const filteredConversations = conversations.filter((conv) =>
-    conv.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    conv.contact_phone.includes(searchTerm)
-  );
+  // 🎯 Filtrar conversas localmente (busca + departamento)
+  const filteredConversations = conversations.filter((conv) => {
+    // 1. Filtro de busca (nome ou telefone)
+    const matchesSearch = 
+      conv.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      conv.contact_phone.includes(searchTerm);
+    
+    if (!matchesSearch) return false;
+    
+    // 2. Filtro de departamento (se houver departamento ativo)
+    if (!activeDepartment) return true;
+    
+    if (activeDepartment.id === 'inbox') {
+      // Inbox: conversas pendentes SEM departamento
+      return conv.status === 'pending' && !conv.department;
+    } else {
+      // Departamento específico: conversas do departamento (qualquer status)
+      return conv.department?.id === activeDepartment.id;
+    }
+  });
 
   const formatTime = (dateString: string | undefined) => {
     if (!dateString) return '';
