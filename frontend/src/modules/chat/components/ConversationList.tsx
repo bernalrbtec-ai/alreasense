@@ -36,8 +36,8 @@ export function ConversationList() {
     }
   }, [conversations, activeDepartment]);
 
-  // 🔄 FIX: Buscar conversas APENAS UMA VEZ ao montar componente
-  // WebSocket adicionará novas conversas automaticamente ao Zustand Store
+  // 🔄 FIX V2: Buscar conversas ao montar componente (apenas uma vez)
+  // WebSocket adicionará novas conversas automaticamente ao Zustand Store via useTenantSocket
   // Filtro por departamento é feito localmente (mais rápido e mantém conversas do WebSocket)
   useEffect(() => {
     const fetchConversations = async () => {
@@ -60,11 +60,14 @@ export function ConversationList() {
       }
     };
 
-    // Buscar apenas se não houver conversas (primeira vez)
-    if (conversations.length === 0) {
-      fetchConversations();
-    }
-  }, [setConversations]); // SEM activeDepartment!
+    // Buscar conversas ao montar componente (apenas uma vez)
+    fetchConversations();
+    
+    // Limpar ao desmontar (boa prática)
+    return () => {
+      console.log('🧹 [ConversationList] Desmontando componente');
+    };
+  }, []); // Array vazio = executa apenas uma vez no mount
 
   // 🎯 Filtrar conversas localmente (busca + departamento)
   const filteredConversations = conversations.filter((conv) => {

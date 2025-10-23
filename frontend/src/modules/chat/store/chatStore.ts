@@ -63,9 +63,13 @@ export const useChatStore = create<ChatState>((set) => ({
     // Evitar duplicatas
     const exists = state.conversations.some(c => c.id === conversation.id);
     if (exists) {
+      console.log('⚠️ [STORE] Conversa duplicada, ignorando:', conversation.contact_name || conversation.contact_phone);
       return state;
     }
+    
     // Adicionar no início da lista (conversas mais recentes primeiro)
+    console.log('✅ [STORE] Nova conversa adicionada:', conversation.contact_name || conversation.contact_phone);
+    console.log(`   Total de conversas: ${state.conversations.length} → ${state.conversations.length + 1}`);
     return {
       conversations: [conversation, ...state.conversations]
     };
