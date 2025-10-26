@@ -1,0 +1,3 @@
+Force rebuild - timestamp: 2025-10-26 23:45
+Railway deve pegar o commit 62a7b38 que corrige as migrations
+
