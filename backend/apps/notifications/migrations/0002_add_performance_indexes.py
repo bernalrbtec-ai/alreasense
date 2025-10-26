@@ -14,18 +14,17 @@ class Migration(migrations.Migration):
         # ✅ CRITICAL: Add indexes for WhatsAppInstance model using RunSQL
         migrations.RunSQL(
             sql="""
-                -- WhatsAppInstance indexes
+                -- WhatsAppInstance indexes (tabela: notifications_whatsapp_instance)
                 CREATE INDEX IF NOT EXISTS whatsapp_tenant_default_idx 
-                ON notifications_whatsappinstance(tenant_id, is_default);
+                ON notifications_whatsapp_instance(tenant_id, is_default);
                 
                 CREATE INDEX IF NOT EXISTS whatsapp_tenant_state_idx 
-                ON notifications_whatsappinstance(tenant_id, connection_state);
+                ON notifications_whatsapp_instance(tenant_id, connection_state);
                 
                 CREATE INDEX IF NOT EXISTS whatsapp_health_score_idx 
-                ON notifications_whatsappinstance(health_score);
+                ON notifications_whatsapp_instance(health_score);
                 
-                CREATE INDEX IF NOT EXISTS whatsapp_daily_limit_idx 
-                ON notifications_whatsappinstance(daily_limit_reached);
+                -- Remover daily_limit_reached (campo não existe no modelo)
             """,
             reverse_sql="""
                 DROP INDEX IF EXISTS whatsapp_tenant_default_idx;
