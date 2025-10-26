@@ -15,16 +15,31 @@ logger = logging.getLogger(__name__)
 
 # ✅ IMPROVEMENT: Use correct Redis URL from settings
 from django.conf import settings
-redis_url = getattr(settings, 'REDIS_URL', 'redis://localhost:6379/0')
-# ✅ IMPROVEMENT: Add connection pool for better performance
-redis_client = redis.Redis.from_url(
-    redis_url, 
-    decode_responses=True,
-    max_connections=50,  # Connection pooling
-    socket_connect_timeout=5,
-    socket_timeout=5,
-    retry_on_timeout=True
-)
+
+# ✅ FIX: Lazy load Redis client to avoid build-time errors
+_redis_client = None
+
+def get_redis_client():
+    """Get Redis client with lazy initialization"""
+    global _redis_client
+    if _redis_client is None:
+        redis_url = getattr(settings, 'REDIS_URL', 'redis://localhost:6379/0')
+        
+        # Skip Redis if URL is empty (build time)
+        if not redis_url or redis_url == '':
+            logger.warning("⚠️ Redis URL not configured, using dummy client")
+            return None
+        
+        # ✅ IMPROVEMENT: Add connection pool for better performance
+        _redis_client = redis.Redis.from_url(
+            redis_url, 
+            decode_responses=True,
+            max_connections=50,  # Connection pooling
+            socket_connect_timeout=5,
+            socket_timeout=5,
+            retry_on_timeout=True
+        )
+    return _redis_client
 
 class WebhookCache:
     """Sistema de cache para webhooks com TTL de 24h."""
@@ -45,6 +60,11 @@ class WebhookCache:
             bool: True se armazenado com sucesso
         """
         try:
+            client = get_redis_client()
+            if client is None:
+                logger.warning("⚠️ Redis not available, skipping cache")
+                return False
+            
             # Adicionar timestamp de recebimento
             event_data['_cached_at'] = datetime.now(timezone.utc).isoformat()
             event_data['_event_id'] = event_id
@@ -53,7 +73,7 @@ class WebhookCache:
             cache_key = f"{cls.CACHE_PREFIX}:{event_id}"
             
             # Armazenar no Redis com TTL de 24h
-            redis_client.setex(
+            client.setex(
                 cache_key, 
                 cls.TTL_SECONDS, 
                 json.dumps(event_data)
@@ -69,20 +89,24 @@ class WebhookCache:
     @classmethod
     def get_event(cls, event_id: str) -> Optional[Dict[Any, Any]]:
         """
-        Recupera evento webhook do Redis.
+        Recupera evento do cache.
         
         Args:
-            event_id: ID único do evento
+            event_id: ID do evento
             
         Returns:
-            Dict com dados do evento ou None se não encontrado
+            Dados do evento ou None
         """
         try:
-            cache_key = f"{cls.CACHE_PREFIX}:{event_id}"
-            cached_data = redis_client.get(cache_key)
+            client = get_redis_client()
+            if client is None:
+                return None
             
-            if cached_data:
-                return json.loads(cached_data)
+            cache_key = f"{cls.CACHE_PREFIX}:{event_id}"
+            data = client.get(cache_key)
+            
+            if data:
+                return json.loads(data)
             return None
             
         except Exception as e:
