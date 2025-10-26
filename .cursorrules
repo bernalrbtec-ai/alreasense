@@ -16,6 +16,90 @@ Leia SEMPRE antes de fazer mudanças:
 3. **MULTI-TENANT FIRST** - Todo modelo precisa de `tenant_id`
 4. **WEBSOCKET PARA REAL-TIME** - Use Channels, não polling
 5. **🔐 SEGURANÇA PRIMEIRO** - Veja seção de segurança abaixo
+6. **📦 VERIFICAR MIGRATIONS EXISTENTES** - Sempre checar antes de criar novas
+
+## 📦 REGRAS DE MIGRATIONS E DATABASE (CRÍTICO)
+
+### ✅ SEMPRE FAÇA ISSO:
+
+1. **SEMPRE verifique migrations existentes antes de criar novas**
+   ```bash
+   # ✅ CORRETO - Verificar primeiro
+   ls backend/apps/[app]/migrations/
+   # Ou
+   python manage.py showmigrations [app]
+   
+   # Ver a última migration
+   ls backend/apps/campaigns/migrations/ | sort
+   ```
+
+2. **SEMPRE use números sequenciais corretos**
+   ```python
+   # ✅ CORRETO - Se última é 0010, criar 0011
+   # ❌ ERRADO - Criar 0002 quando já existe 0010
+   ```
+
+3. **SEMPRE use `IF NOT EXISTS` em migrations SQL**
+   ```python
+   # ✅ CORRETO
+   migrations.RunSQL(
+       sql="CREATE INDEX IF NOT EXISTS idx_name ON table(column);",
+       reverse_sql="DROP INDEX IF EXISTS idx_name;"
+   )
+   ```
+
+4. **SEMPRE teste migrations localmente primeiro**
+   ```bash
+   # ✅ CORRETO
+   python manage.py migrate [app] --plan  # Ver o que vai acontecer
+   python manage.py migrate [app]         # Aplicar
+   python manage.py migrate [app] zero    # Reverter se necessário
+   ```
+
+### ❌ NUNCA FAÇA ISSO:
+
+1. **NUNCA crie migrations sem verificar as existentes**
+   ```python
+   # ❌ ERRADO - Criar 0002 sem verificar se já existe 0010
+   # Causa: Conflicting migrations detected
+   ```
+
+2. **NUNCA delete migrations que já foram aplicadas em produção**
+   ```bash
+   # ❌ ERRADO - Delete migration já aplicada
+   # Causa: Inconsistência de estado do banco
+   ```
+
+3. **NUNCA faça migrations que conectam a serviços externos**
+   ```python
+   # ❌ ERRADO - Conectar Redis/RabbitMQ no import
+   redis_client = redis.Redis.from_url(...)  # Quebra collectstatic
+   
+   # ✅ CORRETO - Usar lazy loading
+   def get_redis_client():
+       if not hasattr(settings, '_redis_client'):
+           settings._redis_client = redis.Redis.from_url(...)
+       return settings._redis_client
+   ```
+
+4. **NUNCA use `python manage.py migrate` no Dockerfile**
+   ```dockerfile
+   # ❌ ERRADO - Migrations no build time
+   RUN python manage.py migrate
+   
+   # ✅ CORRETO - Migrations no runtime (após deploy)
+   # Via Railway CLI ou comando manual
+   ```
+
+### 🎓 LIÇÃO APRENDIDA (Out/2025):
+
+**Problema:** Criamos `0002_add_performance_indexes.py` em campaigns sem verificar.
+**Resultado:** Conflito com `0010_add_performance_indexes.py` já existente.
+**Erro:** `Conflicting migrations detected; multiple leaf nodes`
+**Solução:** Deletar a migration duplicada, usar a existente.
+**Prevenção:** SEMPRE executar `ls migrations/` antes de criar nova.
+
+---
 
 ## 🔐 REGRAS DE SEGURANÇA (CRÍTICO)
 
