@@ -64,8 +64,10 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.common.middleware.TenantMiddleware',
-    # ✅ IMPROVEMENT: Add security audit middleware
+    # ✅ IMPROVEMENT: Security and performance middlewares
     'apps.common.security_middleware.SecurityAuditMiddleware',
+    'apps.common.performance_middleware.PerformanceMiddleware',
+    # 'apps.common.performance_middleware.DatabaseQueryCountMiddleware',  # Only for DEBUG
     # 'apps.common.webhook_debug_middleware.WebhookDebugMiddleware',  # Temporarily disabled
 ]
 
@@ -201,8 +203,11 @@ if env_cors:
         if origin and origin not in CORS_ALLOWED_ORIGINS:
             CORS_ALLOWED_ORIGINS.append(origin)
 
-# Debug CORS configuration
-print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
+# Debug CORS configuration (only in DEBUG mode)
+if DEBUG:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
 
 CORS_ALLOW_CREDENTIALS = True
 # ✅ SECURITY FIX: Never allow all origins in production

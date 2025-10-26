@@ -101,6 +101,204 @@ Leia SEMPRE antes de fazer mudanças:
 
 ---
 
+## ⚡ REGRAS DE PERFORMANCE E CODE QUALITY (CRÍTICO)
+
+### ❌ NUNCA FAÇA ISSO:
+
+1. **NUNCA use print() em código de produção**
+   ```python
+   # ❌ ERRADO
+   print(f"Debug info: {data}")
+   
+   # ✅ CORRETO
+   import logging
+   logger = logging.getLogger(__name__)
+   logger.debug("Debug info", extra={'data': data})
+   ```
+
+2. **NUNCA ignore N+1 queries**
+   ```python
+   # ❌ ERRADO - N+1 query problem
+   campaigns = Campaign.objects.filter(tenant=tenant)
+   for campaign in campaigns:
+       print(campaign.instances.count())  # Query por campanha!
+   
+   # ✅ CORRETO
+   campaigns = Campaign.objects.filter(tenant=tenant).prefetch_related('instances')
+   ```
+
+3. **NUNCA use bare `except Exception`**
+   ```python
+   # ❌ ERRADO - esconde erros específicos
+   try:
+       send_message()
+   except Exception as e:
+       logger.error(f"Error: {e}")
+   
+   # ✅ CORRETO - exceções específicas
+   from requests.exceptions import Timeout, ConnectionError
+   try:
+       send_message()
+   except Timeout as e:
+       logger.warning("Timeout, will retry", exc_info=True)
+       return retry_later()
+   except ConnectionError as e:
+       logger.error("Connection failed", exc_info=True)
+       raise
+   ```
+
+4. **NUNCA deixe endpoints públicos sem rate limiting**
+   ```python
+   # ❌ ERRADO
+   @api_view(['POST'])
+   @permission_classes([AllowAny])
+   def webhook(request):
+       pass
+   
+   # ✅ CORRETO
+   from apps.common.rate_limiting import rate_limit_by_ip
+   
+   @api_view(['POST'])
+   @permission_classes([AllowAny])
+   @rate_limit_by_ip(rate='100/m')
+   def webhook(request):
+       pass
+   ```
+
+5. **NUNCA crie arquivos *debug*.py em produção**
+   ```python
+   # ❌ ERRADO - arquivos temporários de debug
+   backend/debug_something.py
+   backend/apps/campaigns/views_debug.py  # Se existir, DEVE ter @IsAdminUser
+   
+   # ✅ CORRETO - scripts de debug em pasta separada
+   scripts/debug/test_something.py
+   ```
+
+### ✅ SEMPRE FAÇA ISSO:
+
+1. **SEMPRE use select_related/prefetch_related**
+   ```python
+   # ✅ CORRETO - otimizar queries
+   conversations = Conversation.objects.select_related(
+       'tenant', 'department', 'assigned_to'
+   ).prefetch_related('participants')
+   
+   campaigns = Campaign.objects.filter(tenant=tenant).prefetch_related(
+       'instances',
+       'messages',
+       Prefetch('contacts', queryset=CampaignContact.objects.select_related('contact'))
+   )
+   ```
+
+2. **SEMPRE use índices compostos para queries frequentes**
+   ```python
+   # ✅ CORRETO - criar migration com índices compostos
+   migrations.RunSQL(
+       sql="""
+           CREATE INDEX IF NOT EXISTS idx_conv_tenant_dept_status 
+           ON chat_conversation(tenant_id, department_id, status);
+       """,
+       reverse_sql="DROP INDEX IF EXISTS idx_conv_tenant_dept_status;"
+   )
+   ```
+
+3. **SEMPRE use atomic transactions em operações críticas**
+   ```python
+   # ✅ CORRETO
+   from django.db import transaction
+   
+   @transaction.atomic
+   def create_campaign_with_contacts(campaign_data, contacts):
+       campaign = Campaign.objects.create(**campaign_data)
+       CampaignContact.objects.bulk_create([
+           CampaignContact(campaign=campaign, contact=c)
+           for c in contacts
+       ], batch_size=1000)
+       return campaign
+   ```
+
+4. **SEMPRE use bulk_create para inserções em massa**
+   ```python
+   # ❌ ERRADO - 1000 queries
+   for contact in contacts:
+       CampaignContact.objects.create(campaign=campaign, contact=contact)
+   
+   # ✅ CORRETO - 1 query
+   CampaignContact.objects.bulk_create([
+       CampaignContact(campaign=campaign, contact=c)
+       for c in contacts
+   ], batch_size=1000, ignore_conflicts=True)
+   ```
+
+5. **SEMPRE proteja endpoints de debug**
+   ```python
+   # ✅ CORRETO
+   from rest_framework.permissions import IsAuthenticated, IsAdminUser
+   
+   @api_view(['GET'])
+   @permission_classes([IsAuthenticated, IsAdminUser])
+   def debug_view(request):
+       # Apenas admins podem acessar
+       pass
+   ```
+
+### 🚀 FERRAMENTAS DISPONÍVEIS:
+
+1. **Performance Middleware** (`apps.common.performance_middleware`)
+   - Adiciona header `X-Response-Time` em todas as respostas
+   - Loga requests lentos (> 1 segundo)
+   - Em DEBUG: adiciona `X-DB-Query-Count` header
+
+2. **Rate Limiting** (`apps.common.rate_limiting`)
+   ```python
+   from apps.common.rate_limiting import rate_limit_by_user, rate_limit_by_ip
+   
+   @rate_limit_by_user(rate='10/h', method='POST')  # 10 por hora por usuário
+   @rate_limit_by_ip(rate='100/m')  # 100 por minuto por IP
+   ```
+
+3. **Logging Estruturado**
+   ```python
+   logger.info("Message sent", extra={
+       'campaign_id': str(campaign.id),
+       'contact_id': str(contact.id),
+       'instance_id': str(instance.id),
+   })
+   ```
+
+### 📊 CHECKLIST DE PERFORMANCE:
+
+Antes de commitar código novo, verifique:
+
+- [ ] Nenhum print() no código?
+- [ ] Queries otimizadas com select_related/prefetch_related?
+- [ ] Bulk operations ao invés de loops?
+- [ ] Transactions em operações críticas?
+- [ ] Exception handling específico?
+- [ ] Rate limiting em endpoints públicos?
+- [ ] Logging estruturado ao invés de print()?
+- [ ] Índices para queries frequentes?
+
+### 🎓 LIÇÃO APRENDIDA (Out/2025):
+
+**Problema:** 187 print() statements em produção, logs não estruturados.
+**Resultado:** Difícil debugging, logs não aparecem em sistemas centralizados.
+**Solução:** Substituir TODOS os print() por logging.{level}() com contexto.
+**Prevenção:** Pre-commit hook bloqueando novos print().
+
+**Problema:** Queries N+1 em listagem de campanhas (301 queries!).
+**Resultado:** Tempo de resposta > 800ms.
+**Solução:** prefetch_related('instances', 'messages') → 1 query, <100ms.
+**Prevenção:** Sempre usar DatabaseQueryCountMiddleware em DEBUG.
+
+**Problema:** Endpoints de debug públicos expondo dados de todos os tenants.
+**Resultado:** Vazamento potencial de informações.
+**Solução:** @permission_classes([IsAuthenticated, IsAdminUser]) obrigatório.
+**Prevenção:** NUNCA usar @permission_classes([AllowAny]) em views de debug.
+
+---
+
 ## 🔐 REGRAS DE SEGURANÇA (CRÍTICO)
 
 ### ❌ NUNCA FAÇA ISSO:

@@ -39,13 +39,18 @@ class ContactViewSet(viewsets.ModelViewSet):
     
     def create(self, request, *args, **kwargs):
         """Override create to add detailed error logging"""
-        print(f"🔍 CREATE REQUEST DATA: {request.data}")
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.debug("Contact create request", extra={'data': request.data})
         try:
             return super().create(request, *args, **kwargs)
         except Exception as e:
-            print(f"❌ CREATE ERROR: {type(e).__name__}: {str(e)}")
-            import traceback
-            traceback.print_exc()
+            logger.error(
+                f"Contact create error: {type(e).__name__}", 
+                exc_info=True,
+                extra={'error_message': str(e)}
+            )
             raise
     
     def get_queryset(self):

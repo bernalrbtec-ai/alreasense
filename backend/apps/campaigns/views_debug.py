@@ -1,14 +1,15 @@
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.permissions import IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from .models import Campaign
 import logging
 
 logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
-@permission_classes([AllowAny])  # Temporariamente público para debug
+@permission_classes([IsAuthenticated, IsAdminUser])  # ✅ SECURITY FIX: Only admin users
 def debug_campaigns(request):
     """Endpoint de debug para investigar problemas com campanhas"""
     user = request.user
@@ -61,9 +62,10 @@ def debug_campaigns(request):
     return Response(debug_info)
 
 @api_view(['GET'])
-@permission_classes([AllowAny])  # Temporariamente público para debug
+@permission_classes([IsAuthenticated, IsAdminUser])  # ✅ SECURITY FIX: Only admin users
 def test_retry_endpoint(request, campaign_id):
     """Endpoint de teste para verificar se as rotas estão funcionando"""
+    from django.utils import timezone
     return Response({
         'message': f'Endpoint de teste funcionando para campanha {campaign_id}',
         'campaign_id': campaign_id,
