@@ -125,14 +125,19 @@ class WebhookCache:
             Lista de eventos encontrados
         """
         try:
+            client = get_redis_client()
+            if client is None:
+                logger.warning("⚠️ Redis not available, returning empty list")
+                return []
+            
             pattern = f"{cls.CACHE_PREFIX}:*"
-            keys = redis_client.keys(pattern)
+            keys = client.keys(pattern)
             
             events = []
             cutoff_time = datetime.now(timezone.utc).timestamp() - (hours * 3600)
             
             for key in keys:
-                event_data = redis_client.get(key)
+                event_data = client.get(key)
                 if event_data:
                     data = json.loads(event_data)
                     cached_at = data.get('_cached_at')
