@@ -4,7 +4,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('chat', '0002_add_attachment_s3_fields'),
+        ('chat', '0004_add_ai_fields_to_attachment'),
     ]
     
     operations = [

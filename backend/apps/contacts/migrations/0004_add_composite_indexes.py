@@ -4,7 +4,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ('contacts', '0002_contact_state_alter_contact_lifecycle_stage'),
+        ('contacts', '0003_add_performance_indexes'),
     ]
     
     operations = [
