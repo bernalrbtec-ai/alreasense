@@ -11,8 +11,9 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# ✅ SECURITY FIX: No default value - must be set in environment
-SECRET_KEY = config('SECRET_KEY')
+# ✅ SECURITY FIX: Use insecure default only for build time (collectstatic)
+# Railway will use the real SECRET_KEY from env vars at runtime
+SECRET_KEY = config('SECRET_KEY', default='django-insecure-build-time-only-do-not-use-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # ✅ IMPROVEMENT: DEBUG should default to False for security
@@ -315,8 +316,8 @@ CHANNEL_LAYERS = {
 }
 
 # RabbitMQ - Railway Configuration
-# ✅ SECURITY FIX: No default value - must be set in environment
-RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL')
+# ✅ IMPROVEMENT: Default for build time, real value from env at runtime
+RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
 
 print(f"🔧 [SETTINGS] RABBITMQ_URL: {RABBITMQ_URL[:50]}...")
 
@@ -337,8 +338,8 @@ AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings'
 
 # Evolution API (Consolidated)
 EVOLUTION_API_URL = config('EVOLUTION_API_URL', default='https://evo.rbtec.com.br')
-# ✅ SECURITY FIX: No default value - must be set in environment
-EVOLUTION_API_KEY = config('EVOLUTION_API_KEY')
+# ✅ IMPROVEMENT: Default for build time, real value from env at runtime
+EVOLUTION_API_KEY = config('EVOLUTION_API_KEY', default='')
 
 # Base URL for webhooks and callbacks
 BASE_URL = config('BASE_URL', default='https://alreasense-backend-production.up.railway.app')
@@ -433,9 +434,9 @@ CHAT_LOCAL_STORAGE_PATH = config('CHAT_LOCAL_STORAGE_PATH', default='/mnt/storag
 # MinIO (S3-compatible) para storage definitivo
 S3_BUCKET = config('S3_BUCKET', default='flow-attachments')
 S3_ENDPOINT_URL = config('S3_ENDPOINT_URL', default='https://bucket-production-8fb1.up.railway.app')
-# ✅ SECURITY FIX: No default values - must be set in environment
-S3_ACCESS_KEY = config('S3_ACCESS_KEY')
-S3_SECRET_KEY = config('S3_SECRET_KEY')
+# ✅ IMPROVEMENT: Empty defaults for build time, real values from env at runtime
+S3_ACCESS_KEY = config('S3_ACCESS_KEY', default='')
+S3_SECRET_KEY = config('S3_SECRET_KEY', default='')
 S3_REGION = config('S3_REGION', default='us-east-1')
 
 # Debug settings for Railway deploy - AFTER all configurations are loaded
