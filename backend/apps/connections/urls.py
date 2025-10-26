@@ -6,7 +6,6 @@ from . import webhook_monitoring_views
 from . import test_webhook_endpoint
 from . import simple_webhook_test
 from . import simple_webhook_view
-from . import super_simple_webhook
 
 urlpatterns = [
     # Connections list
@@ -27,9 +26,6 @@ urlpatterns = [
     
     # Simple Evolution webhook
     path('webhooks/evolution-simple/', simple_webhook_view.simple_webhook_evolution, name='evolution-webhook-simple'),
-    
-    # Super Simple webhook (NO VALIDATION)
-    path('webhooks/super-simple/', super_simple_webhook.super_simple_webhook, name='super-simple-webhook'),
     
     # Webhook test endpoint (admin only)
     path('webhooks/test/', test_webhook_endpoint.TestWebhookEndpointView.as_view(), name='webhook-test'),
