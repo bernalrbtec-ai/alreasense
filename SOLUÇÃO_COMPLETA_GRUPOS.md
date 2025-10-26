@@ -202,3 +202,6 @@ WHERE conversation_type = 'group'
 
 **🍽️ Aproveite seu almoço! Tudo está funcionando perfeitamente! ✅**
 
+
+
+

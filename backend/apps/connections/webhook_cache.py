@@ -13,9 +13,18 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-# Redis connection - usar variável de ambiente ou padrão
-redis_url = os.getenv('CELERY_BROKER_URL', 'redis://localhost:6379/0')
-redis_client = redis.Redis.from_url(redis_url, decode_responses=True)
+# ✅ IMPROVEMENT: Use correct Redis URL from settings
+from django.conf import settings
+redis_url = getattr(settings, 'REDIS_URL', 'redis://localhost:6379/0')
+# ✅ IMPROVEMENT: Add connection pool for better performance
+redis_client = redis.Redis.from_url(
+    redis_url, 
+    decode_responses=True,
+    max_connections=50,  # Connection pooling
+    socket_connect_timeout=5,
+    socket_timeout=5,
+    retry_on_timeout=True
+)
 
 class WebhookCache:
     """Sistema de cache para webhooks com TTL de 24h."""

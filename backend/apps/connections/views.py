@@ -107,17 +107,23 @@ def evolution_config(request):
             base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
             webhook_url = f"{base_url}/webhooks/evolution/"
         
-        # Tentar obter api_key, se falhar retornar string vazia
+        # ✅ SECURITY FIX: Mask API key - never return full key
         try:
-            api_key_value = connection.api_key or ''
+            api_key_full = connection.api_key or ''
+            # Mask all but last 4 characters
+            if api_key_full and len(api_key_full) > 4:
+                api_key_masked = '****' + api_key_full[-4:]
+            else:
+                api_key_masked = ''
         except Exception:
-            api_key_value = ''
+            api_key_masked = ''
         
         return Response({
             'id': str(connection.id),
             'name': connection.name,
             'base_url': connection.base_url,
-            'api_key': api_key_value,
+            'api_key': api_key_masked,  # Masked for security
+            'api_key_set': bool(connection.api_key),  # Flag indicating if key is configured
             'webhook_url': webhook_url,
             'is_active': connection.is_active,
             'status': connection_status,
@@ -183,17 +189,23 @@ def evolution_config(request):
                 base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
                 webhook_url = f"{base_url}/webhooks/evolution/"
             
-            # Tentar obter api_key, se falhar (criptografia corrompida) retornar string vazia
+            # ✅ SECURITY FIX: Mask API key in response
             try:
-                api_key_value = connection.api_key or ''
+                api_key_full = connection.api_key or ''
+                # Mask all but last 4 characters
+                if api_key_full and len(api_key_full) > 4:
+                    api_key_masked = '****' + api_key_full[-4:]
+                else:
+                    api_key_masked = ''
             except Exception:
-                api_key_value = ''
+                api_key_masked = ''
             
             return Response({
                 'id': str(connection.id),
                 'name': connection.name,
                 'base_url': connection.base_url,
-                'api_key': api_key_value,
+                'api_key': api_key_masked,  # Masked for security
+                'api_key_set': bool(connection.api_key),  # Flag indicating if key is configured
                 'webhook_url': webhook_url,
                 'is_active': connection.is_active,
                 'status': connection.status,
@@ -243,6 +255,9 @@ def test_evolution_connection(request):
             # Connection successful
             instances = response.json()
             
+            # ✅ SECURITY FIX: Mask API key in test response
+            api_key_masked = '****' + (api_key[-4:] if len(api_key) > 4 else '')
+            
             return Response({
                 'success': True,
                 'message': f'Conexão estabelecida com sucesso! Encontradas {len(instances)} instâncias.',
@@ -251,7 +266,8 @@ def test_evolution_connection(request):
                     'id': 'temp-id',
                     'name': 'Default Evolution API',
                     'base_url': base_url,
-                    'api_key': api_key,
+                    'api_key': api_key_masked,  # Masked for security
+                    'api_key_set': True,
                     'webhook_url': f"{request.scheme}://{request.get_host()}/webhooks/evolution/",
                     'is_active': True,
                     'status': 'active',
@@ -264,6 +280,9 @@ def test_evolution_connection(request):
             # Connection failed
             error_message = f'Falha na conexão: {response.status_code} - {response.text}'
             
+            # ✅ SECURITY FIX: Mask API key even in error response
+            api_key_masked = '****' + (api_key[-4:] if len(api_key) > 4 else '')
+            
             return Response({
                 'success': False,
                 'message': error_message,
@@ -271,7 +290,8 @@ def test_evolution_connection(request):
                     'id': 'temp-id',
                     'name': 'Default Evolution API',
                     'base_url': base_url,
-                    'api_key': api_key,
+                    'api_key': api_key_masked,  # Masked for security
+                    'api_key_set': True,
                     'webhook_url': f"{request.scheme}://{request.get_host()}/webhooks/evolution/",
                     'is_active': False,
                     'status': 'error',

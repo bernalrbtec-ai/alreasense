@@ -11,10 +11,12 @@ import dj_database_url
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = config('SECRET_KEY', default='N;.!iB5@sw?D2wJPr{Ysmt5][R%5.aHyAuvNpM_@DOb:OX*<.f')
+# ✅ SECURITY FIX: No default value - must be set in environment
+SECRET_KEY = config('SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = config('DEBUG', default=True, cast=bool)
+# ✅ IMPROVEMENT: DEBUG should default to False for security
+DEBUG = config('DEBUG', default=False, cast=bool)
 
 ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,alreasense-production.up.railway.app,alreasense-backend-production.up.railway.app').split(',')
 
@@ -61,6 +63,8 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'apps.common.middleware.TenantMiddleware',
+    # ✅ IMPROVEMENT: Add security audit middleware
+    'apps.common.security_middleware.SecurityAuditMiddleware',
     # 'apps.common.webhook_debug_middleware.WebhookDebugMiddleware',  # Temporarily disabled
 ]
 
@@ -90,6 +94,13 @@ DATABASES = {
     'default': dj_database_url.parse(
         config('DATABASE_URL', default='postgresql://postgres:postgres@localhost:5432/alrea_sense')
     )
+}
+
+# ✅ IMPROVEMENT: Database connection pooling and performance
+DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=600, cast=int)  # 10 minutes
+DATABASES['default']['OPTIONS'] = {
+    'connect_timeout': 10,
+    'options': '-c statement_timeout=30000'  # 30 seconds query timeout
 }
 
 # Custom User Model
@@ -193,7 +204,8 @@ if env_cors:
 print(f"🌐 CORS_ALLOWED_ORIGINS: {CORS_ALLOWED_ORIGINS}")
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = True  # Temporarily True to fix Railway CORS issue
+# ✅ SECURITY FIX: Never allow all origins in production
+CORS_ALLOW_ALL_ORIGINS = False
 
 # Force CORS headers to be added to all responses
 CORS_PREFLIGHT_MAX_AGE = 86400
@@ -303,7 +315,8 @@ CHANNEL_LAYERS = {
 }
 
 # RabbitMQ - Railway Configuration
-RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672')
+# ✅ SECURITY FIX: No default value - must be set in environment
+RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL')
 
 print(f"🔧 [SETTINGS] RABBITMQ_URL: {RABBITMQ_URL[:50]}...")
 
@@ -324,7 +337,8 @@ AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings'
 
 # Evolution API (Consolidated)
 EVOLUTION_API_URL = config('EVOLUTION_API_URL', default='https://evo.rbtec.com.br')
-EVOLUTION_API_KEY = config('EVOLUTION_API_KEY', default='')
+# ✅ SECURITY FIX: No default value - must be set in environment
+EVOLUTION_API_KEY = config('EVOLUTION_API_KEY')
 
 # Base URL for webhooks and callbacks
 BASE_URL = config('BASE_URL', default='https://alreasense-backend-production.up.railway.app')
@@ -419,8 +433,9 @@ CHAT_LOCAL_STORAGE_PATH = config('CHAT_LOCAL_STORAGE_PATH', default='/mnt/storag
 # MinIO (S3-compatible) para storage definitivo
 S3_BUCKET = config('S3_BUCKET', default='flow-attachments')
 S3_ENDPOINT_URL = config('S3_ENDPOINT_URL', default='https://bucket-production-8fb1.up.railway.app')
-S3_ACCESS_KEY = config('S3_ACCESS_KEY', default='u2gh8aomMEdqPFW1JIlTn7VcCUhRCobL')
-S3_SECRET_KEY = config('S3_SECRET_KEY', default='zSMwLiOH1fURqSNX8zMtMYKBjrScDQYynCW2TbI2UuXM7Bti')
+# ✅ SECURITY FIX: No default values - must be set in environment
+S3_ACCESS_KEY = config('S3_ACCESS_KEY')
+S3_SECRET_KEY = config('S3_SECRET_KEY')
 S3_REGION = config('S3_REGION', default='us-east-1')
 
 # Debug settings for Railway deploy - AFTER all configurations are loaded

@@ -517,12 +517,14 @@ class EvolutionWebhookView(APIView):
                 )
             
             # Get or create Evolution connection
+            # ✅ SECURITY FIX: Use settings instead of hardcoded credentials
+            from django.conf import settings
             connection, created = EvolutionConnection.objects.get_or_create(
                 name=f'Evolution {instance}',
                 defaults={
-                    'base_url': 'https://evo.rbtec.com.br',
-                    'api_key': '584B4A4A-0815-AC86-DC39-C38FC27E8E17',
-                    'webhook_url': f'https://alreasense-production.up.railway.app/api/webhooks/evolution/',
+                    'base_url': settings.EVOLUTION_API_URL,
+                    'api_key': settings.EVOLUTION_API_KEY,
+                    'webhook_url': f'{settings.BASE_URL}/api/webhooks/evolution/',
                     'is_active': True,
                     'status': 'active'
                 }

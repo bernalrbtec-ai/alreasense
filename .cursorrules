@@ -15,6 +15,129 @@ Leia SEMPRE antes de fazer mudanças:
 2. **SEMPRE TESTE ANTES DE COMMIT** - Crie scripts de teste locais
 3. **MULTI-TENANT FIRST** - Todo modelo precisa de `tenant_id`
 4. **WEBSOCKET PARA REAL-TIME** - Use Channels, não polling
+5. **🔐 SEGURANÇA PRIMEIRO** - Veja seção de segurança abaixo
+
+## 🔐 REGRAS DE SEGURANÇA (CRÍTICO)
+
+### ❌ NUNCA FAÇA ISSO:
+
+1. **NUNCA hardcode credenciais no código**
+   ```python
+   # ❌ ERRADO
+   API_KEY = '584B4A4A-0815-AC86-DC39-C38FC27E8E17'
+   SECRET_KEY = config('SECRET_KEY', default='chave-hardcoded')
+   ```
+
+2. **NUNCA exponha API keys em plaintext**
+   ```python
+   # ❌ ERRADO
+   return Response({'api_key': connection.api_key})
+   ```
+
+3. **NUNCA use CORS_ALLOW_ALL_ORIGINS = True**
+   ```python
+   # ❌ ERRADO
+   CORS_ALLOW_ALL_ORIGINS = True
+   ```
+
+4. **NUNCA commite secrets no Git**
+   - Sempre use variáveis de ambiente
+   - Use pre-commit hooks para detectar
+
+5. **NUNCA use defaults com valores reais**
+   ```python
+   # ❌ ERRADO
+   S3_KEY = getattr(settings, 'S3_KEY', 'valor-real-aqui')
+   ```
+
+### ✅ SEMPRE FAÇA ISSO:
+
+1. **SEMPRE use variáveis de ambiente**
+   ```python
+   # ✅ CORRETO
+   EVOLUTION_API_KEY = config('EVOLUTION_API_KEY')  # Sem default
+   SECRET_KEY = config('SECRET_KEY')  # Sem default
+   ```
+
+2. **SEMPRE mascare secrets em respostas de API**
+   ```python
+   # ✅ CORRETO
+   api_key_masked = '****' + api_key[-4:] if len(api_key) > 4 else ''
+   return Response({
+       'api_key': api_key_masked,
+       'api_key_set': bool(connection.api_key)
+   })
+   ```
+
+3. **SEMPRE restrinja CORS**
+   ```python
+   # ✅ CORRETO
+   CORS_ALLOW_ALL_ORIGINS = False
+   CORS_ALLOWED_ORIGINS = [
+       'https://alreasense-production.up.railway.app',
+       'http://localhost:5173',  # Apenas em dev
+   ]
+   ```
+
+4. **SEMPRE use pre-commit hooks**
+   ```bash
+   # Instalar e configurar
+   pip install pre-commit
+   pre-commit install
+   ```
+
+5. **SEMPRE logue acessos sensíveis**
+   ```python
+   # ✅ CORRETO
+   logger.warning(f"🔐 SENSITIVE ACCESS: {user} acessou {path}")
+   ```
+
+6. **SEMPRE implemente rate limiting**
+   ```python
+   # Para endpoints críticos de autenticação e configuração
+   @ratelimit(key='ip', rate='10/h', method='POST')
+   ```
+
+### 🛡️ PROTEÇÕES IMPLEMENTADAS:
+
+1. **Security Middleware** (`apps.common.security_middleware`)
+   - Auditoria automática de acessos sensíveis
+   - Security headers automáticos
+   - Rate limiting básico
+
+2. **Pre-commit Hooks** (`.pre-commit-config.yaml`)
+   - Detecta credenciais antes do commit
+   - Bloqueia secrets automaticamente
+   - Verifica debug prints
+
+3. **API Key Masking** (todas as views de configuração)
+   - Keys sempre mascaradas em GET
+   - Flag `api_key_set` indica se configurada
+   - Aceita update mas nunca retorna completa
+
+4. **Fail Securely**
+   - Se credencial não existe → sistema falha (comportamento desejado)
+   - Melhor quebrar do que usar defaults inseguros
+
+### 📋 CHECKLIST DE SEGURANÇA:
+
+Antes de commitar código novo, verifique:
+
+- [ ] Nenhuma credencial hardcoded?
+- [ ] Secrets mascarados em APIs?
+- [ ] Variáveis de ambiente usadas?
+- [ ] CORS restrito?
+- [ ] Endpoints sensíveis com autenticação?
+- [ ] Rate limiting implementado?
+- [ ] Logs de auditoria adicionados?
+- [ ] Pre-commit hooks passaram?
+
+### 📚 DOCUMENTAÇÃO DE SEGURANÇA:
+
+- `ANALISE_SEGURANCA_COMPLETA.md` - Análise detalhada
+- `README_SEGURANCA_URGENTE.md` - Guia rápido
+- `REFATORACAO_COMPLETA.md` - Mudanças aplicadas
+- `ROTACAO_CREDENCIAIS_URGENTE.md` - Como rotacionar
 
 ## 🎯 STACK ATUAL
 

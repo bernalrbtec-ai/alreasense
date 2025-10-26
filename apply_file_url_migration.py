@@ -77,3 +77,6 @@ print("✅ MIGRATION COMPLETA!")
 print("=" * 80)
 print("\n💡 Agora os uploads de áudio com URLs longas devem funcionar!")
 
+
+
+

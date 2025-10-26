@@ -196,3 +196,6 @@ Sugestão: **Link Preview** (quick win, 2-3h, alto impacto)
 **📌 LEMBRE-SE:**  
 Antes de implementar qualquer feature, criar scripts de teste e validar a lógica localmente! [[memory:9724794]]
 
+
+
+

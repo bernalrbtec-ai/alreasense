@@ -60,3 +60,6 @@ LIMIT 5;
 -- ALTER TABLE chat_messageattachment ALTER COLUMN file_url TYPE VARCHAR(500);
 -- ⚠️  ATENÇÃO: Reverter vai FALHAR se houver URLs > 500 caracteres!
 
+
+
+

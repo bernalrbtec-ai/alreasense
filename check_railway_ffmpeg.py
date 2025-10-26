@@ -72,3 +72,6 @@ print("   - '✅ [AUDIO] Conversão completa!' (deve aparecer agora!)")
 print("   - '📤 [CHAT] Enviando via Evolution API...'")
 print("=" * 70)
 
+
+
+

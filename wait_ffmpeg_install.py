@@ -99,3 +99,6 @@ print()
 print("4. ✅ Se funcionar, o sistema está 100% pronto!")
 print("=" * 80)
 
+
+
+

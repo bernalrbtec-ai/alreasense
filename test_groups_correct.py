@@ -59,3 +59,6 @@ else:
     print(f"❌ Erro: {response.status_code}")
     print(response.text)
 
+
+
+

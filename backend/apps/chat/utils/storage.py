@@ -21,8 +21,9 @@ logger = logging.getLogger(__name__)
 LOCAL_STORAGE_PATH = getattr(settings, 'CHAT_LOCAL_STORAGE_PATH', '/mnt/storage/whatsapp/')
 S3_BUCKET = getattr(settings, 'S3_BUCKET', 'flow-attachments')
 S3_ENDPOINT = getattr(settings, 'S3_ENDPOINT_URL', 'https://bucket-production-8fb1.up.railway.app')
-S3_ACCESS_KEY = getattr(settings, 'S3_ACCESS_KEY', 'u2gh8aomMEdqPFW1JIlTn7VcCUhRCobL')
-S3_SECRET_KEY = getattr(settings, 'S3_SECRET_KEY', 'zSMwLiOH1fURqSNX8zMtMYKBjrScDQYynCW2TbI2UuXM7Bti')
+# ✅ SECURITY FIX: No default values - must be set in settings
+S3_ACCESS_KEY = getattr(settings, 'S3_ACCESS_KEY')
+S3_SECRET_KEY = getattr(settings, 'S3_SECRET_KEY')
 S3_REGION = getattr(settings, 'S3_REGION', 'us-east-1')
 
 # Cliente S3

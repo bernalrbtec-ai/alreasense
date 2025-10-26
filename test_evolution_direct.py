@@ -85,3 +85,6 @@ for endpoint in endpoints_to_test:
 print("\n" + "=" * 80)
 print("✅ TESTES CONCLUÍDOS!")
 
+
+
+

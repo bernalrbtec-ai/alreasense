@@ -120,3 +120,6 @@ print("   ✅ Sistema de áudio está 100% operacional!")
 print("   ✅ Pode gravar áudios e eles chegam como MP3 no WhatsApp!")
 print("=" * 80)
 
+
+
+

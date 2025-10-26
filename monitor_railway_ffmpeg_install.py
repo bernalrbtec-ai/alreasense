@@ -84,3 +84,6 @@ print()
 print("4. 🐛 Se NÃO funcionar, me envie os logs completos do Railway")
 print("=" * 70)
 
+
+
+
