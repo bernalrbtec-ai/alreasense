@@ -135,11 +135,11 @@ export default function EvolutionConfigPage() {
       </div>
 
       {/* Status Card */}
-      <Card className="p-6 border-l-4 ${
+      <Card className={`p-6 border-l-4 ${
         stats.status === 'active' ? 'border-l-green-500 bg-green-50' :
         stats.status === 'inactive' ? 'border-l-gray-400 bg-gray-50' :
         'border-l-red-500 bg-red-50'
-      }">
+      }`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className={`h-3 w-3 rounded-full animate-pulse ${
@@ -340,7 +340,7 @@ export default function EvolutionConfigPage() {
           <div className="text-sm text-blue-800">
             <p className="font-medium mb-1">ℹ️ Configuração via Variáveis de Ambiente</p>
             <p>
-              A URL e API Key da Evolution API são configuradas via variáveis de ambiente (<code className="bg-blue-100 px-1 rounded">EVOLUTION_API_URL</code> e <code className="bg-blue-100 px-1 rounded">EVOLUTION_API_KEY</code>).
+              A URL e API Key da Evolution API são configuradas via variáveis de ambiente (<code className="bg-blue-100 px-1 rounded">EVO_BASE_URL</code> e <code className="bg-blue-100 px-1 rounded">EVO_API_KEY</code>).
               Entre em contato com o administrador do sistema para alterações.
             </p>
           </div>

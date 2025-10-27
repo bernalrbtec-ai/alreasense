@@ -684,39 +684,12 @@ async def start_chat_consumers():
         logger.info(f"RABBITMQ_DEFAULT_USER: {env_user}")
         logger.info(f"RABBITMQ_DEFAULT_PASS presente: {env_pass != 'NOT_SET'} (len={len(env_pass) if env_pass != 'NOT_SET' else 0})")
         
+        # ✅ FIX FINAL: Usar URL DIRETAMENTE como Campaigns Consumer
+        # Railway já fornece URL com encoding correto
+        # Aplicar encoding novamente causa DOUBLE ENCODING e falha de autenticação
         rabbitmq_url = settings.RABBITMQ_URL
         
-        # ✅ FIX: SEMPRE fazer URL encoding na senha (não apenas quando tem ~)
-        from urllib.parse import quote, urlparse, urlunparse
-        
-        try:
-            parsed = urlparse(rabbitmq_url)
-            if parsed.password:
-                # SEMPRE re-encode a senha para garantir
-                logger.info(f"🔐 [CHAT CONSUMER] Aplicando URL encoding na senha (sempre)")
-                
-                # Reconstruct URL com senha encoded
-                encoded_password = quote(parsed.password, safe='')
-                
-                # Também encode o username se necessário
-                encoded_username = quote(parsed.username, safe='') if parsed.username else ''
-                
-                netloc = f"{encoded_username}:{encoded_password}@{parsed.hostname}"
-                if parsed.port:
-                    netloc += f":{parsed.port}"
-                
-                rabbitmq_url = urlunparse((
-                    parsed.scheme,
-                    netloc,
-                    parsed.path or '/',
-                    parsed.params,
-                    parsed.query,
-                    parsed.fragment
-                ))
-                logger.info(f"✅ [CHAT CONSUMER] URL completamente encoded")
-        except Exception as e:
-            logger.error(f"❌ [CHAT CONSUMER] Erro ao fazer URL encoding: {e}", exc_info=True)
-        
+        # Log seguro (mascarar credenciais)
         safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
         
         logger.info(f"settings.RABBITMQ_URL: {safe_url}")
