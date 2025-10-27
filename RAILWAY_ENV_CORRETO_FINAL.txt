@@ -1,0 +1,105 @@
+═══════════════════════════════════════════════════════════════
+🚀 VARIÁVEIS DE AMBIENTE - RAILWAY BACKEND (CORRETO)
+Data: 27 de Outubro de 2025 - Tarde
+NOVO RABBITMQ COM CREDENCIAIS CORRETAS
+═══════════════════════════════════════════════════════════════
+
+INSTRUÇÕES:
+1. Railway Dashboard → Backend Service → Variables
+2. Clicar em "Raw Editor" (modo texto)
+3. DELETAR TODO O CONTEÚDO ANTIGO
+4. Copiar o conteúdo abaixo (linhas 14-38)
+5. Colar no Raw Editor
+6. Salvar → Railway faz redeploy automático
+
+═══════════════════════════════════════════════════════════════
+
+AI_EMBEDDING_MODEL="qwen-mini-embeddings"
+AI_MODEL_NAME="qwen-local"
+N8N_AI_WEBHOOK=""
+DEBUG="False"
+SECRET_KEY="N;.!iB5@sw?D2wJPr{Ysmt5][R%5.aHyAuvNpM_@DOb:OX*<.f"
+LOG_FORMAT="json"
+LOG_LEVEL="INFO"
+ALLOWED_HOSTS="alreasense-backend-production.up.railway.app,localhost,127.0.0.1"
+CORS_ALLOWED_ORIGINS="https://alreasense-production.up.railway.app"
+CSRF_TRUSTED_ORIGINS="https://alreasense-production.up.railway.app"
+ALLOW_ALL_WEBHOOK_ORIGINS="true"
+DATABASE_URL="postgresql://postgres:wDxByyoBGIzFwodHccWSkeLmqCcuwpVt@postgres-59a0986d.railway.internal:5432/railway"
+REDIS_URL="redis://default:AJSfSJmpfWSdYZxSIfLyjPTsdDyUULsu@redis-3bz0.railway.internal:6379"
+CHANNELS_REDIS_URL="redis://default:AJSfSJmpfWSdYZxSIfLyjPTsdDyUULsu@redis-3bz0.railway.internal:6379"
+RABBITMQ_URL="amqp://Tr3DMwZuxCfh4tlF:wy7TTVV~LkTmOBJD6prdbdHkaRVExaVF@shuttle.proxy.rlwy.net:54908"
+RABBITMQ_PRIVATE_URL="amqp://Tr3DMwZuxCfh4tlF:wy7TTVV~LkTmOBJD6prdbdHkaRVExaVF@rabbitmq.railway.internal:5672"
+RABBITMQ_DEFAULT_USER="Tr3DMwZuxCfh4tlF"
+RABBITMQ_DEFAULT_PASS="wy7TTVV~LkTmOBJD6prdbdHkaRVExaVF"
+RABBITMQ_NODENAME="rabbit@rabbitmq"
+EVO_BASE_URL="https://evo.rbtec.com.br"
+EVO_API_KEY="E2413B31-B12C-46ED-ACA0-7EBCA8596A08"
+STRIPE_PUBLISHABLE_KEY=""
+STRIPE_SECRET_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+
+═══════════════════════════════════════════════════════════════
+✅ MUDANÇAS APLICADAS (NOVAS CREDENCIAIS)
+═══════════════════════════════════════════════════════════════
+
+🔄 RABBITMQ - CREDENCIAIS ATUALIZADAS:
+Linha 27: RABBITMQ_URL
+   ANTES: amqp://75jkOdrEEjQmQLFs3:VZgI...@shinkansen.proxy...30709
+   AGORA: amqp://Tr3DMwZuxCfh4tlF:wy7T...@shuttle.proxy...54908
+   
+Linha 28: RABBITMQ_PRIVATE_URL
+   ANTES: amqp://75jkOdrEEjQmQLFs3:VZgI...@rabbitmq.railway.internal:5672
+   AGORA: amqp://Tr3DMwZuxCfh4tlF:wy7T...@rabbitmq.railway.internal:5672
+   
+Linha 29: RABBITMQ_DEFAULT_USER
+   ANTES: 75jkOdrEEjQmQLFs3
+   AGORA: Tr3DMwZuxCfh4tlF
+   
+Linha 30: RABBITMQ_DEFAULT_PASS
+   ANTES: VZgIFDdCNzemdc3ToXzbLqeNhc3lluvk
+   AGORA: wy7TTVV~LkTmOBJD6prdbdHkaRVExaVF
+
+═══════════════════════════════════════════════════════════════
+📊 LOGS ESPERADOS
+═══════════════════════════════════════════════════════════════
+
+🔍 [DEBUG] RABBITMQ_PRIVATE_URL env: amqp://Tr3DMwZuxCfh4tlF:******@rabbitmq.railway.internal:5672
+✅ [SETTINGS] Usando RABBITMQ_PRIVATE_URL (internal - recomendado)
+✅ [SETTINGS] RABBITMQ_URL construída manualmente de DEFAULT_*
+   User: Tr3DMwZuxCfh4tlF  ← NOVO!
+   Pass length: 32 chars
+   Pass preview: wy7T...xaVF  ← NOVO!
+✅ [SETTINGS] RABBITMQ_URL final: amqp://***:***@rabbitmq.railway.internal:5672
+✅ [SETTINGS] RABBITMQ_URL length: 92 chars
+
+🚀 [RABBITMQ] RabbitMQ Consumer (aio-pika) inicializado em background...
+✅ [RABBITMQ] Consumer pronto para processar campanhas!
+
+🚀 [FLOW CHAT] Iniciando Flow Chat Consumer...
+✅ [CHAT CONSUMER] Conexão RabbitMQ estabelecida com sucesso!
+✅ [CHAT CONSUMER] Channel criado com sucesso!
+✅ [FLOW CHAT] Consumer pronto para processar mensagens!
+
+❌ NÃO DEVE APARECER:
+- ACCESS_REFUSED
+- "User: 75jkOdrEEjQmQLFs3" (credencial antiga)
+- "Pass preview: VZgI...luvk" (senha antiga)
+
+═══════════════════════════════════════════════════════════════
+⚠️ IMPORTANTE
+═══════════════════════════════════════════════════════════════
+
+✅ Novo RabbitMQ criado com credenciais limpas
+✅ User: Tr3DMwZuxCfh4tlF (16 chars)
+✅ Pass: wy7TTVV~LkTmOBJD6prdbdHkaRVExaVF (32 chars, com ~)
+✅ Porta proxy: 54908 (nova)
+✅ Host interno: rabbitmq.railway.internal (padrão)
+
+⚠️ Senha tem ~ (tilde) mas NÃO vai truncar porque:
+   - Settings.py detecta truncamento (len < 100)
+   - Reconstrói usando DEFAULT_USER + DEFAULT_PASS
+   - Essas variáveis vêm completas do Railway
+
+═══════════════════════════════════════════════════════════════
+
