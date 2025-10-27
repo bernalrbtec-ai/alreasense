@@ -1,4 +1,5 @@
 # Generated manually for performance optimization
+# FIXED VERSION - Matches actual database execution
 from django.db import migrations
 
 
@@ -10,46 +11,42 @@ class Migration(migrations.Migration):
     operations = [
         migrations.RunSQL(
             sql="""
-                -- ✅ PERFORMANCE: Composite indexes for common queries
-                -- ⚠️  SAFE: Only creates indexes if tables exist
+                -- ✅ PERFORMANCE: Composite indexes (REAL EXECUTION)
+                -- Tabelas corretas: campaigns_contact, campaigns_log
                 
-                DO $$
-                BEGIN
-                    -- Campaign: tenant + status + ordering (para lista de campanhas)
-                    IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'campaigns_campaign') THEN
-                        CREATE INDEX IF NOT EXISTS idx_camp_tenant_status_created 
-                        ON campaigns_campaign(tenant_id, status, created_at DESC);
-                        
-                        -- Campaign: tenant + status (para campanhas ativas)
-                        CREATE INDEX IF NOT EXISTS idx_camp_tenant_active 
-                        ON campaigns_campaign(tenant_id, status) 
-                        WHERE status IN ('active', 'paused', 'scheduled');
-                    END IF;
-                    
-                    -- CampaignContact: campaign + status (para progresso de campanha)
-                    IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'campaigns_campaigncontact') THEN
-                        CREATE INDEX IF NOT EXISTS idx_cc_campaign_status 
-                        ON campaigns_campaigncontact(campaign_id, status);
-                        
-                        -- CampaignContact: campaign + status + retry (para identificar failures)
-                        CREATE INDEX IF NOT EXISTS idx_cc_campaign_failed 
-                        ON campaigns_campaigncontact(campaign_id, status, retry_count) 
-                        WHERE status = 'failed';
-                    END IF;
-                    
-                    -- CampaignLog: campaign + level + created (para monitoring)
-                    IF EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'campaigns_campaignlog') THEN
-                        CREATE INDEX IF NOT EXISTS idx_log_campaign_level_time 
-                        ON campaigns_campaignlog(campaign_id, level, created_at DESC);
-                    END IF;
-                END $$;
+                -- CampaignContact (campaigns_contact)
+                CREATE INDEX IF NOT EXISTS idx_cc_campaign_status 
+                ON campaigns_contact(campaign_id, status);
+                
+                CREATE INDEX IF NOT EXISTS idx_cc_campaign_failed 
+                ON campaigns_contact(campaign_id, status, retry_count) 
+                WHERE status = 'failed';
+                
+                CREATE INDEX IF NOT EXISTS idx_cc_contact_status 
+                ON campaigns_contact(contact_id, status);
+                
+                -- CampaignLog (campaigns_log) - usando log_type e severity
+                CREATE INDEX IF NOT EXISTS idx_log_campaign_type_time 
+                ON campaigns_log(campaign_id, log_type, created_at DESC);
+                
+                CREATE INDEX IF NOT EXISTS idx_log_tenant_severity 
+                ON campaigns_log(tenant_id, severity, created_at DESC);
+                
+                -- CampaignNotification
+                CREATE INDEX IF NOT EXISTS idx_notif_tenant_status 
+                ON campaigns_notification(tenant_id, status, created_at DESC);
+                
+                CREATE INDEX IF NOT EXISTS idx_notif_campaign_status 
+                ON campaigns_notification(campaign_id, status);
             """,
             reverse_sql="""
-                DROP INDEX IF EXISTS idx_camp_tenant_status_created;
-                DROP INDEX IF EXISTS idx_camp_tenant_active;
                 DROP INDEX IF EXISTS idx_cc_campaign_status;
                 DROP INDEX IF EXISTS idx_cc_campaign_failed;
-                DROP INDEX IF EXISTS idx_log_campaign_level_time;
+                DROP INDEX IF EXISTS idx_cc_contact_status;
+                DROP INDEX IF EXISTS idx_log_campaign_type_time;
+                DROP INDEX IF EXISTS idx_log_tenant_severity;
+                DROP INDEX IF EXISTS idx_notif_tenant_status;
+                DROP INDEX IF EXISTS idx_notif_campaign_status;
             """
         ),
     ]
