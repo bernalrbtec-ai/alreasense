@@ -324,16 +324,35 @@ CHANNEL_LAYERS = {
 # ✅ IMPROVEMENT: Default for build time, real value from env at runtime
 # ✅ SECURITY FIX: Usar variável correta e sem default inseguro em produção
 # Default localhost apenas para build time (collectstatic)
-RABBITMQ_URL = config('RABBITMQ_URL', default='amqp://guest:guest@localhost:5672/')
+
+# 🔍 DEBUG: Verificar todas as possíveis variáveis RabbitMQ
+import os
+print(f"🔍 [DEBUG] RABBITMQ_URL env: {os.environ.get('RABBITMQ_URL', 'Not set')[:50]}")
+print(f"🔍 [DEBUG] RABBITMQ_PRIVATE_URL env: {os.environ.get('RABBITMQ_PRIVATE_URL', 'Not set')[:50]}")
+print(f"🔍 [DEBUG] CLOUDAMQP_URL env: {os.environ.get('CLOUDAMQP_URL', 'Not set')[:50]}")
+
+# Tentar múltiplas variáveis (Railway pode usar nomes diferentes)
+RABBITMQ_URL = config('RABBITMQ_URL', default=None)
+if not RABBITMQ_URL or 'localhost' in RABBITMQ_URL:
+    RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default=None)
+    if RABBITMQ_URL:
+        print(f"⚠️ [SETTINGS] Usando RABBITMQ_PRIVATE_URL (variável antiga)")
+if not RABBITMQ_URL or 'localhost' in RABBITMQ_URL:
+    RABBITMQ_URL = config('CLOUDAMQP_URL', default=None)
+    if RABBITMQ_URL:
+        print(f"⚠️ [SETTINGS] Usando CLOUDAMQP_URL")
+if not RABBITMQ_URL:
+    RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
+    print(f"⚠️ [SETTINGS] Nenhuma variável RabbitMQ encontrada! Usando localhost")
 
 # Log seguro (mascarar credenciais)
 if RABBITMQ_URL and 'localhost' not in RABBITMQ_URL:
     # Em produção, mostrar apenas o host
     import re
     safe_url = re.sub(r'://.*@', '://***:***@', RABBITMQ_URL)
-    print(f"🔧 [SETTINGS] RABBITMQ_URL: {safe_url}")
+    print(f"✅ [SETTINGS] RABBITMQ_URL final: {safe_url}")
 else:
-    print(f"🔧 [SETTINGS] RABBITMQ_URL: localhost (dev/build mode)")
+    print(f"⚠️ [SETTINGS] RABBITMQ_URL final: localhost (dev/build mode)")
 
 # MongoDB removido - usando PostgreSQL com pgvector
 
