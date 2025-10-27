@@ -810,11 +810,24 @@ def handle_message_update(data, tenant):
         
         if message.status != new_status:
             old_status = message.status
+            
+            # ✅ CORREÇÃO CRÍTICA: Ignorar status READ para mensagens INCOMING
+            # Mensagens incoming são marcadas como lidas pelo USUÁRIO via mark_as_read(),
+            # não pelo WhatsApp via webhook. WhatsApp envia READ apenas para mensagens
+            # OUTGOING (quando o destinatário lê nossa mensagem).
+            if new_status == 'seen' and message.direction == 'incoming':
+                logger.info(f"⏸️ [WEBHOOK UPDATE] Ignorando status READ para mensagem INCOMING")
+                logger.info(f"   Direction: {message.direction}")
+                logger.info(f"   Mensagens incoming são marcadas como lidas pelo USUÁRIO")
+                logger.info(f"   WhatsApp não controla status de leitura de mensagens que ELE enviou para NÓS")
+                return
+            
             message.status = new_status
             message.evolution_status = status_value
             message.save(update_fields=['status', 'evolution_status'])
             
             logger.info(f"✅ [WEBHOOK UPDATE] Status atualizado!")
+            logger.info(f"   Direction: {message.direction}")
             logger.info(f"   {old_status} → {new_status}")
             logger.info(f"   Evolution status: {status_value}")
             

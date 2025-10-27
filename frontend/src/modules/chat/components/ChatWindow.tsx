@@ -39,20 +39,42 @@ export function ChatWindow() {
 
   // 📖 Marcar mensagens como lidas quando abre a conversa
   useEffect(() => {
-    if (activeConversation) {
-      const markAsRead = async () => {
-        try {
-          await api.post(`/chat/conversations/${activeConversation.id}/mark_as_read/`);
-          console.log('✅ Mensagens marcadas como lidas');
-        } catch (error) {
-          console.error('❌ Erro ao marcar como lidas:', error);
-        }
-      };
+    if (!activeConversation) return;
+    
+    let isCancelled = false;
+    
+    const markAsRead = async () => {
+      // ✅ CORREÇÃO 1: Verificar se conversa ainda está ativa (usuário não saiu)
+      if (isCancelled) {
+        console.log('⏸️ [MARK READ] Marcação cancelada - conversa mudou antes do timeout');
+        return;
+      }
       
-      // Marcar como lida após 1 segundo (simular visualização)
-      const timeout = setTimeout(markAsRead, 1000);
-      return () => clearTimeout(timeout);
-    }
+      // ✅ CORREÇÃO 2: Verificar novamente no momento da marcação
+      const { activeConversation: current } = useChatStore.getState();
+      if (current?.id !== activeConversation.id) {
+        console.log('⏸️ [MARK READ] Marcação cancelada - conversa diferente da que foi aberta');
+        return;
+      }
+      
+      try {
+        console.log('⏰ [MARK READ] Marcando conversa como lida após 2.5s de visualização');
+        await api.post(`/chat/conversations/${activeConversation.id}/mark_as_read/`);
+        console.log('✅ [MARK READ] Mensagens marcadas como lidas com sucesso');
+      } catch (error) {
+        console.error('❌ [MARK READ] Erro ao marcar como lidas:', error);
+      }
+    };
+    
+    // ✅ CORREÇÃO 3: Aumentar timeout de 1s → 2.5s (tempo razoável para usuário ver)
+    console.log('⏰ [MARK READ] Iniciando timeout de 2.5s para marcar como lida');
+    const timeout = setTimeout(markAsRead, 2500);
+    
+    return () => {
+      isCancelled = true;
+      clearTimeout(timeout);
+      console.log('🔌 [MARK READ] Limpando timeout (usuário saiu da conversa)');
+    };
   }, [activeConversation?.id]);
 
   // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
