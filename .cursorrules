@@ -91,13 +91,41 @@ Leia SEMPRE antes de fazer mudanças:
    # Via Railway CLI ou comando manual
    ```
 
-### 🎓 LIÇÃO APRENDIDA (Out/2025):
+### 🎓 LIÇÕES APRENDIDAS (Out/2025):
 
+#### 1️⃣ Migrations Conflitantes
 **Problema:** Criamos `0002_add_performance_indexes.py` em campaigns sem verificar.
 **Resultado:** Conflito com `0010_add_performance_indexes.py` já existente.
 **Erro:** `Conflicting migrations detected; multiple leaf nodes`
 **Solução:** Deletar a migration duplicada, usar a existente.
 **Prevenção:** SEMPRE executar `ls migrations/` antes de criar nova.
+
+#### 2️⃣ Variável de Ambiente RabbitMQ Incorreta
+**Problema:** `settings.py` buscava `RABBITMQ_PRIVATE_URL` mas Railway usa `RABBITMQ_URL`.
+**Resultado:** Conexão falhava para `localhost:5672` com erro `[Errno 111] Connect call failed`.
+**Código Errado:**
+```python
+RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
+```
+**Solução:** Usar nome correto da variável + log seguro mascarando credenciais.
+**Prevenção:** 
+- Verificar nomes exatos das variáveis no Railway/ambiente
+- NUNCA usar credenciais hardcoded como fallback
+- Sempre mascarar credenciais em logs
+
+#### 3️⃣ Credenciais Hardcoded em Fallbacks
+**Problema:** `rabbitmq_consumer.py` tinha credenciais do Railway hardcoded como fallback.
+**Resultado:** Vazamento de credenciais no código fonte.
+**Código Errado:**
+```python
+rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 
+    'amqp://user:pass@rabbitmq.railway.internal:5672')
+```
+**Solução:** Sempre usar `settings.RABBITMQ_URL` direto, sem fallback inseguro.
+**Prevenção:** 
+- NUNCA colocar credenciais reais em defaults/fallbacks
+- Se ambiente não tiver variável, melhor falhar do que usar credencial insegura
+- Usar pre-commit hooks para detectar padrões de credenciais
 
 ---
 
