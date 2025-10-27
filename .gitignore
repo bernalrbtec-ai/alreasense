@@ -72,3 +72,11 @@ htmlcov/
 *.bak
 *.tmp
 .cache/
+
+# Security - API Keys & Secrets
+NOVA_EVO_API_KEY.txt
+*_API_KEY*.txt
+.temp_api_key.txt
+scripts/.temp_api_key.txt
+*SECRET*.txt
+*PASSWORD*.txt
