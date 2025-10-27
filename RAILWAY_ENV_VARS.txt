@@ -1,0 +1,70 @@
+# ==========================================
+# ALREA SENSE - Railway Production Environment
+# Data: 27 de Outubro de 2025
+# ==========================================
+# 
+# INSTRUÇÕES:
+# 1. Copie todo o conteúdo abaixo
+# 2. No Railway Dashboard → Backend Service → Variables
+# 3. Clique em "Raw Editor" (modo texto)
+# 4. Cole este conteúdo (vai substituir tudo)
+# 5. Salve e faça redeploy
+# ==========================================
+
+AI_EMBEDDING_MODEL="qwen-mini-embeddings"
+AI_MODEL_NAME="qwen-local"
+N8N_AI_WEBHOOK=""
+DEBUG="False"
+SECRET_KEY="N;.!iB5@sw?D2wJPr{Ysmt5][R%5.aHyAuvNpM_@DOb:OX*<.f"
+LOG_FORMAT="json"
+LOG_LEVEL="INFO"
+ALLOWED_HOSTS="alreasense-backend-production.up.railway.app,localhost,127.0.0.1"
+CORS_ALLOWED_ORIGINS="https://alreasense-production.up.railway.app"
+CSRF_TRUSTED_ORIGINS="https://alreasense-production.up.railway.app"
+ALLOW_ALL_WEBHOOK_ORIGINS="true"
+DATABASE_URL="postgresql://postgres:wDxByyoBGIzFwodHccWSkeLmqCcuwpVt@postgres-59a0986d.railway.internal:5432/railway"
+REDIS_URL="redis://default:AJSfSJmpfWSdYZxSIfLyjPTsdDyUULsu@redis-3bz0.railway.internal:6379"
+CHANNELS_REDIS_URL="redis://default:AJSfSJmpfWSdYZxSIfLyjPTsdDyUULsu@redis-3bz0.railway.internal:6379"
+RABBITMQ_URL="amqp://75jk0mkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672"
+RABBITMQ_DEFAULT_USER="75jk0mkcjQmQLFs3"
+RABBITMQ_DEFAULT_PASS="~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ"
+EVO_BASE_URL="https://evo.rbtec.com.br"
+EVO_API_KEY="E2413B31-B12C-46ED-ACA0-7EBCA8596A08"
+STRIPE_PUBLISHABLE_KEY=""
+STRIPE_SECRET_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+
+# ==========================================
+# ✅ MUDANÇAS APLICADAS
+# ==========================================
+# 
+# ADICIONADAS 2 NOVAS VARIÁVEIS:
+# - RABBITMQ_DEFAULT_USER (linha 28)
+# - RABBITMQ_DEFAULT_PASS (linha 29)
+#
+# POR QUÊ?
+# A variável RABBITMQ_URL está sendo truncada pelo Railway
+# (caractere ~ causa problema). O sistema detecta o truncamento
+# e reconstrói a URL usando as credenciais separadas.
+#
+# ==========================================
+# 📊 LOGS ESPERADOS APÓS DEPLOY
+# ==========================================
+#
+# ✅ [SETTINGS] RABBITMQ_URL construída manualmente de DEFAULT_USER + DEFAULT_PASS
+#    User: 75jk0mkcjQmQLFs3
+#    Pass length: 34 chars
+# ✅ [SETTINGS] RABBITMQ_URL final: amqp://***:***@rabbitmq.railway.internal:5672
+# ✅ [SETTINGS] RABBITMQ_URL length: 113 chars
+#
+# 🚀 [FLOW CHAT] Iniciando Flow Chat Consumer...
+# ✅ [CHAT CONSUMER] Conexão RabbitMQ estabelecida com sucesso!
+# ✅ [CHAT CONSUMER] Channel criado com sucesso!
+# ✅ [FLOW CHAT] Consumer pronto para processar mensagens!
+#
+# ❌ NÃO DEVE APARECER:
+# - ACCESS_REFUSED
+# - ERRO DE AUTENTICAÇÃO RABBITMQ
+#
+# ==========================================
+
