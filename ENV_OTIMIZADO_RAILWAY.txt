@@ -1,0 +1,88 @@
+# ========================================
+# 🚀 ALREA SENSE - RAILWAY PRODUCTION ENV
+# ========================================
+# Atualizado: 27 Out 2025
+# ========================================
+
+# ========================================
+# 🔐 DJANGO CORE
+# ========================================
+SECRET_KEY="N;.!iB5@sw?D2wJPr{Ysmt5][R%5.aHyAuvNpM_@DOb:OX*<.f"
+DEBUG="False"
+ALLOWED_HOSTS="alreasense-backend-production.up.railway.app,localhost,127.0.0.1"
+
+# ========================================
+# 🗄️ DATABASE (PostgreSQL 15 + pgvector)
+# ========================================
+DATABASE_URL="postgresql://postgres:wDxByyoBGIzFwodHccWSkeLmqCcuwpVt@postgres-59a0986d.railway.internal:5432/railway"
+
+# ========================================
+# 🔴 REDIS (Cache + Channels)
+# ========================================
+REDIS_URL="redis://default:AJSfSJmpfWSdYZxSIfLyjPTsdDyUULsu@redis-3bz0.railway.internal:6379"
+CHANNELS_REDIS_URL="redis://default:AJSfSJmpfWSdYZxSIfLyjPTsdDyUULsu@redis-3bz0.railway.internal:6379"
+
+# ========================================
+# 🐰 RABBITMQ (Mensageria - aio-pika)
+# ========================================
+# ✅ CRÍTICO: Usar URL INTERNAL para comunicação entre serviços
+RABBITMQ_URL="amqp://75jk0mkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672"
+
+# ⚠️ REMOVIDO: Projeto NÃO usa Celery! Usa RabbitMQ + aio-pika
+# CELERY_BROKER_URL="redis://..."
+# CELERY_RESULT_BACKEND="redis://..."
+
+# ========================================
+# 🌐 CORS & CSRF
+# ========================================
+CORS_ALLOWED_ORIGINS="https://alreasense-production.up.railway.app"
+CSRF_TRUSTED_ORIGINS="https://alreasense-production.up.railway.app"
+ALLOW_ALL_WEBHOOK_ORIGINS="true"
+
+# ========================================
+# 💳 STRIPE (Pagamentos)
+# ========================================
+STRIPE_SECRET_KEY=""
+STRIPE_PUBLISHABLE_KEY=""
+STRIPE_WEBHOOK_SECRET=""
+
+# ========================================
+# 📱 EVOLUTION API (WhatsApp)
+# ========================================
+EVO_BASE_URL="https://evo.rbtec.com.br"
+# ⚠️ ATENÇÃO: Esta API key pode ter vazado! Considere rotacionar!
+EVO_API_KEY="584B4A4A-0815-AC86-DC39-C38FC27E8E17"
+
+# ========================================
+# 🤖 AI & EMBEDDINGS
+# ========================================
+N8N_AI_WEBHOOK=""
+AI_MODEL_NAME="qwen-local"
+AI_EMBEDDING_MODEL="qwen-mini-embeddings"
+
+# ========================================
+# 📊 LOGGING
+# ========================================
+LOG_LEVEL="INFO"
+LOG_FORMAT="json"
+
+# ========================================
+# ⚠️ REMOVIDO: MongoDB NÃO é mais usado!
+# ========================================
+# O projeto migrou para PostgreSQL + pgvector
+# Variáveis removidas:
+# - MONGOHOST
+# - MONGOPORT
+# - MONGOUSER
+# - MONGOPASSWORD
+# - MONGO_URL
+
+# ========================================
+# 📝 NOTAS IMPORTANTES
+# ========================================
+# 1. ✅ RABBITMQ_URL agora configurado (era isso que faltava!)
+# 2. ❌ Celery removido (projeto usa RabbitMQ + aio-pika)
+# 3. ❌ MongoDB removido (projeto usa PostgreSQL + pgvector)
+# 4. ⚠️ EVO_API_KEY: considere rotacionar se vazou
+# 5. ✅ RABBITMQ_URL usa internal URL (mais rápido e seguro)
+

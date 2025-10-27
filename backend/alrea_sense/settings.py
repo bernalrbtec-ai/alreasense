@@ -331,16 +331,24 @@ print(f"🔍 [DEBUG] RABBITMQ_URL env: {os.environ.get('RABBITMQ_URL', 'Not set'
 print(f"🔍 [DEBUG] RABBITMQ_PRIVATE_URL env: {os.environ.get('RABBITMQ_PRIVATE_URL', 'Not set')[:50]}")
 print(f"🔍 [DEBUG] CLOUDAMQP_URL env: {os.environ.get('CLOUDAMQP_URL', 'Not set')[:50]}")
 
-# Tentar múltiplas variáveis (Railway pode usar nomes diferentes)
-RABBITMQ_URL = config('RABBITMQ_URL', default=None)
-if not RABBITMQ_URL or 'localhost' in RABBITMQ_URL:
-    RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default=None)
+# ✅ PRIORIDADE: RABBITMQ_PRIVATE_URL (internal) > RABBITMQ_URL (proxy) > localhost
+# Railway cria RABBITMQ_PRIVATE_URL (internal) e RABBITMQ_URL (proxy externo)
+# Para comunicação entre serviços no Railway, INTERNAL é mais rápido e confiável
+RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default=None)
+if RABBITMQ_URL:
+    print(f"✅ [SETTINGS] Usando RABBITMQ_PRIVATE_URL (internal - recomendado)")
+else:
+    # Fallback para RABBITMQ_URL (proxy externo)
+    RABBITMQ_URL = config('RABBITMQ_URL', default=None)
     if RABBITMQ_URL:
-        print(f"⚠️ [SETTINGS] Usando RABBITMQ_PRIVATE_URL (variável antiga)")
-if not RABBITMQ_URL or 'localhost' in RABBITMQ_URL:
-    RABBITMQ_URL = config('CLOUDAMQP_URL', default=None)
-    if RABBITMQ_URL:
-        print(f"⚠️ [SETTINGS] Usando CLOUDAMQP_URL")
+        print(f"⚠️ [SETTINGS] Usando RABBITMQ_URL (proxy externo)")
+    else:
+        # Fallback para CloudAMQP
+        RABBITMQ_URL = config('CLOUDAMQP_URL', default=None)
+        if RABBITMQ_URL:
+            print(f"⚠️ [SETTINGS] Usando CLOUDAMQP_URL")
+
+# Se nenhuma variável encontrada, usar localhost (apenas para build/dev)
 if not RABBITMQ_URL:
     RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
     print(f"⚠️ [SETTINGS] Nenhuma variável RabbitMQ encontrada! Usando localhost")
