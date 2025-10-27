@@ -665,39 +665,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # ✅ CORREÇÃO: Broadcast conversation_updated para atualizar lista em tempo real
         if marked_count > 0:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
-            from apps.chat.api.serializers import ConversationSerializer
+            from apps.chat.utils.websocket import broadcast_conversation_updated
             
-            channel_layer = get_channel_layer()
-            tenant_group = f"chat_tenant_{conversation.tenant_id}"
-            
-            # Serializar conversa atualizada (incluirá novo unread_count)
-            conv_data = ConversationSerializer(conversation).data
-            
-            # Converter UUIDs para string
-            def convert_uuids_to_str(obj):
-                import uuid
-                if isinstance(obj, uuid.UUID):
-                    return str(obj)
-                elif isinstance(obj, dict):
-                    return {k: convert_uuids_to_str(v) for k, v in obj.items()}
-                elif isinstance(obj, list):
-                    return [convert_uuids_to_str(item) for item in obj]
-                return obj
-            
-            conv_data_serializable = convert_uuids_to_str(conv_data)
-            
-            # Broadcast para tenant inteiro (atualiza lista)
-            async_to_sync(channel_layer.group_send)(
-                tenant_group,
-                {
-                    'type': 'conversation_updated',
-                    'conversation': conv_data_serializable
-                }
-            )
-            
-            logger.info(f"📡 [WEBSOCKET] Conversa atualizada broadcast após marcar {marked_count} mensagens como lidas")
+            broadcast_conversation_updated(conversation)
+            logger.info(f"📡 [WEBSOCKET] {marked_count} mensagens marcadas como lidas, broadcast enviado")
         
         return Response(
             {

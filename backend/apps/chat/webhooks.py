@@ -884,32 +884,13 @@ def broadcast_message_to_websocket(message, conversation):
 
 
 def broadcast_status_update(message):
-    """Envia atualização de status via WebSocket."""
-    try:
-        channel_layer = get_channel_layer()
-        room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
-        
-        logger.info(f"📡 [WEBSOCKET STATUS] Preparando broadcast...")
-        logger.info(f"   Room: {room_group_name}")
-        logger.info(f"   Message ID: {message.id}")
-        logger.info(f"   Novo status: {message.status}")
-        
-        # Payload simples, mas garantir que IDs sejam strings
-        payload = {
-            'type': 'message_status_update',
-            'message_id': str(message.id),  # UUID convertido para string
-            'status': message.status
-        }
-        
-        async_to_sync(channel_layer.group_send)(
-            room_group_name,
-            payload
-        )
-        
-        logger.info(f"✅ [WEBSOCKET STATUS] Atualização broadcast com sucesso!")
+    """
+    Envia atualização de status via WebSocket.
     
-    except Exception as e:
-        logger.error(f"❌ [WEBSOCKET STATUS] Erro ao fazer broadcast: {e}", exc_info=True)
+    ✅ REFATORADO: Usa função centralizada de utils/websocket.py
+    """
+    from apps.chat.utils.websocket import broadcast_message_status_update
+    broadcast_message_status_update(message)
 
 
 def send_delivery_receipt(conversation: Conversation, message: Message):
