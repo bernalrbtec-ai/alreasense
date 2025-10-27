@@ -348,10 +348,25 @@ else:
         if RABBITMQ_URL:
             print(f"⚠️ [SETTINGS] Usando CLOUDAMQP_URL")
 
-# Se nenhuma variável encontrada, usar localhost (apenas para build/dev)
-if not RABBITMQ_URL:
-    RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-    print(f"⚠️ [SETTINGS] Nenhuma variável RabbitMQ encontrada! Usando localhost")
+# ✅ FIX: Se URL não encontrada OU parece truncada, construir manualmente
+# Railway às vezes trunca URLs com caracteres especiais (~ na senha)
+if not RABBITMQ_URL or (RABBITMQ_URL and len(RABBITMQ_URL) < 100):
+    user = config('RABBITMQ_DEFAULT_USER', default=None)
+    password = config('RABBITMQ_DEFAULT_PASS', default=None)
+    
+    if user and password:
+        # Construir URL manualmente - NÃO aplicar URL encoding
+        # aio-pika faz o encoding internamente quando necessário
+        host = 'rabbitmq.railway.internal'
+        port = 5672
+        RABBITMQ_URL = f'amqp://{user}:{password}@{host}:{port}'
+        print(f"✅ [SETTINGS] RABBITMQ_URL construída manualmente de DEFAULT_USER + DEFAULT_PASS")
+        print(f"   User: {user}")
+        print(f"   Pass length: {len(password)} chars")
+    elif not RABBITMQ_URL:
+        # Último fallback: localhost (apenas para build/dev)
+        RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
+        print(f"⚠️ [SETTINGS] Nenhuma variável RabbitMQ encontrada! Usando localhost")
 
 # Log seguro (mascarar credenciais)
 if RABBITMQ_URL and 'localhost' not in RABBITMQ_URL:
@@ -359,6 +374,7 @@ if RABBITMQ_URL and 'localhost' not in RABBITMQ_URL:
     import re
     safe_url = re.sub(r'://.*@', '://***:***@', RABBITMQ_URL)
     print(f"✅ [SETTINGS] RABBITMQ_URL final: {safe_url}")
+    print(f"✅ [SETTINGS] RABBITMQ_URL length: {len(RABBITMQ_URL)} chars")
 else:
     print(f"⚠️ [SETTINGS] RABBITMQ_URL final: localhost (dev/build mode)")
 
