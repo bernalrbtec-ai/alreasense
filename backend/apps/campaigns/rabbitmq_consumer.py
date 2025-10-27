@@ -57,8 +57,12 @@ class RabbitMQConsumer:
                     await asyncio.sleep(delay)
                 
                 # Tentar conexão com aio-pika
-                rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672')
-                logger.info(f"🔍 [DEBUG] RabbitMQ URL: {rabbitmq_url[:50]}...")
+                # ✅ SECURITY FIX: Não usar credenciais hardcoded
+                rabbitmq_url = settings.RABBITMQ_URL
+                # Log seguro (mascarar credenciais)
+                import re
+                safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
+                logger.info(f"🔍 [DEBUG] RabbitMQ URL: {safe_url}")
                 
                 logger.info("🔍 [DEBUG] Chamando aio_pika.connect_robust...")
                 self.connection = await aio_pika.connect_robust(
@@ -334,9 +338,13 @@ class RabbitMQConsumer:
             #     logger.info("🔍 [DEBUG] Ambiente local - RabbitMQ desabilitado")
             #     return None
             
-            rabbitmq_url = getattr(settings, 'RABBITMQ_URL', 'amqp://75jkOmkcjQmQLFs3:~CiJnJU1I-1k~GS.vRf4qj8-EqeurdvJ@rabbitmq.railway.internal:5672')
+            # ✅ SECURITY FIX: Não usar credenciais hardcoded
+            rabbitmq_url = settings.RABBITMQ_URL
+            # Log seguro (mascarar credenciais)
+            import re
+            safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
             
-            logger.info("🔍 [DEBUG] Criando conexão da thread...")
+            logger.info(f"🔍 [DEBUG] Criando conexão da thread usando: {safe_url}")
             connection = await aio_pika.connect_robust(
                 rabbitmq_url,
                 heartbeat=0,

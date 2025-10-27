@@ -322,9 +322,18 @@ CHANNEL_LAYERS = {
 
 # RabbitMQ - Railway Configuration
 # ✅ IMPROVEMENT: Default for build time, real value from env at runtime
-RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default='amqp://guest:guest@localhost:5672/')
+# ✅ SECURITY FIX: Usar variável correta e sem default inseguro em produção
+# Default localhost apenas para build time (collectstatic)
+RABBITMQ_URL = config('RABBITMQ_URL', default='amqp://guest:guest@localhost:5672/')
 
-print(f"🔧 [SETTINGS] RABBITMQ_URL: {RABBITMQ_URL[:50]}...")
+# Log seguro (mascarar credenciais)
+if RABBITMQ_URL and 'localhost' not in RABBITMQ_URL:
+    # Em produção, mostrar apenas o host
+    import re
+    safe_url = re.sub(r'://.*@', '://***:***@', RABBITMQ_URL)
+    print(f"🔧 [SETTINGS] RABBITMQ_URL: {safe_url}")
+else:
+    print(f"🔧 [SETTINGS] RABBITMQ_URL: localhost (dev/build mode)")
 
 # MongoDB removido - usando PostgreSQL com pgvector
 
