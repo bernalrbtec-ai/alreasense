@@ -378,9 +378,12 @@ AI_MODEL_NAME = config('AI_MODEL_NAME', default='qwen-local')
 AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings')
 
 # Evolution API (Consolidated)
-EVOLUTION_API_URL = config('EVOLUTION_API_URL', default='https://evo.rbtec.com.br')
-# ✅ IMPROVEMENT: Default for build time, real value from env at runtime
-EVOLUTION_API_KEY = config('EVOLUTION_API_KEY', default='')
+# ✅ Usando nomes que já existem no Railway
+EVOLUTION_API_URL = config('EVO_BASE_URL', default='https://evo.rbtec.com.br')
+EVOLUTION_API_KEY = config('EVO_API_KEY', default='')
+# Aliases para compatibilidade (caso alguém use os nomes novos)
+EVO_BASE_URL = EVOLUTION_API_URL
+EVO_API_KEY = EVOLUTION_API_KEY
 
 # Base URL for webhooks and callbacks
 BASE_URL = config('BASE_URL', default='https://alreasense-backend-production.up.railway.app')
