@@ -667,8 +667,57 @@ async def start_chat_consumers():
     try:
         # ✅ CORREÇÃO: Usar mesmos parâmetros do campaigns consumer
         import re
+        import os
+        
+        # 🔍 DEBUG: Verificar variáveis de ambiente diretamente
+        logger.info("=" * 80)
+        logger.info("🔍 [CHAT CONSUMER DEBUG] Verificando variáveis RabbitMQ")
+        logger.info("=" * 80)
+        
+        env_private = os.environ.get('RABBITMQ_PRIVATE_URL', 'NOT_SET')
+        env_public = os.environ.get('RABBITMQ_URL', 'NOT_SET')
+        env_user = os.environ.get('RABBITMQ_DEFAULT_USER', 'NOT_SET')
+        env_pass = os.environ.get('RABBITMQ_DEFAULT_PASS', 'NOT_SET')
+        
+        logger.info(f"RABBITMQ_PRIVATE_URL presente: {env_private != 'NOT_SET'}")
+        logger.info(f"RABBITMQ_URL presente: {env_public != 'NOT_SET'}")
+        logger.info(f"RABBITMQ_DEFAULT_USER: {env_user}")
+        logger.info(f"RABBITMQ_DEFAULT_PASS presente: {env_pass != 'NOT_SET'} (len={len(env_pass) if env_pass != 'NOT_SET' else 0})")
+        
         rabbitmq_url = settings.RABBITMQ_URL
+        
+        # ✅ FIX: Garantir que caracteres especiais estão encoded
+        from urllib.parse import quote, urlparse, urlunparse
+        
+        try:
+            parsed = urlparse(rabbitmq_url)
+            if parsed.password and ('~' in parsed.password or '@' in parsed.password):
+                # Senha tem caracteres especiais, re-encode
+                logger.warning(f"⚠️ [CHAT CONSUMER] Senha contém caracteres especiais, aplicando URL encoding")
+                
+                # Reconstruct URL com senha encoded
+                encoded_password = quote(parsed.password, safe='')
+                netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
+                if parsed.port:
+                    netloc += f":{parsed.port}"
+                
+                rabbitmq_url = urlunparse((
+                    parsed.scheme,
+                    netloc,
+                    parsed.path,
+                    parsed.params,
+                    parsed.query,
+                    parsed.fragment
+                ))
+                logger.info(f"✅ [CHAT CONSUMER] URL re-encoded com senha segura")
+        except Exception as e:
+            logger.warning(f"⚠️ [CHAT CONSUMER] Erro ao fazer URL encoding: {e}")
+        
         safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
+        
+        logger.info(f"settings.RABBITMQ_URL: {safe_url}")
+        logger.info(f"URL length: {len(rabbitmq_url)}")
+        logger.info("=" * 80)
         logger.info(f"🔍 [CHAT CONSUMER] Conectando ao RabbitMQ: {safe_url}")
         logger.info(f"🔍 [CHAT CONSUMER] Usando parâmetros de conexão robustos...")
         
