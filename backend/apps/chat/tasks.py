@@ -665,8 +665,25 @@ async def start_chat_consumers():
     Roda em background via management command ou ASGI lifespan.
     """
     try:
-        connection = await aio_pika.connect_robust(settings.RABBITMQ_URL)
+        # ✅ CORREÇÃO: Usar mesmos parâmetros do campaigns consumer
+        import re
+        rabbitmq_url = settings.RABBITMQ_URL
+        safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
+        logger.info(f"🔍 [CHAT CONSUMER] Conectando ao RabbitMQ: {safe_url}")
+        logger.info(f"🔍 [CHAT CONSUMER] Usando parâmetros de conexão robustos...")
+        
+        connection = await aio_pika.connect_robust(
+            rabbitmq_url,
+            heartbeat=0,  # Desabilitar heartbeat (mesmo do campaigns)
+            blocked_connection_timeout=0,
+            socket_timeout=10,
+            retry_delay=1,
+            connection_attempts=1
+        )
+        logger.info("✅ [CHAT CONSUMER] Conexão RabbitMQ estabelecida com sucesso!")
+        
         channel = await connection.channel()
+        logger.info("✅ [CHAT CONSUMER] Channel criado com sucesso!")
         
         # Declara filas
         queue_send = await channel.declare_queue(QUEUE_SEND_MESSAGE, durable=True)
@@ -730,7 +747,29 @@ async def start_chat_consumers():
         await asyncio.Future()
     
     except Exception as e:
-        logger.error(f"❌ [CHAT CONSUMER] Erro ao iniciar consumers: {e}", exc_info=True)
+        error_msg = str(e)
+        
+        # ✅ DIAGNÓSTICO: Erro de autenticação RabbitMQ
+        if 'ACCESS_REFUSED' in error_msg or 'authentication' in error_msg.lower():
+            logger.error("=" * 80)
+            logger.error("🚨 [CHAT CONSUMER] ERRO DE AUTENTICAÇÃO RABBITMQ")
+            logger.error("=" * 80)
+            logger.error(f"❌ Erro: {error_msg}")
+            logger.error("")
+            logger.error("📋 POSSÍVEIS CAUSAS:")
+            logger.error("1. Credenciais RabbitMQ incorretas na variável de ambiente")
+            logger.error("2. RABBITMQ_PRIVATE_URL pode estar usando credenciais antigas")
+            logger.error("3. Usuário RabbitMQ pode não ter permissões suficientes")
+            logger.error("")
+            logger.error("🔧 SOLUÇÕES:")
+            logger.error("1. Verificar variáveis no Railway:")
+            logger.error("   - RABBITMQ_URL")
+            logger.error("   - RABBITMQ_PRIVATE_URL")
+            logger.error("2. Comparar com credenciais do campaigns consumer (que funciona)")
+            logger.error("3. Regenerar credenciais RabbitMQ no Railway se necessário")
+            logger.error("=" * 80)
+        else:
+            logger.error(f"❌ [CHAT CONSUMER] Erro ao iniciar consumers: {e}", exc_info=True)
 
 
 # Para rodar o consumer
