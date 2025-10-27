@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Save, TestTube, Check, X, AlertCircle } from 'lucide-react'
+import { RefreshCw, Server, CheckCircle, XCircle, AlertCircle, Copy, Check } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -8,33 +8,32 @@ import { useToast } from '../hooks/useToast'
 import { api } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 
-interface EvolutionConfig {
-  base_url: string
-  api_key: string
-  webhook_url: string
-  is_active: boolean
-  last_check?: string
-  status?: 'active' | 'inactive' | 'error'
+interface InstanceData {
+  name: string
+  status: 'connected' | 'disconnected'
+  raw_status: string
+}
+
+interface EvolutionStats {
+  status: 'active' | 'inactive' | 'error'
+  last_check: string
   last_error?: string | null
-  instance_count?: number
+  webhook_url: string
+  statistics: {
+    total: number
+    connected: number
+    disconnected: number
+  }
+  instances: InstanceData[]
 }
 
 export default function EvolutionConfigPage() {
   const { user } = useAuthStore()
-  const [config, setConfig] = useState<EvolutionConfig>({
-    base_url: '',
-    api_key: '',
-    webhook_url: '',
-    is_active: true,
-  })
+  const [stats, setStats] = useState<EvolutionStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isSaving, setIsSaving] = useState(false)
-  const [isTesting, setIsTesting] = useState(false)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [copied, setCopied] = useState(false)
   const { toast, showToast, hideToast } = useToast()
-  const [testResult, setTestResult] = useState<{
-    success: boolean
-    message: string
-  } | null>(null)
 
   // ✅ Apenas superuser pode acessar esta página
   if (!user?.is_superuser) {
@@ -44,7 +43,7 @@ export default function EvolutionConfigPage() {
           <AlertCircle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Acesso Negado</h2>
           <p className="text-gray-600">
-            Apenas administradores podem configurar o servidor Evolution API.
+            Apenas administradores podem visualizar o servidor Evolution API.
           </p>
         </div>
       </div>
@@ -52,84 +51,40 @@ export default function EvolutionConfigPage() {
   }
 
   useEffect(() => {
-    fetchConfig()
+    fetchStats()
   }, [])
 
-  const fetchConfig = async () => {
+  const fetchStats = async () => {
     try {
       setIsLoading(true)
       const response = await api.get('/connections/evolution/config/')
-      setConfig(response.data)
+      setStats(response.data)
     } catch (error) {
-      console.error('Error fetching config:', error)
-      // ✅ NO FALLBACK - use empty config from database only
-      setConfig({
-        base_url: '',
-        api_key: '',
-        webhook_url: `${window.location.origin}/webhooks/evolution/`,
-        is_active: true,
-        last_check: undefined,
-        status: 'inactive',
-        last_error: 'Configuração não encontrada - configure abaixo',
-        instance_count: 0,
-      })
+      console.error('Error fetching stats:', error)
+      showToast('Erro ao buscar estatísticas', 'error')
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleRefresh = async () => {
     try {
-      setIsSaving(true)
-      console.log('🔧 Salvando configuração:', {
-        base_url: config.base_url,
-        api_key: config.api_key ? `${config.api_key.substring(0, 4)}...` : 'empty',
-        is_active: config.is_active
-      })
-      const response = await api.post('/connections/evolution/config/', config)
-      console.log('✅ Configuração salva:', response.data)
-      setConfig(response.data)
-      showToast('Configuração salva com sucesso!', 'success')
+      setIsRefreshing(true)
+      await fetchStats()
+      showToast('Estatísticas atualizadas!', 'success')
     } catch (error) {
-      console.error('❌ Erro ao salvar configuração:', error)
-      showToast('Erro ao salvar configuração', 'error')
+      showToast('Erro ao atualizar', 'error')
     } finally {
-      setIsSaving(false)
+      setIsRefreshing(false)
     }
   }
 
-  const handleTest = async () => {
-    try {
-      setIsTesting(true)
-      setTestResult(null)
-      
-      const response = await api.post('/connections/evolution/test/', {
-        base_url: config.base_url,
-        api_key: config.api_key,
-      })
-      
-      if (response.data.success) {
-        setTestResult({
-          success: true,
-          message: response.data.message,
-        })
-        // Update config with the response data
-        setConfig(response.data.config)
-      } else {
-        setTestResult({
-          success: false,
-          message: response.data.message,
-        })
-      }
-    } catch (error) {
-      console.error('Error testing connection:', error)
-      setTestResult({
-        success: false,
-        message: error.response?.data?.message || 'Falha ao conectar com Evolution API. Verifique as credenciais.',
-      })
-    } finally {
-      setIsTesting(false)
+  const handleCopyWebhook = async () => {
+    if (stats?.webhook_url) {
+      await navigator.clipboard.writeText(stats.webhook_url)
+      setCopied(true)
+      showToast('Webhook URL copiada!', 'success')
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
@@ -141,185 +96,255 @@ export default function EvolutionConfigPage() {
     )
   }
 
+  if (!stats) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertCircle className="h-16 w-16 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Sem Dados</h2>
+          <p className="text-gray-600 mb-4">
+            Não foi possível carregar as estatísticas.
+          </p>
+          <Button onClick={fetchStats}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Tentar Novamente
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
-    <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-gray-900">Servidor de Instância</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Configure a integração com o servidor Evolution API para ingestion de mensagens do WhatsApp
-        </p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Servidor de Instância Evolution</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Monitoramento e estatísticas das instâncias WhatsApp conectadas
+          </p>
+        </div>
+        <Button
+          onClick={handleRefresh}
+          disabled={isRefreshing}
+          variant="outline"
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} />
+          {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+        </Button>
       </div>
 
       {/* Status Card */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between mb-4">
+      <Card className="p-6 border-l-4 ${
+        stats.status === 'active' ? 'border-l-green-500 bg-green-50' :
+        stats.status === 'inactive' ? 'border-l-gray-400 bg-gray-50' :
+        'border-l-red-500 bg-red-50'
+      }">
+        <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`h-4 w-4 rounded-full animate-pulse ${
-              config.status === 'active' ? 'bg-green-500' : 
-              config.status === 'inactive' ? 'bg-gray-400' : 
+            <div className={`h-3 w-3 rounded-full animate-pulse ${
+              stats.status === 'active' ? 'bg-green-500' :
+              stats.status === 'inactive' ? 'bg-gray-400' :
               'bg-red-500'
             }`} />
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                {config.status === 'active' ? '🟢 Conectado' : 
-                 config.status === 'inactive' ? '⚪ Desconectado' : 
+                {stats.status === 'active' ? '🟢 Conectado' :
+                 stats.status === 'inactive' ? '⚪ Desconectado' :
                  '🔴 Erro de Conexão'}
               </h3>
-              {config.last_check && (
-                <p className="text-sm text-gray-500">
-                  Verificado em: {new Date(config.last_check).toLocaleString('pt-BR')}
-                </p>
-              )}
+              <p className="text-sm text-gray-500">
+                Verificado em: {new Date(stats.last_check).toLocaleString('pt-BR')}
+              </p>
             </div>
           </div>
-          <Button onClick={handleTest} disabled={isTesting} variant="outline">
-            <TestTube className={`h-4 w-4 mr-2 ${isTesting ? 'animate-spin' : ''}`} />
-            {isTesting ? 'Testando...' : 'Testar Novamente'}
-          </Button>
+          <Server className="h-8 w-8 text-gray-400" />
         </div>
 
-        {/* Connection Info */}
-        {config.status === 'active' && config.instance_count !== undefined && (
-          <div className="bg-green-50 border border-green-200 rounded-md p-4">
-            <div className="flex items-center gap-2">
-              <Check className="h-5 w-5 text-green-600" />
-              <p className="text-sm text-green-800 font-medium">
-                Conexão estabelecida com sucesso! 
-                {config.instance_count > 0 && (
-                  <span className="ml-1">
-                    {config.instance_count} instância{config.instance_count !== 1 ? 's' : ''} encontrada{config.instance_count !== 1 ? 's' : ''}.
-                  </span>
-                )}
-              </p>
-            </div>
-          </div>
-        )}
-
-        {/* Error Info */}
-        {config.status === 'error' && config.last_error && (
-          <div className="bg-red-50 border border-red-200 rounded-md p-4">
+        {/* Error Message */}
+        {stats.status === 'error' && stats.last_error && (
+          <div className="mt-4 p-3 bg-red-100 border border-red-300 rounded-md">
             <div className="flex items-start gap-2">
-              <X className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+              <XCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm text-red-800 font-medium">Falha na conexão</p>
-                <p className="text-sm text-red-700 mt-1">{config.last_error}</p>
+                <p className="text-sm font-medium text-red-800">Erro</p>
+                <p className="text-sm text-red-700 mt-1">{stats.last_error}</p>
               </div>
-            </div>
-          </div>
-        )}
-        
-        {testResult && (
-          <div className={`mt-4 p-4 rounded-md ${
-            testResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
-          }`}>
-            <div className="flex items-start gap-2">
-              {testResult.success ? (
-                <Check className="h-5 w-5 text-green-600 flex-shrink-0 mt-0.5" />
-              ) : (
-                <X className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
-              )}
-              <p className={`text-sm ${testResult.success ? 'text-green-800' : 'text-red-800'}`}>
-                {testResult.message}
-              </p>
             </div>
           </div>
         )}
       </Card>
 
-      {/* Configuration Form */}
-      <Card className="p-4">
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label htmlFor="base_url" className="block text-sm font-medium text-gray-700">
-              URL Base da Evolution API
-            </label>
-            <input
-              type="url"
-              id="base_url"
-              required
-              value={config.base_url}
-              onChange={(e) => setConfig({ ...config, base_url: e.target.value })}
-              placeholder="https://evo.rbtec.com.br"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              URL do servidor Evolution API (sem trailing slash)
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="api_key" className="block text-sm font-medium text-gray-700">
-              API Key
-            </label>
-            <input
-              type="password"
-              id="api_key"
-              required
-              value={config.api_key}
-              onChange={(e) => setConfig({ ...config, api_key: e.target.value })}
-              placeholder="Sua API Key"
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Token de autenticação fornecido pela Evolution API
-            </p>
-          </div>
-
-          <div>
-            <label htmlFor="webhook_url" className="block text-sm font-medium text-gray-700">
-              Webhook URL
-            </label>
-            <input
-              type="url"
-              id="webhook_url"
-              readOnly
-              value={config.webhook_url}
-              className="mt-1 block w-full rounded-md border-gray-300 bg-gray-50 shadow-sm sm:text-sm"
-            />
-            <p className="mt-1 text-sm text-gray-500">
-              Configure esta URL no servidor Evolution API para receber eventos
-            </p>
-          </div>
-
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="is_active"
-              checked={config.is_active}
-              onChange={(e) => setConfig({ ...config, is_active: e.target.checked })}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-            />
-            <label htmlFor="is_active" className="ml-2 block text-sm text-gray-900">
-              Habilitar integração com Evolution API
-            </label>
-          </div>
-
-          <div className="bg-blue-50 border border-blue-200 rounded-md p-4">
-            <div className="flex items-start gap-2">
-              <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-800">
-                <p className="font-medium mb-1">Instruções de configuração:</p>
-                <ol className="list-decimal list-inside space-y-1 ml-2">
-                  <li>Instale e configure seu servidor Evolution API</li>
-                  <li>Obtenha a API Key do painel de administração</li>
-                  <li>Configure o webhook URL no Evolution API apontando para esta plataforma</li>
-                  <li>Teste a conexão antes de salvar</li>
-                  <li>Certifique-se de que o firewall permite conexões do Evolution API</li>
-                </ol>
-              </div>
+      {/* Statistics Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total Instances */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Total de Instâncias</p>
+              <p className="text-3xl font-bold text-gray-900 mt-2">
+                {stats.statistics.total}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+              <Server className="h-6 w-6 text-blue-600" />
             </div>
           </div>
+        </Card>
 
-          <div className="flex justify-end gap-3 pt-2">
-            <Button type="button" variant="outline" onClick={fetchConfig}>
-              Cancelar
-            </Button>
-            <Button type="submit" disabled={isSaving}>
-              <Save className={`h-4 w-4 mr-2 ${isSaving ? 'animate-pulse' : ''}`} />
-              {isSaving ? 'Salvando...' : 'Salvar Configuração'}
-            </Button>
+        {/* Connected */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Conectadas</p>
+              <p className="text-3xl font-bold text-green-600 mt-2">
+                {stats.statistics.connected}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-green-100 rounded-lg flex items-center justify-center">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
           </div>
-        </form>
+          <div className="mt-2">
+            <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-green-500 transition-all duration-300"
+                style={{
+                  width: `${stats.statistics.total > 0 
+                    ? (stats.statistics.connected / stats.statistics.total) * 100 
+                    : 0}%`
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+
+        {/* Disconnected */}
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-600">Desconectadas</p>
+              <p className="text-3xl font-bold text-red-600 mt-2">
+                {stats.statistics.disconnected}
+              </p>
+            </div>
+            <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
+              <XCircle className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
+          <div className="mt-2">
+            <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-red-500 transition-all duration-300"
+                style={{
+                  width: `${stats.statistics.total > 0 
+                    ? (stats.statistics.disconnected / stats.statistics.total) * 100 
+                    : 0}%`
+                }}
+              />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Webhook URL Card */}
+      <Card className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Webhook URL
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                readOnly
+                value={stats.webhook_url}
+                className="flex-1 px-4 py-2 text-sm bg-gray-50 border border-gray-300 rounded-md font-mono"
+              />
+              <Button
+                onClick={handleCopyWebhook}
+                variant="outline"
+                size="sm"
+              >
+                {copied ? (
+                  <Check className="h-4 w-4" />
+                ) : (
+                  <Copy className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="mt-2 text-sm text-gray-500">
+              Configure esta URL no servidor Evolution API para receber eventos de mensagens
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Instances List */}
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Instâncias ({stats.instances.length})
+        </h2>
+
+        {stats.instances.length === 0 ? (
+          <Card className="p-8">
+            <div className="text-center">
+              <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <p className="text-gray-600">Nenhuma instância encontrada</p>
+              <p className="text-sm text-gray-500 mt-1">
+                As instâncias aparecerão aqui quando forem configuradas no Evolution API
+              </p>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {stats.instances.map((instance, index) => (
+              <Card
+                key={index}
+                className={`p-4 border-l-4 ${
+                  instance.status === 'connected'
+                    ? 'border-l-green-500 bg-green-50'
+                    : 'border-l-red-500 bg-red-50'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      {instance.status === 'connected' ? (
+                        <CheckCircle className="h-5 w-5 text-green-600" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-600" />
+                      )}
+                      <h3 className="font-semibold text-gray-900">
+                        {instance.name}
+                      </h3>
+                    </div>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Status: {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Raw: {instance.raw_status}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Configuration Note */}
+      <Card className="p-4 bg-blue-50 border border-blue-200">
+        <div className="flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="text-sm text-blue-800">
+            <p className="font-medium mb-1">ℹ️ Configuração via Variáveis de Ambiente</p>
+            <p>
+              A URL e API Key da Evolution API são configuradas via variáveis de ambiente (<code className="bg-blue-100 px-1 rounded">EVOLUTION_API_URL</code> e <code className="bg-blue-100 px-1 rounded">EVOLUTION_API_KEY</code>).
+              Entre em contato com o administrador do sistema para alterações.
+            </p>
+          </div>
+        </div>
       </Card>
 
       {/* Toast Notification */}
@@ -332,4 +357,3 @@ export default function EvolutionConfigPage() {
     </div>
   )
 }
-

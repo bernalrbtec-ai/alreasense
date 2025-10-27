@@ -14,9 +14,8 @@ urlpatterns = [
     # Test endpoint
     path('test/', test_views.TestView.as_view(), name='test'),
     
-    # Evolution API Configuration
+    # Evolution API Configuration (stats and instances)
     path('evolution/config/', views.evolution_config, name='evolution-config'),
-    path('evolution/test/', views.test_evolution_connection, name='evolution-test'),
     
     # Webhook endpoint
     path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook'),

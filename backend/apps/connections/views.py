@@ -19,301 +19,125 @@ class ConnectionListView(generics.ListAPIView):
         return EvolutionConnection.objects.filter(tenant=self.request.user.tenant)
 
 
-@api_view(['GET', 'POST'])
-@permission_classes([IsAuthenticated])
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsAdminUser])
 def evolution_config(request):
-    """Get or update Evolution API configuration."""
+    """
+    Get Evolution API statistics and instances.
     
-    if request.method == 'GET':
-        # Buscar configuração do tenant atual
-        user = request.user
-        
-        if user.is_superuser:
-            # Superadmin vê configuração global (primeira configuração ativa)
-            all_connections = EvolutionConnection.objects.all()
-            connection = EvolutionConnection.objects.filter(is_active=True).first()
-        else:
-            # Usuário comum NÃO PODE acessar configuração - apenas superuser
-            return Response({
-                'error': 'Apenas administradores podem acessar a configuração Evolution API'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        if not connection:
-            # Se não existe, retornar configuração vazia
-            return Response({
-                'id': None,
-                'name': '',
-                'base_url': '',
-                'api_key': '',
-                'webhook_url': '',
-                'is_active': False,
-                'status': 'inactive',
-                'last_check': None,
-                'last_error': 'Configuração não encontrada - configure abaixo',
-                'instance_count': 0,
-                'created_at': None,
-                'updated_at': None,
-            })
-        
-        # Auto-test connection
-        connection_status = 'inactive'
-        last_error = None
-        instance_count = 0
-        
-        # Só testar se tiver api_key e base_url
-        if connection.api_key and connection.base_url:
-            try:
-                headers = {
-                    'apikey': connection.api_key,
-                    'Content-Type': 'application/json'
-                }
-                
-                test_url = f"{connection.base_url}/instance/fetchInstances"
-                response = requests.get(test_url, headers=headers, timeout=5)
-                
-                if response.status_code == 200:
-                    instances = response.json()
-                    instance_count = len(instances)
-                    connection_status = 'active'
-                    connection.update_status('active')
-                else:
-                    connection_status = 'error'
-                    last_error = f'HTTP {response.status_code}: {response.text[:100]}'
-                    connection.update_status('error', last_error)
-                    
-            except requests.exceptions.Timeout:
-                connection_status = 'error'
-                last_error = 'Timeout na conexão'
-                connection.update_status('error', last_error)
-            except requests.exceptions.ConnectionError:
-                connection_status = 'error'
-                last_error = 'Erro de conexão - servidor não alcançável'
-                connection.update_status('error', last_error)
-            except Exception as e:
-                connection_status = 'error'
-                last_error = str(e)[:100]
-                connection.update_status('error', last_error)
-        else:
-            # Sem configuração ainda
-            connection_status = 'inactive'
-            last_error = 'Configuração incompleta - adicione URL e API Key'
-        
-        # Webhook URL seguro (não usa request.get_host que pode dar erro)
-        try:
-            webhook_url = f"{request.scheme}://{request.get_host()}/webhooks/evolution/"
-        except Exception:
-            # Fallback para Railway ou localhost
-            from django.conf import settings
-            base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
-            webhook_url = f"{base_url}/webhooks/evolution/"
-        
-        # ✅ SECURITY FIX: Mask API key - never return full key
-        try:
-            api_key_full = connection.api_key or ''
-            # Mask all but last 4 characters
-            if api_key_full and len(api_key_full) > 4:
-                api_key_masked = '****' + api_key_full[-4:]
-            else:
-                api_key_masked = ''
-        except Exception:
-            api_key_masked = ''
-        
+    ✅ REFATORADO (Out/2025):
+    - Não retorna mais base_url e api_key (vêm do .env)
+    - Busca instâncias da Evolution API usando settings
+    - Retorna estatísticas: total, conectadas, desconectadas
+    - Retorna lista de instâncias com nome e status
+    """
+    from django.conf import settings
+    import logging
+    
+    logger = logging.getLogger(__name__)
+    
+    # ✅ Buscar configuração do .env (não do banco)
+    base_url = settings.EVOLUTION_API_URL
+    api_key = settings.EVOLUTION_API_KEY
+    
+    # Webhook URL
+    try:
+        webhook_url = f"{request.scheme}://{request.get_host()}/webhooks/evolution/"
+    except Exception:
+        base_url_setting = getattr(settings, 'BASE_URL', 'http://localhost:8000')
+        webhook_url = f"{base_url_setting}/webhooks/evolution/"
+    
+    # ✅ Verificar se configuração existe no .env
+    if not base_url or not api_key:
+        logger.warning("⚠️ [EVOLUTION CONFIG] Variáveis de ambiente não configuradas")
         return Response({
-            'id': str(connection.id),
-            'name': connection.name,
-            'base_url': connection.base_url,
-            'api_key': api_key_masked,  # Masked for security
-            'api_key_set': bool(connection.api_key),  # Flag indicating if key is configured
-            'webhook_url': webhook_url,
-            'is_active': connection.is_active,
-            'status': connection_status,
+            'status': 'inactive',
             'last_check': timezone.now().isoformat(),
-            'last_error': last_error,
-            'instance_count': instance_count,
-            'created_at': connection.created_at.isoformat() if connection.created_at else None,
-            'updated_at': connection.updated_at.isoformat() if connection.updated_at else None,
+            'last_error': 'Configuração não encontrada no .env (EVOLUTION_API_URL ou EVOLUTION_API_KEY)',
+            'webhook_url': webhook_url,
+            'statistics': {
+                'total': 0,
+                'connected': 0,
+                'disconnected': 0,
+            },
+            'instances': [],
         })
     
-    elif request.method == 'POST':
-        # Atualizar configuração no banco de dados
-        try:
-            data = request.data
-            
-            # Buscar ou criar conexão para o tenant atual
-            user = request.user
-            
-            if user.is_superuser:
-                # Superadmin pode atualizar configuração global
-                connection = EvolutionConnection.objects.filter(is_active=True).first()
-                if not connection:
-                    from apps.tenancy.models import Tenant
-                    tenant = Tenant.objects.first()
-                    if not tenant:
-                        return Response({
-                            'error': 'Nenhum tenant encontrado no sistema'
-                        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-                    
-                    connection = EvolutionConnection.objects.create(
-                        tenant=tenant,
-                        name=data.get('name', 'Evolution RBTec'),
-                        base_url=data.get('base_url', 'https://evo.rbtec.com.br'),
-                        api_key=data.get('api_key', ''),
-                        is_active=data.get('is_active', True),
-                        status='inactive'
-                    )
-                else:
-                    # Atualizar existente
-                    
-                    connection.name = data.get('name', connection.name)
-                    connection.base_url = data.get('base_url', connection.base_url)
-                    
-                    # API Key: só atualizar se vier nova (não vazia)
-                    new_api_key = data.get('api_key', '')
-                    if new_api_key and new_api_key.strip():
-                        connection.api_key = new_api_key
-                    
-                    connection.is_active = data.get('is_active', connection.is_active)
-                    connection.save()
-                    
-            else:
-                # Usuário comum NÃO PODE configurar - apenas superuser
-                return Response({
-                    'error': 'Apenas administradores podem configurar o servidor Evolution API'
-                }, status=status.HTTP_403_FORBIDDEN)
-            
-            # Webhook URL seguro
-            try:
-                webhook_url = f"{request.scheme}://{request.get_host()}/webhooks/evolution/"
-            except Exception:
-                from django.conf import settings
-                base_url = getattr(settings, 'BASE_URL', 'http://localhost:8000')
-                webhook_url = f"{base_url}/webhooks/evolution/"
-            
-            # ✅ SECURITY FIX: Mask API key in response
-            try:
-                api_key_full = connection.api_key or ''
-                # Mask all but last 4 characters
-                if api_key_full and len(api_key_full) > 4:
-                    api_key_masked = '****' + api_key_full[-4:]
-                else:
-                    api_key_masked = ''
-            except Exception:
-                api_key_masked = ''
-            
-            return Response({
-                'id': str(connection.id),
-                'name': connection.name,
-                'base_url': connection.base_url,
-                'api_key': api_key_masked,  # Masked for security
-                'api_key_set': bool(connection.api_key),  # Flag indicating if key is configured
-                'webhook_url': webhook_url,
-                'is_active': connection.is_active,
-                'status': connection.status,
-                'last_check': connection.last_check.isoformat() if connection.last_check else None,
-                'last_error': connection.last_error,
-                'created_at': connection.created_at.isoformat() if connection.created_at else None,
-                'updated_at': connection.updated_at.isoformat() if connection.updated_at else None,
-            }, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            import traceback
-            traceback.print_exc()
-            return Response({
-                'error': f'Erro ao salvar configuração: {str(e)}'
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def test_evolution_connection(request):
-    """Test connection with Evolution API."""
+    # ✅ Buscar instâncias da Evolution API
+    connection_status = 'inactive'
+    last_error = None
+    instances_data = []
+    stats = {'total': 0, 'connected': 0, 'disconnected': 0}
     
     try:
-        data = request.data
-        base_url = data.get('base_url')
-        api_key = data.get('api_key')
-        
-        if not base_url or not api_key:
-            return Response(
-                {'error': 'URL base e API Key são obrigatórios'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Test connection by fetching instances
         headers = {
             'apikey': api_key,
             'Content-Type': 'application/json'
         }
         
-        # Remove trailing slash from base_url
-        base_url = base_url.rstrip('/')
-        test_url = f"{base_url}/instance/fetchInstances"
+        # Remove trailing slash
+        base_url_clean = base_url.rstrip('/')
+        fetch_url = f"{base_url_clean}/instance/fetchInstances"
         
-        response = requests.get(test_url, headers=headers, timeout=10)
+        logger.info(f"🔍 [EVOLUTION CONFIG] Buscando instâncias em: {base_url_clean}")
+        
+        response = requests.get(fetch_url, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            # Connection successful
             instances = response.json()
+            logger.info(f"✅ [EVOLUTION CONFIG] {len(instances)} instâncias encontradas")
             
-            # ✅ SECURITY FIX: Mask API key in test response
-            api_key_masked = '****' + (api_key[-4:] if len(api_key) > 4 else '')
+            connection_status = 'active'
             
-            return Response({
-                'success': True,
-                'message': f'Conexão estabelecida com sucesso! Encontradas {len(instances)} instâncias.',
-                'instances': instances,
-                'config': {
-                    'id': 'temp-id',
-                    'name': 'Default Evolution API',
-                    'base_url': base_url,
-                    'api_key': api_key_masked,  # Masked for security
-                    'api_key_set': True,
-                    'webhook_url': f"{request.scheme}://{request.get_host()}/webhooks/evolution/",
-                    'is_active': True,
-                    'status': 'active',
-                    'last_check': timezone.now().isoformat(),
-                    'last_error': None,
-                }
-            })
-            
+            # Processar cada instância
+            for inst in instances:
+                # Evolution API retorna: instanceName, status, etc
+                instance_name = inst.get('instance', {}).get('instanceName', 'Unknown')
+                instance_status = inst.get('instance', {}).get('status', 'unknown')
+                
+                # Status pode ser: "open" (conectado), "close" (desconectado), etc
+                is_connected = instance_status == 'open'
+                
+                instances_data.append({
+                    'name': instance_name,
+                    'status': 'connected' if is_connected else 'disconnected',
+                    'raw_status': instance_status,
+                })
+                
+                # Atualizar estatísticas
+                stats['total'] += 1
+                if is_connected:
+                    stats['connected'] += 1
+                else:
+                    stats['disconnected'] += 1
+                    
+        elif response.status_code == 401:
+            connection_status = 'error'
+            last_error = 'Erro de autenticação (401) - Verifique EVOLUTION_API_KEY no .env'
+            logger.error(f"❌ [EVOLUTION CONFIG] {last_error}")
         else:
-            # Connection failed
-            error_message = f'Falha na conexão: {response.status_code} - {response.text}'
-            
-            # ✅ SECURITY FIX: Mask API key even in error response
-            api_key_masked = '****' + (api_key[-4:] if len(api_key) > 4 else '')
-            
-            return Response({
-                'success': False,
-                'message': error_message,
-                'config': {
-                    'id': 'temp-id',
-                    'name': 'Default Evolution API',
-                    'base_url': base_url,
-                    'api_key': api_key_masked,  # Masked for security
-                    'api_key_set': True,
-                    'webhook_url': f"{request.scheme}://{request.get_host()}/webhooks/evolution/",
-                    'is_active': False,
-                    'status': 'error',
-                    'last_check': timezone.now().isoformat(),
-                    'last_error': error_message,
-                }
-            }, status=status.HTTP_400_BAD_REQUEST)
+            connection_status = 'error'
+            last_error = f'HTTP {response.status_code}: {response.text[:200]}'
+            logger.error(f"❌ [EVOLUTION CONFIG] {last_error}")
             
     except requests.exceptions.Timeout:
-        return Response({
-            'success': False,
-            'message': 'Timeout na conexão com Evolution API. Verifique a URL e conectividade.'
-        }, status=status.HTTP_408_REQUEST_TIMEOUT)
-        
+        connection_status = 'error'
+        last_error = 'Timeout na conexão com Evolution API (10s)'
+        logger.error(f"❌ [EVOLUTION CONFIG] {last_error}")
     except requests.exceptions.ConnectionError:
-        return Response({
-            'success': False,
-            'message': 'Erro de conexão com Evolution API. Verifique a URL e se o servidor está online.'
-        }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        
+        connection_status = 'error'
+        last_error = f'Erro de conexão - servidor {base_url} não alcançável'
+        logger.error(f"❌ [EVOLUTION CONFIG] {last_error}")
     except Exception as e:
-        return Response({
-            'success': False,
-            'message': f'Erro inesperado: {str(e)}'
-        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        connection_status = 'error'
+        last_error = f'Erro inesperado: {str(e)[:200]}'
+        logger.error(f"❌ [EVOLUTION CONFIG] {last_error}", exc_info=True)
+    
+    return Response({
+        'status': connection_status,
+        'last_check': timezone.now().isoformat(),
+        'last_error': last_error,
+        'webhook_url': webhook_url,
+        'statistics': stats,
+        'instances': instances_data,
+    })

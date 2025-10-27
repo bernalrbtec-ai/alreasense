@@ -121,17 +121,20 @@ def check_evolution_api():
         external_count = 0
         
         try:
-            # Use the first active connection from database
-            active_connection = all_connections.filter(is_active=True).first()
+            # ✅ REFATORADO: Usar configuração do .env (não do banco)
+            from django.conf import settings
             
-            if active_connection and active_connection.base_url and active_connection.api_key:
+            evolution_url = settings.EVOLUTION_API_URL
+            evolution_key = settings.EVOLUTION_API_KEY
+            
+            if evolution_url and evolution_key:
                 headers = {
-                    'apikey': active_connection.api_key,
+                    'apikey': evolution_key,
                     'Content-Type': 'application/json'
                 }
                 
-                # Test connectivity with the registered connection
-                test_url = f"{active_connection.base_url}/instance/fetchInstances"
+                # Test connectivity with Evolution API
+                test_url = f"{evolution_url.rstrip('/')}/instance/fetchInstances"
                 response = requests.get(test_url, headers=headers, timeout=3)
                 
                 if response.status_code == 200:
