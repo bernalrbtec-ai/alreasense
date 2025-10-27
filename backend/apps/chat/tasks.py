@@ -686,32 +686,36 @@ async def start_chat_consumers():
         
         rabbitmq_url = settings.RABBITMQ_URL
         
-        # ✅ FIX: Garantir que caracteres especiais estão encoded
+        # ✅ FIX: SEMPRE fazer URL encoding na senha (não apenas quando tem ~)
         from urllib.parse import quote, urlparse, urlunparse
         
         try:
             parsed = urlparse(rabbitmq_url)
-            if parsed.password and ('~' in parsed.password or '@' in parsed.password):
-                # Senha tem caracteres especiais, re-encode
-                logger.warning(f"⚠️ [CHAT CONSUMER] Senha contém caracteres especiais, aplicando URL encoding")
+            if parsed.password:
+                # SEMPRE re-encode a senha para garantir
+                logger.info(f"🔐 [CHAT CONSUMER] Aplicando URL encoding na senha (sempre)")
                 
                 # Reconstruct URL com senha encoded
                 encoded_password = quote(parsed.password, safe='')
-                netloc = f"{parsed.username}:{encoded_password}@{parsed.hostname}"
+                
+                # Também encode o username se necessário
+                encoded_username = quote(parsed.username, safe='') if parsed.username else ''
+                
+                netloc = f"{encoded_username}:{encoded_password}@{parsed.hostname}"
                 if parsed.port:
                     netloc += f":{parsed.port}"
                 
                 rabbitmq_url = urlunparse((
                     parsed.scheme,
                     netloc,
-                    parsed.path,
+                    parsed.path or '/',
                     parsed.params,
                     parsed.query,
                     parsed.fragment
                 ))
-                logger.info(f"✅ [CHAT CONSUMER] URL re-encoded com senha segura")
+                logger.info(f"✅ [CHAT CONSUMER] URL completamente encoded")
         except Exception as e:
-            logger.warning(f"⚠️ [CHAT CONSUMER] Erro ao fazer URL encoding: {e}")
+            logger.error(f"❌ [CHAT CONSUMER] Erro ao fazer URL encoding: {e}", exc_info=True)
         
         safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
         
