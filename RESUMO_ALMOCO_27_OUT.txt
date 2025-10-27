@@ -1,0 +1,103 @@
+═══════════════════════════════════════════════════════════════
+🚀 DEPLOY REALIZADO - 27 OUT 2025 (Durante Almoço)
+═══════════════════════════════════════════════════════════════
+
+✅ COMMIT: f44728b
+✅ PUSHED: main → Railway
+✅ STATUS: Build em andamento (~3-5 min)
+
+═══════════════════════════════════════════════════════════════
+🔧 CORREÇÕES APLICADAS
+═══════════════════════════════════════════════════════════════
+
+1️⃣ RABBITMQ CHAT CONSUMER (Erro ACCESS_REFUSED)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+PROBLEMA:
+  ❌ Chat Consumer falhava: ACCESS_REFUSED
+  ✅ Campaigns Consumer funcionava
+
+CAUSA:
+  🔍 Railway já fornece URL com encoding correto
+  ❌ Chat aplicava encoding novamente = DOUBLE ENCODING
+  
+  Railway:  amqp://user:%7Epass@host
+            ↓ quote()
+  Resultado: amqp://user:%257Epass@host  ← Errado!
+
+SOLUÇÃO:
+  ✅ Remover URL encoding do Chat Consumer
+  ✅ Usar URL diretamente como Campaigns faz
+  
+  Arquivo: backend/apps/chat/tasks.py (linhas 687-693)
+  Doc: ANALISE_RABBITMQ_FINAL.md
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+2️⃣ EVOLUTION API DASHBOARD (Ajustes Cosméticos)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STATUS:
+  ✅ Backend já correto (busca do .env)
+  ✅ Frontend já correto (dashboard funcionando)
+  
+AJUSTES:
+  🔧 Corrige template literal (linha 138)
+  🔧 Atualiza nomes das variáveis (linha 343)
+     EVOLUTION_API_URL → EVO_BASE_URL
+     EVOLUTION_API_KEY → EVO_API_KEY
+
+  Arquivo: frontend/src/pages/EvolutionConfigPage.tsx
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+═══════════════════════════════════════════════════════════════
+📊 LOGS ESPERADOS
+═══════════════════════════════════════════════════════════════
+
+✅ SUCESSO:
+  🚀 [FLOW CHAT] Iniciando Flow Chat Consumer...
+  🔍 [CHAT CONSUMER] Conectando ao RabbitMQ: amqp://***:***@...
+  ✅ [CHAT CONSUMER] Conexão RabbitMQ estabelecida!
+  ✅ [FLOW CHAT] Consumer pronto para processar mensagens!
+
+❌ SE FALHAR (Improvável):
+  ❌ [CHAT CONSUMER] Erro: ACCESS_REFUSED
+  → Executar: railway run python test_rabbitmq_connection_debug.py
+
+═══════════════════════════════════════════════════════════════
+🧪 CHECKLIST PÓS-ALMOÇO
+═══════════════════════════════════════════════════════════════
+
+[ ] Verificar Railway logs: ambos consumers "pronto"
+[ ] Nenhum erro ACCESS_REFUSED nos logs
+[ ] Testar: /admin/servidor-de-instancia
+    - Estatísticas aparecem?
+    - Instâncias listadas?
+    - Botão "Atualizar" funciona?
+[ ] Enviar mensagem WhatsApp de teste
+    - Chega no sistema?
+    - Tempo real ok?
+
+═══════════════════════════════════════════════════════════════
+📚 DOCUMENTAÇÃO
+═══════════════════════════════════════════════════════════════
+
+ANALISE_RABBITMQ_FINAL.md ........... Análise técnica completa
+DEPLOY_REALIZADO_27_OUT_ALMOCO.md ... Detalhes do deploy
+RESUMO_ALMOCO_27_OUT.txt ............ Este arquivo
+
+═══════════════════════════════════════════════════════════════
+
+Bom almoço! 🍽️
+
+Paulo, ao voltar:
+1. Verificar Railway logs (sem ACCESS_REFUSED)
+2. Testar dashboard Evolution API
+3. Enviar mensagem WhatsApp teste
+
+Se tudo ok: sistema 100% funcional! ✅
+Se falhar: temos scripts de debug prontos 🔧
+
+═══════════════════════════════════════════════════════════════
+
