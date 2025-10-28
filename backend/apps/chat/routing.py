@@ -7,7 +7,7 @@ Arquitetura Global WebSocket:
 - Escalável para múltiplas conversas simultâneas
 """
 from django.urls import re_path
-from apps.chat.consumers import ChatConsumerV2
+from apps.chat.consumers_v2 import ChatConsumerV2
 from apps.chat.tenant_consumer import TenantChatConsumer
 
 websocket_urlpatterns = [
