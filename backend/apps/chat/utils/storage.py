@@ -96,6 +96,56 @@ async def download_and_save_attachment(attachment, evolution_url: str) -> bool:
         await sync_to_async(attachment.save)()
         
         logger.info(f"✅ [STORAGE] Arquivo salvo localmente: {local_path}")
+        
+        # 📡 Broadcast atualização via WebSocket para frontend atualizar UI
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.chat.api.serializers import MessageSerializer
+            
+            # Recarregar mensagem com anexo atualizado
+            message = await sync_to_async(
+                lambda: attachment.message
+            )()
+            await sync_to_async(message.refresh_from_db)()
+            
+            # Serializar mensagem completa
+            message_data = await sync_to_async(
+                lambda: MessageSerializer(message).data
+            )()
+            
+            # Converter UUIDs para string
+            def convert_uuids_to_str(obj):
+                import uuid
+                if isinstance(obj, uuid.UUID):
+                    return str(obj)
+                elif isinstance(obj, dict):
+                    return {k: convert_uuids_to_str(v) for k, v in obj.items()}
+                elif isinstance(obj, list):
+                    return [convert_uuids_to_str(item) for item in obj]
+                return obj
+            
+            message_data_serializable = convert_uuids_to_str(message_data)
+            
+            # Broadcast para conversa específica
+            channel_layer = get_channel_layer()
+            conversation_id = await sync_to_async(lambda: message.conversation_id)()
+            tenant_id = await sync_to_async(lambda: attachment.tenant_id)()
+            room_group_name = f"chat_tenant_{tenant_id}_conversation_{conversation_id}"
+            
+            await channel_layer.group_send(
+                room_group_name,
+                {
+                    'type': 'attachment_downloaded',
+                    'message': message_data_serializable,
+                    'attachment_id': str(attachment.id)
+                }
+            )
+            
+            logger.info(f"📡 [STORAGE] Broadcast de anexo baixado enviado via WebSocket")
+        except Exception as e:
+            logger.warning(f"⚠️ [STORAGE] Erro ao fazer broadcast (não crítico): {e}")
+        
         return True
     
     except Exception as e:

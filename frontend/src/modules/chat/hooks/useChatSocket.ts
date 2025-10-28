@@ -111,11 +111,20 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
+    const handleAttachmentDownloaded = (data: WebSocketMessage) => {
+      if (data.message) {
+        console.log('📎 [HOOK] Anexo baixado, atualizando mensagem:', data.attachment_id);
+        // Atualizar mensagem no store com a nova URL local
+        addMessage(data.message);
+      }
+    };
+
     // Registrar listeners
     chatWebSocketManager.on('message_received', handleMessageReceived);
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
     chatWebSocketManager.on('typing', handleTyping);
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
+    chatWebSocketManager.on('attachment_downloaded', handleAttachmentDownloaded);
 
     // Cleanup
     return () => {
@@ -123,6 +132,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('message_status_update', handleStatusUpdate);
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
+      chatWebSocketManager.off('attachment_downloaded', handleAttachmentDownloaded);
     };
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);
 
