@@ -257,25 +257,39 @@ async def handle_send_message(message_id: str):
                         filename = attachments_list[idx].original_filename
                     
                     # Mapear mime_type para mediatype da Evolution API
-                    if mime_type.startswith('image/'):
-                        mediatype = 'image'
-                    elif mime_type.startswith('video/'):
-                        mediatype = 'video'
-                    elif mime_type.startswith('audio/'):
-                        mediatype = 'audio'
-                    else:
-                        mediatype = 'document'
+                    is_audio = mime_type.startswith('audio/')
                     
-                    # ✅ Evolution API NÃO usa mediaMessage wrapper!
-                    # Estrutura correta: direto no root
-                    payload = {
-                        'number': phone,
-                        'media': url,           # URL do arquivo
-                        'mediatype': mediatype,  # lowercase!
-                        'fileName': filename     # Nome do arquivo
-                    }
-                    if content:
-                        payload['caption'] = content  # Caption direto no root também
+                    # 🎤 ÁUDIO: Usar audioMessage com PTT para aparecer como "gravado"
+                    if is_audio:
+                        # Estrutura específica para PTT (Push-To-Talk - áudio gravado)
+                        # https://doc.evolution-api.com/v2/pt/send-messages/send-audios
+                        payload = {
+                            'number': phone,
+                            'audioMessage': {
+                                'audio': url,  # URL do arquivo no S3
+                                'ptt': True    # 🎯 FLAG para aparecer como áudio gravado!
+                            }
+                        }
+                        logger.info(f"🎤 [CHAT] Enviando como PTT (áudio gravado)")
+                    else:
+                        # 📎 OUTROS TIPOS: Usar sendMedia normal
+                        if mime_type.startswith('image/'):
+                            mediatype = 'image'
+                        elif mime_type.startswith('video/'):
+                            mediatype = 'video'
+                        else:
+                            mediatype = 'document'
+                        
+                        # ✅ Evolution API NÃO usa mediaMessage wrapper!
+                        # Estrutura correta: direto no root
+                        payload = {
+                            'number': phone,
+                            'media': url,           # URL do arquivo
+                            'mediatype': mediatype,  # lowercase!
+                            'fileName': filename     # Nome do arquivo
+                        }
+                        if content:
+                            payload['caption'] = content  # Caption direto no root também
                     
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
                     logger.info(f"   URL: {base_url}/message/sendMedia/{instance.instance_name}")
