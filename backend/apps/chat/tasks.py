@@ -259,15 +259,16 @@ async def handle_send_message(message_id: str):
                     # Mapear mime_type para mediatype da Evolution API
                     is_audio = mime_type.startswith('audio/')
                     
-                    # 🎤 ÁUDIO: Usar audioMessage com PTT para aparecer como "gravado"
+                    # 🎤 ÁUDIO: Usar sendMedia com options.ptt para aparecer como "gravado"
                     if is_audio:
-                        # Estrutura específica para PTT (Push-To-Talk - áudio gravado)
-                        # https://doc.evolution-api.com/v2/pt/send-messages/send-audios
+                        # Estrutura para PTT (Push-To-Talk - áudio gravado)
+                        # Evolution API v2: sendMedia com options
                         payload = {
                             'number': phone,
-                            'audioMessage': {
-                                'audio': url,  # URL do arquivo no S3
-                                'ptt': True    # 🎯 FLAG para aparecer como áudio gravado!
+                            'media': url,        # URL do arquivo no S3
+                            'mediatype': 'audio',
+                            'options': {
+                                'ptt': True      # 🎯 FLAG para aparecer como áudio gravado!
                             }
                         }
                         logger.info(f"🎤 [CHAT] Enviando como PTT (áudio gravado)")
@@ -291,12 +292,15 @@ async def handle_send_message(message_id: str):
                         if content:
                             payload['caption'] = content  # Caption direto no root também
                     
+                    # Endpoint único: sendMedia (funciona para todos os tipos)
+                    endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
+                    
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
-                    logger.info(f"   URL: {base_url}/message/sendMedia/{instance.instance_name}")
+                    logger.info(f"   URL: {endpoint}")
                     logger.info(f"   Payload: {payload}")
                     
                     response = await client.post(
-                        f"{base_url}/message/sendMedia/{instance.instance_name}",
+                        endpoint,
                         headers=headers,
                         json=payload
                     )
