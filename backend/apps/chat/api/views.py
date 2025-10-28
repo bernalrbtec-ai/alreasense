@@ -2,6 +2,7 @@
 Views para o módulo Flow Chat.
 Integra com permissões multi-tenant e departamentos.
 """
+import logging
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -21,6 +22,8 @@ from apps.authn.permissions import CanAccessChat
 from apps.authn.mixins import DepartmentFilterMixin
 from apps.notifications.models import WhatsAppInstance
 from apps.connections.models import EvolutionConnection
+
+logger = logging.getLogger(__name__)
 
 
 class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
