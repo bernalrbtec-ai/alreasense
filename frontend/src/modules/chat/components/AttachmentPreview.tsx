@@ -149,6 +149,14 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   if (attachment.is_audio) {
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
+    // ✅ Detectar se áudio está disponível (URL local/S3 ao invés de Evolution API)
+    const isAudioReady = attachment.file_url && (
+      attachment.file_url.includes('bucket-production') ||  // MinIO/S3
+      attachment.file_url.includes('s3.') ||                // AWS S3
+      attachment.file_url.includes('localhost') ||          // Dev local
+      attachment.file_url.startsWith('blob:')              // Blob URL
+    );
+    
     return (
       <div className="attachment-preview audio w-full max-w-[280px]">
         {/* Player estilo WhatsApp - responsivo e com largura fixa */}
@@ -156,10 +164,17 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           {/* Botão Play/Pause - responsivo */}
           <button
             onClick={togglePlay}
-            className="flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-green-500 hover:bg-green-600 flex items-center justify-center transition-colors"
-            title={isPlaying ? 'Pausar' : 'Reproduzir'}
+            disabled={!isAudioReady}
+            className={`flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${
+              isAudioReady 
+                ? 'bg-green-500 hover:bg-green-600 cursor-pointer' 
+                : 'bg-gray-300 cursor-not-allowed'
+            }`}
+            title={isAudioReady ? (isPlaying ? 'Pausar' : 'Reproduzir') : 'Baixando áudio...'}
           >
-            {isPlaying ? (
+            {!isAudioReady ? (
+              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            ) : isPlaying ? (
               <Pause className="text-white" size={18} fill="white" />
             ) : (
               <Play className="text-white ml-0.5" size={18} fill="white" />
@@ -171,7 +186,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             {/* Progress Bar - mais alta em mobile */}
             <div
               className="h-1.5 sm:h-1 bg-gray-200 rounded-full cursor-pointer mb-1.5 sm:mb-1"
-              onClick={handleSeek}
+              onClick={isAudioReady ? handleSeek : undefined}
             >
               <div
                 className="h-full bg-green-500 rounded-full transition-all"
@@ -181,19 +196,21 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             
             {/* Tempo atual / total - ajustado para mobile */}
             <div className="flex items-center justify-between text-[10px] sm:text-xs text-gray-500">
-              <span>{formatTime(currentTime)}</span>
-              <span>{formatTime(duration)}</span>
+              <span>{isAudioReady ? formatTime(currentTime) : 'Baixando...'}</span>
+              <span>{isAudioReady ? formatTime(duration) : '--:--'}</span>
             </div>
           </div>
         </div>
         
         {/* Áudio HTML5 (hidden - só para controle) */}
-        <audio
-          ref={audioRef}
-          src={attachment.file_url}
-          preload="metadata"
-          className="hidden"
-        />
+        {isAudioReady && (
+          <audio
+            ref={audioRef}
+            src={attachment.file_url}
+            preload="metadata"
+            className="hidden"
+          />
+        )}
 
         {/* ✨ TRANSCRIÇÃO IA (se disponível e addon ativo) */}
         {showAI && attachment.transcription && (
