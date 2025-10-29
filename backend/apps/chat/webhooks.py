@@ -602,8 +602,6 @@ def handle_message_upsert(data, tenant, connection=None):
             logger.info(f"   Message ID: {message_id}")
             logger.info(f"   Direction: {direction}")
             logger.info(f"   Conversa: {conversation.id} | Phone: {conversation.contact_phone}")
-        else:
-            logger.info(f"ℹ️ [WEBHOOK] Mensagem já existia no banco (message_id={message_id})")
             
             # Se tiver anexo, processa
             attachment_url = None
