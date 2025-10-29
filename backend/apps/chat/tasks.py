@@ -219,6 +219,7 @@ async def handle_send_message(message_id: str):
         logger.info(f"   Nome: {instance.friendly_name}")
         logger.info(f"   UUID: {instance.instance_name}")
         logger.info(f"   API URL: {instance.api_url}")
+        logger.info(f"   API Key: {instance.api_key[:10]}..." if instance.api_key else "   ⚠️ API Key: NONE")
         
         # Prepara dados
         conversation = message.conversation
@@ -267,21 +268,18 @@ async def handle_send_message(message_id: str):
                     # Mapear mime_type para mediatype da Evolution API
                     is_audio = mime_type.startswith('audio/')
                     
-                    # 🎤 ÁUDIO: Usar sendMedia com options.ptt para PTT
+                    # 🎤 ÁUDIO: Usar sendWhatsAppAudio (endpoint específico para PTT)
                     if is_audio:
                         # Estrutura para PTT (Push-To-Talk - áudio gravado)
-                        # Evolution API 2.3.6: sendMedia com mediatype=audio + options.ptt
+                        # Ref: Postman Evolution API - Send Narrated Audio
                         payload = {
                             'number': phone,
-                            'mediatype': 'audio',
-                            'media': url,        # URL do arquivo no S3
-                            'delay': 1200,       # Delay opcional
-                            'options': {
-                                'ptt': True      # 🎯 FLAG PTT para áudio gravado!
-                            }
+                            'audio': url,        # URL do arquivo no S3 (ou base64)
+                            'delay': 1200        # Delay opcional para parecer natural
                         }
-                        logger.info(f"🎤 [CHAT] Enviando como PTT via sendMedia")
-                        logger.info(f"   URL: {url[:100]}...")
+                        logger.info(f"🎤 [CHAT] Enviando como PTT via sendWhatsAppAudio")
+                        logger.info(f"   Phone: {phone}")
+                        logger.info(f"   Audio URL: {url[:100]}...")
                         logger.info(f"   Payload: {payload}")
                     else:
                         # 📎 OUTROS TIPOS: Usar sendMedia normal
@@ -303,8 +301,11 @@ async def handle_send_message(message_id: str):
                         if content:
                             payload['caption'] = content  # Caption direto no root também
                     
-                    # Endpoint único: sendMedia (funciona para todos os tipos incluindo PTT)
-                    endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
+                    # Endpoint: sendWhatsAppAudio para PTT, sendMedia para outros
+                    if is_audio:
+                        endpoint = f"{base_url}/message/sendWhatsAppAudio/{instance.instance_name}"
+                    else:
+                        endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
                     
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
                     logger.info(f"   URL: {endpoint}")
