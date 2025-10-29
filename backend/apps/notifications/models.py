@@ -332,24 +332,15 @@ class WhatsAppInstance(models.Model):
                         'instanceName': self.instance_name,
                         'qrcode': True,
                         'integration': 'WHATSAPP-BAILEYS',
-                        'webhook': {
-                            'enabled': True,
-                            'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
-                            'webhook_by_events': False,
-                            'webhook_base64': True,
-                            'events': [
-                                'messages.upsert',
-                                'messages.update',
-                                'messages.delete',
-                                'connection.update',
-                                'presence.update',
-                                'contacts.upsert',
-                                'contacts.update',
-                                'chats.upsert',
-                                'chats.update',
-                                'chats.delete',
-                            ]
-                        },
+                        # ❌ REMOVIDO: webhook por instância (usa webhook global da Evolution)
+                        # Produto Notifications desabilitado - usar Flow Chat
+                        # 'webhook': {
+                        #     'enabled': True,
+                        #     'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
+                        #     'webhook_by_events': False,
+                        #     'webhook_base64': True,
+                        #     'events': [...]
+                        # },
                         'settings': {
                             'reject_call': True,
                             'msg_call': 'Desculpe, não atendemos chamadas. Use mensagens de texto!',
@@ -457,60 +448,19 @@ class WhatsAppInstance(models.Model):
         from django.conf import settings
         
         try:
-            webhook_config = {
-                'enabled': True,
-                'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
-                'webhookByEvents': False,
-                'webhookBase64': True,
-                'events': [
-                    'messages.upsert',
-                    'messages.update',
-                    'messages.delete',
-                    'connection.update',
-                    'presence.update',
-                    'contacts.upsert',
-                    'contacts.update',
-                    'chats.upsert',
-                    'chats.update',
-                    'chats.delete',
-                ]
-            }
+            # ❌ REMOVIDO: webhook por instância (usa webhook global da Evolution)
+            # Produto Notifications desabilitado - usar Flow Chat
+            # webhook_config = {
+            #     'enabled': True,
+            #     'url': f"{getattr(settings, 'BASE_URL', '')}/api/notifications/webhook/",
+            #     'webhookByEvents': False,
+            #     'webhookBase64': True,
+            #     'events': [...]
+            # }
             
-            webhook_url = f"{api_url.rstrip('/')}/webhook/set/{self.instance_name}"
-            
-            # 🆕 LOGS DETALHADOS
-            print(f"   🔧 CONFIGURANDO WEBHOOK VIA /webhook/set")
-            print(f"   📍 URL: {webhook_url}")
-            print(f"   🔑 API Key: {api_key[:20]}...")
-            print(f"   🌐 Webhook URL: {webhook_config['url']}")
-            print(f"   📊 Eventos: {len(webhook_config['events'])}")
-            print(f"   📷 Base64: {webhook_config['webhookBase64']}")
-            
-            response = requests.post(
-                webhook_url,
-                headers={
-                    'Content-Type': 'application/json',
-                    'apikey': api_key,
-                },
-                json=webhook_config,
-                timeout=10
-            )
-            
-            print(f"   📡 Status Code: {response.status_code}")
-            print(f"   📋 Response: {response.text[:500]}")
-            
-            if response.status_code in [200, 201]:
-                print(f"   ✅ WEBHOOK CONFIGURADO COM SUCESSO!")
-                try:
-                    response_data = response.json()
-                    print(f"   📦 Dados retornados: {response_data}")
-                except:
-                    pass
-                return True
-            else:
-                print(f"   ❌ ERRO: Status {response.status_code}")
-                print(f"   📄 Body completo: {response.text}")
-                return False
+            # Usar webhook global da Evolution - NÃO configurar por instância
+            print(f"   ⏭️ PULANDO configuração de webhook (usando webhook global da Evolution)")
+            return True  # Retorna sucesso sem configurar webhook por instância
                 
         except Exception as e:
             print(f"   ❌ EXCEÇÃO ao configurar webhook!")
