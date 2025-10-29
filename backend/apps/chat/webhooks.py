@@ -186,6 +186,7 @@ def handle_message_upsert(data, tenant, connection=None):
         logger.info(f"{direction_str} [WEBHOOK] {phone}: {content[:50]}...")
         logger.info(f"   Tenant: {tenant.name} | Message ID: {message_id}")
         logger.info(f"   👤 Nome: {push_name} | 📸 Foto de Perfil: {profile_pic_url[:100] if profile_pic_url else 'NÃO ENVIADA'}")
+        logger.info(f"🔍 [DEBUG] fromMe={from_me}, conversation_type={conversation_type}, remoteJid={remote_jid}")
         
         # Busca ou cria conversa
         # Nova conversa vai para INBOX (pending) sem departamento
@@ -584,14 +585,25 @@ def handle_message_upsert(data, tenant, connection=None):
             message_defaults['sender_name'] = sender_name
             message_defaults['sender_phone'] = sender_phone
         
+        logger.info(f"💾 [WEBHOOK] Tentando salvar mensagem no banco...")
+        logger.info(f"   message_id={message_id}")
+        logger.info(f"   direction={direction} (fromMe={from_me})")
+        logger.info(f"   conversation_id={conversation.id}")
+        logger.info(f"   content={content[:100]}...")
+        
         message, msg_created = Message.objects.get_or_create(
             message_id=message_id,
             defaults=message_defaults
         )
         
         if msg_created:
-            logger.info(f"✅ [WEBHOOK] Mensagem {direction} salva no banco")
-            logger.info(f"   ID: {message.id} | Conversa: {conversation.id}")
+            logger.info(f"✅ [WEBHOOK] MENSAGEM NOVA CRIADA NO BANCO!")
+            logger.info(f"   ID interno: {message.id}")
+            logger.info(f"   Message ID: {message_id}")
+            logger.info(f"   Direction: {direction}")
+            logger.info(f"   Conversa: {conversation.id} | Phone: {conversation.contact_phone}")
+        else:
+            logger.info(f"ℹ️ [WEBHOOK] Mensagem já existia no banco (message_id={message_id})")
             
             # Se tiver anexo, processa
             attachment_url = None
