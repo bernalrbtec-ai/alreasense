@@ -1,11 +1,6 @@
 """
 Webhook handler para Evolution API.
 Recebe eventos de mensagens e atualiza o banco.
-
-✅ SEGURANÇA (Out/2025):
-- Validação de token obrigatória (query string)
-- Rate limiting por IP (1000 req/min)
-- Logs de auditoria de tentativas inválidas
 """
 import logging
 import httpx
@@ -22,69 +17,20 @@ from apps.chat.tasks import download_attachment
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
 from apps.notifications.models import WhatsAppInstance
-from apps.common.rate_limiting import rate_limit_by_ip
 
 logger = logging.getLogger(__name__)
 
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-@rate_limit_by_ip(rate='1000/m', method='POST')  # 1000 webhooks por minuto por IP
 def evolution_webhook(request):
     """
     Webhook para receber eventos da Evolution API.
-    
-    ✅ SEGURANÇA (Out/2025):
-    - Validação de token obrigatória (query string)
-    - Rate limiting por IP
-    - Logs de auditoria
     
     Eventos suportados:
     - messages.upsert: Nova mensagem recebida
     - messages.update: Atualização de status (delivered/read)
     """
-    from django.conf import settings
-    
-    # ========================================
-    # 🔐 VALIDAÇÃO DE TOKEN (OBRIGATÓRIA)
-    # ========================================
-    token = request.GET.get('token')
-    
-    if not token:
-        logger.warning(f"🚨 [WEBHOOK SECURITY] Tentativa sem token!")
-        logger.warning(f"   IP: {request.META.get('REMOTE_ADDR')}")
-        logger.warning(f"   User-Agent: {request.META.get('HTTP_USER_AGENT', 'Unknown')}")
-        return Response(
-            {'error': 'Token required'},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
-    
-    # Validar token
-    expected_token = getattr(settings, 'EVOLUTION_WEBHOOK_SECRET', None)
-    
-    if not expected_token:
-        logger.error(f"❌ [WEBHOOK SECURITY] EVOLUTION_WEBHOOK_SECRET não configurado no .env!")
-        return Response(
-            {'error': 'Server configuration error'},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
-    
-    if token != expected_token:
-        logger.warning(f"🚨 [WEBHOOK SECURITY] Token inválido!")
-        logger.warning(f"   IP: {request.META.get('REMOTE_ADDR')}")
-        logger.warning(f"   Token recebido: {token[:10]}... (truncado)")
-        logger.warning(f"   Token esperado: {expected_token[:10]}... (truncado)")
-        return Response(
-            {'error': 'Invalid token'},
-            status=status.HTTP_401_UNAUTHORIZED
-        )
-    
-    # ✅ Token válido!
-    logger.info(f"✅ [WEBHOOK SECURITY] Token válido - processando webhook")
-    
-    # ========================================
-    # 📥 PROCESSAR WEBHOOK
-    # ========================================
     try:
         data = request.data
         event_type = data.get('event')
@@ -682,11 +628,23 @@ def handle_message_upsert(data, tenant, connection=None):
                         file_url=attachment_url,
                         storage_type='local'
                     )
+                    
+                    attachment_id_str = str(attachment.id)
+                    logger.info(f"📎 [WEBHOOK] Criado anexo ID={attachment_id_str}, mime={mime_type}, file={filename}")
+                    logger.info(f"📎 [WEBHOOK] URL={attachment_url[:100]}...")
+                    
                     # Força commit antes de enfileirar
-                    transaction.on_commit(
-                        lambda: download_attachment.delay(str(attachment.id), attachment_url)
-                    )
-                logger.info(f"📎 [WEBHOOK] Anexo enfileirado para download: {filename}")
+                    def enqueue_download():
+                        logger.info(f"🔄 [WEBHOOK] Enfileirando download do anexo {attachment_id_str}...")
+                        try:
+                            download_attachment.delay(attachment_id_str, attachment_url)
+                            logger.info(f"✅ [WEBHOOK] Download enfileirado com sucesso!")
+                        except Exception as e:
+                            logger.error(f"❌ [WEBHOOK] ERRO ao enfileirar download: {e}", exc_info=True)
+                    
+                    transaction.on_commit(enqueue_download)
+                
+                logger.info(f"📎 [WEBHOOK] Anexo {filename} preparado para download")
             
             # Broadcast via WebSocket (mensagem específica)
             logger.info(f"📡 [WEBHOOK] Enviando para WebSocket da conversa...")

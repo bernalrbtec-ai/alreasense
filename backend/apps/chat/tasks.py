@@ -39,14 +39,20 @@ def delay(queue_name: str, payload: dict):
     """
     import pika
     
+    logger.info(f"🚀 [RABBITMQ] Tentando enfileirar: {queue_name}")
+    logger.info(f"   Payload keys: {list(payload.keys())}")
+    
     try:
         # Conexão RabbitMQ
+        logger.debug(f"🔗 [RABBITMQ] Conectando ao RabbitMQ...")
         params = pika.URLParameters(settings.RABBITMQ_URL)
         connection = pika.BlockingConnection(params)
         channel = connection.channel()
+        logger.debug(f"✅ [RABBITMQ] Conectado!")
         
         # Declara fila
         channel.queue_declare(queue=queue_name, durable=True)
+        logger.debug(f"📦 [RABBITMQ] Fila '{queue_name}' declarada")
         
         # Publica mensagem
         channel.basic_publish(
@@ -58,12 +64,14 @@ def delay(queue_name: str, payload: dict):
                 content_type='application/json'
             )
         )
+        logger.info(f"✅ [RABBITMQ] Mensagem publicada na fila '{queue_name}'")
         
         connection.close()
-        logger.info(f"✅ [RABBITMQ] Task enfileirada: {queue_name} - {payload}")
+        logger.info(f"✅ [RABBITMQ] Task enfileirada com sucesso: {queue_name}")
     
     except Exception as e:
-        logger.error(f"❌ [RABBITMQ] Erro ao enfileirar task {queue_name}: {e}", exc_info=True)
+        logger.error(f"❌ [RABBITMQ] ERRO CRÍTICO ao enfileirar task {queue_name}: {e}", exc_info=True)
+        raise  # Re-raise para ver o erro
 
 
 class send_message_to_evolution:
