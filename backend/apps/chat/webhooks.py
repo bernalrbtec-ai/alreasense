@@ -662,14 +662,11 @@ def handle_message_upsert(data, tenant, connection=None):
             
             # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós)
             if not from_me:
-                # 1. Enviar ACK de entrega automático para o WhatsApp
-                logger.info(f"📬 [WEBHOOK] Enviando ACK de entrega automático...")
-                try:
-                    send_delivery_receipt(conversation, message)
-                except Exception as ack_error:
-                    logger.error(f"❌ [WEBHOOK] Erro ao enviar ACK de entrega: {ack_error}", exc_info=True)
+                # ❌ REMOVIDO: Não marcar como lida automaticamente
+                # O read receipt só deve ser enviado quando usuário REALMENTE abrir a conversa
+                # Isso é feito via /mark_as_read/ quando frontend abre a conversa (após 2.5s)
                 
-                # 2. Notificar tenant sobre nova mensagem (toast)
+                # 1. Notificar tenant sobre nova mensagem (toast)
                 logger.info(f"📬 [WEBHOOK] Notificando tenant sobre nova mensagem...")
                 try:
                     from apps.chat.api.serializers import ConversationSerializer
