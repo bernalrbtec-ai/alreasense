@@ -249,10 +249,18 @@ async def handle_send_message(message_id: str):
         # Envia via Evolution API
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = instance.api_url.rstrip('/')
+            
+            # ✅ USAR API KEY GLOBAL (do .env) ao invés da instância
+            # Ref: 403 Forbidden em sendWhatsAppAudio pode exigir API key global
+            from django.conf import settings
+            global_api_key = getattr(settings, 'EVOLUTION_API_KEY', instance.api_key)
+            
             headers = {
-                'apikey': instance.api_key,
+                'apikey': global_api_key,
                 'Content-Type': 'application/json'
             }
+            
+            logger.info(f"🔑 [CHAT] API Key: {'GLOBAL (settings)' if global_api_key != instance.api_key else 'INSTANCE'}")
             
             # Se tiver anexos, envia cada um
             if attachment_urls:
