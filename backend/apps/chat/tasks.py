@@ -276,16 +276,18 @@ async def handle_send_message(message_id: str):
                     # Mapear mime_type para mediatype da Evolution API
                     is_audio = mime_type.startswith('audio/')
                     
-                    # 🎤 ÁUDIO: Usar sendWhatsAppAudio (endpoint específico para PTT)
+                    # 🎤 ÁUDIO: Usar sendWhatsAppAudio (confirmado que existe e retorna ptt:true)
                     if is_audio:
-                        # Estrutura para PTT (Push-To-Talk - áudio gravado)
-                        # Ref: Postman Evolution API - Send Narrated Audio
+                        # Estrutura para PTT via sendWhatsAppAudio
+                        # Ref: https://doc.evolution-api.com/v2/api-reference/message-controller/send-audio
+                        # Testado via Postman: funciona e retorna "ptt": true
                         payload = {
                             'number': phone,
-                            'audio': url,        # URL do arquivo no S3 (ou base64)
-                            'delay': 1200        # Delay opcional para parecer natural
+                            'audio': url,           # URL do arquivo no S3
+                            'delay': 1200           # Delay opcional
                         }
-                        logger.info(f"🎤 [CHAT] Enviando como PTT via sendWhatsAppAudio")
+                        
+                        logger.info(f"🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
                         logger.info(f"   Phone: {phone}")
                         logger.info(f"   Audio URL: {url[:100]}...")
                         logger.info(f"   Payload: {payload}")
@@ -312,8 +314,10 @@ async def handle_send_message(message_id: str):
                     # Endpoint: sendWhatsAppAudio para PTT, sendMedia para outros
                     if is_audio:
                         endpoint = f"{base_url}/message/sendWhatsAppAudio/{instance.instance_name}"
+                        logger.info(f"🎯 [CHAT] Usando sendWhatsAppAudio (PTT)")
                     else:
                         endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
+                        logger.info(f"📎 [CHAT] Usando sendMedia (outros anexos)")
                     
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
                     logger.info(f"   URL: {endpoint}")
