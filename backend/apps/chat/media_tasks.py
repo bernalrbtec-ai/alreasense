@@ -218,11 +218,11 @@ async def handle_process_incoming_media(
         thumb_url = get_public_url(thumb_s3_path) if thumb_s3_path else None
         
         # 6. Criar/atualizar MessageAttachment
-        message = await sync_to_async(Message.objects.get)(id=message_id)
-        
         # Tentar encontrar attachment placeholder criado no webhook
-        from asgiref.sync import sync_to_async
-        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message=message).order_by('-created_at').first())()
+        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message__id=message_id).order_by('-created_at').first())()
+        
+        # Buscar message
+        message = await sync_to_async(Message.objects.get)(id=message_id)
         if existing and (not existing.file_url or existing.storage_type != 's3'):
             existing.file_url = public_url
             existing.thumbnail_url = thumb_url or existing.thumbnail_url
