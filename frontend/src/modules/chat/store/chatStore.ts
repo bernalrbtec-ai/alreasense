@@ -93,9 +93,22 @@ export const useChatStore = create<ChatState>((set) => ({
 
   // Mensagens
   setMessages: (messages) => set({ messages }),
-  addMessage: (message) => set((state) => ({
-    messages: [...state.messages, message]
-  })),
+  addMessage: (message) => set((state) => {
+    // Evitar duplicatas: verificar se mensagem já existe
+    const exists = state.messages.some(m => m.id === message.id);
+    if (exists) {
+      // Atualizar mensagem existente (pode ter novos attachments ou status atualizado)
+      return {
+        messages: state.messages.map(m =>
+          m.id === message.id ? message : m
+        )
+      };
+    }
+    // Adicionar nova mensagem
+    return {
+      messages: [...state.messages, message]
+    };
+  }),
   updateMessageStatus: (messageId, status) => set((state) => ({
     messages: state.messages.map(m =>
       m.id === messageId ? { ...m, status: status as any } : m

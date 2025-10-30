@@ -16,7 +16,7 @@ export function MessageList() {
   const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
 
   useEffect(() => {
-    if (!activeConversation) return;
+    if (!activeConversation?.id) return;
 
     const fetchMessages = async () => {
       try {
@@ -36,7 +36,7 @@ export function MessageList() {
     };
 
     fetchMessages();
-  }, [activeConversation, setMessages]);
+  }, [activeConversation?.id, setMessages]);
 
   // Auto-scroll quando novas mensagens chegam
   useEffect(() => {
