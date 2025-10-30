@@ -684,52 +684,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'], url_path='upload-media')
     def upload_media(self, request):
+        """Endpoint legado desativado. Use o fluxo com presigned URL.
         """
-        Upload de arquivo para enviar via chat.
-        
-        Body (multipart/form-data):
-            file: Arquivo binário
-        
-        Returns:
+        return Response(
             {
-                'success': true,
-                'file_url': 'https://...',
-                'thumbnail_url': 'https://...',
-                'file_size': 123456,
-                'file_type': 'image'
-            }
-        """
-        import base64
-        from apps.chat.media_tasks import handle_process_uploaded_file
-        import asyncio
-        
-        file_obj = request.FILES.get('file')
-        
-        if not file_obj:
-            return Response(
-                {'error': 'Arquivo não fornecido'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Ler arquivo
-        file_data = file_obj.read()
-        file_data_b64 = base64.b64encode(file_data).decode('utf-8')
-        
-        # Processar assincronamente
-        result = asyncio.run(handle_process_uploaded_file(
-            tenant_id=str(request.user.tenant_id),
-            file_data=file_data_b64,
-            filename=file_obj.name,
-            content_type=file_obj.content_type
-        ))
-        
-        if result['success']:
-            return Response(result, status=status.HTTP_200_OK)
-        else:
-            return Response(
-                {'error': result.get('error', 'Erro ao processar arquivo')},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+                'error': 'Endpoint de upload multipart desativado. Use /messages/upload-presigned-url e /messages/confirm-upload.'
+            },
+            status=status.HTTP_410_GONE
+        )
     
     @action(detail=False, methods=['post'], url_path='get-upload-url')
     def get_upload_url(self, request):
@@ -1158,13 +1120,26 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Validar tamanho (max 50MB)
-        max_size = 50 * 1024 * 1024  # 50MB
+        # Validar tamanho (max do settings)
+        from django.conf import settings
+        max_size = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024
         if file_size > max_size:
             return Response(
                 {'error': f'Arquivo muito grande. Máximo: {max_size / 1024 / 1024}MB'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+        # Validar MIME
+        allowed_mime = getattr(settings, 'ATTACHMENTS_ALLOWED_MIME', '')
+        if allowed_mime:
+            allowed = [m.strip() for m in allowed_mime.split(',') if m.strip()]
+            def mime_ok(m):
+                return any((a.endswith('/*') and m.startswith(a[:-1])) or (a == m) for a in allowed)
+            if not mime_ok(content_type):
+                return Response(
+                    {'error': 'Tipo de arquivo não permitido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         
         # Buscar conversa
         try:
@@ -1186,9 +1161,11 @@ class MessageViewSet(viewsets.ModelViewSet):
         # Gerar presigned URL
         try:
             s3_manager = S3Manager()
+            from django.conf import settings
+            expires_upload = int(getattr(settings, 'S3_UPLOAD_URL_EXPIRES', 300))
             upload_url = s3_manager.generate_presigned_url(
                 s3_key,
-                expiration=300,  # 5 minutos
+                expiration=expires_upload,
                 http_method='PUT'
             )
             
@@ -1198,7 +1175,7 @@ class MessageViewSet(viewsets.ModelViewSet):
                 'upload_url': upload_url,
                 'attachment_id': str(attachment_id),
                 's3_key': s3_key,
-                'expires_in': 300,
+                'expires_in': expires_upload,
                 'instructions': {
                     'method': 'PUT',
                     'headers': {
@@ -1322,9 +1299,11 @@ class MessageViewSet(viewsets.ModelViewSet):
             s3_manager = S3Manager()
             
             # URL para Evolution API baixar o arquivo
+            from django.conf import settings
+            expires_download = int(getattr(settings, 'S3_DOWNLOAD_URL_EXPIRES', 900))
             evolution_url = s3_manager.generate_presigned_url(
                 s3_key,
-                expiration=3600,  # 1 hora
+                expiration=expires_download,
                 http_method='GET'
             )
             
@@ -1445,46 +1424,13 @@ class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
     
     @action(detail=False, methods=['post'])
     def upload(self, request):
-        """
-        Upload de arquivo para chat.
-        Salva localmente e retorna URL.
-        """
-        file = request.FILES.get('file')
-        
-        if not file:
-            return Response(
-                {'error': 'Nenhum arquivo enviado'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Validação de tamanho (max 50MB)
-        if file.size > 50 * 1024 * 1024:
-            return Response(
-                {'error': 'Arquivo muito grande (max 50MB)'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Salvar localmente
-        from apps.chat.utils.storage import save_upload_temporarily
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        try:
-            file_url = save_upload_temporarily(file, request.user.tenant)
-            
-            return Response({
-                'url': file_url,
-                'filename': file.name,
-                'size': file.size,
-                'mime_type': file.content_type
-            }, status=status.HTTP_200_OK)
-        
-        except Exception as e:
-            logger.error(f"❌ [UPLOAD] Erro ao fazer upload: {e}", exc_info=True)
-            return Response(
-                {'error': 'Erro ao fazer upload do arquivo'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
+        """Endpoint legado desativado. Use o fluxo com presigned URL."""
+        return Response(
+            {
+                'error': 'Endpoint de upload desativado. Use /messages/upload-presigned-url e /messages/confirm-upload.'
+            },
+            status=status.HTTP_410_GONE
+        )
 
 
 # ==========================================

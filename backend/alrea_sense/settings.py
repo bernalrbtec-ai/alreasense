@@ -325,48 +325,28 @@ CHANNEL_LAYERS = {
 # ✅ SECURITY FIX: Usar variável correta e sem default inseguro em produção
 # Default localhost apenas para build time (collectstatic)
 
-# 🔍 DEBUG: Verificar todas as possíveis variáveis RabbitMQ
+# 🔍 DEBUG: Verificar variáveis RabbitMQ
 import os
-print(f"🔍 [DEBUG] RABBITMQ_URL env: {os.environ.get('RABBITMQ_URL', 'Not set')[:50]}")
-print(f"🔍 [DEBUG] RABBITMQ_PRIVATE_URL env: {os.environ.get('RABBITMQ_PRIVATE_URL', 'Not set')[:50]}")
-print(f"🔍 [DEBUG] CLOUDAMQP_URL env: {os.environ.get('CLOUDAMQP_URL', 'Not set')[:50]}")
+print(f"🔍 [DEBUG] RABBITMQ_URL env: {os.environ.get('RABBITMQ_URL', 'Not set')[:80]}")
 
-# ✅ PRIORIDADE: RABBITMQ_PRIVATE_URL (internal) > RABBITMQ_URL (proxy) > localhost
-# Railway cria RABBITMQ_PRIVATE_URL (internal) e RABBITMQ_URL (proxy externo)
-# Para comunicação entre serviços no Railway, INTERNAL é mais rápido e confiável
-RABBITMQ_URL = config('RABBITMQ_PRIVATE_URL', default=None)
-if RABBITMQ_URL:
-    print(f"✅ [SETTINGS] Usando RABBITMQ_PRIVATE_URL (internal - recomendado)")
-else:
-    # Fallback para RABBITMQ_URL (proxy externo)
-    RABBITMQ_URL = config('RABBITMQ_URL', default=None)
-    if RABBITMQ_URL:
-        print(f"⚠️ [SETTINGS] Usando RABBITMQ_URL (proxy externo)")
-    else:
-        # Fallback para CloudAMQP
-        RABBITMQ_URL = config('CLOUDAMQP_URL', default=None)
-        if RABBITMQ_URL:
-            print(f"⚠️ [SETTINGS] Usando CLOUDAMQP_URL")
+# ✅ REGRA: Usar APENAS RABBITMQ_URL (interno), sem PRIVATE/CloudAMQP
+# Se não existir, construir a partir de DEFAULT_USER/DEFAULT_PASS para host interno
+RABBITMQ_URL = config('RABBITMQ_URL', default=None)
 
-# ✅ FIX: Se URL não encontrada OU parece truncada, construir manualmente
-# Railway às vezes trunca URLs com caracteres especiais (~ na senha)
-if not RABBITMQ_URL or (RABBITMQ_URL and len(RABBITMQ_URL) < 100):
+if not RABBITMQ_URL:
     user = config('RABBITMQ_DEFAULT_USER', default=None)
     password = config('RABBITMQ_DEFAULT_PASS', default=None)
-    
     if user and password:
-        # Construir URL manualmente - NÃO aplicar URL encoding
-        # aio-pika faz o encoding internamente quando necessário
         host = 'rabbitmq.railway.internal'
         port = 5672
         RABBITMQ_URL = f'amqp://{user}:{password}@{host}:{port}'
-        print(f"✅ [SETTINGS] RABBITMQ_URL construída manualmente de DEFAULT_USER + DEFAULT_PASS")
+        print(f"✅ [SETTINGS] RABBITMQ_URL construída manualmente para host interno")
         print(f"   User: {user}")
         print(f"   Pass length: {len(password)} chars")
-    elif not RABBITMQ_URL:
-        # Último fallback: localhost (apenas para build/dev)
+    else:
+        # Fallback apenas para build/dev
         RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'
-        print(f"⚠️ [SETTINGS] Nenhuma variável RabbitMQ encontrada! Usando localhost")
+        print(f"⚠️ [SETTINGS] RABBITMQ_URL não encontrada. Usando localhost (build/dev)")
 
 # Log seguro (mascarar credenciais)
 if RABBITMQ_URL and 'localhost' not in RABBITMQ_URL:
@@ -498,6 +478,15 @@ S3_ENDPOINT_URL = config('S3_ENDPOINT_URL', default='https://bucket-production-8
 S3_ACCESS_KEY = config('S3_ACCESS_KEY', default='')
 S3_SECRET_KEY = config('S3_SECRET_KEY', default='')
 S3_REGION = config('S3_REGION', default='us-east-1')
+
+# ============================
+# FLOW CHAT - Attachments Config (centralizado)
+# ============================
+ATTACHMENTS_MAX_SIZE_MB = config('ATTACHMENTS_MAX_SIZE_MB', default=50, cast=int)
+ATTACHMENTS_ALLOWED_MIME = config('ATTACHMENTS_ALLOWED_MIME', default='image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+S3_UPLOAD_URL_EXPIRES = config('S3_UPLOAD_URL_EXPIRES', default=300, cast=int)
+S3_DOWNLOAD_URL_EXPIRES = config('S3_DOWNLOAD_URL_EXPIRES', default=900, cast=int)
+ATTACHMENTS_REDIS_TTL_DAYS = config('ATTACHMENTS_REDIS_TTL_DAYS', default=30, cast=int)
 
 # Debug settings for Railway deploy - AFTER all configurations are loaded
 print("🚀 [SETTINGS] ==========================================")

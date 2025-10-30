@@ -265,13 +265,14 @@ async def handle_process_uploaded_file(
         
         logger.info(f"✅ [UPLOAD] Decodificado: {len(binary_data)} bytes")
         
-        # 2. Validar tamanho (max 25MB)
-        MAX_SIZE = 25 * 1024 * 1024
+        # 2. Validar tamanho (usar settings: ATTACHMENTS_MAX_SIZE_MB)
+        from django.conf import settings
+        MAX_SIZE = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024
         if len(binary_data) > MAX_SIZE:
             logger.error(f"❌ [UPLOAD] Arquivo muito grande: {len(binary_data)} bytes")
             return {
                 'success': False,
-                'error': 'Arquivo muito grande (máx 25MB)'
+                'error': f"Arquivo muito grande (máx {MAX_SIZE // (1024*1024)}MB)"
             }
         
         # 3. Detectar tipo de mídia

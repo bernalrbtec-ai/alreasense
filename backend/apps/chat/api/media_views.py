@@ -16,15 +16,16 @@ from botocore.exceptions import ClientError
 
 logger = logging.getLogger(__name__)
 
-# TTL do cache: 7 dias em segundos
-MEDIA_CACHE_TTL = 7 * 24 * 60 * 60  # 604.800 segundos
+# TTL do cache (Redis): definido por settings (padrão 30 dias)
+from django.conf import settings
+MEDIA_CACHE_TTL = int(getattr(settings, 'ATTACHMENTS_REDIS_TTL_DAYS', 30)) * 24 * 60 * 60
 
 
 @api_view(['GET'])
 @permission_classes([AllowAny])  # Público, mas hash é único e imprevisível
 def serve_media(request, media_hash):
     """
-    Serve mídia com cache Redis de 7 dias.
+    Serve mídia com cache Redis (TTL configurável; padrão 30 dias).
     
     Fluxo:
     1. Verifica cache Redis (7 dias)
@@ -90,13 +91,13 @@ def serve_media(request, media_hash):
                 logger.error(f"❌ [MEDIA] Erro S3: {e}")
                 raise Http404("Erro ao baixar mídia")
         
-        # 4. Cachear no Redis por 7 dias
+        # 4. Cachear no Redis
         cache_data = {
             'data': binary_data,
             'content_type': attachment.mime_type,
         }
         cache.set(cache_key, cache_data, MEDIA_CACHE_TTL)
-        logger.info(f"✅ [MEDIA CACHE] Cacheado por 7 dias: {media_hash}")
+        logger.info(f"✅ [MEDIA CACHE] Cacheado por {MEDIA_CACHE_TTL} segundos: {media_hash}")
         
         # 5. Retornar
         return HttpResponse(
