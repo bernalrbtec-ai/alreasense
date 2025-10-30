@@ -63,10 +63,16 @@ def serve_media(request, media_hash):
         # 2. ❌ CACHE MISS: Buscar do banco de dados
         logger.info(f"💾 [MEDIA CACHE] MISS - Buscando do banco: {media_hash}")
         
+        # Debug: listar alguns hashes recentes
+        recent_hashes = MessageAttachment.objects.values_list('media_hash', flat=True).order_by('-created_at')[:10]
+        logger.info(f"🔍 [DEBUG] Últimos 10 hashes no banco: {list(recent_hashes)}")
+        
         try:
             attachment = MessageAttachment.objects.get(media_hash=media_hash)
+            logger.info(f"✅ [MEDIA] Attachment encontrado: {attachment.id}")
         except MessageAttachment.DoesNotExist:
             logger.warning(f"⚠️ [MEDIA] Mídia não encontrada: {media_hash}")
+            logger.warning(f"⚠️ [MEDIA] Total de attachments no banco: {MessageAttachment.objects.count()}")
             raise Http404("Mídia não encontrada")
         
         # 3. Baixar do S3

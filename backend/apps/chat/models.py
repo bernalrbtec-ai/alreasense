@@ -484,6 +484,9 @@ class MessageAttachment(models.Model):
         """
         Define expires_at e gera media_hash/short_url automaticamente.
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         # 1. Definir expires_at (cache local)
         if not self.expires_at:
             self.expires_at = timezone.now() + timedelta(days=7)
@@ -491,13 +494,16 @@ class MessageAttachment(models.Model):
         # 2. Gerar media_hash e short_url se não existir
         if not self.media_hash:
             self.media_hash = self.generate_media_hash()
+            logger.info(f"🔑 [ATTACHMENT] Hash gerado: {self.media_hash}")
             
             # Gerar short_url
             from django.conf import settings
             base_url = getattr(settings, 'BASE_URL', 'https://alreasense-backend-production.up.railway.app')
             self.short_url = f"{base_url}/media/{self.media_hash}"
+            logger.info(f"🔗 [ATTACHMENT] URL curta gerada: {self.short_url}")
         
         super().save(*args, **kwargs)
+        logger.info(f"💾 [ATTACHMENT] Salvo no banco: ID={self.id}, hash={self.media_hash}")
     
     def generate_media_hash(self):
         """
