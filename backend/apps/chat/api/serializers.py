@@ -45,6 +45,20 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
             'processing_status', 'processed_at'
         ]
 
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Forçar URL de proxy para anexos no S3, mesmo que antigos tenham file_url direto do bucket
+        try:
+            if instance.storage_type == 's3' and instance.file_path:
+                file_url = (data.get('file_url') or '')
+                if '/api/chat/media-proxy' not in file_url:
+                    from apps.chat.utils.s3 import S3Manager
+                    data['file_url'] = S3Manager().get_public_url(instance.file_path)
+        except Exception:
+            # Em caso de erro, manter o original para não quebrar a resposta
+            pass
+        return data
+
 
 class MessageSerializer(serializers.ModelSerializer):
     """Serializer para mensagens."""
