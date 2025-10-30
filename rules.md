@@ -254,7 +254,7 @@ class Campaign(models.Model):
     tenant = models.ForeignKey('tenancy.Tenant', on_delete=models.CASCADE)
     name = models.CharField(max_length=255)
     # ... outros campos
-    
+
     class Meta:
         db_table = 'campaigns_campaign'
         ordering = ['-created_at']
@@ -478,7 +478,7 @@ async def send_whatsapp_message(instance_id, phone, message):
         'apikey': EVOLUTION_API_KEY,
         'Content-Type': 'application/json'
     }
-    
+
     payload = {
         'number': phone,
         'text': message,

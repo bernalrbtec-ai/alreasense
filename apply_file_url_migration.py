@@ -81,3 +81,8 @@ print("\n💡 Agora os uploads de áudio com URLs longas devem funcionar!")
 
 
 
+
+
+
+
+

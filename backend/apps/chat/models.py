@@ -502,15 +502,15 @@ class MessageAttachment(models.Model):
     def generate_media_hash(self):
         """
         Gera hash único de 12 caracteres para URL curta.
-        Formato: primeiros 12 chars do SHA256(uuid + salt)
+        Formato: primeiros 12 chars do SHA256(uuid + timestamp)
         """
         import hashlib
-        import secrets
+        import uuid
+        import time
         
-        # UUID + salt aleatório para garantir unicidade
-        salt = secrets.token_hex(8)
-        raw = f"{self.id}{salt}".encode('utf-8')
-        hash_hex = hashlib.sha256(raw).hexdigest()
+        # UUID aleatório + timestamp para garantir unicidade
+        unique_str = f"{uuid.uuid4().hex}{time.time()}"
+        hash_hex = hashlib.sha256(unique_str.encode('utf-8')).hexdigest()
         
         # Retornar primeiros 12 caracteres (suficiente para unicidade)
         return hash_hex[:12]

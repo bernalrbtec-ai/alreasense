@@ -140,3 +140,5 @@ def download_from_s3(s3_key):
     # Retornar conteúdo binário
     return response['Body'].read()
 
+
+

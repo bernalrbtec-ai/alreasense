@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Server, CheckCircle, XCircle, AlertCircle, Copy, Check, Phone, User, MessageSquare, ExternalLink } from 'lucide-react'
+import { RefreshCw, Server, CheckCircle, XCircle, AlertCircle, Copy, Check } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -10,17 +10,8 @@ import { useAuthStore } from '../stores/authStore'
 
 interface InstanceData {
   name: string
-  instance_id: string | null
   status: 'connected' | 'disconnected'
   raw_status: string
-  owner: string | null
-  phone_number: string | null
-  profile_name: string | null
-  profile_picture_url: string | null
-  profile_status: string | null
-  server_url: string | null
-  integration: string | null
-  webhook_wa_business: string | null
 }
 
 interface EvolutionStats {
@@ -28,7 +19,6 @@ interface EvolutionStats {
   last_check: string
   last_error?: string | null
   webhook_url: string
-  server_url: string | null
   statistics: {
     total: number
     connected: number
@@ -159,18 +149,13 @@ export default function EvolutionConfigPage() {
             }`} />
             <div>
               <h3 className="text-lg font-semibold text-gray-900">
-                {stats.status === 'active' ? '🟢 Servidor Evolution Conectado' :
-                 stats.status === 'inactive' ? '⚪ Servidor Evolution Desconectado' :
-                 '🔴 Erro de Conexão com Servidor'}
+                {stats.status === 'active' ? '🟢 Conectado' :
+                 stats.status === 'inactive' ? '⚪ Desconectado' :
+                 '🔴 Erro de Conexão'}
               </h3>
               <p className="text-sm text-gray-500">
                 Verificado em: {new Date(stats.last_check).toLocaleString('pt-BR')}
               </p>
-              {stats.server_url && (
-                <p className="text-xs text-gray-500 mt-1 font-mono">
-                  {stats.server_url}
-                </p>
-              )}
             </div>
           </div>
           <Server className="h-8 w-8 text-gray-400" />
@@ -312,114 +297,35 @@ export default function EvolutionConfigPage() {
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {stats.instances.map((instance, index) => (
               <Card
-                key={instance.instance_id || index}
-                className={`overflow-hidden border-l-4 ${
+                key={index}
+                className={`p-4 border-l-4 ${
                   instance.status === 'connected'
-                    ? 'border-l-green-500'
-                    : 'border-l-red-500'
+                    ? 'border-l-green-500 bg-green-50'
+                    : 'border-l-red-500 bg-red-50'
                 }`}
               >
-                {/* Header com status */}
-                <div className={`p-4 ${
-                  instance.status === 'connected' ? 'bg-green-50' : 'bg-red-50'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    {instance.status === 'connected' ? (
-                      <CheckCircle className="h-5 w-5 text-green-600" />
-                    ) : (
-                      <XCircle className="h-5 w-5 text-red-600" />
-                    )}
-                    <h3 className="font-semibold text-gray-900 flex-1">
-                      {instance.name}
-                    </h3>
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      instance.status === 'connected'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                    }`}>
-                      {instance.status === 'connected' ? 'Online' : 'Offline'}
-                    </span>
-                  </div>
-                  {instance.instance_id && (
-                    <p className="text-xs text-gray-500 mt-1 font-mono truncate">
-                      ID: {instance.instance_id}
-                    </p>
-                  )}
-                </div>
-
-                {/* Corpo com detalhes */}
-                <div className="p-4 space-y-3">
-                  {/* Foto de perfil e nome */}
-                  {instance.status === 'connected' && (
-                    <div className="flex items-center gap-3 pb-3 border-b border-gray-200">
-                      {instance.profile_picture_url ? (
-                        <img
-                          src={instance.profile_picture_url}
-                          alt={instance.profile_name || 'Profile'}
-                          className="h-12 w-12 rounded-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none'
-                          }}
-                        />
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      {instance.status === 'connected' ? (
+                        <CheckCircle className="h-5 w-5 text-green-600" />
                       ) : (
-                        <div className="h-12 w-12 rounded-full bg-gray-200 flex items-center justify-center">
-                          <User className="h-6 w-6 text-gray-500" />
-                        </div>
+                        <XCircle className="h-5 w-5 text-red-600" />
                       )}
-                      <div className="flex-1 min-w-0">
-                        {instance.profile_name && (
-                          <p className="font-medium text-gray-900 truncate">
-                            {instance.profile_name}
-                          </p>
-                        )}
-                        {instance.phone_number && (
-                          <div className="flex items-center gap-1 text-sm text-gray-600">
-                            <Phone className="h-3 w-3" />
-                            <span className="font-mono">{instance.phone_number}</span>
-                          </div>
-                        )}
-                      </div>
+                      <h3 className="font-semibold text-gray-900">
+                        {instance.name}
+                      </h3>
                     </div>
-                  )}
-
-                  {/* Status do perfil */}
-                  {instance.profile_status && (
-                    <div className="flex items-start gap-2">
-                      <MessageSquare className="h-4 w-4 text-gray-400 mt-0.5 flex-shrink-0" />
-                      <p className="text-sm text-gray-600 italic">
-                        "{instance.profile_status}"
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Integração */}
-                  {instance.integration && (
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
-                      <Server className="h-3 w-3" />
-                      <span>{instance.integration}</span>
-                    </div>
-                  )}
-
-                  {/* Webhook Business (se configurado) */}
-                  {instance.webhook_wa_business && (
-                    <div className="pt-3 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-gray-500">Webhook Business</span>
-                        <a
-                          href={instance.webhook_wa_business}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-xs text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                        >
-                          <ExternalLink className="h-3 w-3" />
-                          Ver
-                        </a>
-                      </div>
-                    </div>
-                  )}
+                    <p className="text-sm text-gray-600 mt-1">
+                      Status: {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Raw: {instance.raw_status}
+                    </p>
+                  </div>
                 </div>
               </Card>
             ))}
