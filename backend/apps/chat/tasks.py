@@ -281,10 +281,14 @@ async def handle_send_message(message_id: str):
                         # Estrutura para PTT via sendWhatsAppAudio
                         # Ref: https://doc.evolution-api.com/v2/api-reference/message-controller/send-audio
                         # Testado via Postman: funciona e retorna "ptt": true
+                        # IMPORTANTE: linkPreview=false + sem quoted = evita aparecer "Encaminhada"
                         payload = {
                             'number': phone,
-                            'audio': url,           # URL do arquivo no S3
-                            'delay': 1200           # Delay opcional
+                            'audio': url,               # URL do arquivo no S3
+                            'delay': 1200,              # Delay opcional
+                            'linkPreview': False,       # Evita "Encaminhada"
+                            'mentionsEveryOne': False,  # Sem mentions
+                            'mentioned': []             # Lista vazia
                         }
                         
                         logger.info(f"🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
