@@ -1360,6 +1360,8 @@ class MessageViewSet(viewsets.ModelViewSet):
             
             # Criar attachment
         try:
+            logger.info(f"📤 [UPLOAD] Criando attachment com ID: {attachment_id}")
+            
             attachment = MessageAttachment.objects.create(
                 id=attachment_id,
                 message=message,
@@ -1377,6 +1379,8 @@ class MessageViewSet(viewsets.ModelViewSet):
             logger.info(f"✅ [UPLOAD] Mensagem + Anexo criados")
             logger.info(f"   Message ID: {message.id}")
             logger.info(f"   Attachment ID: {attachment_id}")
+            logger.info(f"   📌 media_hash: {attachment.media_hash}")
+            logger.info(f"   📌 short_url: {attachment.short_url}")
             
             # Enfileirar para envio Evolution API
             from apps.chat.tasks import send_message_to_evolution
