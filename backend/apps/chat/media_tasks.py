@@ -152,7 +152,7 @@ async def handle_process_incoming_media(
         
         logger.info(f"✅ [INCOMING MEDIA] Baixado: {len(media_data)} bytes")
         
-        # 2. Processar se for imagem
+        # 2. Processar imagem e padronizar áudio
         processed_data = media_data
         thumbnail_data = None
         
@@ -163,9 +163,33 @@ async def handle_process_incoming_media(
                 thumbnail_data = result['thumbnail_data']
                 logger.info(f"✅ [INCOMING MEDIA] Imagem processada")
         
+        # Áudio: converter OGG/WEBM → MP3 para compatibilidade universal
+        if media_type == 'audio':
+            from apps.chat.utils.audio_converter import should_convert_audio, convert_ogg_to_mp3, get_converted_filename
+            # Inferir filename e checar se precisa converter
+            from urllib.parse import urlparse
+            inferred_filename = urlparse(media_url).path.split('/')[-1] or f"audio_{message_id}"
+            if should_convert_audio(content_type or '', inferred_filename):
+                source_format = "webm" if ('webm' in (content_type or '').lower() or inferred_filename.lower().endswith('.webm')) else "ogg"
+                success_conv, mp3_data, conv_msg = convert_ogg_to_mp3(processed_data, source_format=source_format)
+                if success_conv and mp3_data:
+                    processed_data = mp3_data
+                    content_type = 'audio/mpeg'
+                    inferred_filename = get_converted_filename(inferred_filename)
+                    logger.info(f"✅ [AUDIO] Incoming convertido para MP3")
+                else:
+                    logger.warning(f"⚠️ [AUDIO] Conversão falhou: {conv_msg}. Seguindo com formato original")
+        
         # 3. Path no S3
         from urllib.parse import urlparse
         filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
+        # Se convertemos áudio, o nome pode ter sido ajustado acima
+        if media_type == 'audio':
+            # usar inferred_filename se disponível no escopo
+            try:
+                filename = inferred_filename or filename
+            except NameError:
+                pass
         s3_path = generate_media_path(tenant_id, f'chat_{media_type}s', filename)
         
         # 4. Upload para S3
@@ -190,18 +214,33 @@ async def handle_process_incoming_media(
         public_url = get_public_url(s3_path)
         thumb_url = get_public_url(thumb_s3_path) if thumb_s3_path else None
         
-        # 6. Criar MessageAttachment
+        # 6. Criar/atualizar MessageAttachment
         message = await sync_to_async(Message.objects.get)(id=message_id)
         
-        attachment = await sync_to_async(MessageAttachment.objects.create)(
-            message=message,
-            file_type=media_type,
-            file_url=public_url,
-            thumbnail_url=thumb_url,
-            file_size=len(processed_data),
-            mime_type=content_type,
-            original_filename=filename
-        )
+        # Tentar encontrar attachment placeholder criado no webhook
+        from asgiref.sync import sync_to_async
+        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message=message).order_by('-created_at').first())()
+        if existing and (not existing.file_url or existing.storage_type != 's3'):
+            existing.file_url = public_url
+            existing.thumbnail_url = thumb_url or existing.thumbnail_url
+            existing.size_bytes = len(processed_data)
+            existing.mime_type = content_type
+            existing.original_filename = filename
+            existing.file_path = s3_path
+            existing.storage_type = 's3'
+            await sync_to_async(existing.save)()
+            attachment = existing
+        else:
+            attachment = await sync_to_async(MessageAttachment.objects.create)(
+                message=message,
+                tenant=message.conversation.tenant,
+                original_filename=filename,
+                mime_type=content_type,
+                file_path=s3_path,
+                file_url=public_url,
+                storage_type='s3',
+                size_bytes=len(processed_data)
+            )
         
         # 7. Invalidar cache Redis
         import hashlib
@@ -215,12 +254,13 @@ async def handle_process_incoming_media(
         await channel_layer.group_send(
             f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}',
             {
-                'type': 'attachment_received',
+                'type': 'attachment_updated',
                 'data': {
                     'message_id': str(message_id),
                     'attachment_id': str(attachment.id),
                     'file_url': public_url,
                     'thumbnail_url': thumb_url,
+                    'mime_type': content_type,
                     'file_type': media_type
                 }
             }

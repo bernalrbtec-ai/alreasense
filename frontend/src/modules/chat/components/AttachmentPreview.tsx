@@ -154,7 +154,8 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       attachment.file_url.includes('bucket-production') ||  // MinIO/S3
       attachment.file_url.includes('s3.') ||                // AWS S3
       attachment.file_url.includes('localhost') ||          // Dev local
-      attachment.file_url.startsWith('blob:')              // Blob URL
+      attachment.file_url.startsWith('blob:') ||            // Blob URL
+      attachment.file_url.includes('/api/chat/media-proxy') // Proxy interno
     );
     
     return (
