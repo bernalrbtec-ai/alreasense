@@ -324,8 +324,10 @@ async def handle_send_message(message_id: str):
                         logger.info(f"📎 [CHAT] Usando sendMedia (outros anexos)")
                     
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
-                    logger.info(f"   URL: {endpoint}")
-                    logger.info(f"   Payload: {payload}")
+                    logger.info(f"   Endpoint: {endpoint}")
+                    logger.info(f"   Headers: {headers}")
+                    logger.info(f"   Payload (Python): {payload}")
+                    logger.info(f"   Payload (JSON): {json.dumps(payload)}")
                     
                     response = await client.post(
                         endpoint,
@@ -333,8 +335,9 @@ async def handle_send_message(message_id: str):
                         json=payload
                     )
                     
-                    logger.info(f"🔍 [CHAT] Resposta Evolution API: {response.status_code}")
-                    logger.info(f"   Body: {response.text[:500]}")
+                    logger.info(f"📥 [CHAT] Resposta Evolution API:")
+                    logger.info(f"   Status: {response.status_code}")
+                    logger.info(f"   Body completo: {response.text}")
                     
                     response.raise_for_status()
                     
