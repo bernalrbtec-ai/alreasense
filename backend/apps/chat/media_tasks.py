@@ -225,7 +225,9 @@ async def handle_process_incoming_media(
         message = await sync_to_async(Message.objects.get)(id=message_id)
         if existing and (not existing.file_url or existing.storage_type != 's3'):
             existing.file_url = public_url
-            existing.thumbnail_url = thumb_url or existing.thumbnail_url
+            # Atualizar thumbnail_path se houver thumbnail
+            if thumb_s3_path:
+                existing.thumbnail_path = thumb_s3_path
             existing.size_bytes = len(processed_data)
             existing.mime_type = content_type
             existing.original_filename = filename
@@ -242,7 +244,8 @@ async def handle_process_incoming_media(
                 file_path=s3_path,
                 file_url=public_url,
                 storage_type='s3',
-                size_bytes=len(processed_data)
+                size_bytes=len(processed_data),
+                thumbnail_path=thumb_s3_path or ''
             )
         
         # 7. Cache no Redis (alinhado com envio: 30 dias por padrão)
@@ -265,6 +268,11 @@ async def handle_process_incoming_media(
         from channels.layers import get_channel_layer
         channel_layer = get_channel_layer()
         
+        # Gerar thumbnail_url a partir do thumbnail_path se houver
+        thumbnail_url_for_ws = None
+        if thumb_s3_path:
+            thumbnail_url_for_ws = get_public_url(thumb_s3_path)
+        
         await channel_layer.group_send(
             f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}',
             {
@@ -273,7 +281,7 @@ async def handle_process_incoming_media(
                     'message_id': str(message_id),
                     'attachment_id': str(attachment.id),
                     'file_url': public_url,
-                    'thumbnail_url': thumb_url,
+                    'thumbnail_url': thumbnail_url_for_ws,
                     'mime_type': content_type,
                     'file_type': media_type
                 }
