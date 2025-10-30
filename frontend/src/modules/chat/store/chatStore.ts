@@ -25,6 +25,7 @@ interface ChatState {
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateMessageStatus: (messageId: string, status: string) => void;
+  updateAttachment: (attachmentId: string, updates: Partial<Message['attachments'][number]>) => void;
 
   // Estado do chat
   typing: boolean;
@@ -99,6 +100,16 @@ export const useChatStore = create<ChatState>((set) => ({
     messages: state.messages.map(m =>
       m.id === messageId ? { ...m, status: status as any } : m
     )
+  })),
+  updateAttachment: (attachmentId, updates) => set((state) => ({
+    messages: state.messages.map(m => {
+      if (!m.attachments || m.attachments.length === 0) return m;
+      const idx = m.attachments.findIndex(a => a.id === attachmentId);
+      if (idx === -1) return m;
+      const updatedAttachments = [...m.attachments];
+      updatedAttachments[idx] = { ...updatedAttachments[idx], ...updates } as any;
+      return { ...m, attachments: updatedAttachments } as any;
+    })
   })),
 
   // Estado do chat

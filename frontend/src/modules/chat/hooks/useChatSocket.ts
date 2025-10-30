@@ -20,6 +20,7 @@ export function useChatSocket(conversationId?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const { token, user } = useAuthStore();
   const { addMessage, updateMessageStatus, setTyping, updateConversation } = useChatStore();
+  const { updateAttachment } = useChatStore.getState();
   const { showNotification, isEnabled: notificationsEnabled } = useDesktopNotifications();
 
   // Conectar ao manager global (1 vez por sessão)
@@ -119,12 +120,24 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
+    const handleAttachmentUpdated = (data: WebSocketMessage) => {
+      if (data.data?.attachment_id) {
+        console.log('📎 [HOOK] Attachment updated:', data.data.attachment_id);
+        updateAttachment(data.data.attachment_id, {
+          file_url: data.data.file_url,
+          thumbnail_url: data.data.thumbnail_url,
+          mime_type: data.data.mime_type,
+        } as any);
+      }
+    };
+
     // Registrar listeners
     chatWebSocketManager.on('message_received', handleMessageReceived);
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
     chatWebSocketManager.on('typing', handleTyping);
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
     chatWebSocketManager.on('attachment_downloaded', handleAttachmentDownloaded);
+    chatWebSocketManager.on('attachment_updated', handleAttachmentUpdated);
 
     // Cleanup
     return () => {
@@ -133,6 +146,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
       chatWebSocketManager.off('attachment_downloaded', handleAttachmentDownloaded);
+      chatWebSocketManager.off('attachment_updated', handleAttachmentUpdated);
     };
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);
 
