@@ -235,6 +235,20 @@ async def handle_send_message(message_id: str):
         content = message.content
         attachment_urls = message.metadata.get('attachment_urls', []) if message.metadata else []
         
+        # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
+        # Formato: *Nome Sobrenome:*\n\n{mensagem}
+        created_by = await sync_to_async(lambda: message.created_by)()
+        if created_by and content:
+            first_name = created_by.first_name or ''
+            last_name = created_by.last_name or ''
+            
+            if first_name or last_name:
+                # Montar assinatura com nome completo em negrito
+                full_name = f"{first_name} {last_name}".strip()
+                signature = f"*{full_name}:*\n\n"
+                content = signature + content
+                logger.info(f"✍️ [CHAT ENVIO] Assinatura adicionada: {full_name}")
+        
         logger.info(f"📱 [CHAT ENVIO] Telefone/Grupo: {phone}")
         logger.info(f"   Tipo: {conversation.conversation_type}")
         
