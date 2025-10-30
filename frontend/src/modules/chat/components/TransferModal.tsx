@@ -90,10 +90,14 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
 
       // ✅ Verificar se usuário ainda tem acesso à conversa transferida
       const userDepartments = user?.department_ids || [];
+      // Tratar department como string (ID) ou objeto { id, name }
+      const newDepartmentId = typeof updatedConv.department === 'string' 
+        ? updatedConv.department 
+        : updatedConv.department?.id || null;
       const userHasAccess = 
         user?.is_admin ||  // Admin sempre tem acesso
-        (updatedConv.department?.id && userDepartments.includes(updatedConv.department.id)) ||  // Pertence ao departamento
-        (updatedConv.department === null && updatedConv.status === 'pending');  // Inbox (sem departamento)
+        (newDepartmentId && userDepartments.includes(newDepartmentId)) ||  // Pertence ao departamento
+        (newDepartmentId === null && updatedConv.status === 'pending');  // Inbox (sem departamento)
       
       if (!userHasAccess) {
         // Usuário não tem mais acesso: remover da lista e fechar
