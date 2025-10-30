@@ -350,18 +350,9 @@ else:
 
 # ✅ FIX: Se URL não encontrada OU parece truncada, construir manualmente
 # Railway às vezes trunca URLs com caracteres especiais (~ na senha)
-# Railway também não permite editar variáveis MANAGED (DEFAULT_USER, DEFAULT_PASS)
 if not RABBITMQ_URL or (RABBITMQ_URL and len(RABBITMQ_URL) < 100):
-    # 1️⃣ PRIORIDADE: Tentar variáveis CUSTOM (criadas manualmente, não gerenciadas pelo Railway)
-    user = config('CUSTOM_RABBITMQ_USER', default=None)
-    password = config('CUSTOM_RABBITMQ_PASS', default=None)
-    source = "CUSTOM_*"
-    
-    # 2️⃣ FALLBACK: Tentar variáveis DEFAULT (gerenciadas pelo Railway, podem estar truncadas)
-    if not user or not password:
-        user = config('RABBITMQ_DEFAULT_USER', default=None)
-        password = config('RABBITMQ_DEFAULT_PASS', default=None)
-        source = "DEFAULT_*"
+    user = config('RABBITMQ_DEFAULT_USER', default=None)
+    password = config('RABBITMQ_DEFAULT_PASS', default=None)
     
     if user and password:
         # Construir URL manualmente - NÃO aplicar URL encoding
@@ -369,10 +360,9 @@ if not RABBITMQ_URL or (RABBITMQ_URL and len(RABBITMQ_URL) < 100):
         host = 'rabbitmq.railway.internal'
         port = 5672
         RABBITMQ_URL = f'amqp://{user}:{password}@{host}:{port}'
-        print(f"✅ [SETTINGS] RABBITMQ_URL construída manualmente de {source}")
+        print(f"✅ [SETTINGS] RABBITMQ_URL construída manualmente de DEFAULT_USER + DEFAULT_PASS")
         print(f"   User: {user}")
         print(f"   Pass length: {len(password)} chars")
-        print(f"   Pass preview: {password[:4]}...{password[-4:] if len(password) > 8 else ''}")
     elif not RABBITMQ_URL:
         # Último fallback: localhost (apenas para build/dev)
         RABBITMQ_URL = 'amqp://guest:guest@localhost:5672/'

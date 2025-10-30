@@ -282,10 +282,21 @@ async def handle_send_message(message_id: str):
                     # Detectar mediatype e filename baseado no attachment
                     mime_type = 'application/pdf'  # default
                     filename = 'file'
+                    attachment_obj = None
                     
                     if attachments_list and idx < len(attachments_list):
-                        mime_type = attachments_list[idx].mime_type
-                        filename = attachments_list[idx].original_filename
+                        attachment_obj = attachments_list[idx]
+                        mime_type = attachment_obj.mime_type
+                        filename = attachment_obj.original_filename
+                    
+                    # ✅ USAR SHORT_URL se disponível (evita URLs longas do S3)
+                    # URLs longas causam 403 na Evolution API
+                    if attachment_obj and attachment_obj.short_url:
+                        final_url = attachment_obj.short_url
+                        logger.info(f"🔗 [CHAT] Usando URL curta: {final_url}")
+                    else:
+                        final_url = url  # Fallback para presigned URL
+                        logger.warning(f"⚠️ [CHAT] short_url não disponível, usando presigned URL (pode falhar!)")
                     
                     # Mapear mime_type para mediatype da Evolution API
                     is_audio = mime_type.startswith('audio/')
@@ -295,9 +306,10 @@ async def handle_send_message(message_id: str):
                         # Estrutura para PTT via sendWhatsAppAudio
                         # Ref: https://doc.evolution-api.com/v2/api-reference/message-controller/send-audio
                         # TESTADO E FUNCIONANDO: {number, audio, delay, linkPreview: false}
+                        # ✅ CACHE STRATEGY: Redis 7 dias + S3 30 dias via /media/{hash}
                         payload = {
                             'number': phone,
-                            'audio': url,         # URL do arquivo no S3
+                            'audio': final_url,   # URL CURTA! (/media/{hash})
                             'delay': 1200,        # Delay opcional
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
                         }
@@ -317,9 +329,10 @@ async def handle_send_message(message_id: str):
                         
                         # ✅ Evolution API NÃO usa mediaMessage wrapper!
                         # Estrutura correta: direto no root
+                        # ✅ USAR SHORT_URL (já configurado acima)
                         payload = {
                             'number': phone,
-                            'media': url,           # URL do arquivo
+                            'media': final_url,      # URL CURTA! (/media/{hash})
                             'mediatype': mediatype,  # lowercase!
                             'fileName': filename     # Nome do arquivo
                         }

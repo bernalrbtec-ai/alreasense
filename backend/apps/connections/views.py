@@ -29,9 +29,7 @@ def evolution_config(request):
     - Não retorna mais base_url e api_key (vêm do .env)
     - Busca instâncias da Evolution API usando settings
     - Retorna estatísticas: total, conectadas, desconectadas
-    - Retorna lista de instâncias com TODOS os detalhes da Evolution API
-    
-    📚 API Reference: https://doc.evolution-api.com/v2/api-reference/instance-controller/fetch-instances
+    - Retorna lista de instâncias com nome e status
     """
     from django.conf import settings
     import logging
@@ -91,42 +89,19 @@ def evolution_config(request):
             
             connection_status = 'active'
             
-            # Processar cada instância com TODOS os detalhes da Evolution API
+            # Processar cada instância
             for inst in instances:
-                instance_data = inst.get('instance', {})
-                
-                # Campos da Evolution API
-                instance_name = instance_data.get('instanceName', 'Unknown')
-                instance_id = instance_data.get('instanceId', None)
-                instance_status = instance_data.get('status', 'unknown')
-                owner = instance_data.get('owner', None)
-                profile_name = instance_data.get('profileName', None)
-                profile_picture_url = instance_data.get('profilePictureUrl', None)
-                profile_status = instance_data.get('profileStatus', None)
-                server_url = instance_data.get('serverUrl', None)
-                integration = instance_data.get('integration', {})
+                # Evolution API retorna: instanceName, status, etc
+                instance_name = inst.get('instance', {}).get('instanceName', 'Unknown')
+                instance_status = inst.get('instance', {}).get('status', 'unknown')
                 
                 # Status pode ser: "open" (conectado), "close" (desconectado), etc
                 is_connected = instance_status == 'open'
                 
-                # Formatar número do WhatsApp (owner) para exibição
-                phone_number = None
-                if owner and '@' in owner:
-                    phone_number = owner.split('@')[0]  # Remove @s.whatsapp.net
-                
                 instances_data.append({
                     'name': instance_name,
-                    'instance_id': instance_id,
                     'status': 'connected' if is_connected else 'disconnected',
                     'raw_status': instance_status,
-                    'owner': owner,
-                    'phone_number': phone_number,
-                    'profile_name': profile_name,
-                    'profile_picture_url': profile_picture_url,
-                    'profile_status': profile_status,
-                    'server_url': server_url,
-                    'integration': integration.get('integration', None),
-                    'webhook_wa_business': integration.get('webhook_wa_business', None),
                 })
                 
                 # Atualizar estatísticas
@@ -163,7 +138,6 @@ def evolution_config(request):
         'last_check': timezone.now().isoformat(),
         'last_error': last_error,
         'webhook_url': webhook_url,
-        'server_url': base_url if base_url else None,
         'statistics': stats,
         'instances': instances_data,
     })

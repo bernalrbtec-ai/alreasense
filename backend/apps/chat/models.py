@@ -384,6 +384,24 @@ class MessageAttachment(models.Model):
         verbose_name='Criado em'
     )
     
+    # 🔗 Campos para cache inteligente (Redis 7 dias + S3 30 dias)
+    media_hash = models.CharField(
+        max_length=32,
+        unique=True,
+        db_index=True,
+        null=True,
+        blank=True,
+        verbose_name='Hash de Mídia',
+        help_text='Hash único para URL curta (/media/{hash})'
+    )
+    short_url = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='URL Curta',
+        help_text='URL curta para Evolution API (evita URLs longas do S3)'
+    )
+    
     # ✨ Campos para IA (Flow AI addon)
     transcription = models.TextField(
         null=True,
@@ -463,10 +481,39 @@ class MessageAttachment(models.Model):
         return f"{self.original_filename} ({self.get_storage_type_display()})"
     
     def save(self, *args, **kwargs):
-        """Define expires_at automaticamente se não setado."""
+        """
+        Define expires_at e gera media_hash/short_url automaticamente.
+        """
+        # 1. Definir expires_at (cache local)
         if not self.expires_at:
             self.expires_at = timezone.now() + timedelta(days=7)
+        
+        # 2. Gerar media_hash e short_url se não existir
+        if not self.media_hash:
+            self.media_hash = self.generate_media_hash()
+            
+            # Gerar short_url
+            from django.conf import settings
+            base_url = getattr(settings, 'BASE_URL', 'https://alreasense-backend-production.up.railway.app')
+            self.short_url = f"{base_url}/media/{self.media_hash}"
+        
         super().save(*args, **kwargs)
+    
+    def generate_media_hash(self):
+        """
+        Gera hash único de 12 caracteres para URL curta.
+        Formato: primeiros 12 chars do SHA256(uuid + salt)
+        """
+        import hashlib
+        import secrets
+        
+        # UUID + salt aleatório para garantir unicidade
+        salt = secrets.token_hex(8)
+        raw = f"{self.id}{salt}".encode('utf-8')
+        hash_hex = hashlib.sha256(raw).hexdigest()
+        
+        # Retornar primeiros 12 caracteres (suficiente para unicidade)
+        return hash_hex[:12]
     
     @property
     def is_expired(self):
