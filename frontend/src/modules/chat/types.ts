@@ -26,7 +26,7 @@ export interface ContactTag {
 export interface Conversation {
   id: string;
   tenant: string;
-  department: string;
+  department: string | { id: string; name: string } | null;  // Pode ser ID (string), objeto ou null
   department_name: string;
   contact_phone: string;
   contact_name: string;
