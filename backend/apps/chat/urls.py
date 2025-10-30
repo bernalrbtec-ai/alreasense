@@ -25,6 +25,8 @@ urlpatterns = [
     # 🔗 Serve mídia com cache Redis (7 dias) + S3 (30 dias)
     # URL curta para Evolution API: /media/{hash}
     path('media/<str:media_hash>/', serve_media, name='serve-media'),
+    # Compatibilidade: aceitar sem barra final (short_url antiga)
+    path('media/<str:media_hash>', serve_media),
     
     # Proxy universal de mídia (público - sem autenticação)
     path('media-proxy/', media_proxy, name='media-proxy'),

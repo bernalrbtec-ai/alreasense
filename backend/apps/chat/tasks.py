@@ -346,24 +346,48 @@ async def handle_send_message(message_id: str):
                     else:
                         endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
                         logger.info(f"📎 [CHAT] Usando sendMedia (outros anexos)")
-                    
+
                     logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
                     logger.info(f"   Endpoint: {endpoint}")
                     logger.info(f"   Headers: {headers}")
                     logger.info(f"   Payload (Python): {payload}")
                     logger.info(f"   Payload (JSON): {json.dumps(payload)}")
-                    
-                    response = await client.post(
-                        endpoint,
-                        headers=headers,
-                        json=payload
-                    )
-                    
-                    logger.info(f"📥 [CHAT] Resposta Evolution API:")
-                    logger.info(f"   Status: {response.status_code}")
-                    logger.info(f"   Body completo: {response.text}")
-                    
-                    response.raise_for_status()
+
+                    try:
+                        response = await client.post(
+                            endpoint,
+                            headers=headers,
+                            json=payload
+                        )
+                        logger.info(f"📥 [CHAT] Resposta Evolution API:")
+                        logger.info(f"   Status: {response.status_code}")
+                        logger.info(f"   Body completo: {response.text}")
+                        response.raise_for_status()
+                    except httpx.HTTPStatusError as e:
+                        # Fallback: algumas instalações não expõem sendWhatsAppAudio; tentar sendMedia com mediatype=audio
+                        if is_audio and e.response is not None and e.response.status_code == 404:
+                            fb_endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
+                            fb_payload = {
+                                'number': phone,
+                                'media': final_url,
+                                'mediatype': 'audio',
+                                'fileName': filename,
+                                'linkPreview': False
+                            }
+                            logger.warning("⚠️ [CHAT] sendWhatsAppAudio retornou 404. Tentando fallback sendMedia (audio)...")
+                            logger.info(f"   FB Endpoint: {fb_endpoint}")
+                            logger.info(f"   FB Payload: {json.dumps(fb_payload)}")
+                            fb_resp = await client.post(
+                                fb_endpoint,
+                                headers=headers,
+                                json=fb_payload
+                            )
+                            logger.info(f"📥 [CHAT] Resposta Evolution API (fallback): {fb_resp.status_code}")
+                            logger.info(f"   Body: {fb_resp.text}")
+                            fb_resp.raise_for_status()
+                            response = fb_resp
+                        else:
+                            raise
                     
                     data = response.json()
                     message.message_id = data.get('key', {}).get('id')
