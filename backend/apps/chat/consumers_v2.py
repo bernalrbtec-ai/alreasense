@@ -512,4 +512,23 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'attachment_id': event['attachment_id']
         }))
         logger.info(f"📡 [CHAT WS V2] Notificação de anexo baixado enviada")
+    
+    async def attachment_updated(self, event):
+        """
+        Handler para broadcast quando anexo é processado (S3 + cache Redis).
+        Frontend recebe atualização com file_url proxy.
+        """
+        data = event.get('data', {})
+        await self.send(text_data=json.dumps({
+            'type': 'attachment_updated',
+            'data': {
+                'message_id': data.get('message_id'),
+                'attachment_id': data.get('attachment_id'),
+                'file_url': data.get('file_url'),
+                'thumbnail_url': data.get('thumbnail_url'),
+                'mime_type': data.get('mime_type'),
+                'file_type': data.get('file_type')
+            }
+        }))
+        logger.info(f"📡 [CHAT WS V2] Notificação de anexo atualizado enviada (attachment_id: {data.get('attachment_id')})")
 

@@ -13,7 +13,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 from apps.chat.models import Conversation, Message, MessageAttachment
-from apps.chat.tasks import download_attachment
+# download_attachment removido - agora usa process_incoming_media diretamente (S3 + cache Redis)
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
 from apps.notifications.models import WhatsAppInstance
@@ -626,35 +626,58 @@ def handle_message_upsert(data, tenant, connection=None):
                 filename = f"{message.id}.ogg"
             
             if attachment_url:
+                # Determinar media_type baseado no message_type
+                if message_type == 'imageMessage':
+                    incoming_media_type = 'image'
+                elif message_type == 'videoMessage':
+                    incoming_media_type = 'video'
+                elif message_type == 'audioMessage':
+                    incoming_media_type = 'audio'
+                elif message_type == 'documentMessage':
+                    incoming_media_type = 'document'
+                else:
+                    incoming_media_type = 'document'
+                
                 # Usar transaction para garantir que o anexo seja salvo antes de enfileirar
                 from django.db import transaction
                 with transaction.atomic():
+                    # Criar placeholder (sem file_url ainda, será preenchido após processamento)
                     attachment = MessageAttachment.objects.create(
                         message=message,
                         tenant=tenant,
                         original_filename=filename,
                         mime_type=mime_type,
-                        file_path='',  # Será preenchido após download
-                        file_url=attachment_url,
-                        storage_type='local'
+                        file_path='',  # Será preenchido após processamento S3
+                        file_url='',  # Será preenchido com URL proxy após processamento
+                        storage_type='s3',  # Direto para S3 (sem storage local)
+                        size_bytes=0  # Será preenchido após download
                     )
                     
                     attachment_id_str = str(attachment.id)
-                    logger.info(f"📎 [WEBHOOK] Criado anexo ID={attachment_id_str}, mime={mime_type}, file={filename}")
-                    logger.info(f"📎 [WEBHOOK] URL={attachment_url[:100]}...")
+                    message_id_str = str(message.id)
+                    tenant_id_str = str(tenant.id)
                     
-                    # Força commit antes de enfileirar
-                    def enqueue_download():
-                        logger.info(f"🔄 [WEBHOOK] Enfileirando download do anexo {attachment_id_str}...")
+                    logger.info(f"📎 [WEBHOOK] Criado anexo placeholder ID={attachment_id_str}, mime={mime_type}, type={incoming_media_type}")
+                    logger.info(f"📎 [WEBHOOK] URL temporária: {attachment_url[:100]}...")
+                    
+                    # Força commit antes de enfileirar processamento direto (S3 + cache Redis)
+                    def enqueue_process():
+                        logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3+cache) do anexo {attachment_id_str}...")
                         try:
-                            download_attachment.delay(attachment_id_str, attachment_url)
-                            logger.info(f"✅ [WEBHOOK] Download enfileirado com sucesso!")
+                            from apps.chat.tasks import process_incoming_media
+                            process_incoming_media.delay(
+                                tenant_id=tenant_id_str,
+                                message_id=message_id_str,
+                                media_url=attachment_url,
+                                media_type=incoming_media_type
+                            )
+                            logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso!")
                         except Exception as e:
-                            logger.error(f"❌ [WEBHOOK] ERRO ao enfileirar download: {e}", exc_info=True)
+                            logger.error(f"❌ [WEBHOOK] ERRO ao enfileirar processamento: {e}", exc_info=True)
                     
-                    transaction.on_commit(enqueue_download)
+                    transaction.on_commit(enqueue_process)
                 
-                logger.info(f"📎 [WEBHOOK] Anexo {filename} preparado para download")
+                logger.info(f"📎 [WEBHOOK] Anexo {filename} preparado para processamento direto (S3+cache)")
             
             # Broadcast via WebSocket (mensagem específica)
             logger.info(f"📡 [WEBHOOK] Enviando para WebSocket da conversa...")

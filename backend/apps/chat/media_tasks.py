@@ -245,10 +245,21 @@ async def handle_process_incoming_media(
                 size_bytes=len(processed_data)
             )
         
-        # 7. Invalidar cache Redis
+        # 7. Cache no Redis (alinhado com envio: 30 dias por padrão)
+        # Gerar hash único para cache (usar file_path como base)
         import hashlib
-        cache_key = f"media:{hashlib.md5(media_url.encode()).hexdigest()}"
-        cache.delete(cache_key)
+        from django.conf import settings
+        media_hash = hashlib.md5(s3_path.encode()).hexdigest()[:12]
+        cache_key = f"media:{media_hash}"
+        
+        # Cachear dados do arquivo processado (TTL configurável)
+        cache_ttl = int(getattr(settings, 'ATTACHMENTS_REDIS_TTL_DAYS', 30)) * 24 * 60 * 60
+        cache_data = {
+            'data': processed_data,
+            'content_type': content_type,
+        }
+        cache.set(cache_key, cache_data, cache_ttl)
+        logger.info(f"✅ [INCOMING MEDIA] Cacheado no Redis por {cache_ttl} segundos (hash: {media_hash})")
         
         # 8. Broadcast via WebSocket
         from channels.layers import get_channel_layer

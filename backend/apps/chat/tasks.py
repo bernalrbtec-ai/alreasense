@@ -813,6 +813,7 @@ async def start_chat_consumers():
         queue_download = await channel.declare_queue(QUEUE_DOWNLOAD_ATTACHMENT, durable=True)
         queue_migrate = await channel.declare_queue(QUEUE_MIGRATE_S3, durable=True)
         queue_profile_pic = await channel.declare_queue(QUEUE_FETCH_PROFILE_PIC, durable=True)
+        queue_process_incoming_media = await channel.declare_queue(QUEUE_PROCESS_INCOMING_MEDIA, durable=True)
         
         logger.info("✅ [CHAT CONSUMER] Filas declaradas")
         
@@ -858,11 +859,27 @@ async def start_chat_consumers():
                 except Exception as e:
                     logger.error(f"❌ [CHAT CONSUMER] Erro fetch_profile_pic: {e}", exc_info=True)
         
+        # Consumer: process_incoming_media (novo fluxo: S3 direto + cache Redis)
+        async def on_process_incoming_media(message: aio_pika.IncomingMessage):
+            async with message.process():
+                try:
+                    from apps.chat.media_tasks import handle_process_incoming_media
+                    payload = json.loads(message.body.decode())
+                    await handle_process_incoming_media(
+                        tenant_id=payload['tenant_id'],
+                        message_id=payload['message_id'],
+                        media_url=payload['media_url'],
+                        media_type=payload['media_type']
+                    )
+                except Exception as e:
+                    logger.error(f"❌ [CHAT CONSUMER] Erro process_incoming_media: {e}", exc_info=True)
+        
         # Inicia consumo
         await queue_send.consume(on_send_message)
         await queue_download.consume(on_download_attachment)
         await queue_migrate.consume(on_migrate_s3)
         await queue_profile_pic.consume(on_fetch_profile_pic)
+        await queue_process_incoming_media.consume(on_process_incoming_media)
         
         logger.info("🚀 [CHAT CONSUMER] Consumers iniciados e aguardando mensagens")
         
