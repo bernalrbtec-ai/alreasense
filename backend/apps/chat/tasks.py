@@ -267,7 +267,7 @@ async def handle_send_message(message_id: str):
             # ✅ USAR API KEY GLOBAL (do .env) ao invés da instância
             # Ref: 403 Forbidden em sendWhatsAppAudio pode exigir API key global
             from django.conf import settings
-            global_api_key = getattr(settings, 'EVOLUTION_API_KEY', instance.api_key)
+            global_api_key = getattr(settings, 'EVOLUTION_API_KEY', '') or instance.api_key
             
             headers = {
                 'apikey': global_api_key,
