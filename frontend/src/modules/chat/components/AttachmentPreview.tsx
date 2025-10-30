@@ -158,14 +158,14 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     );
     
     return (
-      <div className="attachment-preview audio w-full max-w-[280px]">
-        {/* Player estilo WhatsApp - responsivo e com largura fixa */}
-        <div className="flex items-center gap-2 sm:gap-3 bg-white rounded-lg p-3 sm:p-4 shadow-sm w-full">
-          {/* Botão Play/Pause - responsivo */}
+      <div className="attachment-preview audio w-full">
+        {/* Player estilo WhatsApp - responsivo e com largura maior */}
+        <div className="flex items-center gap-3 sm:gap-4 bg-white rounded-lg p-3 sm:p-4 shadow-sm w-full">
+          {/* Botão Play/Pause - levemente maior */}
           <button
             onClick={togglePlay}
             disabled={!isAudioReady}
-            className={`flex-shrink-0 w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors ${
+            className={`flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center transition-colors ${
               isAudioReady 
                 ? 'bg-green-500 hover:bg-green-600 cursor-pointer' 
                 : 'bg-gray-300 cursor-not-allowed'
@@ -173,11 +173,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             title={isAudioReady ? (isPlaying ? 'Pausar' : 'Reproduzir') : 'Baixando áudio...'}
           >
             {!isAudioReady ? (
-              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
             ) : isPlaying ? (
-              <Pause className="text-white" size={18} fill="white" />
+              <Pause className="text-white" size={20} fill="white" />
             ) : (
-              <Play className="text-white ml-0.5" size={18} fill="white" />
+              <Play className="text-white ml-0.5" size={20} fill="white" />
             )}
           </button>
           
@@ -185,7 +185,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           <div className="flex-1 min-w-0">
             {/* Progress Bar - mais alta em mobile */}
             <div
-              className="h-1.5 sm:h-1 bg-gray-200 rounded-full cursor-pointer mb-1.5 sm:mb-1"
+              className="h-1.5 sm:h-1.5 bg-gray-200 rounded-full cursor-pointer mb-1.5 sm:mb-1"
               onClick={isAudioReady ? handleSeek : undefined}
             >
               <div
