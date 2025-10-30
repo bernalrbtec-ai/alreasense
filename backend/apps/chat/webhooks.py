@@ -765,9 +765,8 @@ def handle_message_update(data, tenant):
         logger.info(f"   Status recebido: {status_value}")
         
         if not message_id or not status_value:
-            logger.warning(f"⚠️ [WEBHOOK UPDATE] Dados insuficientes!")
-            logger.warning(f"   message_id: {message_id}")
-            logger.warning(f"   status: {status_value}")
+            # 🔇 Reduzir ruído: Evolution envia updates parciais de contato/chat sem status/mensagem
+            logger.debug(f"🔇 [WEBHOOK UPDATE] Ignorando update sem message_id/status (contacts.update/chat.update)")
             return
         
         # Busca mensagem - tentar com keyId primeiro

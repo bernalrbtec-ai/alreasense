@@ -162,6 +162,9 @@ async def handle_process_incoming_media(
                 processed_data = result['processed_data']
                 thumbnail_data = result['thumbnail_data']
                 logger.info(f"✅ [INCOMING MEDIA] Imagem processada")
+            # Forçar content-type seguro se vier genérico
+            if not content_type or content_type.startswith('application/octet-stream'):
+                content_type = 'image/jpeg'
         
         # Áudio: converter OGG/WEBM → MP3 para compatibilidade universal
         if media_type == 'audio':
