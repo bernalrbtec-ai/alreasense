@@ -237,10 +237,10 @@ async def handle_send_message(message_id: str):
         
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
-        created_by = await sync_to_async(lambda: message.created_by)()
-        if created_by and content:
-            first_name = created_by.first_name or ''
-            last_name = created_by.last_name or ''
+        sender = await sync_to_async(lambda: message.sender)()
+        if sender and content:
+            first_name = sender.first_name or ''
+            last_name = sender.last_name or ''
             
             if first_name or last_name:
                 # Montar assinatura com nome completo em negrito
