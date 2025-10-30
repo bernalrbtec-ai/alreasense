@@ -7,6 +7,7 @@ import { Conversation, Department, User } from '../types';
 import { X, ArrowRight, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useChatStore } from '../store/chatStore';
+import { useAuthStore } from '@/stores/authStore';
 
 interface TransferModalProps {
   conversation: Conversation;
@@ -15,7 +16,8 @@ interface TransferModalProps {
 }
 
 export function TransferModal({ conversation, onClose, onTransferSuccess }: TransferModalProps) {
-  const { updateConversation, setActiveConversation, removeConversation } = useChatStore();
+  const { updateConversation, setActiveConversation, removeConversation, setConversations } = useChatStore();
+  const { user } = useAuthStore();
   const [departments, setDepartments] = useState<Department[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState<string>('');
@@ -72,12 +74,42 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
       if (selectedAgent) payload.new_agent = selectedAgent;
 
       const response = await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
+      const updatedConv: Conversation = response.data;
 
-      // Remover conversa da lista atual (mudou de departamento)
-      removeConversation(conversation.id);
+      // ✅ Recarregar lista completa de conversas
+      try {
+        const convsResponse = await api.get('/chat/conversations/', {
+          params: { ordering: '-last_message_at' }
+        });
+        const convs = convsResponse.data.results || convsResponse.data;
+        setConversations(convs);
+        console.log('✅ [TransferModal] Lista de conversas recarregada:', convs.length);
+      } catch (error) {
+        console.error('❌ [TransferModal] Erro ao recarregar conversas:', error);
+      }
+
+      // ✅ Verificar se usuário ainda tem acesso à conversa transferida
+      const userDepartments = user?.departments?.map((d: Department) => d.id) || [];
+      const userHasAccess = 
+        user?.is_admin ||  // Admin sempre tem acesso
+        (updatedConv.department && userDepartments.includes(updatedConv.department.id)) ||  // Pertence ao departamento
+        (updatedConv.department === null && updatedConv.status === 'pending');  // Inbox (sem departamento)
       
-      // Fechar a conversa ativa
-      setActiveConversation(null);
+      if (!userHasAccess) {
+        // Usuário não tem mais acesso: remover da lista e fechar
+        removeConversation(conversation.id);
+        setActiveConversation(null);
+        console.log('🔒 [TransferModal] Usuário perdeu acesso, conversa removida');
+      } else {
+        // Usuário ainda tem acesso: atualizar conversa na lista
+        updateConversation(updatedConv);
+        console.log('✅ [TransferModal] Conversa atualizada, usuário mantém acesso');
+        
+        // Se a conversa transferida era a ativa, atualizar também
+        if (useChatStore.getState().activeConversation?.id === conversation.id) {
+          setActiveConversation(updatedConv);
+        }
+      }
 
       toast.success('Conversa transferida com sucesso! ✅');
       

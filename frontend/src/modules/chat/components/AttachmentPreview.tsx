@@ -96,6 +96,21 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
 
   // 🖼️ IMAGEM
   if (attachment.is_image) {
+    // ✅ Verificar se está processando (metadata.processing = true e file_url vazio)
+    const isProcessing = attachment.metadata?.processing && !attachment.file_url;
+    
+    if (isProcessing) {
+      // Skeleton/Loading enquanto processa
+      return (
+        <div className="attachment-preview image">
+          <div className="max-w-xs rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse flex items-center justify-center" style={{ height: '200px' }}>
+            <div className="text-gray-400 text-sm">Processando imagem...</div>
+          </div>
+        </div>
+      );
+    }
+    
+    // Imagem pronta
     return (
       <div className="attachment-preview image">
         <img
@@ -103,6 +118,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           alt={attachment.original_filename}
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
+          onError={(e) => {
+            console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', attachment.file_url);
+            // Fallback: mostrar skeleton se imagem falhar
+            e.currentTarget.style.display = 'none';
+          }}
         />
         
         {/* Lightbox */}

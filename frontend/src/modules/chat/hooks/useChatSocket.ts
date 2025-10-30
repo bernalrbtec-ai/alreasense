@@ -123,11 +123,23 @@ export function useChatSocket(conversationId?: string) {
     const handleAttachmentUpdated = (data: WebSocketMessage) => {
       if (data.data?.attachment_id) {
         console.log('📎 [HOOK] Attachment updated:', data.data.attachment_id);
+        // ✅ Atualizar attachment e remover flag de processing para forçar re-render
         updateAttachment(data.data.attachment_id, {
           file_url: data.data.file_url,
           thumbnail_url: data.data.thumbnail_url,
           mime_type: data.data.mime_type,
+          metadata: {},  // Remover flag de processing
         } as any);
+        
+        // ✅ Forçar re-render da mensagem completa para garantir que React detecte a mudança
+        const { messages } = useChatStore.getState();
+        const messageWithAttachment = messages.find(m => 
+          m.attachments?.some(a => a.id === data.data.attachment_id)
+        );
+        if (messageWithAttachment) {
+          // Atualizar mensagem completa força re-render do componente
+          addMessage({ ...messageWithAttachment } as any);
+        }
       }
     };
 

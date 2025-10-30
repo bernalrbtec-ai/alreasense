@@ -92,6 +92,8 @@ export interface MessageAttachment {
   is_video: boolean;
   is_audio: boolean;
   is_document: boolean;
+  // ✨ Metadata (pode conter flags de processing)
+  metadata?: Record<string, any> | null;
   // ✨ Campos IA
   transcription?: string | null;
   transcription_language?: string | null;

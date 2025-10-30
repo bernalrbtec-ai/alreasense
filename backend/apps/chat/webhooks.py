@@ -650,7 +650,8 @@ def handle_message_upsert(data, tenant, connection=None):
                         file_path='',  # Será preenchido após processamento S3
                         file_url='',  # Será preenchido com URL proxy após processamento
                         storage_type='s3',  # Direto para S3 (sem storage local)
-                        size_bytes=0  # Será preenchido após download
+                        size_bytes=0,  # Será preenchido após download
+                        metadata={'processing': True, 'media_type': incoming_media_type}  # Flag para frontend mostrar loading
                     )
                     
                     attachment_id_str = str(attachment.id)

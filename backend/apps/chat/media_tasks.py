@@ -233,6 +233,13 @@ async def handle_process_incoming_media(
             existing.original_filename = filename
             existing.file_path = s3_path
             existing.storage_type = 's3'
+            # Remover flag de processing (mídia está pronta)
+            import json
+            metadata = existing.metadata if existing.metadata else {}
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata) if metadata else {}
+            metadata.pop('processing', None)
+            existing.metadata = metadata
             await sync_to_async(existing.save)()
             attachment = existing
         else:
