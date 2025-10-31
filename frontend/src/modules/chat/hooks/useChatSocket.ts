@@ -69,7 +69,20 @@ export function useChatSocket(conversationId?: string) {
     const handleMessageReceived = (data: WebSocketMessage) => {
       if (data.message) {
         console.log('💬 [HOOK] Nova mensagem recebida:', data.message);
-        addMessage(data.message);
+        // ✅ Verificar se mensagem já existe e preservar attachments existentes
+        const { messages } = useChatStore.getState();
+        const existingMessage = messages.find(m => m.id === data.message.id);
+        if (existingMessage && existingMessage.attachments && existingMessage.attachments.length > 0) {
+          // Se a mensagem nova não tiver attachments mas a antiga tiver, preservar
+          if (!data.message.attachments || data.message.attachments.length === 0) {
+            console.log('📎 [HOOK] Preservando attachments existentes na mensagem:', data.message.id);
+            addMessage({ ...data.message, attachments: existingMessage.attachments });
+          } else {
+            addMessage(data.message);
+          }
+        } else {
+          addMessage(data.message);
+        }
         
         // 🔔 Notificar desktop (apenas se for mensagem recebida e notificações estão habilitadas)
         if (notificationsEnabled && data.message.direction === 'inbound') {

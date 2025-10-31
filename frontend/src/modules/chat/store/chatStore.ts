@@ -97,11 +97,24 @@ export const useChatStore = create<ChatState>((set) => ({
     // Evitar duplicatas: verificar se mensagem já existe
     const exists = state.messages.some(m => m.id === message.id);
     if (exists) {
-      // Atualizar mensagem existente (pode ter novos attachments ou status atualizado)
+      // ✅ Atualizar mensagem existente fazendo MERGE para preservar attachments
+      // Se a nova mensagem não tiver attachments mas a antiga tiver, preservar os da antiga
       return {
-        messages: state.messages.map(m =>
-          m.id === message.id ? message : m
-        )
+        messages: state.messages.map(m => {
+          if (m.id === message.id) {
+            // Se a mensagem nova tem attachments, usar ela
+            if (message.attachments && message.attachments.length > 0) {
+              return message;
+            }
+            // Se a mensagem nova não tem attachments mas a antiga tem, preservar os da antiga
+            if (m.attachments && m.attachments.length > 0) {
+              return { ...message, attachments: m.attachments };
+            }
+            // Caso contrário, usar a mensagem nova
+            return message;
+          }
+          return m;
+        })
       };
     }
     // Adicionar nova mensagem
