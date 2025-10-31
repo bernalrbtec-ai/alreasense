@@ -83,10 +83,18 @@ export function ConversationList() {
     
     if (activeDepartment.id === 'inbox') {
       // Inbox: conversas pendentes SEM departamento
-      return conv.status === 'pending' && !conv.department;
+      // Tratar department como string (ID) ou objeto ou null
+      const departmentId = typeof conv.department === 'string' 
+        ? conv.department 
+        : conv.department?.id || null;
+      return conv.status === 'pending' && !departmentId;
     } else {
       // Departamento específico: conversas do departamento (qualquer status)
-      return conv.department?.id === activeDepartment.id;
+      // ✅ Tratar department como string (ID) ou objeto { id, name }
+      const departmentId = typeof conv.department === 'string' 
+        ? conv.department 
+        : conv.department?.id || null;
+      return departmentId === activeDepartment.id;
     }
   });
 
