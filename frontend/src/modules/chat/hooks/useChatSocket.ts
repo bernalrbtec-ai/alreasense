@@ -171,6 +171,15 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
+    // ✅ ESCUTAR novas conversas do tenant (via ChatConsumerV2)
+    const handleNewConversation = (data: WebSocketMessage) => {
+      if (data.conversation) {
+        console.log('🆕 [HOOK] Nova conversa recebida via WebSocket:', data.conversation);
+        const { addConversation } = useChatStore.getState();
+        addConversation(data.conversation);
+      }
+    };
+
     // Registrar listeners
     chatWebSocketManager.on('message_received', handleMessageReceived);
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
@@ -178,6 +187,7 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
     chatWebSocketManager.on('attachment_downloaded', handleAttachmentDownloaded);
     chatWebSocketManager.on('attachment_updated', handleAttachmentUpdated);
+    chatWebSocketManager.on('new_conversation', handleNewConversation);
 
     // Cleanup
     return () => {
@@ -187,6 +197,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
       chatWebSocketManager.off('attachment_downloaded', handleAttachmentDownloaded);
       chatWebSocketManager.off('attachment_updated', handleAttachmentUpdated);
+      chatWebSocketManager.off('new_conversation', handleNewConversation);
     };
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);
 

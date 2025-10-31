@@ -97,11 +97,27 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
 
   // 🖼️ IMAGEM
   if (attachment.is_image) {
-    // ✅ Verificar se está processando ou se file_url é inválido
+    // ✅ Verificar se está processando, tem erro ou se file_url é inválido
     const fileUrl = (attachment.file_url || '').trim();
-    const isProcessing = attachment.metadata?.processing || !fileUrl || 
+    const metadata = attachment.metadata || {};
+    const hasError = Boolean(metadata.error);
+    const isProcessing = metadata.processing || !fileUrl || 
                          fileUrl.includes('whatsapp.net') || 
                          fileUrl.includes('evo.');
+    
+    if (hasError) {
+      // Mostrar erro de processamento
+      return (
+        <div className="attachment-preview image">
+          <div className="max-w-xs rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-center justify-center p-4" style={{ minHeight: '150px' }}>
+            <div className="text-red-600 dark:text-red-400 text-sm text-center">
+              <p className="font-semibold">❌ Erro ao processar imagem</p>
+              <p className="text-xs mt-1 opacity-75">{metadata.error || 'Erro desconhecido'}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     
     if (isProcessing) {
       // Skeleton/Loading enquanto processa
