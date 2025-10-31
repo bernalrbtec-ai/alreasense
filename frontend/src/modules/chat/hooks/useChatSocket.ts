@@ -122,23 +122,38 @@ export function useChatSocket(conversationId?: string) {
 
     const handleAttachmentUpdated = (data: WebSocketMessage) => {
       if (data.data?.attachment_id) {
-        console.log('📎 [HOOK] Attachment updated:', data.data.attachment_id);
-        // ✅ Atualizar attachment e remover flag de processing para forçar re-render
-        updateAttachment(data.data.attachment_id, {
-          file_url: data.data.file_url,
-          thumbnail_url: data.data.thumbnail_url,
-          mime_type: data.data.mime_type,
-          metadata: {},  // Remover flag de processing
-        } as any);
+        const attachmentId = data.data.attachment_id;
+        const fileUrl = data.data.file_url || '';
+        console.log('📎 [HOOK] Attachment updated:', attachmentId, '| URL:', fileUrl.substring(0, 50));
         
-        // ✅ Forçar re-render da mensagem completa para garantir que React detecte a mudança
+        // ✅ Atualizar attachment na mensagem
         const { messages } = useChatStore.getState();
         const messageWithAttachment = messages.find(m => 
-          m.attachments?.some(a => a.id === data.data.attachment_id)
+          m.attachments?.some(a => a.id === attachmentId)
         );
+        
         if (messageWithAttachment) {
-          // Atualizar mensagem completa força re-render do componente
-          addMessage({ ...messageWithAttachment } as any);
+          // Atualizar attachment específico
+          updateAttachment(attachmentId, {
+            file_url: fileUrl,
+            thumbnail_url: data.data.thumbnail_url,
+            mime_type: data.data.mime_type,
+            metadata: data.data.metadata || {},  // Manter metadata atualizado
+          } as any);
+          
+          // ✅ Forçar re-render da mensagem completa (clonar para garantir mudança de referência)
+          const updatedMessage = {
+            ...messageWithAttachment,
+            attachments: messageWithAttachment.attachments?.map(att => 
+              att.id === attachmentId 
+                ? { ...att, file_url: fileUrl, metadata: data.data.metadata || {} }
+                : att
+            )
+          };
+          addMessage(updatedMessage as any);
+          console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId);
+        } else {
+          console.warn('⚠️ [HOOK] Mensagem com attachment não encontrada:', attachmentId);
         }
       }
     };

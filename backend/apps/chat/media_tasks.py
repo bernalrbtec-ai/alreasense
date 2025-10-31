@@ -280,6 +280,15 @@ async def handle_process_incoming_media(
         if thumb_s3_path:
             thumbnail_url_for_ws = get_public_url(thumb_s3_path)
         
+        # ✅ Garantir que metadata está serializado corretamente para WebSocket
+        metadata_for_ws = attachment.metadata if attachment.metadata else {}
+        if isinstance(metadata_for_ws, str):
+            try:
+                import json
+                metadata_for_ws = json.loads(metadata_for_ws) if metadata_for_ws else {}
+            except:
+                metadata_for_ws = {}
+        
         await channel_layer.group_send(
             f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}',
             {
@@ -287,13 +296,15 @@ async def handle_process_incoming_media(
                 'data': {
                     'message_id': str(message_id),
                     'attachment_id': str(attachment.id),
-                    'file_url': public_url,
+                    'file_url': public_url,  # ✅ URL do proxy (via get_public_url)
                     'thumbnail_url': thumbnail_url_for_ws,
                     'mime_type': content_type,
-                    'file_type': media_type
+                    'file_type': media_type,
+                    'metadata': metadata_for_ws  # ✅ Incluir metadata sem flag processing
                 }
             }
         )
+        logger.info(f"📡 [INCOMING MEDIA] WebSocket attachment_updated enviado: {attachment.id}")
         
         logger.info(f"✅ [INCOMING MEDIA] Processamento completo: {attachment.id}")
         

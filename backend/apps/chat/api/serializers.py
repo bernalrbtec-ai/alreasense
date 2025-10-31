@@ -47,16 +47,28 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
 
     def to_representation(self, instance):
         data = super().to_representation(instance)
-        # Forçar URL de proxy para anexos no S3, mesmo que antigos tenham file_url direto do bucket
+        # ✅ SEMPRE forçar URL de proxy para anexos no S3
+        # Isso garante que frontend sempre recebe URL válida e acessível
         try:
             if instance.storage_type == 's3' and instance.file_path:
-                file_url = (data.get('file_url') or '')
-                if '/api/chat/media-proxy' not in file_url:
+                file_url = (data.get('file_url') or '').strip()
+                # Se file_url está vazio OU não é URL do proxy, gerar URL do proxy
+                if not file_url or '/api/chat/media-proxy' not in file_url:
                     from apps.chat.utils.s3 import S3Manager
-                    data['file_url'] = S3Manager().get_public_url(instance.file_path)
-        except Exception:
-            # Em caso de erro, manter o original para não quebrar a resposta
-            pass
+                    proxy_url = S3Manager().get_public_url(instance.file_path)
+                    data['file_url'] = proxy_url
+                    # Log para debug
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    if not file_url:
+                        logger.debug(f"📎 [SERIALIZER] file_url vazio, gerado proxy: {proxy_url[:50]}...")
+                    else:
+                        logger.debug(f"📎 [SERIALIZER] file_url não era proxy, convertido: {proxy_url[:50]}...")
+        except Exception as e:
+            # Em caso de erro, logar mas manter o original para não quebrar a resposta
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"⚠️ [SERIALIZER] Erro ao gerar URL do proxy: {e}", exc_info=True)
         return data
 
 

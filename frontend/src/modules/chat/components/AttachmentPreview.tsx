@@ -97,8 +97,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
 
   // 🖼️ IMAGEM
   if (attachment.is_image) {
-    // ✅ Verificar se está processando (metadata.processing = true e file_url vazio)
-    const isProcessing = attachment.metadata?.processing && !attachment.file_url;
+    // ✅ Verificar se está processando ou se file_url é inválido
+    const fileUrl = (attachment.file_url || '').trim();
+    const isProcessing = attachment.metadata?.processing || !fileUrl || 
+                         fileUrl.includes('whatsapp.net') || 
+                         fileUrl.includes('evo.');
     
     if (isProcessing) {
       // Skeleton/Loading enquanto processa
@@ -115,16 +118,15 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     return (
       <div className="attachment-preview image">
         <img
-          src={attachment.file_url}
+          src={fileUrl}
           alt={attachment.original_filename}
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
           onError={(e) => {
-            console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', attachment.file_url);
+            console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', fileUrl);
             // Fallback: mostrar skeleton se imagem falhar
             e.currentTarget.style.display = 'none';
           }}
-        />
         
         {/* Lightbox */}
         {lightboxOpen && (
@@ -151,6 +153,21 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
 
   // 🎥 VÍDEO
   if (attachment.is_video) {
+    const fileUrl = (attachment.file_url || '').trim();
+    const isProcessing = attachment.metadata?.processing || !fileUrl || 
+                         fileUrl.includes('whatsapp.net') || 
+                         fileUrl.includes('evo.');
+    
+    if (isProcessing) {
+      return (
+        <div className="attachment-preview video">
+          <div className="max-w-md rounded-lg bg-gray-200 dark:bg-gray-700 animate-pulse flex items-center justify-center" style={{ height: '300px' }}>
+            <div className="text-gray-400 text-sm">Processando vídeo...</div>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="attachment-preview video max-w-md">
         <video
@@ -158,7 +175,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           className="w-full rounded-lg"
           preload="metadata"
         >
-          <source src={attachment.file_url} type={attachment.mime_type} />
+          <source src={fileUrl} type={attachment.mime_type} />
           Seu navegador não suporta vídeo.
         </video>
         <p className="text-xs text-gray-500 mt-1">{attachment.original_filename}</p>
@@ -171,16 +188,13 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
     // ✅ Detectar se áudio está disponível
-    // Verifica se file_url existe e não é URL temporária do WhatsApp
-    const isAudioReady = attachment.file_url && (
-      attachment.file_url.includes('/api/chat/media-proxy') ||  // Proxy interno (prioridade)
-      attachment.file_url.includes('bucket-production') ||      // MinIO/S3
-      attachment.file_url.includes('s3.') ||                  // AWS S3
-      attachment.file_url.includes('localhost') ||              // Dev local
-      attachment.file_url.startsWith('blob:') ||                // Blob URL
-      (!attachment.file_url.includes('whatsapp.net') &&         // NÃO é URL temporária do WhatsApp
-       !attachment.file_url.includes('evo.') &&                 // NÃO é URL da Evolution API
-       attachment.file_url.length > 0)                          // URL válida
+    // URL válida = não vazia, não é URL temporária do WhatsApp/Evolution
+    const isAudioReady = Boolean(
+      attachment.file_url && 
+      attachment.file_url.trim().length > 0 &&
+      !attachment.file_url.includes('whatsapp.net') &&  // NÃO é URL temporária do WhatsApp
+      !attachment.file_url.includes('evo.') &&          // NÃO é URL da Evolution API
+      !attachment.metadata?.processing                   // NÃO está processando
     );
     
     return (

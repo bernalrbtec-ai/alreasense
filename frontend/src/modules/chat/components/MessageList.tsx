@@ -171,7 +171,7 @@ export function MessageList() {
                   </p>
                 )}
                 
-                {/* Anexos */}
+                {/* Anexos - renderizar ANTES do texto */}
                 {msg.attachments && msg.attachments.length > 0 && (
                   <div className="message-attachments mb-2 space-y-2">
                     {msg.attachments.map((attachment) => (
@@ -184,9 +184,9 @@ export function MessageList() {
                   </div>
                 )}
 
-                {/* Texto (se houver) */}
+                {/* Texto (se houver) - mostrar mesmo se só tiver anexos */}
                 {msg.content && msg.content.trim() && (
-                  <p className="text-sm whitespace-pre-wrap break-words">
+                  <p className="text-sm whitespace-pre-wrap break-words mb-1">
                     {msg.content}
                   </p>
                 )}
