@@ -201,17 +201,37 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     // ✅ Detectar se áudio está disponível e é reproduzível
     // URL válida = não vazia, não é URL temporária do WhatsApp/Evolution, não é arquivo criptografado (.enc)
     const fileUrl = (attachment.file_url || '').trim();
+    const metadata = attachment.metadata || {};
+    const hasError = Boolean(metadata.error);
     const isEncrypted = fileUrl.includes('.enc') || 
                        attachment.original_filename?.toLowerCase().endsWith('.enc') ||
                        attachment.mime_type === 'application/octet-stream';
     
     const isAudioReady = Boolean(
+      !hasError &&
       fileUrl.length > 0 &&
       !fileUrl.includes('whatsapp.net') &&  // NÃO é URL temporária do WhatsApp
       !fileUrl.includes('evo.') &&          // NÃO é URL da Evolution API
-      !attachment.metadata?.processing &&   // NÃO está processando
-      !isEncrypted                          // NÃO é arquivo criptografado
+      !metadata.processing &&               // NÃO está processando
+      !isEncrypted                           // NÃO é arquivo criptografado
     );
+    
+    // Mostrar erro se houver
+    if (hasError) {
+      return (
+        <div className="attachment-preview audio w-full">
+          <div className="flex items-center gap-3 sm:gap-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 sm:p-4 w-full">
+            <div className="flex-shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-full flex items-center justify-center bg-red-500">
+              <span className="text-white text-xs">⚠️</span>
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-red-600 dark:text-red-400 text-sm font-semibold">Erro ao processar áudio</p>
+              <p className="text-red-500 dark:text-red-500 text-xs mt-1">{metadata.error || 'Erro desconhecido'}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     
     return (
       <div className="attachment-preview audio w-full">
@@ -280,7 +300,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               }
             }}
             onEnded={() => setIsPlaying(false)}
-            onError={(e) => {
+            onError={() => {
               const error = audioRef.current?.error;
               console.error('❌ [AttachmentPreview] Erro ao carregar áudio:', {
                 file_url: fileUrl.substring(0, 50),

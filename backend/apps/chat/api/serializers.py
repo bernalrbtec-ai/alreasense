@@ -55,35 +55,56 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
                 # Se file_url está vazio OU não é URL do proxy, gerar URL do proxy
                 if not file_url or '/api/chat/media-proxy' not in file_url:
                     from apps.chat.utils.s3 import S3Manager
+                    from django.core.cache import cache
+                    import logging
+                    
+                    logger = logging.getLogger(__name__)
                     s3_manager = S3Manager()
                     
-                    # ✅ Verificar se arquivo existe no S3 antes de gerar URL
-                    # IMPORTANTE: Esta verificação é custosa, mas necessária para evitar URLs quebradas
-                    # Em produção, considerar cachear resultado da verificação
-                    try:
-                        if not s3_manager.file_exists(instance.file_path):
-                            import logging
-                            logger = logging.getLogger(__name__)
-                            logger.warning(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3: {instance.file_path}")
-                            # Se arquivo não existe, retornar URL vazia
-                            data['file_url'] = ''
-                            return data
-                    except Exception as check_error:
-                        # Se verificação falhar (timeout, etc), gerar URL mesmo assim
-                        # Melhor ter URL que pode funcionar do que URL vazia
-                        import logging
-                        logger = logging.getLogger(__name__)
-                        logger.warning(f"⚠️ [SERIALIZER] Erro ao verificar existência no S3: {check_error}. Gerando URL mesmo assim.")
+                    # ✅ PERFORMANCE: Cachear resultado de verificação de existência (5 min)
+                    # Evita chamadas custosas ao S3 em cada serializer call
+                    cache_key = f"s3_exists:{instance.file_path}"
+                    file_exists = cache.get(cache_key)
                     
+                    if file_exists is None:
+                        # Não está em cache, verificar
+                        try:
+                            file_exists = s3_manager.file_exists(instance.file_path)
+                            # Cachear resultado por 5 minutos (300 segundos)
+                            cache.set(cache_key, file_exists, 300)
+                        except Exception as check_error:
+                            # Se verificação falhar (timeout, etc), assumir que existe e gerar URL
+                            # Melhor ter URL que pode funcionar do que URL vazia
+                            logger.warning(f"⚠️ [SERIALIZER] Erro ao verificar S3: {check_error}. Assumindo existência.")
+                            file_exists = True  # Otimista: assumir que existe
+                    
+                    if not file_exists:
+                        logger.warning(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3: {instance.file_path}")
+                        # Se arquivo não existe, retornar URL vazia
+                        data['file_url'] = ''
+                        return data
+                    
+                    # Gerar URL do proxy
                     proxy_url = s3_manager.get_public_url(instance.file_path)
                     data['file_url'] = proxy_url
-                    # Log para debug
-                    import logging
-                    logger = logging.getLogger(__name__)
+                    
+                    # Log apenas em debug para reduzir poluição de logs
                     if not file_url:
                         logger.debug(f"📎 [SERIALIZER] file_url vazio, gerado proxy: {proxy_url[:50]}...")
                     else:
-                        logger.debug(f"📎 [SERIALIZER] file_url não era proxy, convertido: {proxy_url[:50]}...")
+                        logger.debug(f"📎 [SERIALIZER] file_url convertido para proxy: {proxy_url[:50]}...")
+                
+                # ✅ NORMALIZAR metadata: garantir que sempre seja dict
+                metadata = data.get('metadata')
+                if metadata is not None:
+                    if isinstance(metadata, str):
+                        try:
+                            import json
+                            data['metadata'] = json.loads(metadata) if metadata else {}
+                        except (json.JSONDecodeError, ValueError):
+                            data['metadata'] = {}
+                    elif not isinstance(metadata, dict):
+                        data['metadata'] = {}
         except Exception as e:
             # Em caso de erro, logar mas manter o original para não quebrar a resposta
             import logging
