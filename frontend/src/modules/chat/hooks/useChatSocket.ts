@@ -163,14 +163,14 @@ export function useChatSocket(conversationId?: string) {
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);
 
   // API pública
-  const sendMessage = useCallback((content: string, isInternal = false): boolean => {
+  const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false): boolean => {
     if (!isConnected) {
       console.warn('⚠️ [HOOK] WebSocket não conectado (ignorando envio)');
       return false;
     }
 
-    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50));
-    return chatWebSocketManager.sendChatMessage(content, isInternal);
+    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`);
+    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal);
   }, [isConnected]);
 
   const sendTyping = useCallback((isTyping: boolean) => {

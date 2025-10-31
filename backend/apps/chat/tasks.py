@@ -234,20 +234,25 @@ async def handle_send_message(message_id: str):
         
         content = message.content
         attachment_urls = message.metadata.get('attachment_urls', []) if message.metadata else []
+        include_signature = message.metadata.get('include_signature', True) if message.metadata else True  # ✅ Por padrão inclui assinatura
         
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
-        sender = await sync_to_async(lambda: message.sender)()
-        if sender and content:
-            first_name = sender.first_name or ''
-            last_name = sender.last_name or ''
-            
-            if first_name or last_name:
-                # Montar assinatura com nome completo em negrito
-                full_name = f"{first_name} {last_name}".strip()
-                signature = f"*{full_name}:*\n\n"
-                content = signature + content
-                logger.info(f"✍️ [CHAT ENVIO] Assinatura adicionada: {full_name}")
+        # ✅ Só adiciona se include_signature=True no metadata
+        if include_signature:
+            sender = await sync_to_async(lambda: message.sender)()
+            if sender and content:
+                first_name = sender.first_name or ''
+                last_name = sender.last_name or ''
+                
+                if first_name or last_name:
+                    # Montar assinatura com nome completo em negrito
+                    full_name = f"{first_name} {last_name}".strip()
+                    signature = f"*{full_name}:*\n\n"
+                    content = signature + content
+                    logger.info(f"✍️ [CHAT ENVIO] Assinatura adicionada: {full_name}")
+        else:
+            logger.info(f"✍️ [CHAT ENVIO] Assinatura desabilitada pelo usuário")
         
         logger.info(f"📱 [CHAT ENVIO] Telefone/Grupo: {phone}")
         logger.info(f"   Tipo: {conversation.conversation_type}")

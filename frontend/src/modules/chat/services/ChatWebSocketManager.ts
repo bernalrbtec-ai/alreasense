@@ -192,7 +192,7 @@ class ChatWebSocketManager {
   /**
    * Envia uma mensagem de chat
    */
-  public sendChatMessage(content: string, isInternal = false): boolean {
+  public sendChatMessage(content: string, includeSignature = true, isInternal = false): boolean {
     if (!this.currentConversationId) {
       console.error('❌ [MANAGER] Nenhuma conversa ativa');
       return false;
@@ -201,6 +201,7 @@ class ChatWebSocketManager {
     return this.sendMessage({
       type: 'send_message',
       content,
+      include_signature: includeSignature,
       is_internal: isInternal,
     });
   }

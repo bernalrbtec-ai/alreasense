@@ -2,13 +2,13 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip } from 'lucide-react';
+import { Send, Smile, Paperclip, User } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
 
 interface MessageInputProps {
-  sendMessage: (content: string) => boolean;
+  sendMessage: (content: string, includeSignature?: boolean) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
 }
@@ -17,6 +17,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
   const { activeConversation } = useChatStore();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
+  const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Limpar timeout de digitando ao desmontar
@@ -66,7 +67,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         clearTimeout(typingTimeoutRef.current);
       }
       
-      const success = sendMessage(message.trim());
+      const success = sendMessage(message.trim(), includeSignature);
       
       if (success) {
         setMessage('');
@@ -126,6 +127,21 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
           disabled={sending}
         />
       </div>
+
+      {/* Toggle de Assinatura */}
+      <button
+        onClick={() => setIncludeSignature(!includeSignature)}
+        className={`
+          p-2 rounded-full transition-colors flex-shrink-0
+          ${includeSignature 
+            ? 'text-green-600 hover:bg-green-100 bg-green-50' 
+            : 'text-gray-500 hover:bg-gray-200'
+          }
+        `}
+        title={includeSignature ? 'Assinatura ativada - clique para desativar' : 'Assinatura desativada - clique para ativar'}
+      >
+        <User className="w-5 h-5" />
+      </button>
 
       {/* Voice Recorder button - ao lado do Send */}
       <VoiceRecorder
