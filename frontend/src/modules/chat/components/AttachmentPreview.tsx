@@ -127,6 +127,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             // Fallback: mostrar skeleton se imagem falhar
             e.currentTarget.style.display = 'none';
           }}
+        />
         
         {/* Lightbox */}
         {lightboxOpen && (
