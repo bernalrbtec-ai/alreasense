@@ -55,7 +55,18 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
                 # Se file_url está vazio OU não é URL do proxy, gerar URL do proxy
                 if not file_url or '/api/chat/media-proxy' not in file_url:
                     from apps.chat.utils.s3 import S3Manager
-                    proxy_url = S3Manager().get_public_url(instance.file_path)
+                    s3_manager = S3Manager()
+                    
+                    # ✅ Verificar se arquivo existe no S3 antes de gerar URL
+                    if not s3_manager.file_exists(instance.file_path):
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3: {instance.file_path}")
+                        # Se arquivo não existe, manter URL vazia ou retornar URL vazia
+                        data['file_url'] = ''
+                        return data
+                    
+                    proxy_url = s3_manager.get_public_url(instance.file_path)
                     data['file_url'] = proxy_url
                     # Log para debug
                     import logging
