@@ -124,8 +124,18 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           onClick={() => setLightboxOpen(true)}
           onError={(e) => {
             console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', fileUrl);
-            // Fallback: mostrar skeleton se imagem falhar
-            e.currentTarget.style.display = 'none';
+            // Não esconder imediatamente - pode ser erro temporário de rede
+            // Tentar reload uma vez após 1 segundo
+            const img = e.currentTarget;
+            if (!img.dataset.retried) {
+              img.dataset.retried = 'true';
+              setTimeout(() => {
+                img.src = fileUrl + (fileUrl.includes('?') ? '&' : '?') + '_retry=' + Date.now();
+              }, 1000);
+            } else {
+              // Se já tentou uma vez, esconder
+              img.style.display = 'none';
+            }
           }}
         />
         
@@ -188,14 +198,19 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   if (attachment.is_audio) {
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
-    // ✅ Detectar se áudio está disponível
-    // URL válida = não vazia, não é URL temporária do WhatsApp/Evolution
+    // ✅ Detectar se áudio está disponível e é reproduzível
+    // URL válida = não vazia, não é URL temporária do WhatsApp/Evolution, não é arquivo criptografado (.enc)
+    const fileUrl = (attachment.file_url || '').trim();
+    const isEncrypted = fileUrl.includes('.enc') || 
+                       attachment.original_filename?.toLowerCase().endsWith('.enc') ||
+                       attachment.mime_type === 'application/octet-stream';
+    
     const isAudioReady = Boolean(
-      attachment.file_url && 
-      attachment.file_url.trim().length > 0 &&
-      !attachment.file_url.includes('whatsapp.net') &&  // NÃO é URL temporária do WhatsApp
-      !attachment.file_url.includes('evo.') &&          // NÃO é URL da Evolution API
-      !attachment.metadata?.processing                   // NÃO está processando
+      fileUrl.length > 0 &&
+      !fileUrl.includes('whatsapp.net') &&  // NÃO é URL temporária do WhatsApp
+      !fileUrl.includes('evo.') &&          // NÃO é URL da Evolution API
+      !attachment.metadata?.processing &&   // NÃO está processando
+      !isEncrypted                          // NÃO é arquivo criptografado
     );
     
     return (
@@ -211,10 +226,14 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
                 ? 'bg-green-500 hover:bg-green-600 cursor-pointer' 
                 : 'bg-gray-300 cursor-not-allowed'
             }`}
-            title={isAudioReady ? (isPlaying ? 'Pausar' : 'Reproduzir') : 'Baixando áudio...'}
+            title={isAudioReady ? (isPlaying ? 'Pausar' : 'Reproduzir') : (isEncrypted ? 'Áudio criptografado - não pode ser reproduzido' : 'Baixando áudio...')}
           >
             {!isAudioReady ? (
-              <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              isEncrypted ? (
+                <span className="text-white text-xs">🔒</span>
+              ) : (
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              )
             ) : isPlaying ? (
               <Pause className="text-white" size={20} fill="white" />
             ) : (
