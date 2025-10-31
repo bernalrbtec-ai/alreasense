@@ -446,6 +446,13 @@ class MessageAttachment(models.Model):
         verbose_name='Metadados IA',
         help_text='Dados adicionais da IA (ações, entidades, etc)'
     )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        null=True,
+        verbose_name='Metadados',
+        help_text='Dados extras (processing flags, media_type, etc)'
+    )
     processing_status = models.CharField(
         max_length=20,
         choices=[
