@@ -38,28 +38,23 @@ export function NotificationToggle() {
     <button
       onClick={handleToggle}
       className={`
-        flex items-center gap-2 px-3 py-2 rounded-lg transition-colors
+        p-2 rounded-full transition-colors
         ${isEnabled 
-          ? 'bg-green-100 text-green-700 hover:bg-green-200' 
-          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          ? 'text-green-600 hover:bg-green-100' 
+          : 'text-gray-600 hover:bg-gray-200'
         }
       `}
       title={isEnabled ? 'Desativar notificações' : 'Ativar notificações'}
     >
       {isEnabled ? (
-        <>
-          <Bell size={18} />
-          <span className="text-sm font-medium">Notificações ON</span>
-        </>
+        <Bell className="w-5 h-5" />
       ) : (
-        <>
-          <BellOff size={18} />
-          <span className="text-sm font-medium">Notificações OFF</span>
-        </>
+        <BellOff className="w-5 h-5" />
       )}
     </button>
   );
 }
+
 
 
 
