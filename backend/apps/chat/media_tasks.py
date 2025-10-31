@@ -252,11 +252,16 @@ async def handle_process_incoming_media(
                     logger.error(f"❌ [INCOMING MEDIA] Falha no upload após {max_upload_retries + 1} tentativas: {msg}")
                     return
         
-        # Upload thumbnail se houver
+        # Upload thumbnail se houver (com tratamento de erro)
         thumb_s3_path = None
         if thumbnail_data:
             thumb_s3_path = generate_media_path(tenant_id, f'chat_{media_type}s', f"thumb_{filename}")
-            s3_manager.upload_to_s3(thumbnail_data, thumb_s3_path, 'image/jpeg')
+            thumb_success, thumb_msg = s3_manager.upload_to_s3(thumbnail_data, thumb_s3_path, 'image/jpeg')
+            if thumb_success:
+                logger.info(f"✅ [INCOMING MEDIA] Thumbnail enviado para S3: {thumb_s3_path}")
+            else:
+                logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao enviar thumbnail: {thumb_msg}. Continuando sem thumbnail.")
+                thumb_s3_path = None  # Não usar path se upload falhou
         
         # 5. URL pública
         public_url = get_public_url(s3_path)
