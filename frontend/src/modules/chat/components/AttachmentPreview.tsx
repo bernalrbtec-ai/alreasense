@@ -152,7 +152,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               <X size={32} />
             </button>
             <img
-              src={attachment.file_url}
+              src={fileUrl}
               alt={attachment.original_filename}
               className="max-w-full max-h-full object-contain"
             />
