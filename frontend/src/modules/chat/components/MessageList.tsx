@@ -185,7 +185,7 @@ export function MessageList() {
                 )}
 
                 {/* Texto (se houver) */}
-                {msg.content && (
+                {msg.content && msg.content.trim() && (
                   <p className="text-sm whitespace-pre-wrap break-words">
                     {msg.content}
                   </p>

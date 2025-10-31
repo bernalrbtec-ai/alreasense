@@ -29,7 +29,7 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'message', 'tenant', 'original_filename', 'mime_type',
             'file_path', 'file_url', 'thumbnail_path', 'storage_type',
-            'size_bytes', 'expires_at', 'created_at',
+            'size_bytes', 'expires_at', 'created_at', 'metadata',
             'is_expired', 'is_image', 'is_video', 'is_audio', 'is_document',
             # ✨ Campos IA
             'transcription', 'transcription_language', 'ai_summary',

@@ -169,13 +169,17 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   if (attachment.is_audio) {
     const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
     
-    // ✅ Detectar se áudio está disponível (URL local/S3 ao invés de Evolution API)
+    // ✅ Detectar se áudio está disponível
+    // Verifica se file_url existe e não é URL temporária do WhatsApp
     const isAudioReady = attachment.file_url && (
-      attachment.file_url.includes('bucket-production') ||  // MinIO/S3
-      attachment.file_url.includes('s3.') ||                // AWS S3
-      attachment.file_url.includes('localhost') ||          // Dev local
-      attachment.file_url.startsWith('blob:') ||            // Blob URL
-      attachment.file_url.includes('/api/chat/media-proxy') // Proxy interno
+      attachment.file_url.includes('/api/chat/media-proxy') ||  // Proxy interno (prioridade)
+      attachment.file_url.includes('bucket-production') ||      // MinIO/S3
+      attachment.file_url.includes('s3.') ||                  // AWS S3
+      attachment.file_url.includes('localhost') ||              // Dev local
+      attachment.file_url.startsWith('blob:') ||                // Blob URL
+      (!attachment.file_url.includes('whatsapp.net') &&         // NÃO é URL temporária do WhatsApp
+       !attachment.file_url.includes('evo.') &&                 // NÃO é URL da Evolution API
+       attachment.file_url.length > 0)                          // URL válida
     );
     
     return (
