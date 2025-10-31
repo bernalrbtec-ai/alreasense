@@ -27,9 +27,17 @@ export function ConversationList() {
     if (activeDepartment) {
       const filtered = conversations.filter(conv => {
         if (activeDepartment.id === 'inbox') {
-          return conv.status === 'pending' && !conv.department;
+          // Inbox: conversas pendentes SEM departamento
+          const departmentId = typeof conv.department === 'string' 
+            ? conv.department 
+            : conv.department?.id || null;
+          return conv.status === 'pending' && !departmentId;
         } else {
-          return conv.department?.id === activeDepartment.id;
+          // Departamento específico: conversas do departamento (qualquer status)
+          const departmentId = typeof conv.department === 'string' 
+            ? conv.department 
+            : conv.department?.id || null;
+          return departmentId === activeDepartment.id;
         }
       });
       console.log(`   📂 Filtradas para ${activeDepartment.name}:`, filtered.length);
