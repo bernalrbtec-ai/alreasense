@@ -21,6 +21,7 @@ interface Attachment {
   is_video: boolean;
   is_audio: boolean;
   is_document: boolean;
+  metadata?: Record<string, any> | null;  // ✅ Adicionar metadata
   // ✨ Campos IA (podem ser null)
   transcription?: string | null;
   ai_summary?: string | null;
