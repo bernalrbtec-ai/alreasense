@@ -9,7 +9,7 @@
  * - IA: Transcrição + Resumo (se addon ativo)
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, FileText, Image, Video, Music, X, Play, Pause } from 'lucide-react';
+import { Download, FileText, X, Play, Pause } from 'lucide-react';
 
 interface Attachment {
   id: string;
@@ -165,9 +165,25 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   // 🎥 VÍDEO
   if (attachment.is_video) {
     const fileUrl = (attachment.file_url || '').trim();
-    const isProcessing = attachment.metadata?.processing || !fileUrl || 
+    const metadata = attachment.metadata || {};
+    const hasError = Boolean(metadata.error);
+    const isProcessing = metadata.processing || !fileUrl || 
                          fileUrl.includes('whatsapp.net') || 
                          fileUrl.includes('evo.');
+    
+    if (hasError) {
+      // Mostrar erro de processamento
+      return (
+        <div className="attachment-preview video max-w-md">
+          <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 flex items-center justify-center p-4" style={{ minHeight: '200px' }}>
+            <div className="text-red-600 dark:text-red-400 text-sm text-center">
+              <p className="font-semibold">❌ Erro ao processar vídeo</p>
+              <p className="text-xs mt-1 opacity-75">{metadata.error || 'Erro desconhecido'}</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
     
     if (isProcessing) {
       return (
@@ -185,6 +201,12 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           controls
           className="w-full rounded-lg"
           preload="metadata"
+          onError={() => {
+            console.error('❌ [AttachmentPreview] Erro ao carregar vídeo:', {
+              file_url: fileUrl.substring(0, 50),
+              mime_type: attachment.mime_type
+            });
+          }}
         >
           <source src={fileUrl} type={attachment.mime_type} />
           Seu navegador não suporta vídeo.
