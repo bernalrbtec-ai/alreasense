@@ -263,12 +263,38 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         </div>
         
         {/* Áudio HTML5 (hidden - só para controle) */}
-        {isAudioReady && (
+        {isAudioReady && !isEncrypted && fileUrl && (
           <audio
             ref={audioRef}
-            src={attachment.file_url}
+            src={fileUrl}
             preload="metadata"
             className="hidden"
+            onLoadedMetadata={() => {
+              if (audioRef.current) {
+                setDuration(audioRef.current.duration);
+              }
+            }}
+            onTimeUpdate={() => {
+              if (audioRef.current) {
+                setCurrentTime(audioRef.current.currentTime);
+              }
+            }}
+            onEnded={() => setIsPlaying(false)}
+            onError={(e) => {
+              const error = audioRef.current?.error;
+              console.error('❌ [AttachmentPreview] Erro ao carregar áudio:', {
+                file_url: fileUrl.substring(0, 50),
+                error_code: error?.code,
+                error_message: error?.message,
+                mime_type: attachment.mime_type,
+                is_encrypted: isEncrypted
+              });
+              setIsPlaying(false);
+              // Se for erro de codec não suportado, tentar marcar como não reproduzível
+              if (error?.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+                console.warn('⚠️ [AttachmentPreview] Formato de áudio não suportado pelo navegador');
+              }
+            }}
           />
         )}
 
