@@ -132,16 +132,35 @@ export function useChatSocket(conversationId?: string) {
     const handleAttachmentUpdated = (data: WebSocketMessage) => {
       if (data.data?.attachment_id) {
         const attachmentId = data.data.attachment_id;
+        const messageId = data.data.message_id;
         const fileUrl = data.data.file_url || '';
-        console.log('📎 [HOOK] Attachment updated:', attachmentId, '| URL:', fileUrl.substring(0, 50));
+        console.log('📎 [HOOK] Attachment updated:', attachmentId, '| Message:', messageId, '| URL:', fileUrl.substring(0, 50));
         
-        // ✅ Atualizar attachment na mensagem
+        // ✅ LÓGICA MELHORADA: Buscar mensagem por message_id se fornecido (mais confiável)
         const { messages } = useChatStore.getState();
-        const messageWithAttachment = messages.find(m => 
-          m.attachments?.some(a => a.id === attachmentId)
-        );
+        let messageWithAttachment = null;
+        
+        if (messageId) {
+          // Se message_id fornecido, usar ele (mais preciso)
+          messageWithAttachment = messages.find(m => m.id === messageId);
+        }
+        
+        if (!messageWithAttachment) {
+          // Fallback: buscar por attachment_id
+          messageWithAttachment = messages.find(m => 
+            m.attachments?.some(a => a.id === attachmentId)
+          );
+        }
         
         if (messageWithAttachment) {
+          // ✅ RACE CONDITION FIX: Verificar se attachment já foi atualizado
+          // Evita updates duplicados ou conflitos se múltiplos eventos chegarem
+          const existingAttachment = messageWithAttachment.attachments?.find(a => a.id === attachmentId);
+          if (existingAttachment && existingAttachment.file_url && existingAttachment.file_url === fileUrl) {
+            console.log('ℹ️ [HOOK] Attachment já atualizado, ignorando update duplicado:', attachmentId);
+            return;  // Já está atualizado, não fazer nada
+          }
+          
           // Atualizar attachment específico
           updateAttachment(attachmentId, {
             file_url: fileUrl,
@@ -155,14 +174,14 @@ export function useChatSocket(conversationId?: string) {
             ...messageWithAttachment,
             attachments: messageWithAttachment.attachments?.map(att => 
               att.id === attachmentId 
-                ? { ...att, file_url: fileUrl, metadata: data.data.metadata || {} }
+                ? { ...att, file_url: fileUrl, thumbnail_url: data.data.thumbnail_url, mime_type: data.data.mime_type, metadata: data.data.metadata || {} }
                 : att
             )
           };
           addMessage(updatedMessage as any);
           console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId);
         } else {
-          console.warn('⚠️ [HOOK] Mensagem com attachment não encontrada:', attachmentId);
+          console.warn('⚠️ [HOOK] Mensagem com attachment não encontrada:', { attachmentId, messageId });
         }
       }
     };

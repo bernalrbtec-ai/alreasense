@@ -674,21 +674,9 @@ def handle_message_upsert(data, tenant, connection=None):
                 # 1. Notificar tenant sobre nova mensagem (toast)
                 logger.info(f"📬 [WEBHOOK] Notificando tenant sobre nova mensagem...")
                 try:
-                    from apps.chat.api.serializers import ConversationSerializer
-                    conv_data = ConversationSerializer(conversation).data
+                    from apps.chat.utils.serialization import serialize_conversation_for_ws
                     
-                    # Converter UUIDs para string
-                    def convert_uuids_to_str(obj):
-                        import uuid
-                        if isinstance(obj, uuid.UUID):
-                            return str(obj)
-                        elif isinstance(obj, dict):
-                            return {k: convert_uuids_to_str(v) for k, v in obj.items()}
-                        elif isinstance(obj, list):
-                            return [convert_uuids_to_str(item) for item in obj]
-                        return obj
-                    
-                    conv_data_serializable = convert_uuids_to_str(conv_data)
+                    conv_data_serializable = serialize_conversation_for_ws(conversation)
                     
                     # Broadcast para todo o tenant (notificação de nova mensagem)
                     channel_layer = get_channel_layer()
@@ -870,26 +858,13 @@ def broadcast_message_to_websocket(message, conversation):
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
         
-        from apps.chat.api.serializers import MessageSerializer
-        message_data = MessageSerializer(message).data
-        
         logger.info(f"📡 [WEBSOCKET] Preparando broadcast...")
         logger.info(f"   Room: {room_group_name}")
         logger.info(f"   Direction: {message.direction}")
         
-        # Converter UUIDs para string para serialização msgpack
-        def convert_uuids_to_str(obj):
-            """Recursivamente converte UUIDs para string."""
-            import uuid
-            if isinstance(obj, uuid.UUID):
-                return str(obj)
-            elif isinstance(obj, dict):
-                return {k: convert_uuids_to_str(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_uuids_to_str(item) for item in obj]
-            return obj
-        
-        message_data_serializable = convert_uuids_to_str(message_data)
+        # ✅ Usar utilitário centralizado para serialização
+        from apps.chat.utils.serialization import serialize_message_for_ws
+        message_data_serializable = serialize_message_for_ws(message)
         
         async_to_sync(channel_layer.group_send)(
             room_group_name,

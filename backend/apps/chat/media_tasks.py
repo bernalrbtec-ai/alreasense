@@ -143,6 +143,41 @@ async def handle_process_incoming_media(
     
     logger.info(f"📦 [INCOMING MEDIA] Processando: {media_type} - {media_url[:80]}...")
     
+    # ✅ VALIDAÇÃO: Verificar tamanho ANTES de baixar (economia de recursos)
+    from django.conf import settings
+    MAX_SIZE = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024  # 50MB padrão
+    
+    try:
+        # HEAD request para verificar tamanho antes de baixar
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            head_response = await client.head(media_url)
+            content_length = int(head_response.headers.get('content-length', 0))
+            
+            if content_length > MAX_SIZE:
+                logger.error(f"❌ [INCOMING MEDIA] Arquivo muito grande! {content_length / 1024 / 1024:.2f}MB > {MAX_SIZE / 1024 / 1024}MB")
+                # Marcar attachment como erro se existir
+                try:
+                    from apps.chat.models import MessageAttachment
+                    from apps.chat.utils.serialization import normalize_metadata
+                    
+                    existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                        message__id=message_id,
+                        file_url='',
+                        file_path=''
+                    ).first())()
+                    if existing:
+                        metadata = normalize_metadata(existing.metadata)
+                        metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
+                        metadata.pop('processing', None)
+                        existing.metadata = metadata
+                        await sync_to_async(existing.save)(update_fields=['metadata'])
+                except Exception:
+                    pass
+                return  # Não processar arquivo muito grande
+    except Exception as size_check_error:
+        # Se HEAD falhar, continuar e validar após download (fallback)
+        logger.warning(f"⚠️ [INCOMING MEDIA] Não foi possível verificar tamanho antes de baixar: {size_check_error}. Validando após download...")
+    
     # ✅ RETRY: Tentar até 3 vezes em caso de falha de rede
     max_retries = 3
     retry_count = 0
@@ -157,6 +192,29 @@ async def handle_process_incoming_media(
                 response.raise_for_status()
                 media_data = response.content
                 content_type = response.headers.get('content-type', 'application/octet-stream')
+            
+            # ✅ VALIDAÇÃO: Verificar tamanho após download (se não foi possível antes)
+            if len(media_data) > MAX_SIZE:
+                logger.error(f"❌ [INCOMING MEDIA] Arquivo muito grande após download! {len(media_data) / 1024 / 1024:.2f}MB > {MAX_SIZE / 1024 / 1024}MB")
+                # Marcar attachment como erro se existir
+                try:
+                    from apps.chat.models import MessageAttachment
+                    from apps.chat.utils.serialization import normalize_metadata
+                    
+                    existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                        message__id=message_id,
+                        file_url='',
+                        file_path=''
+                    ).first())()
+                    if existing:
+                        metadata = normalize_metadata(existing.metadata)
+                        metadata['error'] = f'Arquivo muito grande ({len(media_data) / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
+                        metadata.pop('processing', None)
+                        existing.metadata = metadata
+                        await sync_to_async(existing.save)(update_fields=['metadata'])
+                except Exception:
+                    pass
+                return  # Não processar arquivo muito grande
             
             logger.info(f"✅ [INCOMING MEDIA] Baixado: {len(media_data)} bytes (tentativa {retry_count + 1}/{max_retries})")
             break  # Sucesso, sair do loop
@@ -268,12 +326,19 @@ async def handle_process_incoming_media(
         thumb_url = get_public_url(thumb_s3_path) if thumb_s3_path else None
         
         # 6. Criar/atualizar MessageAttachment
-        # Tentar encontrar attachment placeholder criado no webhook
-        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message__id=message_id).order_by('-created_at').first())()
-        
-        # Buscar message
+        # ✅ LÓGICA CORRIGIDA: Buscar placeholder especificamente (file_url vazio E file_path vazio)
+        # Isso evita race conditions e identifica corretamente o placeholder
         message = await sync_to_async(Message.objects.get)(id=message_id)
-        if existing and (not existing.file_url or existing.storage_type != 's3'):
+        
+        # Buscar placeholder criado no webhook (file_url vazio OU file_path vazio = placeholder)
+        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+            message__id=message_id,
+            file_url='',  # Placeholder tem file_url vazio
+            file_path=''  # Placeholder tem file_path vazio
+        ).order_by('-created_at').first())()
+        
+        # ✅ LÓGICA MELHORADA: Se encontrou placeholder, atualizar; senão criar novo
+        if existing:
             existing.file_url = public_url
             # Atualizar thumbnail_path se houver thumbnail
             if thumb_s3_path:
@@ -360,12 +425,13 @@ async def handle_process_incoming_media(
         # Garantir que não tem flag processing (já foi removido acima)
         metadata_for_ws.pop('processing', None)
         
+        # ✅ IMPORTANTE: Sempre incluir message_id no broadcast para facilitar busca no frontend
         await channel_layer.group_send(
             f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}',
             {
                 'type': 'attachment_updated',
                 'data': {
-                    'message_id': str(message_id),
+                    'message_id': str(message_id),  # ✅ Incluir message_id para busca precisa
                     'attachment_id': str(attachment.id),
                     'file_url': public_url,  # ✅ URL do proxy (via get_public_url)
                     'thumbnail_url': thumbnail_url_for_ws,
@@ -402,7 +468,12 @@ async def handle_process_incoming_media(
             from apps.chat.models import MessageAttachment
             from apps.chat.utils.serialization import normalize_metadata
             
-            existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message__id=message_id).order_by('-created_at').first())()
+            # ✅ LÓGICA CORRIGIDA: Buscar placeholder especificamente
+            existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                message__id=message_id,
+                file_url='',
+                file_path=''
+            ).first())()
             if existing:
                 metadata = normalize_metadata(existing.metadata)
                 metadata['error'] = str(e)[:100]  # Limitar tamanho
