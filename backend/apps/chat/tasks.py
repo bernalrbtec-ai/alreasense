@@ -703,21 +703,9 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                     
                     # Broadcast atualização via WebSocket
                     try:
-                        from apps.chat.api.serializers import ConversationSerializer
-                        conv_data = await sync_to_async(lambda: ConversationSerializer(conversation).data)()
+                        from apps.chat.utils.serialization import serialize_conversation_for_ws
                         
-                        # Converter UUIDs
-                        def convert_uuids_to_str(obj):
-                            import uuid
-                            if isinstance(obj, uuid.UUID):
-                                return str(obj)
-                            elif isinstance(obj, dict):
-                                return {k: convert_uuids_to_str(v) for k, v in obj.items()}
-                            elif isinstance(obj, list):
-                                return [convert_uuids_to_str(item) for item in obj]
-                            return obj
-                        
-                        conv_data_serializable = convert_uuids_to_str(conv_data)
+                        conv_data_serializable = serialize_conversation_for_ws(conversation)
                         
                         channel_layer = get_channel_layer()
                         tenant_group = f"chat_tenant_{conversation.tenant_id}"
