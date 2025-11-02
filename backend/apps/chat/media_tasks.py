@@ -236,7 +236,25 @@ async def handle_process_incoming_media(
             raise
     
     if not media_data:
-        logger.error(f"❌ [INCOMING MEDIA] Não foi possível baixar mídia após {max_retries} tentativas")
+        logger.error(f"❌ [INCOMING MEDIA] Failed to download media after {max_retries} attempts")
+        # Mark attachment as error if exists
+        try:
+            from apps.chat.models import MessageAttachment
+            from apps.chat.utils.serialization import normalize_metadata
+            
+            existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                message__id=message_id,
+                file_url='',
+                file_path=''
+            ).first())()
+            if existing:
+                metadata = normalize_metadata(existing.metadata)
+                metadata['error'] = f'Falha ao baixar mídia após {max_retries} tentativas'
+                metadata.pop('processing', None)
+                existing.metadata = metadata
+                await sync_to_async(existing.save)(update_fields=['metadata'])
+        except Exception:
+            pass
         return
     
     try:
