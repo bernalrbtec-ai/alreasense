@@ -181,7 +181,6 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
     chatWebSocketManager.on('typing', handleTyping);
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
-    chatWebSocketManager.on('attachment_downloaded', handleAttachmentDownloaded);
     chatWebSocketManager.on('attachment_updated', handleAttachmentUpdated);
     chatWebSocketManager.on('new_conversation', handleNewConversation);
 
@@ -191,7 +190,6 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('message_status_update', handleStatusUpdate);
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
-      chatWebSocketManager.off('attachment_downloaded', handleAttachmentDownloaded);
       chatWebSocketManager.off('attachment_updated', handleAttachmentUpdated);
       chatWebSocketManager.off('new_conversation', handleNewConversation);
     };
