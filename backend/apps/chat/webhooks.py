@@ -519,14 +519,12 @@ def handle_message_upsert(data, tenant, connection=None):
             if conversation.status == 'closed':
                 conversation.status = 'pending' if not from_me else 'open'
                 conversation.save(update_fields=['status'])
-                logger.info(f"✅ [WEBHOOK] Conversa reaberta: {phone}")
+                status_str = "Inbox" if not from_me else "Aberta"
+                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente ({status_str})")
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista
             conversation.update_last_message()
-                conversation.save(update_fields=['status'])
-                status_str = "Inbox" if not from_me else "Aberta"
-                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente ({status_str})")
         
         # Atualiza nome e foto se mudaram
         update_fields = []
