@@ -314,7 +314,8 @@ async def handle_process_incoming_media(
             
             if success:
                 upload_success = True
-                logger.info(f"✅ [INCOMING MEDIA] Upload para S3 concluído: {s3_path}")
+                logger.info(f"✅ [INCOMING MEDIA] Upload para S3 concluído: {s3_path} ({len(processed_data)} bytes)")
+                break  # ✅ IMPORTANTE: Sair do loop ao conseguir upload com sucesso
             else:
                 upload_retries += 1
                 if upload_retries <= max_upload_retries:
