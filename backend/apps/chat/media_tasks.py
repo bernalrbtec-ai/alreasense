@@ -323,6 +323,25 @@ async def handle_process_incoming_media(
                     await asyncio.sleep(wait_time)
                 else:
                     logger.error(f"❌ [INCOMING MEDIA] Falha no upload após {max_upload_retries + 1} tentativas: {msg}")
+                    # ✅ IMPORTANTE: Marcar attachment como erro se upload falhar completamente
+                    try:
+                        from apps.chat.models import MessageAttachment
+                        from apps.chat.utils.serialization import normalize_metadata
+                        
+                        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                            message__id=message_id,
+                            file_url='',
+                            file_path=''
+                        ).first())()
+                        if existing:
+                            metadata = normalize_metadata(existing.metadata)
+                            metadata['error'] = f'Falha no upload para S3 após {max_upload_retries + 1} tentativas: {msg[:100]}'
+                            metadata.pop('processing', None)
+                            existing.metadata = metadata
+                            await sync_to_async(existing.save)(update_fields=['metadata'])
+                            logger.error(f"❌ [INCOMING MEDIA] Attachment marcado como erro: {existing.id}")
+                    except Exception as update_error:
+                        logger.error(f"❌ [INCOMING MEDIA] Erro ao marcar attachment como erro: {update_error}", exc_info=True)
                     return
         
         # Upload thumbnail se houver (com tratamento de erro)

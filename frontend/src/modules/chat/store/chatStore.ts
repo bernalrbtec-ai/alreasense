@@ -97,12 +97,47 @@ export const useChatStore = create<ChatState>((set) => ({
     // Evitar duplicatas: verificar se mensagem já existe
     const exists = state.messages.some(m => m.id === message.id);
     if (exists) {
-      // ✅ Atualizar mensagem existente fazendo MERGE para preservar attachments
-      // Se a nova mensagem não tiver attachments mas a antiga tiver, preservar os da antiga
+      // ✅ MELHORIA: Merge inteligente de attachments - preservar attachments atualizados
       return {
         messages: state.messages.map(m => {
           if (m.id === message.id) {
-            // Se a mensagem nova tem attachments, usar ela
+            // Fazer merge inteligente de attachments
+            if (m.attachments && m.attachments.length > 0 && message.attachments && message.attachments.length > 0) {
+              // ✅ MERGE: Preservar attachments existentes que estão atualizados (com file_url)
+              // e usar novos attachments apenas se não existirem ou estiverem desatualizados
+              const mergedAttachments = m.attachments.map(existingAtt => {
+                const newAtt = message.attachments.find(a => a.id === existingAtt.id);
+                if (newAtt) {
+                  // Se attachment existente tem file_url válido e novo não tem, manter o existente
+                  const existingHasUrl = existingAtt.file_url && existingAtt.file_url.trim() && 
+                                        !existingAtt.file_url.includes('whatsapp.net') &&
+                                        !existingAtt.file_url.includes('evo.');
+                  const newHasUrl = newAtt.file_url && newAtt.file_url.trim() &&
+                                   !newAtt.file_url.includes('whatsapp.net') &&
+                                   !newAtt.file_url.includes('evo.');
+                  
+                  // Priorizar attachment com URL válida
+                  if (existingHasUrl && !newHasUrl) {
+                    return existingAtt; // Manter attachment atualizado
+                  }
+                  // Se novo tem URL válida ou ambos não têm, usar o novo
+                  return newAtt;
+                }
+                return existingAtt; // Manter attachment que não existe na nova mensagem
+              });
+              
+              // Adicionar novos attachments que não existem
+              const newAttachmentIds = new Set(mergedAttachments.map(a => a.id));
+              message.attachments.forEach(newAtt => {
+                if (!newAttachmentIds.has(newAtt.id)) {
+                  mergedAttachments.push(newAtt);
+                }
+              });
+              
+              return { ...message, attachments: mergedAttachments };
+            }
+            
+            // Se a mensagem nova tem attachments mas a antiga não, usar os novos
             if (message.attachments && message.attachments.length > 0) {
               return message;
             }

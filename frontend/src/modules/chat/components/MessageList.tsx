@@ -24,7 +24,48 @@ export function MessageList() {
           params: { ordering: 'created_at' }
         });
         const msgs = response.data.results || response.data;
-        setMessages(msgs);
+        
+        // ✅ MELHORIA: Ao invés de setMessages (sobrescreve), fazer merge inteligente
+        // para preservar attachments que foram atualizados via WebSocket
+        const { messages: currentMessages } = useChatStore.getState();
+        const mergedMessages = msgs.map(serverMsg => {
+          const existingMsg = currentMessages.find(m => m.id === serverMsg.id);
+          if (existingMsg && existingMsg.attachments && existingMsg.attachments.length > 0) {
+            // Se mensagem existente tem attachments atualizados, preservar
+            const serverAttachments = serverMsg.attachments || [];
+            const mergedAttachments = existingMsg.attachments.map(existingAtt => {
+              const serverAtt = serverAttachments.find(a => a.id === existingAtt.id);
+              if (serverAtt) {
+                // Priorizar attachment com file_url válido
+                const existingHasUrl = existingAtt.file_url && existingAtt.file_url.trim() &&
+                                      !existingAtt.file_url.includes('whatsapp.net') &&
+                                      !existingAtt.file_url.includes('evo.');
+                const serverHasUrl = serverAtt.file_url && serverAtt.file_url.trim() &&
+                                    !serverAtt.file_url.includes('whatsapp.net') &&
+                                    !serverAtt.file_url.includes('evo.');
+                
+                if (existingHasUrl && !serverHasUrl) {
+                  return existingAtt; // Manter attachment atualizado do WebSocket
+                }
+                return serverAtt; // Usar server se não há conflito ou server tem URL válida
+              }
+              return existingAtt; // Manter attachment que não vem do servidor
+            });
+            
+            // Adicionar novos attachments do servidor
+            const existingAttachmentIds = new Set(mergedAttachments.map(a => a.id));
+            serverAttachments.forEach(serverAtt => {
+              if (!existingAttachmentIds.has(serverAtt.id)) {
+                mergedAttachments.push(serverAtt);
+              }
+            });
+            
+            return { ...serverMsg, attachments: mergedAttachments };
+          }
+          return serverMsg; // Nova mensagem ou sem attachments, usar do servidor
+        });
+        
+        setMessages(mergedMessages);
         
         // Scroll to bottom
         setTimeout(() => {

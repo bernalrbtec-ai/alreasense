@@ -161,25 +161,36 @@ export function useChatSocket(conversationId?: string) {
             return;  // Já está atualizado, não fazer nada
           }
           
+          // ✅ IMPORTANTE: Atualizar metadata removendo flag processing explicitamente
+          const updatedMetadata = { ...(data.data.metadata || {}) };
+          delete updatedMetadata.processing; // Garantir que processing é false
+          
           // Atualizar attachment específico
           updateAttachment(attachmentId, {
             file_url: fileUrl,
             thumbnail_url: data.data.thumbnail_url,
             mime_type: data.data.mime_type,
-            metadata: data.data.metadata || {},  // Manter metadata atualizado
+            metadata: updatedMetadata,  // ✅ Metadata sem flag processing
           } as any);
           
           // ✅ Forçar re-render da mensagem completa (clonar para garantir mudança de referência)
           const updatedMessage = {
             ...messageWithAttachment,
-            attachments: messageWithAttachment.attachments?.map(att => 
-              att.id === attachmentId 
-                ? { ...att, file_url: fileUrl, thumbnail_url: data.data.thumbnail_url, mime_type: data.data.mime_type, metadata: data.data.metadata || {} }
-                : att
-            )
+            attachments: messageWithAttachment.attachments?.map(att => {
+              if (att.id === attachmentId) {
+                return {
+                  ...att,
+                  file_url: fileUrl,
+                  thumbnail_url: data.data.thumbnail_url,
+                  mime_type: data.data.mime_type,
+                  metadata: updatedMetadata  // ✅ Metadata sem flag processing
+                };
+              }
+              return att;
+            })
           };
           addMessage(updatedMessage as any);
-          console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId);
+          console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId, '| URL:', fileUrl.substring(0, 50));
         } else {
           console.warn('⚠️ [HOOK] Mensagem com attachment não encontrada:', { attachmentId, messageId });
         }
