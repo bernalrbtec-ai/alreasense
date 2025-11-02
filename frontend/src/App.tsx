@@ -37,14 +37,15 @@ function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
 
   useEffect(() => {
-    // Set axios token if it exists
+    // ✅ Set axios token if it exists (importante manter após mudança de página)
     if (token) {
       api.defaults.headers.common['Authorization'] = `Bearer ${token}`
     }
     
-    // Check auth only once on mount
+    // ✅ Check auth on mount and when token changes
+    // Importante verificar token em todas as navegações para evitar perda de autenticação
     checkAuth()
-  }, [])
+  }, [token])  // ✅ Adicionar token como dependência para revalidar quando mudar
 
   if (isLoading) {
     return (

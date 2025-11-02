@@ -80,11 +80,13 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
                     
                     if not file_exists:
                         logger.warning(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3: {instance.file_path}")
-                        # Se arquivo não existe, retornar URL vazia
-                        data['file_url'] = ''
-                        return data
+                        # ✅ IMPORTANTE: Se arquivo não existe, tentar gerar URL mesmo assim
+                        # Pode ser que o cache esteja desatualizado ou arquivo foi processado recentemente
+                        # Melhor tentar carregar do que não mostrar nada
+                        logger.debug(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3, mas gerando URL mesmo assim (pode estar em processamento)")
                     
-                    # Gerar URL do proxy
+                    # ✅ SEMPRE gerar URL do proxy, mesmo se verificação falhou
+                    # A verificação pode estar desatualizada (arquivo pode ter sido processado após verificação)
                     proxy_url = s3_manager.get_public_url(instance.file_path)
                     data['file_url'] = proxy_url
                     

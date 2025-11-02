@@ -515,9 +515,15 @@ def handle_message_upsert(data, tenant, connection=None):
             except Exception as e:
                 logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de nova conversa: {e}", exc_info=True)
         else:
-            # Se conversa estava fechada, reabrir automaticamente
+            # ✅ CONVERSAS EXISTENTES: Se conversa estava fechada, reabrir automaticamente
             if conversation.status == 'closed':
                 conversation.status = 'pending' if not from_me else 'open'
+                conversation.save(update_fields=['status'])
+                logger.info(f"✅ [WEBHOOK] Conversa reaberta: {phone}")
+            
+            # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
+            # Isso garante que a conversa aparece no topo da lista
+            conversation.update_last_message()
                 conversation.save(update_fields=['status'])
                 status_str = "Inbox" if not from_me else "Aberta"
                 logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente ({status_str})")
