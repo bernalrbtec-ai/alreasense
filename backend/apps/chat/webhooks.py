@@ -502,7 +502,7 @@ def handle_message_upsert(data, tenant, connection=None):
                 
                 logger.info(f"✅ [WEBSOCKET] Broadcast de nova conversa enviado com sucesso!")
             except Exception as e:
-                logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de nova conversa: {e}", exc_info=True)
+                logger.error(f"❌ [WEBSOCKET] Error broadcasting new conversation: {e}", exc_info=True)
         else:
             # ✅ CONVERSAS EXISTENTES: Se conversa estava fechada, reabrir automaticamente
             if conversation.status == 'closed':
@@ -706,7 +706,7 @@ def handle_message_upsert(data, tenant, connection=None):
                     
                     logger.info(f"📡 [WEBSOCKET] Notificação de nova mensagem broadcast para tenant {tenant.name}")
                 except Exception as e:
-                    logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de notificação: {e}", exc_info=True)
+                    logger.error(f"❌ [WEBSOCKET] Error broadcasting notification: {e}", exc_info=True)
         
         else:
             logger.info(f"ℹ️ [WEBHOOK] Mensagem já existe no banco: {message_id}")
@@ -878,7 +878,7 @@ def broadcast_message_to_websocket(message, conversation):
         logger.info(f"   Message ID: {message.id} | Content: {message.content[:30]}...")
     
     except Exception as e:
-        logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast: {e}", exc_info=True)
+        logger.error(f"❌ [WEBSOCKET] Error broadcasting message: {e}", exc_info=True)
 
 
 def broadcast_status_update(message):

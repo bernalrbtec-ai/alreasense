@@ -274,14 +274,11 @@ async def handle_process_incoming_media(
         
         # 3. Path no S3
         from urllib.parse import urlparse
+        # Base filename from URL
         filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
-        # Se convertemos áudio, o nome pode ter sido ajustado acima
-        if media_type == 'audio':
-            # usar inferred_filename se disponível no escopo
-            try:
-                filename = inferred_filename or filename
-            except NameError:
-                pass
+        # If audio was converted, use the converted filename
+        if media_type == 'audio' and 'inferred_filename' in locals():
+            filename = inferred_filename or filename
         s3_path = generate_media_path(tenant_id, f'chat_{media_type}s', filename)
         
         # 4. Upload para S3 (com retry)
@@ -447,20 +444,25 @@ async def handle_process_incoming_media(
         
     except httpx.TimeoutException as e:
         logger.error(f"❌ [INCOMING MEDIA] Timeout ao processar: {e}")
-        # Marcar attachment como erro se existir
+        # Mark attachment as error if exists
         try:
             from apps.chat.models import MessageAttachment
             from apps.chat.utils.serialization import normalize_metadata
             
-            existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message__id=message_id).order_by('-created_at').first())()
+            # ✅ Use specific filter for placeholder (consistent with other error handlers)
+            existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                message__id=message_id,
+                file_url='',
+                file_path=''
+            ).first())()
             if existing:
                 metadata = normalize_metadata(existing.metadata)
-                metadata['error'] = 'timeout'
+                metadata['error'] = 'Timeout ao processar mídia. Tente novamente mais tarde.'
                 metadata.pop('processing', None)
                 existing.metadata = metadata
                 await sync_to_async(existing.save)(update_fields=['metadata'])
         except Exception:
-            pass  # Não quebrar se falhar ao atualizar metadata
+            pass  # Don't break if metadata update fails
     except Exception as e:
         logger.error(f"❌ [INCOMING MEDIA] Erro: {e}", exc_info=True)
         # Marcar attachment como erro se existir
