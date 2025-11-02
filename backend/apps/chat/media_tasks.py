@@ -284,17 +284,10 @@ async def handle_process_incoming_media(
             existing.file_path = s3_path
             existing.storage_type = 's3'
             # Remover flag de processing (mídia está pronta)
-            import json
-            # ✅ NORMALIZAR metadata: garantir que sempre seja dict
-            metadata = existing.metadata if existing.metadata else {}
-            if isinstance(metadata, str):
-                try:
-                    metadata = json.loads(metadata) if metadata else {}
-                except (json.JSONDecodeError, ValueError):
-                    metadata = {}
-            elif not isinstance(metadata, dict):
-                metadata = {}
+            from apps.chat.utils.serialization import normalize_metadata
             
+            # ✅ NORMALIZAR metadata: garantir que sempre seja dict
+            metadata = normalize_metadata(existing.metadata)
             metadata.pop('processing', None)
             # Manter media_type se existir
             if 'media_type' not in metadata and media_type:
@@ -307,7 +300,6 @@ async def handle_process_incoming_media(
         else:
             # ✅ Criar novo attachment se placeholder não existir
             # Normalizar metadata ao criar
-            import json
             new_metadata = {'media_type': media_type}
             attachment = await sync_to_async(MessageAttachment.objects.create)(
                 message=message,
@@ -362,16 +354,9 @@ async def handle_process_incoming_media(
         
         # ✅ Garantir que metadata está serializado corretamente para WebSocket
         # NORMALIZAR: sempre retornar dict, nunca string
-        metadata_for_ws = attachment.metadata if attachment.metadata else {}
-        if isinstance(metadata_for_ws, str):
-            try:
-                import json
-                metadata_for_ws = json.loads(metadata_for_ws) if metadata_for_ws else {}
-            except (json.JSONDecodeError, ValueError):
-                metadata_for_ws = {}
-        elif not isinstance(metadata_for_ws, dict):
-            metadata_for_ws = {}
+        from apps.chat.utils.serialization import normalize_metadata
         
+        metadata_for_ws = normalize_metadata(attachment.metadata)
         # Garantir que não tem flag processing (já foi removido acima)
         metadata_for_ws.pop('processing', None)
         
@@ -399,17 +384,11 @@ async def handle_process_incoming_media(
         # Marcar attachment como erro se existir
         try:
             from apps.chat.models import MessageAttachment
+            from apps.chat.utils.serialization import normalize_metadata
+            
             existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message__id=message_id).order_by('-created_at').first())()
             if existing:
-                import json
-                metadata = existing.metadata if existing.metadata else {}
-                if isinstance(metadata, str):
-                    try:
-                        metadata = json.loads(metadata) if metadata else {}
-                    except:
-                        metadata = {}
-                elif not isinstance(metadata, dict):
-                    metadata = {}
+                metadata = normalize_metadata(existing.metadata)
                 metadata['error'] = 'timeout'
                 metadata.pop('processing', None)
                 existing.metadata = metadata
@@ -421,17 +400,11 @@ async def handle_process_incoming_media(
         # Marcar attachment como erro se existir
         try:
             from apps.chat.models import MessageAttachment
+            from apps.chat.utils.serialization import normalize_metadata
+            
             existing = await sync_to_async(lambda: MessageAttachment.objects.filter(message__id=message_id).order_by('-created_at').first())()
             if existing:
-                import json
-                metadata = existing.metadata if existing.metadata else {}
-                if isinstance(metadata, str):
-                    try:
-                        metadata = json.loads(metadata) if metadata else {}
-                    except:
-                        metadata = {}
-                elif not isinstance(metadata, dict):
-                    metadata = {}
+                metadata = normalize_metadata(existing.metadata)
                 metadata['error'] = str(e)[:100]  # Limitar tamanho
                 metadata.pop('processing', None)
                 existing.metadata = metadata

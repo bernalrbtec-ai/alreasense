@@ -97,16 +97,8 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
                         logger.debug(f"📎 [SERIALIZER] file_url convertido para proxy: {proxy_url[:50]}...")
                 
                 # ✅ NORMALIZAR metadata: garantir que sempre seja dict
-                metadata = data.get('metadata')
-                if metadata is not None:
-                    if isinstance(metadata, str):
-                        try:
-                            import json
-                            data['metadata'] = json.loads(metadata) if metadata else {}
-                        except (json.JSONDecodeError, ValueError):
-                            data['metadata'] = {}
-                    elif not isinstance(metadata, dict):
-                        data['metadata'] = {}
+                from apps.chat.utils.serialization import normalize_metadata
+                data['metadata'] = normalize_metadata(data.get('metadata'))
         except Exception as e:
             # Em caso de erro, logar mas manter o original para não quebrar a resposta
             import logging

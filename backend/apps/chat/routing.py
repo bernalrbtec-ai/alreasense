@@ -8,7 +8,6 @@ Arquitetura Global WebSocket:
 """
 from django.urls import re_path
 from apps.chat.consumers_v2 import ChatConsumerV2
-from apps.chat.tenant_consumer import TenantChatConsumer
 
 websocket_urlpatterns = [
     # ✅ WebSocket GLOBAL (1 por usuário, subscribe/unsubscribe)
@@ -17,6 +16,7 @@ websocket_urlpatterns = [
         ChatConsumerV2.as_asgi()
     ),
     # ❌ V1 REMOVIDO: WebSocket por conversa (deprecated)
+    # ❌ TenantChatConsumer REMOVIDO: ChatConsumerV2 já faz o trabalho do tenant
     # Causava múltiplas conexões e código duplicado
 ]
 

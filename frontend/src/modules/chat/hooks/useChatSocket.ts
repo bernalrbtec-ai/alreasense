@@ -125,13 +125,9 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
-    const handleAttachmentDownloaded = (data: WebSocketMessage) => {
-      if (data.message) {
-        console.log('📎 [HOOK] Anexo baixado, atualizando mensagem:', data.attachment_id);
-        // Atualizar mensagem no store com a nova URL local
-        addMessage(data.message);
-      }
-    };
+    // ✅ REMOVIDO: handleAttachmentDownloaded não é mais usado
+    // O evento 'attachment_downloaded' foi substituído por 'attachment_updated'
+    // que é mais robusto e inclui metadata normalizado
 
     const handleAttachmentUpdated = (data: WebSocketMessage) => {
       if (data.data?.attachment_id) {

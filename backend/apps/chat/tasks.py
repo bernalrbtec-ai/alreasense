@@ -454,22 +454,9 @@ async def handle_send_message(message_id: str):
         
         logger.info(f"   Room: {room_group_name}")
         
-        from apps.chat.api.serializers import MessageSerializer
-        message_data = await sync_to_async(lambda: MessageSerializer(message).data)()
+        from apps.chat.utils.serialization import serialize_message_for_ws
         
-        # Converter UUIDs para string para serialização msgpack
-        def convert_uuids_to_str(obj):
-            """Recursivamente converte UUIDs para string."""
-            import uuid
-            if isinstance(obj, uuid.UUID):
-                return str(obj)
-            elif isinstance(obj, dict):
-                return {k: convert_uuids_to_str(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_uuids_to_str(item) for item in obj]
-            return obj
-        
-        message_data_serializable = convert_uuids_to_str(message_data)
+        message_data_serializable = serialize_message_for_ws(message)
         
         await channel_layer.group_send(
             room_group_name,

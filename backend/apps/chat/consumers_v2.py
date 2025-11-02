@@ -430,21 +430,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     @database_sync_to_async
     def serialize_message(self, message):
         """Serializa mensagem para JSON."""
-        from apps.chat.api.serializers import MessageSerializer
-        import uuid
-        
-        data = MessageSerializer(message).data
-        
-        def convert_uuids(obj):
-            if isinstance(obj, uuid.UUID):
-                return str(obj)
-            elif isinstance(obj, dict):
-                return {k: convert_uuids(v) for k, v in obj.items()}
-            elif isinstance(obj, list):
-                return [convert_uuids(item) for item in obj]
-            return obj
-        
-        return convert_uuids(data)
+        from apps.chat.utils.serialization import serialize_message_for_ws
+        return serialize_message_for_ws(message)
     
     @database_sync_to_async
     def mark_message_as_seen(self, message_id, conversation_id):

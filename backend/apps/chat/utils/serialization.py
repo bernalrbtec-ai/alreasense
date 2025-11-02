@@ -2,9 +2,10 @@
 Utilitários para serialização de dados no sistema de chat.
 
 Centraliza conversão de tipos não serializáveis (UUID, datetime, etc)
-para evitar duplicação de código.
+e normalização de metadata para evitar duplicação de código.
 """
 import uuid
+import json
 from datetime import datetime, date
 from decimal import Decimal
 from typing import Any, Dict, List, Union
@@ -157,4 +158,46 @@ def prepare_ws_event(event_type: str, data: Dict[str, Any]) -> Dict[str, Any]:
         'type': event_type,
         **serialized_data
     }
+
+
+def normalize_metadata(metadata: Any) -> Dict[str, Any]:
+    """
+    Normaliza metadata para garantir que sempre seja dict.
+    
+    Converte:
+    - None → {}
+    - str (JSON) → dict (parseado)
+    - dict → dict (mantém)
+    - Outros tipos → {}
+    
+    Args:
+        metadata: dict, str (JSON), None ou qualquer outro tipo
+        
+    Returns:
+        dict: Metadata normalizado (sempre dict)
+        
+    Example:
+        >>> normalize_metadata(None)
+        {}
+        >>> normalize_metadata('{"key": "value"}')
+        {'key': 'value'}
+        >>> normalize_metadata({'key': 'value'})
+        {'key': 'value'}
+        >>> normalize_metadata('invalid json')
+        {}
+    """
+    if metadata is None:
+        return {}
+    
+    if isinstance(metadata, str):
+        try:
+            return json.loads(metadata) if metadata else {}
+        except (json.JSONDecodeError, ValueError):
+            return {}
+    
+    if isinstance(metadata, dict):
+        return metadata
+    
+    # Outros tipos → dict vazio
+    return {}
 
