@@ -177,12 +177,39 @@ export function useTenantSocket() {
         console.log('🔄 [TENANT WS] Conversa atualizada:', data.conversation);
         console.log('🖼️ [DEBUG] profile_pic_url:', data.conversation?.profile_pic_url);
         console.log('🖼️ [DEBUG] contact_name:', data.conversation?.contact_name);
+        
         // Atualizar conversa na lista
-        const { updateConversation } = useChatStore.getState();
+        const { updateConversation, conversations } = useChatStore.getState();
         if (data.conversation) {
+          // ✅ Detectar se status mudou de 'closed' para 'pending' (conversa reaberta)
+          const existingConversation = conversations.find(c => c.id === data.conversation.id);
+          const wasClosed = existingConversation?.status === 'closed';
+          const isNowPending = data.conversation.status === 'pending';
+          const statusReopened = wasClosed && isNowPending;
+          
           console.log('✅ [TENANT WS] Chamando updateConversation...');
           updateConversation(data.conversation);
           console.log('✅ [TENANT WS] Store atualizada!');
+          
+          // 🔔 Mostrar toast se conversa foi reaberta
+          if (statusReopened) {
+            const contactName = data.conversation.contact_name || data.conversation.contact_phone;
+            const currentPath = window.location.pathname;
+            const isOnChatPage = currentPath === '/chat';
+            
+            if (!isOnChatPage) {
+              toast.success('Conversa Reaberta! 💬', {
+                description: `${contactName} enviou uma nova mensagem`,
+                duration: 5000,
+                action: {
+                  label: 'Abrir',
+                  onClick: () => navigateToChat(data.conversation)
+                }
+              });
+            } else {
+              console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
+            }
+          }
         }
         break;
 
