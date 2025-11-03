@@ -157,7 +157,12 @@ export function useTenantSocket() {
             
             // ✅ IGNORAR apenas se tem URL válida, é a mesma URL, E não está processando
             if (existingAttachment && hasValidUrl && isSameUrl && !isProcessing) {
-              console.log('ℹ️ [TENANT WS] Attachment já atualizado, ignorando update duplicado:', attachmentId);
+              console.log('ℹ️ [TENANT WS] Attachment já atualizado, ignorando update duplicado:', {
+                attachmentId,
+                oldUrl: existingAttachment?.file_url?.substring(0, 80) || 'VAZIO',
+                newUrl: fileUrl?.substring(0, 80) || 'VAZIO',
+                metadata: existingAttachment?.metadata
+              });
               return;  // Já está atualizado e processado, não fazer nada
             }
             
@@ -167,8 +172,10 @@ export function useTenantSocket() {
               isProcessing,
               isSameUrl,
               hasValidUrl,
-              oldUrl: existingAttachment?.file_url?.substring(0, 50) || 'VAZIO',
-              newUrl: fileUrl?.substring(0, 50) || 'VAZIO'
+              oldUrl: existingAttachment?.file_url?.substring(0, 80) || 'VAZIO',
+              newUrl: fileUrl?.substring(0, 80) || 'VAZIO',
+              oldMetadata: existingAttachment?.metadata,
+              newMetadata: data.data?.metadata
             });
             
             // ✅ IMPORTANTE: Remover flag processing explicitamente

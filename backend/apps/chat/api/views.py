@@ -753,7 +753,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             'expires_in': 3600
         }, status=status.HTTP_200_OK)
     
-    @action(detail=False, methods=['get'], url_path='profile-pic-proxy')
+    @action(detail=False, methods=['get', 'options'], url_path='profile-pic-proxy')
     def profile_pic_proxy(self, request):
         """
         Proxy para fotos de perfil do WhatsApp com cache Redis.
@@ -769,6 +769,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         import hashlib
         
         logger = logging.getLogger(__name__)
+        
+        # ✅ CORS Preflight: Responder OPTIONS com headers CORS
+        if request.method == 'OPTIONS':
+            response = HttpResponse()
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type'
+            response['Access-Control-Max-Age'] = '86400'  # 24 horas
+            return response
         
         profile_url = request.query_params.get('url')
         
@@ -1441,7 +1450,7 @@ class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
 # VIEW FUNCTION PARA PROXY DE FOTOS
 # ==========================================
 
-@api_view(['GET'])
+@api_view(['GET', 'OPTIONS'])
 @permission_classes([AllowAny])
 def profile_pic_proxy_view(request):
     """
@@ -1458,6 +1467,15 @@ def profile_pic_proxy_view(request):
     import hashlib
     
     logger = logging.getLogger(__name__)
+    
+    # ✅ CORS Preflight: Responder OPTIONS com headers CORS
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        response['Access-Control-Max-Age'] = '86400'  # 24 horas
+        return response
     
     profile_url = request.GET.get('url')
     
