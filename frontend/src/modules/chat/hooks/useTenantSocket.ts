@@ -207,45 +207,46 @@ export function useTenantSocket() {
             const isOnChatPage = currentPath === '/chat';
             
             // ✅ Prevenir múltiplos toasts: só mostrar uma vez por conversa reaberta
+            // Usar apenas o ID da conversa como chave (sem timestamp) para detectar duplicatas
             const toastKey = `reopened-${data.conversation.id}`;
-            const timestamp = Date.now();
-            const toastId = `${toastKey}-${timestamp}`;
             
-            // ✅ Verificar se já mostramos um toast recentemente para esta conversa (últimos 5 segundos)
-            const recentToast = Array.from(shownToastsRef.current).find(id => id.startsWith(toastKey));
-            if (recentToast) {
-              console.log('🔕 [TOAST] Toast já foi mostrado recentemente para esta conversa, ignorando...');
-              return;
+            // ✅ Verificar e adicionar ATÔMICAMENTE para prevenir race conditions
+            // Se já existe no Set, significa que um toast foi mostrado recentemente
+            if (shownToastsRef.current.has(toastKey)) {
+              console.log('🔕 [TOAST] Toast já foi mostrado recentemente para esta conversa, ignorando...', toastKey);
+              return; // ✅ RETORNAR DO CALLBACK COMPLETO
             }
             
+            // ✅ Adicionar ao Set ANTES de mostrar o toast (prevenir duplicatas simultâneas)
+            shownToastsRef.current.add(toastKey);
+            
             if (!isOnChatPage) {
-              // ✅ Adicionar ao Set de toasts mostrados
-              shownToastsRef.current.add(toastId);
-              
               toast.success('Conversa Reaberta! 💬', {
                 description: `${contactName} enviou uma nova mensagem`,
                 duration: 5000,
-                id: toastId, // ✅ Prevenir duplicação usando ID único com timestamp
+                id: toastKey, // ✅ Usar mesmo ID do Set para garantir deduplicação
                 action: {
                   label: 'Abrir',
                   onClick: () => navigateToChat(data.conversation)
                 },
                 onDismiss: () => {
                   // ✅ Remover do Set quando toast for fechado
-                  shownToastsRef.current.delete(toastId);
+                  shownToastsRef.current.delete(toastKey);
                 },
                 onAutoClose: () => {
                   // ✅ Remover do Set quando toast expirar
-                  shownToastsRef.current.delete(toastId);
+                  shownToastsRef.current.delete(toastKey);
                 }
               });
               
               // ✅ Limpar do Set após 10 segundos (backup caso callbacks não sejam chamados)
               setTimeout(() => {
-                shownToastsRef.current.delete(toastId);
+                shownToastsRef.current.delete(toastKey);
               }, 10000);
             } else {
               console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
+              // ✅ Remover do Set se não mostrou o toast (para permitir mostrar depois)
+              shownToastsRef.current.delete(toastKey);
             }
           }
         }
