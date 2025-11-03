@@ -179,7 +179,7 @@ export function useTenantSocket() {
         console.log('🖼️ [DEBUG] contact_name:', data.conversation?.contact_name);
         
         // Atualizar conversa na lista
-        const { updateConversation, conversations } = useChatStore.getState();
+        const { updateConversation, addConversation, conversations } = useChatStore.getState();
         if (data.conversation) {
           // ✅ Detectar se status mudou de 'closed' para 'pending' (conversa reaberta)
           const existingConversation = conversations.find(c => c.id === data.conversation.id);
@@ -187,20 +187,30 @@ export function useTenantSocket() {
           const isNowPending = data.conversation.status === 'pending';
           const statusReopened = wasClosed && isNowPending;
           
-          console.log('✅ [TENANT WS] Chamando updateConversation...');
-          updateConversation(data.conversation);
+          // ✅ IMPORTANTE: Se conversa não existe no store, adicionar (pode acontecer em race conditions)
+          if (!existingConversation) {
+            console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...');
+            addConversation(data.conversation);
+          } else {
+            console.log('✅ [TENANT WS] Chamando updateConversation...');
+            updateConversation(data.conversation);
+          }
           console.log('✅ [TENANT WS] Store atualizada!');
           
           // 🔔 Mostrar toast se conversa foi reaberta
-          if (statusReopened) {
+          // ✅ FIX: Também mostrar se não existia no store E status é pending (nova conversa ou reaberta)
+          if (statusReopened || (!existingConversation && isNowPending)) {
             const contactName = data.conversation.contact_name || data.conversation.contact_phone;
             const currentPath = window.location.pathname;
             const isOnChatPage = currentPath === '/chat';
             
+            // ✅ Prevenir múltiplos toasts: só mostrar uma vez por conversa reaberta
+            const toastKey = `reopened-${data.conversation.id}`;
             if (!isOnChatPage) {
               toast.success('Conversa Reaberta! 💬', {
                 description: `${contactName} enviou uma nova mensagem`,
                 duration: 5000,
+                id: toastKey, // ✅ Prevenir duplicação usando ID único
                 action: {
                   label: 'Abrir',
                   onClick: () => navigateToChat(data.conversation)

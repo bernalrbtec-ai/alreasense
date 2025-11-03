@@ -518,49 +518,33 @@ def handle_message_upsert(data, tenant, connection=None):
             # Isso garante que a conversa aparece no topo da lista
             conversation.update_last_message()
             
-            # ✅ IMPORTANTE: Se status mudou, fazer broadcast da conversa atualizada via WebSocket
-            # Isso garante que o frontend recebe o status atualizado em tempo real
-            if status_changed:
-                try:
-                    from apps.chat.utils.serialization import serialize_conversation_for_ws
-                    from channels.layers import get_channel_layer
-                    from asgiref.sync import async_to_sync
-                    
-                    conv_data_serializable = serialize_conversation_for_ws(conversation)
-                    
-                    channel_layer = get_channel_layer()
-                    tenant_group = f"chat_tenant_{tenant.id}"
-                    
-                    async_to_sync(channel_layer.group_send)(
-                        tenant_group,
-                        {
-                            'type': 'conversation_updated',
-                            'conversation': conv_data_serializable
-                        }
-                    )
-                    
-                    logger.info(f"📡 [WEBSOCKET] Broadcast de conversa atualizada (status mudou) enviado")
-                except Exception as e:
-                    logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de conversa atualizada: {e}", exc_info=True)
-        
         # Atualiza nome e foto se mudaram
         update_fields = []
+        name_or_pic_changed = False
         if push_name and conversation.contact_name != push_name:
             conversation.contact_name = push_name
             update_fields.append('contact_name')
+            name_or_pic_changed = True
         
         if profile_pic_url and conversation.profile_pic_url != profile_pic_url:
             conversation.profile_pic_url = profile_pic_url
             update_fields.append('profile_pic_url')
+            name_or_pic_changed = True
             logger.info(f"📸 [WEBHOOK] Foto de perfil atualizada: {profile_pic_url[:50]}...")
         
         if update_fields:
             conversation.save(update_fields=update_fields)
-            
-            # 📡 Broadcast atualização via WebSocket
+        
+        # ✅ IMPORTANTE: Fazer broadcast UMA VEZ apenas se algo mudou (status OU nome/foto)
+        # Isso evita duplicação de eventos e múltiplos toasts
+        if status_changed or name_or_pic_changed:
             try:
                 from apps.chat.utils.serialization import serialize_conversation_for_ws
+                from channels.layers import get_channel_layer
+                from asgiref.sync import async_to_sync
                 
+                # ✅ Recarregar do banco para garantir dados atualizados
+                conversation.refresh_from_db()
                 conv_data_serializable = serialize_conversation_for_ws(conversation)
                 
                 channel_layer = get_channel_layer()
@@ -574,9 +558,10 @@ def handle_message_upsert(data, tenant, connection=None):
                     }
                 )
                 
-                logger.info(f"📡 [WEBSOCKET] Atualização de conversa broadcast (nome/foto)")
+                change_type = "status mudou" if status_changed else "nome/foto atualizado"
+                logger.info(f"📡 [WEBSOCKET] Broadcast de conversa atualizada ({change_type}) enviado")
             except Exception as e:
-                logger.error(f"❌ [WEBSOCKET] Erro ao broadcast atualização: {e}", exc_info=True)
+                logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de conversa atualizada: {e}", exc_info=True)
         
         # Cria mensagem
         direction = 'outgoing' if from_me else 'incoming'
