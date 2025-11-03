@@ -77,8 +77,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
     }
   }, [isConnected, sendTyping]);
 
-  const handleSend = () => {
-    if (!message.trim() || !activeConversation || sending || !isConnected) return;
+  const handleSend = async () => {
+    // Validar condições: precisa ter texto OU arquivo selecionado
+    const hasText = message.trim().length > 0;
+    const hasFile = selectedFile !== null;
+    
+    if ((!hasText && !hasFile) || !activeConversation || sending || !isConnected || uploadingFile) {
+      return;
+    }
 
     try {
       setSending(true);
@@ -88,31 +94,51 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
-      
-      const success = sendMessage(message.trim(), includeSignature);
-      
-      if (success) {
-        setMessage('');
-        toast.success('Mensagem enviada!', {
-          duration: 2000,
-          position: 'bottom-right'
-        });
-      } else {
-        toast.error('Erro ao enviar mensagem. WebSocket desconectado.', {
-          duration: 4000,
-          position: 'bottom-right'
-        });
+
+      // 1️⃣ Se houver arquivo selecionado, enviar primeiro
+      if (selectedFile) {
+        console.log('📤 [SEND] Enviando arquivo primeiro:', selectedFile.name);
+        await handleFileUpload(selectedFile);
+        // Arquivo será limpo no onUploadComplete
+      }
+
+      // 2️⃣ Se houver texto, enviar mensagem
+      if (hasText) {
+        const success = sendMessage(message.trim(), includeSignature);
+        
+        if (success) {
+          setMessage('');
+          if (!selectedFile) {
+            // Só mostrar toast se não teve arquivo (arquivo já mostra seu próprio toast)
+            toast.success('Mensagem enviada!', {
+              duration: 2000,
+              position: 'bottom-right'
+            });
+          }
+        } else {
+          toast.error('Erro ao enviar mensagem. WebSocket desconectado.', {
+            duration: 4000,
+            position: 'bottom-right'
+          });
+        }
+      } else if (selectedFile) {
+        // Se só tinha arquivo (sem texto), toast já foi mostrado no handleFileUpload
+        console.log('✅ [SEND] Apenas arquivo enviado');
       }
     } catch (error: any) {
-      console.error('Erro ao enviar mensagem:', error);
-      toast.error('Erro ao enviar mensagem');
+      console.error('Erro ao enviar mensagem/arquivo:', error);
+      toast.error('Erro ao enviar');
     } finally {
       setSending(false);
     }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    // ✅ Permitir Enter para enviar se houver texto OU arquivo
+    const hasText = message.trim().length > 0;
+    const hasFile = selectedFile !== null;
+    
+    if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFile)) {
       e.preventDefault();
       handleSend();
     }
