@@ -2,7 +2,7 @@
  * Lista de mensagens - Estilo WhatsApp Web
  */
 import React, { useEffect, useRef } from 'react';
-import { Check, CheckCheck, Clock } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';

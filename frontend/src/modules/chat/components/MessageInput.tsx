@@ -6,6 +6,7 @@ import { Send, Smile, Paperclip, PenTool } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
+import { EmojiPicker } from './EmojiPicker';
 
 interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean) => boolean;
@@ -18,7 +19,9 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   // Limpar timeout de digitando ao desmontar
   useEffect(() => {
@@ -29,6 +32,20 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       }
     };
   }, [sendTyping]);
+
+  // Fechar emoji picker ao clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (emojiPickerRef.current && !emojiPickerRef.current.contains(event.target as Node)) {
+        setShowEmojiPicker(false);
+      }
+    }
+    
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showEmojiPicker]);
 
   const handleMessageChange = useCallback((value: string) => {
     setMessage(value);
@@ -89,12 +106,17 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
     }
   };
 
+  const handleEmojiSelect = (emoji: string) => {
+    setMessage(prev => prev + emoji);
+    setShowEmojiPicker(false);
+  };
+
   if (!activeConversation) {
     return null;
   }
 
   return (
-    <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300">
+    <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300 relative">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
         onClick={() => setIncludeSignature(!includeSignature)}
@@ -119,12 +141,26 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       </button>
 
       {/* Emoji button */}
-      <button
-        className="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
-        title="Emoji"
-      >
-        <Smile className="w-6 h-6 text-gray-600" />
-      </button>
+      <div className="relative" ref={emojiPickerRef}>
+        <button
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          className={`
+            p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0
+            ${showEmojiPicker ? 'bg-gray-200' : ''}
+          `}
+          title="Emoji"
+        >
+          <Smile className="w-6 h-6 text-gray-600" />
+        </button>
+        
+        {/* Emoji Picker */}
+        {showEmojiPicker && (
+          <EmojiPicker
+            onSelect={handleEmojiSelect}
+            onClose={() => setShowEmojiPicker(false)}
+          />
+        )}
+      </div>
 
       {/* Input */}
       <div className="flex-1 bg-white rounded-lg shadow-sm">
