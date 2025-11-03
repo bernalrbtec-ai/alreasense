@@ -134,17 +134,14 @@ export function useChatSocket(conversationId?: string) {
         const attachmentId = data.data.attachment_id;
         const messageId = data.data.message_id;
         const fileUrl = data.data.file_url || '';
-        // ✅ Log completo da URL (sem truncar)
-        console.log('📎 [HOOK] Attachment updated:', {
-          attachmentId,
-          messageId,
-          fileUrl: fileUrl ? (fileUrl.length > 100 ? fileUrl.substring(0, 100) + '...' : fileUrl) : 'EMPTY',
-          isMediaProxy: fileUrl?.includes('/api/chat/media-proxy') || false
-        });
+        
+        // ✅ LOG REDUZIDO: Apenas informações essenciais (sem spam)
+        // O log completo está no useTenantSocket, não precisa duplicar aqui
+        console.log('📎 [HOOK] Attachment updated:', attachmentId);
         
         // ✅ Verificar se URL está correta (deve conter media-proxy)
         if (fileUrl && !fileUrl.includes('/api/chat/media-proxy')) {
-          console.warn('⚠️ [HOOK] URL não é do media-proxy! URL recebida:', fileUrl);
+          console.warn('⚠️ [HOOK] URL não é do media-proxy! URL recebida:', fileUrl.substring(0, 100));
         } else if (!fileUrl) {
           console.warn('⚠️ [HOOK] URL está vazia no evento attachment_updated!');
         }

@@ -28,10 +28,11 @@ export function ConversationList() {
       const filtered = conversations.filter(conv => {
         if (activeDepartment.id === 'inbox') {
           // Inbox: conversas pendentes SEM departamento
+          // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
           const departmentId = typeof conv.department === 'string' 
             ? conv.department 
             : conv.department?.id || null;
-          return conv.status === 'pending' && !departmentId;
+          return (conv.status === 'pending' || !conv.status) && !departmentId;
         } else {
           // Departamento específico: conversas do departamento (qualquer status)
           const departmentId = typeof conv.department === 'string' 
@@ -41,6 +42,9 @@ export function ConversationList() {
         }
       });
       console.log(`   📂 Filtradas para ${activeDepartment.name}:`, filtered.length);
+    } else {
+      // ✅ SEM departamento ativo: mostrar todas
+      console.log(`   📂 Sem filtro (mostrando todas):`, conversations.length);
     }
   }, [conversations, activeDepartment]);
 

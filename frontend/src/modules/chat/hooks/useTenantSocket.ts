@@ -82,6 +82,55 @@ export function useTenantSocket() {
         }
         break;
 
+      case 'attachment_updated':
+        // ✅ NOVO: Tratar attachment_updated do grupo do tenant
+        // Isso garante que attachments sejam atualizados mesmo se conversa não estiver aberta
+        console.log('📎 [TENANT WS] Attachment atualizado:', data.data?.attachment_id);
+        if (data.data?.attachment_id) {
+          // Atualizar attachment via store (mesmo se conversa não estiver aberta)
+          const { updateAttachment, addMessage, messages } = useChatStore.getState();
+          const attachmentId = data.data.attachment_id;
+          const messageId = data.data.message_id;
+          
+          // Buscar mensagem no store
+          const messageWithAttachment = messages.find(m => 
+            m.id === messageId || 
+            m.attachments?.some(a => a.id === attachmentId)
+          );
+          
+          if (messageWithAttachment) {
+            // Atualizar attachment
+            updateAttachment(attachmentId, {
+              file_url: data.data.file_url,
+              thumbnail_url: data.data.thumbnail_url,
+              mime_type: data.data.mime_type,
+              metadata: data.data.metadata || {},
+            } as any);
+            
+            // Forçar re-render da mensagem
+            const updatedMessage = {
+              ...messageWithAttachment,
+              attachments: messageWithAttachment.attachments?.map(att => {
+                if (att.id === attachmentId) {
+                  return {
+                    ...att,
+                    file_url: data.data.file_url,
+                    thumbnail_url: data.data.thumbnail_url,
+                    mime_type: data.data.mime_type,
+                    metadata: data.data.metadata || {},
+                  };
+                }
+                return att;
+              })
+            };
+            addMessage(updatedMessage as any);
+            console.log('✅ [TENANT WS] Attachment atualizado via tenant socket');
+          } else {
+            console.log('ℹ️ [TENANT WS] Mensagem não encontrada localmente, será atualizada quando conversa for aberta');
+          }
+        }
+        break;
+
       case 'new_message_notification':
         console.log('💬 [TENANT WS] Nova mensagem em conversa existente:', data);
         if (data.conversation) {
