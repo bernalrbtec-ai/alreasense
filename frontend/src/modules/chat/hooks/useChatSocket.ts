@@ -121,6 +121,8 @@ export function useChatSocket(conversationId?: string) {
     const handleConversationUpdate = (data: WebSocketMessage) => {
       if (data.conversation) {
         console.log('🔄 [HOOK] Conversa atualizada:', data.conversation);
+        // ✅ IMPORTANTE: Apenas atualizar store, NÃO mostrar toast
+        // Toasts são responsabilidade do useTenantSocket (evita duplicação)
         updateConversation(data.conversation);
       }
     };
@@ -216,9 +218,13 @@ export function useChatSocket(conversationId?: string) {
     };
 
     // ✅ ESCUTAR novas conversas do tenant (via ChatConsumerV2)
+    // ⚠️ IMPORTANTE: Este evento é TAMBÉM processado por useTenantSocket
+    // O useTenantSocket é responsável por toasts, este hook apenas atualiza store
     const handleNewConversation = (data: WebSocketMessage) => {
       if (data.conversation) {
         console.log('🆕 [HOOK] Nova conversa recebida via WebSocket:', data.conversation);
+        // ✅ IMPORTANTE: Apenas atualizar store, NÃO mostrar toast
+        // Toasts são responsabilidade do useTenantSocket (evita duplicação)
         const { addConversation } = useChatStore.getState();
         addConversation(data.conversation);
       }

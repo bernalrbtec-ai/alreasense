@@ -10,12 +10,35 @@ import { toast } from 'sonner';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
 
+// ✅ SINGLETON global para prevenir toasts duplicados ACROSS múltiplas instâncias
+// Isso é necessário porque useTenantSocket pode ser chamado múltiplas vezes (React StrictMode, etc)
+const globalToastRegistry = {
+  shownToasts: new Set<string>(),
+  
+  addToast(toastKey: string): boolean {
+    // ✅ Verificar e adicionar ATÔMICAMENTE
+    if (this.shownToasts.has(toastKey)) {
+      return false; // Já existe, retornar false
+    }
+    this.shownToasts.add(toastKey);
+    return true; // Adicionado com sucesso
+  },
+  
+  removeToast(toastKey: string): void {
+    this.shownToasts.delete(toastKey);
+  },
+  
+  clearAfterTimeout(toastKey: string, timeout: number): void {
+    setTimeout(() => {
+      this.shownToasts.delete(toastKey);
+    }, timeout);
+  }
+};
+
 export function useTenantSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
-  // ✅ Prevenir toasts duplicados usando Set para rastrear toasts já mostrados
-  const shownToastsRef = useRef<Set<string>>(new Set());
 
   const { addConversation, setConnectionStatus } = useChatStore();
   const { token, user } = useAuthStore();
@@ -210,43 +233,38 @@ export function useTenantSocket() {
             // Usar apenas o ID da conversa como chave (sem timestamp) para detectar duplicatas
             const toastKey = `reopened-${data.conversation.id}`;
             
-            // ✅ Verificar e adicionar ATÔMICAMENTE para prevenir race conditions
-            // Se já existe no Set, significa que um toast foi mostrado recentemente
-            if (shownToastsRef.current.has(toastKey)) {
+            // ✅ Usar SINGLETON global para prevenir duplicatas ACROSS múltiplas instâncias do hook
+            // Isso garante que mesmo se useTenantSocket for chamado múltiplas vezes, apenas 1 toast aparece
+            if (!globalToastRegistry.addToast(toastKey)) {
               console.log('🔕 [TOAST] Toast já foi mostrado recentemente para esta conversa, ignorando...', toastKey);
               return; // ✅ RETORNAR DO CALLBACK COMPLETO
             }
-            
-            // ✅ Adicionar ao Set ANTES de mostrar o toast (prevenir duplicatas simultâneas)
-            shownToastsRef.current.add(toastKey);
             
             if (!isOnChatPage) {
               toast.success('Conversa Reaberta! 💬', {
                 description: `${contactName} enviou uma nova mensagem`,
                 duration: 5000,
-                id: toastKey, // ✅ Usar mesmo ID do Set para garantir deduplicação
+                id: toastKey, // ✅ Usar mesmo ID para garantir deduplicação pelo Sonner também
                 action: {
                   label: 'Abrir',
                   onClick: () => navigateToChat(data.conversation)
                 },
                 onDismiss: () => {
-                  // ✅ Remover do Set quando toast for fechado
-                  shownToastsRef.current.delete(toastKey);
+                  // ✅ Remover do registry quando toast for fechado
+                  globalToastRegistry.removeToast(toastKey);
                 },
                 onAutoClose: () => {
-                  // ✅ Remover do Set quando toast expirar
-                  shownToastsRef.current.delete(toastKey);
+                  // ✅ Remover do registry quando toast expirar
+                  globalToastRegistry.removeToast(toastKey);
                 }
               });
               
-              // ✅ Limpar do Set após 10 segundos (backup caso callbacks não sejam chamados)
-              setTimeout(() => {
-                shownToastsRef.current.delete(toastKey);
-              }, 10000);
+              // ✅ Limpar do registry após 10 segundos (backup caso callbacks não sejam chamados)
+              globalToastRegistry.clearAfterTimeout(toastKey, 10000);
             } else {
               console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
-              // ✅ Remover do Set se não mostrou o toast (para permitir mostrar depois)
-              shownToastsRef.current.delete(toastKey);
+              // ✅ Remover do registry se não mostrou o toast (para permitir mostrar depois)
+              globalToastRegistry.removeToast(toastKey);
             }
           }
         }
