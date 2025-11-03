@@ -143,12 +143,44 @@ export function useTenantSocket() {
           );
           
           if (messageWithAttachment) {
+            // ✅ MESMA LÓGICA: Verificar se já está atualizado antes de processar
+            const existingAttachment = messageWithAttachment.attachments?.find(a => a.id === attachmentId);
+            const fileUrl = data.data.file_url || '';
+            
+            // ✅ MELHORIA: Só ignorar se:
+            // 1. Attachment existe
+            // 2. file_url não está vazio E é igual ao novo
+            // 3. E metadata não tem flag processing (já está processado)
+            const hasValidUrl = existingAttachment?.file_url && existingAttachment.file_url.trim() !== '';
+            const isSameUrl = hasValidUrl && existingAttachment.file_url === fileUrl;
+            const isProcessing = existingAttachment?.metadata?.processing === true;
+            
+            // ✅ IGNORAR apenas se tem URL válida, é a mesma URL, E não está processando
+            if (existingAttachment && hasValidUrl && isSameUrl && !isProcessing) {
+              console.log('ℹ️ [TENANT WS] Attachment já atualizado, ignorando update duplicado:', attachmentId);
+              return;  // Já está atualizado e processado, não fazer nada
+            }
+            
+            // ✅ Se está processando OU URL mudou OU URL estava vazia, ATUALIZAR
+            console.log('🔄 [TENANT WS] Atualizando attachment:', {
+              attachmentId,
+              isProcessing,
+              isSameUrl,
+              hasValidUrl,
+              oldUrl: existingAttachment?.file_url?.substring(0, 50) || 'VAZIO',
+              newUrl: fileUrl?.substring(0, 50) || 'VAZIO'
+            });
+            
+            // ✅ IMPORTANTE: Remover flag processing explicitamente
+            const updatedMetadata = { ...(data.data.metadata || {}) };
+            delete updatedMetadata.processing;
+            
             // Atualizar attachment
             updateAttachment(attachmentId, {
-              file_url: data.data.file_url,
+              file_url: fileUrl,
               thumbnail_url: data.data.thumbnail_url,
               mime_type: data.data.mime_type,
-              metadata: data.data.metadata || {},
+              metadata: updatedMetadata,  // ✅ Metadata sem flag processing
             } as any);
             
             // Forçar re-render da mensagem
@@ -158,10 +190,10 @@ export function useTenantSocket() {
                 if (att.id === attachmentId) {
                   return {
                     ...att,
-                    file_url: data.data.file_url,
+                    file_url: fileUrl,
                     thumbnail_url: data.data.thumbnail_url,
                     mime_type: data.data.mime_type,
-                    metadata: data.data.metadata || {},
+                    metadata: updatedMetadata,  // ✅ Metadata sem flag processing
                   };
                 }
                 return att;

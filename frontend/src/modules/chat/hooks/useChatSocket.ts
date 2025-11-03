@@ -168,9 +168,31 @@ export function useChatSocket(conversationId?: string) {
           // ✅ RACE CONDITION FIX: Verificar se attachment já foi atualizado
           // Evita updates duplicados ou conflitos se múltiplos eventos chegarem
           const existingAttachment = messageWithAttachment.attachments?.find(a => a.id === attachmentId);
-          if (existingAttachment && existingAttachment.file_url && existingAttachment.file_url === fileUrl) {
+          
+          // ✅ MELHORIA: Só ignorar se:
+          // 1. Attachment existe
+          // 2. file_url não está vazio E é igual ao novo
+          // 3. E metadata não tem flag processing (já está processado)
+          const hasValidUrl = existingAttachment?.file_url && existingAttachment.file_url.trim() !== '';
+          const isSameUrl = hasValidUrl && existingAttachment.file_url === fileUrl;
+          const isProcessing = existingAttachment?.metadata?.processing === true;
+          
+          // ✅ IGNORAR apenas se tem URL válida, é a mesma URL, E não está processando
+          if (existingAttachment && hasValidUrl && isSameUrl && !isProcessing) {
             console.log('ℹ️ [HOOK] Attachment já atualizado, ignorando update duplicado:', attachmentId);
-            return;  // Já está atualizado, não fazer nada
+            return;  // Já está atualizado e processado, não fazer nada
+          }
+          
+          // ✅ Se está processando OU URL mudou OU URL estava vazia, ATUALIZAR
+          if (isProcessing || !isSameUrl || !hasValidUrl) {
+            console.log('🔄 [HOOK] Atualizando attachment:', {
+              attachmentId,
+              isProcessing,
+              isSameUrl,
+              hasValidUrl,
+              oldUrl: existingAttachment?.file_url?.substring(0, 50) || 'VAZIO',
+              newUrl: fileUrl?.substring(0, 50) || 'VAZIO'
+            });
           }
           
           // ✅ IMPORTANTE: Atualizar metadata removendo flag processing explicitamente
