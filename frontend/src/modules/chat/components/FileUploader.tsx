@@ -74,11 +74,6 @@ export function FileUploader({
     onFileSelect(file);
   }, [onFileSelect]);
 
-  const handleUploadClick = useCallback(async () => {
-    if (!selectedFile || !conversationId || externalIsUploading) return;
-    await onUpload(selectedFile);
-  }, [selectedFile, conversationId, externalIsUploading, onUpload]);
-
   const handleButtonClick = () => {
     if (disabled || externalIsUploading) return;
     fileInputRef.current?.click();

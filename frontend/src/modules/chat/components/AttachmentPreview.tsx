@@ -10,6 +10,7 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { Download, FileText, X, Play, Pause } from 'lucide-react';
+// Removed unused imports: Image, Video, Music
 
 interface Attachment {
   id: string;

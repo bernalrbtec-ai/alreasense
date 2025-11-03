@@ -8,6 +8,8 @@ import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
 import { EmojiPicker } from './EmojiPicker';
 import { FileUploader } from './FileUploader';
+import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { api } from '@/lib/api';
 
 interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean) => boolean;
