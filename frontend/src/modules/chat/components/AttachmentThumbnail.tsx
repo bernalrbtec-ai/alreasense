@@ -10,7 +10,7 @@
  * Responsivo: ajusta tamanho ao viewport (mobile, tablet, desktop)
  */
 import React, { useState, useEffect } from 'react';
-import { X, FileText, File, FileSpreadsheet, File as FileWord } from 'lucide-react';
+import { X, FileText, File, FileSpreadsheet } from 'lucide-react';
 
 interface AttachmentThumbnailProps {
   file: File;
