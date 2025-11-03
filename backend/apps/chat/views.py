@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 @csrf_exempt
-@require_http_methods(["GET", "HEAD"])
+@require_http_methods(["GET", "HEAD", "OPTIONS"])
 def media_proxy(request):
     """
     Proxy universal para servir mídia (fotos, áudios, documentos).
@@ -37,6 +37,15 @@ def media_proxy(request):
         3. Cacheia no Redis (7 dias)
         4. Retorna conteúdo
     """
+    # ✅ CORS Preflight: Responder OPTIONS com headers CORS
+    if request.method == 'OPTIONS':
+        response = HttpResponse()
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type'
+        response['Access-Control-Max-Age'] = '86400'  # 24 horas
+        return response
+    
     # ✅ IMPORTANTE: Django já decodifica URL automaticamente, mas garantir que está correta
     from urllib.parse import unquote
     

@@ -50,7 +50,9 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
         # ✅ SEMPRE forçar URL de proxy para anexos no S3
         # Isso garante que frontend sempre recebe URL válida e acessível
         try:
-            if instance.storage_type == 's3' and instance.file_path:
+            if instance.storage_type == 's3' and instance.file_path and instance.file_path.strip():
+                # ✅ IMPORTANTE: Só gerar URL se file_path está preenchido (não é placeholder)
+                # Placeholders têm file_path vazio e devem manter file_url vazio até processamento
                 file_url = (data.get('file_url') or '').strip()
                 # Se file_url está vazio OU não é URL do proxy, gerar URL do proxy
                 if not file_url or '/api/chat/media-proxy' not in file_url:
