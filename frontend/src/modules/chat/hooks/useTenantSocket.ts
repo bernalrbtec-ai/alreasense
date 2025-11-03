@@ -73,16 +73,30 @@ export function useTenantSocket() {
           const currentPath = window.location.pathname;
           const isOnChatPage = currentPath === '/chat';
           
+          // ✅ Prevenir múltiplos toasts usando registry global
+          const toastKey = `new-conversation-${data.conversation.id}`;
+          
           // 🔔 Toast notification - NÃO mostrar se já está na página do chat
           if (!isOnChatPage) {
-            toast.success('Nova Mensagem Recebida! 💬', {
-              description: `De: ${contactName}`,
-              duration: 6000,
-              action: {
-                label: 'Abrir',
-                onClick: () => navigateToChat(data.conversation)
-              }
-            });
+            // ✅ Verificar registry global antes de mostrar
+            if (globalToastRegistry.addToast(toastKey)) {
+              toast.success('Nova Mensagem Recebida! 💬', {
+                description: `De: ${contactName}`,
+                duration: 6000,
+                id: toastKey, // ✅ Usar mesmo ID para deduplicação
+                action: {
+                  label: 'Abrir',
+                  onClick: () => navigateToChat(data.conversation)
+                },
+                onDismiss: () => globalToastRegistry.removeToast(toastKey),
+                onAutoClose: () => globalToastRegistry.removeToast(toastKey)
+              });
+              
+              // ✅ Limpar após 10 segundos
+              globalToastRegistry.clearAfterTimeout(toastKey, 10000);
+            } else {
+              console.log('🔕 [TOAST] Toast já foi mostrado para nova conversa, ignorando...');
+            }
           } else {
             console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
           }
@@ -169,18 +183,33 @@ export function useTenantSocket() {
           const isOnChatPage = currentPath === '/chat';
           const isActiveConversation = activeConversation?.id === data.conversation.id;
           
+          // ✅ Prevenir múltiplos toasts usando registry global
+          const messageId = data.message?.id || 'unknown';
+          const toastKey = `new-message-${data.conversation.id}-${messageId}`;
+          
           // 🔔 Toast notification - NÃO mostrar se:
           // 1. Já está na página do chat E
           // 2. É a conversa ativa (usuário já está vendo)
           if (!isOnChatPage || !isActiveConversation) {
-            toast.info('Nova Mensagem! 💬', {
-              description: `${contactName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
-              duration: 5000,
-              action: {
-                label: 'Ver',
-                onClick: () => navigateToChat(data.conversation)
-              }
-            });
+            // ✅ Verificar registry global antes de mostrar
+            if (globalToastRegistry.addToast(toastKey)) {
+              toast.info('Nova Mensagem! 💬', {
+                description: `${contactName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
+                duration: 5000,
+                id: toastKey, // ✅ Usar mesmo ID para deduplicação
+                action: {
+                  label: 'Ver',
+                  onClick: () => navigateToChat(data.conversation)
+                },
+                onDismiss: () => globalToastRegistry.removeToast(toastKey),
+                onAutoClose: () => globalToastRegistry.removeToast(toastKey)
+              });
+              
+              // ✅ Limpar após 8 segundos
+              globalToastRegistry.clearAfterTimeout(toastKey, 8000);
+            } else {
+              console.log('🔕 [TOAST] Toast já foi mostrado para esta mensagem, ignorando...');
+            }
           } else {
             console.log('🔕 [TOAST] Não exibido - usuário já está na conversa ativa');
           }
