@@ -78,18 +78,33 @@ def media_proxy(request):
         
         # Para HEAD request, retornar só headers
         content = b'' if request.method == 'HEAD' else cached_data['content']
+        content_type = cached_data['content_type']
         
+        # ✅ CRUCIAL: Usar HttpResponse com content_type explicitamente
         response = HttpResponse(
             content,
-            content_type=cached_data['content_type']
+            content_type=content_type,
+            status=200
         )
-        response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
+        
+        # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
+        # 1. Content-Type primeiro
+        response['Content-Type'] = content_type
+        
+        # 2. CORS headers (OBRIGATÓRIOS para evitar OpaqueResponseBlocking)
         response['Access-Control-Allow-Origin'] = '*'
-        # ✅ IMPORTANTE: Headers CORS adicionais para garantir que browser aceite a resposta
+        response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
         response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
+        
+        # 3. Cache headers
+        response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
+        
+        # 4. Custom headers
         response['X-Cache'] = 'HIT'
-        response['X-Content-Size'] = len(cached_data['content'])
+        response['X-Content-Size'] = str(len(cached_data['content']))
         response['Content-Length'] = str(len(cached_data['content']))
+        
         return response
     
     # Cache MISS - Download
@@ -170,29 +185,50 @@ def media_proxy(request):
             # Para HEAD request, retornar só headers
             response_content = b'' if request.method == 'HEAD' else content
             
-            # ✅ DEBUG: Log detalhado dos headers sendo enviados
-            logger.info(f'📤 [MEDIA PROXY] Preparando resposta HTTP:')
-            logger.info(f'   Content-Type: {content_type}')
-            logger.info(f'   Content-Length: {len(content)}')
-            logger.info(f'   Method: {request.method}')
-            logger.info(f'   User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
+            # ✅ DEBUG: Log detalhado dos headers sendo enviados (usar WARNING para garantir visibilidade)
+            logger.warning(f'📤 [MEDIA PROXY] Preparando resposta HTTP:')
+            logger.warning(f'   Content-Type: {content_type}')
+            logger.warning(f'   Content-Length: {len(content)}')
+            logger.warning(f'   Method: {request.method}')
+            logger.warning(f'   User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
             
-            response = HttpResponse(response_content, content_type=content_type)
-            response['Cache-Control'] = 'public, max-age=604800'
-            response['Access-Control-Allow-Origin'] = '*'
-            # ✅ IMPORTANTE: Headers CORS adicionais para garantir que browser aceite a resposta
-            response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
-            # ✅ CRUCIAL: Adicionar Content-Type explicitamente (mesmo que já esteja no construtor)
+            # ✅ CRUCIAL: Usar HttpResponse com content_type explicitamente
+            # Isso garante que o browser reconheça como imagem/vídeo/áudio válido
+            response = HttpResponse(
+                response_content,
+                content_type=content_type,  # ✅ Definir no construtor
+                status=200
+            )
+            
+            # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
+            # 1. Content-Type primeiro (pode ser sobrescrito, então definir duas vezes)
             response['Content-Type'] = content_type
+            
+            # 2. CORS headers (OBRIGATÓRIOS para evitar OpaqueResponseBlocking)
+            response['Access-Control-Allow-Origin'] = '*'
+            response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+            response['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
+            response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
+            
+            # 3. Cache headers
+            response['Cache-Control'] = 'public, max-age=604800'
+            
+            # 4. Custom headers
             response['X-Cache'] = 'MISS'
-            response['X-Content-Size'] = len(content)
+            response['X-Content-Size'] = str(len(content))
             response['Content-Length'] = str(len(content))
             
-            # ✅ DEBUG: Verificar headers finais
-            logger.info(f'📤 [MEDIA PROXY] Headers finais da resposta:')
+            # ✅ DEBUG: Verificar headers finais (usar WARNING para garantir visibilidade)
+            logger.warning(f'📤 [MEDIA PROXY] Headers finais da resposta:')
             for key, value in response.items():
-                if key.lower() in ['content-type', 'content-length', 'cache-control', 'access-control-allow-origin', 'access-control-expose-headers']:
-                    logger.info(f'   {key}: {value}')
+                if key.lower() in ['content-type', 'content-length', 'cache-control', 'access-control-allow-origin', 'access-control-expose-headers', 'access-control-allow-methods']:
+                    logger.warning(f'   {key}: {value}')
+            
+            # ✅ CRUCIAL: Verificar se Content-Type foi definido corretamente
+            if response.get('Content-Type') != content_type:
+                logger.error(f'❌ [MEDIA PROXY] Content-Type não corresponde! Esperado: {content_type}, Atual: {response.get("Content-Type")}')
+                # Forçar correção
+                response['Content-Type'] = content_type
             
             return response
             
