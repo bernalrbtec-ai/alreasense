@@ -459,20 +459,23 @@ async def handle_process_incoming_media(
             }
         }
         
+        logger.info(f"📡 [INCOMING MEDIA] Preparando WebSocket broadcast:")
+        logger.info(f"   📌 message_id: {message_id}")
+        logger.info(f"   📌 attachment_id: {attachment.id}")
+        logger.info(f"   📌 file_url: {public_url[:80]}...")
+        logger.info(f"   📌 conversation_id: {message.conversation_id}")
+        logger.info(f"   📌 tenant_id: {tenant_id}")
+        
         # 1. Enviar para grupo da conversa (usuários com conversa aberta)
-        await channel_layer.group_send(
-            f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}',
-            attachment_update_event
-        )
+        conversation_group = f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}'
+        await channel_layer.group_send(conversation_group, attachment_update_event)
+        logger.info(f"📡 [INCOMING MEDIA] WebSocket enviado para grupo conversa: {conversation_group}")
         
         # 2. ✅ NOVO: Enviar também para grupo do tenant inteiro (mesmo se conversa não estiver aberta)
         # Isso garante que attachments sejam atualizados mesmo se a conversa não estiver aberta no momento
-        await channel_layer.group_send(
-            f'chat_tenant_{tenant_id}',
-            attachment_update_event
-        )
-        
-        logger.info(f"📡 [INCOMING MEDIA] WebSocket attachment_updated enviado (conversa + tenant): {attachment.id}")
+        tenant_group = f'chat_tenant_{tenant_id}'
+        await channel_layer.group_send(tenant_group, attachment_update_event)
+        logger.info(f"📡 [INCOMING MEDIA] WebSocket enviado para grupo tenant: {tenant_group}")
         
         logger.info(f"✅ [INCOMING MEDIA] Processamento completo: {attachment.id}")
         
