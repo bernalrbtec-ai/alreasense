@@ -56,9 +56,27 @@ export const useChatStore = create<ChatState>((set) => ({
 
   // Conversas
   setConversations: (conversations) => set({ conversations }),
-  setActiveConversation: (conversation) => set({ 
-    activeConversation: conversation,
-    messages: [] // Limpa mensagens ao trocar conversa
+  setActiveConversation: (conversation) => set((state) => {
+    // ✅ FIX: Se conversation é null ou undefined, limpar
+    if (!conversation) {
+      console.log('🔕 [STORE] Limpando conversa ativa');
+      return {
+        activeConversation: null,
+        messages: []
+      };
+    }
+    
+    // ✅ FIX: Se já é a mesma conversa, não fazer nada (evita resetar mensagens e referencia)
+    if (state.activeConversation?.id === conversation.id) {
+      console.log('🔕 [STORE] Conversa já está ativa, mantendo:', conversation.id);
+      return state; // Retornar state atual sem mudanças
+    }
+    
+    console.log('✅ [STORE] Definindo conversa ativa:', conversation.id, '| Antiga:', state.activeConversation?.id || 'nenhuma');
+    return {
+      activeConversation: conversation,
+      messages: [] // Limpa mensagens ao trocar conversa
+    };
   }),
   addConversation: (conversation) => set((state) => {
     // ✅ IMPORTANTE: Garantir que conversation tem os campos necessários
