@@ -191,7 +191,7 @@ export function AttachmentThumbnail({
       <div className={thumbnailContainerClass}>
         <div className="flex flex-col items-center justify-center p-8 h-[200px] sm:h-[250px] md:h-[300px]">
           <div className="w-16 h-16 sm:w-20 sm:h-20 md:w-24 md:h-24 bg-blue-500 rounded flex items-center justify-center mb-4">
-            <FileWord size={32} className="text-white" />
+            <FileText size={32} className="text-white" />
           </div>
           <p className="text-sm font-medium text-gray-700 dark:text-gray-300 truncate w-full text-center px-2">
             {file.name}
