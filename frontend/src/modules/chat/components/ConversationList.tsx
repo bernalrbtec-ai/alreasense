@@ -219,7 +219,16 @@ export function ConversationList() {
           filteredConversations.map((conv, index) => (
             <button
               key={conv.id}
-              onClick={() => setActiveConversation(conv)}
+              onClick={() => {
+                // ✅ FIX: Verificar se é a mesma conversa antes de definir
+                // Se já é a conversa ativa, não fazer nada (evita desselecionar)
+                if (activeConversation?.id === conv.id) {
+                  console.log('🔕 [LIST] Conversa já está ativa, mantendo selecionada:', conv.id);
+                  return;
+                }
+                console.log('✅ [LIST] Selecionando conversa:', conv.id);
+                setActiveConversation(conv);
+              }}
               className={`
                 w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 
                 hover:bg-[#f0f2f5] active:scale-[0.98] 
