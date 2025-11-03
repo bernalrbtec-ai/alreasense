@@ -146,18 +146,36 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
           onError={(e) => {
-            console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', fileUrl);
-            // Não esconder imediatamente - pode ser erro temporário de rede
-            // Tentar reload uma vez após 1 segundo
             const img = e.currentTarget;
+            const currentUrl = img.src;
+            
+            // ✅ Log detalhado do erro
+            console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', {
+              url: fileUrl,
+              currentSrc: currentUrl,
+              retried: img.dataset.retried,
+              naturalWidth: img.naturalWidth,
+              naturalHeight: img.naturalHeight,
+              complete: img.complete
+            });
+            
+            // ✅ Não esconder imediatamente - pode ser erro temporário de rede/CORS
+            // Tentar reload uma vez após 1 segundo com cache bust
             if (!img.dataset.retried) {
               img.dataset.retried = 'true';
+              console.log('🔄 [AttachmentPreview] Tentando retry após 1 segundo...');
               setTimeout(() => {
-                img.src = fileUrl + (fileUrl.includes('?') ? '&' : '?') + '_retry=' + Date.now();
+                // ✅ Adicionar timestamp para bypass cache do browser
+                const retryUrl = fileUrl + (fileUrl.includes('?') ? '&' : '?') + '_retry=' + Date.now();
+                console.log('🔄 [AttachmentPreview] Retry URL:', retryUrl.substring(0, 100) + '...');
+                img.src = retryUrl;
               }, 1000);
             } else {
-              // Se já tentou uma vez, esconder
-              img.style.display = 'none';
+              // ✅ Se já tentou uma vez, mostrar mensagem de erro ao invés de esconder
+              console.warn('⚠️ [AttachmentPreview] Retry falhou, imagem não pôde ser carregada');
+              // Não esconder - manter visível para debug
+              img.style.opacity = '0.3';
+              img.style.border = '2px solid red';
             }
           }}
         />

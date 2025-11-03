@@ -170,14 +170,30 @@ def media_proxy(request):
             # Para HEAD request, retornar só headers
             response_content = b'' if request.method == 'HEAD' else content
             
+            # ✅ DEBUG: Log detalhado dos headers sendo enviados
+            logger.info(f'📤 [MEDIA PROXY] Preparando resposta HTTP:')
+            logger.info(f'   Content-Type: {content_type}')
+            logger.info(f'   Content-Length: {len(content)}')
+            logger.info(f'   Method: {request.method}')
+            logger.info(f'   User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
+            
             response = HttpResponse(response_content, content_type=content_type)
             response['Cache-Control'] = 'public, max-age=604800'
             response['Access-Control-Allow-Origin'] = '*'
             # ✅ IMPORTANTE: Headers CORS adicionais para garantir que browser aceite a resposta
             response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
+            # ✅ CRUCIAL: Adicionar Content-Type explicitamente (mesmo que já esteja no construtor)
+            response['Content-Type'] = content_type
             response['X-Cache'] = 'MISS'
             response['X-Content-Size'] = len(content)
             response['Content-Length'] = str(len(content))
+            
+            # ✅ DEBUG: Verificar headers finais
+            logger.info(f'📤 [MEDIA PROXY] Headers finais da resposta:')
+            for key, value in response.items():
+                if key.lower() in ['content-type', 'content-length', 'cache-control', 'access-control-allow-origin', 'access-control-expose-headers']:
+                    logger.info(f'   {key}: {value}')
+            
             return response
             
     except httpx.HTTPStatusError as e:
