@@ -354,14 +354,28 @@ async def handle_process_incoming_media(
         
         # 6. Atualizar MessageAttachment placeholder (padronizado com ENVIO)
         # ✅ BUSCAR placeholder criado no webhook (file_url vazio E file_path vazio)
+        logger.info(f"🔍 [INCOMING MEDIA] Buscando placeholder para message_id={message_id}")
         message = await sync_to_async(Message.objects.select_related('conversation', 'conversation__tenant').get)(id=message_id)
         
         # ✅ Buscar placeholder - buscar por file_url vazio (placeholder criado no webhook)
         # Simplificado: buscar apenas por file_url vazio, que é o que o placeholder tem
+        # ✅ MELHORIA: Buscar TODOS os attachments da mensagem para debug
+        all_attachments = await sync_to_async(list)(
+            MessageAttachment.objects.filter(message__id=message_id).values('id', 'file_url', 'file_path', 'metadata', 'created_at')
+        )
+        logger.info(f"🔍 [INCOMING MEDIA] Total de attachments na mensagem: {len(all_attachments)}")
+        for att in all_attachments:
+            logger.info(f"   📎 Attachment: {att['id']}, file_url={att['file_url'][:50] if att['file_url'] else 'VAZIO'}..., file_path={att['file_path'][:50] if att['file_path'] else 'VAZIO'}..., metadata={att['metadata']}")
+        
         existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
             message__id=message_id,
             file_url=''  # ✅ Placeholder criado no webhook tem file_url vazio
         ).order_by('-created_at').first())()
+        
+        if existing:
+            logger.info(f"✅ [INCOMING MEDIA] Placeholder encontrado: {existing.id}")
+        else:
+            logger.warning(f"⚠️ [INCOMING MEDIA] Placeholder NÃO encontrado! Total attachments: {len(all_attachments)}")
         
         if existing:
             # ✅ ATUALIZAR placeholder existente (padronizado com ENVIO)
