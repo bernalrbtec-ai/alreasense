@@ -6,11 +6,9 @@ Endpoints:
 """
 import httpx
 import logging
-import hashlib
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -27,15 +25,13 @@ def media_proxy(request):
         url: URL da mídia (S3, WhatsApp, etc)
     
     Headers de resposta:
-        X-Cache: HIT (Redis) ou MISS (Download)
+        X-Cache: DIRECT (Download direto - sem cache)
         Cache-Control: public, max-age=604800 (7 dias)
         Content-Type: Detectado automaticamente
     
     Fluxo:
-        1. Tenta buscar no Redis cache
-        2. Se não encontrar, baixa da URL original
-        3. Cacheia no Redis (7 dias)
-        4. Retorna conteúdo
+        1. Baixa direto da URL original (S3, WhatsApp, etc)
+        2. Retorna conteúdo
     """
     # ✅ CORS Preflight: Responder OPTIONS com headers CORS
     if request.method == 'OPTIONS':
@@ -68,53 +64,10 @@ def media_proxy(request):
     
     logger.debug(f'🔍 [MEDIA PROXY] URL recebida (decodificada): {media_url[:100]}...')
     
-    # Cache key (hash da URL)
-    cache_key = f"media:{hashlib.md5(media_url.encode()).hexdigest()}"
-    cached_data = cache.get(cache_key)
+    # ✅ REMOVIDO: Cache Redis - simplificar fluxo e facilitar debug
+    # Agora sempre baixa direto da URL original (S3, WhatsApp, etc)
     
-    # Cache HIT
-    if cached_data:
-        logger.info(f'✅ [MEDIA PROXY CACHE] Servido do Redis: {media_url[:80]}...')
-        
-        # Para HEAD request, retornar só headers
-        content = b'' if request.method == 'HEAD' else cached_data['content']
-        content_type = cached_data['content_type']
-        
-        # ✅ CRUCIAL: Para cache, usar HttpResponse simples (já está na memória)
-        # StreamingHttpResponse não é necessário aqui pois já está no cache
-        if request.method == 'HEAD':
-            response = HttpResponse(status=200, content_type=content_type)
-        else:
-            # ✅ Usar HttpResponse direto para conteúdo em cache (mais eficiente)
-            response = HttpResponse(
-                content,
-                content_type=content_type,
-                status=200
-            )
-        
-        # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
-        # 1. Content-Type primeiro
-        response['Content-Type'] = content_type
-        
-        # 2. CORS headers (OBRIGATÓRIOS para evitar OpaqueResponseBlocking)
-        response['Access-Control-Allow-Origin'] = '*'
-        response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
-        response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size, Accept-Ranges'
-        
-        # 3. Cache headers
-        response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
-        
-        # 4. Custom headers
-        response['X-Cache'] = 'HIT'
-        response['X-Content-Size'] = str(len(cached_data['content']))
-        if request.method != 'HEAD':
-            response['Content-Length'] = str(len(cached_data['content']))
-            response['Accept-Ranges'] = 'bytes'
-        
-        return response
-    
-    # Cache MISS - Download
+    # Download direto
     logger.info(f'🔄 [MEDIA PROXY] Baixando mídia: {media_url[:80]}...')
     
     try:
@@ -181,13 +134,7 @@ def media_proxy(request):
                 f'Content-Type: {content_type} | Size: {len(content)} bytes'
             )
             
-            # Cachear no Redis (7 dias)
-            cache.set(
-                cache_key,
-                {'content': content, 'content_type': content_type},
-                timeout=604800  # 7 dias
-            )
-            logger.info(f'💾 [MEDIA PROXY] Cacheado no Redis: {cache_key}')
+            # ✅ REMOVIDO: Cache Redis - simplificar fluxo e facilitar debug
             
             # ✅ DEBUG: Log detalhado dos headers sendo enviados (usar WARNING para garantir visibilidade)
             logger.warning(f'📤 [MEDIA PROXY] Preparando resposta HTTP:')
@@ -227,7 +174,7 @@ def media_proxy(request):
             response['Cache-Control'] = 'public, max-age=604800'
             
             # 4. Custom headers
-            response['X-Cache'] = 'MISS'
+            response['X-Cache'] = 'DIRECT'  # ✅ Sem cache - download direto
             response['X-Content-Size'] = str(len(content))
             if request.method != 'HEAD':
                 response['Content-Length'] = str(len(content))
