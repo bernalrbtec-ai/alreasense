@@ -7,6 +7,7 @@ import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
 import { EmojiPicker } from './EmojiPicker';
+import { FileUploader } from './FileUploader';
 
 interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean) => boolean;
@@ -140,13 +141,16 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         <PenTool className="w-5 h-5" />
       </button>
 
-      {/* Attach button (placeholder) */}
-      <button
-        className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md"
-        title="Anexar arquivo"
-      >
-        <Paperclip className="w-6 h-6 text-gray-600" />
-      </button>
+      {/* File Uploader */}
+      <div className="relative">
+        <FileUploader
+          conversationId={activeConversation.id}
+          onUploadComplete={() => {
+            console.log('✅ Arquivo enviado! WebSocket vai atualizar UI');
+          }}
+          disabled={sending || !isConnected}
+        />
+      </div>
 
       {/* Emoji button */}
       <div className="relative" ref={emojiPickerRef}>
