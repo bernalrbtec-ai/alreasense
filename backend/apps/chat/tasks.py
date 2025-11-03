@@ -182,7 +182,7 @@ async def handle_send_message(message_id: str):
     try:
         # Busca mensagem
         message = await sync_to_async(
-            Message.objects.select_related('conversation', 'conversation__tenant').get
+            Message.objects.select_related('conversation', 'conversation__tenant', 'sender').get
         )(id=message_id)
         
         logger.info(f"✅ [CHAT ENVIO] Mensagem encontrada no banco")
@@ -240,7 +240,7 @@ async def handle_send_message(message_id: str):
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
         # ✅ Só adiciona se include_signature=True no metadata
         if include_signature:
-            sender = await sync_to_async(lambda: message.sender)()
+            sender = message.sender  # ✅ Já carregado via select_related
             if sender and content:
                 first_name = sender.first_name or ''
                 last_name = sender.last_name or ''

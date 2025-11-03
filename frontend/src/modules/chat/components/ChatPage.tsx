@@ -8,9 +8,13 @@ import { DepartmentTabs } from './DepartmentTabs';
 import { ConversationList } from './ConversationList';
 import { ChatWindow } from './ChatWindow';
 import { useChatStore } from '../store/chatStore';
+import { useTenantSocket } from '../hooks/useTenantSocket';
 
 export function ChatPage() {
   const { activeConversation } = useChatStore();
+  
+  // 🔌 Conectar WebSocket do tenant para receber novas conversas em tempo real
+  useTenantSocket();
   
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-[#f0f2f5]">
