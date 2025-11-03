@@ -17,6 +17,7 @@ from apps.chat.utils.s3 import (
     generate_media_path,
     get_public_url
 )
+# ✅ Import image_processing apenas para profile_pic (foto de perfil ainda precisa processar)
 from apps.chat.utils.image_processing import process_image, is_valid_image
 
 logger = logging.getLogger(__name__)
@@ -125,13 +126,14 @@ async def handle_process_incoming_media(
     """
     Handler: Processa mídia recebida do WhatsApp.
     
-    Fluxo:
-        1. Baixa mídia da URL temporária do WhatsApp
-        2. Se for imagem: processa (thumbnail, resize, optimize)
-        3. Faz upload para S3
-        4. Cria MessageAttachment
-        5. Invalida cache Redis
-        6. Broadcast via WebSocket
+    Fluxo (padronizado com ENVIO):
+        1. Baixa mídia da URL temporária do WhatsApp (com retry)
+        2. Valida tamanho antes/depois de baixar
+        3. Converte áudio OGG/WEBM → MP3 (se necessário)
+        4. Faz upload direto para S3 (sem processar imagem)
+        5. Atualiza MessageAttachment
+        6. Cache Redis (opcional)
+        7. Broadcast via WebSocket
     
     Args:
         tenant_id: UUID do tenant
@@ -258,26 +260,21 @@ async def handle_process_incoming_media(
         return
     
     try:
+        import uuid
+        from urllib.parse import urlparse
         
-        # 2. Processar imagem e padronizar áudio
+        # 2. Converter áudio OGG/WEBM → MP3 (padronizado com ENVIO)
         processed_data = media_data
-        thumbnail_data = None
+        filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
         
-        if media_type == 'image' and is_valid_image(media_data):
-            result = process_image(media_data, create_thumb=True, resize=True, optimize=True)
-            if result['success']:
-                processed_data = result['processed_data']
-                thumbnail_data = result['thumbnail_data']
-                logger.info(f"✅ [INCOMING MEDIA] Imagem processada")
-            # Forçar content-type seguro se vier genérico
-            if not content_type or content_type.startswith('application/octet-stream'):
-                content_type = 'image/jpeg'
+        # ✅ Forçar content-type seguro se vier genérico (apenas para imagens)
+        if media_type == 'image' and (not content_type or content_type.startswith('application/octet-stream')):
+            content_type = 'image/jpeg'
         
-        # Áudio: converter OGG/WEBM → MP3 para compatibilidade universal
+        # ✅ Áudio: converter OGG/WEBM → MP3 para compatibilidade universal (mesmo do ENVIO)
         if media_type == 'audio':
             from apps.chat.utils.audio_converter import should_convert_audio, convert_ogg_to_mp3, get_converted_filename
-            # Inferir filename e checar se precisa converter
-            from urllib.parse import urlparse
+            
             inferred_filename = urlparse(media_url).path.split('/')[-1] or f"audio_{message_id}"
             if should_convert_audio(content_type or '', inferred_filename):
                 source_format = "webm" if ('webm' in (content_type or '').lower() or inferred_filename.lower().endswith('.webm')) else "ogg"
@@ -285,19 +282,28 @@ async def handle_process_incoming_media(
                 if success_conv and mp3_data:
                     processed_data = mp3_data
                     content_type = 'audio/mpeg'
-                    inferred_filename = get_converted_filename(inferred_filename)
+                    filename = get_converted_filename(inferred_filename)
                     logger.info(f"✅ [AUDIO] Incoming convertido para MP3")
                 else:
                     logger.warning(f"⚠️ [AUDIO] Conversão falhou: {conv_msg}. Seguindo com formato original")
         
-        # 3. Path no S3
-        from urllib.parse import urlparse
-        # Base filename from URL
-        filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
-        # If audio was converted, use the converted filename
-        if media_type == 'audio' and 'inferred_filename' in locals():
-            filename = inferred_filename or filename
-        s3_path = generate_media_path(tenant_id, f'chat_{media_type}s', filename)
+        # 3. ✅ Path S3 padronizado (mesmo do ENVIO): chat/{tenant_id}/attachments/{uuid}.{ext}
+        attachment_id = uuid.uuid4()
+        file_ext = filename.split('.')[-1] if '.' in filename else ''
+        # Se não tem extensão, inferir do content_type
+        if not file_ext and content_type:
+            if 'image' in content_type:
+                file_ext = 'jpg'
+            elif 'audio' in content_type:
+                file_ext = 'mp3' if 'mpeg' in content_type else 'ogg'
+            elif 'video' in content_type:
+                file_ext = 'mp4'
+            elif 'pdf' in content_type:
+                file_ext = 'pdf'
+            else:
+                file_ext = 'bin'
+        
+        s3_path = f"chat/{tenant_id}/attachments/{attachment_id}.{file_ext}"
         
         # 4. Upload para S3 (com retry)
         s3_manager = get_s3_manager()
@@ -345,20 +351,8 @@ async def handle_process_incoming_media(
                         logger.error(f"❌ [INCOMING MEDIA] Erro ao marcar attachment como erro: {update_error}", exc_info=True)
                     return
         
-        # Upload thumbnail se houver (com tratamento de erro)
-        thumb_s3_path = None
-        if thumbnail_data:
-            thumb_s3_path = generate_media_path(tenant_id, f'chat_{media_type}s', f"thumb_{filename}")
-            thumb_success, thumb_msg = s3_manager.upload_to_s3(thumbnail_data, thumb_s3_path, 'image/jpeg')
-            if thumb_success:
-                logger.info(f"✅ [INCOMING MEDIA] Thumbnail enviado para S3: {thumb_s3_path}")
-            else:
-                logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao enviar thumbnail: {thumb_msg}. Continuando sem thumbnail.")
-                thumb_s3_path = None  # Não usar path se upload falhou
-        
-        # 5. URL pública
+        # 5. URL pública (padronizado com ENVIO)
         public_url = get_public_url(s3_path)
-        thumb_url = get_public_url(thumb_s3_path) if thumb_s3_path else None
         
         # 6. Criar/atualizar MessageAttachment
         # ✅ LÓGICA CORRIGIDA: Buscar placeholder especificamente (file_url vazio E file_path vazio)
@@ -375,9 +369,6 @@ async def handle_process_incoming_media(
         # ✅ LÓGICA MELHORADA: Se encontrou placeholder, atualizar; senão criar novo
         if existing:
             existing.file_url = public_url
-            # Atualizar thumbnail_path se houver thumbnail
-            if thumb_s3_path:
-                existing.thumbnail_path = thumb_s3_path
             existing.size_bytes = len(processed_data)
             existing.mime_type = content_type
             existing.original_filename = filename
@@ -394,7 +385,7 @@ async def handle_process_incoming_media(
                 metadata['media_type'] = media_type
             
             existing.metadata = metadata
-            await sync_to_async(existing.save)(update_fields=['file_url', 'thumbnail_path', 'size_bytes', 'mime_type', 'original_filename', 'file_path', 'storage_type', 'metadata'])
+            await sync_to_async(existing.save)(update_fields=['file_url', 'size_bytes', 'mime_type', 'original_filename', 'file_path', 'storage_type', 'metadata'])
             attachment = existing
             logger.info(f"✅ [INCOMING MEDIA] Attachment atualizado: {attachment.id}, file_url={public_url[:50]}...")
         else:
@@ -410,7 +401,6 @@ async def handle_process_incoming_media(
                 file_url=public_url,
                 storage_type='s3',
                 size_bytes=len(processed_data),
-                thumbnail_path=thumb_s3_path or '',
                 metadata=new_metadata  # ✅ Metadata normalizado como dict
             )
             logger.info(f"✅ [INCOMING MEDIA] Novo attachment criado: {attachment.id}")
@@ -436,21 +426,13 @@ async def handle_process_incoming_media(
             # Quando arquivo é processado, garantir que cache de "existe" está atualizado
             exists_cache_key = f"s3_exists:{s3_path}"
             cache.set(exists_cache_key, True, 300)  # 5 minutos
-            if thumb_s3_path:
-                thumb_exists_cache_key = f"s3_exists:{thumb_s3_path}"
-                cache.set(thumb_exists_cache_key, True, 300)
         except Exception as cache_error:
             # Se cache falhar, não quebrar o processamento
             logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao cachear no Redis: {cache_error}. Continuando...")
         
-        # 8. Broadcast via WebSocket
+        # 8. Broadcast via WebSocket (padronizado com ENVIO)
         from channels.layers import get_channel_layer
         channel_layer = get_channel_layer()
-        
-        # Gerar thumbnail_url a partir do thumbnail_path se houver
-        thumbnail_url_for_ws = None
-        if thumb_s3_path:
-            thumbnail_url_for_ws = get_public_url(thumb_s3_path)
         
         # ✅ Garantir que metadata está serializado corretamente para WebSocket
         # NORMALIZAR: sempre retornar dict, nunca string
@@ -470,7 +452,7 @@ async def handle_process_incoming_media(
                 'message_id': str(message_id),  # ✅ Incluir message_id para busca precisa
                 'attachment_id': str(attachment.id),
                 'file_url': public_url,  # ✅ URL do proxy (via get_public_url)
-                'thumbnail_url': thumbnail_url_for_ws,
+                'thumbnail_url': None,  # ✅ Removido: não geramos thumbnail mais (padronizado com ENVIO)
                 'mime_type': content_type,
                 'file_type': media_type,
                 'metadata': metadata_for_ws  # ✅ Incluir metadata sem flag processing
