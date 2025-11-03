@@ -92,12 +92,12 @@ export function FileUploader({
         accept={allowedTypes.join(',')}
         onChange={handleFileSelect}
         className="hidden"
-        disabled={disabled || isUploading}
+        disabled={disabled || externalIsUploading}
       />
 
       <button
         onClick={handleButtonClick}
-        disabled={disabled || isUploading}
+        disabled={disabled || externalIsUploading}
         className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
         title="Anexar arquivo"
       >
