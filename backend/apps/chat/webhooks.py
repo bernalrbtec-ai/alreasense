@@ -505,15 +505,43 @@ def handle_message_upsert(data, tenant, connection=None):
                 logger.error(f"❌ [WEBSOCKET] Error broadcasting new conversation: {e}", exc_info=True)
         else:
             # ✅ CONVERSAS EXISTENTES: Se conversa estava fechada, reabrir automaticamente
+            status_changed = False
             if conversation.status == 'closed':
+                old_status = conversation.status
                 conversation.status = 'pending' if not from_me else 'open'
                 conversation.save(update_fields=['status'])
                 status_str = "Inbox" if not from_me else "Aberta"
-                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente ({status_str})")
+                status_changed = True
+                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status} ({status_str})")
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista
             conversation.update_last_message()
+            
+            # ✅ IMPORTANTE: Se status mudou, fazer broadcast da conversa atualizada via WebSocket
+            # Isso garante que o frontend recebe o status atualizado em tempo real
+            if status_changed:
+                try:
+                    from apps.chat.utils.serialization import serialize_conversation_for_ws
+                    from channels.layers import get_channel_layer
+                    from asgiref.sync import async_to_sync
+                    
+                    conv_data_serializable = serialize_conversation_for_ws(conversation)
+                    
+                    channel_layer = get_channel_layer()
+                    tenant_group = f"chat_tenant_{tenant.id}"
+                    
+                    async_to_sync(channel_layer.group_send)(
+                        tenant_group,
+                        {
+                            'type': 'conversation_updated',
+                            'conversation': conv_data_serializable
+                        }
+                    )
+                    
+                    logger.info(f"📡 [WEBSOCKET] Broadcast de conversa atualizada (status mudou) enviado")
+                except Exception as e:
+                    logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de conversa atualizada: {e}", exc_info=True)
         
         # Atualiza nome e foto se mudaram
         update_fields = []
