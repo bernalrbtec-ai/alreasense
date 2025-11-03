@@ -138,7 +138,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           alt={attachment.original_filename}
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
-          onError={() => {
+          onError={(e) => {
             console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', fileUrl);
             // Não esconder imediatamente - pode ser erro temporário de rede
             // Tentar reload uma vez após 1 segundo

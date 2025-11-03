@@ -134,7 +134,20 @@ export function useChatSocket(conversationId?: string) {
         const attachmentId = data.data.attachment_id;
         const messageId = data.data.message_id;
         const fileUrl = data.data.file_url || '';
-        console.log('📎 [HOOK] Attachment updated:', attachmentId, '| Message:', messageId, '| URL:', fileUrl.substring(0, 50));
+        // ✅ Log completo da URL (sem truncar)
+        console.log('📎 [HOOK] Attachment updated:', {
+          attachmentId,
+          messageId,
+          fileUrl: fileUrl ? (fileUrl.length > 100 ? fileUrl.substring(0, 100) + '...' : fileUrl) : 'EMPTY',
+          isMediaProxy: fileUrl?.includes('/api/chat/media-proxy') || false
+        });
+        
+        // ✅ Verificar se URL está correta (deve conter media-proxy)
+        if (fileUrl && !fileUrl.includes('/api/chat/media-proxy')) {
+          console.warn('⚠️ [HOOK] URL não é do media-proxy! URL recebida:', fileUrl);
+        } else if (!fileUrl) {
+          console.warn('⚠️ [HOOK] URL está vazia no evento attachment_updated!');
+        }
         
         // ✅ LÓGICA MELHORADA: Buscar mensagem por message_id se fornecido (mais confiável)
         const { messages } = useChatStore.getState();
