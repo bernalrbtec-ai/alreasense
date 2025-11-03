@@ -331,18 +331,26 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       {/* Send button */}
       <button
         onClick={handleSend}
-        disabled={!message.trim() || sending || !isConnected}
+        disabled={(!message.trim() && !selectedFile) || sending || !isConnected || uploadingFile}
         className={`
           p-2 rounded-full transition-all duration-150 flex-shrink-0
           shadow-md hover:shadow-lg active:scale-95
-          ${message.trim() && !sending && isConnected
+          ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected
             ? 'bg-[#00a884] hover:bg-[#008f6f]'
             : 'bg-gray-300 cursor-not-allowed opacity-50'
           }
         `}
-        title={isConnected ? "Enviar" : "Conectando..."}
+        title={
+          !isConnected 
+            ? "Conectando..." 
+            : uploadingFile 
+            ? "Enviando arquivo..." 
+            : (message.trim() || selectedFile) 
+            ? "Enviar" 
+            : "Digite uma mensagem ou selecione um arquivo"
+        }
       >
-        <Send className={`w-6 h-6 ${message.trim() && !sending && isConnected ? 'text-white' : 'text-gray-500'}`} />
+        <Send className={`w-6 h-6 ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected ? 'text-white' : 'text-gray-500'}`} />
       </button>
       </div>
     </div>
