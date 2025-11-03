@@ -14,6 +14,8 @@ export function useTenantSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  // ✅ Prevenir toasts duplicados usando Set para rastrear toasts já mostrados
+  const shownToastsRef = useRef<Set<string>>(new Set());
 
   const { addConversation, setConnectionStatus } = useChatStore();
   const { token, user } = useAuthStore();
@@ -206,16 +208,42 @@ export function useTenantSocket() {
             
             // ✅ Prevenir múltiplos toasts: só mostrar uma vez por conversa reaberta
             const toastKey = `reopened-${data.conversation.id}`;
+            const timestamp = Date.now();
+            const toastId = `${toastKey}-${timestamp}`;
+            
+            // ✅ Verificar se já mostramos um toast recentemente para esta conversa (últimos 5 segundos)
+            const recentToast = Array.from(shownToastsRef.current).find(id => id.startsWith(toastKey));
+            if (recentToast) {
+              console.log('🔕 [TOAST] Toast já foi mostrado recentemente para esta conversa, ignorando...');
+              return;
+            }
+            
             if (!isOnChatPage) {
+              // ✅ Adicionar ao Set de toasts mostrados
+              shownToastsRef.current.add(toastId);
+              
               toast.success('Conversa Reaberta! 💬', {
                 description: `${contactName} enviou uma nova mensagem`,
                 duration: 5000,
-                id: toastKey, // ✅ Prevenir duplicação usando ID único
+                id: toastId, // ✅ Prevenir duplicação usando ID único com timestamp
                 action: {
                   label: 'Abrir',
                   onClick: () => navigateToChat(data.conversation)
+                },
+                onDismiss: () => {
+                  // ✅ Remover do Set quando toast for fechado
+                  shownToastsRef.current.delete(toastId);
+                },
+                onAutoClose: () => {
+                  // ✅ Remover do Set quando toast expirar
+                  shownToastsRef.current.delete(toastId);
                 }
               });
+              
+              // ✅ Limpar do Set após 10 segundos (backup caso callbacks não sejam chamados)
+              setTimeout(() => {
+                shownToastsRef.current.delete(toastId);
+              }, 10000);
             } else {
               console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
             }
