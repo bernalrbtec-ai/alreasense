@@ -113,21 +113,27 @@ export function ConversationList() {
     if (activeDepartment.id === 'inbox') {
       // Inbox: conversas pendentes SEM departamento
       // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
+      // ✅ FIX: Se lista está vazia e recebe uma nova conversa, pode estar com status 'closed' temporariamente
       // Tratar department como string (ID) ou objeto ou null
       const departmentId = typeof conv.department === 'string' 
         ? conv.department 
         : conv.department?.id || null;
       const convStatus = conv.status || 'pending'; // ✅ Garantir que sempre tem status
-      const matchesInbox = (convStatus === 'pending') && !departmentId;
+      
+      // ✅ FIX: Se não tem departamento, mostrar na Inbox (independente do status)
+      // A Inbox deve mostrar conversas sem departamento, não apenas pendentes
+      // Isso garante que novas conversas apareçam mesmo que tenham status diferente
+      const matchesInbox = !departmentId && (convStatus === 'pending' || !convStatus || convStatus === 'closed');
       
       console.log('  🔍 [FILTRO] Inbox check:', {
         convId: conv.id,
         status: convStatus,
         departmentId,
-        matchesInbox
+        matchesInbox,
+        reason: !departmentId ? 'sem departamento' : 'tem departamento',
+        statusReason: convStatus === 'pending' ? 'pending' : convStatus === 'closed' ? 'closed (mas sem dept)' : 'outro status'
       });
       
-      // ✅ Permitir conversas pendentes OU que ainda não têm departamento atribuído
       return matchesInbox;
     } else {
       // Departamento específico: conversas do departamento (qualquer status)
