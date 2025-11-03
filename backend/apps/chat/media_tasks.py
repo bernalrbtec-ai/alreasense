@@ -11,7 +11,6 @@ import asyncio
 import httpx
 import base64
 from asgiref.sync import sync_to_async
-from django.core.cache import cache
 from apps.chat.utils.s3 import (
     get_s3_manager,
     generate_media_path,
@@ -126,14 +125,13 @@ async def handle_process_incoming_media(
     """
     Handler: Processa mídia recebida do WhatsApp.
     
-    Fluxo (padronizado com ENVIO):
+    Fluxo (padronizado com ENVIO - sem cache):
         1. Baixa mídia da URL temporária do WhatsApp (com retry)
         2. Valida tamanho antes/depois de baixar
         3. Converte áudio OGG/WEBM → MP3 (se necessário)
         4. Faz upload direto para S3 (sem processar imagem)
-        5. Atualiza MessageAttachment
-        6. Cache Redis (opcional)
-        7. Broadcast via WebSocket
+        5. Atualiza MessageAttachment placeholder com file_url e file_path
+        6. Broadcast via WebSocket
     
     Args:
         tenant_id: UUID do tenant
@@ -354,44 +352,53 @@ async def handle_process_incoming_media(
         # 5. URL pública (padronizado com ENVIO)
         public_url = get_public_url(s3_path)
         
-        # 6. Criar/atualizar MessageAttachment
-        # ✅ LÓGICA CORRIGIDA: Buscar placeholder especificamente (file_url vazio E file_path vazio)
-        # Isso evita race conditions e identifica corretamente o placeholder
-        message = await sync_to_async(Message.objects.get)(id=message_id)
+        # 6. Atualizar MessageAttachment placeholder (padronizado com ENVIO)
+        # ✅ BUSCAR placeholder criado no webhook (file_url vazio E file_path vazio)
+        message = await sync_to_async(Message.objects.select_related('conversation', 'conversation__tenant').get)(id=message_id)
         
-        # Buscar placeholder criado no webhook (file_url vazio OU file_path vazio = placeholder)
+        # ✅ Buscar placeholder - buscar por file_url vazio (placeholder criado no webhook)
+        # Simplificado: buscar apenas por file_url vazio, que é o que o placeholder tem
         existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
             message__id=message_id,
-            file_url='',  # Placeholder tem file_url vazio
-            file_path=''  # Placeholder tem file_path vazio
+            file_url=''  # ✅ Placeholder criado no webhook tem file_url vazio
         ).order_by('-created_at').first())()
         
-        # ✅ LÓGICA MELHORADA: Se encontrou placeholder, atualizar; senão criar novo
         if existing:
+            # ✅ ATUALIZAR placeholder existente (padronizado com ENVIO)
+            from apps.chat.utils.serialization import normalize_metadata
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            # Normalizar metadata e remover flag processing
+            metadata = normalize_metadata(existing.metadata)
+            metadata.pop('processing', None)
+            if 'media_type' not in metadata:
+                metadata['media_type'] = media_type
+            
             existing.file_url = public_url
+            existing.file_path = s3_path
+            existing.storage_type = 's3'
             existing.size_bytes = len(processed_data)
             existing.mime_type = content_type
             existing.original_filename = filename
-            existing.file_path = s3_path
-            existing.storage_type = 's3'
-            # Remover flag de processing (mídia está pronta)
-            from apps.chat.utils.serialization import normalize_metadata
-            
-            # ✅ NORMALIZAR metadata: garantir que sempre seja dict
-            metadata = normalize_metadata(existing.metadata)
-            metadata.pop('processing', None)
-            # Manter media_type se existir
-            if 'media_type' not in metadata and media_type:
-                metadata['media_type'] = media_type
-            
+            existing.expires_at = timezone.now() + timedelta(days=365)  # ✅ Mesmo do ENVIO
             existing.metadata = metadata
-            await sync_to_async(existing.save)(update_fields=['file_url', 'size_bytes', 'mime_type', 'original_filename', 'file_path', 'storage_type', 'metadata'])
+            
+            # ✅ IMPORTANTE: Usar save() para gerar media_hash e short_url (mesmo do ENVIO)
+            await sync_to_async(existing.save)()
             attachment = existing
-            logger.info(f"✅ [INCOMING MEDIA] Attachment atualizado: {attachment.id}, file_url={public_url[:50]}...")
+            logger.info(f"✅ [INCOMING MEDIA] Attachment atualizado: {attachment.id}")
+            logger.info(f"   📌 file_url: {public_url[:60]}...")
+            logger.info(f"   📌 file_path: {s3_path}")
+            logger.info(f"   📌 media_hash: {attachment.media_hash}")
+            logger.info(f"   📌 metadata.processing: {metadata.get('processing', 'N/A')}")
         else:
-            # ✅ Criar novo attachment se placeholder não existir
-            # Normalizar metadata ao criar
-            new_metadata = {'media_type': media_type}
+            # ✅ Se não encontrou placeholder, criar novo (não deveria acontecer)
+            from apps.chat.utils.serialization import normalize_metadata
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            logger.warning(f"⚠️ [INCOMING MEDIA] Placeholder não encontrado! Criando novo attachment para message_id={message_id}")
             attachment = await sync_to_async(MessageAttachment.objects.create)(
                 message=message,
                 tenant=message.conversation.tenant,
@@ -401,34 +408,13 @@ async def handle_process_incoming_media(
                 file_url=public_url,
                 storage_type='s3',
                 size_bytes=len(processed_data),
-                metadata=new_metadata  # ✅ Metadata normalizado como dict
+                expires_at=timezone.now() + timedelta(days=365),
+                metadata={'media_type': media_type}  # ✅ Sem flag processing
             )
             logger.info(f"✅ [INCOMING MEDIA] Novo attachment criado: {attachment.id}")
         
-        # 7. Cache no Redis (alinhado com envio: 30 dias por padrão)
-        # Gerar hash único para cache (usar file_path como base)
-        import hashlib
-        from django.conf import settings
-        media_hash = hashlib.md5(s3_path.encode()).hexdigest()[:12]
-        cache_key = f"media:{media_hash}"
-        
-        # Cachear dados do arquivo processado (TTL configurável)
-        cache_ttl = int(getattr(settings, 'ATTACHMENTS_REDIS_TTL_DAYS', 30)) * 24 * 60 * 60
-        try:
-            cache_data = {
-                'data': processed_data,
-                'content_type': content_type,
-            }
-            cache.set(cache_key, cache_data, cache_ttl)
-            logger.info(f"✅ [INCOMING MEDIA] Cacheado no Redis por {cache_ttl}s (hash: {media_hash})")
-            
-            # ✅ PERFORMANCE: Invalidar cache de verificação de existência no S3
-            # Quando arquivo é processado, garantir que cache de "existe" está atualizado
-            exists_cache_key = f"s3_exists:{s3_path}"
-            cache.set(exists_cache_key, True, 300)  # 5 minutos
-        except Exception as cache_error:
-            # Se cache falhar, não quebrar o processamento
-            logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao cachear no Redis: {cache_error}. Continuando...")
+        # 7. ✅ REMOVIDO: Cache Redis (padronizado com ENVIO - sem cache)
+        # O envio não usa cache, então o recebimento também não usa
         
         # 8. Broadcast via WebSocket (padronizado com ENVIO)
         from channels.layers import get_channel_layer

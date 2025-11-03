@@ -540,9 +540,9 @@ def handle_message_upsert(data, tenant, connection=None):
         if status_changed or name_or_pic_changed:
             try:
                 from apps.chat.utils.serialization import serialize_conversation_for_ws
-                # ✅ Usar import global (linha 12) ao invés de import local
+                # ✅ Usar imports globais (linhas 12-13) ao invés de import local
                 # from channels.layers import get_channel_layer  # ❌ REMOVIDO: causava UnboundLocalError
-                from asgiref.sync import async_to_sync
+                # from asgiref.sync import async_to_sync  # ❌ REMOVIDO: causava UnboundLocalError
                 
                 # ✅ Recarregar do banco para garantir dados atualizados
                 conversation.refresh_from_db()
@@ -689,11 +689,13 @@ def handle_message_upsert(data, tenant, connection=None):
                 logger.info(f"📬 [WEBHOOK] Notificando tenant sobre nova mensagem...")
                 try:
                     from apps.chat.utils.serialization import serialize_conversation_for_ws
+                    # ✅ Usar imports globais (linhas 12-13) ao invés de import local
+                    # from asgiref.sync import async_to_sync  # ❌ REMOVIDO: causava UnboundLocalError
                     
                     conv_data_serializable = serialize_conversation_for_ws(conversation)
                     
                     # Broadcast para todo o tenant (notificação de nova mensagem)
-                    channel_layer = get_channel_layer()
+                    channel_layer = get_channel_layer()  # ✅ Usa import global (linha 12)
                     tenant_group = f"chat_tenant_{tenant.id}"
                     
                     # 📱 Para GRUPOS: Nome do grupo + quem enviou
@@ -705,7 +707,7 @@ def handle_message_upsert(data, tenant, connection=None):
                     else:
                         notification_text = content[:100]  # Primeiros 100 caracteres para contatos individuais
                     
-                    async_to_sync(channel_layer.group_send)(
+                    async_to_sync(channel_layer.group_send)(  # ✅ Usa import global (linha 13)
                         tenant_group,
                         {
                             'type': 'new_message_notification',
