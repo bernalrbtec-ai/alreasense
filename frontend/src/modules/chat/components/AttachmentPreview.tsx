@@ -143,6 +143,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         <img
           src={fileUrl}
           alt={attachment.original_filename}
+          crossOrigin="anonymous"
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
           onError={(e) => {
