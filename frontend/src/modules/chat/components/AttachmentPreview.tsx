@@ -149,7 +149,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           onClick={() => setLightboxOpen(true)}
           onLoad={() => {
             console.log('✅ [AttachmentPreview] Imagem carregada com sucesso:', {
-              url: fileUrl.substring(0, 100),
+              url: fileUrl, // ✅ URL COMPLETA - sem truncar
               naturalWidth: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalWidth,
               naturalHeight: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalHeight
             });
@@ -159,10 +159,10 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             const currentUrl = img.src;
             const error = (img as any).error;
             
-            // ✅ Log MUITO detalhado do erro para debug
+            // ✅ Log MUITO detalhado do erro para debug - URL COMPLETA
             console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', {
-              fileUrl: fileUrl.substring(0, 100),
-              currentSrc: currentUrl.substring(0, 100),
+              fileUrl: fileUrl, // ✅ URL COMPLETA - sem truncar
+              currentSrc: currentUrl, // ✅ URL COMPLETA - sem truncar
               retried: img.dataset.retried,
               naturalWidth: img.naturalWidth,
               naturalHeight: img.naturalHeight,
@@ -185,7 +185,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               setTimeout(() => {
                 // ✅ Adicionar timestamp para bypass cache do browser
                 const retryUrl = fileUrl + (fileUrl.includes('?') ? '&' : '?') + '_retry=' + Date.now();
-                console.log('🔄 [AttachmentPreview] Retry URL:', retryUrl.substring(0, 100) + '...');
+                console.log('🔄 [AttachmentPreview] Retry URL:', retryUrl); // ✅ URL COMPLETA
                 img.src = retryUrl;
               }, 1000);
             } else {
