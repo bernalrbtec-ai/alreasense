@@ -85,9 +85,11 @@ def media_proxy(request):
         )
         response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
         response['Access-Control-Allow-Origin'] = '*'
+        # ✅ IMPORTANTE: Headers CORS adicionais para garantir que browser aceite a resposta
+        response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
         response['X-Cache'] = 'HIT'
         response['X-Content-Size'] = len(cached_data['content'])
-        response['Content-Length'] = len(cached_data['content'])
+        response['Content-Length'] = str(len(cached_data['content']))
         return response
     
     # Cache MISS - Download
@@ -100,6 +102,57 @@ def media_proxy(request):
             
             content_type = http_response.headers.get('content-type', 'application/octet-stream')
             content = http_response.content
+            
+            # ✅ MELHORIA: Detectar Content-Type baseado na extensão se genérico
+            # Isso resolve problema de OpaqueResponseBlocking quando S3 retorna application/octet-stream
+            if content_type == 'application/octet-stream' or 'application/octet-stream' in content_type:
+                import mimetypes
+                from urllib.parse import urlparse, unquote
+                
+                # Tentar detectar pelo nome do arquivo na URL
+                parsed_url = urlparse(unquote(media_url))
+                filename = parsed_url.path.split('/')[-1]
+                
+                if '.' in filename:
+                    ext = filename.split('.')[-1].lower()
+                    detected_type, _ = mimetypes.guess_type(f'file.{ext}')
+                    if detected_type:
+                        content_type = detected_type
+                        logger.info(f'🔍 [MEDIA PROXY] Content-Type detectado pela extensão: {content_type} (arquivo: {filename})')
+                    elif ext in ['jpg', 'jpeg']:
+                        content_type = 'image/jpeg'
+                    elif ext == 'png':
+                        content_type = 'image/png'
+                    elif ext == 'gif':
+                        content_type = 'image/gif'
+                    elif ext == 'webp':
+                        content_type = 'image/webp'
+                    elif ext == 'mp4':
+                        content_type = 'video/mp4'
+                    elif ext == 'mp3':
+                        content_type = 'audio/mpeg'
+                    elif ext == 'pdf':
+                        content_type = 'application/pdf'
+                
+                # Se ainda for genérico, tentar detectar pelo magic number (primeiros bytes)
+                if content_type == 'application/octet-stream' and len(content) > 4:
+                    if content[:2] == b'\xff\xd8':
+                        content_type = 'image/jpeg'
+                    elif content[:8] == b'\x89PNG\r\n\x1a\n':
+                        content_type = 'image/png'
+                    elif content[:6] in [b'GIF87a', b'GIF89a']:
+                        content_type = 'image/gif'
+                    elif content[:4] == b'RIFF' and content[8:12] == b'WEBP':
+                        content_type = 'image/webp'
+                    elif content[:4] == b'\x00\x00\x00 ftyp':
+                        content_type = 'video/mp4'
+                    elif content[:3] == b'\xff\xfb' or content[:2] == b'\xff\xf3':
+                        content_type = 'audio/mpeg'
+                    elif content[:4] == b'%PDF':
+                        content_type = 'application/pdf'
+                    
+                    if content_type != 'application/octet-stream':
+                        logger.info(f'🔍 [MEDIA PROXY] Content-Type detectado pelo magic number: {content_type}')
             
             logger.info(
                 f'✅ [MEDIA PROXY] Download concluído! '
@@ -120,9 +173,11 @@ def media_proxy(request):
             response = HttpResponse(response_content, content_type=content_type)
             response['Cache-Control'] = 'public, max-age=604800'
             response['Access-Control-Allow-Origin'] = '*'
+            # ✅ IMPORTANTE: Headers CORS adicionais para garantir que browser aceite a resposta
+            response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
             response['X-Cache'] = 'MISS'
             response['X-Content-Size'] = len(content)
-            response['Content-Length'] = len(content)
+            response['Content-Length'] = str(len(content))
             return response
             
     except httpx.HTTPStatusError as e:
