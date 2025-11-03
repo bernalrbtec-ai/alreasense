@@ -21,6 +21,8 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadingFile, setUploadingFile] = useState(false);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
@@ -119,12 +121,103 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
     setShowEmojiPicker(false);
   };
 
+  const handleFileUpload = async (file: File) => {
+    if (!file || !activeConversation || uploadingFile) return;
+
+    setUploadingFile(true);
+
+    try {
+      console.log('📤 [FILE] Iniciando upload...', file.name, file.size, 'bytes');
+
+      // 1️⃣ Obter presigned URL
+      const { data: presignedData } = await api.post('/chat/messages/upload-presigned-url/', {
+        conversation_id: activeConversation.id,
+        filename: file.name,
+        content_type: file.type,
+        file_size: file.size,
+      });
+
+      console.log('✅ [FILE] Presigned URL obtida');
+
+      // 2️⃣ Upload S3
+      const xhr = new XMLHttpRequest();
+      
+      await new Promise<void>((resolve, reject) => {
+        xhr.addEventListener('load', () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve();
+          } else {
+            reject(new Error(`Upload falhou: ${xhr.status}`));
+          }
+        });
+
+        xhr.addEventListener('error', () => {
+          reject(new Error('Erro de rede'));
+        });
+
+        xhr.addEventListener('progress', (e) => {
+          if (e.lengthComputable) {
+            const percent = (e.loaded / e.total) * 100;
+            console.log(`📤 [FILE] Upload progress: ${percent.toFixed(1)}%`);
+          }
+        });
+
+        xhr.open('PUT', presignedData.upload_url);
+        xhr.setRequestHeader('Content-Type', file.type);
+        xhr.send(file);
+      });
+
+      console.log('✅ [FILE] Upload S3 completo');
+
+      // 3️⃣ Confirmar backend
+      const { data: confirmData } = await api.post('/chat/messages/confirm-upload/', {
+        conversation_id: activeConversation.id,
+        attachment_id: presignedData.attachment_id,
+        s3_key: presignedData.s3_key,
+        filename: file.name,
+        content_type: file.type,
+        file_size: file.size,
+      });
+
+      console.log('✅ [FILE] Arquivo enviado com sucesso!');
+
+      toast.success('Arquivo enviado!', {
+        duration: 2000,
+        position: 'bottom-right'
+      });
+    } catch (error: any) {
+      console.error('❌ [FILE] Erro ao enviar arquivo:', error);
+      const errorMsg = error.response?.data?.error || error.message || 'Erro ao enviar arquivo';
+      toast.error(errorMsg);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null);
+  };
+
   if (!activeConversation) {
     return null;
   }
 
   return (
-    <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300 relative shadow-sm">
+    <div className="relative">
+      {/* Thumbnail preview acima do input */}
+      {selectedFile && (
+        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] border-t border-gray-300">
+          <AttachmentThumbnail
+            file={selectedFile}
+            onRemove={handleRemoveFile}
+            onUpload={handleFileUpload}
+            isUploading={uploadingFile}
+          />
+        </div>
+      )}
+
+      {/* Input area */}
+      <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300 relative shadow-sm">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
         onClick={() => setIncludeSignature(!includeSignature)}
@@ -145,10 +238,15 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       <div className="relative">
         <FileUploader
           conversationId={activeConversation.id}
+          selectedFile={selectedFile}
+          onFileSelect={setSelectedFile}
+          onUpload={handleFileUpload}
           onUploadComplete={() => {
             console.log('✅ Arquivo enviado! WebSocket vai atualizar UI');
+            setSelectedFile(null);
           }}
           disabled={sending || !isConnected}
+          isUploading={uploadingFile}
         />
       </div>
 
@@ -218,6 +316,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       >
         <Send className={`w-6 h-6 ${message.trim() && !sending && isConnected ? 'text-white' : 'text-gray-500'}`} />
       </button>
+      </div>
     </div>
   );
 }
