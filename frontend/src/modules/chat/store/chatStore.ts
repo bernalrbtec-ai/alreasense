@@ -86,11 +86,21 @@ export const useChatStore = create<ChatState>((set) => ({
     };
     
     // Adicionar no início da lista (conversas mais recentes primeiro)
+    const newConversations = [conversationWithStatus, ...state.conversations];
+    
     console.log('✅ [STORE] Nova conversa adicionada:', conversation.contact_name || conversation.contact_phone);
-    console.log(`   Total de conversas: ${state.conversations.length} → ${state.conversations.length + 1}`);
+    console.log(`   Total de conversas: ${state.conversations.length} → ${newConversations.length}`);
     console.log(`   Status: ${conversationWithStatus.status}, Department: ${conversationWithStatus.department || 'null'}`);
+    console.log(`   ID: ${conversationWithStatus.id}`);
+    console.log(`   ✅ STORE ATUALIZADO - Nova lista:`, newConversations.map(c => ({
+      id: c.id,
+      name: c.contact_name || c.contact_phone,
+      status: c.status,
+      department: c.department || null
+    })));
+    
     return {
-      conversations: [conversationWithStatus, ...state.conversations]
+      conversations: newConversations
     };
   }),
   updateConversation: (conversation) => set((state) => ({

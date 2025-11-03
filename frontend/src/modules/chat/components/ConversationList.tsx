@@ -83,16 +83,30 @@ export function ConversationList() {
 
   // 🎯 Filtrar conversas localmente (busca + departamento)
   const filteredConversations = conversations.filter((conv) => {
+    // ✅ DEBUG: Log detalhado para cada conversa
+    console.log('🔍 [FILTRO] Verificando conversa:', {
+      id: conv.id,
+      contact_name: conv.contact_name,
+      status: conv.status,
+      department: conv.department,
+      activeDepartment: activeDepartment?.id || 'null',
+      searchTerm: searchTerm || 'vazio'
+    });
+    
     // 1. Filtro de busca (nome ou telefone)
     const matchesSearch = 
       conv.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       conv.contact_phone.includes(searchTerm);
     
-    if (!matchesSearch) return false;
+    if (!matchesSearch) {
+      console.log('  ❌ [FILTRO] Não passa busca:', conv.id);
+      return false;
+    }
     
     // 2. Filtro de departamento (se houver departamento ativo)
     if (!activeDepartment) {
       // ✅ SEM departamento ativo: mostrar TODAS as conversas (inclui novas)
+      console.log('  ✅ [FILTRO] Sem departamento ativo - MOSTRAR:', conv.id);
       return true;
     }
     
@@ -103,16 +117,42 @@ export function ConversationList() {
       const departmentId = typeof conv.department === 'string' 
         ? conv.department 
         : conv.department?.id || null;
+      const convStatus = conv.status || 'pending'; // ✅ Garantir que sempre tem status
+      const matchesInbox = (convStatus === 'pending') && !departmentId;
+      
+      console.log('  🔍 [FILTRO] Inbox check:', {
+        convId: conv.id,
+        status: convStatus,
+        departmentId,
+        matchesInbox
+      });
+      
       // ✅ Permitir conversas pendentes OU que ainda não têm departamento atribuído
-      return (conv.status === 'pending' || !conv.status) && !departmentId;
+      return matchesInbox;
     } else {
       // Departamento específico: conversas do departamento (qualquer status)
       // ✅ Tratar department como string (ID) ou objeto { id, name }
       const departmentId = typeof conv.department === 'string' 
         ? conv.department 
         : conv.department?.id || null;
-      return departmentId === activeDepartment.id;
+      const matchesDepartment = departmentId === activeDepartment.id;
+      
+      console.log('  🔍 [FILTRO] Departamento check:', {
+        convId: conv.id,
+        convDepartmentId: departmentId,
+        activeDepartmentId: activeDepartment.id,
+        matchesDepartment
+      });
+      
+      return matchesDepartment;
     }
+  });
+  
+  // ✅ DEBUG: Log final do filtro
+  console.log('📊 [FILTRO] Resultado:', {
+    total: conversations.length,
+    filtradas: filteredConversations.length,
+    activeDepartment: activeDepartment?.id || 'null'
   });
 
   const formatTime = (dateString: string | undefined) => {
