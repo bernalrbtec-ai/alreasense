@@ -67,8 +67,13 @@ def media_proxy(request):
     # ✅ REMOVIDO: Cache Redis - simplificar fluxo e facilitar debug
     # Agora sempre baixa direto da URL original (S3, WhatsApp, etc)
     
+    # ✅ DEBUG: Log detalhado da URL que está sendo baixada
+    logger.info(f'🔄 [MEDIA PROXY] Baixando mídia:')
+    logger.info(f'   🔗 [MEDIA PROXY] URL completa: {media_url}')
+    logger.info(f'   📌 [MEDIA PROXY] Método: {request.method}')
+    logger.info(f'   📌 [MEDIA PROXY] User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
+    
     # Download direto
-    logger.info(f'🔄 [MEDIA PROXY] Baixando mídia: {media_url[:80]}...')
     
     try:
         with httpx.Client(timeout=30.0, follow_redirects=True) as client:
@@ -129,10 +134,11 @@ def media_proxy(request):
                     if content_type != 'application/octet-stream':
                         logger.info(f'🔍 [MEDIA PROXY] Content-Type detectado pelo magic number: {content_type}')
             
-            logger.info(
-                f'✅ [MEDIA PROXY] Download concluído! '
-                f'Content-Type: {content_type} | Size: {len(content)} bytes'
-            )
+            logger.info(f'✅ [MEDIA PROXY] Download concluído!')
+            logger.info(f'   🔗 [MEDIA PROXY] URL original: {media_url}')
+            logger.info(f'   📄 [MEDIA PROXY] Content-Type: {content_type}')
+            logger.info(f'   📏 [MEDIA PROXY] Size: {len(content)} bytes ({len(content) / 1024:.2f} KB)')
+            logger.info(f'   ✅ [MEDIA PROXY] Status: 200 OK')
             
             # ✅ REMOVIDO: Cache Redis - simplificar fluxo e facilitar debug
             

@@ -92,11 +92,13 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
                     proxy_url = s3_manager.get_public_url(instance.file_path)
                     data['file_url'] = proxy_url
                     
-                    # Log only in debug mode to reduce log pollution
-                    if not file_url:
-                        logger.debug(f"📎 [SERIALIZER] Empty file_url, generated proxy: {proxy_url[:50]}...")
-                    elif '/api/chat/media-proxy' not in file_url:
-                        logger.debug(f"📎 [SERIALIZER] file_url converted to proxy: {proxy_url[:50]}...")
+                    # ✅ DEBUG: Log detalhado das URLs geradas no serializer
+                    logger.info(f"📎 [SERIALIZER] URLs para attachment {instance.id}:")
+                    logger.info(f"   📦 [SERIALIZER] S3 Path: {instance.file_path}")
+                    logger.info(f"   🌐 [SERIALIZER] URL Proxy (final): {proxy_url}")
+                    logger.info(f"   📄 [SERIALIZER] MIME Type: {instance.mime_type}")
+                    logger.info(f"   📝 [SERIALIZER] Filename: {instance.original_filename}")
+                    logger.info(f"   📏 [SERIALIZER] Size: {instance.size_bytes} bytes ({instance.size_bytes / 1024:.2f} KB)" if instance.size_bytes else "   📏 [SERIALIZER] Size: N/A")
                 
                 # ✅ NORMALIZAR metadata: garantir que sempre seja dict
                 from apps.chat.utils.serialization import normalize_metadata

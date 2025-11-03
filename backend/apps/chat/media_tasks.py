@@ -141,7 +141,10 @@ async def handle_process_incoming_media(
     """
     from apps.chat.models import Message, MessageAttachment
     
-    logger.info(f"📦 [INCOMING MEDIA] Processando: {media_type} - {media_url[:80]}...")
+    logger.info(f"📦 [INCOMING MEDIA] Processando: {media_type}")
+    logger.info(f"   🔗 [INCOMING MEDIA] URL WhatsApp (original): {media_url}")
+    logger.info(f"   📌 [INCOMING MEDIA] message_id: {message_id}")
+    logger.info(f"   📌 [INCOMING MEDIA] tenant_id: {tenant_id}")
     
     # ✅ VALIDAÇÃO: Verificar tamanho ANTES de baixar (economia de recursos)
     from django.conf import settings
@@ -351,6 +354,15 @@ async def handle_process_incoming_media(
         
         # 5. URL pública (padronizado com ENVIO)
         public_url = get_public_url(s3_path)
+        
+        # ✅ DEBUG: Log detalhado das URLs
+        logger.info(f"📎 [INCOMING MEDIA] URLs geradas:")
+        logger.info(f"   🔗 [INCOMING MEDIA] URL WhatsApp (original): {media_url}")
+        logger.info(f"   📦 [INCOMING MEDIA] S3 Path: {s3_path}")
+        logger.info(f"   🌐 [INCOMING MEDIA] URL Proxy (final): {public_url}")
+        logger.info(f"   📏 [INCOMING MEDIA] Tamanho: {len(processed_data)} bytes ({len(processed_data) / 1024:.2f} KB)")
+        logger.info(f"   📄 [INCOMING MEDIA] Content-Type: {content_type}")
+        logger.info(f"   📝 [INCOMING MEDIA] Filename: {filename}")
         
         # 6. Atualizar MessageAttachment placeholder (padronizado com ENVIO)
         # ✅ BUSCAR placeholder criado no webhook (file_url vazio E file_path vazio)
