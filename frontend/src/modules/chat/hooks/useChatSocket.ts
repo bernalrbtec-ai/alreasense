@@ -127,122 +127,10 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
-    // ✅ REMOVIDO: handleAttachmentDownloaded não é mais usado
-    // O evento 'attachment_downloaded' foi substituído por 'attachment_updated'
-    // que é mais robusto e inclui metadata normalizado
-
-    const handleAttachmentUpdated = (data: WebSocketMessage) => {
-      if (data.data?.attachment_id) {
-        const attachmentId = data.data.attachment_id;
-        const messageId = data.data.message_id;
-        const fileUrl = data.data.file_url || '';
-        
-        // ✅ LOG REDUZIDO: Apenas informações essenciais (sem spam)
-        // O log completo está no useTenantSocket, não precisa duplicar aqui
-        console.log('📎 [HOOK] Attachment updated:', attachmentId);
-        
-        // ✅ Verificar se URL está correta (deve conter media-proxy)
-        if (fileUrl && !fileUrl.includes('/api/chat/media-proxy')) {
-          console.warn('⚠️ [HOOK] URL não é do media-proxy! URL recebida:', fileUrl.substring(0, 100));
-        } else if (!fileUrl) {
-          console.warn('⚠️ [HOOK] URL está vazia no evento attachment_updated!');
-        }
-        
-        // ✅ LÓGICA MELHORADA: Buscar mensagem por message_id se fornecido (mais confiável)
-        const { messages } = useChatStore.getState();
-        let messageWithAttachment = null;
-        
-        if (messageId) {
-          // Se message_id fornecido, usar ele (mais preciso)
-          messageWithAttachment = messages.find(m => m.id === messageId);
-        }
-        
-        if (!messageWithAttachment) {
-          // Fallback: buscar por attachment_id
-          messageWithAttachment = messages.find(m => 
-            m.attachments?.some(a => a.id === attachmentId)
-          );
-        }
-        
-        if (messageWithAttachment) {
-          // ✅ RACE CONDITION FIX: Verificar se attachment já foi atualizado
-          // Evita updates duplicados ou conflitos se múltiplos eventos chegarem
-          const existingAttachment = messageWithAttachment.attachments?.find(a => a.id === attachmentId);
-          
-          // ✅ MELHORIA: Só ignorar se:
-          // 1. Attachment existe
-          // 2. file_url não está vazio E é igual ao novo
-          // 3. E metadata não tem flag processing (já está processado)
-          const hasValidUrl = existingAttachment?.file_url && existingAttachment.file_url.trim() !== '';
-          const isSameUrl = hasValidUrl && existingAttachment.file_url === fileUrl;
-          const isProcessing = existingAttachment?.metadata?.processing === true;
-          
-          // ✅ IGNORAR apenas se tem URL válida, é a mesma URL, E não está processando
-          if (existingAttachment && hasValidUrl && isSameUrl && !isProcessing) {
-            console.log('ℹ️ [HOOK] Attachment já atualizado, ignorando update duplicado:', {
-              attachmentId,
-              oldUrl: existingAttachment?.file_url?.substring(0, 80) || 'VAZIO',
-              newUrl: fileUrl?.substring(0, 80) || 'VAZIO',
-              metadata: existingAttachment?.metadata
-            });
-            return;  // Já está atualizado e processado, não fazer nada
-          }
-          
-          // ✅ Se está processando OU URL mudou OU URL estava vazia, ATUALIZAR
-          console.log('🔄 [HOOK] Atualizando attachment:', {
-            attachmentId,
-            isProcessing,
-            isSameUrl,
-            hasValidUrl,
-            oldUrl: existingAttachment?.file_url?.substring(0, 80) || 'VAZIO',
-            newUrl: fileUrl?.substring(0, 80) || 'VAZIO',
-            oldMetadata: existingAttachment?.metadata,
-            newMetadata: data.data?.metadata
-          });
-          
-          // ✅ IMPORTANTE: Atualizar metadata removendo flag processing explicitamente
-          const updatedMetadata = { ...(data.data.metadata || {}) };
-          delete updatedMetadata.processing; // Garantir que processing é false
-          
-          // Atualizar attachment específico
-          updateAttachment(attachmentId, {
-            file_url: fileUrl,
-            thumbnail_url: data.data.thumbnail_url,
-            mime_type: data.data.mime_type,
-            metadata: updatedMetadata,  // ✅ Metadata sem flag processing
-          } as any);
-          
-          // ✅ Forçar re-render da mensagem completa (clonar para garantir mudança de referência)
-          const updatedMessage = {
-            ...messageWithAttachment,
-            attachments: messageWithAttachment.attachments?.map(att => {
-              if (att.id === attachmentId) {
-                return {
-                  ...att,
-                  file_url: fileUrl,
-                  thumbnail_url: data.data.thumbnail_url,
-                  mime_type: data.data.mime_type,
-                  metadata: updatedMetadata  // ✅ Metadata sem flag processing
-                };
-              }
-              return att;
-            })
-          };
-          addMessage(updatedMessage as any);
-          console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId);
-        } else {
-          console.warn('⚠️ [HOOK] Mensagem com attachment não encontrada:', { attachmentId, messageId });
-          // ✅ NOVO: Se mensagem não está na lista (conversa não aberta), buscar do servidor
-          // Isso garante que o attachment será atualizado quando a conversa for aberta
-          if (messageId) {
-            console.log('🔄 [HOOK] Mensagem não encontrada localmente, será atualizada quando conversa for aberta');
-            // Não fazer fetch aqui - será carregado quando conversa for aberta
-            // O attachment já está atualizado no banco, então quando carregar a mensagem,
-            // o serializer já retornará a URL correta
-          }
-        }
-      }
-    };
+    // ✅ REMOVIDO: handleAttachmentUpdated movido para useTenantSocket
+    // O useTenantSocket já escuta o grupo tenant e processa attachment_updated
+    // Remover daqui evita duplicação, já que o ChatWebSocketManager também está conectado ao grupo tenant
+    // e receberia o mesmo evento duas vezes (do grupo tenant + do grupo da conversa via subscribe)
 
     // ✅ ESCUTAR novas conversas do tenant (via ChatConsumerV2)
     // ⚠️ IMPORTANTE: Este evento é TAMBÉM processado por useTenantSocket
@@ -262,7 +150,7 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
     chatWebSocketManager.on('typing', handleTyping);
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
-    chatWebSocketManager.on('attachment_updated', handleAttachmentUpdated);
+    // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
     chatWebSocketManager.on('new_conversation', handleNewConversation);
 
     // Cleanup
@@ -271,7 +159,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('message_status_update', handleStatusUpdate);
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
-      chatWebSocketManager.off('attachment_updated', handleAttachmentUpdated);
+      // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
       chatWebSocketManager.off('new_conversation', handleNewConversation);
     };
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);

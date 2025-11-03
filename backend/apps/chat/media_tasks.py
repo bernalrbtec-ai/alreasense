@@ -466,16 +466,13 @@ async def handle_process_incoming_media(
         logger.info(f"   📌 conversation_id: {message.conversation_id}")
         logger.info(f"   📌 tenant_id: {tenant_id}")
         
-        # 1. Enviar para grupo da conversa (usuários com conversa aberta)
-        conversation_group = f'chat_tenant_{tenant_id}_conversation_{message.conversation_id}'
-        await channel_layer.group_send(conversation_group, attachment_update_event)
-        logger.info(f"📡 [INCOMING MEDIA] WebSocket enviado para grupo conversa: {conversation_group}")
-        
-        # 2. ✅ NOVO: Enviar também para grupo do tenant inteiro (mesmo se conversa não estiver aberta)
-        # Isso garante que attachments sejam atualizados mesmo se a conversa não estiver aberta no momento
+        # ✅ CORREÇÃO: Enviar APENAS para grupo do tenant (evita duplicação)
+        # O useTenantSocket já cobre todas as conversas, então não precisa enviar para grupo específico
+        # Isso evita que o evento chegue duas vezes (useChatSocket + useTenantSocket)
         tenant_group = f'chat_tenant_{tenant_id}'
         await channel_layer.group_send(tenant_group, attachment_update_event)
         logger.info(f"📡 [INCOMING MEDIA] WebSocket enviado para grupo tenant: {tenant_group}")
+        logger.info(f"   ℹ️ [INCOMING MEDIA] NOTA: Não enviando para grupo conversa para evitar duplicação")
         
         logger.info(f"✅ [INCOMING MEDIA] Processamento completo: {attachment.id}")
         
