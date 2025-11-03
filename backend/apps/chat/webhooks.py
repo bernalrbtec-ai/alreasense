@@ -656,9 +656,13 @@ def handle_message_upsert(data, tenant, connection=None):
                     logger.info(f"📎 [WEBHOOK] Criado anexo placeholder ID={attachment_id_str}, mime={mime_type}, type={incoming_media_type}")
                     logger.info(f"📎 [WEBHOOK] URL temporária: {attachment_url[:100]}...")
                     
-                    # Força commit antes de enfileirar processamento direto (S3 + cache Redis)
+                    # Força commit antes de enfileirar processamento direto (S3 direto - sem cache)
                     def enqueue_process():
-                        logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3+cache) do anexo {attachment_id_str}...")
+                        logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
+                        logger.info(f"   📌 tenant_id: {tenant_id_str}")
+                        logger.info(f"   📌 message_id: {message_id_str}")
+                        logger.info(f"   📌 media_url: {attachment_url[:100]}...")
+                        logger.info(f"   📌 media_type: {incoming_media_type}")
                         try:
                             from apps.chat.tasks import process_incoming_media
                             process_incoming_media.delay(
@@ -667,9 +671,10 @@ def handle_message_upsert(data, tenant, connection=None):
                                 media_url=attachment_url,
                                 media_type=incoming_media_type
                             )
-                            logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso!")
+                            logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso na fila chat_process_incoming_media!")
                         except Exception as e:
                             logger.error(f"❌ [WEBHOOK] ERRO ao enfileirar processamento: {e}", exc_info=True)
+                            raise  # ✅ Re-raise para não silenciar erro
                     
                     transaction.on_commit(enqueue_process)
                 
