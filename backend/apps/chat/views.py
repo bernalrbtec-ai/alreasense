@@ -22,7 +22,8 @@ def media_proxy(request):
     IMPORTANTE: Este endpoint é PÚBLICO (não requer autenticação)!
     
     Query params:
-        url: URL da mídia (S3, WhatsApp, etc)
+        url: URL da mídia (WhatsApp, etc) - para URLs externas
+        s3_path: Caminho no S3 (ex: chat/{tenant_id}/attachments/{uuid}.jpg) - para nosso S3
     
     Headers de resposta:
         X-Cache: DIRECT (Download direto - sem cache)
@@ -42,46 +43,102 @@ def media_proxy(request):
         response['Access-Control-Max-Age'] = '86400'  # 24 horas
         return response
     
-    # ✅ IMPORTANTE: Django já decodifica URL automaticamente, mas garantir que está correta
-    from urllib.parse import unquote
-    
+    # ✅ CORREÇÃO: Verificar se é S3 nosso ou URL externa
+    s3_path = request.GET.get('s3_path')
     media_url = request.GET.get('url')
     
-    if not media_url:
-        logger.warning('📦 [MEDIA PROXY] URL não fornecida')
-        return JsonResponse({'error': 'URL é obrigatória'}, status=400)
+    if not s3_path and not media_url:
+        logger.warning('📦 [MEDIA PROXY] Parâmetro não fornecido (s3_path ou url)')
+        return JsonResponse({'error': 's3_path ou url é obrigatório'}, status=400)
     
-    # ✅ Garantir que URL está decodificada (pode vir duplo-encoded)
-    try:
-        # Se ainda estiver encoded, decodificar
-        if '%' in media_url:
-            media_url = unquote(media_url)
-        # Se ainda tiver caracteres encoded, tentar mais uma vez
-        if '%' in media_url:
-            media_url = unquote(media_url)
-    except Exception as e:
-        logger.warning(f'⚠️ [MEDIA PROXY] Erro ao decodificar URL: {e}, usando original')
-    
-    logger.debug(f'🔍 [MEDIA PROXY] URL recebida (decodificada): {media_url[:100]}...')
-    
-    # ✅ REMOVIDO: Cache Redis - simplificar fluxo e facilitar debug
-    # Agora sempre baixa direto da URL original (S3, WhatsApp, etc)
-    
-    # ✅ DEBUG: Log detalhado da URL que está sendo baixada
-    logger.info(f'🔄 [MEDIA PROXY] Baixando mídia:')
-    logger.info(f'   🔗 [MEDIA PROXY] URL completa: {media_url}')
-    logger.info(f'   📌 [MEDIA PROXY] Método: {request.method}')
-    logger.info(f'   📌 [MEDIA PROXY] User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
-    
-    # Download direto
-    
-    try:
-        with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-            http_response = client.get(media_url)
-            http_response.raise_for_status()
+    # ✅ Se for S3 nosso, acessar diretamente usando boto3
+    if s3_path:
+        logger.info(f'📦 [MEDIA PROXY] Acessando S3 diretamente: {s3_path}')
+        try:
+            from apps.chat.utils.s3 import get_s3_manager
+            s3_manager = get_s3_manager()
             
-            content_type = http_response.headers.get('content-type', 'application/octet-stream')
-            content = http_response.content
+            # Baixar do S3 usando boto3 (com credenciais do Django)
+            success, content, msg = s3_manager.download_from_s3(s3_path)
+            
+            if not success:
+                logger.error(f'❌ [MEDIA PROXY] Erro ao baixar do S3: {msg}')
+                return JsonResponse({'error': f'Erro ao baixar do S3: {msg}'}, status=404)
+            
+            # Detectar Content-Type baseado na extensão
+            from urllib.parse import unquote
+            import mimetypes
+            
+            filename = s3_path.split('/')[-1]
+            if '.' in filename:
+                ext = filename.split('.')[-1].lower()
+                detected_type, _ = mimetypes.guess_type(f'file.{ext}')
+                if detected_type:
+                    content_type = detected_type
+                elif ext in ['jpg', 'jpeg']:
+                    content_type = 'image/jpeg'
+                elif ext == 'png':
+                    content_type = 'image/png'
+                elif ext == 'gif':
+                    content_type = 'image/gif'
+                elif ext == 'webp':
+                    content_type = 'image/webp'
+                elif ext == 'mp4':
+                    content_type = 'video/mp4'
+                elif ext == 'mp3':
+                    content_type = 'audio/mpeg'
+                elif ext == 'pdf':
+                    content_type = 'application/pdf'
+                else:
+                    content_type = 'application/octet-stream'
+            else:
+                content_type = 'application/octet-stream'
+            
+            # Detectar pelo magic number se ainda for genérico
+            if content_type == 'application/octet-stream' and len(content) > 4:
+                if content[:2] == b'\xff\xd8':
+                    content_type = 'image/jpeg'
+                elif content[:8] == b'\x89PNG\r\n\x1a\n':
+                    content_type = 'image/png'
+                elif content[:6] in [b'GIF87a', b'GIF89a']:
+                    content_type = 'image/gif'
+                elif content[:4] == b'RIFF' and content[8:12] == b'WEBP':
+                    content_type = 'image/webp'
+            
+            logger.info(f'✅ [MEDIA PROXY] Download do S3 concluído!')
+            logger.info(f'   📦 [MEDIA PROXY] S3 Path: {s3_path}')
+            logger.info(f'   📄 [MEDIA PROXY] Content-Type: {content_type}')
+            logger.info(f'   📏 [MEDIA PROXY] Size: {len(content)} bytes ({len(content) / 1024:.2f} KB)')
+            
+        except Exception as e:
+            logger.error(f'❌ [MEDIA PROXY] Erro ao acessar S3: {e}', exc_info=True)
+            return JsonResponse({'error': f'Erro ao acessar S3: {str(e)}'}, status=500)
+    
+    # ✅ Se for URL externa (WhatsApp, etc), baixar via HTTP
+    else:
+        from urllib.parse import unquote
+        
+        # ✅ Garantir que URL está decodificada (pode vir duplo-encoded)
+        try:
+            if '%' in media_url:
+                media_url = unquote(media_url)
+            if '%' in media_url:
+                media_url = unquote(media_url)
+        except Exception as e:
+            logger.warning(f'⚠️ [MEDIA PROXY] Erro ao decodificar URL: {e}, usando original')
+        
+        logger.info(f'🔄 [MEDIA PROXY] Baixando mídia externa:')
+        logger.info(f'   🔗 [MEDIA PROXY] URL completa: {media_url}')
+        logger.info(f'   📌 [MEDIA PROXY] Método: {request.method}')
+        logger.info(f'   📌 [MEDIA PROXY] User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
+        
+        try:
+            with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+                http_response = client.get(media_url)
+                http_response.raise_for_status()
+                
+                content_type = http_response.headers.get('content-type', 'application/octet-stream')
+                content = http_response.content
             
             # ✅ MELHORIA: Detectar Content-Type baseado na extensão se genérico
             # Isso resolve problema de OpaqueResponseBlocking quando S3 retorna application/octet-stream
