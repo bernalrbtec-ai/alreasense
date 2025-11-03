@@ -87,15 +87,20 @@ export function ConversationList() {
     if (!matchesSearch) return false;
     
     // 2. Filtro de departamento (se houver departamento ativo)
-    if (!activeDepartment) return true;
+    if (!activeDepartment) {
+      // ✅ SEM departamento ativo: mostrar TODAS as conversas (inclui novas)
+      return true;
+    }
     
     if (activeDepartment.id === 'inbox') {
       // Inbox: conversas pendentes SEM departamento
+      // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
       // Tratar department como string (ID) ou objeto ou null
       const departmentId = typeof conv.department === 'string' 
         ? conv.department 
         : conv.department?.id || null;
-      return conv.status === 'pending' && !departmentId;
+      // ✅ Permitir conversas pendentes OU que ainda não têm departamento atribuído
+      return (conv.status === 'pending' || !conv.status) && !departmentId;
     } else {
       // Departamento específico: conversas do departamento (qualquer status)
       // ✅ Tratar department como string (ID) ou objeto { id, name }

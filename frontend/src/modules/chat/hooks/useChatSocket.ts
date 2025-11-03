@@ -203,9 +203,17 @@ export function useChatSocket(conversationId?: string) {
             })
           };
           addMessage(updatedMessage as any);
-          console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId, '| URL:', fileUrl.substring(0, 50));
+          console.log('✅ [HOOK] Mensagem atualizada com attachment:', attachmentId);
         } else {
           console.warn('⚠️ [HOOK] Mensagem com attachment não encontrada:', { attachmentId, messageId });
+          // ✅ NOVO: Se mensagem não está na lista (conversa não aberta), buscar do servidor
+          // Isso garante que o attachment será atualizado quando a conversa for aberta
+          if (messageId) {
+            console.log('🔄 [HOOK] Mensagem não encontrada localmente, será atualizada quando conversa for aberta');
+            // Não fazer fetch aqui - será carregado quando conversa for aberta
+            // O attachment já está atualizado no banco, então quando carregar a mensagem,
+            // o serializer já retornará a URL correta
+          }
         }
       }
     };
