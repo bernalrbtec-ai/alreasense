@@ -102,9 +102,15 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     const fileUrl = (attachment.file_url || '').trim();
     const metadata = attachment.metadata || {};
     const hasError = Boolean(metadata.error);
-    const isProcessing = metadata.processing || !fileUrl || 
+    // ✅ IMPORTANTE: Se file_url é válido (proxy), não mostrar como processando
+    // Isso resolve race condition onde attachment foi processado mas metadata ainda tem flag
+    const hasValidUrl = fileUrl && 
+                       !fileUrl.includes('whatsapp.net') && 
+                       !fileUrl.includes('evo.') &&
+                       fileUrl.includes('/api/chat/media-proxy');
+    const isProcessing = !hasValidUrl && (metadata.processing || !fileUrl || 
                          fileUrl.includes('whatsapp.net') || 
-                         fileUrl.includes('evo.');
+                         fileUrl.includes('evo.'));
     
     if (hasError) {
       // Mostrar erro de processamento
@@ -139,7 +145,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           alt={attachment.original_filename}
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
-          onError={(e) => {
+          onError={() => {
             console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', fileUrl);
             // Não esconder imediatamente - pode ser erro temporário de rede
             // Tentar reload uma vez após 1 segundo
@@ -184,9 +190,14 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     const fileUrl = (attachment.file_url || '').trim();
     const metadata = attachment.metadata || {};
     const hasError = Boolean(metadata.error);
-    const isProcessing = metadata.processing || !fileUrl || 
+    // ✅ IMPORTANTE: Se file_url é válido (proxy), não mostrar como processando
+    const hasValidUrl = fileUrl && 
+                       !fileUrl.includes('whatsapp.net') && 
+                       !fileUrl.includes('evo.') &&
+                       fileUrl.includes('/api/chat/media-proxy');
+    const isProcessing = !hasValidUrl && (metadata.processing || !fileUrl || 
                          fileUrl.includes('whatsapp.net') || 
-                         fileUrl.includes('evo.');
+                         fileUrl.includes('evo.'));
     
     if (hasError) {
       // Mostrar erro de processamento
