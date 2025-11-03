@@ -258,13 +258,13 @@ def media_proxy(request):
             logger.info(f'   ✅ [MEDIA PROXY] Status: 200 OK')
             
         except httpx.HTTPStatusError as e:
-        logger.error(
-            f'❌ [MEDIA PROXY] Erro HTTP {e.response.status_code}: {media_url[:80]}...'
-        )
-        return JsonResponse(
-            {'error': f'Erro ao buscar mídia: {e.response.status_code}'},
-            status=502
-        )
+            logger.error(
+                f'❌ [MEDIA PROXY] Erro HTTP {e.response.status_code}: {media_url[:80]}...'
+            )
+            return JsonResponse(
+                {'error': f'Erro ao buscar mídia: {e.response.status_code}'},
+                status=502
+            )
         except httpx.TimeoutException:
             logger.error(f'⏱️ [MEDIA PROXY] Timeout ao baixar: {media_url[:80]}...')
             return JsonResponse({'error': 'Timeout ao baixar mídia'}, status=504)
