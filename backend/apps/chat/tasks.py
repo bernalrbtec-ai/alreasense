@@ -704,20 +704,27 @@ async def start_chat_consumers():
                 except Exception as e:
                     logger.error(f"❌ [CHAT CONSUMER] Erro fetch_profile_pic: {e}", exc_info=True)
         
-        # Consumer: process_incoming_media (novo fluxo: S3 direto + cache Redis)
+        # Consumer: process_incoming_media (novo fluxo: S3 direto - sem cache)
         async def on_process_incoming_media(message: aio_pika.IncomingMessage):
             async with message.process():
                 try:
                     from apps.chat.media_tasks import handle_process_incoming_media
                     payload = json.loads(message.body.decode())
+                    logger.info(f"📥 [CHAT CONSUMER] Recebida task process_incoming_media")
+                    logger.info(f"   📌 tenant_id: {payload.get('tenant_id')}")
+                    logger.info(f"   📌 message_id: {payload.get('message_id')}")
+                    logger.info(f"   📌 media_type: {payload.get('media_type')}")
+                    logger.info(f"   📌 media_url: {payload.get('media_url', '')[:100]}...")
                     await handle_process_incoming_media(
                         tenant_id=payload['tenant_id'],
                         message_id=payload['message_id'],
                         media_url=payload['media_url'],
                         media_type=payload['media_type']
                     )
+                    logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
                 except Exception as e:
                     logger.error(f"❌ [CHAT CONSUMER] Erro process_incoming_media: {e}", exc_info=True)
+                    raise  # ✅ Re-raise para não silenciar erro
         
         # Inicia consumo
         await queue_send.consume(on_send_message)
