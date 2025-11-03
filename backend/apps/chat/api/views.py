@@ -1341,7 +1341,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         try:
             logger.info(f"📤 [UPLOAD] Criando attachment com ID: {attachment_id}")
             
-            attachment = MessageAttachment.objects.create(
+            # ✅ IMPORTANTE: Criar attachment permitindo que o save() gere o hash único
+            # O método save() do modelo já trata colisões de hash automaticamente
+            attachment = MessageAttachment(
                 id=attachment_id,
                 message=message,
                 tenant=request.user.tenant,
@@ -1354,6 +1356,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                 expires_at=timezone.now() + timedelta(days=365),  # 1 ano
                 processing_status='pending'  # Para IA futura
             )
+            # ✅ Usar save() para que o método save() do modelo gere o hash único
+            attachment.save()
             
             logger.info(f"✅ [UPLOAD] Mensagem + Anexo criados")
             logger.info(f"   Message ID: {message.id}")

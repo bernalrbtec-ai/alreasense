@@ -492,6 +492,8 @@ class MessageAttachment(models.Model):
         Define expires_at e gera media_hash/short_url automaticamente.
         """
         import logging
+        from django.db import IntegrityError
+        
         logger = logging.getLogger(__name__)
         
         # 1. Definir expires_at (cache local)
@@ -500,8 +502,44 @@ class MessageAttachment(models.Model):
         
         # 2. Gerar media_hash e short_url se não existir
         if not self.media_hash:
-            self.media_hash = self.generate_media_hash()
-            logger.info(f"🔑 [ATTACHMENT] Hash gerado: {self.media_hash}")
+            # ✅ IMPORTANTE: Gerar hash único evitando colisões
+            max_attempts = 10  # Tentar até 10 vezes para evitar colisão
+            attempt = 0
+            
+            while attempt < max_attempts:
+                try:
+                    new_hash = self.generate_media_hash()
+                    
+                    # ✅ Verificar se hash já existe no banco (evitar IntegrityError)
+                    from django.db import transaction
+                    with transaction.atomic():
+                        # Verificar se já existe outro attachment com esse hash
+                        existing = MessageAttachment.objects.filter(media_hash=new_hash).exclude(id=self.id).exists()
+                        
+                        if not existing:
+                            # Hash único, usar
+                            self.media_hash = new_hash
+                            logger.info(f"🔑 [ATTACHMENT] Hash gerado (tentativa {attempt + 1}): {self.media_hash}")
+                            break
+                        else:
+                            logger.warning(f"⚠️ [ATTACHMENT] Hash colidiu: {new_hash} (tentativa {attempt + 1}/{max_attempts})")
+                            attempt += 1
+                            if attempt >= max_attempts:
+                                # Se falhou muitas vezes, gerar hash mais longo (16 chars ao invés de 12)
+                                import hashlib
+                                import uuid
+                                import time
+                                unique_str = f"{uuid.uuid4().hex}{time.time()}{self.id if self.id else uuid.uuid4()}"
+                                new_hash = hashlib.sha256(unique_str.encode()).hexdigest()[:16]
+                                self.media_hash = new_hash
+                                logger.warning(f"⚠️ [ATTACHMENT] Usando hash estendido (16 chars): {self.media_hash}")
+                                break
+                except IntegrityError:
+                    # Se mesmo assim houver IntegrityError, tentar novamente
+                    logger.warning(f"⚠️ [ATTACHMENT] IntegrityError ao gerar hash (tentativa {attempt + 1}/{max_attempts})")
+                    attempt += 1
+                    if attempt >= max_attempts:
+                        raise
             
             # Gerar short_url (endpoint está em /api/chat/media/)
             from django.conf import settings
@@ -510,8 +548,36 @@ class MessageAttachment(models.Model):
             self.short_url = f"{base_url}/api/chat/media/{self.media_hash}/"
             logger.info(f"🔗 [ATTACHMENT] URL curta gerada: {self.short_url}")
         
-        super().save(*args, **kwargs)
-        logger.info(f"💾 [ATTACHMENT] Salvo no banco: ID={self.id}, hash={self.media_hash}")
+        # ✅ IMPORTANTE: Tentar salvar com tratamento de IntegrityError
+        try:
+            super().save(*args, **kwargs)
+            logger.info(f"💾 [ATTACHMENT] Salvo no banco: ID={self.id}, hash={self.media_hash}")
+        except IntegrityError as e:
+            # ✅ Se IntegrityError por media_hash duplicado, regenerar e tentar novamente
+            if 'media_hash' in str(e) or 'unique constraint' in str(e).lower():
+                logger.warning(f"⚠️ [ATTACHMENT] IntegrityError por hash duplicado! Regenerando hash...")
+                
+                # Forçar regeneração de hash (mesmo que já tenha)
+                old_hash = self.media_hash
+                self.media_hash = None  # Forçar regeneração
+                
+                # Gerar novo hash (usando hash mais longo para garantir unicidade)
+                import hashlib
+                import uuid
+                import time
+                unique_str = f"{uuid.uuid4().hex}{time.time()}{self.id if self.id else uuid.uuid4()}"
+                new_hash = hashlib.sha256(unique_str.encode()).hexdigest()[:16]  # 16 chars para maior segurança
+                self.media_hash = new_hash
+                self.short_url = f"{getattr(settings, 'BASE_URL', 'https://alreasense-backend-production.up.railway.app')}/api/chat/media/{self.media_hash}/"
+                
+                logger.info(f"🔄 [ATTACHMENT] Hash regenerado: {old_hash} → {self.media_hash}")
+                
+                # Tentar salvar novamente
+                super().save(*args, **kwargs)
+                logger.info(f"✅ [ATTACHMENT] Salvo com novo hash: ID={self.id}, hash={self.media_hash}")
+            else:
+                # Re-raise se for outro tipo de IntegrityError
+                raise
     
     def generate_media_hash(self):
         """
