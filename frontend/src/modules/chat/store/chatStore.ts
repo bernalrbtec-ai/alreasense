@@ -61,18 +61,36 @@ export const useChatStore = create<ChatState>((set) => ({
     messages: [] // Limpa mensagens ao trocar conversa
   }),
   addConversation: (conversation) => set((state) => {
+    // ✅ IMPORTANTE: Garantir que conversation tem os campos necessários
+    if (!conversation || !conversation.id) {
+      console.error('❌ [STORE] Tentativa de adicionar conversa inválida:', conversation);
+      return state;
+    }
+    
     // Evitar duplicatas
     const exists = state.conversations.some(c => c.id === conversation.id);
     if (exists) {
       console.log('⚠️ [STORE] Conversa duplicada, ignorando:', conversation.contact_name || conversation.contact_phone);
-      return state;
+      // ✅ MAS: Atualizar conversa existente se dados novos foram recebidos
+      return {
+        conversations: state.conversations.map(c => 
+          c.id === conversation.id ? conversation : c
+        )
+      };
     }
+    
+    // ✅ IMPORTANTE: Garantir que conversation tem status (default 'pending' se não tiver)
+    const conversationWithStatus = {
+      ...conversation,
+      status: conversation.status || 'pending'
+    };
     
     // Adicionar no início da lista (conversas mais recentes primeiro)
     console.log('✅ [STORE] Nova conversa adicionada:', conversation.contact_name || conversation.contact_phone);
     console.log(`   Total de conversas: ${state.conversations.length} → ${state.conversations.length + 1}`);
+    console.log(`   Status: ${conversationWithStatus.status}, Department: ${conversationWithStatus.department || 'null'}`);
     return {
-      conversations: [conversation, ...state.conversations]
+      conversations: [conversationWithStatus, ...state.conversations]
     };
   }),
   updateConversation: (conversation) => set((state) => ({

@@ -37,11 +37,27 @@ def media_proxy(request):
         3. Cacheia no Redis (7 dias)
         4. Retorna conteúdo
     """
+    # ✅ IMPORTANTE: Django já decodifica URL automaticamente, mas garantir que está correta
+    from urllib.parse import unquote
+    
     media_url = request.GET.get('url')
     
     if not media_url:
         logger.warning('📦 [MEDIA PROXY] URL não fornecida')
         return JsonResponse({'error': 'URL é obrigatória'}, status=400)
+    
+    # ✅ Garantir que URL está decodificada (pode vir duplo-encoded)
+    try:
+        # Se ainda estiver encoded, decodificar
+        if '%' in media_url:
+            media_url = unquote(media_url)
+        # Se ainda tiver caracteres encoded, tentar mais uma vez
+        if '%' in media_url:
+            media_url = unquote(media_url)
+    except Exception as e:
+        logger.warning(f'⚠️ [MEDIA PROXY] Erro ao decodificar URL: {e}, usando original')
+    
+    logger.debug(f'🔍 [MEDIA PROXY] URL recebida (decodificada): {media_url[:100]}...')
     
     # Cache key (hash da URL)
     cache_key = f"media:{hashlib.md5(media_url.encode()).hexdigest()}"
