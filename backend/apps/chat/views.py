@@ -81,15 +81,14 @@ def media_proxy(request):
         content = b'' if request.method == 'HEAD' else cached_data['content']
         content_type = cached_data['content_type']
         
-        # ✅ CRUCIAL: Usar StreamingHttpResponse para imagens grandes (cache)
-        # Isso evita problemas de memória e garante que o conteúdo seja enviado corretamente
+        # ✅ CRUCIAL: Para cache, usar HttpResponse simples (já está na memória)
+        # StreamingHttpResponse não é necessário aqui pois já está no cache
         if request.method == 'HEAD':
             response = HttpResponse(status=200, content_type=content_type)
         else:
-            # ✅ Usar BytesIO para garantir que o conteúdo seja binário correto
-            file_stream = BytesIO(content)
-            response = StreamingHttpResponse(
-                iter(lambda: file_stream.read(8192), b''),  # Chunks de 8KB
+            # ✅ Usar HttpResponse direto para conteúdo em cache (mais eficiente)
+            response = HttpResponse(
+                content,
                 content_type=content_type,
                 status=200
             )
@@ -198,16 +197,16 @@ def media_proxy(request):
             logger.warning(f'   Method: {request.method}')
             logger.warning(f'   User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
             
-            # ✅ CRUCIAL: Usar StreamingHttpResponse para imagens grandes
-            # Isso evita problemas de memória e garante que o conteúdo seja enviado corretamente
+            # ✅ CRUCIAL: Usar HttpResponse direto (simples e eficiente)
+            # StreamingHttpResponse pode causar problemas com CORS em alguns browsers
             # Para HEAD requests, retornar HttpResponse vazio
             if request.method == 'HEAD':
                 response = HttpResponse(status=200, content_type=content_type)
             else:
-                # ✅ Usar BytesIO para garantir que o conteúdo seja binário correto
-                file_stream = BytesIO(content)
-                response = StreamingHttpResponse(
-                    iter(lambda: file_stream.read(8192), b''),  # Chunks de 8KB
+                # ✅ Usar HttpResponse direto com content binário
+                # Garante que o conteúdo seja enviado corretamente sem problemas de CORS
+                response = HttpResponse(
+                    content,
                     content_type=content_type,
                     status=200
                 )
