@@ -143,25 +143,42 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         <img
           src={fileUrl}
           alt={attachment.original_filename}
-          crossOrigin="anonymous"
+          // ✅ REMOVIDO: crossOrigin="anonymous" - pode estar causando problema de CORS preflight
+          // Se a imagem não carregar, o servidor já está configurado para aceitar qualquer origem
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
+          onLoad={() => {
+            console.log('✅ [AttachmentPreview] Imagem carregada com sucesso:', {
+              url: fileUrl.substring(0, 100),
+              naturalWidth: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalWidth,
+              naturalHeight: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalHeight
+            });
+          }}
           onError={(e) => {
             const img = e.currentTarget;
             const currentUrl = img.src;
+            const error = (img as any).error;
             
-            // ✅ Log detalhado do erro
+            // ✅ Log MUITO detalhado do erro para debug
             console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', {
-              url: fileUrl,
-              currentSrc: currentUrl,
+              fileUrl: fileUrl.substring(0, 100),
+              currentSrc: currentUrl.substring(0, 100),
               retried: img.dataset.retried,
               naturalWidth: img.naturalWidth,
               naturalHeight: img.naturalHeight,
-              complete: img.complete
+              complete: img.complete,
+              error: error ? {
+                code: error.code,
+                message: error.message,
+                type: error.type
+              } : 'N/A',
+              // Verificar se é problema de CORS/Mixed Content
+              isSameOrigin: new URL(fileUrl, window.location.href).origin === window.location.origin,
+              protocol: new URL(fileUrl, window.location.href).protocol,
+              pageProtocol: window.location.protocol
             });
             
-            // ✅ Não esconder imediatamente - pode ser erro temporário de rede/CORS
-            // Tentar reload uma vez após 1 segundo com cache bust
+            // ✅ Tentar carregar sem crossOrigin primeiro (se não foi tentado)
             if (!img.dataset.retried) {
               img.dataset.retried = 'true';
               console.log('🔄 [AttachmentPreview] Tentando retry após 1 segundo...');
@@ -196,6 +213,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             <img
               src={fileUrl}
               alt={attachment.original_filename}
+              // ✅ REMOVIDO: crossOrigin="anonymous" - mesma razão do img principal
               className="max-w-full max-h-full object-contain"
             />
           </div>
