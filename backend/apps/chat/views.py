@@ -114,6 +114,66 @@ def media_proxy(request):
             logger.error(f'❌ [MEDIA PROXY] Erro ao acessar S3: {e}', exc_info=True)
             return JsonResponse({'error': f'Erro ao acessar S3: {str(e)}'}, status=500)
     
+    # ✅ Resposta comum para S3 e URL externa
+    try:
+        # ✅ DEBUG: Log detalhado dos headers sendo enviados (usar WARNING para garantir visibilidade)
+        logger.warning(f'📤 [MEDIA PROXY] Preparando resposta HTTP:')
+        logger.warning(f'   Content-Type: {content_type}')
+        logger.warning(f'   Content-Length: {len(content)}')
+        logger.warning(f'   Method: {request.method}')
+        logger.warning(f'   User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
+        
+        # ✅ CRUCIAL: Usar HttpResponse direto (simples e eficiente)
+        # StreamingHttpResponse pode causar problemas com CORS em alguns browsers
+        # Para HEAD requests, retornar HttpResponse vazio
+        if request.method == 'HEAD':
+            response = HttpResponse(status=200, content_type=content_type)
+        else:
+            # ✅ Usar HttpResponse direto com content binário
+            # Garante que o conteúdo seja enviado corretamente sem problemas de CORS
+            response = HttpResponse(
+                content,
+                content_type=content_type,
+                status=200
+            )
+        
+        # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
+        # 1. Content-Type primeiro (pode ser sobrescrito, então definir duas vezes)
+        response['Content-Type'] = content_type
+        
+        # 2. CORS headers (OBRIGATÓRIOS para evitar OpaqueResponseBlocking)
+        # ✅ IMPORTANTE: Não usar '*' com credenciais, mas este endpoint não usa credenciais
+        response['Access-Control-Allow-Origin'] = '*'
+        response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
+        response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size, Accept-Ranges'
+        # ✅ CRUCIAL: Não definir Access-Control-Allow-Credentials se usar '*'
+        # response['Access-Control-Allow-Credentials'] = 'true'  # NÃO USAR com '*'
+        
+        # 3. Cache headers
+        response['Cache-Control'] = 'public, max-age=604800'
+        
+        # 4. Custom headers
+        response['X-Cache'] = 'DIRECT'  # ✅ Sem cache - download direto
+        response['X-Content-Size'] = str(len(content))
+        if request.method != 'HEAD':
+            response['Content-Length'] = str(len(content))
+            response['Accept-Ranges'] = 'bytes'
+        
+        # ✅ DEBUG: Verificar headers finais (usar WARNING para garantir visibilidade)
+        logger.warning(f'📤 [MEDIA PROXY] Headers finais da resposta:')
+        for key, value in response.items():
+            if key.lower() in ['content-type', 'content-length', 'cache-control', 'access-control-allow-origin', 'access-control-expose-headers', 'access-control-allow-methods']:
+                logger.warning(f'   {key}: {value}')
+        
+        # ✅ CRUCIAL: Verificar se Content-Type foi definido corretamente
+        if response.get('Content-Type') != content_type:
+            logger.error(f'❌ [MEDIA PROXY] Content-Type não corresponde! Esperado: {content_type}, Atual: {response.get("Content-Type")}')
+            # Forçar correção
+            response['Content-Type'] = content_type
+        
+        return response
+    
     # ✅ Se for URL externa (WhatsApp, etc), baixar via HTTP
     else:
         from urllib.parse import unquote
@@ -191,73 +251,13 @@ def media_proxy(request):
                     if content_type != 'application/octet-stream':
                         logger.info(f'🔍 [MEDIA PROXY] Content-Type detectado pelo magic number: {content_type}')
             
-            logger.info(f'✅ [MEDIA PROXY] Download concluído!')
+            logger.info(f'✅ [MEDIA PROXY] Download externo concluído!')
             logger.info(f'   🔗 [MEDIA PROXY] URL original: {media_url}')
             logger.info(f'   📄 [MEDIA PROXY] Content-Type: {content_type}')
             logger.info(f'   📏 [MEDIA PROXY] Size: {len(content)} bytes ({len(content) / 1024:.2f} KB)')
             logger.info(f'   ✅ [MEDIA PROXY] Status: 200 OK')
             
-            # ✅ REMOVIDO: Cache Redis - simplificar fluxo e facilitar debug
-            
-            # ✅ DEBUG: Log detalhado dos headers sendo enviados (usar WARNING para garantir visibilidade)
-            logger.warning(f'📤 [MEDIA PROXY] Preparando resposta HTTP:')
-            logger.warning(f'   Content-Type: {content_type}')
-            logger.warning(f'   Content-Length: {len(content)}')
-            logger.warning(f'   Method: {request.method}')
-            logger.warning(f'   User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
-            
-            # ✅ CRUCIAL: Usar HttpResponse direto (simples e eficiente)
-            # StreamingHttpResponse pode causar problemas com CORS em alguns browsers
-            # Para HEAD requests, retornar HttpResponse vazio
-            if request.method == 'HEAD':
-                response = HttpResponse(status=200, content_type=content_type)
-            else:
-                # ✅ Usar HttpResponse direto com content binário
-                # Garante que o conteúdo seja enviado corretamente sem problemas de CORS
-                response = HttpResponse(
-                    content,
-                    content_type=content_type,
-                    status=200
-                )
-            
-            # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
-            # 1. Content-Type primeiro (pode ser sobrescrito, então definir duas vezes)
-            response['Content-Type'] = content_type
-            
-            # 2. CORS headers (OBRIGATÓRIOS para evitar OpaqueResponseBlocking)
-            # ✅ IMPORTANTE: Não usar '*' com credenciais, mas este endpoint não usa credenciais
-            response['Access-Control-Allow-Origin'] = '*'
-            response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
-            response['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
-            response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size, Accept-Ranges'
-            # ✅ CRUCIAL: Não definir Access-Control-Allow-Credentials se usar '*'
-            # response['Access-Control-Allow-Credentials'] = 'true'  # NÃO USAR com '*'
-            
-            # 3. Cache headers
-            response['Cache-Control'] = 'public, max-age=604800'
-            
-            # 4. Custom headers
-            response['X-Cache'] = 'DIRECT'  # ✅ Sem cache - download direto
-            response['X-Content-Size'] = str(len(content))
-            if request.method != 'HEAD':
-                response['Content-Length'] = str(len(content))
-                response['Accept-Ranges'] = 'bytes'
-            
-            # ✅ DEBUG: Verificar headers finais (usar WARNING para garantir visibilidade)
-            logger.warning(f'📤 [MEDIA PROXY] Headers finais da resposta:')
-            for key, value in response.items():
-                if key.lower() in ['content-type', 'content-length', 'cache-control', 'access-control-allow-origin', 'access-control-expose-headers', 'access-control-allow-methods']:
-                    logger.warning(f'   {key}: {value}')
-            
-            # ✅ CRUCIAL: Verificar se Content-Type foi definido corretamente
-            if response.get('Content-Type') != content_type:
-                logger.error(f'❌ [MEDIA PROXY] Content-Type não corresponde! Esperado: {content_type}, Atual: {response.get("Content-Type")}')
-                # Forçar correção
-                response['Content-Type'] = content_type
-            
-            return response
-            
-    except httpx.HTTPStatusError as e:
+        except httpx.HTTPStatusError as e:
         logger.error(
             f'❌ [MEDIA PROXY] Erro HTTP {e.response.status_code}: {media_url[:80]}...'
         )
@@ -265,15 +265,16 @@ def media_proxy(request):
             {'error': f'Erro ao buscar mídia: {e.response.status_code}'},
             status=502
         )
-    except httpx.TimeoutException:
-        logger.error(f'⏱️ [MEDIA PROXY] Timeout ao baixar: {media_url[:80]}...')
-        return JsonResponse({'error': 'Timeout ao baixar mídia'}, status=504)
+        except httpx.TimeoutException:
+            logger.error(f'⏱️ [MEDIA PROXY] Timeout ao baixar: {media_url[:80]}...')
+            return JsonResponse({'error': 'Timeout ao baixar mídia'}, status=504)
+        except Exception as e:
+            logger.error(f'❌ [MEDIA PROXY] Erro ao baixar URL externa: {e}', exc_info=True)
+            return JsonResponse({'error': f'Erro ao buscar mídia: {str(e)}'}, status=500)
+    
     except Exception as e:
-        logger.error(
-            f'❌ [MEDIA PROXY] Erro: {str(e)} | URL: {media_url[:80]}...',
-            exc_info=True
-        )
-        return JsonResponse({'error': f'Erro ao buscar mídia: {str(e)}'}, status=500)
+        logger.error(f'❌ [MEDIA PROXY] Erro geral: {e}', exc_info=True)
+        return JsonResponse({'error': f'Erro ao processar mídia: {str(e)}'}, status=500)
 
 
 # Alias para compatibilidade (pode ser removido depois)
