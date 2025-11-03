@@ -314,7 +314,7 @@ def handle_message_upsert(data, tenant, connection=None):
                         update_fields = []
                         
                         # 1️⃣ Buscar foto de perfil
-                        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance.name}"
+                        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
                         
                         with httpx.Client(timeout=5.0) as client:
                             response = client.get(
@@ -344,7 +344,7 @@ def handle_message_upsert(data, tenant, connection=None):
                         # 2️⃣ Buscar nome do contato (se não tiver)
                         if not conversation.contact_name:
                             logger.info(f"👤 [INDIVIDUAL] Nome vazio, buscando na API...")
-                            endpoint = f"{base_url}/chat/whatsappNumbers/{instance.name}"
+                            endpoint = f"{base_url}/chat/whatsappNumbers/{instance_name}"
                             
                             with httpx.Client(timeout=5.0) as client:
                                 try:
@@ -540,14 +540,15 @@ def handle_message_upsert(data, tenant, connection=None):
         if status_changed or name_or_pic_changed:
             try:
                 from apps.chat.utils.serialization import serialize_conversation_for_ws
-                from channels.layers import get_channel_layer
+                # ✅ Usar import global (linha 12) ao invés de import local
+                # from channels.layers import get_channel_layer  # ❌ REMOVIDO: causava UnboundLocalError
                 from asgiref.sync import async_to_sync
                 
                 # ✅ Recarregar do banco para garantir dados atualizados
                 conversation.refresh_from_db()
                 conv_data_serializable = serialize_conversation_for_ws(conversation)
                 
-                channel_layer = get_channel_layer()
+                channel_layer = get_channel_layer()  # ✅ Usa import global (linha 12)
                 tenant_group = f"chat_tenant_{tenant.id}"
                 
                 async_to_sync(channel_layer.group_send)(
