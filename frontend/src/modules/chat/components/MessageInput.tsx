@@ -88,8 +88,15 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       
       if (success) {
         setMessage('');
+        toast.success('Mensagem enviada!', {
+          duration: 2000,
+          position: 'bottom-right'
+        });
       } else {
-        toast.error('Erro ao enviar mensagem. WebSocket desconectado.');
+        toast.error('Erro ao enviar mensagem. WebSocket desconectado.', {
+          duration: 4000,
+          position: 'bottom-right'
+        });
       }
     } catch (error: any) {
       console.error('Erro ao enviar mensagem:', error);
@@ -116,12 +123,13 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
   }
 
   return (
-    <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300 relative">
+    <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300 relative shadow-sm">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
         onClick={() => setIncludeSignature(!includeSignature)}
         className={`
-          p-2 rounded-full transition-colors flex-shrink-0
+          p-2 rounded-full transition-all duration-150 flex-shrink-0
+          shadow-sm hover:shadow-md active:scale-95
           ${includeSignature 
             ? 'text-green-600 hover:bg-green-100 bg-green-50' 
             : 'text-gray-500 hover:bg-gray-200'
@@ -134,7 +142,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
       {/* Attach button (placeholder) */}
       <button
-        className="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
+        className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md"
         title="Anexar arquivo"
       >
         <Paperclip className="w-6 h-6 text-gray-600" />
@@ -145,8 +153,8 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         <button
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
           className={`
-            p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0
-            ${showEmojiPicker ? 'bg-gray-200' : ''}
+            p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md
+            ${showEmojiPicker ? 'bg-gray-200 shadow-md' : ''}
           `}
           title="Emoji"
         >
@@ -155,25 +163,28 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         
         {/* Emoji Picker */}
         {showEmojiPicker && (
-          <EmojiPicker
-            onSelect={handleEmojiSelect}
-            onClose={() => setShowEmojiPicker(false)}
-          />
+          <div className="animate-scale-in">
+            <EmojiPicker
+              onSelect={handleEmojiSelect}
+              onClose={() => setShowEmojiPicker(false)}
+            />
+          </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="flex-1 bg-white rounded-lg shadow-sm">
+      <div className="flex-1 bg-white rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg focus-within:shadow-lg focus-within:ring-2 focus-within:ring-[#00a884]/20">
         <textarea
           value={message}
           onChange={(e) => handleMessageChange(e.target.value)}
           onKeyPress={handleKeyPress}
           placeholder="Digite uma mensagem"
           rows={1}
-          className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500"
+          className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
           style={{
             maxHeight: '120px',
-            minHeight: '44px'
+            minHeight: '44px',
+            transition: 'height 0.2s ease-out'
           }}
           disabled={sending}
         />
@@ -191,10 +202,17 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       <button
         onClick={handleSend}
         disabled={!message.trim() || sending || !isConnected}
-        className="p-2 bg-[#00a884] hover:bg-[#008f6f] rounded-full transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed"
+        className={`
+          p-2 rounded-full transition-all duration-150 flex-shrink-0
+          shadow-md hover:shadow-lg active:scale-95
+          ${message.trim() && !sending && isConnected
+            ? 'bg-[#00a884] hover:bg-[#008f6f]'
+            : 'bg-gray-300 cursor-not-allowed opacity-50'
+          }
+        `}
         title={isConnected ? "Enviar" : "Conectando..."}
       >
-        <Send className="w-6 h-6 text-white" />
+        <Send className={`w-6 h-6 ${message.trim() && !sending && isConnected ? 'text-white' : 'text-gray-500'}`} />
       </button>
     </div>
   );

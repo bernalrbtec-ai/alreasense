@@ -131,7 +131,7 @@ export function ConversationList() {
         </div>
         <button
           onClick={() => setShowNewConversation(true)}
-          className="flex-shrink-0 p-2 hover:bg-gray-100 rounded-full transition-all active:scale-95"
+          className="flex-shrink-0 p-2 hover:bg-gray-100 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
           title="Nova conversa"
         >
           <Plus className="w-5 h-5 text-gray-600" />
@@ -141,25 +141,39 @@ export function ConversationList() {
       {/* Conversations */}
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         {loading ? (
-          <div className="flex items-center justify-center py-8">
-            <div className="text-sm text-gray-500">Carregando...</div>
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="flex gap-2 mb-3">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
+            <p className="text-sm text-gray-500">Carregando conversas...</p>
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4">
-            <div className="text-gray-400 text-center">
-              <p className="text-sm">Nenhuma conversa</p>
-              <p className="text-xs mt-1">Inicie uma nova conversa para começar</p>
+            <div className="w-24 h-24 mb-4 opacity-20">
+              <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400 w-full h-full">
+                <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
+              </svg>
             </div>
+            <h3 className="text-base font-medium text-gray-700 mb-2">Nenhuma conversa</h3>
+            <p className="text-sm text-gray-500 text-center max-w-xs">
+              Inicie uma nova conversa para começar!
+            </p>
           </div>
         ) : (
-          filteredConversations.map((conv) => (
+          filteredConversations.map((conv, index) => (
             <button
               key={conv.id}
               onClick={() => setActiveConversation(conv)}
               className={`
-                w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 hover:bg-[#f0f2f5] transition-colors border-b border-gray-100
-                ${activeConversation?.id === conv.id ? 'bg-[#f0f2f5]' : ''}
+                w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 
+                hover:bg-[#f0f2f5] active:scale-[0.98] 
+                transition-all duration-150 border-b border-gray-100
+                animate-fade-in
+                ${activeConversation?.id === conv.id ? 'bg-[#f0f2f5] shadow-sm' : ''}
               `}
+              style={{ animationDelay: `${index * 30}ms` }}
             >
               {/* Avatar com foto - responsivo */}
               <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden relative">

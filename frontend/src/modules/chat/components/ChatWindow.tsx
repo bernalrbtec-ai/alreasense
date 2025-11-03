@@ -131,12 +131,18 @@ export function ChatWindow() {
       const { removeConversation } = useChatStore.getState();
       removeConversation(activeConversation.id);
       
-      toast.success('Conversa fechada!');
+      toast.success('Conversa fechada!', {
+        duration: 2000,
+        position: 'bottom-right'
+      });
       setShowMenu(false);
       setActiveConversation(null);
     } catch (error) {
       console.error('Erro ao fechar conversa:', error);
-      toast.error('Erro ao fechar conversa');
+      toast.error('Erro ao fechar conversa', {
+        duration: 4000,
+        position: 'bottom-right'
+      });
     }
   };
 
@@ -147,11 +153,17 @@ export function ChatWindow() {
       await api.patch(`/chat/conversations/${activeConversation.id}/`, {
         status: 'closed'
       });
-      toast.success('Conversa marcada como resolvida!');
+      toast.success('Conversa marcada como resolvida!', {
+        duration: 2000,
+        position: 'bottom-right'
+      });
       setShowMenu(false);
     } catch (error) {
       console.error('Erro ao marcar como resolvida:', error);
-      toast.error('Erro ao marcar como resolvida');
+      toast.error('Erro ao marcar como resolvida', {
+        duration: 4000,
+        position: 'bottom-right'
+      });
     }
   };
 
@@ -175,14 +187,14 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#efeae2]">
+    <div className="flex flex-col h-full w-full bg-[#efeae2] animate-fade-in">
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300">
+      <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300 shadow-sm">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Botão Voltar (mobile) */}
           <button
             onClick={() => setActiveConversation(null)}
-            className="md:hidden p-2 hover:bg-gray-200 rounded-full transition-colors"
+            className="md:hidden p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
             title="Voltar"
           >
             <ArrowLeft className="w-5 h-5 text-gray-600" />
@@ -263,7 +275,10 @@ export function ChatWindow() {
           {/* Botão de Notificações */}
           <NotificationToggle />
           
-          <button className="p-2 hover:bg-gray-200 rounded-full transition-colors" title="Buscar">
+          <button 
+            className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md" 
+            title="Buscar"
+          >
             <Search className="w-5 h-5 text-gray-600" />
           </button>
           
@@ -271,14 +286,14 @@ export function ChatWindow() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+              className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
               title="Menu"
             >
               <MoreVertical className="w-5 h-5 text-gray-600" />
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
                 <button
                   onClick={() => {
                     setShowInfoModal(true);
@@ -338,8 +353,8 @@ export function ChatWindow() {
 
       {/* Modals */}
       {showInfoModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-2xl w-full max-w-md">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scale-in">
             <div className="flex items-center justify-between px-6 py-4 border-b">
               <h2 className="text-lg font-semibold text-gray-900">Informações da Conversa</h2>
               <button

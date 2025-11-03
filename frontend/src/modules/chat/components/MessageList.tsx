@@ -1,7 +1,7 @@
 /**
- * Lista de mensagens - Estilo WhatsApp Web
+ * Lista de mensagens - Estilo WhatsApp Web com UX Moderna
  */
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
@@ -14,12 +14,17 @@ export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
+  const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     if (!activeConversation?.id) return;
 
     const fetchMessages = async () => {
       try {
+        setIsLoading(true);
+        setVisibleMessages(new Set()); // Reset visibilidade ao trocar conversa
+        
         const response = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
           params: { ordering: 'created_at' }
         });
@@ -67,31 +72,59 @@ export function MessageList() {
         
         setMessages(mergedMessages);
         
+        // Animar mensagens com fade-in sequencial
+        setTimeout(() => {
+          mergedMessages.forEach((msg, index) => {
+            setTimeout(() => {
+              setVisibleMessages(prev => new Set([...prev, msg.id]));
+            }, index * 20); // 20ms entre cada mensagem para efeito cascata
+          });
+        }, 50);
+        
         // Scroll to bottom
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
       } catch (error) {
         console.error('❌ Erro ao carregar mensagens:', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
     fetchMessages();
   }, [activeConversation?.id, setMessages]);
 
-  // Auto-scroll quando novas mensagens chegam
+  // Auto-scroll quando novas mensagens chegam + fade-in para novas mensagens
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    if (messages.length === 0) return;
+    
+    // Identificar novas mensagens (não visíveis ainda)
+    const newMessages = messages.filter(msg => !visibleMessages.has(msg.id));
+    
+    if (newMessages.length > 0) {
+      // Adicionar fade-in para novas mensagens
+      newMessages.forEach((msg, index) => {
+        setTimeout(() => {
+          setVisibleMessages(prev => new Set([...prev, msg.id]));
+        }, index * 50); // 50ms entre cada nova mensagem
+      });
+    }
+    
+    // Scroll suave ao final
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  }, [messages, visibleMessages]);
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-gray-400" />;
+        return <Clock className="w-4 h-4 text-gray-400 animate-pulse" />;
       case 'sent':
         return <Check className="w-4 h-4 text-gray-400" />;
       case 'delivered':
-        return <CheckCheck className="w-4 h-4 text-gray-400" />;
+        return <CheckCheck className="w-4 h-4 text-gray-500" />;
       case 'seen':
         return <CheckCheck className="w-4 h-4 text-blue-500" />;
       default:
@@ -185,20 +218,44 @@ export function MessageList() {
         backgroundImage: 'url("data:image/svg+xml,%3Csvg width=\'100\' height=\'100\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cpath d=\'M0 0h100v100H0z\' fill=\'%23e5ddd5\'/%3E%3Cpath d=\'M20 10h60v2H20zm0 15h60v2H20zm0 15h40v2H20z\' fill=\'%23ffffff\' opacity=\'0.1\'/%3E%3C/svg%3E")',
       }}
     >
-      {messages.length === 0 ? (
+      {isLoading ? (
         <div className="flex items-center justify-center h-full">
-          <p className="text-sm text-gray-500">Nenhuma mensagem ainda. Comece a conversa!</p>
+          <div className="flex flex-col items-center gap-3">
+            <div className="flex gap-2">
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+              <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+            </div>
+            <p className="text-sm text-gray-500">Carregando mensagens...</p>
+          </div>
+        </div>
+      ) : messages.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-full p-8">
+          <div className="w-32 h-32 mb-4 opacity-20">
+            <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400 w-full h-full">
+              <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-700 mb-2">Nenhuma mensagem ainda</h3>
+          <p className="text-sm text-gray-500 text-center max-w-xs">
+            Comece a conversa enviando uma mensagem!
+          </p>
         </div>
       ) : (
         <>
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}
+              className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'} ${
+                visibleMessages.has(msg.id) 
+                  ? 'opacity-100 translate-y-0' 
+                  : 'opacity-0 translate-y-2'
+              } transition-all duration-300 ease-out`}
             >
               <div
                 className={`
-                  max-w-[65%] md:max-w-md rounded-lg px-3 py-2 shadow-sm
+                  max-w-[65%] md:max-w-md rounded-2xl px-4 py-2.5 shadow-md
+                  transform transition-all duration-200 hover:shadow-lg
                   ${msg.direction === 'outgoing'
                     ? 'bg-[#d9fdd3] text-gray-900'
                     : 'bg-white text-gray-900'
@@ -246,18 +303,18 @@ export function MessageList() {
             </div>
           ))}
           
-          {/* Indicador de digitando */}
+          {/* Indicador de digitando - Melhorado */}
           {typing && (
-            <div className="flex justify-start">
-              <div className="bg-white rounded-lg px-4 py-3 shadow-sm">
-                <div className="flex items-center gap-1">
-                  <div className="flex gap-1">
+            <div className="flex justify-start animate-fade-in">
+              <div className="bg-white rounded-2xl px-4 py-3 shadow-md">
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-1 px-1">
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
                     <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                   </div>
                   {typingUser && (
-                    <span className="text-xs text-gray-500 ml-2">{typingUser} está digitando...</span>
+                    <span className="text-xs text-gray-500">{typingUser} está digitando...</span>
                   )}
                 </div>
               </div>

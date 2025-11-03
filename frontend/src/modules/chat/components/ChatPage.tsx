@@ -29,14 +29,14 @@ export function ChatPage() {
             ? 'hidden md:flex md:w-[280px] lg:w-[300px]' 
             : 'flex w-full md:w-[340px] lg:w-[360px]'
           }
-          flex-shrink-0 border-r border-gray-200 transition-all duration-300
+          flex-shrink-0 border-r border-gray-200 transition-all duration-300 ease-in-out
         `}>
           <ConversationList />
         </div>
         
         {/* Chat window - EXPANDE AO MÁXIMO quando conversa aberta */}
         <div className={`
-          ${activeConversation ? 'flex flex-1' : 'hidden md:flex md:flex-1'}
+          ${activeConversation ? 'flex flex-1 animate-slide-in-right' : 'hidden md:flex md:flex-1'}
           min-w-0 max-w-full
         `}>
           <ChatWindow />
