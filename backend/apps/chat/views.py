@@ -7,7 +7,8 @@ Endpoints:
 import httpx
 import logging
 import hashlib
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
+from io import BytesIO
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.core.cache import cache
@@ -80,12 +81,18 @@ def media_proxy(request):
         content = b'' if request.method == 'HEAD' else cached_data['content']
         content_type = cached_data['content_type']
         
-        # ✅ CRUCIAL: Usar HttpResponse com content_type explicitamente
-        response = HttpResponse(
-            content,
-            content_type=content_type,
-            status=200
-        )
+        # ✅ CRUCIAL: Usar StreamingHttpResponse para imagens grandes (cache)
+        # Isso evita problemas de memória e garante que o conteúdo seja enviado corretamente
+        if request.method == 'HEAD':
+            response = HttpResponse(status=200, content_type=content_type)
+        else:
+            # ✅ Usar BytesIO para garantir que o conteúdo seja binário correto
+            file_stream = BytesIO(content)
+            response = StreamingHttpResponse(
+                iter(lambda: file_stream.read(8192), b''),  # Chunks de 8KB
+                content_type=content_type,
+                status=200
+            )
         
         # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
         # 1. Content-Type primeiro
@@ -94,8 +101,8 @@ def media_proxy(request):
         # 2. CORS headers (OBRIGATÓRIOS para evitar OpaqueResponseBlocking)
         response['Access-Control-Allow-Origin'] = '*'
         response['Access-Control-Allow-Methods'] = 'GET, HEAD, OPTIONS'
-        response['Access-Control-Allow-Headers'] = 'Content-Type, Accept'
-        response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size'
+        response['Access-Control-Allow-Headers'] = 'Content-Type, Accept, Range'
+        response['Access-Control-Expose-Headers'] = 'Content-Type, Content-Length, X-Cache, X-Content-Size, Accept-Ranges'
         
         # 3. Cache headers
         response['Cache-Control'] = 'public, max-age=604800'  # 7 dias
@@ -103,7 +110,9 @@ def media_proxy(request):
         # 4. Custom headers
         response['X-Cache'] = 'HIT'
         response['X-Content-Size'] = str(len(cached_data['content']))
-        response['Content-Length'] = str(len(cached_data['content']))
+        if request.method != 'HEAD':
+            response['Content-Length'] = str(len(cached_data['content']))
+            response['Accept-Ranges'] = 'bytes'
         
         return response
     
