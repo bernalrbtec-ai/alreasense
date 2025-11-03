@@ -20,7 +20,7 @@ export function useChatSocket(conversationId?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const { token, user } = useAuthStore();
   const { addMessage, updateMessageStatus, setTyping, updateConversation } = useChatStore();
-  const { updateAttachment } = useChatStore.getState();
+  // ✅ REMOVIDO: updateAttachment não é mais usado aqui (movido para useTenantSocket)
   const { showNotification, isEnabled: notificationsEnabled } = useDesktopNotifications();
 
   // Conectar ao manager global (1 vez por sessão)
