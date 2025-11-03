@@ -157,6 +157,7 @@ async def handle_send_message(message_id: str):
     from apps.chat.models import Message
     from apps.notifications.models import WhatsAppInstance
     from channels.layers import get_channel_layer
+    from channels.db import database_sync_to_async
     from asgiref.sync import sync_to_async
     import httpx
     
@@ -164,9 +165,17 @@ async def handle_send_message(message_id: str):
     logger.info(f"   Message ID: {message_id}")
     
     try:
-        # Busca mensagem
+        # Busca mensagem com todos os relacionamentos necessários para serialização
         message = await sync_to_async(
-            Message.objects.select_related('conversation', 'conversation__tenant', 'sender').get
+            Message.objects.select_related(
+                'conversation', 
+                'conversation__tenant', 
+                'sender',
+                'sender__tenant'  # ✅ Necessário para UserSerializer
+            ).prefetch_related(
+                'attachments',
+                'sender__departments'  # ✅ Necessário para UserSerializer.get_department_ids
+            ).get
         )(id=message_id)
         
         logger.info(f"✅ [CHAT ENVIO] Mensagem encontrada no banco")
@@ -440,7 +449,8 @@ async def handle_send_message(message_id: str):
         
         from apps.chat.utils.serialization import serialize_message_for_ws
         
-        message_data_serializable = serialize_message_for_ws(message)
+        # ✅ Usar database_sync_to_async para serialização (MessageSerializer acessa relacionamentos do DB)
+        message_data_serializable = await database_sync_to_async(serialize_message_for_ws)(message)
         
         await channel_layer.group_send(
             room_group_name,
