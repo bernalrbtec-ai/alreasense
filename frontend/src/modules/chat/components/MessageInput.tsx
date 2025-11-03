@@ -99,7 +99,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       if (selectedFile) {
         console.log('📤 [SEND] Enviando arquivo primeiro:', selectedFile.name);
         await handleFileUpload(selectedFile);
-        // Arquivo será limpo no onUploadComplete
+        // ✅ Arquivo será limpo automaticamente no handleFileUpload após sucesso
       }
 
       // 2️⃣ Se houver texto, enviar mensagem
@@ -213,6 +213,12 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         duration: 2000,
         position: 'bottom-right'
       });
+
+      // ✅ IMPORTANTE: Limpar arquivo após upload bem-sucedido
+      // Isso garante que o card desapareça mesmo quando chamado via handleSend
+      if (selectedFile === file) {
+        setSelectedFile(null);
+      }
     } catch (error: any) {
       console.error('❌ [FILE] Erro ao enviar arquivo:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Erro ao enviar arquivo';
