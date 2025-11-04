@@ -71,7 +71,7 @@ def evolution_webhook(request):
         
         # Roteamento por tipo de evento
         if event_type == 'messages.upsert':
-            handle_message_upsert(data, connection.tenant)
+            handle_message_upsert(data, connection.tenant, connection=connection)
         elif event_type == 'messages.update':
             handle_message_update(data, connection.tenant)
         else:
@@ -657,32 +657,23 @@ def handle_message_upsert(data, tenant, connection=None):
                     logger.info(f"📎 [WEBHOOK] URL temporária: {attachment_url[:100]}...")
                     
                     # Força commit antes de enfileirar processamento direto (S3 direto - sem cache)
-                    # ✅ MELHORIA: Buscar informações da conexão Evolution para descriptografar arquivos
-                    evolution_connection = None
+                    # ✅ MELHORIA: Usar conexão Evolution já encontrada no webhook para descriptografar arquivos
                     instance_name_for_media = None
                     api_key_for_media = None
                     evolution_api_url_for_media = None
                     
-                    try:
-                        # Buscar conexão Evolution ativa
-                        from apps.connections.models import EvolutionConnection
-                        evolution_connection = EvolutionConnection.objects.filter(
-                            tenant=tenant,
-                            is_active=True
-                        ).first()
+                    # ✅ CORREÇÃO: Usar conexão já encontrada no webhook (passada como parâmetro)
+                    if connection:
+                        instance_name_for_media = instance_name  # Usar instance_name do webhook
+                        api_key_for_media = connection.api_key
+                        evolution_api_url_for_media = connection.api_url or connection.base_url
                         
-                        if evolution_connection:
-                            instance_name_for_media = instance_name  # Usar instance_name do webhook
-                            api_key_for_media = evolution_connection.api_key
-                            evolution_api_url_for_media = evolution_connection.api_url or evolution_connection.base_url
-                            
-                            logger.info(f"✅ [WEBHOOK] Informações Evolution encontradas para descriptografar mídia:")
-                            logger.info(f"   📌 Instance: {instance_name_for_media}")
-                            logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
-                        else:
-                            logger.warning(f"⚠️ [WEBHOOK] Conexão Evolution não encontrada, usando URL original")
-                    except Exception as e:
-                        logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão Evolution: {e}")
+                        logger.info(f"✅ [WEBHOOK] Informações Evolution encontradas para descriptografar mídia:")
+                        logger.info(f"   📌 Instance: {instance_name_for_media}")
+                        logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                        logger.info(f"   📌 Connection: {connection.name}")
+                    else:
+                        logger.warning(f"⚠️ [WEBHOOK] Conexão Evolution não disponível, usando URL original")
                     
                     def enqueue_process():
                         logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
