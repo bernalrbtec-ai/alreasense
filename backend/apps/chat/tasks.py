@@ -117,13 +117,17 @@ class process_incoming_media:
     """Producer: Processa mídia recebida do WhatsApp."""
     
     @staticmethod
-    def delay(tenant_id: str, message_id: str, media_url: str, media_type: str):
+    def delay(tenant_id: str, message_id: str, media_url: str, media_type: str, 
+              instance_name: str = None, api_key: str = None, evolution_api_url: str = None):
         """Enfileira processamento de mídia recebida."""
         delay(QUEUE_PROCESS_INCOMING_MEDIA, {
             'tenant_id': tenant_id,
             'message_id': message_id,
             'media_url': media_url,
-            'media_type': media_type
+            'media_type': media_type,
+            'instance_name': instance_name,
+            'api_key': api_key,
+            'evolution_api_url': evolution_api_url
         })
 
 
@@ -715,11 +719,15 @@ async def start_chat_consumers():
                     logger.info(f"   📌 message_id: {payload.get('message_id')}")
                     logger.info(f"   📌 media_type: {payload.get('media_type')}")
                     logger.info(f"   📌 media_url: {payload.get('media_url', '')[:100]}...")
+                    logger.info(f"   📌 instance_name: {payload.get('instance_name')}")
                     await handle_process_incoming_media(
                         tenant_id=payload['tenant_id'],
                         message_id=payload['message_id'],
                         media_url=payload['media_url'],
-                        media_type=payload['media_type']
+                        media_type=payload['media_type'],
+                        instance_name=payload.get('instance_name'),
+                        api_key=payload.get('api_key'),
+                        evolution_api_url=payload.get('evolution_api_url')
                     )
                     logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
                 except Exception as e:

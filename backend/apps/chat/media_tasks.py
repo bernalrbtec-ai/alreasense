@@ -121,24 +121,31 @@ async def handle_process_incoming_media(
     tenant_id: str,
     message_id: str,
     media_url: str,
-    media_type: str
+    media_type: str,
+    instance_name: str = None,
+    api_key: str = None,
+    evolution_api_url: str = None
 ):
     """
     Handler: Processa mídia recebida do WhatsApp.
     
     Fluxo (padronizado com ENVIO - sem cache):
-        1. Baixa mídia da URL temporária do WhatsApp (com retry)
-        2. Valida tamanho antes/depois de baixar
-        3. Converte áudio OGG/WEBM → MP3 (se necessário)
-        4. Faz upload direto para S3 (sem processar imagem)
-        5. Atualiza MessageAttachment placeholder com file_url e file_path
-        6. Broadcast via WebSocket
+        1. ✅ Tenta obter URL descriptografada do Evolution API (se disponível)
+        2. Baixa mídia da URL (descriptografada ou direta do WhatsApp)
+        3. Valida tamanho antes/depois de baixar
+        4. Converte áudio OGG/WEBM → MP3 (se necessário)
+        5. Faz upload direto para S3 (sem processar imagem)
+        6. Atualiza MessageAttachment placeholder com file_url e file_path
+        7. Broadcast via WebSocket
     
     Args:
         tenant_id: UUID do tenant
         message_id: UUID da mensagem
-        media_url: URL temporária do WhatsApp
+        media_url: URL temporária do WhatsApp (pode estar criptografada)
         media_type: Tipo de mídia (image, audio, document, video)
+        instance_name: Nome da instância Evolution (opcional, para descriptografar)
+        api_key: API key do Evolution (opcional, para descriptografar)
+        evolution_api_url: URL base do Evolution API (opcional, para descriptografar)
     """
     from apps.chat.models import Message, MessageAttachment
     
@@ -146,6 +153,45 @@ async def handle_process_incoming_media(
     logger.info(f"   🔗 [INCOMING MEDIA] URL WhatsApp (original): {media_url}")
     logger.info(f"   📌 [INCOMING MEDIA] message_id: {message_id}")
     logger.info(f"   📌 [INCOMING MEDIA] tenant_id: {tenant_id}")
+    
+    # ✅ MELHORIA: Tentar obter URL descriptografada do Evolution API
+    final_media_url = media_url
+    if instance_name and api_key and evolution_api_url:
+        logger.info(f"🔐 [INCOMING MEDIA] Tentando obter URL descriptografada do Evolution API...")
+        logger.info(f"   📌 [INCOMING MEDIA] Instance: {instance_name}")
+        logger.info(f"   📌 [INCOMING MEDIA] Message ID: {message_id}")
+        
+        try:
+            # Tentar usar endpoint /s3/getMediaUrl/{INSTANCE}?mediaId={MESSAGE_ID}
+            base_url = evolution_api_url.rstrip('/')
+            endpoint = f"{base_url}/s3/getMediaUrl/{instance_name}"
+            
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                response = await client.get(
+                    endpoint,
+                    params={'mediaId': message_id},
+                    headers={'apikey': api_key}
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    decrypted_url = data.get('url') or data.get('mediaUrl')
+                    
+                    if decrypted_url:
+                        logger.info(f"✅ [INCOMING MEDIA] URL descriptografada obtida do Evolution API!")
+                        logger.info(f"   🔗 [INCOMING MEDIA] URL descriptografada: {decrypted_url[:100]}...")
+                        final_media_url = decrypted_url
+                    else:
+                        logger.warning(f"⚠️ [INCOMING MEDIA] Evolution API retornou sucesso mas sem URL descriptografada")
+                else:
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Evolution API retornou {response.status_code}, usando URL original")
+        except Exception as e:
+            logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao obter URL descriptografada: {e}. Usando URL original.")
+    
+    # ✅ Se URL original tem .enc, avisar
+    if '.enc' in media_url.lower() and final_media_url == media_url:
+        logger.warning(f"⚠️ [INCOMING MEDIA] URL original tem .enc e não foi possível descriptografar!")
+        logger.warning(f"   🔐 [INCOMING MEDIA] URL pode estar criptografada: {media_url[:100]}...")
     
     # ✅ VALIDAÇÃO: Verificar tamanho ANTES de baixar (economia de recursos)
     from django.conf import settings
@@ -190,10 +236,10 @@ async def handle_process_incoming_media(
     
     while retry_count < max_retries:
         try:
-            # 1. Baixar do WhatsApp
+            # 1. Baixar do WhatsApp (ou URL descriptografada do Evolution API)
             async with httpx.AsyncClient(timeout=30.0) as client:
-                logger.info(f"📥 [INCOMING MEDIA] Baixando de: {media_url}")
-                response = await client.get(media_url)
+                logger.info(f"📥 [INCOMING MEDIA] Baixando de: {final_media_url}")
+                response = await client.get(final_media_url)
                 response.raise_for_status()
                 
                 # ✅ CRUCIAL: Verificar se response.content é bytes
