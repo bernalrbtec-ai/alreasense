@@ -44,36 +44,82 @@ def evolution_webhook(request):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Busca conexão pelo nome da instância (field 'name' no modelo)
+        # ✅ CORREÇÃO: Buscar WhatsAppInstance pelo instance_name (UUID) primeiro
+        # O webhook envia UUID (ex: "9afdad84-5411-4754-8f63-2599a6b9142c")
+        # EvolutionConnection.name é nome amigável, não UUID
+        wa_instance = None
+        connection = None
+        
         try:
-            connection = EvolutionConnection.objects.select_related('tenant').get(
-                name=instance_name,
-                is_active=True
-            )
-            logger.info(f"✅ [WEBHOOK] Conexão encontrada: {connection.name} - Tenant: {connection.tenant.name}")
-        except EvolutionConnection.DoesNotExist:
-            logger.warning(f"⚠️ [WEBHOOK] Conexão não encontrada ou inativa: {instance_name}")
-            logger.warning(f"   Tentando buscar qualquer conexão ativa do tenant...")
+            # Buscar WhatsAppInstance pelo instance_name (UUID do webhook)
+            wa_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                instance_name=instance_name,
+                is_active=True,
+                status='active'
+            ).first()
             
-            # Fallback: buscar qualquer conexão ativa (se o instance_name não for exato)
-            connection = EvolutionConnection.objects.filter(
-                is_active=True
-            ).select_related('tenant').first()
-            
-            if not connection:
-                logger.error(f"❌ [WEBHOOK] Nenhuma conexão ativa encontrada!")
-                return Response(
-                    {'error': 'Conexão não encontrada'},
-                    status=status.HTTP_404_NOT_FOUND
+            if wa_instance:
+                logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada: {wa_instance.friendly_name} ({wa_instance.instance_name})")
+                logger.info(f"   📌 Tenant: {wa_instance.tenant.name if wa_instance.tenant else 'Global'}")
+                
+                # Buscar EvolutionConnection (servidor Evolution) para usar api_url/api_key
+                # Se WhatsAppInstance tem api_url/api_key próprios, usar deles
+                # Se não, usar do EvolutionConnection
+                connection = EvolutionConnection.objects.filter(
+                    is_active=True
+                ).select_related('tenant').first()
+                
+                if not connection:
+                    logger.warning(f"⚠️ [WEBHOOK] EvolutionConnection não encontrada, mas WhatsAppInstance encontrada")
+                    # Continuar mesmo assim (WhatsAppInstance pode ter api_url/api_key próprios)
+        except Exception as e:
+            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar WhatsAppInstance: {e}")
+        
+        # ✅ FALLBACK: Se não encontrou WhatsAppInstance, tentar buscar EvolutionConnection pelo name
+        # (pode ser que instance_name seja nome amigável em alguns casos)
+        if not wa_instance:
+            try:
+                connection = EvolutionConnection.objects.select_related('tenant').get(
+                    name=instance_name,
+                    is_active=True
                 )
-            
-            logger.info(f"✅ [WEBHOOK] Usando conexão ativa encontrada: {connection.name} - Tenant: {connection.tenant.name}")
+                logger.info(f"✅ [WEBHOOK] EvolutionConnection encontrada pelo name: {connection.name} - Tenant: {connection.tenant.name}")
+            except EvolutionConnection.DoesNotExist:
+                logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão encontrada para instance: {instance_name}")
+                logger.warning(f"   Tentando buscar qualquer conexão ativa...")
+                
+                # Fallback final: buscar qualquer conexão ativa
+                connection = EvolutionConnection.objects.filter(
+                    is_active=True
+                ).select_related('tenant').first()
+                
+                if not connection:
+                    logger.error(f"❌ [WEBHOOK] Nenhuma conexão ativa encontrada!")
+                    return Response(
+                        {'error': 'Conexão não encontrada'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                
+                logger.info(f"✅ [WEBHOOK] Usando conexão ativa encontrada: {connection.name} - Tenant: {connection.tenant.name}")
+        
+        # ✅ Determinar tenant: usar do wa_instance se tiver, senão usar do connection
+        if wa_instance and wa_instance.tenant:
+            tenant = wa_instance.tenant
+        elif connection:
+            tenant = connection.tenant
+        else:
+            logger.error(f"❌ [WEBHOOK] Nenhum tenant encontrado!")
+            return Response(
+                {'error': 'Tenant não encontrado'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         
         # Roteamento por tipo de evento
+        # ✅ Passar wa_instance também para handler (pode ter api_url/api_key próprios)
         if event_type == 'messages.upsert':
-            handle_message_upsert(data, connection.tenant, connection=connection)
+            handle_message_upsert(data, tenant, connection=connection, wa_instance=wa_instance)
         elif event_type == 'messages.update':
-            handle_message_update(data, connection.tenant)
+            handle_message_update(data, tenant)
         else:
             logger.info(f"ℹ️ [WEBHOOK] Evento não tratado: {event_type}")
         
@@ -88,7 +134,7 @@ def evolution_webhook(request):
 
 
 @transaction.atomic
-def handle_message_upsert(data, tenant, connection=None):
+def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
     """
     Processa evento de nova mensagem (messages.upsert).
     
@@ -96,6 +142,12 @@ def handle_message_upsert(data, tenant, connection=None):
     - Conversation
     - Message
     - MessageAttachment (se houver)
+    
+    Args:
+        data: Dados do webhook
+        tenant: Tenant da mensagem
+        connection: EvolutionConnection (opcional)
+        wa_instance: WhatsAppInstance (opcional, tem instance_name UUID)
     """
     logger.info(f"📥 [WEBHOOK UPSERT] ====== INICIANDO PROCESSAMENTO ======")
     logger.info(f"📥 [WEBHOOK UPSERT] Tenant: {tenant.name} (ID: {tenant.id})")
@@ -662,65 +714,88 @@ def handle_message_upsert(data, tenant, connection=None):
                     api_key_for_media = None
                     evolution_api_url_for_media = None
                     
-                    # ✅ DEBUG: Log para verificar se connection está disponível
-                    logger.info(f"🔍 [WEBHOOK] Verificando conexão Evolution para descriptografar mídia:")
-                    logger.info(f"   📌 connection recebida: {connection is not None}")
-                    logger.info(f"   📌 instance_name: {instance_name}")
+                    # ✅ CORREÇÃO: Usar WhatsAppInstance (tem instance_name UUID) ou EvolutionConnection
+                    # Prioridade: wa_instance > connection > fallback
+                    instance_name_for_media = None
+                    api_key_for_media = None
+                    evolution_api_url_for_media = None
                     
-                    # ✅ CORREÇÃO: Usar conexão já encontrada no webhook (passada como parâmetro)
-                    if connection:
-                        instance_name_for_media = instance_name  # Usar instance_name do webhook
+                    # ✅ OPÇÃO 1: Usar WhatsAppInstance (tem instance_name UUID do webhook)
+                    if wa_instance:
+                        instance_name_for_media = wa_instance.instance_name  # UUID da instância
+                        api_key_for_media = wa_instance.api_key or (connection.api_key if connection else None)
+                        evolution_api_url_for_media = wa_instance.api_url or (connection.base_url if connection else None)
+                        
+                        logger.info(f"✅ [WEBHOOK] Usando WhatsAppInstance para descriptografar mídia:")
+                        logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
+                        logger.info(f"   📌 Friendly Name: {wa_instance.friendly_name}")
+                        logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                        logger.info(f"   📌 API Key: {'Configurada' if api_key_for_media else 'Não configurada'}")
+                    
+                    # ✅ OPÇÃO 2: Usar EvolutionConnection (fallback)
+                    elif connection:
+                        instance_name_for_media = instance_name  # Usar instance_name do webhook (pode ser UUID ou nome)
                         api_key_for_media = connection.api_key
                         evolution_api_url_for_media = connection.api_url or connection.base_url
                         
-                        logger.info(f"✅ [WEBHOOK] Informações Evolution encontradas para descriptografar mídia:")
+                        logger.info(f"✅ [WEBHOOK] Usando EvolutionConnection para descriptografar mídia:")
                         logger.info(f"   📌 Instance: {instance_name_for_media}")
                         logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
                         logger.info(f"   📌 Connection: {connection.name}")
+                    
+                    # ✅ OPÇÃO 3: Fallback - buscar conexão diretamente
                     else:
-                        logger.warning(f"⚠️ [WEBHOOK] Conexão Evolution não disponível (connection=None), usando URL original")
-                        logger.warning(f"   🔍 [WEBHOOK] Tentando buscar conexão diretamente...")
+                        logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão disponível, tentando buscar diretamente...")
                         
-                        # ✅ FALLBACK: Buscar conexão usando instance_name do webhook
                         try:
+                            # Tentar buscar WhatsAppInstance pelo instance_name (UUID)
+                            from apps.notifications.models import WhatsAppInstance
                             from apps.connections.models import EvolutionConnection
                             
-                            # ✅ CORREÇÃO: Buscar primeiro pelo instance_name do webhook (que é o name da conexão)
-                            fallback_connection = None
+                            fallback_wa_instance = WhatsAppInstance.objects.filter(
+                                instance_name=instance_name,
+                                tenant=tenant,
+                                is_active=True,
+                                status='active'
+                            ).first()
                             
-                            if instance_name:
-                                # Tentar buscar pelo name (que corresponde ao instance_name do webhook)
-                                try:
+                            if fallback_wa_instance:
+                                instance_name_for_media = fallback_wa_instance.instance_name
+                                api_key_for_media = fallback_wa_instance.api_key
+                                evolution_api_url_for_media = fallback_wa_instance.api_url
+                                
+                                # Se não tem api_url/api_key próprios, buscar EvolutionConnection
+                                if not evolution_api_url_for_media or not api_key_for_media:
                                     fallback_connection = EvolutionConnection.objects.filter(
-                                        name=instance_name,
-                                        tenant=tenant,
                                         is_active=True
                                     ).first()
                                     if fallback_connection:
-                                        logger.info(f"✅ [WEBHOOK] Conexão encontrada via fallback (pelo name={instance_name}):")
-                                except Exception:
-                                    pass
-                            
-                            # Se não encontrou pelo name, tentar qualquer conexão ativa do tenant
-                            if not fallback_connection:
+                                        evolution_api_url_for_media = evolution_api_url_for_media or fallback_connection.base_url
+                                        api_key_for_media = api_key_for_media or fallback_connection.api_key
+                                
+                                logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada via fallback:")
+                                logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
+                                logger.info(f"   📌 Friendly Name: {fallback_wa_instance.friendly_name}")
+                                logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                            else:
+                                # Último fallback: buscar EvolutionConnection
                                 fallback_connection = EvolutionConnection.objects.filter(
                                     tenant=tenant,
                                     is_active=True
                                 ).first()
-                                if fallback_connection:
-                                    logger.info(f"✅ [WEBHOOK] Conexão encontrada via fallback (qualquer conexão ativa do tenant):")
-                            
-                            if fallback_connection:
-                                instance_name_for_media = instance_name  # Usar instance_name do webhook
-                                api_key_for_media = fallback_connection.api_key
-                                evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
                                 
-                                logger.info(f"   📌 Instance: {instance_name_for_media}")
-                                logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
-                                logger.info(f"   📌 Connection: {fallback_connection.name}")
-                            else:
-                                logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão ativa encontrada via fallback")
-                                logger.warning(f"   🔍 [WEBHOOK] Tentou buscar por: instance_name={instance_name}, tenant={tenant.name}")
+                                if fallback_connection:
+                                    instance_name_for_media = instance_name
+                                    api_key_for_media = fallback_connection.api_key
+                                    evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
+                                    
+                                    logger.info(f"✅ [WEBHOOK] EvolutionConnection encontrada via fallback:")
+                                    logger.info(f"   📌 Instance: {instance_name_for_media}")
+                                    logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                                    logger.info(f"   📌 Connection: {fallback_connection.name}")
+                                else:
+                                    logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão encontrada via fallback")
+                                    logger.warning(f"   🔍 [WEBHOOK] Tentou buscar por: instance_name={instance_name}, tenant={tenant.name}")
                         except Exception as e:
                             logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão via fallback: {e}", exc_info=True)
                     
