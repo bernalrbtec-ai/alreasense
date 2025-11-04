@@ -662,6 +662,11 @@ def handle_message_upsert(data, tenant, connection=None):
                     api_key_for_media = None
                     evolution_api_url_for_media = None
                     
+                    # ✅ DEBUG: Log para verificar se connection está disponível
+                    logger.info(f"🔍 [WEBHOOK] Verificando conexão Evolution para descriptografar mídia:")
+                    logger.info(f"   📌 connection recebida: {connection is not None}")
+                    logger.info(f"   📌 instance_name: {instance_name}")
+                    
                     # ✅ CORREÇÃO: Usar conexão já encontrada no webhook (passada como parâmetro)
                     if connection:
                         instance_name_for_media = instance_name  # Usar instance_name do webhook
@@ -673,7 +678,30 @@ def handle_message_upsert(data, tenant, connection=None):
                         logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
                         logger.info(f"   📌 Connection: {connection.name}")
                     else:
-                        logger.warning(f"⚠️ [WEBHOOK] Conexão Evolution não disponível, usando URL original")
+                        logger.warning(f"⚠️ [WEBHOOK] Conexão Evolution não disponível (connection=None), usando URL original")
+                        logger.warning(f"   🔍 [WEBHOOK] Tentando buscar conexão diretamente...")
+                        
+                        # ✅ FALLBACK: Buscar conexão diretamente se não foi passada
+                        try:
+                            from apps.connections.models import EvolutionConnection
+                            fallback_connection = EvolutionConnection.objects.filter(
+                                tenant=tenant,
+                                is_active=True
+                            ).first()
+                            
+                            if fallback_connection:
+                                instance_name_for_media = instance_name
+                                api_key_for_media = fallback_connection.api_key
+                                evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
+                                
+                                logger.info(f"✅ [WEBHOOK] Conexão encontrada via fallback:")
+                                logger.info(f"   📌 Instance: {instance_name_for_media}")
+                                logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                                logger.info(f"   📌 Connection: {fallback_connection.name}")
+                            else:
+                                logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão ativa encontrada via fallback")
+                        except Exception as e:
+                            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão via fallback: {e}")
                     
                     def enqueue_process():
                         logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
