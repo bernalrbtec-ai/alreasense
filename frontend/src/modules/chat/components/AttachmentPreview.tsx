@@ -165,15 +165,27 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               const blob = await response.blob();
               const blobUrl = URL.createObjectURL(blob);
               
-              console.log('🔍 [AttachmentPreview] Fetch direto da URL:', {
+              // ✅ Expandir objeto para garantir que todos os detalhes sejam visíveis
+              const fetchDetails = {
                 status: response.status,
                 statusText: response.statusText,
                 contentType: response.headers.get('content-type'),
                 contentLength: response.headers.get('content-length'),
                 blobSize: blob.size,
                 blobType: blob.type,
-                blobUrl: blobUrl
-              });
+                blobUrl: blobUrl,
+                allHeaders: Object.fromEntries(response.headers.entries())
+              };
+              
+              // ✅ Log individual de cada propriedade para garantir visibilidade
+              console.log('🔍 [AttachmentPreview] Fetch direto da URL:');
+              console.log('   Status:', response.status, response.statusText);
+              console.log('   Content-Type:', response.headers.get('content-type'));
+              console.log('   Content-Length:', response.headers.get('content-length'));
+              console.log('   Blob Size:', blob.size, 'bytes');
+              console.log('   Blob Type:', blob.type);
+              console.log('   Todos os headers:', fetchDetails.allHeaders);
+              console.log('   Detalhes completos:', fetchDetails);
               
               // ✅ Tentar criar um novo elemento img com o blob URL
               const testImg = new Image();

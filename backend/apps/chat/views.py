@@ -110,6 +110,23 @@ def media_proxy(request):
             logger.info(f'   📄 [MEDIA PROXY] Content-Type: {content_type}')
             logger.info(f'   📏 [MEDIA PROXY] Size: {len(content)} bytes ({len(content) / 1024:.2f} KB)')
             
+            # ✅ CRUCIAL: Validar que o conteúdo é bytes válido
+            if not isinstance(content, bytes):
+                logger.error(f'❌ [MEDIA PROXY] Content não é bytes! Tipo: {type(content)}')
+                return JsonResponse({'error': 'Erro ao processar conteúdo do S3'}, status=500)
+            
+            # ✅ Validar que o conteúdo não está vazio
+            if len(content) == 0:
+                logger.error(f'❌ [MEDIA PROXY] Content está vazio!')
+                return JsonResponse({'error': 'Arquivo vazio no S3'}, status=404)
+            
+            # ✅ Validar magic numbers para imagens (primeiros bytes)
+            if content_type.startswith('image/'):
+                if len(content) < 4:
+                    logger.error(f'❌ [MEDIA PROXY] Content muito pequeno para ser uma imagem!')
+                    return JsonResponse({'error': 'Arquivo corrompido'}, status=500)
+                logger.info(f'   🔍 [MEDIA PROXY] Primeiros bytes (hex): {content[:16].hex()}')
+            
         except Exception as e:
             logger.error(f'❌ [MEDIA PROXY] Erro ao acessar S3: {e}', exc_info=True)
             return JsonResponse({'error': f'Erro ao acessar S3: {str(e)}'}, status=500)
@@ -227,13 +244,18 @@ def media_proxy(request):
         if request.method == 'HEAD':
             response = HttpResponse(status=200, content_type=content_type)
         else:
-            # ✅ Usar HttpResponse direto com content binário
-            # Garante que o conteúdo seja enviado corretamente sem problemas de CORS
+            # ✅ CRUCIAL: Usar HttpResponse com content como bytes explicitamente
+            # Garante que o conteúdo binário seja enviado corretamente sem encoding
+            # IMPORTANTE: Não usar str() ou .encode() no content - já é bytes!
             response = HttpResponse(
-                content,
+                content,  # ✅ Já é bytes do S3
                 content_type=content_type,
                 status=200
             )
+            # ✅ CRUCIAL: Garantir que não há charset sendo aplicado (imagens são binárias)
+            if 'charset' in response.get('Content-Type', ''):
+                # Remover charset se foi adicionado automaticamente
+                response['Content-Type'] = content_type
         
         # ✅ CRUCIAL: Definir headers na ordem correta para evitar problemas de CORS
         # 1. Content-Type primeiro (pode ser sobrescrito, então definir duas vezes)
