@@ -147,11 +147,22 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           // Se a imagem não carregar, o servidor já está configurado para aceitar qualquer origem
           className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
           onClick={() => setLightboxOpen(true)}
-          onLoad={() => {
+          onLoad={(e) => {
+            const img = e.currentTarget;
+            const blobUrl = (img as any).__blobUrl;
+            
+            // ✅ Limpar blob URL se foi usado
+            if (blobUrl) {
+              console.log('✅ [AttachmentPreview] Imagem carregada via blob URL, limpando...');
+              URL.revokeObjectURL(blobUrl);
+              delete (img as any).__blobUrl;
+            }
+            
             console.log('✅ [AttachmentPreview] Imagem carregada com sucesso:', {
               url: fileUrl, // ✅ URL COMPLETA - sem truncar
-              naturalWidth: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalWidth,
-              naturalHeight: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalHeight
+              naturalWidth: img.naturalWidth,
+              naturalHeight: img.naturalHeight,
+              viaBlob: !!blobUrl
             });
           }}
           onError={async (e) => {
@@ -187,22 +198,31 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               console.log('   Todos os headers:', fetchDetails.allHeaders);
               console.log('   Detalhes completos:', fetchDetails);
               
-              // ✅ Tentar criar um novo elemento img com o blob URL
-              const testImg = new Image();
-              testImg.onload = () => {
-                console.log('✅ [AttachmentPreview] Blob URL funcionou!', {
-                  width: testImg.naturalWidth,
-                  height: testImg.naturalHeight
+              // ✅ CRUCIAL: Usar blob URL diretamente na imagem principal
+              // Se fetch retornou 200 OK com blob válido, usar o blob URL
+              if (response.status === 200 && blob.size > 0 && blob.type.startsWith('image/')) {
+                console.log('✅ [AttachmentPreview] Usando blob URL diretamente:', {
+                  blobSize: blob.size,
+                  blobType: blob.type,
+                  blobUrl: blobUrl.substring(0, 50) + '...'
                 });
-                // Se funcionar, usar o blob URL
+                
+                // ✅ Armazenar blob URL para limpar depois
+                (img as any).__blobUrl = blobUrl;
+                
+                // ✅ Usar blob URL diretamente (manter handlers originais)
                 img.src = blobUrl;
+                
+                // ✅ Não substituir handlers - deixar os originais funcionarem
+                // O onLoad original vai limpar o blob URL
+              } else {
+                console.warn('⚠️ [AttachmentPreview] Blob inválido, não usando blob URL:', {
+                  status: response.status,
+                  blobSize: blob.size,
+                  blobType: blob.type
+                });
                 URL.revokeObjectURL(blobUrl);
-              };
-              testImg.onerror = (err) => {
-                console.error('❌ [AttachmentPreview] Blob URL também falhou:', err);
-                URL.revokeObjectURL(blobUrl);
-              };
-              testImg.src = blobUrl;
+              }
               
             } catch (fetchError) {
               console.error('❌ [AttachmentPreview] Erro ao fazer fetch direto:', fetchError);
