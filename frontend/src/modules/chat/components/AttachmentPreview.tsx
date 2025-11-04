@@ -44,6 +44,20 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   
+  // ✅ Fechar lightbox com ESC
+  useEffect(() => {
+    if (!lightboxOpen) return;
+    
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLightboxOpen(false);
+      }
+    };
+    
+    window.addEventListener('keydown', handleEscape);
+    return () => window.removeEventListener('keydown', handleEscape);
+  }, [lightboxOpen]);
+  
   // Atualizar progresso do áudio
   useEffect(() => {
     const audio = audioRef.current;
@@ -267,23 +281,63 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           }}
         />
         
-        {/* Lightbox */}
+        {/* Lightbox - Fullscreen com controles */}
         {lightboxOpen && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4"
-            onClick={() => setLightboxOpen(false)}
+            className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-4"
+            onClick={(e) => {
+              // Fechar apenas se clicar no fundo (não na imagem ou botões)
+              if (e.target === e.currentTarget) {
+                setLightboxOpen(false);
+              }
+            }}
           >
+            {/* Botão Fechar */}
             <button
-              className="absolute top-4 right-4 text-white hover:text-gray-300"
-              onClick={() => setLightboxOpen(false)}
+              className="absolute top-4 right-4 z-10 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxOpen(false);
+              }}
+              title="Fechar (ESC)"
             >
-              <X size={32} />
+              <X size={24} />
             </button>
+
+            {/* Botão Download */}
+            <button
+              className="absolute top-4 right-16 z-10 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+              onClick={(e) => {
+                e.stopPropagation();
+                const link = document.createElement('a');
+                link.href = fileUrl;
+                link.download = attachment.original_filename || 'image.jpg';
+                link.target = '_blank';
+                link.rel = 'noopener noreferrer';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+              }}
+              title="Baixar imagem"
+            >
+              <Download size={24} />
+            </button>
+
+            {/* Imagem Fullscreen */}
             <img
               src={fileUrl}
               alt={attachment.original_filename}
-              // ✅ REMOVIDO: crossOrigin="anonymous" - mesma razão do img principal
-              className="max-w-full max-h-full object-contain"
+              className="max-w-full max-h-full object-contain cursor-zoom-out"
+              onClick={(e) => {
+                e.stopPropagation();
+                setLightboxOpen(false);
+              }}
+              onError={(e) => {
+                console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
+                  fileUrl: fileUrl.substring(0, 100),
+                  filename: attachment.original_filename
+                });
+              }}
             />
           </div>
         )}
@@ -507,7 +561,55 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     );
   }
 
-  // 📄 DOCUMENTO
+  // 📄 DOCUMENTO (incluindo PDFs)
+  const isPDF = attachment.mime_type === 'application/pdf' || 
+                attachment.original_filename?.toLowerCase().endsWith('.pdf');
+  
+  const handleDocumentClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    if (isPDF) {
+      // ✅ PDF: Abrir em nova aba para não quebrar autenticação
+      const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
+      if (!newWindow) {
+        // Se popup foi bloqueado, tentar download direto
+        const link = document.createElement('a');
+        link.href = attachment.file_url;
+        link.download = attachment.original_filename || 'document.pdf';
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    } else {
+      // Outros documentos: Download direto
+      const link = document.createElement('a');
+      link.href = attachment.file_url;
+      link.download = attachment.original_filename || 'document';
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleDocumentDownload = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const link = document.createElement('a');
+    link.href = attachment.file_url;
+    link.download = attachment.original_filename || 'document';
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="attachment-preview document flex items-center gap-3 p-3 bg-gray-50 rounded-lg max-w-md">
       <FileText className="text-gray-600" size={24} />
@@ -517,13 +619,24 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           {(attachment.size_bytes / 1024).toFixed(0)} KB
         </p>
       </div>
-      <a
-        href={attachment.file_url}
-        download={attachment.original_filename}
-        className="p-2 bg-white border border-gray-300 rounded hover:bg-gray-100"
-      >
-        <Download size={18} />
-      </a>
+      <div className="flex gap-2">
+        {isPDF && (
+          <button
+            onClick={handleDocumentClick}
+            className="p-2 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
+            title="Abrir PDF em nova aba"
+          >
+            <FileText size={18} />
+          </button>
+        )}
+        <button
+          onClick={handleDocumentDownload}
+          className="p-2 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
+          title="Baixar arquivo"
+        >
+          <Download size={18} />
+        </button>
+      </div>
     </div>
   );
 }
