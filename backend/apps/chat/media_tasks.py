@@ -200,12 +200,13 @@ async def handle_process_incoming_media(
                     
                     try:
                         response_base64 = await client.post(
-                            endpoint_base64,
-                            json=payload,
-                            headers={'apikey': api_key, 'Content-Type': 'application/json'}
-                        )
+                                endpoint_base64,
+                                json=payload,
+                                headers={'apikey': api_key, 'Content-Type': 'application/json'}
+                            )
                         
-                        if response_base64.status_code == 200:
+                        # ✅ CORREÇÃO: Aceitar 200 (OK) e 201 (Created) - ambos são válidos!
+                        if response_base64.status_code in [200, 201]:
                             data_base64 = response_base64.json()
                             base64_data = data_base64.get('base64')
                             
@@ -213,9 +214,12 @@ async def handle_process_incoming_media(
                                 # ✅ CRUCIAL: Decodificar base64 para bytes (já descriptografado)
                                 import base64
                                 try:
+                                    # ✅ IMPORTANTE: O base64 pode vir truncado no log, mas está completo no JSON
                                     decoded_bytes = base64.b64decode(base64_data)
                                     
                                     logger.info(f"✅ [INCOMING MEDIA] Base64 obtido via /chat/getBase64FromMediaMessage!")
+                                    logger.info(f"   📏 [INCOMING MEDIA] Status: {response_base64.status_code} ({'OK' if response_base64.status_code == 200 else 'Created'})")
+                                    logger.info(f"   📏 [INCOMING MEDIA] Tamanho base64 (string): {len(base64_data)} caracteres")
                                     logger.info(f"   📏 [INCOMING MEDIA] Tamanho decodificado: {len(decoded_bytes)} bytes")
                                     logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {decoded_bytes[:16].hex()}")
                                     
@@ -223,9 +227,11 @@ async def handle_process_incoming_media(
                                     decrypted_data = decoded_bytes
                                     logger.info(f"✅ [INCOMING MEDIA] Bytes descriptografados prontos para uso!")
                                 except Exception as decode_error:
-                                    logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao decodificar base64: {decode_error}", exc_info=True)
+                                    logger.error(f"❌ [INCOMING MEDIA] Erro ao decodificar base64: {decode_error}", exc_info=True)
+                                    logger.error(f"   📄 [INCOMING MEDIA] Base64 (primeiros 100 chars): {base64_data[:100] if base64_data else 'None'}...")
                             else:
                                 logger.warning(f"⚠️ [INCOMING MEDIA] /chat/getBase64FromMediaMessage retornou sem base64")
+                                logger.warning(f"   📄 [INCOMING MEDIA] Response keys: {list(data_base64.keys()) if isinstance(data_base64, dict) else 'N/A'}")
                         else:
                             logger.warning(f"⚠️ [INCOMING MEDIA] /chat/getBase64FromMediaMessage retornou {response_base64.status_code}")
                             if response_base64.status_code != 404:
@@ -278,7 +284,8 @@ async def handle_process_incoming_media(
                                 headers={'apikey': api_key, 'Content-Type': 'application/json'}
                             )
                             
-                            if response_fallback.status_code == 200:
+                            # ✅ CORREÇÃO: Aceitar 200 (OK) e 201 (Created) - ambos são válidos!
+                            if response_fallback.status_code in [200, 201]:
                                 data_fallback = response_fallback.json()
                                 base64_fallback = data_fallback.get('base64')
                                 
@@ -287,10 +294,11 @@ async def handle_process_incoming_media(
                                     try:
                                         decoded_fallback = base64.b64decode(base64_fallback)
                                         logger.info(f"✅ [INCOMING MEDIA] Base64 obtido via fallback!")
+                                        logger.info(f"   📏 [INCOMING MEDIA] Status: {response_fallback.status_code}")
                                         logger.info(f"   📏 [INCOMING MEDIA] Tamanho: {len(decoded_fallback)} bytes")
                                         decrypted_data = decoded_fallback
                                     except Exception as e_fallback:
-                                        logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao decodificar base64 do fallback: {e_fallback}", exc_info=True)
+                                        logger.error(f"❌ [INCOMING MEDIA] Erro ao decodificar base64 do fallback: {e_fallback}", exc_info=True)
                         except Exception as e_fallback:
                             logger.warning(f"⚠️ [INCOMING MEDIA] Erro no fallback base64: {e_fallback}", exc_info=True)
                 
