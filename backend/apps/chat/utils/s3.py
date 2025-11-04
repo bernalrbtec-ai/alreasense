@@ -251,20 +251,32 @@ class S3Manager:
             logger.error(f"❌ [S3] Erro ao gerar URL presigned: {e}")
             return None
     
-    def get_public_url(self, file_path: str) -> str:
+    def get_public_url(self, file_path: str, use_presigned: bool = False) -> str:
         """
-        Retorna URL pública via proxy Django.
+        Retorna URL pública via proxy Django ou presigned URL direta.
         
-        IMPORTANTE: Passa apenas o file_path, não presigned URL.
-        O media-proxy acessa o S3 diretamente usando credenciais do Django.
+        IMPORTANTE: Por padrão, usa proxy Django que acessa o S3 diretamente.
         Isso evita problemas de presigned URL expirada.
         
         Args:
             file_path: Caminho no S3
+            use_presigned: Se True, retorna presigned URL direta (para testes)
         
         Returns:
-            URL do proxy Django
+            URL do proxy Django ou presigned URL direta
         """
+        # ✅ TESTE: Permitir usar presigned URL diretamente (sem media-proxy)
+        # Verificar variável de ambiente ou parâmetro
+        use_presigned_env = getattr(settings, 'USE_PRESIGNED_URL', False)
+        if use_presigned or use_presigned_env:
+            presigned_url = self.generate_presigned_url(file_path, expiration=604800, http_method='GET')
+            if presigned_url:
+                logger.info(f"📎 [S3] URL presigned gerada para: {file_path}")
+                logger.info(f"   🌐 [S3] URL presigned: {presigned_url[:100]}...")
+                return presigned_url
+            else:
+                logger.warning(f"⚠️ [S3] Falha ao gerar presigned URL, usando proxy")
+        
         # ✅ CORREÇÃO: Passar apenas o file_path, não presigned URL
         # O media-proxy vai acessar o S3 diretamente usando credenciais do Django
         # Isso evita problemas de presigned URL expirada ou AccessDenied

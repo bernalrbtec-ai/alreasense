@@ -488,6 +488,9 @@ S3_UPLOAD_URL_EXPIRES = config('S3_UPLOAD_URL_EXPIRES', default=300, cast=int)
 S3_DOWNLOAD_URL_EXPIRES = config('S3_DOWNLOAD_URL_EXPIRES', default=900, cast=int)
 ATTACHMENTS_REDIS_TTL_DAYS = config('ATTACHMENTS_REDIS_TTL_DAYS', default=30, cast=int)
 
+# ✅ TESTE: Usar presigned URL diretamente (sem media-proxy) para testes
+USE_PRESIGNED_URL = config('USE_PRESIGNED_URL', default=False, cast=bool)
+
 # Debug settings for Railway deploy - AFTER all configurations are loaded
 print("🚀 [SETTINGS] ==========================================")
 print("🚀 [SETTINGS] DJANGO SETTINGS LOADED SUCCESSFULLY!")
