@@ -124,7 +124,9 @@ async def handle_process_incoming_media(
     media_type: str,
     instance_name: str = None,
     api_key: str = None,
-    evolution_api_url: str = None
+    evolution_api_url: str = None,
+    decrypted_bytes: bytes = None,
+    message_key: dict = None
 ):
     """
     Handler: Processa mídia recebida do WhatsApp.
@@ -146,6 +148,8 @@ async def handle_process_incoming_media(
         instance_name: Nome da instância Evolution (opcional, para descriptografar)
         api_key: API key do Evolution (opcional, para descriptografar)
         evolution_api_url: URL base do Evolution API (opcional, para descriptografar)
+        decrypted_bytes: Bytes já descriptografados (opcional, se obtido via base64)
+        message_key: Key completo da mensagem (opcional, para getBase64FromMediaMessage)
     """
     from apps.chat.models import Message, MessageAttachment
     
@@ -153,80 +157,153 @@ async def handle_process_incoming_media(
     logger.info(f"   🔗 [INCOMING MEDIA] URL WhatsApp (original): {media_url}")
     logger.info(f"   📌 [INCOMING MEDIA] message_id: {message_id}")
     logger.info(f"   📌 [INCOMING MEDIA] tenant_id: {tenant_id}")
+    logger.info(f"   📌 [INCOMING MEDIA] instance_name: {instance_name}")
+    logger.info(f"   📌 [INCOMING MEDIA] api_key: {'Configurada' if api_key else 'Não configurada'}")
+    logger.info(f"   📌 [INCOMING MEDIA] evolution_api_url: {evolution_api_url}")
+    logger.info(f"   📌 [INCOMING MEDIA] message_key: {message_key}")
+    logger.info(f"   📌 [INCOMING MEDIA] decrypted_bytes: {'Presente' if decrypted_bytes else 'Não presente'}")
     
-    # ✅ MELHORIA: Tentar obter URL descriptografada do Evolution API
+    # ✅ REFATORAÇÃO: Priorizar base64 quando message_key disponível (mais confiável)
+    # Base64 é sempre descriptografado e não depende do MongoDB estar atualizado
     final_media_url = media_url
-    if instance_name and api_key and evolution_api_url:
-        logger.info(f"🔐 [INCOMING MEDIA] Tentando obter URL descriptografada do Evolution API...")
+    decrypted_data = decrypted_bytes  # Bytes já descriptografados (se vier do webhook)
+    
+    if instance_name and api_key and evolution_api_url and not decrypted_data:
+        logger.info(f"🔐 [INCOMING MEDIA] Tentando obter mídia descriptografada do Evolution API...")
         logger.info(f"   📌 [INCOMING MEDIA] Instance: {instance_name}")
         logger.info(f"   📌 [INCOMING MEDIA] Message ID: {message_id}")
+        logger.info(f"   📌 [INCOMING MEDIA] message_key disponível: {message_key is not None}")
+        if message_key:
+            logger.info(f"   📌 [INCOMING MEDIA] message_key.id: {message_key.get('id')}")
+            logger.info(f"   📌 [INCOMING MEDIA] message_key completo: {message_key}")
+        else:
+            logger.warning(f"   ⚠️ [INCOMING MEDIA] message_key NÃO disponível! Base64 não será tentado como prioridade.")
         
         try:
-            # Tentar usar endpoint /s3/getMediaUrl/{INSTANCE}?mediaId={MESSAGE_ID}
             base_url = evolution_api_url.rstrip('/')
-            endpoint = f"{base_url}/s3/getMediaUrl/{instance_name}"
-            
             async with httpx.AsyncClient(timeout=10.0) as client:
-                response = await client.get(
-                    endpoint,
-                    params={'mediaId': message_id},
-                    headers={'apikey': api_key}
-                )
                 
-                if response.status_code == 200:
-                    data = response.json()
-                    decrypted_url = data.get('url') or data.get('mediaUrl')
+                # ✅ PRIORIDADE 1: Base64 quando message_key disponível (mais confiável)
+                if message_key and message_key.get('id'):
+                    logger.info(f"🔐 [INCOMING MEDIA] PRIORIDADE 1: Tentando /chat/getBase64FromMediaMessage (base64)...")
+                    logger.info(f"   📌 [INCOMING MEDIA] message_key.id: {message_key.get('id')}")
                     
-                    if decrypted_url:
-                        logger.info(f"✅ [INCOMING MEDIA] URL descriptografada obtida do Evolution API!")
-                        logger.info(f"   🔗 [INCOMING MEDIA] URL descriptografada: {decrypted_url[:100]}...")
-                        final_media_url = decrypted_url
+                    endpoint_base64 = f"{base_url}/chat/getBase64FromMediaMessage/{instance_name}"
+                    payload = {
+                        'message': {
+                            'key': {
+                                'id': message_key.get('id')
+                            }
+                        },
+                        'convertToMp4': False  # Para áudio, usar MP3 ao invés de MP4
+                    }
+                    
+                    try:
+                        response_base64 = await client.post(
+                            endpoint_base64,
+                            json=payload,
+                            headers={'apikey': api_key, 'Content-Type': 'application/json'}
+                        )
+                        
+                        if response_base64.status_code == 200:
+                            data_base64 = response_base64.json()
+                            base64_data = data_base64.get('base64')
+                            
+                            if base64_data:
+                                # ✅ CRUCIAL: Decodificar base64 para bytes (já descriptografado)
+                                import base64
+                                try:
+                                    decoded_bytes = base64.b64decode(base64_data)
+                                    
+                                    logger.info(f"✅ [INCOMING MEDIA] Base64 obtido via /chat/getBase64FromMediaMessage!")
+                                    logger.info(f"   📏 [INCOMING MEDIA] Tamanho decodificado: {len(decoded_bytes)} bytes")
+                                    logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {decoded_bytes[:16].hex()}")
+                                    
+                                    # ✅ CRUCIAL: Usar bytes descriptografados diretamente
+                                    decrypted_data = decoded_bytes
+                                    logger.info(f"✅ [INCOMING MEDIA] Bytes descriptografados prontos para uso!")
+                                except Exception as decode_error:
+                                    logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao decodificar base64: {decode_error}", exc_info=True)
+                            else:
+                                logger.warning(f"⚠️ [INCOMING MEDIA] /chat/getBase64FromMediaMessage retornou sem base64")
+                        else:
+                            logger.warning(f"⚠️ [INCOMING MEDIA] /chat/getBase64FromMediaMessage retornou {response_base64.status_code}")
+                            if response_base64.status_code != 404:
+                                logger.warning(f"   📄 [INCOMING MEDIA] Response: {response_base64.text[:200]}")
+                    except Exception as e_base64:
+                        logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao tentar /chat/getBase64FromMediaMessage: {e_base64}", exc_info=True)
+                
+                # ✅ PRIORIDADE 2: URL descriptografada se base64 não funcionou ou não tiver message_key
+                if not decrypted_data:
+                    logger.info(f"🔐 [INCOMING MEDIA] PRIORIDADE 2: Tentando /s3/getMediaUrl (URL descriptografada)...")
+                    logger.info(f"   📌 [INCOMING MEDIA] Motivo: base64 não funcionou ou message_key não disponível")
+                    endpoint_url = f"{base_url}/s3/getMediaUrl/{instance_name}"
+                    
+                    response_url = await client.get(
+                        endpoint_url,
+                        params={'mediaId': message_id},
+                        headers={'apikey': api_key}
+                    )
+                    
+                    if response_url.status_code == 200:
+                        data_url = response_url.json()
+                        decrypted_url = data_url.get('url') or data_url.get('mediaUrl')
+                        
+                        if decrypted_url:
+                            logger.info(f"✅ [INCOMING MEDIA] URL descriptografada obtida via /s3/getMediaUrl!")
+                            logger.info(f"   🔗 [INCOMING MEDIA] URL descriptografada: {decrypted_url[:100]}...")
+                            final_media_url = decrypted_url
+                        else:
+                            logger.warning(f"⚠️ [INCOMING MEDIA] /s3/getMediaUrl retornou sucesso mas sem URL")
                     else:
-                        logger.warning(f"⚠️ [INCOMING MEDIA] Evolution API retornou sucesso mas sem URL descriptografada")
-                else:
-                    logger.warning(f"⚠️ [INCOMING MEDIA] Evolution API retornou {response.status_code}, usando URL original")
+                        logger.warning(f"⚠️ [INCOMING MEDIA] /s3/getMediaUrl retornou {response_url.status_code}")
+                    
+                    # ✅ FALLBACK: Tentar base64 com message_id se não tiver message_key
+                    if not decrypted_data and final_media_url == media_url and not message_key:
+                        logger.info(f"🔐 [INCOMING MEDIA] FALLBACK: Tentando /chat/getBase64FromMediaMessage com message_id...")
+                        endpoint_fallback = f"{base_url}/chat/getBase64FromMediaMessage/{instance_name}"
+                        payload_fallback = {
+                            'message': {
+                                'key': {
+                                    'id': message_id
+                                }
+                            },
+                            'convertToMp4': False
+                        }
+                        
+                        try:
+                            response_fallback = await client.post(
+                                endpoint_fallback,
+                                json=payload_fallback,
+                                headers={'apikey': api_key, 'Content-Type': 'application/json'}
+                            )
+                            
+                            if response_fallback.status_code == 200:
+                                data_fallback = response_fallback.json()
+                                base64_fallback = data_fallback.get('base64')
+                                
+                                if base64_fallback:
+                                    import base64
+                                    try:
+                                        decoded_fallback = base64.b64decode(base64_fallback)
+                                        logger.info(f"✅ [INCOMING MEDIA] Base64 obtido via fallback!")
+                                        logger.info(f"   📏 [INCOMING MEDIA] Tamanho: {len(decoded_fallback)} bytes")
+                                        decrypted_data = decoded_fallback
+                                    except Exception as e_fallback:
+                                        logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao decodificar base64 do fallback: {e_fallback}", exc_info=True)
+                        except Exception as e_fallback:
+                            logger.warning(f"⚠️ [INCOMING MEDIA] Erro no fallback base64: {e_fallback}", exc_info=True)
+                
+                # Se todos os métodos falharam, usar URL original (pode estar criptografada)
+                if final_media_url == media_url and not decrypted_data:
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Todos os métodos falharam, usando URL original (pode estar criptografada)")
         except Exception as e:
-            logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao obter URL descriptografada: {e}. Usando URL original.")
+            logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao obter mídia descriptografada: {e}. Usando URL original.", exc_info=True)
     
     # ✅ Se URL original tem .enc, avisar
-    if '.enc' in media_url.lower() and final_media_url == media_url:
+    if '.enc' in media_url.lower() and final_media_url == media_url and not decrypted_data:
         logger.warning(f"⚠️ [INCOMING MEDIA] URL original tem .enc e não foi possível descriptografar!")
         logger.warning(f"   🔐 [INCOMING MEDIA] URL pode estar criptografada: {media_url[:100]}...")
-    
-    # ✅ VALIDAÇÃO: Verificar tamanho ANTES de baixar (economia de recursos)
-    from django.conf import settings
-    MAX_SIZE = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024  # 50MB padrão
-    
-    try:
-        # HEAD request para verificar tamanho antes de baixar
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            head_response = await client.head(media_url)
-            content_length = int(head_response.headers.get('content-length', 0))
-            
-            if content_length > MAX_SIZE:
-                logger.error(f"❌ [INCOMING MEDIA] Arquivo muito grande! {content_length / 1024 / 1024:.2f}MB > {MAX_SIZE / 1024 / 1024}MB")
-                # Marcar attachment como erro se existir
-                try:
-                    from apps.chat.models import MessageAttachment
-                    from apps.chat.utils.serialization import normalize_metadata
-                    
-                    existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
-                        message__id=message_id,
-                        file_url='',
-                        file_path=''
-                    ).first())()
-                    if existing:
-                        metadata = normalize_metadata(existing.metadata)
-                        metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
-                        metadata.pop('processing', None)
-                        existing.metadata = metadata
-                        await sync_to_async(existing.save)(update_fields=['metadata'])
-                except Exception:
-                    pass
-                return  # Não processar arquivo muito grande
-    except Exception as size_check_error:
-        # Se HEAD falhar, continuar e validar após download (fallback)
-        logger.warning(f"⚠️ [INCOMING MEDIA] Não foi possível verificar tamanho antes de baixar: {size_check_error}. Validando após download...")
     
     # ✅ RETRY: Tentar até 3 vezes em caso de falha de rede
     max_retries = 3
@@ -234,13 +311,72 @@ async def handle_process_incoming_media(
     media_data = None
     content_type = 'application/octet-stream'
     
-    while retry_count < max_retries:
+    # ✅ OPÇÃO 1: Se já temos bytes descriptografados, usar diretamente
+    if decrypted_data:
+        logger.info(f"✅ [INCOMING MEDIA] Usando bytes já descriptografados (não precisa baixar)")
+        logger.info(f"   📏 [INCOMING MEDIA] Tamanho: {len(decrypted_data)} bytes")
+        media_data = decrypted_data
+        # ✅ Detectar Content-Type dos bytes
+        from apps.chat.utils.image_processing import validate_magic_numbers
+        is_valid_magic, detected_format, detected_mime = validate_magic_numbers(decrypted_data)
+        if detected_mime:
+            content_type = detected_mime
+            logger.info(f"   📄 [INCOMING MEDIA] Content-Type detectado: {content_type}")
+        else:
+            # Inferir do media_type
+            if media_type == 'image':
+                content_type = 'image/jpeg'
+            elif media_type == 'video':
+                content_type = 'video/mp4'
+            elif media_type == 'audio':
+                content_type = 'audio/mpeg'
+            elif media_type == 'document':
+                content_type = 'application/pdf'
+    
+    # ✅ OPÇÃO 2: Se não temos bytes descriptografados, baixar da URL
+    if not media_data:
+        # ✅ VALIDAÇÃO: Verificar tamanho ANTES de baixar (economia de recursos)
+        from django.conf import settings
+        MAX_SIZE = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024  # 50MB padrão
+        
         try:
-            # 1. Baixar do WhatsApp (ou URL descriptografada do Evolution API)
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                logger.info(f"📥 [INCOMING MEDIA] Baixando de: {final_media_url}")
-                response = await client.get(final_media_url)
-                response.raise_for_status()
+            # HEAD request para verificar tamanho antes de baixar
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                head_response = await client.head(final_media_url)
+                content_length = int(head_response.headers.get('content-length', 0))
+                
+                if content_length > MAX_SIZE:
+                    logger.error(f"❌ [INCOMING MEDIA] Arquivo muito grande! {content_length / 1024 / 1024:.2f}MB > {MAX_SIZE / 1024 / 1024}MB")
+                    # Marcar attachment como erro se existir
+                    try:
+                        from apps.chat.models import MessageAttachment
+                        from apps.chat.utils.serialization import normalize_metadata
+                        
+                        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                            message__id=message_id,
+                            file_url='',
+                            file_path=''
+                        ).first())()
+                        if existing:
+                            metadata = normalize_metadata(existing.metadata)
+                            metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
+                            metadata.pop('processing', None)
+                            existing.metadata = metadata
+                            await sync_to_async(existing.save)(update_fields=['metadata'])
+                    except Exception:
+                        pass
+                    return  # Não processar arquivo muito grande
+        except Exception as size_check_error:
+            # Se HEAD falhar, continuar e validar após download (fallback)
+            logger.warning(f"⚠️ [INCOMING MEDIA] Não foi possível verificar tamanho antes de baixar: {size_check_error}. Validando após download...")
+        
+        while retry_count < max_retries:
+            try:
+                # 1. Baixar do WhatsApp (ou URL descriptografada do Evolution API)
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    logger.info(f"📥 [INCOMING MEDIA] Baixando de: {final_media_url}")
+                    response = await client.get(final_media_url)
+                    response.raise_for_status()
                 
                 # ✅ CRUCIAL: Verificar se response.content é bytes
                 media_data = response.content
@@ -267,65 +403,65 @@ async def handle_process_incoming_media(
                 if '.enc' in media_url.lower():
                     logger.warning(f"⚠️ [INCOMING MEDIA] Arquivo com extensão .enc detectada! Pode estar criptografado.")
                     logger.warning(f"   🔐 [INCOMING MEDIA] URL contém .enc: {media_url}")
-            
-            # ✅ VALIDAÇÃO: Verificar tamanho após download (se não foi possível antes)
-            if len(media_data) > MAX_SIZE:
-                logger.error(f"❌ [INCOMING MEDIA] Arquivo muito grande após download! {len(media_data) / 1024 / 1024:.2f}MB > {MAX_SIZE / 1024 / 1024}MB")
-                # Marcar attachment como erro se existir
-                try:
-                    from apps.chat.models import MessageAttachment
-                    from apps.chat.utils.serialization import normalize_metadata
-                    
-                    existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
-                        message__id=message_id,
-                        file_url='',
-                        file_path=''
-                    ).first())()
-                    if existing:
-                        metadata = normalize_metadata(existing.metadata)
-                        metadata['error'] = f'Arquivo muito grande ({len(media_data) / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
-                        metadata.pop('processing', None)
-                        existing.metadata = metadata
-                        await sync_to_async(existing.save)(update_fields=['metadata'])
-                except Exception:
-                    pass
-                return  # Não processar arquivo muito grande
-            
-            logger.info(f"✅ [INCOMING MEDIA] Baixado: {len(media_data)} bytes (tentativa {retry_count + 1}/{max_retries})")
-            
-            # ✅ VALIDAÇÃO: Verificar tamanho real vs Content-Length
-            expected_length = int(response.headers.get('content-length', 0))
-            if expected_length > 0 and abs(len(media_data) - expected_length) > 1024:  # Diferença > 1KB
-                logger.warning(f"⚠️ [INCOMING MEDIA] Tamanho real ({len(media_data)}) difere do Content-Length ({expected_length})")
-            
-            # ✅ VALIDAÇÃO: Magic numbers (primeiros bytes)
-            from apps.chat.utils.image_processing import validate_magic_numbers, validate_image_data
-            is_valid_magic, detected_format, detected_mime = validate_magic_numbers(media_data)
-            
-            if is_valid_magic:
-                logger.info(f"✅ [INCOMING MEDIA] Magic numbers válidos: {detected_format} ({detected_mime})")
-                logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {media_data[:16].hex()}")
-            else:
-                logger.warning(f"⚠️ [INCOMING MEDIA] Magic numbers não reconhecidos (primeiros bytes: {media_data[:16].hex()})")
-                # Continuar mesmo assim (pode ser formato não suportado)
-            
-            break  # Sucesso, sair do loop
-            
-        except (httpx.TimeoutException, httpx.NetworkError) as e:
-            retry_count += 1
-            if retry_count < max_retries:
-                wait_time = retry_count * 2  # Backoff exponencial: 2s, 4s, 6s
-                logger.warning(f"⚠️ [INCOMING MEDIA] Erro de rede (tentativa {retry_count}/{max_retries}): {e}. Aguardando {wait_time}s...")
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(f"❌ [INCOMING MEDIA] Falhou após {max_retries} tentativas: {e}")
+                
+                # ✅ VALIDAÇÃO: Verificar tamanho após download (se não foi possível antes)
+                if len(media_data) > MAX_SIZE:
+                    logger.error(f"❌ [INCOMING MEDIA] Arquivo muito grande após download! {len(media_data) / 1024 / 1024:.2f}MB > {MAX_SIZE / 1024 / 1024}MB")
+                    # Marcar attachment como erro se existir
+                    try:
+                        from apps.chat.models import MessageAttachment
+                        from apps.chat.utils.serialization import normalize_metadata
+                        
+                        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                            message__id=message_id,
+                            file_url='',
+                            file_path=''
+                        ).first())()
+                        if existing:
+                            metadata = normalize_metadata(existing.metadata)
+                            metadata['error'] = f'Arquivo muito grande ({len(media_data) / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
+                            metadata.pop('processing', None)
+                            existing.metadata = metadata
+                            await sync_to_async(existing.save)(update_fields=['metadata'])
+                    except Exception:
+                        pass
+                    return  # Não processar arquivo muito grande
+                
+                logger.info(f"✅ [INCOMING MEDIA] Baixado: {len(media_data)} bytes (tentativa {retry_count + 1}/{max_retries})")
+                
+                # ✅ VALIDAÇÃO: Verificar tamanho real vs Content-Length
+                expected_length = int(response.headers.get('content-length', 0))
+                if expected_length > 0 and abs(len(media_data) - expected_length) > 1024:  # Diferença > 1KB
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Tamanho real ({len(media_data)}) difere do Content-Length ({expected_length})")
+                
+                # ✅ VALIDAÇÃO: Magic numbers (primeiros bytes)
+                from apps.chat.utils.image_processing import validate_magic_numbers, validate_image_data
+                is_valid_magic, detected_format, detected_mime = validate_magic_numbers(media_data)
+                
+                if is_valid_magic:
+                    logger.info(f"✅ [INCOMING MEDIA] Magic numbers válidos: {detected_format} ({detected_mime})")
+                    logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {media_data[:16].hex()}")
+                else:
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Magic numbers não reconhecidos (primeiros bytes: {media_data[:16].hex()})")
+                    # Continuar mesmo assim (pode ser formato não suportado)
+                
+                break  # Sucesso, sair do loop
+                
+            except (httpx.TimeoutException, httpx.NetworkError) as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = retry_count * 2  # Backoff exponencial: 2s, 4s, 6s
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Erro de rede (tentativa {retry_count}/{max_retries}): {e}. Aguardando {wait_time}s...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"❌ [INCOMING MEDIA] Falhou após {max_retries} tentativas: {e}")
+                    raise
+            except httpx.HTTPStatusError as e:
+                logger.error(f"❌ [INCOMING MEDIA] Erro HTTP ao baixar: {e.response.status_code}")
                 raise
-        except httpx.HTTPStatusError as e:
-            logger.error(f"❌ [INCOMING MEDIA] Erro HTTP ao baixar: {e.response.status_code}")
-            raise
-        except Exception as e:
-            logger.error(f"❌ [INCOMING MEDIA] Erro inesperado ao baixar: {e}", exc_info=True)
-            raise
+            except Exception as e:
+                logger.error(f"❌ [INCOMING MEDIA] Erro inesperado ao baixar: {e}", exc_info=True)
+                raise
     
     if not media_data:
         logger.error(f"❌ [INCOMING MEDIA] Failed to download media after {max_retries} attempts")

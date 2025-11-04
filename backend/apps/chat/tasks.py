@@ -118,7 +118,8 @@ class process_incoming_media:
     
     @staticmethod
     def delay(tenant_id: str, message_id: str, media_url: str, media_type: str, 
-              instance_name: str = None, api_key: str = None, evolution_api_url: str = None):
+              instance_name: str = None, api_key: str = None, evolution_api_url: str = None,
+              message_key: dict = None):
         """Enfileira processamento de mídia recebida."""
         delay(QUEUE_PROCESS_INCOMING_MEDIA, {
             'tenant_id': tenant_id,
@@ -127,7 +128,8 @@ class process_incoming_media:
             'media_type': media_type,
             'instance_name': instance_name,
             'api_key': api_key,
-            'evolution_api_url': evolution_api_url
+            'evolution_api_url': evolution_api_url,
+            'message_key': message_key
         })
 
 
@@ -720,6 +722,12 @@ async def start_chat_consumers():
                     logger.info(f"   📌 media_type: {payload.get('media_type')}")
                     logger.info(f"   📌 media_url: {payload.get('media_url', '')[:100]}...")
                     logger.info(f"   📌 instance_name: {payload.get('instance_name')}")
+                    logger.info(f"   📌 api_key: {'Configurada' if payload.get('api_key') else 'Não configurada'}")
+                    logger.info(f"   📌 evolution_api_url: {payload.get('evolution_api_url')}")
+                    logger.info(f"   📌 message_key: {payload.get('message_key')}")
+                    message_key_from_payload = payload.get('message_key')
+                    if message_key_from_payload:
+                        logger.info(f"   ✅ [CHAT CONSUMER] message_key recebido: id={message_key_from_payload.get('id')}, remoteJid={message_key_from_payload.get('remoteJid')}")
                     await handle_process_incoming_media(
                         tenant_id=payload['tenant_id'],
                         message_id=payload['message_id'],
@@ -727,7 +735,8 @@ async def start_chat_consumers():
                         media_type=payload['media_type'],
                         instance_name=payload.get('instance_name'),
                         api_key=payload.get('api_key'),
-                        evolution_api_url=payload.get('evolution_api_url')
+                        evolution_api_url=payload.get('evolution_api_url'),
+                        message_key=message_key_from_payload
                     )
                     logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
                 except Exception as e:

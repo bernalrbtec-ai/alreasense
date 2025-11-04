@@ -805,6 +805,32 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.info(f"   📌 message_id: {message_id_str}")
                         logger.info(f"   📌 media_url: {attachment_url[:100]}...")
                         logger.info(f"   📌 media_type: {incoming_media_type}")
+                        
+                        # ✅ MELHORIA: Passar message_key completo para getBase64FromMediaMessage
+                        # O endpoint pode precisar do key completo (remoteJid, fromMe, id)
+                        # ✅ IMPORTANTE: Usar 'key' já extraído acima (linha 162) para garantir consistência
+                        message_key_data = None
+                        try:
+                            # ✅ CORREÇÃO: Usar 'key' já extraído acima (linha 162) ao invés de extrair novamente
+                            # Isso garante que estamos usando o mesmo objeto que foi usado para message_id
+                            if key and key.get('id'):
+                                message_key_data = {
+                                    'remoteJid': key.get('remoteJid'),
+                                    'fromMe': key.get('fromMe', False),
+                                    'id': key.get('id')
+                                }
+                                logger.info(f"✅ [WEBHOOK] message_key extraído com sucesso!")
+                                logger.info(f"   📌 message_key.id: {message_key_data.get('id')}")
+                                logger.info(f"   📌 message_key.remoteJid: {message_key_data.get('remoteJid')}")
+                                logger.info(f"   📌 message_key.fromMe: {message_key_data.get('fromMe')}")
+                            else:
+                                logger.warning(f"⚠️ [WEBHOOK] key não disponível ou sem id!")
+                                logger.warning(f"   📌 key disponível: {key is not None}")
+                                if key:
+                                    logger.warning(f"   📌 key.id: {key.get('id')}")
+                        except Exception as e:
+                            logger.error(f"❌ [WEBHOOK] Erro ao extrair message_key: {e}", exc_info=True)
+                        
                         try:
                             from apps.chat.tasks import process_incoming_media
                             process_incoming_media.delay(
@@ -814,7 +840,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 media_type=incoming_media_type,
                                 instance_name=instance_name_for_media,
                                 api_key=api_key_for_media,
-                                evolution_api_url=evolution_api_url_for_media
+                                evolution_api_url=evolution_api_url_for_media,
+                                message_key=message_key_data
                             )
                             logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso na fila chat_process_incoming_media!")
                         except Exception as e:
