@@ -192,10 +192,35 @@ async def handle_process_incoming_media(
         try:
             # 1. Baixar do WhatsApp
             async with httpx.AsyncClient(timeout=30.0) as client:
+                logger.info(f"📥 [INCOMING MEDIA] Baixando de: {media_url}")
                 response = await client.get(media_url)
                 response.raise_for_status()
+                
+                # ✅ CRUCIAL: Verificar se response.content é bytes
                 media_data = response.content
+                if not isinstance(media_data, bytes):
+                    logger.error(f"❌ [INCOMING MEDIA] response.content não é bytes! Tipo: {type(media_data)}")
+                    # Tentar converter se for string
+                    if isinstance(media_data, str):
+                        logger.warning(f"⚠️ [INCOMING MEDIA] Tentando converter string para bytes...")
+                        media_data = media_data.encode('utf-8')
+                    else:
+                        raise ValueError(f"response.content é {type(media_data)}, esperado bytes")
+                
                 content_type = response.headers.get('content-type', 'application/octet-stream')
+                
+                # ✅ DEBUG: Log detalhado do que foi baixado
+                logger.info(f"📥 [INCOMING MEDIA] Download concluído:")
+                logger.info(f"   📏 [INCOMING MEDIA] Tamanho: {len(media_data)} bytes")
+                logger.info(f"   📄 [INCOMING MEDIA] Content-Type: {content_type}")
+                logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {media_data[:16].hex()}")
+                logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (repr): {repr(media_data[:16])}")
+                logger.info(f"   🔍 [INCOMING MEDIA] Últimos bytes (hex): {media_data[-16:].hex() if len(media_data) >= 16 else media_data.hex()}")
+                
+                # ✅ VERIFICAR: Se arquivo tem extensão .enc (criptografado)
+                if '.enc' in media_url.lower():
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Arquivo com extensão .enc detectada! Pode estar criptografado.")
+                    logger.warning(f"   🔐 [INCOMING MEDIA] URL contém .enc: {media_url}")
             
             # ✅ VALIDAÇÃO: Verificar tamanho após download (se não foi possível antes)
             if len(media_data) > MAX_SIZE:
@@ -283,28 +308,38 @@ async def handle_process_incoming_media(
         from urllib.parse import urlparse
         
         # ✅ VALIDAÇÃO: Validar dados baixados (magic numbers + PIL para imagens)
-        from apps.chat.utils.image_processing import validate_image_data
-        is_valid, validation_error, detected_format = validate_image_data(media_data, media_type)
+        # ✅ EXCEÇÃO: Se arquivo tem extensão .enc, pode estar criptografado - não validar magic numbers
+        is_encrypted = '.enc' in media_url.lower()
         
-        if not is_valid:
-            logger.error(f"❌ [INCOMING MEDIA] Validação falhou: {validation_error}")
-            # Marcar attachment como erro
-            try:
-                existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
-                    message__id=message_id,
-                    file_url='',
-                    file_path=''
-                ).first())()
-                if existing:
-                    from apps.chat.utils.serialization import normalize_metadata
-                    metadata = normalize_metadata(existing.metadata)
-                    metadata['error'] = f'Validação falhou: {validation_error}'
-                    metadata.pop('processing', None)
-                    existing.metadata = metadata
-                    await sync_to_async(existing.save)(update_fields=['metadata'])
-            except Exception:
-                pass
-            return  # Não processar arquivo inválido
+        if is_encrypted:
+            logger.warning(f"⚠️ [INCOMING MEDIA] Arquivo .enc detectado - pode estar criptografado. Pulando validação de magic numbers.")
+            # Continuar mesmo sem validar magic numbers (arquivo pode estar criptografado)
+            is_valid = True
+            validation_error = None
+            detected_format = None
+        else:
+            from apps.chat.utils.image_processing import validate_image_data
+            is_valid, validation_error, detected_format = validate_image_data(media_data, media_type)
+            
+            if not is_valid:
+                logger.error(f"❌ [INCOMING MEDIA] Validação falhou: {validation_error}")
+                # Marcar attachment como erro
+                try:
+                    existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                        message__id=message_id,
+                        file_url='',
+                        file_path=''
+                    ).first())()
+                    if existing:
+                        from apps.chat.utils.serialization import normalize_metadata
+                        metadata = normalize_metadata(existing.metadata)
+                        metadata['error'] = f'Validação falhou: {validation_error}'
+                        metadata.pop('processing', None)
+                        existing.metadata = metadata
+                        await sync_to_async(existing.save)(update_fields=['metadata'])
+                except Exception:
+                    pass
+                return  # Não processar arquivo inválido
         
         # ✅ DETECÇÃO: Usar formato detectado pelos magic numbers
         from apps.chat.utils.image_processing import validate_magic_numbers
