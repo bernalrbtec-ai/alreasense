@@ -561,10 +561,66 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     );
   }
 
-  // 📄 DOCUMENTO (incluindo PDFs)
-  const isPDF = attachment.mime_type === 'application/pdf' || 
-                attachment.original_filename?.toLowerCase().endsWith('.pdf');
+  // 📄 DOCUMENTO (estilo WhatsApp - vertical com ícone grande)
+  const filename = attachment.original_filename || 'document';
+  const fileExt = filename.toLowerCase().split('.').pop() || '';
+  const isPDF = attachment.mime_type === 'application/pdf' || fileExt === 'pdf';
+  const isWord = fileExt === 'doc' || fileExt === 'docx' || 
+                 attachment.mime_type?.includes('word');
+  const isExcel = fileExt === 'xls' || fileExt === 'xlsx' || 
+                  attachment.mime_type?.includes('spreadsheet');
+  const isPowerPoint = fileExt === 'ppt' || fileExt === 'pptx' || 
+                       attachment.mime_type?.includes('presentation');
   
+  // Cores e estilos baseados no tipo de arquivo (estilo WhatsApp)
+  const getDocumentStyle = () => {
+    if (isPDF) {
+      return {
+        bgColor: 'bg-red-50',
+        iconColor: 'text-red-600',
+        iconBg: 'bg-red-100',
+        borderColor: 'border-red-200'
+      };
+    } else if (isWord) {
+      return {
+        bgColor: 'bg-blue-50',
+        iconColor: 'text-blue-600',
+        iconBg: 'bg-blue-100',
+        borderColor: 'border-blue-200'
+      };
+    } else if (isExcel) {
+      return {
+        bgColor: 'bg-green-50',
+        iconColor: 'text-green-600',
+        iconBg: 'bg-green-100',
+        borderColor: 'border-green-200'
+      };
+    } else if (isPowerPoint) {
+      return {
+        bgColor: 'bg-orange-50',
+        iconColor: 'text-orange-600',
+        iconBg: 'bg-orange-100',
+        borderColor: 'border-orange-200'
+      };
+    } else {
+      return {
+        bgColor: 'bg-gray-50',
+        iconColor: 'text-gray-600',
+        iconBg: 'bg-gray-100',
+        borderColor: 'border-gray-200'
+      };
+    }
+  };
+
+  const docStyle = getDocumentStyle();
+  
+  // Formatar tamanho do arquivo
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
   const handleDocumentClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -576,7 +632,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         // Se popup foi bloqueado, tentar download direto
         const link = document.createElement('a');
         link.href = attachment.file_url;
-        link.download = attachment.original_filename || 'document.pdf';
+        link.download = filename;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         document.body.appendChild(link);
@@ -584,15 +640,19 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         document.body.removeChild(link);
       }
     } else {
-      // Outros documentos: Download direto
-      const link = document.createElement('a');
-      link.href = attachment.file_url;
-      link.download = attachment.original_filename || 'document';
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Outros documentos: Abrir em nova aba
+      const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
+      if (!newWindow) {
+        // Se popup foi bloqueado, tentar download direto
+        const link = document.createElement('a');
+        link.href = attachment.file_url;
+        link.download = filename;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
     }
   };
 
@@ -602,7 +662,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     
     const link = document.createElement('a');
     link.href = attachment.file_url;
-    link.download = attachment.original_filename || 'document';
+    link.download = filename;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
     document.body.appendChild(link);
@@ -611,31 +671,54 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   };
 
   return (
-    <div className="attachment-preview document flex items-center gap-3 p-3 bg-gray-50 rounded-lg max-w-md">
-      <FileText className="text-gray-600" size={24} />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-medium truncate">{attachment.original_filename}</p>
-        <p className="text-xs text-gray-500">
-          {(attachment.size_bytes / 1024).toFixed(0)} KB
+    <div 
+      className={`attachment-preview document ${docStyle.bgColor} rounded-lg border ${docStyle.borderColor} max-w-xs cursor-pointer hover:shadow-md transition-shadow`}
+      onClick={handleDocumentClick}
+    >
+      {/* Container vertical estilo WhatsApp */}
+      <div className="flex flex-col items-center p-4">
+        {/* Ícone grande centralizado */}
+        <div className={`w-16 h-16 ${docStyle.iconBg} rounded-lg flex items-center justify-center mb-3`}>
+          <FileText className={docStyle.iconColor} size={40} />
+        </div>
+        
+        {/* Nome do arquivo */}
+        <p className="text-sm font-medium text-gray-900 text-center mb-1 px-2 break-words w-full">
+          {filename}
         </p>
-      </div>
-      <div className="flex gap-2">
-        {isPDF && (
+        
+        {/* Tamanho do arquivo */}
+        <p className="text-xs text-gray-500 mb-3">
+          {formatFileSize(attachment.size_bytes)}
+        </p>
+        
+        {/* Botões de ação */}
+        <div className="flex gap-2 mt-2">
+          {isPDF && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDocumentClick(e);
+              }}
+              className="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1"
+              title="Abrir PDF"
+            >
+              <FileText size={14} />
+              Abrir
+            </button>
+          )}
           <button
-            onClick={handleDocumentClick}
-            className="p-2 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
-            title="Abrir PDF em nova aba"
+            onClick={(e) => {
+              e.stopPropagation();
+              handleDocumentDownload(e);
+            }}
+            className="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1"
+            title="Baixar arquivo"
           >
-            <FileText size={18} />
+            <Download size={14} />
+            Baixar
           </button>
-        )}
-        <button
-          onClick={handleDocumentDownload}
-          className="p-2 bg-white border border-gray-300 rounded hover:bg-gray-100 transition-colors"
-          title="Baixar arquivo"
-        >
-          <Download size={18} />
-        </button>
+        </div>
       </div>
     </div>
   );
