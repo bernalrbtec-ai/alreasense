@@ -9,6 +9,7 @@ interface Department {
   name: string;
   color: string;
   ai_enabled: boolean;
+  transfer_message?: string;
   created_at: string;
   updated_at: string;
 }
@@ -21,7 +22,8 @@ export default function DepartmentsPage() {
   const [formData, setFormData] = useState({
     name: '',
     color: '#3b82f6',
-    ai_enabled: false
+    ai_enabled: false,
+    transfer_message: ''
   });
 
   const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -99,7 +101,8 @@ export default function DepartmentsPage() {
     setFormData({
       name: dept.name,
       color: dept.color,
-      ai_enabled: dept.ai_enabled
+      ai_enabled: dept.ai_enabled,
+      transfer_message: dept.transfer_message || ''
     });
     setShowModal(true);
   };
@@ -107,7 +110,7 @@ export default function DepartmentsPage() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingDept(null);
-    setFormData({ name: '', color: '#3b82f6', ai_enabled: false });
+    setFormData({ name: '', color: '#3b82f6', ai_enabled: false, transfer_message: '' });
   };
 
   if (loading) {
@@ -245,6 +248,22 @@ export default function DepartmentsPage() {
                     placeholder="#3b82f6"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Mensagem de Transferência
+                </label>
+                <textarea
+                  value={formData.transfer_message}
+                  onChange={(e) => setFormData({ ...formData, transfer_message: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  placeholder="Mensagem automática enviada ao cliente quando uma conversa é transferida para este departamento"
+                  rows={3}
+                />
+                <p className="mt-1 text-xs text-gray-500">
+                  Mensagem opcional que será enviada automaticamente ao cliente quando uma conversa for transferida para este departamento
+                </p>
               </div>
 
               <div className="flex items-center gap-2">

@@ -982,6 +982,62 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             is_internal=True
         )
         
+        # ✅ NOVO: Enviar mensagem automática de transferência para o cliente
+        if new_department_id and conversation.department and conversation.department.transfer_message:
+            try:
+                import httpx
+                from apps.notifications.models import WhatsAppInstance
+                from apps.connections.models import EvolutionConnection
+                
+                # Buscar instância WhatsApp ativa
+                wa_instance = WhatsAppInstance.objects.filter(
+                    tenant=user.tenant,
+                    is_active=True,
+                    status='active'
+                ).first()
+                
+                # Buscar servidor Evolution
+                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+                
+                if wa_instance and evolution_server:
+                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                    api_key = wa_instance.api_key or evolution_server.api_key
+                    instance_name = wa_instance.instance_name
+                    
+                    # Preparar mensagem de transferência
+                    transfer_message_text = conversation.department.transfer_message
+                    
+                    # Enviar via Evolution API
+                    with httpx.Client(timeout=10.0) as client:
+                        response = client.post(
+                            f"{base_url}/message/sendText/{instance_name}",
+                            json={
+                                'number': conversation.contact_phone.replace('@g.us', '').replace('@s.whatsapp.net', ''),
+                                'text': transfer_message_text
+                            },
+                            headers={'apikey': api_key, 'Content-Type': 'application/json'}
+                        )
+                        
+                        if response.status_code in [200, 201]:
+                            logger.info(
+                                f"✅ [TRANSFER] Mensagem automática enviada para {conversation.contact_phone} "
+                                f"(departamento: {conversation.department.name})"
+                            )
+                        else:
+                            logger.warning(
+                                f"⚠️ [TRANSFER] Erro ao enviar mensagem automática: {response.status_code}"
+                            )
+                else:
+                    logger.warning(
+                        f"⚠️ [TRANSFER] Instância WhatsApp ou Evolution não encontrada - "
+                        f"mensagem automática não enviada"
+                    )
+            except Exception as e:
+                logger.error(
+                    f"❌ [TRANSFER] Erro ao enviar mensagem automática: {e}",
+                    exc_info=True
+                )
+        
         # Broadcast via WebSocket
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync

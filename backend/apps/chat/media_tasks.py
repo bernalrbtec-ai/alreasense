@@ -546,7 +546,24 @@ async def handle_process_incoming_media(
         
         # 2. Converter áudio OGG/WEBM → MP3 (padronizado com ENVIO)
         processed_data = media_data
-        filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
+        
+        # ✅ CORREÇÃO: Buscar original_filename do attachment se disponível (já foi limpo no webhook)
+        # Se não tiver, extrair da URL e limpar
+        from apps.chat.models import MessageAttachment
+        attachment_placeholder = await sync_to_async(lambda: MessageAttachment.objects.filter(
+            message__id=message_id,
+            file_url=''
+        ).order_by('-created_at').first())()
+        
+        if attachment_placeholder and attachment_placeholder.original_filename:
+            filename = attachment_placeholder.original_filename
+            logger.info(f"✅ [INCOMING MEDIA] Usando original_filename do attachment: {filename}")
+        else:
+            # Fallback: extrair da URL e limpar
+            raw_filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
+            from apps.chat.webhooks import clean_filename
+            filename = clean_filename(raw_filename, message_id=message_id, mime_type=content_type)
+            logger.info(f"🧹 [INCOMING MEDIA] Nome limpo da URL: {filename}")
         
         # ✅ Áudio: converter OGG/WEBM → MP3 para compatibilidade universal (mesmo do ENVIO)
         if media_type == 'audio':

@@ -173,6 +173,16 @@ class WhatsAppInstance(models.Model):
         help_text="Instância padrão para notificações"
     )
     
+    # Chat routing
+    default_department = models.ForeignKey(
+        'authn.Department',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='default_instances',
+        help_text="Departamento padrão para novas conversas desta instância (null = Inbox)"
+    )
+    
     # Campaign settings
     delay_min_seconds = models.IntegerField(
         default=20,

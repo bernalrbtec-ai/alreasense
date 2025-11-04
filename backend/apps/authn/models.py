@@ -32,6 +32,12 @@ class Department(models.Model):
         verbose_name='IA Habilitada',
         help_text='Se este departamento tem recursos de IA habilitados'
     )
+    transfer_message = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Mensagem de Transferência',
+        help_text='Mensagem automática enviada ao cliente quando uma conversa é transferida para este departamento'
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     

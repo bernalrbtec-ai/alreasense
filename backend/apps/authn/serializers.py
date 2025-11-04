@@ -14,7 +14,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Department
         fields = [
-            'id', 'tenant_id', 'name', 'color', 'ai_enabled',
+            'id', 'tenant_id', 'name', 'color', 'ai_enabled', 'transfer_message',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'tenant_id', 'created_at', 'updated_at']

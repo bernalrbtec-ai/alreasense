@@ -51,7 +51,7 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
             'id', 'tenant', 'tenant_name', 'friendly_name', 'instance_name',
             'api_url', 'api_key', 'phone_number', 'qr_code', 'qr_code_expires_at',
             'connection_state', 'status', 'status_display', 'last_check', 'last_error',
-            'is_active', 'is_default',
+            'is_active', 'is_default', 'default_department',
             'health_score', 'msgs_sent_today', 'msgs_delivered_today', 'msgs_read_today', 'msgs_failed_today',
             'consecutive_errors', 'last_success_at',
             'created_at', 'updated_at', 'created_by', 'created_by_name'

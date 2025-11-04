@@ -21,6 +21,89 @@ from apps.notifications.models import WhatsAppInstance
 logger = logging.getLogger(__name__)
 
 
+def clean_filename(filename: str, message_id: str = None, mime_type: str = None) -> str:
+    """
+    Limpa e normaliza nome de arquivo recebido do WhatsApp.
+    
+    Remove:
+    - Extensões .enc (criptografadas)
+    - Caracteres especiais inválidos
+    - Nomes muito longos ou estranhos
+    
+    Args:
+        filename: Nome original do arquivo
+        message_id: ID da mensagem (para fallback)
+        mime_type: MIME type do arquivo (para inferir extensão)
+    
+    Returns:
+        Nome limpo e normalizado
+    """
+    import re
+    import os
+    
+    if not filename:
+        filename = f"arquivo_{message_id or 'unknown'}"
+    
+    # Remover extensão .enc se existir
+    if filename.lower().endswith('.enc'):
+        filename = filename[:-4]  # Remove .enc
+        logger.info(f"🧹 [CLEAN FILENAME] Removida extensão .enc: {filename}")
+    
+    # Remover caracteres inválidos (manter apenas letras, números, pontos, hífens, underscores)
+    filename = re.sub(r'[^a-zA-Z0-9.\-_ ]', '_', filename)
+    
+    # Se nome é muito longo (>100 chars) ou parece ser hash/ID estranho, gerar nome amigável
+    if len(filename) > 100 or re.match(r'^[0-9_]+$', filename.split('.')[0]):
+        # Gerar nome amigável baseado no tipo MIME
+        if mime_type:
+            ext_map = {
+                'image/jpeg': 'jpg',
+                'image/png': 'png',
+                'image/gif': 'gif',
+                'image/webp': 'webp',
+                'video/mp4': 'mp4',
+                'video/quicktime': 'mov',
+                'audio/mpeg': 'mp3',
+                'audio/ogg': 'ogg',
+                'audio/webm': 'webm',
+                'application/pdf': 'pdf',
+                'application/msword': 'doc',
+                'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+                'application/vnd.ms-excel': 'xls',
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+                'application/vnd.ms-powerpoint': 'ppt',
+                'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'pptx',
+            }
+            ext = ext_map.get(mime_type, 'bin')
+        else:
+            # Tentar extrair extensão do nome original
+            ext = filename.split('.')[-1] if '.' in filename else 'bin'
+            if len(ext) > 5:  # Extensão muito longa, provavelmente inválida
+                ext = 'bin'
+        
+        # Gerar nome amigável
+        type_names = {
+            'jpg': 'imagem', 'png': 'imagem', 'gif': 'imagem', 'webp': 'imagem',
+            'mp4': 'video', 'mov': 'video',
+            'mp3': 'audio', 'ogg': 'audio', 'webm': 'audio',
+            'pdf': 'documento', 'doc': 'documento', 'docx': 'documento',
+            'xls': 'planilha', 'xlsx': 'planilha',
+            'ppt': 'apresentacao', 'pptx': 'apresentacao',
+        }
+        type_name = type_names.get(ext, 'arquivo')
+        
+        short_id = message_id[:8] if message_id else 'unknown'
+        filename = f"{type_name}_{short_id}.{ext}"
+        logger.info(f"🧹 [CLEAN FILENAME] Nome gerado automaticamente: {filename}")
+    
+    # Limitar tamanho total do nome (incluindo extensão)
+    if len(filename) > 150:
+        name, ext = os.path.splitext(filename)
+        filename = name[:140] + ext
+    
+    return filename
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def evolution_webhook(request):
@@ -241,7 +324,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         logger.info(f"🔍 [DEBUG] fromMe={from_me}, conversation_type={conversation_type}, remoteJid={remote_jid}")
         
         # Busca ou cria conversa
-        # Nova conversa vai para INBOX (pending) sem departamento
+        # ✅ NOVO: Se instância tem default_department, nova conversa vai direto para ele
+        # Senão, vai para INBOX (pending) sem departamento
+        
+        # Determinar departamento padrão
+        default_department = None
+        if wa_instance and wa_instance.default_department:
+            default_department = wa_instance.default_department
+            logger.info(f"📋 [ROUTING] Instância tem departamento padrão: {default_department.name}")
+        else:
+            logger.info(f"📋 [ROUTING] Instância sem departamento padrão - vai para Inbox")
         
         # 🔧 FIX: Só usar pushName se mensagem veio do contato (not from_me)
         # Se você enviou a primeira mensagem, deixar vazio e buscar via API
@@ -249,11 +341,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Para grupos, usar o ID do grupo como identificador único
         defaults = {
-            'department': None,  # Inbox: sem departamento
+            'department': default_department,  # Departamento padrão da instância (ou None = Inbox)
             'contact_name': contact_name_to_save,
             'profile_pic_url': profile_pic_url if profile_pic_url else None,
             'instance_name': instance_name,  # Salvar instância de origem
-            'status': 'pending',  # Pendente para classificação
+            'status': 'pending' if not default_department else 'open',  # Pendente se Inbox, aberta se departamento
             'conversation_type': conversation_type,
         }
         
@@ -666,7 +758,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             elif message_type == 'documentMessage':
                 attachment_url = message_info.get('documentMessage', {}).get('url')
                 mime_type = message_info.get('documentMessage', {}).get('mimetype', 'application/octet-stream')
-                filename = message_info.get('documentMessage', {}).get('fileName', f"{message.id}.bin")
+                raw_filename = message_info.get('documentMessage', {}).get('fileName', f"{message.id}.bin")
+                
+                # ✅ CORREÇÃO: Limpar nome de arquivo inválido (ex: .enc, nomes muito longos)
+                filename = clean_filename(raw_filename, message_id=message_id, mime_type=mime_type)
             elif message_type == 'audioMessage':
                 attachment_url = message_info.get('audioMessage', {}).get('url')
                 mime_type = message_info.get('audioMessage', {}).get('mimetype', 'audio/ogg')

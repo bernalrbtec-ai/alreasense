@@ -19,6 +19,7 @@ interface WhatsAppInstance {
   status: string
   is_active: boolean
   is_default: boolean
+  default_department?: string | null
   connection_state: string
   qr_code?: string
   qr_code_expires_at?: string
@@ -65,7 +66,11 @@ export default function ConnectionsPage() {
     friendly_name: '',
     phone_number: '',
     is_default: false,
+    default_department: null as string | null,
   })
+  
+  // Lista de departamentos para o select
+  const [departments, setDepartments] = useState<Array<{id: string, name: string}>>([])
   
   // Notificações toast
   const { toast, showToast, hideToast } = useToast()
@@ -73,7 +78,18 @@ export default function ConnectionsPage() {
 
   useEffect(() => {
     fetchData()
+    fetchDepartments()
   }, [])
+  
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/auth/departments/')
+      const depts = Array.isArray(response.data) ? response.data : (response.data?.results || [])
+      setDepartments(depts.map((d: any) => ({ id: d.id, name: d.name })))
+    } catch (error) {
+      console.error('Erro ao buscar departamentos:', error)
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -123,6 +139,7 @@ export default function ConnectionsPage() {
         friendly_name: '',
         phone_number: '',
         is_default: false,
+        default_department: null,
       })
       setEditingInstance(null)
       setShowInstanceModal(false)
@@ -174,6 +191,7 @@ export default function ConnectionsPage() {
       friendly_name: instance.friendly_name,
       phone_number: instance.phone_number || '',
       is_default: instance.is_default,
+      default_department: (instance as any).default_department || null,
     })
     setEditingInstance(instance)
     setShowInstanceModal(true)
@@ -499,6 +517,7 @@ export default function ConnectionsPage() {
                     friendly_name: '',
                     phone_number: '',
                     is_default: false,
+                    default_department: null,
                   })
                 }}
               >
@@ -528,6 +547,26 @@ export default function ConnectionsPage() {
                   placeholder="Ex: 5517991234567"
                 />
                 <p className="text-xs text-gray-500 mt-1">Número do WhatsApp (opcional, será preenchido automaticamente ao conectar)</p>
+              </div>
+              
+              <div>
+                <Label htmlFor="default_department">Departamento Padrão</Label>
+                <select
+                  id="default_department"
+                  value={instanceForm.default_department || ''}
+                  onChange={(e) => setInstanceForm({ ...instanceForm, default_department: e.target.value || null })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Inbox (sem departamento)</option>
+                  {departments.map((dept) => (
+                    <option key={dept.id} value={dept.id}>
+                      {dept.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Novas conversas desta instância irão automaticamente para este departamento. Deixe em branco para ir para Inbox.
+                </p>
               </div>
               
               <div className="flex items-center space-x-2">
@@ -560,6 +599,7 @@ export default function ConnectionsPage() {
                     friendly_name: '',
                     phone_number: '',
                     is_default: false,
+                    default_department: null,
                   })
                 }}
               >
