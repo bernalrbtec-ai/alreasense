@@ -681,27 +681,48 @@ def handle_message_upsert(data, tenant, connection=None):
                         logger.warning(f"⚠️ [WEBHOOK] Conexão Evolution não disponível (connection=None), usando URL original")
                         logger.warning(f"   🔍 [WEBHOOK] Tentando buscar conexão diretamente...")
                         
-                        # ✅ FALLBACK: Buscar conexão diretamente se não foi passada
+                        # ✅ FALLBACK: Buscar conexão usando instance_name do webhook
                         try:
                             from apps.connections.models import EvolutionConnection
-                            fallback_connection = EvolutionConnection.objects.filter(
-                                tenant=tenant,
-                                is_active=True
-                            ).first()
+                            
+                            # ✅ CORREÇÃO: Buscar primeiro pelo instance_name do webhook (que é o name da conexão)
+                            fallback_connection = None
+                            
+                            if instance_name:
+                                # Tentar buscar pelo name (que corresponde ao instance_name do webhook)
+                                try:
+                                    fallback_connection = EvolutionConnection.objects.filter(
+                                        name=instance_name,
+                                        tenant=tenant,
+                                        is_active=True
+                                    ).first()
+                                    if fallback_connection:
+                                        logger.info(f"✅ [WEBHOOK] Conexão encontrada via fallback (pelo name={instance_name}):")
+                                except Exception:
+                                    pass
+                            
+                            # Se não encontrou pelo name, tentar qualquer conexão ativa do tenant
+                            if not fallback_connection:
+                                fallback_connection = EvolutionConnection.objects.filter(
+                                    tenant=tenant,
+                                    is_active=True
+                                ).first()
+                                if fallback_connection:
+                                    logger.info(f"✅ [WEBHOOK] Conexão encontrada via fallback (qualquer conexão ativa do tenant):")
                             
                             if fallback_connection:
-                                instance_name_for_media = instance_name
+                                instance_name_for_media = instance_name  # Usar instance_name do webhook
                                 api_key_for_media = fallback_connection.api_key
                                 evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
                                 
-                                logger.info(f"✅ [WEBHOOK] Conexão encontrada via fallback:")
                                 logger.info(f"   📌 Instance: {instance_name_for_media}")
                                 logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
                                 logger.info(f"   📌 Connection: {fallback_connection.name}")
                             else:
                                 logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão ativa encontrada via fallback")
+                                logger.warning(f"   🔍 [WEBHOOK] Tentou buscar por: instance_name={instance_name}, tenant={tenant.name}")
                         except Exception as e:
-                            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão via fallback: {e}")
+                            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão via fallback: {e}", exc_info=True)
                     
                     def enqueue_process():
                         logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
