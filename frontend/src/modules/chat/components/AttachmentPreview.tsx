@@ -639,8 +639,19 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         link.click();
         document.body.removeChild(link);
       }
+    } else if (isWord || isExcel || isPowerPoint) {
+      // ✅ Word, Excel, PowerPoint: Download direto (abre no aplicativo padrão)
+      const link = document.createElement('a');
+      link.href = attachment.file_url;
+      link.download = filename;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      // Forçar download para abrir no aplicativo padrão
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     } else {
-      // Outros documentos: Abrir em nova aba
+      // Outros documentos: Tentar abrir em nova aba, fallback para download
       const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
       if (!newWindow) {
         // Se popup foi bloqueado, tentar download direto
