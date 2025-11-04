@@ -328,3 +328,101 @@ def is_valid_image(image_data: bytes) -> bool:
     except Exception:
         return False
 
+
+def validate_magic_numbers(data: bytes) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Valida magic numbers (primeiros bytes) para detectar formato real do arquivo.
+    
+    Args:
+        data: Dados binários do arquivo
+    
+    Returns:
+        (is_valid: bool, detected_format: str | None, detected_mime: str | None)
+    """
+    if len(data) < 4:
+        return False, None, None
+    
+    # JPEG: FF D8 FF
+    if data[:3] == b'\xff\xd8\xff':
+        return True, 'jpeg', 'image/jpeg'
+    
+    # PNG: 89 50 4E 47 0D 0A 1A 0A
+    if data[:8] == b'\x89PNG\r\n\x1a\n':
+        return True, 'png', 'image/png'
+    
+    # GIF: GIF87a ou GIF89a
+    if data[:6] in [b'GIF87a', b'GIF89a']:
+        return True, 'gif', 'image/gif'
+    
+    # WebP: RIFF ... WEBP
+    if data[:4] == b'RIFF' and len(data) > 12 and data[8:12] == b'WEBP':
+        return True, 'webp', 'image/webp'
+    
+    # MP4: ftyp box
+    if len(data) >= 12 and data[4:8] == b'ftyp':
+        return True, 'mp4', 'video/mp4'
+    
+    # MP3: FF FB, FF F3, FF F2 ou ID3
+    if len(data) >= 3 and (data[:2] in [b'\xff\xfb', b'\xff\xf3', b'\xff\xf2'] or data[:3] == b'ID3'):
+        return True, 'mp3', 'audio/mpeg'
+    
+    # PDF: %PDF
+    if data[:4] == b'%PDF':
+        return True, 'pdf', 'application/pdf'
+    
+    # OGG: OggS
+    if data[:4] == b'OggS':
+        return True, 'ogg', 'audio/ogg'
+    
+    # WEBM: webm (pode estar em diferentes posições)
+    if b'webm' in data[:32].lower():
+        return True, 'webm', 'video/webm'
+    
+    return False, None, None
+
+
+def validate_image_data(data: bytes, media_type: str) -> Tuple[bool, Optional[str], Optional[str]]:
+    """
+    Valida dados de imagem: magic numbers + PIL verification.
+    
+    Args:
+        data: Dados binários
+        media_type: Tipo de mídia esperado (image, video, audio, document)
+    
+    Returns:
+        (is_valid: bool, error_message: str | None, detected_format: str | None)
+    """
+    # 1. Validar tamanho mínimo
+    if len(data) < 4:
+        return False, 'Arquivo muito pequeno para ser válido', None
+    
+    # 2. Validar magic numbers
+    is_valid_magic, detected_format, detected_mime = validate_magic_numbers(data)
+    
+    # 3. Para imagens, validar com PIL também
+    if media_type == 'image':
+        if not is_valid_magic:
+            # Log primeiros bytes para debug
+            hex_preview = data[:16].hex() if len(data) >= 16 else data.hex()
+            return False, f'Magic numbers inválidos para imagem (primeiros bytes: {hex_preview})', None
+        
+        # Validar com PIL
+        try:
+            img = Image.open(io.BytesIO(data))
+            img.verify()
+            # Reabrir para usar (verify() fecha o arquivo)
+            img = Image.open(io.BytesIO(data))
+            img.load()  # Carregar dados completos
+            return True, None, detected_format
+        except Exception as e:
+            logger.warning(f'⚠️ [VALIDATION] Magic numbers OK mas PIL falhou: {e}')
+            return False, f'Imagem não passa na validação PIL: {str(e)}', detected_format
+    
+    # 4. Para outros tipos, só validar magic numbers
+    if media_type in ['video', 'audio', 'document']:
+        if not is_valid_magic:
+            hex_preview = data[:16].hex() if len(data) >= 16 else data.hex()
+            return False, f'Magic numbers inválidos para {media_type} (primeiros bytes: {hex_preview})', None
+        return True, None, detected_format
+    
+    return True, None, detected_format

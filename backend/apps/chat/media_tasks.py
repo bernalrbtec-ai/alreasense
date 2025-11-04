@@ -92,6 +92,7 @@ async def handle_process_profile_pic(tenant_id: str, phone: str, profile_url: st
         
         # 6. Invalidar cache Redis da URL antiga
         import hashlib
+        from django.core.cache import cache
         old_cache_key = f"media:{hashlib.md5(profile_url.encode()).hexdigest()}"
         cache.delete(old_cache_key)
         
@@ -220,6 +221,23 @@ async def handle_process_incoming_media(
                 return  # Não processar arquivo muito grande
             
             logger.info(f"✅ [INCOMING MEDIA] Baixado: {len(media_data)} bytes (tentativa {retry_count + 1}/{max_retries})")
+            
+            # ✅ VALIDAÇÃO: Verificar tamanho real vs Content-Length
+            expected_length = int(response.headers.get('content-length', 0))
+            if expected_length > 0 and abs(len(media_data) - expected_length) > 1024:  # Diferença > 1KB
+                logger.warning(f"⚠️ [INCOMING MEDIA] Tamanho real ({len(media_data)}) difere do Content-Length ({expected_length})")
+            
+            # ✅ VALIDAÇÃO: Magic numbers (primeiros bytes)
+            from apps.chat.utils.image_processing import validate_magic_numbers, validate_image_data
+            is_valid_magic, detected_format, detected_mime = validate_magic_numbers(media_data)
+            
+            if is_valid_magic:
+                logger.info(f"✅ [INCOMING MEDIA] Magic numbers válidos: {detected_format} ({detected_mime})")
+                logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {media_data[:16].hex()}")
+            else:
+                logger.warning(f"⚠️ [INCOMING MEDIA] Magic numbers não reconhecidos (primeiros bytes: {media_data[:16].hex()})")
+                # Continuar mesmo assim (pode ser formato não suportado)
+            
             break  # Sucesso, sair do loop
             
         except (httpx.TimeoutException, httpx.NetworkError) as e:
@@ -264,13 +282,46 @@ async def handle_process_incoming_media(
         import uuid
         from urllib.parse import urlparse
         
+        # ✅ VALIDAÇÃO: Validar dados baixados (magic numbers + PIL para imagens)
+        from apps.chat.utils.image_processing import validate_image_data
+        is_valid, validation_error, detected_format = validate_image_data(media_data, media_type)
+        
+        if not is_valid:
+            logger.error(f"❌ [INCOMING MEDIA] Validação falhou: {validation_error}")
+            # Marcar attachment como erro
+            try:
+                existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                    message__id=message_id,
+                    file_url='',
+                    file_path=''
+                ).first())()
+                if existing:
+                    from apps.chat.utils.serialization import normalize_metadata
+                    metadata = normalize_metadata(existing.metadata)
+                    metadata['error'] = f'Validação falhou: {validation_error}'
+                    metadata.pop('processing', None)
+                    existing.metadata = metadata
+                    await sync_to_async(existing.save)(update_fields=['metadata'])
+            except Exception:
+                pass
+            return  # Não processar arquivo inválido
+        
+        # ✅ DETECÇÃO: Usar formato detectado pelos magic numbers
+        from apps.chat.utils.image_processing import validate_magic_numbers
+        is_valid_magic, detected_format_final, detected_mime = validate_magic_numbers(media_data)
+        
+        if is_valid_magic and detected_mime:
+            # Usar MIME type detectado se for mais confiável que o Content-Type do WhatsApp
+            if not content_type or content_type.startswith('application/octet-stream'):
+                content_type = detected_mime
+                logger.info(f"✅ [INCOMING MEDIA] Content-Type detectado pelos magic numbers: {detected_mime}")
+            elif detected_mime != content_type:
+                logger.warning(f"⚠️ [INCOMING MEDIA] Content-Type do WhatsApp ({content_type}) difere do detectado ({detected_mime}). Usando detectado.")
+                content_type = detected_mime
+        
         # 2. Converter áudio OGG/WEBM → MP3 (padronizado com ENVIO)
         processed_data = media_data
         filename = urlparse(media_url).path.split('/')[-1] or f"media_{message_id}"
-        
-        # ✅ Forçar content-type seguro se vier genérico (apenas para imagens)
-        if media_type == 'image' and (not content_type or content_type.startswith('application/octet-stream')):
-            content_type = 'image/jpeg'
         
         # ✅ Áudio: converter OGG/WEBM → MP3 para compatibilidade universal (mesmo do ENVIO)
         if media_type == 'audio':
@@ -291,10 +342,30 @@ async def handle_process_incoming_media(
         # 3. ✅ Path S3 padronizado (mesmo do ENVIO): chat/{tenant_id}/attachments/{uuid}.{ext}
         attachment_id = uuid.uuid4()
         file_ext = filename.split('.')[-1] if '.' in filename else ''
-        # Se não tem extensão, inferir do content_type
+        
+        # ✅ MELHORIA: Usar formato detectado pelos magic numbers se disponível
+        if is_valid_magic and detected_format_final:
+            # Mapear formato detectado para extensão
+            format_to_ext = {
+                'jpeg': 'jpg',
+                'png': 'png',
+                'gif': 'gif',
+                'webp': 'webp',
+                'mp4': 'mp4',
+                'mp3': 'mp3',
+                'pdf': 'pdf',
+                'ogg': 'ogg',
+                'webm': 'webm'
+            }
+            detected_ext = format_to_ext.get(detected_format_final)
+            if detected_ext:
+                file_ext = detected_ext
+                logger.info(f"✅ [INCOMING MEDIA] Extensão detectada pelos magic numbers: {detected_ext}")
+        
+        # Se ainda não tem extensão, inferir do content_type
         if not file_ext and content_type:
             if 'image' in content_type:
-                file_ext = 'jpg'
+                file_ext = 'jpg'  # Default para JPEG
             elif 'audio' in content_type:
                 file_ext = 'mp3' if 'mpeg' in content_type else 'ogg'
             elif 'video' in content_type:
@@ -305,6 +376,16 @@ async def handle_process_incoming_media(
                 file_ext = 'bin'
         
         s3_path = f"chat/{tenant_id}/attachments/{attachment_id}.{file_ext}"
+        
+        # ✅ DEBUG: Log detalhado antes do upload
+        logger.info(f"📤 [INCOMING MEDIA] Preparando upload para S3:")
+        logger.info(f"   📦 [INCOMING MEDIA] S3 Path: {s3_path}")
+        logger.info(f"   📄 [INCOMING MEDIA] Content-Type: {content_type}")
+        logger.info(f"   📏 [INCOMING MEDIA] Tamanho: {len(processed_data)} bytes ({len(processed_data) / 1024:.2f} KB)")
+        logger.info(f"   🔍 [INCOMING MEDIA] Primeiros bytes (hex): {processed_data[:16].hex()}")
+        logger.info(f"   📝 [INCOMING MEDIA] Extensão: {file_ext}")
+        if is_valid_magic:
+            logger.info(f"   ✅ [INCOMING MEDIA] Formato detectado: {detected_format_final} ({detected_mime})")
         
         # 4. Upload para S3 (com retry)
         s3_manager = get_s3_manager()
@@ -322,6 +403,18 @@ async def handle_process_incoming_media(
             if success:
                 upload_success = True
                 logger.info(f"✅ [INCOMING MEDIA] Upload para S3 concluído: {s3_path} ({len(processed_data)} bytes)")
+                
+                # ✅ VALIDAÇÃO: Verificar se arquivo foi salvo corretamente no S3
+                try:
+                    file_exists = s3_manager.file_exists(s3_path)
+                    if file_exists:
+                        logger.info(f"✅ [INCOMING MEDIA] Arquivo verificado no S3: {s3_path}")
+                    else:
+                        logger.error(f"❌ [INCOMING MEDIA] Arquivo não encontrado no S3 após upload: {s3_path}")
+                        # Continuar mesmo assim (pode ser delay no S3)
+                except Exception as verify_error:
+                    logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao verificar arquivo no S3: {verify_error}")
+                
                 break  # ✅ IMPORTANTE: Sair do loop ao conseguir upload com sucesso
             else:
                 upload_retries += 1
