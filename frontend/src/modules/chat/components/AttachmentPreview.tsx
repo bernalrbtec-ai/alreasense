@@ -154,10 +154,47 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               naturalHeight: (document.querySelector(`img[src="${fileUrl}"]`) as HTMLImageElement)?.naturalHeight
             });
           }}
-          onError={(e) => {
+          onError={async (e) => {
             const img = e.currentTarget;
             const currentUrl = img.src;
             const error = (img as any).error;
+            
+            // ✅ Tentar fazer fetch direto para ver o que está vindo do servidor
+            try {
+              const response = await fetch(currentUrl, { method: 'GET', mode: 'cors' });
+              const blob = await response.blob();
+              const blobUrl = URL.createObjectURL(blob);
+              
+              console.log('🔍 [AttachmentPreview] Fetch direto da URL:', {
+                status: response.status,
+                statusText: response.statusText,
+                contentType: response.headers.get('content-type'),
+                contentLength: response.headers.get('content-length'),
+                blobSize: blob.size,
+                blobType: blob.type,
+                blobUrl: blobUrl
+              });
+              
+              // ✅ Tentar criar um novo elemento img com o blob URL
+              const testImg = new Image();
+              testImg.onload = () => {
+                console.log('✅ [AttachmentPreview] Blob URL funcionou!', {
+                  width: testImg.naturalWidth,
+                  height: testImg.naturalHeight
+                });
+                // Se funcionar, usar o blob URL
+                img.src = blobUrl;
+                URL.revokeObjectURL(blobUrl);
+              };
+              testImg.onerror = (err) => {
+                console.error('❌ [AttachmentPreview] Blob URL também falhou:', err);
+                URL.revokeObjectURL(blobUrl);
+              };
+              testImg.src = blobUrl;
+              
+            } catch (fetchError) {
+              console.error('❌ [AttachmentPreview] Erro ao fazer fetch direto:', fetchError);
+            }
             
             // ✅ Log MUITO detalhado do erro para debug - URL COMPLETA
             console.error('❌ [AttachmentPreview] Erro ao carregar imagem:', {
