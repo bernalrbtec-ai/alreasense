@@ -66,28 +66,54 @@ def start_rabbitmq_consumer():
 
 
 def start_flow_chat_consumer():
-    """Inicia o Flow Chat Consumer em thread separada"""
+    """
+    Inicia o Flow Chat Consumer em thread separada (RabbitMQ).
+    ⚠️ MANTIDO para process_incoming_media apenas (durabilidade crítica).
+    """
     try:
         import asyncio
         time.sleep(12)  # Espera um pouco mais que o consumer de campanhas
         
         from apps.chat.tasks import start_chat_consumers
         
-        print("🚀 [FLOW CHAT] Iniciando Flow Chat Consumer...")
+        print("🚀 [FLOW CHAT RABBITMQ] Iniciando Flow Chat Consumer (RabbitMQ)...")
+        print("⚠️ [FLOW CHAT RABBITMQ] Processando apenas process_incoming_media (durabilidade crítica)")
         asyncio.run(start_chat_consumers())
-        print("✅ [FLOW CHAT] Consumer pronto para processar mensagens!")
+        print("✅ [FLOW CHAT RABBITMQ] Consumer pronto para processar mensagens!")
             
     except Exception as e:
-        print(f"❌ [FLOW CHAT] Erro ao iniciar Flow Chat Consumer: {e}")
+        print(f"❌ [FLOW CHAT RABBITMQ] Erro ao iniciar Flow Chat Consumer: {e}")
+
+
+def start_redis_chat_consumer():
+    """Inicia o Redis Chat Consumer em thread separada (Redis - 10x mais rápido)"""
+    try:
+        import asyncio
+        time.sleep(14)  # Espera um pouco mais que os outros consumers
+        
+        from apps.chat.redis_consumer import start_redis_consumers
+        
+        print("🚀 [REDIS CHAT] Iniciando Redis Chat Consumer...")
+        print("✅ [REDIS CHAT] Processando: send_message, fetch_profile_pic, fetch_group_info")
+        asyncio.run(start_redis_consumers())
+        print("✅ [REDIS CHAT] Consumer pronto para processar mensagens!")
+            
+    except Exception as e:
+        print(f"❌ [REDIS CHAT] Erro ao iniciar Redis Chat Consumer: {e}")
 
 # Iniciar consumers apenas se não estiver em DEBUG (produção)
 if not os.environ.get('DEBUG', 'False').lower() == 'true':
-    # Consumer de campanhas
+    # Consumer de campanhas (RabbitMQ)
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, daemon=True)
     consumer_thread.start()
     print("🧵 [RABBITMQ] Thread do RabbitMQ Consumer iniciada")
     
-    # Consumer do Flow Chat
+    # Consumer do Flow Chat - RabbitMQ (apenas process_incoming_media)
     flow_chat_thread = threading.Thread(target=start_flow_chat_consumer, daemon=True)
     flow_chat_thread.start()
-    print("🧵 [FLOW CHAT] Thread do Flow Chat Consumer iniciada")
+    print("🧵 [FLOW CHAT RABBITMQ] Thread do Flow Chat Consumer (RabbitMQ) iniciada")
+    
+    # Consumer do Flow Chat - Redis (send_message, fetch_profile_pic, fetch_group_info)
+    redis_chat_thread = threading.Thread(target=start_redis_chat_consumer, daemon=True)
+    redis_chat_thread.start()
+    print("🧵 [REDIS CHAT] Thread do Redis Chat Consumer iniciada")

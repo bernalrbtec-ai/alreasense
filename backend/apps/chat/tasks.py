@@ -33,10 +33,22 @@ QUEUE_FETCH_GROUP_INFO = 'chat_fetch_group_info'  # ✅ NOVO: Busca informaçõe
 
 # ========== PRODUCERS (enfileirar tasks) ==========
 
-def delay(queue_name: str, payload: dict):
+# ✅ MIGRAÇÃO: Producers Redis para filas de latência crítica
+from apps.chat.redis_queue import (
+    enqueue_message,
+    REDIS_QUEUE_SEND_MESSAGE,
+    REDIS_QUEUE_FETCH_PROFILE_PIC,
+    REDIS_QUEUE_FETCH_GROUP_INFO
+)
+
+# ❌ REMOVIDO: Função delay() RabbitMQ (substituída por Redis)
+# Mantida apenas para process_incoming_media (durabilidade crítica)
+
+def delay_rabbitmq(queue_name: str, payload: dict):
     """
     Enfileira task no RabbitMQ de forma síncrona.
-    Usado por código Django síncrono.
+    ⚠️ USAR APENAS para process_incoming_media (durabilidade crítica).
+    Para outras filas, usar Redis (10x mais rápido).
     """
     import pika
     
@@ -76,12 +88,12 @@ def delay(queue_name: str, payload: dict):
 
 
 class send_message_to_evolution:
-    """Producer: Envia mensagem para Evolution API."""
+    """Producer: Envia mensagem para Evolution API (Redis - 10x mais rápido)."""
     
     @staticmethod
     def delay(message_id: str):
-        """Enfileira mensagem para envio."""
-        delay(QUEUE_SEND_MESSAGE, {'message_id': message_id})
+        """Enfileira mensagem para envio (Redis)."""
+        enqueue_message(REDIS_QUEUE_SEND_MESSAGE, {'message_id': message_id})
 
 
 # ❌ download_attachment e migrate_to_s3 REMOVIDOS
@@ -90,24 +102,24 @@ class send_message_to_evolution:
 
 
 class fetch_profile_pic:
-    """Producer: Busca foto de perfil via Evolution API."""
+    """Producer: Busca foto de perfil via Evolution API (Redis - 10x mais rápido)."""
     
     @staticmethod
     def delay(conversation_id: str, phone: str):
-        """Enfileira busca de foto de perfil."""
-        delay(QUEUE_FETCH_PROFILE_PIC, {
+        """Enfileira busca de foto de perfil (Redis)."""
+        enqueue_message(REDIS_QUEUE_FETCH_PROFILE_PIC, {
             'conversation_id': conversation_id,
             'phone': phone
         })
 
 
 class process_profile_pic:
-    """Producer: Processa foto de perfil do WhatsApp."""
+    """Producer: Processa foto de perfil do WhatsApp (Redis - 10x mais rápido)."""
     
     @staticmethod
     def delay(tenant_id: str, phone: str, profile_url: str):
-        """Enfileira processamento de foto de perfil."""
-        delay(QUEUE_FETCH_PROFILE_PIC, {
+        """Enfileira processamento de foto de perfil (Redis)."""
+        enqueue_message(REDIS_QUEUE_FETCH_PROFILE_PIC, {
             'tenant_id': tenant_id,
             'phone': phone,
             'profile_url': profile_url
@@ -115,14 +127,22 @@ class process_profile_pic:
 
 
 class process_incoming_media:
-    """Producer: Processa mídia recebida do WhatsApp."""
+    """
+    Producer: Processa mídia recebida do WhatsApp (RabbitMQ - durabilidade crítica).
+    
+    ⚠️ MANTIDO EM RABBITMQ por questões de resiliência:
+    - Durabilidade garantida (mensagens não são perdidas se servidor cair)
+    - Persistência em disco (sobrevive a reinicializações)
+    - Não é latência crítica (pode ser processado assincronamente)
+    - Perda de mídia é crítica (não pode ser reprocessada)
+    """
     
     @staticmethod
     def delay(tenant_id: str, message_id: str, media_url: str, media_type: str, 
               instance_name: str = None, api_key: str = None, evolution_api_url: str = None,
               message_key: dict = None):
-        """Enfileira processamento de mídia recebida."""
-        delay(QUEUE_PROCESS_INCOMING_MEDIA, {
+        """Enfileira processamento de mídia recebida (RabbitMQ)."""
+        delay_rabbitmq(QUEUE_PROCESS_INCOMING_MEDIA, {
             'tenant_id': tenant_id,
             'message_id': message_id,
             'media_url': media_url,
@@ -140,11 +160,26 @@ class process_uploaded_file:
     @staticmethod
     def delay(tenant_id: str, file_data: str, filename: str, content_type: str):
         """Enfileira processamento de arquivo enviado (base64)."""
-        delay(QUEUE_PROCESS_UPLOADED_FILE, {
+        delay_rabbitmq(QUEUE_PROCESS_UPLOADED_FILE, {
             'tenant_id': tenant_id,
             'file_data': file_data,  # base64
             'filename': filename,
             'content_type': content_type
+        })
+
+
+class fetch_group_info:
+    """Producer: Busca info de grupo via Evolution API (Redis - 10x mais rápido)."""
+    
+    @staticmethod
+    def delay(conversation_id: str, group_jid: str, instance_name: str, api_key: str, base_url: str):
+        """Enfileira busca de info de grupo (Redis)."""
+        enqueue_message(REDIS_QUEUE_FETCH_GROUP_INFO, {
+            'conversation_id': conversation_id,
+            'group_jid': group_jid,
+            'instance_name': instance_name,
+            'api_key': api_key,
+            'base_url': base_url
         })
 
 
