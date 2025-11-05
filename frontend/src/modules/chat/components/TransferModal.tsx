@@ -155,7 +155,9 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
             </p>
             <p className="text-xs text-gray-400 mt-2">Departamento atual:</p>
             <p className="text-sm text-green-500">
-              {conversation.department_data?.name || 'N/A'}
+              {conversation.department_name || 
+               (typeof conversation.department === 'object' && conversation.department?.name) ||
+               (conversation.department ? 'Departamento' : 'N/A')}
             </p>
           </div>
 

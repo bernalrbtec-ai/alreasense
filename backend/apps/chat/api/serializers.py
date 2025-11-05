@@ -162,7 +162,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     participants_data = serializers.SerializerMethodField()
     last_message = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()  # ✅ MUDADO: Agora usa get_unread_count
-    department_name = serializers.CharField(source='department.name', read_only=True)
+    department_name = serializers.SerializerMethodField()  # ✅ FIX: Mudado para SerializerMethodField para tratar null
     contact_tags = serializers.SerializerMethodField()
     instance_friendly_name = serializers.SerializerMethodField()
     
@@ -171,6 +171,12 @@ class ConversationSerializer(serializers.ModelSerializer):
         read_only=True,
         allow_null=True
     )
+    
+    def get_department_name(self, obj):
+        """Retorna nome do departamento ou string vazia se não houver."""
+        if obj.department:
+            return obj.department.name
+        return ''  # ✅ FIX: Retornar string vazia ao invés de None
     
     class Meta:
         model = Conversation
