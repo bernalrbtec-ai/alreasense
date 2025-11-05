@@ -3,6 +3,7 @@ Views para o módulo Flow Chat.
 Integra com permissões multi-tenant e departamentos.
 """
 import logging
+from datetime import datetime
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
@@ -1223,21 +1224,33 @@ class MessageViewSet(viewsets.ModelViewSet):
         return MessageSerializer
     
     def get_queryset(self):
-        """Filtra mensagens por conversas acessíveis ao usuário."""
+        """
+        Filtra mensagens por conversas acessíveis ao usuário.
+        
+        ✅ CORREÇÃO: Prefetch de reações em batch para evitar N+1 queries.
+        """
+        from apps.chat.models import MessageReaction
+        
+        queryset = self.queryset
+        
+        # ✅ CORREÇÃO: Prefetch de reações em batch
+        # Usar prefetch normal (sem to_attr) para manter compatibilidade com serializer
+        queryset = queryset.prefetch_related('reactions__user')
+        
         user = self.request.user
         
         if user.is_superuser:
-            return self.queryset
+            return queryset
         
         if user.is_admin:
-            return self.queryset.filter(conversation__tenant=user.tenant)
+            return queryset.filter(conversation__tenant=user.tenant)
         
         # Gerente/Agente: apenas mensagens de conversas dos seus departamentos
         user_departments = user.departments.all()
         if not user_departments.exists():
-            return self.queryset.none()
+            return queryset.none()
         
-        return self.queryset.filter(
+        return queryset.filter(
             conversation__tenant=user.tenant,
             conversation__department__in=user_departments
         )
@@ -1281,6 +1294,40 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
         """Cria reação e garante que usuário é o atual."""
         serializer.save(user=self.request.user)
     
+    @action(detail=False, methods=['get'], url_path='queues/status')
+    def queues_status(self, request):
+        """
+        ✅ CORREÇÃO: Endpoint de métricas e monitoramento de filas Redis.
+        
+        Retorna:
+        {
+            "metrics": {
+                "send_message": {"length": 10, "name": "..."},
+                "fetch_profile_pic": {"length": 5, "name": "..."},
+                "fetch_group_info": {"length": 2, "name": "..."},
+                "dead_letter": {"length": 1, "name": "..."},
+                "total": 18
+            },
+            "alerts": ["⚠️ Fila send_message tem 1500 mensagens (acima de 1000)"],
+            "timestamp": "2025-11-04T..."
+        }
+        """
+        from apps.chat.redis_queue import get_queue_metrics
+        
+        metrics = get_queue_metrics()
+        
+        # ✅ Alerta se filas estão muito grandes
+        alerts = []
+        for queue_name, queue_data in metrics.items():
+            if isinstance(queue_data, dict) and queue_data.get('length', 0) > 1000:
+                alerts.append(f"⚠️ Fila {queue_name} tem {queue_data['length']} mensagens (acima de 1000)")
+        
+        return Response({
+            'metrics': metrics,
+            'alerts': alerts,
+            'timestamp': datetime.now().isoformat()
+        })
+    
     @action(detail=False, methods=['post'], url_path='add')
     def add_reaction(self, request):
         """
@@ -1306,6 +1353,27 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
                 {'error': 'emoji é obrigatório'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # ✅ CORREÇÃO: Validação de emoji (segurança)
+        import unicodedata
+        # Verificar se é realmente um emoji (não apenas string)
+        # Emojis têm categoria Unicode 'So' (Symbol, other) ou 'Sk' (Symbol, modifier)
+        if len(emoji) > 10:  # Limite de 10 caracteres (alguns emojis são compostos)
+            return Response(
+                {'error': 'Emoji inválido (muito longo)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verificar se todos os caracteres são emojis válidos
+        for char in emoji:
+            category = unicodedata.category(char)
+            if category not in ('So', 'Sk', 'Mn', 'Mc'):  # Symbol, Modifier
+                # Permitir alguns caracteres especiais comuns em emojis (variation selectors)
+                if ord(char) < 0x1F300 and char not in ('\uFE0F', '\u200D'):  # Emojis começam em U+1F300
+                    return Response(
+                        {'error': 'Emoji inválido (caracteres não permitidos)'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
         
         # Validar que mensagem existe e é acessível
         try:
@@ -1339,12 +1407,7 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
             defaults={}
         )
         
-        if not created:
-            # Reação já existe, retornar existente
-            serializer = self.get_serializer(reaction)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        # ✅ Broadcast via WebSocket
+        # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
         from apps.chat.utils.serialization import serialize_message_for_ws
@@ -1352,6 +1415,10 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
         try:
             channel_layer = get_channel_layer()
             room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+            
+            # ✅ CORREÇÃO: Prefetch de reações antes de serializar
+            from apps.chat.models import MessageReaction
+            message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
             
             # Serializar mensagem completa com reações atualizadas
             message.refresh_from_db()
@@ -1376,13 +1443,17 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
                 }
             )
             
-            logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
+            if created:
+                logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
+            else:
+                logger.info(f"✅ [REACTION] Reação já existente (broadcast): {request.user.email} {emoji} em {message.id}")
             logger.info(f"   📡 Broadcast via WebSocket: {room_group_name}")
         except Exception as e:
             logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
         
         serializer = self.get_serializer(reaction)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
+        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(serializer.data, status=status_code)
     
     @action(detail=False, methods=['post'], url_path='remove')
     def remove_reaction(self, request):

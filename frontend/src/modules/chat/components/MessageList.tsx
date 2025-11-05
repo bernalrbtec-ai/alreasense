@@ -487,11 +487,13 @@ export function MessageList() {
  * Componente de Reações de Mensagem
  * Mostra reações existentes e permite adicionar/remover
  */
-function MessageReactions({ message }: { message: any }) {
+// ✅ CORREÇÃO: Memoização de componente de reações para evitar re-renders desnecessários
+const MessageReactions = React.memo(function MessageReactions({ message }: { message: any }) {
   const { user } = useAuthStore();
   const { messages, setMessages } = useChatStore();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
+  const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
   const pickerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -526,7 +528,9 @@ function MessageReactions({ message }: { message: any }) {
 
   // Adicionar reação
   const handleAddReaction = async (emoji: string) => {
-    if (!user) return;
+    if (!user || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
+    
+    setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
     try {
       const response = await api.post('/chat/reactions/add/', {
@@ -552,12 +556,16 @@ function MessageReactions({ message }: { message: any }) {
       setShowEmojiPicker(false);
     } catch (error) {
       console.error('❌ Erro ao adicionar reação:', error);
+    } finally {
+      setProcessingEmoji(null); // ✅ CORREÇÃO: Remover loading state
     }
   };
 
   // Remover reação
   const handleRemoveReaction = async (emoji: string) => {
-    if (!user) return;
+    if (!user || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
+    
+    setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
     try {
       await api.post('/chat/reactions/remove/', {
@@ -599,6 +607,8 @@ function MessageReactions({ message }: { message: any }) {
       setMessages(updatedMessages);
     } catch (error) {
       console.error('❌ Erro ao remover reação:', error);
+    } finally {
+      setProcessingEmoji(null); // ✅ CORREÇÃO: Remover loading state
     }
   };
 
@@ -654,8 +664,10 @@ function MessageReactions({ message }: { message: any }) {
             onClick={() => handleToggleReaction(emoji)}
             onMouseEnter={() => setHoveredEmoji(emoji)}
             onMouseLeave={() => setHoveredEmoji(null)}
+            disabled={processingEmoji === emoji} // ✅ CORREÇÃO: Desabilitar durante processamento
             className={`
               px-2 py-1 rounded-full text-xs flex items-center gap-1.5 transition-all
+              ${processingEmoji === emoji ? 'opacity-50 cursor-wait' : ''}
               ${isUserReaction
                 ? 'bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
                 : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
@@ -665,7 +677,7 @@ function MessageReactions({ message }: { message: any }) {
           >
             <span className="text-base">{emoji}</span>
             <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
-              {data.count}
+              {processingEmoji === emoji ? '...' : data.count} {/* ✅ CORREÇÃO: Feedback visual */}
             </span>
           </button>
         );
@@ -695,4 +707,5 @@ function MessageReactions({ message }: { message: any }) {
       </div>
     </div>
   );
+}); // ✅ CORREÇÃO: Fechar React.memo
 }

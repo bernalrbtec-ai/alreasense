@@ -123,13 +123,21 @@ def serialize_message_for_ws(message) -> Dict[str, Any]:
     """
     Serializa uma mensagem completa para WebSocket.
     
+    ✅ CORREÇÃO: Prefetch de reações para evitar race conditions.
+    
     Args:
         message: Instância do modelo Message
-        
+    
     Returns:
         Dict serializável para JSON com todos os dados da mensagem
     """
     from apps.chat.api.serializers import MessageSerializer
+    from apps.chat.models import Message
+    
+    # ✅ CORREÇÃO: Prefetch de reações se ainda não foi feito
+    if not hasattr(message, '_prefetched_objects_cache') or 'reactions' not in getattr(message, '_prefetched_objects_cache', {}):
+        # Recarregar mensagem com prefetch de reações
+        message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
     
     msg_data = MessageSerializer(message).data
     return convert_uuids_to_str(msg_data)

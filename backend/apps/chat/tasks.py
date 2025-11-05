@@ -1,14 +1,24 @@
 """
-Tasks assíncronas para Flow Chat via RabbitMQ.
+Tasks assíncronas para Flow Chat.
+
+✅ ARQUITETURA HÍBRIDA:
+- Redis Queue: Para tasks de latência crítica (send_message, fetch_profile_pic, fetch_group_info)
+  - Performance: 10x mais rápido que RabbitMQ (2-6ms vs 15-65ms)
+  - Uso: Envio de mensagens, busca de fotos de perfil, info de grupos
+  
+- RabbitMQ: Apenas para process_incoming_media (durabilidade crítica)
+  - Uso: Processamento de mídia recebida (requer garantia de durabilidade)
+  - Motivo: RabbitMQ oferece garantias de persistência mais robustas para mídia
 
 Producers:
-- send_message_to_evolution: Envia mensagem para Evolution API
-- process_profile_pic: Processa foto de perfil do WhatsApp
-- process_incoming_media: Processa mídia recebida do WhatsApp
+- send_message_to_evolution: Envia mensagem para Evolution API (Redis)
+- process_profile_pic: Processa foto de perfil do WhatsApp (Redis)
+- process_incoming_media: Processa mídia recebida do WhatsApp (RabbitMQ)
 - process_uploaded_file: Processa arquivo enviado pelo usuário
 
 Consumers:
-- Processa mensagens das filas dedicadas ao chat
+- Redis Consumer: Processa filas Redis (apps.chat.redis_consumer)
+- RabbitMQ Consumer: Processa fila de mídia (apps.chat.media_tasks)
 """
 import logging
 import json

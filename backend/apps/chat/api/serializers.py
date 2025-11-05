@@ -137,10 +137,13 @@ class MessageSerializer(serializers.ModelSerializer):
         from django.db.models import Count
         from collections import defaultdict
         
-        # Buscar reações com prefetch se disponível
+        # ✅ CORREÇÃO: Prefetch de reações em batch para evitar N+1 queries
+        # Se o queryset já tem prefetch (via ViewSet.get_queryset), usar reações prefetched
         if hasattr(obj, 'reactions'):
+            # Usar prefetch se disponível (evita query adicional)
             reactions = obj.reactions.all()
         else:
+            # Fallback: buscar reações se não foram prefetched
             reactions = MessageReaction.objects.filter(message=obj).select_related('user')
         
         summary = defaultdict(lambda: {'count': 0, 'users': []})
