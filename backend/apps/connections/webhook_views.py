@@ -437,9 +437,29 @@ class EvolutionWebhookView(APIView):
     def handle_message_upsert(self, data):
         """Handle new messages from Evolution API."""
         try:
-            messages = data.get('data', {}).get('messages', [])
-            instance = data.get('data', {}).get('instance', 'default')
+            # ✅ DEBUG CRÍTICO: Log quando messages.upsert chega
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] ====== messages.upsert RECEBIDO ======")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Data completo: {data}")
+            
+            # ✅ FIX: Evolution API v2 envia 'data' como objeto, não lista
+            # Estrutura: { event: 'messages.upsert', instance: '...', data: { key: {...}, message: {...} } }
+            message_data = data.get('data', {})
             instance_name = data.get('instance', 'default')
+            
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Instance: {instance_name}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Message data keys: {list(message_data.keys()) if isinstance(message_data, dict) else 'not dict'}")
+            
+            # ✅ FIX: Se data é um objeto (não lista), processar diretamente
+            # Se for lista (formato antigo), processar primeiro item
+            if isinstance(message_data, list):
+                if len(message_data) == 0:
+                    logger.warning(f"⚠️ [CONNECTIONS WEBHOOK] data está vazio (lista)")
+                    return JsonResponse({'status': 'success', 'processed': 0})
+                message_data = message_data[0]
+                logger.info(f"📥 [CONNECTIONS WEBHOOK] data é LISTA, usando primeiro item")
+            else:
+                logger.info(f"📥 [CONNECTIONS WEBHOOK] data é OBJETO, processando diretamente")
             
             # 💬 FLOW CHAT: Processar mensagem para o chat em tempo real
             try:
