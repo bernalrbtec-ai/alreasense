@@ -430,7 +430,15 @@ async def handle_send_message(message_id: str):
                             raise
                     
                     data = response.json()
-                    message.message_id = data.get('key', {}).get('id')
+                    evolution_message_id = data.get('key', {}).get('id')
+                    
+                    # ✅ FIX CRÍTICO: Salvar message_id IMEDIATAMENTE para evitar race condition
+                    if evolution_message_id:
+                        message.message_id = evolution_message_id
+                        # ✅ Salvar message_id ANTES de continuar
+                        await sync_to_async(message.save)(update_fields=['message_id'])
+                        logger.info(f"💾 [CHAT] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
+                    
                     logger.info(f"✅ [CHAT] Mídia enviada: {message_id}")
             
             # Envia texto (se não tiver anexo ou como caption separado)
