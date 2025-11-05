@@ -1034,6 +1034,23 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             try:
                 from apps.chat.utils.serialization import serialize_message_for_ws
                 from apps.chat.api.serializers import ConversationSerializer
+                from django.db.models import Count, Q
+                
+                # ✅ FIX CRÍTICO: Recalcular unread_count para garantir que está atualizado
+                conversation.refresh_from_db()
+                if not hasattr(conversation, 'unread_count_annotated'):
+                    from apps.chat.models import Conversation as ConvModel
+                    conversation_with_annotate = ConvModel.objects.annotate(
+                        unread_count_annotated=Count(
+                            'messages',
+                            filter=Q(
+                                messages__direction='incoming',
+                                messages__status__in=['sent', 'delivered']
+                            ),
+                            distinct=True
+                        )
+                    ).get(id=conversation.id)
+                    conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
                 
                 msg_data_serializable = serialize_message_for_ws(message)
                 conv_data_serializable = serialize_conversation_for_ws(conversation)
@@ -1041,7 +1058,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 channel_layer = get_channel_layer()
                 tenant_group = f"chat_tenant_{tenant.id}"
                 
-                # Broadcast para todo o tenant (atualiza lista de conversas e adiciona mensagem)
+                # ✅ FIX: Enviar TANTO message_received QUANTO conversation_updated
+                # message_received: para adicionar mensagem na conversa ativa
+                # conversation_updated: para atualizar lista (unread_count, last_message, etc)
+                
+                # 1. Broadcast message_received (para adicionar mensagem)
                 async_to_sync(channel_layer.group_send)(
                     tenant_group,
                     {
@@ -1051,7 +1072,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     }
                 )
                 
-                logger.info(f"📡 [WEBSOCKET] Mensagem também broadcast para grupo do tenant (atualiza lista)")
+                # 2. Broadcast conversation_updated (para atualizar lista com unread_count correto)
+                async_to_sync(channel_layer.group_send)(
+                    tenant_group,
+                    {
+                        'type': 'conversation_updated',
+                        'conversation': conv_data_serializable
+                    }
+                )
+                
+                logger.info(f"📡 [WEBSOCKET] Mensagem e conversa atualizada broadcast para grupo do tenant (unread_count: {getattr(conversation, 'unread_count_annotated', 'N/A')})")
             except Exception as e:
                 logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
             
