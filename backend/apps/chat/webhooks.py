@@ -1185,35 +1185,49 @@ def handle_message_update(data, tenant):
             return
         
         # Busca mensagem - tentar com keyId primeiro
+        # ✅ FIX CRÍTICO: Adicionar retry para aguardar message_id ser salvo (race condition)
         message = None
+        max_retries = 5
+        retry_delay = 0.2  # 200ms entre tentativas
         
-        # Tentar com keyId
-        if key_id:
-            try:
-                message = Message.objects.select_related('conversation').get(message_id=key_id)
-                logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via keyId!")
-            except Message.DoesNotExist:
-                pass
-        
-        # Se não encontrou, tentar com key.id
-        if not message and key.get('id'):
-            try:
-                message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
-                logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via key.id!")
-            except Message.DoesNotExist:
-                pass
-        
-        # Se não encontrou, tentar com messageId do Evolution
-        if not message and message_id_evo:
-            try:
-                message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
-                logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via messageId!")
-            except Message.DoesNotExist:
-                pass
+        for attempt in range(max_retries):
+            # Tentar com keyId
+            if key_id:
+                try:
+                    message = Message.objects.select_related('conversation').get(message_id=key_id)
+                    logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via keyId (tentativa {attempt + 1})!")
+                    break
+                except Message.DoesNotExist:
+                    pass
+            
+            # Se não encontrou, tentar com key.id
+            if not message and key.get('id'):
+                try:
+                    message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
+                    logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via key.id (tentativa {attempt + 1})!")
+                    break
+                except Message.DoesNotExist:
+                    pass
+            
+            # Se não encontrou, tentar com messageId do Evolution
+            if not message and message_id_evo:
+                try:
+                    message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
+                    logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via messageId (tentativa {attempt + 1})!")
+                    break
+                except Message.DoesNotExist:
+                    pass
+            
+            # Se não encontrou e ainda tem tentativas, aguardar um pouco
+            if not message and attempt < max_retries - 1:
+                import time
+                time.sleep(retry_delay)
+                logger.debug(f"⏳ [WEBHOOK UPDATE] Aguardando message_id ser salvo (tentativa {attempt + 1}/{max_retries})...")
         
         if not message:
-            logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco!")
+            logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco após {max_retries} tentativas!")
             logger.warning(f"   Tentou: keyId={key_id}, key.id={key.get('id')}, messageId={message_id_evo}")
+            logger.warning(f"   ⚠️ Possível race condition: webhook chegou antes do message_id ser salvo")
             return
         
         logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada!")

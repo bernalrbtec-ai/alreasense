@@ -470,14 +470,25 @@ async def handle_send_message(message_id: str):
                 response.raise_for_status()
                 
                 data = response.json()
-                message.message_id = data.get('key', {}).get('id')
+                evolution_message_id = data.get('key', {}).get('id')
+                
+                # ✅ FIX CRÍTICO: Salvar message_id IMEDIATAMENTE para evitar race condition
+                # O webhook pode chegar muito rápido (antes do save completo)
+                if evolution_message_id:
+                    message.message_id = evolution_message_id
+                    # ✅ Salvar message_id ANTES de salvar status completo
+                    # Isso garante que webhook encontra a mensagem mesmo se chegar muito rápido
+                    await sync_to_async(message.save)(update_fields=['message_id'])
+                    logger.info(f"💾 [CHAT ENVIO] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
+                
                 logger.info(f"✅ [CHAT ENVIO] Mensagem enviada com sucesso!")
                 logger.info(f"   Message ID Evolution: {message.message_id}")
         
-        # Atualiza status
+        # Atualiza status (message_id já foi salvo acima se disponível)
         message.status = 'sent'
         message.evolution_status = 'sent'
-        await sync_to_async(message.save)(update_fields=['status', 'evolution_status', 'message_id'])
+        # ✅ Atualizar apenas status/evolution_status (message_id já foi salvo)
+        await sync_to_async(message.save)(update_fields=['status', 'evolution_status'])
         
         logger.info(f"💾 [CHAT ENVIO] Status atualizado no banco para 'sent'")
         
