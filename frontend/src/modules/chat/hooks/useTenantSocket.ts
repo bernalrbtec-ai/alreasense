@@ -265,8 +265,25 @@ export function useTenantSocket() {
           
           // ✅ Atualizar conversa na lista se fornecida (sempre atualizar para unread_count)
           if (data.conversation) {
-            const { updateConversation } = useChatStore.getState();
+            const { updateConversation, setDepartments } = useChatStore.getState();
             updateConversation(data.conversation);
+            
+            // ✅ FIX CRÍTICO: Refetch departamentos quando nova mensagem chega
+            // Isso garante que o contador do departamento seja atualizado em tempo real
+            console.log('🔄 [TENANT WS] Nova mensagem recebida, refetching departamentos...');
+            import('@/lib/api').then(({ api }) => {
+              api.get('/auth/departments/').then(response => {
+                const depts = response.data.results || response.data;
+                setDepartments(depts);
+                console.log('✅ [TENANT WS] Departamentos atualizados após nova mensagem:', depts.map((d: any) => ({
+                  id: d.id,
+                  name: d.name,
+                  pending_count: d.pending_count
+                })));
+              }).catch(error => {
+                console.error('❌ [TENANT WS] Erro ao refetch departamentos após nova mensagem:', error);
+              });
+            });
           }
         }
         break;
