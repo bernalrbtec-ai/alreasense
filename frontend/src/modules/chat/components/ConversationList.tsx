@@ -114,41 +114,51 @@ export function ConversationList() {
       
       if (activeDepartment.id === 'inbox') {
         // Inbox: conversas pendentes SEM departamento
-        // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
+        // ✅ FIX CRÍTICO: Inbox deve mostrar APENAS conversas SEM departamento E status='pending'
+        // Conversas com departamento NUNCA aparecem no Inbox (mesmo se status='pending')
         // Tratar department como string (ID) ou objeto ou null
         const departmentId = typeof conv.department === 'string' 
           ? conv.department 
           : conv.department?.id || null;
-        const convStatus = conv.status || 'pending'; // ✅ Garantir que sempre tem status
+        const convStatus = conv.status || 'pending';
         
-        // ✅ FIX: Inbox deve mostrar APENAS conversas SEM departamento E com status 'pending'
-        // Conversas 'closed' NÃO devem aparecer na Inbox (mesmo sem departamento)
-        // Isso garante que quando recarrega a página, apenas conversas pendentes aparecem
-        const matchesInbox = !departmentId && (convStatus === 'pending' || !convStatus);
+        // ✅ CORREÇÃO: Inbox só mostra conversas SEM departamento E com status='pending'
+        // Removido `!convStatus` para ser mais estrito
+        const matchesInbox = !departmentId && convStatus === 'pending';
         
         console.log('  🔍 [FILTRO] Inbox check:', {
           convId: conv.id,
           status: convStatus,
           departmentId,
+          departmentName: conv.department_name || 'null',
           matchesInbox,
-          reason: !departmentId ? 'sem departamento' : 'tem departamento',
-          statusReason: convStatus === 'pending' ? 'pending' : convStatus === 'closed' ? 'closed (FILTRADO)' : 'outro status'
+          reason: !departmentId ? 'sem departamento' : 'tem departamento (FILTRADO)',
+          statusReason: convStatus === 'pending' ? 'pending' : 'outro status (FILTRADO)'
         });
         
         return matchesInbox;
       } else {
         // Departamento específico: conversas do departamento (qualquer status)
-        // ✅ Tratar department como string (ID) ou objeto { id, name }
+        // ✅ FIX CRÍTICO: Comparar IDs como strings para garantir match
+        // Tratar department como string (ID) ou objeto { id, name }
         const departmentId = typeof conv.department === 'string' 
           ? conv.department 
           : conv.department?.id || null;
-        const matchesDepartment = departmentId === activeDepartment.id;
+        
+        // ✅ CORREÇÃO: Comparar IDs como strings (ambos podem ser UUIDs)
+        const activeDeptId = String(activeDepartment.id);
+        const convDeptId = departmentId ? String(departmentId) : null;
+        const matchesDepartment = convDeptId === activeDeptId;
         
         console.log('  🔍 [FILTRO] Departamento check:', {
           convId: conv.id,
-          convDepartmentId: departmentId,
-          activeDepartmentId: activeDepartment.id,
-          matchesDepartment
+          convDepartmentId: convDeptId,
+          convDepartmentName: conv.department_name || 'null',
+          activeDepartmentId: activeDeptId,
+          activeDepartmentName: activeDepartment.name,
+          matchesDepartment,
+          departmentType: typeof conv.department,
+          departmentObject: conv.department
         });
         
         return matchesDepartment;

@@ -367,8 +367,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {phone} | Tipo: {conversation_type}")
         
+        # ✅ FIX CRÍTICO: Se conversa já existia mas não tem departamento E instância tem default_department,
+        # atualizar conversa para usar o departamento padrão
+        if not created and default_department and not conversation.department:
+            logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name}")
+            conversation.department = default_department
+            conversation.status = 'open'  # Mudar status de 'pending' para 'open' ao atribuir departamento
+            conversation.save(update_fields=['department', 'status'])
+            logger.info(f"✅ [ROUTING] Conversa atualizada: {phone} → {default_department.name}")
+        
         if created:
-            logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} (Inbox)")
+            logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} ({'Departamento: ' + default_department.name if default_department else 'Inbox'})")
             
             # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
             logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")

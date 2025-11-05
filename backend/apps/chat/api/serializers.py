@@ -166,6 +166,12 @@ class ConversationSerializer(serializers.ModelSerializer):
     contact_tags = serializers.SerializerMethodField()
     instance_friendly_name = serializers.SerializerMethodField()
     
+    # ✅ FIX: Garantir que department sempre retorne como UUID string (ou null)
+    department = serializers.PrimaryKeyRelatedField(
+        read_only=True,
+        allow_null=True
+    )
+    
     class Meta:
         model = Conversation
         fields = [
