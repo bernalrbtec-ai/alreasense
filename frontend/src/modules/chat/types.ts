@@ -7,6 +7,7 @@ export interface Department {
   name: string;
   color?: string;
   ai_enabled: boolean;
+  pending_count?: number;  // ✅ NOVO: Contador de conversas pendentes do backend
 }
 
 export interface User {

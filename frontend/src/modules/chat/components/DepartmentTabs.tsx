@@ -10,8 +10,31 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { NotificationToggle } from './NotificationToggle';
 
 export function DepartmentTabs() {
-  const { departments, activeDepartment, setDepartments, setActiveDepartment } = useChatStore();
+  const { departments, activeDepartment, setDepartments, setActiveDepartment, conversations } = useChatStore();
   const { can_access_all_departments, departmentIds } = usePermissions();
+  
+  // ✅ NOVO: Calcular contador de novas conversas (pendentes) para Inbox e departamentos
+  const getPendingCount = (deptId: string | null) => {
+    if (deptId === 'inbox') {
+      // Inbox: conversas pendentes SEM departamento
+      return conversations.filter(conv => 
+        conv.status === 'pending' && 
+        (!conv.department || conv.department === null)
+      ).length;
+    } else {
+      // ✅ MELHORIA: Usar pending_count do backend se disponível, senão calcular do frontend
+      const dept = departments.find(d => d.id === deptId);
+      if (dept?.pending_count !== undefined) {
+        return dept.pending_count;
+      }
+      
+      // Fallback: calcular do frontend
+      return conversations.filter(conv => 
+        conv.status === 'pending' && 
+        (typeof conv.department === 'string' ? conv.department === deptId : conv.department?.id === deptId)
+      ).length;
+    }
+  };
 
   useEffect(() => {
     const fetchDepartments = async () => {
@@ -53,25 +76,57 @@ export function DepartmentTabs() {
           `}
         >
           <Inbox className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          <span className="hidden sm:inline">Inbox</span>
+          <span className="hidden sm:inline">
+            Inbox
+            {getPendingCount('inbox') > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
+                {getPendingCount('inbox')}
+              </span>
+            )}
+          </span>
+          {getPendingCount('inbox') > 0 && (
+            <span className="sm:hidden px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
+              {getPendingCount('inbox')}
+            </span>
+          )}
         </button>
 
         {/* Tabs Departamentos - Responsivo */}
-        {departments.map((dept) => (
-          <button
-            key={dept.id}
-            onClick={() => setActiveDepartment(dept)}
-            className={`
-              px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
-              ${activeDepartment?.id === dept.id
-                ? 'bg-[#00a884] text-white'
-                : 'text-gray-600 hover:bg-gray-100 active:scale-95'
-              }
-            `}
-          >
-            {dept.name}
-          </button>
-        ))}
+        {departments.map((dept) => {
+          const pendingCount = getPendingCount(dept.id);
+          return (
+            <button
+              key={dept.id}
+              onClick={() => setActiveDepartment(dept)}
+              className={`
+                flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
+                ${activeDepartment?.id === dept.id
+                  ? 'bg-[#00a884] text-white'
+                  : 'text-gray-600 hover:bg-gray-100 active:scale-95'
+                }
+              `}
+            >
+              <span className="hidden sm:inline">
+                {dept.name}
+                {pendingCount > 0 && (
+                  <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                    activeDepartment?.id === dept.id ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
+                  }`}>
+                    {pendingCount}
+                  </span>
+                )}
+              </span>
+              <span className="sm:hidden">{dept.name}</span>
+              {pendingCount > 0 && (
+                <span className={`sm:hidden px-1.5 py-0.5 rounded-full text-xs font-semibold ${
+                  activeDepartment?.id === dept.id ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
+                }`}>
+                  {pendingCount}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
 
       {/* Botão de Notificações */}

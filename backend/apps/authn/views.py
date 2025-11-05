@@ -263,8 +263,26 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         """Retorna apenas departamentos do tenant do usuário."""
         user = self.request.user
         if user.is_superuser:
-            return Department.objects.select_related('tenant').all()
-        return Department.objects.filter(tenant=user.tenant).select_related('tenant')
+            queryset = Department.objects.select_related('tenant').all()
+        else:
+            queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
+        
+        # ✅ NOVO: Anotar contador de conversas pendentes para otimizar performance
+        from apps.chat.models import Conversation
+        from django.db.models import Count, Q
+        
+        queryset = queryset.annotate(
+            pending_count_annotated=Count(
+                'conversation',
+                filter=Q(
+                    conversation__status='pending',
+                    conversation__tenant=user.tenant
+                ),
+                distinct=True
+            )
+        )
+        
+        return queryset
     
     def perform_create(self, serializer):
         """Ao criar, associa automaticamente ao tenant do usuário."""

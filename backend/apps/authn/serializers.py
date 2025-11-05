@@ -10,14 +10,52 @@ class DepartmentSerializer(serializers.ModelSerializer):
     Retorna informações básicas do departamento.
     """
     tenant_id = serializers.UUIDField(source='tenant.id', read_only=True)
+    pending_count = serializers.SerializerMethodField()  # ✅ NOVO: Contador de conversas pendentes
     
     class Meta:
         model = Department
         fields = [
             'id', 'tenant_id', 'name', 'color', 'ai_enabled', 'transfer_message',
+            'pending_count',  # ✅ NOVO: Contador de conversas pendentes
             'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'tenant_id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant_id', 'pending_count', 'created_at', 'updated_at']
+    
+    def get_pending_count(self, obj):
+        """
+        Conta conversas pendentes (status='pending') do departamento.
+        Usa annotate quando disponível para melhor performance.
+        """
+        # ✅ PERFORMANCE: Usar pending_count_annotated se disponível (calculado em batch)
+        if hasattr(obj, 'pending_count_annotated'):
+            return obj.pending_count_annotated
+        
+        # Fallback: calcular diretamente (caso annotate não esteja disponível)
+        from apps.chat.models import Conversation
+        
+        tenant = obj.tenant
+        user = self.context.get('request').user if self.context.get('request') else None
+        
+        # Se não tem usuário no contexto, não calcular
+        if not user:
+            return 0
+        
+        # Contar conversas pendentes do departamento
+        pending_conversations = Conversation.objects.filter(
+            tenant=tenant,
+            status='pending',
+            department=obj  # ✅ FIX: Filtrar pelo departamento específico
+        )
+        
+        # Aplicar filtros de permissão do usuário
+        if not user.is_admin:
+            # Gerente/Agente: ver apenas dos seus departamentos
+            if user.is_gerente or user.is_agente:
+                department_ids = user.departments.values_list('id', flat=True)
+                if obj.id not in department_ids:
+                    return 0  # Não tem acesso ao departamento
+        
+        return pending_conversations.count()
     
     def validate(self, attrs):
         """Valida que não pode criar departamento duplicado no mesmo tenant."""

@@ -701,17 +701,57 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             marked_count += 1
         
         # ✅ CORREÇÃO: Broadcast conversation_updated para atualizar lista em tempo real
-        if marked_count > 0:
-            from apps.chat.utils.websocket import broadcast_conversation_updated
-            
-            broadcast_conversation_updated(conversation)
-            logger.info(f"📡 [WEBSOCKET] {marked_count} mensagens marcadas como lidas, broadcast enviado")
+        # ✅ FIX: Sempre fazer broadcast, mesmo se marked_count = 0 (para atualizar unread_count)
+        from apps.chat.utils.websocket import broadcast_conversation_updated
+        from apps.chat.api.serializers import ConversationSerializer
+        
+        # ✅ FIX CRÍTICO: Recarregar conversa do banco para garantir unread_count atualizado
+        conversation.refresh_from_db()
+        
+        # Serializar conversa atualizada (com unread_count=0)
+        serializer = ConversationSerializer(conversation, context={'request': request})
+        conversation_data = serializer.data
+        
+        # Broadcast para todo o tenant (atualiza lista de conversas)
+        broadcast_conversation_updated(conversation)
+        
+        # ✅ FIX: Também enviar para o grupo específico da conversa
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        from apps.chat.utils.serialization import serialize_conversation_for_ws
+        
+        channel_layer = get_channel_layer()
+        room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+        tenant_group = f"chat_tenant_{conversation.tenant_id}"
+        
+        conv_data_serializable = serialize_conversation_for_ws(conversation)
+        
+        # Broadcast para a sala da conversa (atualiza chat aberto)
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'conversation_updated',
+                'conversation': conv_data_serializable
+            }
+        )
+        
+        # Broadcast para todo o tenant (atualiza lista de conversas)
+        async_to_sync(channel_layer.group_send)(
+            tenant_group,
+            {
+                'type': 'conversation_updated',
+                'conversation': conv_data_serializable
+            }
+        )
+        
+        logger.info(f"📡 [WEBSOCKET] {marked_count} mensagens marcadas como lidas, broadcast enviado para tenant")
         
         return Response(
             {
                 'success': True,
                 'marked_count': marked_count,
-                'message': f'{marked_count} mensagens marcadas como lidas'
+                'message': f'{marked_count} mensagens marcadas como lidas',
+                'conversation': conversation_data  # ✅ FIX: Retornar conversa atualizada
             },
             status=status.HTTP_200_OK
         )
