@@ -69,9 +69,43 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         REGRA IMPORTANTE: Conversas com departamento NÃO aparecem no Inbox,
         mesmo que tenham status='pending'
+        
+        ✅ PERFORMANCE: Otimizações aplicadas:
+        - Calcula unread_count em batch (evita N+1 queries)
+        - Prefetch última mensagem (evita N+1 queries)
         """
+        from django.db.models import Prefetch, Count, Q, OuterRef, Subquery
+        from apps.chat.models import Message
+        
         queryset = super().get_queryset()
         user = self.request.user
+        
+        # ✅ PERFORMANCE: Calcular unread_count em batch usando annotate
+        # Isso evita N+1 queries quando serializer acessa unread_count
+        queryset = queryset.annotate(
+            unread_count_annotated=Count(
+                'messages',
+                filter=Q(
+                    messages__direction='incoming',
+                    messages__status__in=['sent', 'delivered']
+                ),
+                distinct=True
+            )
+        )
+        
+        # ✅ PERFORMANCE: Prefetch última mensagem para evitar N+1 queries
+        # Usa Prefetch com queryset customizado para buscar apenas última mensagem
+        last_message_queryset = Message.objects.select_related(
+            'sender', 'conversation'
+        ).prefetch_related('attachments').order_by('-created_at')
+        
+        queryset = queryset.prefetch_related(
+            Prefetch(
+                'messages',
+                queryset=last_message_queryset[:1],  # Apenas última mensagem
+                to_attr='last_message_list'
+            )
+        )
         
         # 🔍 Verificar se está filtrando por status=pending (Inbox)
         status_filter = self.request.query_params.get('status')
@@ -874,16 +908,42 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         """
-        Lista mensagens de uma conversa específica.
-        GET /conversations/{id}/messages/
+        Lista mensagens de uma conversa específica (paginado).
+        GET /conversations/{id}/messages/?limit=50&offset=0
+        
+        ✅ PERFORMANCE: Paginação implementada para melhor performance
         """
         conversation = self.get_object()
+        
+        # Paginação
+        limit = int(request.query_params.get('limit', 50))  # Default 50 mensagens
+        offset = int(request.query_params.get('offset', 0))
+        
+        # Contar total de mensagens (para paginação)
+        total_count = Message.objects.filter(conversation=conversation).count()
+        
+        # Buscar mensagens com paginação (ordenado por created_at DESC para pegar mais recentes)
         messages = Message.objects.filter(
             conversation=conversation
-        ).select_related('sender').prefetch_related('attachments').order_by('created_at')
+        ).select_related(
+            'sender', 'conversation', 'conversation__tenant', 'conversation__department'
+        ).prefetch_related('attachments').order_by('-created_at')[offset:offset+limit]
         
-        serializer = MessageSerializer(messages, many=True)
-        return Response(serializer.data)
+        # Reverter ordem para exibir (mais antigas primeiro, como WhatsApp)
+        messages_list = list(messages)
+        messages_list.reverse()
+        
+        serializer = MessageSerializer(messages_list, many=True)
+        
+        return Response({
+            'results': serializer.data,
+            'count': total_count,
+            'limit': limit,
+            'offset': offset,
+            'has_more': offset + limit < total_count,
+            'next': f'/chat/conversations/{pk}/messages/?limit={limit}&offset={offset+limit}' if offset + limit < total_count else None,
+            'previous': f'/chat/conversations/{pk}/messages/?limit={limit}&offset={max(0, offset-limit)}' if offset > 0 else None
+        })
     
     @action(detail=True, methods=['post'])
     def transfer(self, request, pk=None):

@@ -1,7 +1,8 @@
 /**
  * Lista de conversas - Estilo WhatsApp Web
+ * ✅ PERFORMANCE: Componente otimizado com memoização
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, Plus, User } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
@@ -81,77 +82,79 @@ export function ConversationList() {
     };
   }, []); // Array vazio = executa apenas uma vez no mount
 
-  // 🎯 Filtrar conversas localmente (busca + departamento)
-  const filteredConversations = conversations.filter((conv) => {
-    // ✅ DEBUG: Log detalhado para cada conversa
-    console.log('🔍 [FILTRO] Verificando conversa:', {
-      id: conv.id,
-      contact_name: conv.contact_name,
-      status: conv.status,
-      department: conv.department,
-      activeDepartment: activeDepartment?.id || 'null',
-      searchTerm: searchTerm || 'vazio'
+  // ✅ PERFORMANCE: Memoizar filtro de conversas para evitar recalcular a cada render
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((conv) => {
+      // ✅ DEBUG: Log detalhado para cada conversa
+      console.log('🔍 [FILTRO] Verificando conversa:', {
+        id: conv.id,
+        contact_name: conv.contact_name,
+        status: conv.status,
+        department: conv.department,
+        activeDepartment: activeDepartment?.id || 'null',
+        searchTerm: searchTerm || 'vazio'
+      });
+      
+      // 1. Filtro de busca (nome ou telefone)
+      const matchesSearch = 
+        conv.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        conv.contact_phone.includes(searchTerm);
+      
+      if (!matchesSearch) {
+        console.log('  ❌ [FILTRO] Não passa busca:', conv.id);
+        return false;
+      }
+      
+      // 2. Filtro de departamento (se houver departamento ativo)
+      if (!activeDepartment) {
+        // ✅ SEM departamento ativo: mostrar TODAS as conversas (inclui novas)
+        console.log('  ✅ [FILTRO] Sem departamento ativo - MOSTRAR:', conv.id);
+        return true;
+      }
+      
+      if (activeDepartment.id === 'inbox') {
+        // Inbox: conversas pendentes SEM departamento
+        // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
+        // Tratar department como string (ID) ou objeto ou null
+        const departmentId = typeof conv.department === 'string' 
+          ? conv.department 
+          : conv.department?.id || null;
+        const convStatus = conv.status || 'pending'; // ✅ Garantir que sempre tem status
+        
+        // ✅ FIX: Inbox deve mostrar APENAS conversas SEM departamento E com status 'pending'
+        // Conversas 'closed' NÃO devem aparecer na Inbox (mesmo sem departamento)
+        // Isso garante que quando recarrega a página, apenas conversas pendentes aparecem
+        const matchesInbox = !departmentId && (convStatus === 'pending' || !convStatus);
+        
+        console.log('  🔍 [FILTRO] Inbox check:', {
+          convId: conv.id,
+          status: convStatus,
+          departmentId,
+          matchesInbox,
+          reason: !departmentId ? 'sem departamento' : 'tem departamento',
+          statusReason: convStatus === 'pending' ? 'pending' : convStatus === 'closed' ? 'closed (FILTRADO)' : 'outro status'
+        });
+        
+        return matchesInbox;
+      } else {
+        // Departamento específico: conversas do departamento (qualquer status)
+        // ✅ Tratar department como string (ID) ou objeto { id, name }
+        const departmentId = typeof conv.department === 'string' 
+          ? conv.department 
+          : conv.department?.id || null;
+        const matchesDepartment = departmentId === activeDepartment.id;
+        
+        console.log('  🔍 [FILTRO] Departamento check:', {
+          convId: conv.id,
+          convDepartmentId: departmentId,
+          activeDepartmentId: activeDepartment.id,
+          matchesDepartment
+        });
+        
+        return matchesDepartment;
+      }
     });
-    
-    // 1. Filtro de busca (nome ou telefone)
-    const matchesSearch = 
-      conv.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      conv.contact_phone.includes(searchTerm);
-    
-    if (!matchesSearch) {
-      console.log('  ❌ [FILTRO] Não passa busca:', conv.id);
-      return false;
-    }
-    
-    // 2. Filtro de departamento (se houver departamento ativo)
-    if (!activeDepartment) {
-      // ✅ SEM departamento ativo: mostrar TODAS as conversas (inclui novas)
-      console.log('  ✅ [FILTRO] Sem departamento ativo - MOSTRAR:', conv.id);
-      return true;
-    }
-    
-    if (activeDepartment.id === 'inbox') {
-      // Inbox: conversas pendentes SEM departamento
-      // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
-      // Tratar department como string (ID) ou objeto ou null
-      const departmentId = typeof conv.department === 'string' 
-        ? conv.department 
-        : conv.department?.id || null;
-      const convStatus = conv.status || 'pending'; // ✅ Garantir que sempre tem status
-      
-      // ✅ FIX: Inbox deve mostrar APENAS conversas SEM departamento E com status 'pending'
-      // Conversas 'closed' NÃO devem aparecer na Inbox (mesmo sem departamento)
-      // Isso garante que quando recarrega a página, apenas conversas pendentes aparecem
-      const matchesInbox = !departmentId && (convStatus === 'pending' || !convStatus);
-      
-      console.log('  🔍 [FILTRO] Inbox check:', {
-        convId: conv.id,
-        status: convStatus,
-        departmentId,
-        matchesInbox,
-        reason: !departmentId ? 'sem departamento' : 'tem departamento',
-        statusReason: convStatus === 'pending' ? 'pending' : convStatus === 'closed' ? 'closed (FILTRADO)' : 'outro status'
-      });
-      
-      return matchesInbox;
-    } else {
-      // Departamento específico: conversas do departamento (qualquer status)
-      // ✅ Tratar department como string (ID) ou objeto { id, name }
-      const departmentId = typeof conv.department === 'string' 
-        ? conv.department 
-        : conv.department?.id || null;
-      const matchesDepartment = departmentId === activeDepartment.id;
-      
-      console.log('  🔍 [FILTRO] Departamento check:', {
-        convId: conv.id,
-        convDepartmentId: departmentId,
-        activeDepartmentId: activeDepartment.id,
-        matchesDepartment
-      });
-      
-      return matchesDepartment;
-    }
-  });
+  }, [conversations, searchTerm, activeDepartment]); // ✅ Dependências do useMemo
   
   // ✅ DEBUG: Log final do filtro
   console.log('📊 [FILTRO] Resultado:', {
@@ -160,14 +163,15 @@ export function ConversationList() {
     activeDepartment: activeDepartment?.id || 'null'
   });
 
-  const formatTime = (dateString: string | undefined) => {
+  // ✅ PERFORMANCE: Memoizar função de formatação
+  const formatTime = useCallback((dateString: string | undefined) => {
     if (!dateString) return '';
     try {
       return formatDistanceToNow(new Date(dateString), { addSuffix: false, locale: ptBR });
     } catch {
       return '';
     }
-  };
+  }, []);
 
   return (
     <div className="flex flex-col h-full w-full bg-white">

@@ -22,6 +22,120 @@ from apps.chat.utils.image_processing import process_image, is_valid_image
 logger = logging.getLogger(__name__)
 
 
+async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance_name: str, api_key: str, base_url: str):
+    """
+    Handler: Busca informações de grupo (nome, foto, participantes) de forma assíncrona.
+    
+    Fluxo:
+        1. Busca informações do grupo via Evolution API
+        2. Atualiza conversation com nome e metadados
+        3. Broadcast via WebSocket para atualizar frontend
+    
+    Args:
+        conversation_id: UUID da conversa
+        group_jid: JID completo do grupo (ex: 5517991106338-1396034900@g.us)
+        instance_name: Nome da instância WhatsApp
+        api_key: API key da instância
+        base_url: URL base da Evolution API
+    """
+    from apps.chat.models import Conversation
+    from channels.layers import get_channel_layer
+    from asgiref.sync import async_to_sync
+    from asgiref.sync import sync_to_async
+    
+    logger.info(f"👥 [GROUP INFO] Buscando informações do grupo: {group_jid}")
+    
+    try:
+        # Buscar informações do grupo
+        endpoint = f"{base_url.rstrip('/')}/group/findGroupInfos/{instance_name}"
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
+        
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                endpoint,
+                params={'groupJid': group_jid},
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                group_info = response.json()
+                logger.info(f"✅ [GROUP INFO] Informações recebidas para {group_jid}")
+                
+                # Extrair dados
+                group_name = group_info.get('subject', '')
+                group_pic_url = group_info.get('pictureUrl')
+                participants_count = group_info.get('size', 0)
+                group_desc = group_info.get('desc', '')
+                
+                # Buscar e atualizar conversa
+                conversation = await sync_to_async(
+                    Conversation.objects.select_related('tenant').get
+                )(id=conversation_id)
+                
+                update_fields = []
+                
+                if group_name:
+                    conversation.contact_name = group_name
+                    update_fields.append('contact_name')
+                    logger.info(f"✅ [GROUP INFO] Nome atualizado: {group_name}")
+                
+                if group_pic_url:
+                    conversation.profile_pic_url = group_pic_url
+                    update_fields.append('profile_pic_url')
+                    logger.info(f"✅ [GROUP INFO] Foto atualizada")
+                
+                # Atualizar metadados
+                conversation.group_metadata = {
+                    'group_id': group_jid,
+                    'group_name': group_name,
+                    'group_pic_url': group_pic_url,
+                    'participants_count': participants_count,
+                    'description': group_desc,
+                    'is_group': True,
+                }
+                update_fields.append('group_metadata')
+                
+                if update_fields:
+                    await sync_to_async(conversation.save)(update_fields=update_fields)
+                    logger.info(f"✅ [GROUP INFO] Conversa atualizada: {conversation_id}")
+                    
+                    # Broadcast via WebSocket para atualizar frontend
+                    try:
+                        channel_layer = get_channel_layer()
+                        if channel_layer:
+                            room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+                            async_to_sync(channel_layer.group_send)(
+                                room_group_name,
+                                {
+                                    'type': 'conversation_updated',
+                                    'conversation_id': str(conversation.id),
+                                    'updated_fields': update_fields
+                                }
+                            )
+                            
+                            # Broadcast global para tenant
+                            tenant_group_name = f"chat_tenant_{conversation.tenant_id}"
+                            async_to_sync(channel_layer.group_send)(
+                                tenant_group_name,
+                                {
+                                    'type': 'conversation_updated',
+                                    'conversation_id': str(conversation.id),
+                                    'updated_fields': update_fields
+                                }
+                            )
+                            logger.info(f"📡 [GROUP INFO] Broadcast WebSocket enviado")
+                    except Exception as ws_error:
+                        logger.warning(f"⚠️ [GROUP INFO] Erro ao enviar WebSocket: {ws_error}")
+            else:
+                logger.warning(f"⚠️ [GROUP INFO] Erro ao buscar grupo {group_jid}: HTTP {response.status_code}")
+                
+    except Exception as e:
+        logger.error(f"❌ [GROUP INFO] Erro ao buscar informações do grupo: {e}", exc_info=True)
+
+
 async def handle_process_profile_pic(tenant_id: str, phone: str, profile_url: str):
     """
     Handler: Processa foto de perfil do WhatsApp.

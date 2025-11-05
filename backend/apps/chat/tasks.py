@@ -28,6 +28,7 @@ QUEUE_SEND_MESSAGE = 'chat_send_message'
 QUEUE_FETCH_PROFILE_PIC = 'chat_fetch_profile_pic'
 QUEUE_PROCESS_INCOMING_MEDIA = 'chat_process_incoming_media'
 QUEUE_PROCESS_UPLOADED_FILE = 'chat_process_uploaded_file'
+QUEUE_FETCH_GROUP_INFO = 'chat_fetch_group_info'  # ✅ NOVO: Busca informações de grupo de forma assíncrona
 
 
 # ========== PRODUCERS (enfileirar tasks) ==========
@@ -683,6 +684,7 @@ async def start_chat_consumers():
         queue_send = await channel.declare_queue(QUEUE_SEND_MESSAGE, durable=True)
         queue_profile_pic = await channel.declare_queue(QUEUE_FETCH_PROFILE_PIC, durable=True)
         queue_process_incoming_media = await channel.declare_queue(QUEUE_PROCESS_INCOMING_MEDIA, durable=True)
+        queue_fetch_group_info = await channel.declare_queue(QUEUE_FETCH_GROUP_INFO, durable=True)  # ✅ NOVO
         
         logger.info("✅ [CHAT CONSUMER] Filas declaradas")
         
@@ -743,10 +745,32 @@ async def start_chat_consumers():
                     logger.error(f"❌ [CHAT CONSUMER] Erro process_incoming_media: {e}", exc_info=True)
                     raise  # ✅ Re-raise para não silenciar erro
         
+        # Consumer: fetch_group_info (✅ NOVO: busca informações de grupo de forma assíncrona)
+        async def on_fetch_group_info(message: aio_pika.IncomingMessage):
+            async with message.process():
+                try:
+                    from apps.chat.media_tasks import handle_fetch_group_info
+                    payload = json.loads(message.body.decode())
+                    logger.info(f"📥 [CHAT CONSUMER] Recebida task fetch_group_info")
+                    logger.info(f"   📌 conversation_id: {payload.get('conversation_id')}")
+                    logger.info(f"   📌 group_jid: {payload.get('group_jid')}")
+                    await handle_fetch_group_info(
+                        conversation_id=payload['conversation_id'],
+                        group_jid=payload['group_jid'],
+                        instance_name=payload['instance_name'],
+                        api_key=payload['api_key'],
+                        base_url=payload['base_url']
+                    )
+                    logger.info(f"✅ [CHAT CONSUMER] fetch_group_info concluída com sucesso")
+                except Exception as e:
+                    logger.error(f"❌ [CHAT CONSUMER] Erro fetch_group_info: {e}", exc_info=True)
+                    raise  # ✅ Re-raise para não silenciar erro
+        
         # Inicia consumo
         await queue_send.consume(on_send_message)
         await queue_profile_pic.consume(on_fetch_profile_pic)
         await queue_process_incoming_media.consume(on_process_incoming_media)
+        await queue_fetch_group_info.consume(on_fetch_group_info)  # ✅ NOVO
         
         logger.info("🚀 [CHAT CONSUMER] Consumers iniciados e aguardando mensagens")
         

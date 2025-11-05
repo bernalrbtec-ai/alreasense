@@ -1,7 +1,8 @@
 /**
  * Lista de mensagens - Estilo WhatsApp Web com UX Moderna
+ * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
@@ -13,9 +14,12 @@ import { useUserAccess } from '@/hooks/useUserAccess';
 export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
   const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false); // ✅ NOVO: Paginação
+  const [loadingOlder, setLoadingOlder] = useState(false); // ✅ NOVO: Loading mensagens antigas
 
   useEffect(() => {
     if (!activeConversation?.id) return;
@@ -25,10 +29,18 @@ export function MessageList() {
         setIsLoading(true);
         setVisibleMessages(new Set()); // Reset visibilidade ao trocar conversa
         
+        // ✅ PERFORMANCE: Paginação - carregar apenas últimas 50 mensagens
         const response = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
-          params: { ordering: 'created_at' }
+          params: { 
+            limit: 50,
+            offset: 0
+          }
         });
-        const msgs = response.data.results || response.data;
+        
+        // API retorna { results, count, has_more, ... }
+        const data = response.data;
+        const msgs = data.results || data;
+        setHasMoreMessages(data.has_more || false); // ✅ NOVO: Salvar se tem mais mensagens
         
         // ✅ MELHORIA: Ao invés de setMessages (sobrescreve), fazer merge inteligente
         // para preservar attachments que foram atualizados via WebSocket
@@ -72,19 +84,66 @@ export function MessageList() {
         
         setMessages(mergedMessages);
         
-        // Animar mensagens com fade-in sequencial
+        // ✅ PERFORMANCE: Animar mensagens em batch (mais rápido)
+        // Reduzido delay de 20ms para 10ms e limita animação a 50 mensagens
         setTimeout(() => {
-          mergedMessages.forEach((msg, index) => {
+          const messagesToAnimate = mergedMessages.slice(-50); // Apenas últimas 50 para não demorar muito
+          messagesToAnimate.forEach((msg, index) => {
             setTimeout(() => {
               setVisibleMessages(prev => new Set([...prev, msg.id]));
-            }, index * 20); // 20ms entre cada mensagem para efeito cascata
+            }, index * 10); // ✅ Reduzido de 20ms para 10ms
           });
+          
+          // Adicionar mensagens restantes imediatamente (sem animação)
+          if (mergedMessages.length > 50) {
+            const restMessages = mergedMessages.slice(0, -50);
+            restMessages.forEach(msg => {
+              setVisibleMessages(prev => new Set([...prev, msg.id]));
+            });
+          }
         }, 50);
         
         // Scroll to bottom
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
+        
+        // ✅ NOVO: Se conversa não tem mensagens e foi criada recentemente (< 30s), 
+        // fazer re-fetch após 1.5s para pegar mensagem que pode estar sendo processada
+        if (mergedMessages.length === 0 && activeConversation.created_at) {
+          const createdDate = new Date(activeConversation.created_at);
+          const now = new Date();
+          const ageInSeconds = (now.getTime() - createdDate.getTime()) / 1000;
+          
+          if (ageInSeconds < 30) {
+            console.log(`🔄 [MessageList] Conversa nova sem mensagens (${Math.round(ageInSeconds)}s), re-fetch em 1.5s...`);
+            setTimeout(async () => {
+              // Re-fetch mensagens
+              try {
+                const retryResponse = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
+                  params: { 
+                    limit: 50,
+                    offset: 0
+                  }
+                });
+                const retryData = retryResponse.data;
+                const retryMsgs = retryData.results || retryData;
+                if (retryMsgs.length > 0) {
+                  console.log(`✅ [MessageList] Re-fetch encontrou ${retryMsgs.length} mensagem(ns)!`);
+                  setMessages(retryMsgs);
+                  setHasMoreMessages(retryData.has_more || false);
+                  
+                  // Scroll to bottom
+                  setTimeout(() => {
+                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                  }, 100);
+                }
+              } catch (error) {
+                console.error('❌ Erro no re-fetch de mensagens:', error);
+              }
+            }, 1500);
+          }
+        }
       } catch (error) {
         console.error('❌ Erro ao carregar mensagens:', error);
       } finally {
@@ -93,7 +152,7 @@ export function MessageList() {
     };
 
     fetchMessages();
-  }, [activeConversation?.id, setMessages]);
+  }, [activeConversation?.id, activeConversation?.created_at, setMessages]);
 
   // Auto-scroll quando novas mensagens chegam + fade-in para novas mensagens
   useEffect(() => {
@@ -117,7 +176,8 @@ export function MessageList() {
     }, 100);
   }, [messages, visibleMessages]);
 
-  const getStatusIcon = (status: string) => {
+  // ✅ PERFORMANCE: Memoizar funções para evitar recriação a cada render
+  const getStatusIcon = useCallback((status: string) => {
     switch (status) {
       case 'pending':
         return <Clock className="w-4 h-4 text-gray-400 animate-pulse" />;
@@ -130,22 +190,22 @@ export function MessageList() {
       default:
         return null;
     }
-  };
+  }, []);
 
-  const formatTime = (dateString: string) => {
+  const formatTime = useCallback((dateString: string) => {
     try {
       return format(new Date(dateString), 'HH:mm');
     } catch {
       return '';
     }
-  };
+  }, []);
 
-  const getAttachmentIcon = (attachment: MessageAttachment) => {
+  const getAttachmentIcon = useCallback((attachment: MessageAttachment) => {
     if (attachment.is_image) return <ImageIcon className="w-5 h-5" />;
     if (attachment.is_video) return <Video className="w-5 h-5" />;
     if (attachment.is_audio) return <Music className="w-5 h-5" />;
     return <FileText className="w-5 h-5" />;
-  };
+  }, []);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -243,6 +303,72 @@ export function MessageList() {
         </div>
       ) : (
         <>
+          {/* ✅ NOVO: Botão para carregar mensagens antigas */}
+          {hasMoreMessages && !loadingOlder && (
+            <div className="flex justify-center mb-2">
+              <button
+                onClick={async () => {
+                  if (!activeConversation?.id || loadingOlder) return;
+                  
+                  setLoadingOlder(true);
+                  try {
+                    const currentCount = messages.length;
+                    const response = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
+                      params: { 
+                        limit: 50,
+                        offset: currentCount
+                      }
+                    });
+                    
+                    const data = response.data;
+                    const olderMsgs = data.results || data;
+                    
+                    if (olderMsgs.length > 0) {
+                      // Adicionar mensagens antigas no início
+                      setMessages([...olderMsgs.reverse(), ...messages]);
+                      setHasMoreMessages(data.has_more || false);
+                      
+                      // Manter scroll na posição atual (sem pular para o topo)
+                      const container = messagesStartRef.current?.parentElement;
+                      if (container) {
+                        const scrollHeightBefore = container.scrollHeight;
+                        setTimeout(() => {
+                          const scrollHeightAfter = container.scrollHeight;
+                          const scrollDiff = scrollHeightAfter - scrollHeightBefore;
+                          container.scrollTop += scrollDiff;
+                        }, 0);
+                      }
+                    } else {
+                      setHasMoreMessages(false);
+                    }
+                  } catch (error) {
+                    console.error('❌ Erro ao carregar mensagens antigas:', error);
+                  } finally {
+                    setLoadingOlder(false);
+                  }
+                }}
+                className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+              >
+                Carregar mensagens antigas
+              </button>
+            </div>
+          )}
+          
+          {loadingOlder && (
+            <div className="flex justify-center mb-2">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <div className="flex gap-1">
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                  <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                </div>
+                Carregando mensagens antigas...
+              </div>
+            </div>
+          )}
+          
+          <div ref={messagesStartRef} /> {/* ✅ NOVO: Ref para topo */}
+          
           {messages.map((msg) => (
             <div
               key={msg.id}

@@ -63,34 +63,16 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
                     logger = logging.getLogger(__name__)
                     s3_manager = S3Manager()
                     
-                    # ✅ PERFORMANCE: Cachear resultado de verificação de existência (5 min)
-                    # Evita chamadas custosas ao S3 em cada serializer call
-                    cache_key = f"s3_exists:{instance.file_path}"
-                    file_exists = cache.get(cache_key)
-                    
-                    if file_exists is None:
-                        # Não está em cache, verificar
-                        try:
-                            file_exists = s3_manager.file_exists(instance.file_path)
-                            # Cachear resultado por 5 minutos (300 segundos)
-                            cache.set(cache_key, file_exists, 300)
-                        except Exception as check_error:
-                            # Se verificação falhar (timeout, etc), assumir que existe e gerar URL
-                            # Melhor ter URL que pode funcionar do que URL vazia
-                            logger.warning(f"⚠️ [SERIALIZER] Erro ao verificar S3: {check_error}. Assumindo existência.")
-                            file_exists = True  # Otimista: assumir que existe
-                    
-                    if not file_exists:
-                        logger.warning(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3: {instance.file_path}")
-                        # ✅ IMPORTANTE: Se arquivo não existe, tentar gerar URL mesmo assim
-                        # Pode ser que o cache esteja desatualizado ou arquivo foi processado recentemente
-                        # Melhor tentar carregar do que não mostrar nada
-                        logger.debug(f"⚠️ [SERIALIZER] Arquivo não encontrado no S3, mas gerando URL mesmo assim (pode estar em processamento)")
-                    
-                    # ✅ SEMPRE gerar URL do proxy, mesmo se verificação falhou
-                    # A verificação pode estar desatualizada (arquivo pode ter sido processado após verificação)
+                    # ✅ PERFORMANCE: Gerar URL diretamente sem verificar existência
+                    # Verificação é custosa e pode ser desatualizada
+                    # Assumir que arquivo existe (otimista) - se não existir, erro será tratado no frontend
                     proxy_url = s3_manager.get_public_url(instance.file_path)
                     data['file_url'] = proxy_url
+                    
+                    # ✅ PERFORMANCE: Cachear URL gerada (10 minutos) para evitar regeneração
+                    # URLs são estáveis enquanto arquivo existe no S3
+                    url_cache_key = f"s3_proxy_url:{instance.file_path}"
+                    cache.set(url_cache_key, proxy_url, 600)  # 10 minutos
                     
                     # ✅ DEBUG: Log detalhado das URLs geradas no serializer
                     logger.info(f"📎 [SERIALIZER] URLs para attachment {instance.id}:")
@@ -179,7 +161,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     assigned_to_data = UserSerializer(source='assigned_to', read_only=True)
     participants_data = serializers.SerializerMethodField()
     last_message = serializers.SerializerMethodField()
-    unread_count = serializers.ReadOnlyField()
+    unread_count = serializers.SerializerMethodField()  # ✅ MUDADO: Agora usa get_unread_count
     department_name = serializers.CharField(source='department.name', read_only=True)
     contact_tags = serializers.SerializerMethodField()
     instance_friendly_name = serializers.SerializerMethodField()
@@ -205,48 +187,81 @@ class ConversationSerializer(serializers.ModelSerializer):
         """Retorna os participantes da conversa."""
         return UserSerializer(obj.participants.all(), many=True).data
     
+    def get_unread_count(self, obj):
+        """Retorna contagem de mensagens não lidas (otimizado em batch)."""
+        # ✅ PERFORMANCE: Usar unread_count_annotated calculado em batch
+        # Se não estiver disponível (fallback), usar property original
+        if hasattr(obj, 'unread_count_annotated'):
+            return obj.unread_count_annotated
+        # Fallback para property original (caso não tenha annotate)
+        return obj.unread_count
+    
     def get_last_message(self, obj):
-        """Retorna a última mensagem da conversa."""
+        """Retorna a última mensagem da conversa (otimizado com prefetch)."""
+        # ✅ PERFORMANCE: Usar last_message_list do prefetch_related
+        # Se não estiver disponível (fallback), buscar normalmente
+        if hasattr(obj, 'last_message_list') and obj.last_message_list:
+            return MessageSerializer(obj.last_message_list[0]).data
+        
+        # Fallback para query normal (caso não tenha prefetch)
         last_message = obj.messages.order_by('-created_at').first()
         if last_message:
             return MessageSerializer(last_message).data
         return None
     
     def get_instance_friendly_name(self, obj):
-        """Retorna nome amigável da instância."""
+        """Retorna nome amigável da instância (com cache)."""
         if not obj.instance_name:
             return None
         
-        # Buscar no banco
-        from apps.notifications.models import WhatsAppInstance
-        instance = WhatsAppInstance.objects.filter(
-            instance_name=obj.instance_name,
-            is_active=True
-        ).values('friendly_name').first()
+        # ✅ PERFORMANCE: Cache de 5 minutos para evitar queries repetidas
+        from django.core.cache import cache
+        cache_key = f"instance_friendly_name:{obj.instance_name}"
+        friendly_name = cache.get(cache_key)
         
-        if instance:
-            return instance['friendly_name']
+        if friendly_name is None:
+            # Buscar no banco
+            from apps.notifications.models import WhatsAppInstance
+            instance = WhatsAppInstance.objects.filter(
+                instance_name=obj.instance_name,
+                is_active=True
+            ).values('friendly_name').first()
+            
+            friendly_name = instance['friendly_name'] if instance else obj.instance_name
+            # Cache por 5 minutos (300 segundos)
+            cache.set(cache_key, friendly_name, 300)
         
-        return obj.instance_name  # Fallback para UUID
+        return friendly_name
     
     def get_contact_tags(self, obj):
-        """Busca as tags do contato pelo telefone."""
-        try:
-            contact = Contact.objects.prefetch_related('tags').get(
-                tenant=obj.tenant,
-                phone=obj.contact_phone,
-                is_active=True
-            )
-            return [
-                {
-                    'id': str(tag.id),
-                    'name': tag.name,
-                    'color': tag.color
-                }
-                for tag in contact.tags.all()
-            ]
-        except Contact.DoesNotExist:
-            return []
+        """Busca as tags do contato pelo telefone (com cache)."""
+        # ✅ PERFORMANCE: Cache de 10 minutos para evitar queries repetidas
+        from django.core.cache import cache
+        cache_key = f"contact_tags:{obj.tenant_id}:{obj.contact_phone}"
+        tags = cache.get(cache_key)
+        
+        if tags is None:
+            try:
+                contact = Contact.objects.prefetch_related('tags').get(
+                    tenant=obj.tenant,
+                    phone=obj.contact_phone,
+                    is_active=True
+                )
+                tags = [
+                    {
+                        'id': str(tag.id),
+                        'name': tag.name,
+                        'color': tag.color
+                    }
+                    for tag in contact.tags.all()
+                ]
+            except Contact.DoesNotExist:
+                tags = []
+            
+            # Cache por 10 minutos (600 segundos)
+            cache.set(cache_key, tags, 600)
+        
+        return tags
 
 
 class ConversationDetailSerializer(ConversationSerializer):

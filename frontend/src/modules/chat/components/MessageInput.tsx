@@ -108,13 +108,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
         
         if (success) {
           setMessage('');
-          if (!selectedFile) {
-            // Só mostrar toast se não teve arquivo (arquivo já mostra seu próprio toast)
-            toast.success('Mensagem enviada!', {
-              duration: 2000,
-              position: 'bottom-right'
-            });
-          }
+          // ✅ Removido toast "Mensagem enviada" - desnecessário e polui a interface
         } else {
           toast.error('Erro ao enviar mensagem. WebSocket desconectado.', {
             duration: 4000,

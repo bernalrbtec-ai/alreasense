@@ -397,58 +397,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         'Content-Type': 'application/json'
                     }
                     
-                    # 👥 Para GRUPOS: usar endpoint /group/findGroupInfos
+                    # 👥 Para GRUPOS: enfileirar busca de informações (assíncrona, não bloqueia webhook)
                     if is_group:
                         group_jid = remote_jid
-                        logger.info(f"👥 [GRUPO NOVO] Buscando informações com Group JID: {group_jid}")
+                        logger.info(f"👥 [GRUPO NOVO] Enfileirando busca de informações para Group JID: {group_jid}")
                         
-                        endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
-                        
-                        with httpx.Client(timeout=5.0) as client:
-                            response = client.get(
-                                endpoint,
-                                params={'groupJid': group_jid},
-                                headers=headers
-                            )
-                            
-                            if response.status_code == 200:
-                                group_info = response.json()
-                                logger.info(f"✅ [GRUPO NOVO] Informações recebidas!")
-                                
-                                # Extrair dados
-                                group_name = group_info.get('subject', '')
-                                group_pic_url = group_info.get('pictureUrl')
-                                participants_count = group_info.get('size', 0)
-                                group_desc = group_info.get('desc', '')
-                                
-                                # Atualizar conversa
-                                update_fields = []
-                                
-                                if group_name:
-                                    conversation.contact_name = group_name
-                                    update_fields.append('contact_name')
-                                    logger.info(f"✅ [GRUPO NOVO] Nome: {group_name}")
-                                
-                                if group_pic_url:
-                                    conversation.profile_pic_url = group_pic_url
-                                    update_fields.append('profile_pic_url')
-                                    logger.info(f"✅ [GRUPO NOVO] Foto: {group_pic_url[:50]}...")
-                                
-                                # Atualizar metadados
-                                conversation.group_metadata = {
-                                    'group_id': remote_jid,
-                                    'group_name': group_name,
-                                    'group_pic_url': group_pic_url,
-                                    'participants_count': participants_count,
-                                    'description': group_desc,
-                                    'is_group': True,
-                                }
-                                update_fields.append('group_metadata')
-                                
-                                if update_fields:
-                                    conversation.save(update_fields=update_fields)
-                            else:
-                                logger.warning(f"⚠️ [GRUPO NOVO] Erro ao buscar: {response.status_code}")
+                        # ✅ Enfileirar task assíncrona para buscar informações do grupo
+                        from apps.chat.tasks import delay, QUEUE_FETCH_GROUP_INFO
+                        delay(QUEUE_FETCH_GROUP_INFO, {
+                            'conversation_id': str(conversation.id),
+                            'group_jid': group_jid,
+                            'instance_name': instance_name,
+                            'api_key': api_key,
+                            'base_url': base_url
+                        })
+                        logger.info(f"✅ [GRUPO NOVO] Task enfileirada - informações serão buscadas em background")
                     
                     # 👤 Para INDIVIDUAIS: buscar foto E nome do contato via API
                     else:

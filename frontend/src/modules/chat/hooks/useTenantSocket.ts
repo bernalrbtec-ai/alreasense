@@ -83,11 +83,11 @@ export function useTenantSocket() {
           
           // 🔔 Toast notification - NÃO mostrar se já está na página do chat
           if (!isOnChatPage) {
-            // ✅ Verificar registry global antes de mostrar
+            // ✅ Verificar registry global antes de mostrar (simplificado)
             if (globalToastRegistry.addToast(toastKey)) {
               toast.success('Nova Mensagem Recebida! 💬', {
                 description: `De: ${contactName}`,
-                duration: 6000,
+                duration: 3000, // ✅ Reduzido de 6s para 3s para aparecer mais rápido
                 id: toastKey, // ✅ Usar mesmo ID para deduplicação
                 action: {
                   label: 'Abrir',
@@ -97,8 +97,8 @@ export function useTenantSocket() {
                 onAutoClose: () => globalToastRegistry.removeToast(toastKey)
               });
               
-              // ✅ Limpar após 10 segundos
-              globalToastRegistry.clearAfterTimeout(toastKey, 10000);
+              // ✅ Limpar após 5 segundos (reduzido de 10s)
+              globalToastRegistry.clearAfterTimeout(toastKey, 5000);
             } else {
               console.log('🔕 [TOAST] Toast já foi mostrado para nova conversa, ignorando...');
             }
@@ -277,7 +277,7 @@ export function useTenantSocket() {
         console.log('🖼️ [DEBUG] contact_name:', data.conversation?.contact_name);
         
         // Atualizar conversa na lista
-        const { updateConversation, addConversation, conversations } = useChatStore.getState();
+        const { updateConversation, addConversation, conversations, activeConversation, setMessages } = useChatStore.getState();
         if (data.conversation) {
           // ✅ Detectar se status mudou de 'closed' para 'pending' (conversa reaberta)
           const existingConversation = conversations.find(c => c.id === data.conversation.id);
@@ -286,7 +286,8 @@ export function useTenantSocket() {
           const statusReopened = wasClosed && isNowPending;
           
           // ✅ IMPORTANTE: Se conversa não existe no store, adicionar (pode acontecer em race conditions)
-          if (!existingConversation) {
+          const isNewConversation = !existingConversation;
+          if (isNewConversation) {
             console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...');
             addConversation(data.conversation);
           } else {
@@ -294,6 +295,34 @@ export function useTenantSocket() {
             updateConversation(data.conversation);
           }
           console.log('✅ [TENANT WS] Store atualizada!');
+          
+          // ✅ NOVO: Se conversa atualizada é a conversa ativa E foi criada recentemente,
+          // forçar re-fetch de mensagens para garantir que mensagens novas sejam carregadas
+          if (activeConversation?.id === data.conversation.id && data.updated_fields) {
+            const updatedName = data.updated_fields.includes('contact_name');
+            const updatedMetadata = data.updated_fields.includes('group_metadata');
+            
+            // Se nome ou metadados foram atualizados, pode ser que conversa estava vazia antes
+            // Forçar re-fetch de mensagens após 500ms
+            if (updatedName || updatedMetadata) {
+              console.log('🔄 [TENANT WS] Conversa ativa atualizada (nome/metadados), re-fetch de mensagens em 500ms...');
+              setTimeout(async () => {
+                try {
+                  const { api } = await import('@/lib/api');
+                  const response = await api.get(`/chat/conversations/${data.conversation.id}/messages/`, {
+                    params: { ordering: 'created_at' }
+                  });
+                  const msgs = response.data.results || response.data;
+                  if (msgs.length > 0) {
+                    console.log(`✅ [TENANT WS] Re-fetch encontrou ${msgs.length} mensagem(ns)!`);
+                    setMessages(msgs);
+                  }
+                } catch (error) {
+                  console.error('❌ [TENANT WS] Erro no re-fetch de mensagens:', error);
+                }
+              }, 500);
+            }
+          }
           
           // 🔔 Mostrar toast se conversa foi reaberta
           // ✅ FIX: Também mostrar se não existia no store E status é pending (nova conversa ou reaberta)
