@@ -126,9 +126,21 @@ export function ChatWindow() {
         status: 'closed'
       });
       
-      // Remover conversa da lista imediatamente
-      const { removeConversation } = useChatStore.getState();
-      removeConversation(activeConversation.id);
+      // ✅ FIX: Atualizar conversa na lista ao invés de remover
+      // Se remover, quando nova mensagem chegar e reabrir, não aparece na lista
+      const { updateConversation, setDepartments } = useChatStore.getState();
+      updateConversation({
+        ...activeConversation,
+        status: 'closed'
+      });
+      
+      // ✅ FIX: Refetch departamentos para atualizar contadores
+      api.get('/auth/departments/').then(response => {
+        const depts = response.data.results || response.data;
+        setDepartments(depts);
+      }).catch(error => {
+        console.error('❌ [ChatWindow] Erro ao refetch departamentos:', error);
+      });
       
       toast.success('Conversa fechada!', {
         duration: 2000,
