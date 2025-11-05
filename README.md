@@ -10,7 +10,7 @@ Plataforma SaaS multi-tenant para análise de sentimento e satisfação de clien
 
 ## 🚀 Stack
 
-- **Backend:** Django 5 + DRF + Channels + Celery
+- **Backend:** Django 5 + DRF + Channels + RabbitMQ (NÃO Celery)
 - **Frontend:** React + TypeScript + Vite + Tailwind + shadcn/ui
 - **Banco:** PostgreSQL + pgvector
 - **Infra:** Docker + Railway
@@ -78,10 +78,10 @@ cp .env.example .env
 npm run dev
 ```
 
-#### Celery (terminal separado)
+#### RabbitMQ Worker (terminal separado)
 ```bash
 cd backend
-celery -A evosense worker -l info
+python manage.py run_rabbitmq_worker
 ```
 
 ### Opção 3: Docker
@@ -92,10 +92,10 @@ docker-compose up --build
 
 ## 📚 Documentação
 
-- [Arquitetura](docs/ARCHITECTURE.md) - Visão geral da arquitetura do sistema
-- [Schema do Banco](docs/DB_SCHEMA.md) - Estrutura do banco de dados
-- [Deploy](docs/DEPLOYMENT.md) - Guia completo de deployment
-- [Regras de Desenvolvimento](rules.md) - Convenções e padrões
+- **[📚 Documentação Consolidada](DOCUMENTACAO_CONSOLIDADA.md)** - Guia completo e atualizado
+- **[🚦 Regras de Desenvolvimento](rules.md)** - Convenções e padrões do projeto
+- **[⚡ Otimizações de Performance](OTIMIZACOES_PERFORMANCE_CHAT.md)** - Melhorias implementadas
+- **[📡 WebSocket vs Webhooks](ANALISE_WEBSOCKET_EVOLUTION.md)** - Análise de integração
 
 ## 🎯 Features
 
