@@ -299,15 +299,20 @@ export function useTenantSocket() {
         console.log('🔄 [TENANT WS] Conversa atualizada:', data.conversation);
         console.log('🖼️ [DEBUG] profile_pic_url:', data.conversation?.profile_pic_url);
         console.log('🖼️ [DEBUG] contact_name:', data.conversation?.contact_name);
+        console.log('📊 [DEBUG] unread_count:', data.conversation?.unread_count);
+        console.log('📊 [DEBUG] status:', data.conversation?.status);
+        console.log('📊 [DEBUG] department:', data.conversation?.department);
         
         // Atualizar conversa na lista
-        const { updateConversation, addConversation, conversations, activeConversation, setMessages } = useChatStore.getState();
+        const { updateConversation, addConversation, conversations, activeConversation, setMessages, setDepartments } = useChatStore.getState();
         if (data.conversation) {
           // ✅ Detectar se status mudou de 'closed' para 'pending' (conversa reaberta)
           const existingConversation = conversations.find(c => c.id === data.conversation.id);
           const wasClosed = existingConversation?.status === 'closed';
           const isNowPending = data.conversation.status === 'pending';
           const statusReopened = wasClosed && isNowPending;
+          const statusChanged = existingConversation && existingConversation.status !== data.conversation.status;
+          const unreadCountChanged = existingConversation && existingConversation.unread_count !== data.conversation.unread_count;
           
           // ✅ IMPORTANTE: Se conversa não existe no store, adicionar (pode acontecer em race conditions)
           const isNewConversation = !existingConversation;
@@ -319,6 +324,26 @@ export function useTenantSocket() {
             updateConversation(data.conversation);
           }
           console.log('✅ [TENANT WS] Store atualizada!');
+          
+          // ✅ FIX CRÍTICO: Se status mudou para 'pending' OU unread_count mudou, refetch departamentos
+          // Isso garante que pending_count seja atualizado em tempo real
+          if (statusChanged && isNowPending || unreadCountChanged) {
+            console.log('🔄 [TENANT WS] Status/unread_count mudou, refetching departamentos...');
+            // Refetch departamentos para atualizar pending_count
+            import('@/lib/api').then(({ api }) => {
+              api.get('/auth/departments/').then(response => {
+                const depts = response.data.results || response.data;
+                setDepartments(depts);
+                console.log('✅ [TENANT WS] Departamentos atualizados:', depts.map((d: any) => ({
+                  id: d.id,
+                  name: d.name,
+                  pending_count: d.pending_count
+                })));
+              }).catch(error => {
+                console.error('❌ [TENANT WS] Erro ao refetch departamentos:', error);
+              });
+            });
+          }
           
           // ✅ NOVO: Se conversa atualizada é a conversa ativa E foi criada recentemente,
           // forçar re-fetch de mensagens para garantir que mensagens novas sejam carregadas
