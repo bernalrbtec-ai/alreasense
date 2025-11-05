@@ -17,14 +17,15 @@ export function DepartmentTabs() {
   const getPendingCount = (deptId: string | null) => {
     if (deptId === 'inbox') {
       // Inbox: conversas pendentes SEM departamento
-      return conversations.filter(conv => 
+      const inboxCount = conversations.filter(conv => 
         conv.status === 'pending' && 
         (!conv.department || conv.department === null)
       ).length;
+      return inboxCount;
     } else {
       // ✅ MELHORIA: Usar pending_count do backend se disponível, senão calcular do frontend
       const dept = departments.find(d => d.id === deptId);
-      if (dept?.pending_count !== undefined) {
+      if (dept?.pending_count !== undefined && dept.pending_count !== null) {
         return dept.pending_count;
       }
       
@@ -41,6 +42,13 @@ export function DepartmentTabs() {
       try {
         const response = await api.get('/auth/departments/');
         const depts = response.data.results || response.data;
+        
+        // ✅ DEBUG: Log para verificar se pending_count está vindo do backend
+        console.log('📊 [DEPARTMENTS] Departamentos recebidos:', depts.map((d: Department) => ({
+          id: d.id,
+          name: d.name,
+          pending_count: d.pending_count
+        })));
         
         let filteredDepts = depts;
         if (!can_access_all_departments && departmentIds) {
@@ -59,6 +67,11 @@ export function DepartmentTabs() {
     };
 
     fetchDepartments();
+    
+    // ✅ NOVO: Refetch departamentos a cada 30 segundos para atualizar contadores
+    const interval = setInterval(fetchDepartments, 30000);
+    
+    return () => clearInterval(interval);
   }, [can_access_all_departments, departmentIds, setDepartments, setActiveDepartment, activeDepartment]);
 
   return (
