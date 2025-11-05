@@ -119,9 +119,15 @@ def evolution_webhook(request):
         event_type = data.get('event')
         instance_name = data.get('instance')
         
-        logger.info(f"📥 [WEBHOOK] Evento recebido: {event_type} - {instance_name}")
+        # ✅ DEBUG: Log completo do request
+        logger.info(f"📥 [WEBHOOK] ====== NOVO EVENTO RECEBIDO ======")
+        logger.info(f"📥 [WEBHOOK] Evento: {event_type}")
+        logger.info(f"📥 [WEBHOOK] Instance: {instance_name}")
+        logger.info(f"📥 [WEBHOOK] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+        logger.info(f"📥 [WEBHOOK] Data completo: {data}")
         
         if not instance_name:
+            logger.error(f"❌ [WEBHOOK] Instance não fornecido no webhook!")
             return Response(
                 {'error': 'instance é obrigatório'},
                 status=status.HTTP_400_BAD_REQUEST
