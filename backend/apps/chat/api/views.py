@@ -1019,7 +1019,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
         
+        # ✅ FIX: Atualizar status quando transferir para departamento
+        if new_department_id:
+            conversation.status = 'open'  # Abrir quando transferir para departamento
+        
         conversation.save()
+        
+        # ✅ FIX: Recarregar conversa do banco para garantir dados atualizados
+        conversation.refresh_from_db()
         
         # Criar mensagem interna de transferência
         old_dept_name = old_department.name if old_department else 'Inbox'
@@ -1098,21 +1105,38 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     exc_info=True
                 )
         
-        # Broadcast via WebSocket
+        # ✅ FIX: Serializar conversa atualizada para resposta e WebSocket
+        serializer = ConversationSerializer(conversation)
+        conversation_data = serializer.data
+        
+        # Broadcast via WebSocket para atualizar conversa em todos os clientes
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
+        from apps.chat.utils.serialization import serialize_conversation_for_ws
         
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+        tenant_group = f"chat_tenant_{conversation.tenant_id}"
         
+        # ✅ FIX: Broadcast para a sala da conversa (atualiza chat aberto)
         async_to_sync(channel_layer.group_send)(
             room_group_name,
             {
                 'type': 'conversation_transferred',
                 'conversation_id': str(conversation.id),
                 'new_agent': conversation.assigned_to.email if conversation.assigned_to else None,
-                'new_department': conversation.department.name,
+                'new_department': conversation.department.name if conversation.department else None,
                 'transferred_by': user.email
+            }
+        )
+        
+        # ✅ FIX: Broadcast para todo o tenant (atualiza lista de conversas)
+        conv_data_serializable = serialize_conversation_for_ws(conversation)
+        async_to_sync(channel_layer.group_send)(
+            tenant_group,
+            {
+                'type': 'conversation_updated',
+                'conversation': conv_data_serializable
             }
         )
         
@@ -1120,11 +1144,13 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         logger = logging.getLogger(__name__)
         logger.info(
             f"✅ [TRANSFER] Conversa {conversation.id} transferida por {user.email} "
-            f"para {conversation.department.name}"
+            f"para {conversation.department.name if conversation.department else 'Sem departamento'}"
         )
+        logger.info(f"   📋 Departamento: {conversation.department_id}")
+        logger.info(f"   📊 Status: {conversation.status}")
         
         return Response(
-            ConversationSerializer(conversation).data,
+            conversation_data,  # ✅ FIX: Usar conversation_data já serializado
             status=status.HTTP_200_OK
         )
 
