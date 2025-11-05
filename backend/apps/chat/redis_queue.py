@@ -42,9 +42,12 @@ def get_chat_redis_client():
             chat_redis_url,
             decode_responses=True,
             max_connections=50,  # Connection pooling
-            socket_connect_timeout=5,
-            socket_timeout=5,
-            retry_on_timeout=True
+            socket_connect_timeout=10,  # ✅ AUMENTADO: 5s → 10s
+            socket_timeout=30,  # ✅ AUMENTADO: 5s → 30s (maior que BRPOP timeout)
+            socket_keepalive=True,  # ✅ NOVO: Keepalive para manter conexão
+            socket_keepalive_options={},  # ✅ NOVO: Opções de keepalive
+            retry_on_timeout=True,
+            health_check_interval=30  # ✅ NOVO: Health check a cada 30s
         )
         
         # Testar conexão
@@ -114,9 +117,11 @@ def dequeue_message(queue_name: str, timeout: int = 5):
         
         # Desenfileirar mensagem (BRPOP)
         # BRPOP retorna (queue_name, message_json) ou None se timeout
+        # ✅ IMPORTANTE: socket_timeout deve ser maior que BRPOP timeout
         result = client.brpop(queue_name, timeout=timeout or 0)
         
         if result is None:
+            # Timeout normal (fila vazia) - não é erro
             return None
         
         # result = (queue_name, message_json)
@@ -128,7 +133,19 @@ def dequeue_message(queue_name: str, timeout: int = 5):
         
         return payload
         
+    except redis.exceptions.TimeoutError as e:
+        # ✅ Timeout é normal quando fila está vazia (não é erro crítico)
+        # Não logar como erro, apenas debug
+        logger.debug(f"⏱️ [REDIS] Timeout ao desenfileirar (fila vazia): {queue_name}")
+        return None
+        
+    except redis.exceptions.ConnectionError as e:
+        # ✅ Erro de conexão - logar como warning (será reconectado automaticamente)
+        logger.warning(f"⚠️ [REDIS] Erro de conexão ao desenfileirar: {e}")
+        return None
+        
     except Exception as e:
+        # ✅ Outros erros - logar como erro
         logger.error(f"❌ [REDIS] Erro ao desenfileirar mensagem: {e}", exc_info=True)
         return None
 

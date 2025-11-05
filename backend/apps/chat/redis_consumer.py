@@ -42,6 +42,7 @@ async def start_redis_consumers():
         while True:
             try:
                 # Desenfileirar mensagem (timeout 5s)
+                # ✅ Timeout é normal quando fila está vazia (não é erro)
                 payload = dequeue_message(REDIS_QUEUE_SEND_MESSAGE, timeout=5)
                 
                 if payload:
@@ -53,10 +54,11 @@ async def start_redis_consumers():
                     
                     logger.info(f"✅ [REDIS CONSUMER] send_message concluída: {message_id}")
                 else:
-                    # Timeout (fila vazia), continuar loop
+                    # Timeout (fila vazia), continuar loop - normal
                     await asyncio.sleep(0.1)
                 
             except Exception as e:
+                # ✅ Erros inesperados (não timeout) - logar e continuar
                 logger.error(f"❌ [REDIS CONSUMER] Erro send_message: {e}", exc_info=True)
                 await asyncio.sleep(1)  # Delay em caso de erro
     
@@ -67,6 +69,7 @@ async def start_redis_consumers():
         while True:
             try:
                 # Desenfileirar mensagem (timeout 5s)
+                # ✅ Timeout é normal quando fila está vazia (não é erro)
                 payload = dequeue_message(REDIS_QUEUE_FETCH_PROFILE_PIC, timeout=5)
                 
                 if payload:
@@ -79,10 +82,11 @@ async def start_redis_consumers():
                     
                     logger.info(f"✅ [REDIS CONSUMER] fetch_profile_pic concluída: {conversation_id}")
                 else:
-                    # Timeout (fila vazia), continuar loop
+                    # Timeout (fila vazia), continuar loop - normal
                     await asyncio.sleep(0.1)
                 
             except Exception as e:
+                # ✅ Erros inesperados (não timeout) - logar e continuar
                 logger.error(f"❌ [REDIS CONSUMER] Erro fetch_profile_pic: {e}", exc_info=True)
                 await asyncio.sleep(1)  # Delay em caso de erro
     
@@ -93,6 +97,7 @@ async def start_redis_consumers():
         while True:
             try:
                 # Desenfileirar mensagem (timeout 5s)
+                # ✅ Timeout é normal quando fila está vazia (não é erro)
                 payload = dequeue_message(REDIS_QUEUE_FETCH_GROUP_INFO, timeout=5)
                 
                 if payload:
@@ -110,10 +115,11 @@ async def start_redis_consumers():
                     
                     logger.info(f"✅ [REDIS CONSUMER] fetch_group_info concluída: {conversation_id}")
                 else:
-                    # Timeout (fila vazia), continuar loop
+                    # Timeout (fila vazia), continuar loop - normal
                     await asyncio.sleep(0.1)
                 
             except Exception as e:
+                # ✅ Erros inesperados (não timeout) - logar e continuar
                 logger.error(f"❌ [REDIS CONSUMER] Erro fetch_group_info: {e}", exc_info=True)
                 await asyncio.sleep(1)  # Delay em caso de erro
     
