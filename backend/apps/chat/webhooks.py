@@ -430,6 +430,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         logger.info(f"   📋 Departamento FINAL: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'} (ID: {conversation.department_id or 'None'})")
         logger.info(f"   📊 Status FINAL: {conversation.status}")
         
+        # ✅ FIX CRÍTICO: Inicializar status_changed ANTES do bloco if created else
+        # Isso evita UnboundLocalError quando conversa é nova ou existente
+        status_changed = False
+        
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone}")
             logger.info(f"   📋 Departamento: {default_department.name if default_department else 'Nenhum (Inbox)'}")
