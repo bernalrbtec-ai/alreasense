@@ -201,12 +201,13 @@ export function VoiceRecorder({
     }
 
     // ✅ FIX: Validar tamanho de arquivo antes de iniciar upload
-    const file = new File([blob], `voice-${Date.now()}.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`, {
+    const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
+    const fileToUpload = new File([blob], `voice-${Date.now()}.${extension}`, {
       type: blob.type
     });
     
     const { validateFileSize } = await import('../utils/messageUtils');
-    const sizeValidation = validateFileSize(file, 50);
+    const sizeValidation = validateFileSize(fileToUpload, 50);
     if (!sizeValidation.valid) {
       toast.error(sizeValidation.error || 'Áudio muito grande. Máximo: 50MB');
       cleanup();
@@ -216,11 +217,6 @@ export function VoiceRecorder({
     setIsUploading(true);
 
     try {
-      // Detectar extensão baseada no mime type
-      const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
-      const fileToUpload = new File([blob], `voice-${Date.now()}.${extension}`, {
-        type: blob.type
-      });
 
       console.log('📤 [VOICE] Enviando áudio...', fileToUpload.size, 'bytes');
 
