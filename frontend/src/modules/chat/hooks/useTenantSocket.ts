@@ -214,6 +214,30 @@ export function useTenantSocket() {
         }
         break;
 
+      case 'message_received':
+        // ✅ FIX CRÍTICO: Handler para mensagens recebidas via WebSocket
+        // Este evento é enviado quando uma nova mensagem é criada (incluindo mensagem inicial)
+        console.log('💬 [TENANT WS] Mensagem recebida via WebSocket:', data);
+        if (data.message) {
+          const { addMessage, activeConversation } = useChatStore.getState();
+          
+          // ✅ Se a conversa da mensagem é a conversa ativa, adicionar mensagem imediatamente
+          if (activeConversation?.id === data.message.conversation_id || 
+              activeConversation?.id === data.conversation?.id) {
+            console.log('✅ [TENANT WS] Mensagem é da conversa ativa, adicionando ao store...');
+            addMessage(data.message);
+          } else {
+            console.log('ℹ️ [TENANT WS] Mensagem não é da conversa ativa, será carregada quando conversa for aberta');
+          }
+          
+          // ✅ Atualizar conversa na lista se fornecida
+          if (data.conversation) {
+            const { updateConversation } = useChatStore.getState();
+            updateConversation(data.conversation);
+          }
+        }
+        break;
+
       case 'new_message_notification':
         console.log('💬 [TENANT WS] Nova mensagem em conversa existente:', data);
         if (data.conversation) {
