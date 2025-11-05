@@ -371,25 +371,58 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         )
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {phone} | Tipo: {conversation_type}")
-        logger.info(f"   📋 Departamento atual: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
-        logger.info(f"   📊 Status atual: {conversation.status}")
+        logger.info(f"   📋 Departamento atual ANTES: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
+        logger.info(f"   📊 Status atual ANTES: {conversation.status}")
         logger.info(f"   🆔 ID: {conversation.id}")
+        logger.info(f"   🔍 Default Department disponível: {default_department.name if default_department else 'Nenhum'}")
         
         # ✅ FIX CRÍTICO: Se conversa já existia mas não tem departamento E instância tem default_department,
         # atualizar conversa para usar o departamento padrão
+        # IMPORTANTE: get_or_create só usa defaults na criação, não atualiza existentes!
+        needs_update = False
+        update_fields_list = []
+        
         if not created and default_department and not conversation.department:
             logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name}")
             conversation.department = default_department
-            conversation.status = 'open'  # Mudar status de 'pending' para 'open' ao atribuir departamento
-            conversation.save(update_fields=['department', 'status'])
-            logger.info(f"✅ [ROUTING] Conversa atualizada: {phone} → {default_department.name} | Status: pending → open")
+            update_fields_list.append('department')
+            needs_update = True
+            
+            # Mudar status de 'pending' para 'open' ao atribuir departamento
+            if conversation.status == 'pending':
+                conversation.status = 'open'
+                update_fields_list.append('status')
         
         # ✅ FIX CRÍTICO: Se conversa foi criada COM departamento, garantir que status está correto
         if created and default_department:
             if conversation.status != 'open':
                 logger.warning(f"⚠️ [ROUTING] Conversa criada com departamento mas status errado: {conversation.status} → corrigindo para 'open'")
                 conversation.status = 'open'
-                conversation.save(update_fields=['status'])
+                update_fields_list.append('status')
+                needs_update = True
+        
+        # ✅ FIX CRÍTICO: Se conversa foi criada SEM departamento mas deveria ter (verificar se defaults foi aplicado)
+        if created and default_department and not conversation.department:
+            logger.error(f"❌ [ROUTING] ERRO: Conversa criada mas department não foi aplicado dos defaults!")
+            logger.error(f"   Defaults tinha: department={default_department.id} ({default_department.name})")
+            logger.error(f"   Conversa tem: department={conversation.department_id}")
+            # Forçar atualização
+            conversation.department = default_department
+            conversation.status = 'open'
+            update_fields_list.extend(['department', 'status'])
+            needs_update = True
+        
+        if needs_update:
+            conversation.save(update_fields=update_fields_list)
+            logger.info(f"✅ [ROUTING] Conversa atualizada: {phone}")
+            logger.info(f"   📋 Departamento DEPOIS: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
+            logger.info(f"   📊 Status DEPOIS: {conversation.status}")
+            logger.info(f"   🔧 Campos atualizados: {', '.join(update_fields_list)}")
+        
+        # ✅ DEBUG: Verificar estado final
+        logger.info(f"📋 [CONVERSA] Estado final: {phone}")
+        logger.info(f"   📋 Departamento FINAL: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'} (ID: {conversation.department_id or 'None'})")
+        logger.info(f"   📊 Status FINAL: {conversation.status}")
         
         if created:
             logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone}")
