@@ -90,10 +90,19 @@ export const useChatStore = create<ChatState>((set) => ({
     if (exists) {
       console.log('⚠️ [STORE] Conversa duplicada, ignorando:', conversation.contact_name || conversation.contact_phone);
       // ✅ MAS: Atualizar conversa existente se dados novos foram recebidos
+      const updatedConversations = state.conversations.map(c => 
+        c.id === conversation.id ? conversation : c
+      );
+      
+      // ✅ FIX: Ordenar por last_message_at após atualizar
+      const sortedConversations = [...updatedConversations].sort((a, b) => {
+        const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+        const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+        return bTime - aTime; // Mais recente primeiro
+      });
+      
       return {
-        conversations: state.conversations.map(c => 
-          c.id === conversation.id ? conversation : c
-        )
+        conversations: sortedConversations
       };
     }
     
@@ -106,19 +115,27 @@ export const useChatStore = create<ChatState>((set) => ({
     // Adicionar no início da lista (conversas mais recentes primeiro)
     const newConversations = [conversationWithStatus, ...state.conversations];
     
+    // ✅ FIX: Ordenar por last_message_at para garantir ordem correta
+    const sortedConversations = [...newConversations].sort((a, b) => {
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return bTime - aTime; // Mais recente primeiro
+    });
+    
     console.log('✅ [STORE] Nova conversa adicionada:', conversation.contact_name || conversation.contact_phone);
-    console.log(`   Total de conversas: ${state.conversations.length} → ${newConversations.length}`);
+    console.log(`   Total de conversas: ${state.conversations.length} → ${sortedConversations.length}`);
     console.log(`   Status: ${conversationWithStatus.status}, Department: ${conversationWithStatus.department || 'null'}`);
     console.log(`   ID: ${conversationWithStatus.id}`);
-    console.log(`   ✅ STORE ATUALIZADO - Nova lista:`, newConversations.map(c => ({
+    console.log(`   ✅ STORE ATUALIZADO - Nova lista:`, sortedConversations.map(c => ({
       id: c.id,
       name: c.contact_name || c.contact_phone,
       status: c.status,
-      department: c.department || null
+      department: c.department || null,
+      last_message_at: c.last_message_at
     })));
     
     return {
-      conversations: newConversations
+      conversations: sortedConversations
     };
   }),
   updateConversation: (conversation) => set((state) => {
@@ -159,7 +176,7 @@ export const useChatStore = create<ChatState>((set) => ({
         // ✅ FIX: Merge completo para garantir que todos os campos sejam atualizados
         const updated = {
           ...c,
-          ...conversation,  // Sobrescrever com dados atualizados (inclui unread_count)
+          ...conversation,  // Sobrescrever com dados atualizados (inclui unread_count e last_message_at)
           // Preservar mensagens existentes (não sobrescrever com mensagens vazias)
           messages: c.messages && c.messages.length > 0 ? c.messages : (conversation.messages || [])
         };
@@ -167,6 +184,14 @@ export const useChatStore = create<ChatState>((set) => ({
         return updated;
       }
       return c;
+    });
+    
+    // ✅ FIX CRÍTICO: Ordenar conversas por last_message_at (mais recente primeiro)
+    // Quando uma nova mensagem chega, a conversa deve ir para o topo
+    const sortedConversations = [...updatedConversations].sort((a, b) => {
+      const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
+      const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+      return bTime - aTime; // Mais recente primeiro (decrescente)
     });
     
     // ✅ FIX CRÍTICO: Atualizar conversa ativa também para garantir que unread_count seja atualizado
@@ -181,17 +206,18 @@ export const useChatStore = create<ChatState>((set) => ({
         }
       : state.activeConversation;
     
-    console.log('   ✅ STORE ATUALIZADO - Conversas:', updatedConversations.map(c => ({
+    console.log('   ✅ STORE ATUALIZADO - Conversas:', sortedConversations.map(c => ({
       id: c.id,
       name: c.contact_name || c.contact_phone,
       status: c.status,
       department: c.department || null,
       departmentName: c.department_name || null,
-      unread_count: c.unread_count || 0
+      unread_count: c.unread_count || 0,
+      last_message_at: c.last_message_at
     })));
     
     return {
-      conversations: updatedConversations,
+      conversations: sortedConversations,  // ✅ FIX: Retornar lista ordenada
       activeConversation: updatedActiveConversation
     };
   }),

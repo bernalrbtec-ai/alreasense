@@ -56,6 +56,7 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
     - Marcar mensagens como lidas
     - Atualizar metadados da conversa
     - Mudar status/atendente
+    - Nova mensagem recebida (para atualizar unread_count e last_message_at)
     
     Args:
         conversation: Instância do modelo Conversation
@@ -65,26 +66,38 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
     from django.db.models import Count, Q
     from apps.chat.models import Message
     
-    # ✅ FIX CRÍTICO: Recalcular unread_count se não estiver anotado
+    # ✅ FIX CRÍTICO: SEMPRE recalcular unread_count para garantir que está atualizado
     # Isso garante que o unread_count sempre esteja correto mesmo quando a conversa vem direto do modelo
-    if not hasattr(conversation, 'unread_count_annotated'):
-        # Buscar conversa com annotate para garantir unread_count correto
-        from apps.chat.models import Conversation
-        conversation_with_annotate = Conversation.objects.annotate(
-            unread_count_annotated=Count(
-                'messages',
-                filter=Q(
-                    messages__direction='incoming',
-                    messages__status__in=['sent', 'delivered']
-                ),
-                distinct=True
-            )
-        ).prefetch_related(
-            'messages'
-        ).get(id=conversation.id)
-        
-        # Transferir o annotate para o objeto original
-        conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
+    # Recarregar do banco para garantir dados atualizados
+    conversation.refresh_from_db()
+    
+    # Buscar conversa com annotate para garantir unread_count correto
+    from apps.chat.models import Conversation
+    from django.db.models import Prefetch
+    conversation_with_annotate = Conversation.objects.annotate(
+        unread_count_annotated=Count(
+            'messages',
+            filter=Q(
+                messages__direction='incoming',
+                messages__status__in=['sent', 'delivered']
+            ),
+            distinct=True
+        )
+    ).prefetch_related(
+        Prefetch(
+            'messages',
+            queryset=Message.objects.select_related('sender', 'conversation')
+                .prefetch_related('attachments')
+                .order_by('-created_at')[:1],
+            to_attr='last_message_list'
+        )
+    ).get(id=conversation.id)
+    
+    # Transferir o annotate para o objeto original
+    conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
+    
+    # ✅ FIX: Garantir que last_message_at está atualizado (vem do banco após refresh_from_db)
+    # Não precisa fazer nada extra, refresh_from_db já atualiza last_message_at
     
     # Serializar com contexto se disponível
     serializer_context = {'request': request} if request else {}
@@ -96,7 +109,7 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
         data={'conversation': conv_data}
     )
     
-    logger.info(f"📡 [WEBSOCKET] Conversa {conversation.id} atualizada via broadcast (unread_count: {conv_data.get('unread_count', 'N/A')})")
+    logger.info(f"📡 [WEBSOCKET] Conversa {conversation.id} atualizada via broadcast (unread_count: {conv_data.get('unread_count', 'N/A')}, last_message_at: {conv_data.get('last_message_at', 'N/A')})")
 
 
 def broadcast_message_received(message) -> None:
