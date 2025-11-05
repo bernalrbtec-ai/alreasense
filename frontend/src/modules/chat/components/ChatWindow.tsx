@@ -60,6 +60,23 @@ export function ChatWindow() {
         console.log('⏰ [MARK READ] Marcando conversa como lida após 2.5s de visualização');
         await api.post(`/chat/conversations/${activeConversation.id}/mark_as_read/`);
         console.log('✅ [MARK READ] Mensagens marcadas como lidas com sucesso');
+        
+        // ✅ FIX CRÍTICO: Refetch departamentos após marcar como lida para atualizar pending_count
+        // Quando uma conversa é marcada como lida, o status pode mudar de 'pending' para 'open'
+        // Isso deve atualizar o contador do departamento imediatamente
+        const { setDepartments } = useChatStore.getState();
+        console.log('🔄 [MARK READ] Refetching departamentos após marcar como lida...');
+        api.get('/auth/departments/').then(response => {
+          const depts = response.data.results || response.data;
+          setDepartments(depts);
+          console.log('✅ [MARK READ] Departamentos atualizados:', depts.map((d: any) => ({
+            id: d.id,
+            name: d.name,
+            pending_count: d.pending_count
+          })));
+        }).catch(error => {
+          console.error('❌ [MARK READ] Erro ao refetch departamentos:', error);
+        });
       } catch (error) {
         console.error('❌ [MARK READ] Erro ao marcar como lidas:', error);
       }
