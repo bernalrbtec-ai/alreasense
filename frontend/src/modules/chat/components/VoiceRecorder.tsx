@@ -218,7 +218,7 @@ export function VoiceRecorder({
     try {
       // Detectar extensão baseada no mime type
       const extension = blob.type.includes('ogg') ? 'ogg' : 'webm';
-      const file = new File([blob], `voice-${Date.now()}.${extension}`, {
+      const fileToUpload = new File([blob], `voice-${Date.now()}.${extension}`, {
         type: blob.type
       });
 
