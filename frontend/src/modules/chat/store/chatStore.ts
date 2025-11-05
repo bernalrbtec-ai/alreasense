@@ -121,14 +121,40 @@ export const useChatStore = create<ChatState>((set) => ({
       conversations: newConversations
     };
   }),
-  updateConversation: (conversation) => set((state) => ({
-    conversations: state.conversations.map(c => 
+  updateConversation: (conversation) => set((state) => {
+    // ✅ FIX: Log detalhado para debug
+    const existingConv = state.conversations.find(c => c.id === conversation.id);
+    console.log('🔄 [STORE] Atualizando conversa:', {
+      id: conversation.id,
+      contact: conversation.contact_name || conversation.contact_phone,
+      oldDepartment: existingConv?.department || null,
+      newDepartment: conversation.department || null,
+      oldStatus: existingConv?.status || null,
+      newStatus: conversation.status || null,
+      departmentName: conversation.department_name || null
+    });
+    
+    const updatedConversations = state.conversations.map(c => 
       c.id === conversation.id ? conversation : c
-    ),
-    activeConversation: state.activeConversation?.id === conversation.id 
+    );
+    
+    const updatedActiveConversation = state.activeConversation?.id === conversation.id 
       ? conversation 
-      : state.activeConversation
-  })),
+      : state.activeConversation;
+    
+    console.log('   ✅ STORE ATUALIZADO - Conversas:', updatedConversations.map(c => ({
+      id: c.id,
+      name: c.contact_name || c.contact_phone,
+      status: c.status,
+      department: c.department || null,
+      departmentName: c.department_name || null
+    })));
+    
+    return {
+      conversations: updatedConversations,
+      activeConversation: updatedActiveConversation
+    };
+  }),
   removeConversation: (conversationId) => set((state) => ({
     conversations: state.conversations.filter(c => c.id !== conversationId),
     // Se a conversa removida era a ativa, limpar
