@@ -8,7 +8,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('chat', '0010_alter_messageattachment_media_hash'),
+        ('chat', '0006_add_metadata_to_messageattachment'),
         ('authn', '0001_initial'),
     ]
 
