@@ -273,10 +273,10 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         
         queryset = queryset.annotate(
             pending_count_annotated=Count(
-                'conversation',
+                'conversations',  # ✅ FIX: related_name é 'conversations' (plural), não 'conversation'
                 filter=Q(
-                    conversation__status='pending',
-                    conversation__tenant=user.tenant
+                    conversations__status='pending',  # ✅ FIX: usar 'conversations' (plural)
+                    conversations__tenant=user.tenant
                 ),
                 distinct=True
             )
