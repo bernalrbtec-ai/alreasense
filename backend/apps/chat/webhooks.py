@@ -678,7 +678,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.error(f"❌ [WEBSOCKET] Error broadcasting new conversation: {e}", exc_info=True)
         else:
             # ✅ CONVERSAS EXISTENTES: Se conversa estava fechada, reabrir automaticamente
-            status_changed = False
+            # ✅ FIX: status_changed já foi inicializado antes do bloco if created else
             if conversation.status == 'closed':
                 old_status = conversation.status
                 conversation.status = 'pending' if not from_me else 'open'
