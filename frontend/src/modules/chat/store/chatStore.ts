@@ -122,6 +122,12 @@ export const useChatStore = create<ChatState>((set) => ({
     };
   }),
   updateConversation: (conversation) => set((state) => {
+    // ✅ IMPORTANTE: Garantir que conversation tem os campos necessários
+    if (!conversation || !conversation.id) {
+      console.error('❌ [STORE] Tentativa de atualizar conversa inválida:', conversation);
+      return state;
+    }
+    
     // ✅ FIX: Log detalhado para debug
     const existingConv = state.conversations.find(c => c.id === conversation.id);
     console.log('🔄 [STORE] Atualizando conversa:', {
@@ -131,15 +137,46 @@ export const useChatStore = create<ChatState>((set) => ({
       newDepartment: conversation.department || null,
       oldStatus: existingConv?.status || null,
       newStatus: conversation.status || null,
+      oldUnreadCount: existingConv?.unread_count || 0,
+      newUnreadCount: conversation.unread_count || 0,
       departmentName: conversation.department_name || null
     });
     
-    const updatedConversations = state.conversations.map(c => 
-      c.id === conversation.id ? conversation : c
-    );
+    // ✅ FIX: Se conversa não existe no store, adicionar (pode acontecer em race conditions)
+    const exists = state.conversations.some(c => c.id === conversation.id);
+    if (!exists) {
+      console.log('⚠️ [STORE] Conversa não encontrada no store, adicionando...');
+      return {
+        conversations: [...state.conversations, conversation],
+        // Se não tem conversa ativa, definir esta como ativa
+        activeConversation: state.activeConversation || conversation
+      };
+    }
     
+    // ✅ FIX CRÍTICO: Fazer merge completo para garantir que unread_count e outros campos sejam atualizados
+    const updatedConversations = state.conversations.map(c => {
+      if (c.id === conversation.id) {
+        // ✅ FIX: Merge completo para garantir que todos os campos sejam atualizados
+        return {
+          ...c,
+          ...conversation,  // Sobrescrever com dados atualizados (inclui unread_count)
+          // Preservar mensagens existentes (não sobrescrever com mensagens vazias)
+          messages: c.messages && c.messages.length > 0 ? c.messages : (conversation.messages || [])
+        };
+      }
+      return c;
+    });
+    
+    // ✅ FIX CRÍTICO: Atualizar conversa ativa também para garantir que unread_count seja atualizado
     const updatedActiveConversation = state.activeConversation?.id === conversation.id 
-      ? conversation 
+      ? {
+          ...state.activeConversation,
+          ...conversation,  // ✅ FIX: Atualizar todos os campos incluindo unread_count
+          // Preservar mensagens existentes
+          messages: state.activeConversation.messages && state.activeConversation.messages.length > 0 
+            ? state.activeConversation.messages 
+            : (conversation.messages || [])
+        }
       : state.activeConversation;
     
     console.log('   ✅ STORE ATUALIZADO - Conversas:', updatedConversations.map(c => ({
@@ -147,7 +184,8 @@ export const useChatStore = create<ChatState>((set) => ({
       name: c.contact_name || c.contact_phone,
       status: c.status,
       department: c.department || null,
-      departmentName: c.department_name || null
+      departmentName: c.department_name || null,
+      unread_count: c.unread_count || 0
     })));
     
     return {
