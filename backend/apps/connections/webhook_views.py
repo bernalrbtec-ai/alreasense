@@ -445,20 +445,47 @@ class EvolutionWebhookView(APIView):
             try:
                 from apps.chat.webhooks import handle_message_upsert as chat_handle_message
                 from apps.notifications.models import WhatsAppInstance
+                from apps.connections.models import EvolutionConnection
                 from django.db.models import Q
                 
-                # Buscar instância - Evolution API envia o "nome da instância" (ex: "RBTec")
-                # Pode ser friendly_name OU instance_name (depende da configuração)
-                whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
-                    Q(instance_name=instance_name) | Q(friendly_name=instance_name),
-                    is_active=True
+                # ✅ FIX CRÍTICO: Buscar WhatsAppInstance pelo instance_name (UUID) com default_department
+                # Evolution API envia UUID (ex: "9afdad84-5411-4754-8f63-2599a6b9142c")
+                whatsapp_instance = WhatsAppInstance.objects.select_related(
+                    'tenant', 
+                    'default_department'  # ✅ CRÍTICO: Carregar departamento padrão
+                ).filter(
+                    instance_name=instance_name,  # ✅ FIX: Buscar apenas por instance_name (UUID)
+                    is_active=True,
+                    status='active'
                 ).first()
                 
+                # ✅ FALLBACK: Se não encontrou por instance_name, tentar por friendly_name
+                if not whatsapp_instance:
+                    whatsapp_instance = WhatsAppInstance.objects.select_related(
+                        'tenant',
+                        'default_department'
+                    ).filter(
+                        friendly_name=instance_name,
+                        is_active=True,
+                        status='active'
+                    ).first()
+                
+                # Buscar EvolutionConnection para passar também
+                connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
+                
                 if whatsapp_instance:
-                    chat_handle_message(data, whatsapp_instance.tenant)
+                    logger.info(f"✅ [FLOW CHAT] WhatsAppInstance encontrada: {whatsapp_instance.friendly_name} ({whatsapp_instance.instance_name})")
+                    logger.info(f"   📋 Default Department: {whatsapp_instance.default_department.name if whatsapp_instance.default_department else 'Nenhum (Inbox)'}")
+                    
+                    # ✅ FIX: Passar wa_instance e connection para chat_handle_message
+                    chat_handle_message(data, whatsapp_instance.tenant, connection=connection, wa_instance=whatsapp_instance)
                     logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {whatsapp_instance.tenant.name}")
                 else:
-                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para UUID: {instance_name}")
+                    logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para instance: {instance_name}")
+                    # ✅ FALLBACK: Tentar processar mesmo sem wa_instance (pode funcionar com connection)
+                    if connection:
+                        logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
+                        chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}", exc_info=True)
             
