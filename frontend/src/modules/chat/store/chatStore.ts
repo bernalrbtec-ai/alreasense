@@ -206,6 +206,27 @@ export const useChatStore = create<ChatState>((set) => ({
   // Mensagens
   setMessages: (messages) => set({ messages }),
   addMessage: (message) => set((state) => {
+    // ✅ FIX CRÍTICO: Verificar se mensagem pertence à conversa ativa
+    // Se não houver conversa ativa ou a mensagem não pertence à conversa ativa, NÃO adicionar
+    if (!state.activeConversation) {
+      console.log('⚠️ [STORE] Nenhuma conversa ativa, ignorando mensagem:', message.id);
+      return state;
+    }
+    
+    // ✅ FIX: Comparar conversation_id da mensagem com a conversa ativa
+    const messageConversationId = message.conversation ? String(message.conversation) : null;
+    const activeConversationId = state.activeConversation.id ? String(state.activeConversation.id) : null;
+    
+    if (messageConversationId !== activeConversationId) {
+      console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
+        messageId: message.id,
+        messageConversationId,
+        activeConversationId,
+        messageContent: message.content?.substring(0, 50)
+      });
+      return state; // Não adicionar mensagem se não for da conversa ativa
+    }
+    
     // Evitar duplicatas: verificar se mensagem já existe
     const exists = state.messages.some(m => m.id === message.id);
     if (exists) {

@@ -243,24 +243,32 @@ export function useTenantSocket() {
         if (data.message) {
           const { addMessage, activeConversation } = useChatStore.getState();
           
-          // ✅ FIX: Verificar múltiplas formas de identificar a conversa
+          // ✅ FIX CRÍTICO: Verificar SE a mensagem pertence à conversa ativa de forma rigorosa
+          // Comparar IDs convertidos para string para garantir que tipos diferentes sejam comparados corretamente
           const messageConversationId = data.message.conversation_id || data.message.conversation || data.conversation?.id;
-          const isActiveConversation = activeConversation && (
-            activeConversation.id === messageConversationId ||
-            activeConversation.id === data.conversation?.id ||
-            activeConversation.id === String(messageConversationId) ||
-            activeConversation.id === String(data.conversation?.id)
+          const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
+          const messageConvIdStr = messageConversationId ? String(messageConversationId) : null;
+          const dataConvIdStr = data.conversation?.id ? String(data.conversation.id) : null;
+          
+          // ✅ FIX: Comparar apenas IDs válidos e converter para string para garantir comparação correta
+          const isActiveConversation = activeConversationId && (
+            activeConversationId === messageConvIdStr ||
+            activeConversationId === dataConvIdStr
           );
+          
+          console.log('🔍 [TENANT WS] Verificando se mensagem é da conversa ativa:', {
+            messageConversationId: messageConvIdStr,
+            activeConversationId: activeConversationId,
+            dataConversationId: dataConvIdStr,
+            isActiveConversation
+          });
           
           if (isActiveConversation) {
             console.log('✅ [TENANT WS] Mensagem é da conversa ativa, adicionando ao store...');
             addMessage(data.message);
           } else {
-            console.log('ℹ️ [TENANT WS] Mensagem não é da conversa ativa:', {
-              messageConvId: messageConversationId,
-              activeConvId: activeConversation?.id,
-              dataConvId: data.conversation?.id
-            });
+            console.log('ℹ️ [TENANT WS] Mensagem NÃO é da conversa ativa, NÃO adicionando ao store');
+            console.log('   ⚠️ Mensagem será carregada quando a conversa correta for aberta');
           }
           
           // ✅ Atualizar conversa na lista se fornecida (sempre atualizar para unread_count)
