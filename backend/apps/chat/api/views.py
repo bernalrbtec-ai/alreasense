@@ -712,8 +712,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         serializer = ConversationSerializer(conversation, context={'request': request})
         conversation_data = serializer.data
         
+        # ✅ FIX: Passar request para broadcast_conversation_updated para garantir contexto correto
         # Broadcast para todo o tenant (atualiza lista de conversas)
-        broadcast_conversation_updated(conversation)
+        broadcast_conversation_updated(conversation, request=request)
         
         # ✅ FIX: Também enviar para o grupo específico da conversa
         from channels.layers import get_channel_layer

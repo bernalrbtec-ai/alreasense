@@ -48,7 +48,7 @@ def broadcast_to_tenant(tenant_id: str, event_type: str, data: Dict[str, Any]) -
         logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast: {e}", exc_info=True)
 
 
-def broadcast_conversation_updated(conversation) -> None:
+def broadcast_conversation_updated(conversation, request=None) -> None:
     """
     Broadcast específico para quando uma conversa é atualizada.
     
@@ -59,10 +59,36 @@ def broadcast_conversation_updated(conversation) -> None:
     
     Args:
         conversation: Instância do modelo Conversation
+        request: Objeto request (opcional, para contexto do serializer)
     """
     from apps.chat.api.serializers import ConversationSerializer
+    from django.db.models import Count, Q
+    from apps.chat.models import Message
     
-    conv_data = ConversationSerializer(conversation).data
+    # ✅ FIX CRÍTICO: Recalcular unread_count se não estiver anotado
+    # Isso garante que o unread_count sempre esteja correto mesmo quando a conversa vem direto do modelo
+    if not hasattr(conversation, 'unread_count_annotated'):
+        # Buscar conversa com annotate para garantir unread_count correto
+        from apps.chat.models import Conversation
+        conversation_with_annotate = Conversation.objects.annotate(
+            unread_count_annotated=Count(
+                'messages',
+                filter=Q(
+                    messages__direction='incoming',
+                    messages__status__in=['sent', 'delivered']
+                ),
+                distinct=True
+            )
+        ).prefetch_related(
+            'messages'
+        ).get(id=conversation.id)
+        
+        # Transferir o annotate para o objeto original
+        conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
+    
+    # Serializar com contexto se disponível
+    serializer_context = {'request': request} if request else {}
+    conv_data = ConversationSerializer(conversation, context=serializer_context).data
     
     broadcast_to_tenant(
         tenant_id=str(conversation.tenant_id),
@@ -70,7 +96,7 @@ def broadcast_conversation_updated(conversation) -> None:
         data={'conversation': conv_data}
     )
     
-    logger.info(f"📡 [WEBSOCKET] Conversa {conversation.id} atualizada via broadcast")
+    logger.info(f"📡 [WEBSOCKET] Conversa {conversation.id} atualizada via broadcast (unread_count: {conv_data.get('unread_count', 'N/A')})")
 
 
 def broadcast_message_received(message) -> None:
