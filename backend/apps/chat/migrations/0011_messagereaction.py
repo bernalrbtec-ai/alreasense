@@ -1,8 +1,6 @@
-# Generated manually
+# Generated manually - Usando RunSQL porque tabelas anteriores foram criadas via RunSQL
 
-from django.db import migrations, models
-import django.db.models.deletion
-import uuid
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -13,30 +11,27 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.CreateModel(
-            name='MessageReaction',
-            fields=[
-                ('id', models.UUIDField(default=uuid.uuid4, editable=False, primary_key=True, serialize=False)),
-                ('emoji', models.CharField(help_text='Emoji da reação (ex: 👍, ❤️, 😂)', max_length=10, verbose_name='Emoji')),
-                ('created_at', models.DateTimeField(auto_now_add=True, db_index=True, verbose_name='Criado em')),
-                ('message', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='reactions', to='chat.message', verbose_name='Mensagem')),
-                ('user', models.ForeignKey(on_delete=django.db.models.deletion.CASCADE, related_name='message_reactions', to='authn.user', verbose_name='Usuário')),
-            ],
-            options={
-                'verbose_name': 'Reação',
-                'verbose_name_plural': 'Reações',
-                'db_table': 'chat_message_reaction',
-                'ordering': ['created_at'],
-                'unique_together': {('message', 'user', 'emoji')},
-            },
-        ),
-        migrations.AddIndex(
-            model_name='messagereaction',
-            index=models.Index(fields=['message', 'created_at'], name='chat_messa_message_idx'),
-        ),
-        migrations.AddIndex(
-            model_name='messagereaction',
-            index=models.Index(fields=['user', 'created_at'], name='chat_messa_user_id_idx'),
+        migrations.RunSQL(
+            sql="""
+            -- Tabela: MessageReaction
+            CREATE TABLE IF NOT EXISTS chat_message_reaction (
+                id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                message_id UUID NOT NULL REFERENCES chat_message(id) ON DELETE CASCADE,
+                user_id INTEGER NOT NULL REFERENCES authn_user(id) ON DELETE CASCADE,
+                emoji VARCHAR(10) NOT NULL,
+                created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+            );
+            
+            -- Índices
+            CREATE INDEX IF NOT EXISTS idx_chat_message_reaction_message ON chat_message_reaction(message_id, created_at);
+            CREATE INDEX IF NOT EXISTS idx_chat_message_reaction_user ON chat_message_reaction(user_id, created_at);
+            
+            -- Constraint único: uma reação por usuário, mensagem e emoji
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_message_reaction_unique ON chat_message_reaction(message_id, user_id, emoji);
+            """,
+            reverse_sql="""
+            DROP TABLE IF EXISTS chat_message_reaction CASCADE;
+            """
         ),
     ]
 
