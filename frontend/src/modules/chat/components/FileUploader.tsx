@@ -50,29 +50,25 @@ export function FileUploader({
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validar tamanho (50MB)
-    const maxSize = 50 * 1024 * 1024; // 50MB
-    if (file.size > maxSize) {
-      toast.error('Arquivo muito grande. Máximo: 50MB');
-      return;
-    }
-
-    // Validar tipo
-    const isAllowed = allowedTypes.some(type => {
-      if (type.endsWith('/*')) {
-        const baseType = type.slice(0, -2);
-        return file.type.startsWith(baseType);
+    // ✅ FIX: Usar utilitários centralizados para validação
+    import('../utils/messageUtils').then(({ validateFileSize, validateFileType }) => {
+      // Validar tamanho (50MB)
+      const sizeValidation = validateFileSize(file, 50);
+      if (!sizeValidation.valid) {
+        toast.error(sizeValidation.error || 'Arquivo muito grande. Máximo: 50MB');
+        return;
       }
-      return file.type === type;
+
+      // Validar tipo
+      const typeValidation = validateFileType(file, allowedTypes);
+      if (!typeValidation.valid) {
+        toast.error(typeValidation.error || 'Tipo de arquivo não permitido');
+        return;
+      }
+
+      onFileSelect(file);
     });
-
-    if (!isAllowed) {
-      toast.error('Tipo de arquivo não permitido');
-      return;
-    }
-
-    onFileSelect(file);
-  }, [onFileSelect]);
+  }, [onFileSelect, allowedTypes]);
 
   const handleButtonClick = () => {
     if (disabled || externalIsUploading) return;

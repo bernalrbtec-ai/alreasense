@@ -200,6 +200,19 @@ export function VoiceRecorder({
       return;
     }
 
+    // ✅ FIX: Validar tamanho de arquivo antes de iniciar upload
+    const file = new File([blob], `voice-${Date.now()}.${blob.type.includes('ogg') ? 'ogg' : 'webm'}`, {
+      type: blob.type
+    });
+    
+    const { validateFileSize } = await import('../utils/messageUtils');
+    const sizeValidation = validateFileSize(file, 50);
+    if (!sizeValidation.valid) {
+      toast.error(sizeValidation.error || 'Áudio muito grande. Máximo: 50MB');
+      cleanup();
+      return;
+    }
+
     setIsUploading(true);
 
     try {
@@ -209,14 +222,14 @@ export function VoiceRecorder({
         type: blob.type
       });
 
-      console.log('📤 [VOICE] Enviando áudio...', file.size, 'bytes');
+      console.log('📤 [VOICE] Enviando áudio...', fileToUpload.size, 'bytes');
 
       // 1️⃣ Obter presigned URL
       const { data: presignedData } = await api.post('/chat/messages/upload-presigned-url/', {
         conversation_id: conversationId,
-        filename: file.name,
-        content_type: file.type,
-        file_size: file.size,
+        filename: fileToUpload.name,
+        content_type: fileToUpload.type,
+        file_size: fileToUpload.size,
       });
 
       console.log('✅ [VOICE] Presigned URL obtida');
@@ -238,8 +251,8 @@ export function VoiceRecorder({
         });
 
         xhr.open('PUT', presignedData.upload_url);
-        xhr.setRequestHeader('Content-Type', file.type);
-        xhr.send(file);
+        xhr.setRequestHeader('Content-Type', fileToUpload.type);
+        xhr.send(fileToUpload);
       });
 
       console.log('✅ [VOICE] Upload S3 completo');
@@ -249,9 +262,9 @@ export function VoiceRecorder({
         conversation_id: conversationId,
         attachment_id: presignedData.attachment_id,
         s3_key: presignedData.s3_key,
-        filename: file.name,
-        content_type: file.type,
-        file_size: file.size,
+        filename: fileToUpload.name,
+        content_type: fileToUpload.type,
+        file_size: fileToUpload.size,
       });
 
       console.log('✅ [VOICE] Áudio enviado com sucesso!');

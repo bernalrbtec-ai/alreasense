@@ -289,12 +289,17 @@ export const useChatStore = create<ChatState>((set) => ({
                                    !newAtt.file_url.includes('whatsapp.net') &&
                                    !newAtt.file_url.includes('evo.');
                   
-                  // Priorizar attachment com URL válida
+                  // ✅ FIX: Priorizar attachment com URL válida OU mais recente (timestamp-based)
                   if (existingHasUrl && !newHasUrl) {
                     return existingAtt; // Manter attachment atualizado
                   }
-                  // Se novo tem URL válida ou ambos não têm, usar o novo
-                  return newAtt;
+                  if (newHasUrl && !existingHasUrl) {
+                    return newAtt; // Usar novo que tem URL válida
+                  }
+                  // Ambos têm ou não têm URL - usar o mais recente (timestamp-based merge)
+                  const existingTime = existingAtt.created_at ? new Date(existingAtt.created_at).getTime() : 0;
+                  const newTime = newAtt.created_at ? new Date(newAtt.created_at).getTime() : 0;
+                  return newTime > existingTime ? newAtt : existingAtt;
                 }
                 return existingAtt; // Manter attachment que não existe na nova mensagem
               });
@@ -325,9 +330,16 @@ export const useChatStore = create<ChatState>((set) => ({
         })
       };
     }
-    // Adicionar nova mensagem
+    // ✅ FIX: Ordenar mensagens por timestamp antes de adicionar
+    // Isso garante que mensagens fora de ordem via WebSocket sejam ordenadas corretamente
+    const newMessages = [...state.messages, message].sort((a, b) => {
+      const timeA = new Date(a.created_at).getTime();
+      const timeB = new Date(b.created_at).getTime();
+      return timeA - timeB; // Mais antiga primeiro
+    });
+    
     return {
-      messages: [...state.messages, message]
+      messages: newMessages
     };
   }),
   updateMessageStatus: (messageId, status) => set((state) => ({

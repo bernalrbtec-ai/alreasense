@@ -146,6 +146,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
   const handleFileUpload = async (file: File) => {
     if (!file || !activeConversation || uploadingFile) return;
 
+    // ✅ FIX: Validar tamanho de arquivo antes de iniciar upload
+    const { validateFileSize } = await import('../utils/messageUtils');
+    const sizeValidation = validateFileSize(file, 50);
+    if (!sizeValidation.valid) {
+      toast.error(sizeValidation.error || 'Arquivo muito grande. Máximo: 50MB');
+      return;
+    }
+
     setUploadingFile(true);
 
     try {

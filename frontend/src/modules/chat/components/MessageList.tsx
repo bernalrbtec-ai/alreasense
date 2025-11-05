@@ -10,6 +10,7 @@ import { format } from 'date-fns';
 import type { MessageAttachment } from '../types';
 import { AttachmentPreview } from './AttachmentPreview';
 import { useUserAccess } from '@/hooks/useUserAccess';
+import { sortMessagesByTimestamp } from '../utils/messageUtils';
 
 export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
@@ -42,10 +43,14 @@ export function MessageList() {
         const msgs = data.results || data;
         setHasMoreMessages(data.has_more || false); // ✅ NOVO: Salvar se tem mais mensagens
         
+        // ✅ FIX: Ordenar mensagens por timestamp antes de fazer merge
+        // Isso garante que mensagens fora de ordem sejam ordenadas corretamente
+        const sortedMsgs = sortMessagesByTimestamp(msgs);
+        
         // ✅ MELHORIA: Ao invés de setMessages (sobrescreve), fazer merge inteligente
         // para preservar attachments que foram atualizados via WebSocket
         const { messages: currentMessages } = useChatStore.getState();
-        const mergedMessages = msgs.map(serverMsg => {
+        const mergedMessages = sortedMsgs.map(serverMsg => {
           const existingMsg = currentMessages.find(m => m.id === serverMsg.id);
           if (existingMsg && existingMsg.attachments && existingMsg.attachments.length > 0) {
             // Se mensagem existente tem attachments atualizados, preservar
@@ -360,6 +365,7 @@ export function MessageList() {
                   }
                 }}
                 className="px-4 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-lg text-sm font-medium transition-colors"
+                aria-label="Carregar mensagens antigas"
               >
                 Carregar mensagens antigas
               </button>
@@ -421,10 +427,19 @@ export function MessageList() {
                 )}
 
                 {/* Texto (se houver) - mostrar mesmo se só tiver anexos */}
+                {/* ✅ FIX: Sanitizar conteúdo para prevenir XSS */}
                 {msg.content && msg.content.trim() && (
-                  <p className="text-sm whitespace-pre-wrap break-words mb-1">
-                    {msg.content}
-                  </p>
+                  <p 
+                    className="text-sm whitespace-pre-wrap break-words mb-1"
+                    dangerouslySetInnerHTML={{ 
+                      __html: msg.content
+                        .replace(/&/g, '&amp;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/'/g, '&#039;')
+                    }}
+                  />
                 )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${msg.direction === 'outgoing' ? '' : 'opacity-60'}`}>
