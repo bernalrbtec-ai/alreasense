@@ -42,6 +42,7 @@ interface WhatsAppInstance {
   status: string
   is_active: boolean
   is_default: boolean
+  default_department?: string | null
   connection_state: string
   qr_code?: string
   qr_code_expires_at?: string
@@ -97,8 +98,10 @@ export default function ConfigurationsPage() {
   const [isInstanceModalOpen, setIsInstanceModalOpen] = useState(false)
   const [editingInstance, setEditingInstance] = useState<WhatsAppInstance | null>(null)
   const [instanceFormData, setInstanceFormData] = useState({
-    friendly_name: ''
+    friendly_name: '',
+    default_department: null as string | null
   })
+  const [departments, setDepartments] = useState<Array<{id: string, name: string}>>([])
   const [qrCodeInstance, setQrCodeInstance] = useState<WhatsAppInstance | null>(null)
   const [showApiKeys, setShowApiKeys] = useState(false)
   const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
@@ -125,7 +128,18 @@ export default function ConfigurationsPage() {
 
   useEffect(() => {
     fetchData()
+    fetchDepartments()
   }, [])
+  
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/auth/departments/')
+      const depts = Array.isArray(response.data) ? response.data : (response.data?.results || [])
+      setDepartments(depts.map((d: any) => ({ id: d.id, name: d.name })))
+    } catch (error) {
+      console.error('Erro ao buscar departamentos:', error)
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -212,7 +226,8 @@ export default function ConfigurationsPage() {
   const handleEditInstance = (instance: WhatsAppInstance) => {
     setEditingInstance(instance)
     setInstanceFormData({
-      friendly_name: instance.friendly_name
+      friendly_name: instance.friendly_name,
+      default_department: instance.default_department || null
     })
     setIsInstanceModalOpen(true)
   }
@@ -419,7 +434,7 @@ export default function ConfigurationsPage() {
   const handleCloseInstanceModal = () => {
     setIsInstanceModalOpen(false)
     setEditingInstance(null)
-    setInstanceFormData({ friendly_name: '' })
+    setInstanceFormData({ friendly_name: '', default_department: null })
   }
 
   const handleCloseSmtpModal = () => {
@@ -881,12 +896,34 @@ export default function ConfigurationsPage() {
                         id="friendly_name"
                         required
                         value={instanceFormData.friendly_name}
-                        onChange={(e) => setInstanceFormData({ friendly_name: e.target.value })}
+                        onChange={(e) => setInstanceFormData({ ...instanceFormData, friendly_name: e.target.value })}
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                         placeholder="Ex: WhatsApp Principal"
                       />
                       <p className="mt-1 text-xs text-gray-500">
                         Nome de exibição para identificar esta instância
+                      </p>
+                    </div>
+
+                    <div>
+                      <label htmlFor="default_department" className="block text-sm font-medium text-gray-700">
+                        Departamento Padrão
+                      </label>
+                      <select
+                        id="default_department"
+                        value={instanceFormData.default_department || ''}
+                        onChange={(e) => setInstanceFormData({ ...instanceFormData, default_department: e.target.value || null })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      >
+                        <option value="">Inbox (sem departamento)</option>
+                        {departments.map((dept) => (
+                          <option key={dept.id} value={dept.id}>
+                            {dept.name}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">
+                        Novas conversas desta instância irão automaticamente para este departamento. Deixe em branco para ir para Inbox.
                       </p>
                     </div>
 
