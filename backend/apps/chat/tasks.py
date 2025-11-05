@@ -446,19 +446,43 @@ async def handle_send_message(message_id: str):
         
         logger.info(f"💾 [CHAT ENVIO] Status atualizado no banco para 'sent'")
         
-        # Broadcast via WebSocket (convertendo UUIDs para string)
+        # ✅ FIX CRÍTICO: Broadcast via WebSocket para adicionar mensagem em tempo real
+        # Enviar TANTO message_received (para adicionar mensagem) QUANTO message_status_update (para atualizar status)
         logger.info(f"📡 [CHAT ENVIO] Preparando broadcast via WebSocket...")
         
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+        tenant_group = f"chat_tenant_{message.conversation.tenant_id}"
         
         logger.info(f"   Room: {room_group_name}")
+        logger.info(f"   Tenant Group: {tenant_group}")
         
-        from apps.chat.utils.serialization import serialize_message_for_ws
+        from apps.chat.utils.serialization import serialize_message_for_ws, serialize_conversation_for_ws
         
         # ✅ Usar database_sync_to_async para serialização (MessageSerializer acessa relacionamentos do DB)
         message_data_serializable = await database_sync_to_async(serialize_message_for_ws)(message)
+        conversation_data_serializable = await database_sync_to_async(serialize_conversation_for_ws)(message.conversation)
         
+        # ✅ FIX: Enviar message_received para adicionar mensagem em tempo real (TANTO na room QUANTO no tenant)
+        # Isso garante que a mensagem apareça imediatamente na conversa ativa
+        await channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'message_received',
+                'message': message_data_serializable
+            }
+        )
+        
+        await channel_layer.group_send(
+            tenant_group,
+            {
+                'type': 'message_received',
+                'message': message_data_serializable,
+                'conversation': conversation_data_serializable
+            }
+        )
+        
+        # ✅ Também enviar message_status_update para atualizar status
         await channel_layer.group_send(
             room_group_name,
             {
@@ -473,6 +497,7 @@ async def handle_send_message(message_id: str):
         logger.info(f"   Message ID: {message.id}")
         logger.info(f"   Phone: {message.conversation.contact_phone}")
         logger.info(f"   Status: {message.status}")
+        logger.info(f"   Broadcast: message_received + message_status_update")
     
     except Exception as e:
         logger.error(f"❌ [CHAT] Erro ao enviar mensagem {message_id}: {e}", exc_info=True)

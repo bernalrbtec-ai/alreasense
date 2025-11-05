@@ -1247,6 +1247,44 @@ class MessageViewSet(viewsets.ModelViewSet):
         """
         message = serializer.save()
         
+        # ✅ FIX CRÍTICO: Broadcast imediato para adicionar mensagem em tempo real
+        # A mensagem aparece imediatamente na conversa (com status 'pending')
+        # Depois será atualizada quando for enviada com sucesso
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.chat.utils.serialization import serialize_message_for_ws, serialize_conversation_for_ws
+            
+            channel_layer = get_channel_layer()
+            room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+            tenant_group = f"chat_tenant_{message.conversation.tenant_id}"
+            
+            msg_data_serializable = serialize_message_for_ws(message)
+            conv_data_serializable = serialize_conversation_for_ws(message.conversation)
+            
+            # ✅ Broadcast para room da conversa (para adicionar mensagem)
+            async_to_sync(channel_layer.group_send)(
+                room_group_name,
+                {
+                    'type': 'message_received',
+                    'message': msg_data_serializable
+                }
+            )
+            
+            # ✅ Broadcast para grupo do tenant (para que useTenantSocket processe)
+            async_to_sync(channel_layer.group_send)(
+                tenant_group,
+                {
+                    'type': 'message_received',
+                    'message': msg_data_serializable,
+                    'conversation': conv_data_serializable
+                }
+            )
+            
+            logger.info(f"📡 [MESSAGE CREATE] Mensagem criada e broadcast enviado (ID: {message.id})")
+        except Exception as e:
+            logger.error(f"❌ [MESSAGE CREATE] Erro ao broadcast mensagem criada: {e}", exc_info=True)
+        
         # Importa aqui para evitar circular import
         from apps.chat.tasks import send_message_to_evolution
         
