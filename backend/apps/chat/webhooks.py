@@ -135,7 +135,11 @@ def evolution_webhook(request):
         
         try:
             # Buscar WhatsAppInstance pelo instance_name (UUID do webhook)
-            wa_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+            # ✅ FIX: Incluir select_related('default_department') para evitar query extra
+            wa_instance = WhatsAppInstance.objects.select_related(
+                'tenant', 
+                'default_department'  # ✅ CRÍTICO: Carregar departamento padrão
+            ).filter(
                 instance_name=instance_name,
                 is_active=True,
                 status='active'
@@ -144,6 +148,7 @@ def evolution_webhook(request):
             if wa_instance:
                 logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada: {wa_instance.friendly_name} ({wa_instance.instance_name})")
                 logger.info(f"   📌 Tenant: {wa_instance.tenant.name if wa_instance.tenant else 'Global'}")
+                logger.info(f"   📋 Default Department: {wa_instance.default_department.name if wa_instance.default_department else 'Nenhum (Inbox)'}")
                 
                 # Buscar EvolutionConnection (servidor Evolution) para usar api_url/api_key
                 # Se WhatsAppInstance tem api_url/api_key próprios, usar deles
@@ -366,6 +371,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         )
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {phone} | Tipo: {conversation_type}")
+        logger.info(f"   📋 Departamento atual: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
+        logger.info(f"   📊 Status atual: {conversation.status}")
+        logger.info(f"   🆔 ID: {conversation.id}")
         
         # ✅ FIX CRÍTICO: Se conversa já existia mas não tem departamento E instância tem default_department,
         # atualizar conversa para usar o departamento padrão
@@ -374,10 +382,20 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             conversation.department = default_department
             conversation.status = 'open'  # Mudar status de 'pending' para 'open' ao atribuir departamento
             conversation.save(update_fields=['department', 'status'])
-            logger.info(f"✅ [ROUTING] Conversa atualizada: {phone} → {default_department.name}")
+            logger.info(f"✅ [ROUTING] Conversa atualizada: {phone} → {default_department.name} | Status: pending → open")
+        
+        # ✅ FIX CRÍTICO: Se conversa foi criada COM departamento, garantir que status está correto
+        if created and default_department:
+            if conversation.status != 'open':
+                logger.warning(f"⚠️ [ROUTING] Conversa criada com departamento mas status errado: {conversation.status} → corrigindo para 'open'")
+                conversation.status = 'open'
+                conversation.save(update_fields=['status'])
         
         if created:
-            logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone} ({'Departamento: ' + default_department.name if default_department else 'Inbox'})")
+            logger.info(f"✅ [WEBHOOK] Nova conversa criada: {phone}")
+            logger.info(f"   📋 Departamento: {default_department.name if default_department else 'Nenhum (Inbox)'}")
+            logger.info(f"   📊 Status: {conversation.status}")
+            logger.info(f"   🆔 ID: {conversation.id}")
             
             # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
             logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")
