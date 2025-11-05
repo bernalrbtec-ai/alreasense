@@ -509,11 +509,21 @@ class EvolutionWebhookView(APIView):
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}", exc_info=True)
             
-            # Processar mensagem normalmente para analytics/campaigns
-            for msg_data in messages:
-                self.process_message(msg_data, instance)
-            
-            return JsonResponse({'status': 'success', 'processed': len(messages)})
+            # ✅ FIX: Processar mensagem para analytics/campaigns
+            # Evolution API v2: data.data é objeto { key: {...}, message: {...} }
+            # Evolution API v1: data.data.messages é lista [...]
+            messages_list = data.get('data', {}).get('messages', [])
+            if isinstance(messages_list, list) and len(messages_list) > 0:
+                # Formato antigo (lista): processar cada item
+                for msg_data in messages_list:
+                    self.process_message(msg_data, instance_name)
+                logger.info(f"✅ [CONNECTIONS WEBHOOK] Processadas {len(messages_list)} mensagens (formato lista)")
+                return JsonResponse({'status': 'success', 'processed': len(messages_list)})
+            else:
+                # ✅ Formato novo (objeto): já foi processado pelo Flow Chat
+                # Não precisa processar novamente para analytics (já foi feito no chat)
+                logger.info(f"✅ [CONNECTIONS WEBHOOK] Mensagem processada pelo Flow Chat (formato objeto)")
+                return JsonResponse({'status': 'success', 'processed': 1})
             
         except Exception as e:
             logger.error(f"Error processing messages: {str(e)}")
