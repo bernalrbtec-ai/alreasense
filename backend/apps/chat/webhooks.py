@@ -1004,9 +1004,35 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 
                 logger.info(f"📎 [WEBHOOK] Anexo {filename} preparado para processamento direto (S3+cache)")
             
-            # Broadcast via WebSocket (mensagem específica)
-            logger.info(f"📡 [WEBHOOK] Enviando para WebSocket da conversa...")
+            # ✅ FIX CRÍTICO: Broadcast via WebSocket (mensagem específica)
+            # IMPORTANTE: Enviar para o grupo da conversa E para o grupo do tenant
+            logger.info(f"📡 [WEBHOOK] Enviando mensagem para WebSocket...")
             broadcast_message_to_websocket(message, conversation)
+            
+            # ✅ FIX: Também enviar para o grupo do tenant para atualizar lista de conversas
+            try:
+                from apps.chat.utils.serialization import serialize_message_for_ws
+                from apps.chat.api.serializers import ConversationSerializer
+                
+                msg_data_serializable = serialize_message_for_ws(message)
+                conv_data_serializable = serialize_conversation_for_ws(conversation)
+                
+                channel_layer = get_channel_layer()
+                tenant_group = f"chat_tenant_{tenant.id}"
+                
+                # Broadcast para todo o tenant (atualiza lista de conversas e adiciona mensagem)
+                async_to_sync(channel_layer.group_send)(
+                    tenant_group,
+                    {
+                        'type': 'message_received',
+                        'message': msg_data_serializable,
+                        'conversation': conv_data_serializable
+                    }
+                )
+                
+                logger.info(f"📡 [WEBSOCKET] Mensagem também broadcast para grupo do tenant (atualiza lista)")
+            except Exception as e:
+                logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
             
             # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós)
             if not from_me:

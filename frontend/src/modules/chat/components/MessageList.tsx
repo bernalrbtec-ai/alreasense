@@ -108,40 +108,52 @@ export function MessageList() {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
         
-        // ✅ NOVO: Se conversa não tem mensagens e foi criada recentemente (< 30s), 
-        // fazer re-fetch após 1.5s para pegar mensagem que pode estar sendo processada
+        // ✅ FIX CRÍTICO: Se conversa não tem mensagens e foi criada recentemente (< 60s), 
+        // fazer múltiplos re-fetches para pegar mensagem que pode estar sendo processada
         if (mergedMessages.length === 0 && activeConversation.created_at) {
           const createdDate = new Date(activeConversation.created_at);
           const now = new Date();
           const ageInSeconds = (now.getTime() - createdDate.getTime()) / 1000;
           
-          if (ageInSeconds < 30) {
-            console.log(`🔄 [MessageList] Conversa nova sem mensagens (${Math.round(ageInSeconds)}s), re-fetch em 1.5s...`);
-            setTimeout(async () => {
-              // Re-fetch mensagens
-              try {
-                const retryResponse = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
-                  params: { 
-                    limit: 50,
-                    offset: 0
-                  }
-                });
-                const retryData = retryResponse.data;
-                const retryMsgs = retryData.results || retryData;
-                if (retryMsgs.length > 0) {
-                  console.log(`✅ [MessageList] Re-fetch encontrou ${retryMsgs.length} mensagem(ns)!`);
-                  setMessages(retryMsgs);
-                  setHasMoreMessages(retryData.has_more || false);
+          if (ageInSeconds < 60) {
+            console.log(`🔄 [MessageList] Conversa nova sem mensagens (${Math.round(ageInSeconds)}s), fazendo re-fetches...`);
+            
+            // ✅ FIX: Fazer múltiplos retries com intervalos crescentes
+            const retryDelays = [1000, 2000, 3000, 5000]; // 1s, 2s, 3s, 5s
+            
+            retryDelays.forEach((delay, index) => {
+              setTimeout(async () => {
+                try {
+                  console.log(`🔄 [MessageList] Re-fetch #${index + 1} após ${delay}ms...`);
+                  const retryResponse = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
+                    params: { 
+                      limit: 50,
+                      offset: 0
+                    }
+                  });
+                  const retryData = retryResponse.data;
+                  const retryMsgs = retryData.results || retryData;
                   
-                  // Scroll to bottom
-                  setTimeout(() => {
-                    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-                  }, 100);
+                  if (retryMsgs.length > 0) {
+                    console.log(`✅ [MessageList] Re-fetch #${index + 1} encontrou ${retryMsgs.length} mensagem(ns)!`);
+                    setMessages(retryMsgs);
+                    setHasMoreMessages(retryData.has_more || false);
+                    
+                    // Scroll to bottom
+                    setTimeout(() => {
+                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                    }, 100);
+                    
+                    // Parar outros retries
+                    return;
+                  } else if (index === retryDelays.length - 1) {
+                    console.log(`⚠️ [MessageList] Nenhum retry encontrou mensagens após ${retryDelays.length} tentativas`);
+                  }
+                } catch (error) {
+                  console.error(`❌ [MessageList] Erro no re-fetch #${index + 1}:`, error);
                 }
-              } catch (error) {
-                console.error('❌ Erro no re-fetch de mensagens:', error);
-              }
-            }, 1500);
+              }, delay);
+            });
           }
         }
       } catch (error) {
