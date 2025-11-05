@@ -218,19 +218,34 @@ export function useTenantSocket() {
         // ✅ FIX CRÍTICO: Handler para mensagens recebidas via WebSocket
         // Este evento é enviado quando uma nova mensagem é criada (incluindo mensagem inicial)
         console.log('💬 [TENANT WS] Mensagem recebida via WebSocket:', data);
+        console.log('💬 [TENANT WS] Message conversation_id:', data.message?.conversation_id || data.message?.conversation);
+        console.log('💬 [TENANT WS] Data conversation id:', data.conversation?.id);
+        console.log('💬 [TENANT WS] Active conversation id:', useChatStore.getState().activeConversation?.id);
+        
         if (data.message) {
           const { addMessage, activeConversation } = useChatStore.getState();
           
-          // ✅ Se a conversa da mensagem é a conversa ativa, adicionar mensagem imediatamente
-          if (activeConversation?.id === data.message.conversation_id || 
-              activeConversation?.id === data.conversation?.id) {
+          // ✅ FIX: Verificar múltiplas formas de identificar a conversa
+          const messageConversationId = data.message.conversation_id || data.message.conversation || data.conversation?.id;
+          const isActiveConversation = activeConversation && (
+            activeConversation.id === messageConversationId ||
+            activeConversation.id === data.conversation?.id ||
+            activeConversation.id === String(messageConversationId) ||
+            activeConversation.id === String(data.conversation?.id)
+          );
+          
+          if (isActiveConversation) {
             console.log('✅ [TENANT WS] Mensagem é da conversa ativa, adicionando ao store...');
             addMessage(data.message);
           } else {
-            console.log('ℹ️ [TENANT WS] Mensagem não é da conversa ativa, será carregada quando conversa for aberta');
+            console.log('ℹ️ [TENANT WS] Mensagem não é da conversa ativa:', {
+              messageConvId: messageConversationId,
+              activeConvId: activeConversation?.id,
+              dataConvId: data.conversation?.id
+            });
           }
           
-          // ✅ Atualizar conversa na lista se fornecida
+          // ✅ Atualizar conversa na lista se fornecida (sempre atualizar para unread_count)
           if (data.conversation) {
             const { updateConversation } = useChatStore.getState();
             updateConversation(data.conversation);
@@ -325,10 +340,23 @@ export function useTenantSocket() {
           }
           console.log('✅ [TENANT WS] Store atualizada!');
           
-          // ✅ FIX CRÍTICO: Se status mudou para 'pending' OU unread_count mudou, refetch departamentos
-          // Isso garante que pending_count seja atualizado em tempo real
-          if (statusChanged && isNowPending || unreadCountChanged) {
-            console.log('🔄 [TENANT WS] Status/unread_count mudou, refetching departamentos...');
+          // ✅ FIX CRÍTICO: Sempre refetch departamentos quando conversa é atualizada
+          // Isso garante que pending_count seja atualizado em tempo real, especialmente quando:
+          // - Conversa muda de departamento (Inbox → Departamento)
+          // - Status muda para pending
+          // - unread_count muda
+          const departmentChanged = existingConversation && 
+            (existingConversation.department !== data.conversation.department ||
+             (typeof existingConversation.department === 'object' && existingConversation.department?.id) !== 
+             (typeof data.conversation.department === 'object' ? data.conversation.department?.id : data.conversation.department));
+          
+          if (statusChanged || unreadCountChanged || departmentChanged || isNewConversation) {
+            console.log('🔄 [TENANT WS] Conversa atualizada, refetching departamentos...', {
+              statusChanged,
+              unreadCountChanged,
+              departmentChanged,
+              isNewConversation
+            });
             // Refetch departamentos para atualizar pending_count
             import('@/lib/api').then(({ api }) => {
               api.get('/auth/departments/').then(response => {

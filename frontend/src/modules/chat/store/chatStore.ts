@@ -147,9 +147,9 @@ export const useChatStore = create<ChatState>((set) => ({
     if (!exists) {
       console.log('⚠️ [STORE] Conversa não encontrada no store, adicionando...');
       return {
-        conversations: [...state.conversations, conversation],
-        // Se não tem conversa ativa, definir esta como ativa
-        activeConversation: state.activeConversation || conversation
+        conversations: [...state.conversations, conversation]
+        // ✅ FIX: NÃO definir automaticamente como ativa - usuário deve escolher qual abrir
+        // activeConversation: state.activeConversation || conversation  // ❌ REMOVIDO
       };
     }
     
