@@ -708,4 +708,3 @@ const MessageReactions = React.memo(function MessageReactions({ message }: { mes
     </div>
   );
 }); // ✅ CORREÇÃO: Fechar React.memo
-}
