@@ -245,21 +245,27 @@ export function useTenantSocket() {
           
           // ✅ FIX CRÍTICO: Verificar SE a mensagem pertence à conversa ativa de forma rigorosa
           // Comparar IDs convertidos para string para garantir que tipos diferentes sejam comparados corretamente
-          const messageConversationId = data.message.conversation_id || data.message.conversation || data.conversation?.id;
+          // O campo 'conversation' pode ser UUID (objeto) ou string, e também pode vir em 'conversation_id'
+          const messageConversationId = data.message.conversation 
+            ? String(data.message.conversation) 
+            : (data.message.conversation_id ? String(data.message.conversation_id) : null);
+          const dataConversationId = data.conversation?.id ? String(data.conversation.id) : null;
           const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
-          const messageConvIdStr = messageConversationId ? String(messageConversationId) : null;
-          const dataConvIdStr = data.conversation?.id ? String(data.conversation.id) : null;
           
           // ✅ FIX: Comparar apenas IDs válidos e converter para string para garantir comparação correta
-          const isActiveConversation = activeConversationId && (
-            activeConversationId === messageConvIdStr ||
-            activeConversationId === dataConvIdStr
+          // Usar messageConversationId OU dataConversationId (qualquer um que estiver disponível)
+          const finalMessageConvId = messageConversationId || dataConversationId;
+          const isActiveConversation = activeConversationId && finalMessageConvId && (
+            activeConversationId === finalMessageConvId
           );
           
           console.log('🔍 [TENANT WS] Verificando se mensagem é da conversa ativa:', {
-            messageConversationId: messageConvIdStr,
+            messageConversationId: messageConversationId,
+            dataConversationId: dataConversationId,
+            finalMessageConvId: finalMessageConvId,
             activeConversationId: activeConversationId,
-            dataConversationId: dataConvIdStr,
+            messageConversation: data.message.conversation,
+            messageConversationIdField: data.message.conversation_id,
             isActiveConversation
           });
           

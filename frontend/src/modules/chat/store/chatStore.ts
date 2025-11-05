@@ -240,8 +240,20 @@ export const useChatStore = create<ChatState>((set) => ({
     }
     
     // ✅ FIX: Comparar conversation_id da mensagem com a conversa ativa
-    const messageConversationId = message.conversation ? String(message.conversation) : null;
+    // O campo pode ser 'conversation' (UUID) ou 'conversation_id' (string)
+    const messageConversationId = message.conversation 
+      ? String(message.conversation) 
+      : (message.conversation_id ? String(message.conversation_id) : null);
     const activeConversationId = state.activeConversation.id ? String(state.activeConversation.id) : null;
+    
+    console.log('🔍 [STORE] Verificando se mensagem pertence à conversa ativa:', {
+      messageId: message.id,
+      messageConversationId,
+      activeConversationId,
+      messageConversation: message.conversation,
+      messageConversationIdField: message.conversation_id,
+      match: messageConversationId === activeConversationId
+    });
     
     if (messageConversationId !== activeConversationId) {
       console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
@@ -252,6 +264,8 @@ export const useChatStore = create<ChatState>((set) => ({
       });
       return state; // Não adicionar mensagem se não for da conversa ativa
     }
+    
+    console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);
     
     // Evitar duplicatas: verificar se mensagem já existe
     const exists = state.messages.some(m => m.id === message.id);
