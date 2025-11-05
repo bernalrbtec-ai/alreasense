@@ -127,6 +127,25 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
+    const handleReactionUpdate = (data: WebSocketMessage) => {
+      if (data.message) {
+        console.log('👍 [HOOK] Reação atualizada:', data.message.id, data.reaction);
+        // Atualizar mensagem com reações atualizadas
+        const { messages, setMessages } = useChatStore.getState();
+        const updatedMessages = messages.map((m) => {
+          if (m.id === data.message!.id) {
+            return {
+              ...m,
+              reactions: data.message!.reactions || [],
+              reactions_summary: data.message!.reactions_summary || {},
+            };
+          }
+          return m;
+        });
+        setMessages(updatedMessages);
+      }
+    };
+
     // ✅ REMOVIDO: handleAttachmentUpdated movido para useTenantSocket
     // O useTenantSocket já escuta o grupo tenant e processa attachment_updated
     // Remover daqui evita duplicação, já que o ChatWebSocketManager também está conectado ao grupo tenant
@@ -150,6 +169,7 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('message_status_update', handleStatusUpdate);
     chatWebSocketManager.on('typing', handleTyping);
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
+    chatWebSocketManager.on('message_reaction_update', handleReactionUpdate);
     // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
     chatWebSocketManager.on('new_conversation', handleNewConversation);
 
@@ -159,6 +179,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('message_status_update', handleStatusUpdate);
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
+      chatWebSocketManager.off('message_reaction_update', handleReactionUpdate);
       // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
       chatWebSocketManager.off('new_conversation', handleNewConversation);
     };

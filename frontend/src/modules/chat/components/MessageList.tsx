@@ -3,14 +3,16 @@
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Smile } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
-import type { MessageAttachment } from '../types';
+import type { MessageAttachment, MessageReaction } from '../types';
 import { AttachmentPreview } from './AttachmentPreview';
 import { useUserAccess } from '@/hooks/useUserAccess';
 import { sortMessagesByTimestamp } from '../utils/messageUtils';
+import { EmojiPicker } from './EmojiPicker';
+import { useAuthStore } from '@/stores/authStore';
 
 export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
@@ -394,7 +396,7 @@ export function MessageList() {
                 visibleMessages.has(msg.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
-              } transition-all duration-300 ease-out`}
+              } transition-all duration-300 ease-out group`}
             >
               <div
                 className={`
@@ -477,6 +479,220 @@ export function MessageList() {
           <div ref={messagesEndRef} />
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * Componente de Reações de Mensagem
+ * Mostra reações existentes e permite adicionar/remover
+ */
+function MessageReactions({ message }: { message: any }) {
+  const { user } = useAuthStore();
+  const { messages, setMessages } = useChatStore();
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // Fechar picker ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        pickerRef.current &&
+        !pickerRef.current.contains(event.target as Node) &&
+        buttonRef.current &&
+        !buttonRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    if (showEmojiPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showEmojiPicker]);
+
+  // Reações agrupadas por emoji
+  const reactionsSummary = message.reactions_summary || {};
+  const hasReactions = Object.keys(reactionsSummary).length > 0;
+
+  // Verificar se usuário já reagiu com cada emoji
+  const getUserReaction = (emoji: string): MessageReaction | null => {
+    if (!message.reactions || !user) return null;
+    return message.reactions.find((r: MessageReaction) => r.emoji === emoji && r.user === user.id) || null;
+  };
+
+  // Adicionar reação
+  const handleAddReaction = async (emoji: string) => {
+    if (!user) return;
+    
+    try {
+      const response = await api.post('/chat/reactions/add/', {
+        message_id: message.id,
+        emoji: emoji,
+      });
+      
+      // Atualizar mensagem no store
+      const updatedMessages = messages.map((m) => {
+        if (m.id === message.id) {
+          // Buscar mensagem atualizada do servidor se necessário
+          // Por enquanto, atualizar localmente
+          return {
+            ...m,
+            reactions: m.reactions || [],
+            reactions_summary: response.data.message?.reactions_summary || m.reactions_summary,
+          };
+        }
+        return m;
+      });
+      
+      setMessages(updatedMessages);
+      setShowEmojiPicker(false);
+    } catch (error) {
+      console.error('❌ Erro ao adicionar reação:', error);
+    }
+  };
+
+  // Remover reação
+  const handleRemoveReaction = async (emoji: string) => {
+    if (!user) return;
+    
+    try {
+      await api.post('/chat/reactions/remove/', {
+        message_id: message.id,
+        emoji: emoji,
+      });
+      
+      // Atualizar mensagem no store (remoção local)
+      const updatedMessages = messages.map((m) => {
+        if (m.id === message.id) {
+          const updatedReactions = (m.reactions || []).filter(
+            (r: MessageReaction) => !(r.emoji === emoji && r.user === user.id)
+          );
+          
+          // Recalcular reactions_summary
+          const newSummary: Record<string, { count: number; users: any[] }> = {};
+          updatedReactions.forEach((r: MessageReaction) => {
+            if (!newSummary[r.emoji]) {
+              newSummary[r.emoji] = { count: 0, users: [] };
+            }
+            newSummary[r.emoji].count++;
+            newSummary[r.emoji].users.push({
+              id: r.user,
+              email: r.user_data?.email || '',
+              first_name: r.user_data?.first_name,
+              last_name: r.user_data?.last_name,
+            });
+          });
+          
+          return {
+            ...m,
+            reactions: updatedReactions,
+            reactions_summary: newSummary,
+          };
+        }
+        return m;
+      });
+      
+      setMessages(updatedMessages);
+    } catch (error) {
+      console.error('❌ Erro ao remover reação:', error);
+    }
+  };
+
+  // Toggle reação (adicionar se não existe, remover se existe)
+  const handleToggleReaction = async (emoji: string) => {
+    const userReaction = getUserReaction(emoji);
+    if (userReaction) {
+      await handleRemoveReaction(emoji);
+    } else {
+      await handleAddReaction(emoji);
+    }
+  };
+
+  if (!hasReactions && !showEmojiPicker) {
+    // Mostrar apenas botão de adicionar reação se não houver reações
+    return (
+      <div className="mt-2 flex items-center gap-1">
+        <div className="relative">
+          <button
+            ref={buttonRef}
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors opacity-0 group-hover:opacity-100"
+            title="Adicionar reação"
+          >
+            <Smile className="w-4 h-4 text-gray-500" />
+          </button>
+          {showEmojiPicker && (
+            <div ref={pickerRef} className="absolute bottom-full left-0 mb-2 z-50">
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  handleAddReaction(emoji);
+                  setShowEmojiPicker(false);
+                }}
+                onClose={() => setShowEmojiPicker(false)}
+              />
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-2 flex items-center gap-1 flex-wrap">
+      {/* Reações existentes */}
+      {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
+        const userReaction = getUserReaction(emoji);
+        const isUserReaction = !!userReaction;
+        
+        return (
+          <button
+            key={emoji}
+            onClick={() => handleToggleReaction(emoji)}
+            onMouseEnter={() => setHoveredEmoji(emoji)}
+            onMouseLeave={() => setHoveredEmoji(null)}
+            className={`
+              px-2 py-1 rounded-full text-xs flex items-center gap-1.5 transition-all
+              ${isUserReaction
+                ? 'bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
+                : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }
+            `}
+            title={`${data.count} ${data.count === 1 ? 'reação' : 'reações'}: ${data.users.map((u: any) => u.email).join(', ')}`}
+          >
+            <span className="text-base">{emoji}</span>
+            <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
+              {data.count}
+            </span>
+          </button>
+        );
+      })}
+      
+      {/* Botão de adicionar reação */}
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+          title="Adicionar reação"
+        >
+          <Smile className="w-4 h-4 text-gray-500" />
+        </button>
+        {showEmojiPicker && (
+          <div ref={pickerRef} className="absolute bottom-full left-0 mb-2 z-50">
+            <EmojiPicker
+              onSelect={(emoji) => {
+                handleAddReaction(emoji);
+                setShowEmojiPicker(false);
+              }}
+              onClose={() => setShowEmojiPicker(false)}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }

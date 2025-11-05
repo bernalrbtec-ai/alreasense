@@ -56,6 +56,15 @@ export interface Conversation {
   contact_tags?: ContactTag[];
 }
 
+export interface MessageReaction {
+  id: string;
+  message: string;
+  user: string;
+  user_data?: User;
+  emoji: string;
+  created_at: string;
+}
+
 export interface Message {
   id: string;
   conversation: string;
@@ -71,6 +80,8 @@ export interface Message {
   status: 'pending' | 'sent' | 'delivered' | 'seen' | 'failed';
   is_internal: boolean;
   attachments: MessageAttachment[];
+  reactions?: MessageReaction[];
+  reactions_summary?: Record<string, { count: number; users: Array<{ id: string; email: string; first_name?: string; last_name?: string }> }>;
   metadata?: Record<string, any>;
   created_at: string;
 }
@@ -107,7 +118,7 @@ export interface MessageAttachment {
 }
 
 export interface WebSocketMessage {
-  type: 'message_received' | 'message_status_update' | 'typing_status' | 'conversation_transferred' | 'user_joined';
+  type: 'message_received' | 'message_status_update' | 'typing_status' | 'conversation_transferred' | 'user_joined' | 'message_reaction_update';
   message?: Message;
   message_id?: string;
   status?: string;
@@ -118,6 +129,18 @@ export interface WebSocketMessage {
   new_agent?: string;
   new_department?: string;
   transferred_by?: string;
+  reaction?: {
+    id?: string;
+    emoji: string;
+    removed?: boolean;
+    user?: {
+      id: string;
+      email: string;
+      first_name?: string;
+      last_name?: string;
+    };
+    created_at?: string;
+  };
 }
 
 export interface TransferPayload {
