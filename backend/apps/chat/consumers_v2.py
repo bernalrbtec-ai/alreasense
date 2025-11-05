@@ -525,4 +525,16 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }
         }))
         logger.info(f"📡 [CHAT WS V2] Notificação de anexo atualizado enviada (attachment_id: {data.get('attachment_id')})")
+    
+    async def message_reaction_update(self, event):
+        """
+        Handler para atualizações de reações de mensagem.
+        Frontend recebe mensagem atualizada com reações.
+        """
+        await self.send(text_data=json.dumps({
+            'type': 'message_reaction_update',
+            'message': event.get('message'),
+            'reaction': event.get('reaction')
+        }))
+        logger.debug(f"👍 [CHAT WS V2] Broadcast de reação enviado para {self.user.email}")
 

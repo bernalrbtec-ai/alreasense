@@ -2,7 +2,7 @@
 Serializers para o módulo Flow Chat.
 """
 from rest_framework import serializers
-from apps.chat.models import Conversation, Message, MessageAttachment
+from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.authn.serializers import UserSerializer
 from apps.contacts.models import Contact
 
@@ -93,6 +93,20 @@ class MessageAttachmentSerializer(serializers.ModelSerializer):
         return data
 
 
+class MessageReactionSerializer(serializers.ModelSerializer):
+    """Serializer para reações de mensagens."""
+    
+    id = serializers.UUIDField(read_only=True)
+    message = serializers.UUIDField(read_only=True)
+    user = serializers.UUIDField(read_only=True)
+    user_data = UserSerializer(source='user', read_only=True)
+    
+    class Meta:
+        model = MessageReaction
+        fields = ['id', 'message', 'user', 'user_data', 'emoji', 'created_at']
+        read_only_fields = ['id', 'message', 'user', 'user_data', 'created_at']
+
+
 class MessageSerializer(serializers.ModelSerializer):
     """Serializer para mensagens."""
     
@@ -103,15 +117,46 @@ class MessageSerializer(serializers.ModelSerializer):
     
     sender_data = UserSerializer(source='sender', read_only=True)
     attachments = MessageAttachmentSerializer(many=True, read_only=True)
+    reactions = MessageReactionSerializer(many=True, read_only=True)
+    reactions_summary = serializers.SerializerMethodField()
     
     class Meta:
         model = Message
         fields = [
             'id', 'conversation', 'sender', 'sender_data', 'sender_name', 'sender_phone',
             'content', 'direction', 'message_id', 'evolution_status', 'error_message',
-            'status', 'is_internal', 'attachments', 'metadata', 'created_at'
+            'status', 'is_internal', 'attachments', 'reactions', 'reactions_summary', 'metadata', 'created_at'
         ]
-        read_only_fields = ['id', 'conversation', 'sender', 'created_at', 'sender_data', 'attachments']
+        read_only_fields = ['id', 'conversation', 'sender', 'created_at', 'sender_data', 'attachments', 'reactions', 'reactions_summary']
+    
+    def get_reactions_summary(self, obj):
+        """
+        Retorna resumo das reações agrupadas por emoji.
+        Formato: {'👍': {'count': 3, 'users': [user1, user2, user3]}, ...}
+        """
+        from django.db.models import Count
+        from collections import defaultdict
+        
+        # Buscar reações com prefetch se disponível
+        if hasattr(obj, 'reactions'):
+            reactions = obj.reactions.all()
+        else:
+            reactions = MessageReaction.objects.filter(message=obj).select_related('user')
+        
+        summary = defaultdict(lambda: {'count': 0, 'users': []})
+        
+        for reaction in reactions:
+            emoji = reaction.emoji
+            summary[emoji]['count'] += 1
+            # Adicionar dados do usuário (apenas ID e nome para economizar espaço)
+            summary[emoji]['users'].append({
+                'id': str(reaction.user.id),
+                'email': reaction.user.email,
+                'first_name': reaction.user.first_name,
+                'last_name': reaction.user.last_name,
+            })
+        
+        return dict(summary)
 
 
 class MessageCreateSerializer(serializers.ModelSerializer):

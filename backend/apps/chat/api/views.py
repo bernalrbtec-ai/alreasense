@@ -10,13 +10,14 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
 
-from apps.chat.models import Conversation, Message, MessageAttachment
+from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.chat.api.serializers import (
     ConversationSerializer,
     ConversationDetailSerializer,
     MessageSerializer,
     MessageCreateSerializer,
-    MessageAttachmentSerializer
+    MessageAttachmentSerializer,
+    MessageReactionSerializer
 )
 from apps.authn.permissions import CanAccessChat
 from apps.authn.mixins import DepartmentFilterMixin
@@ -1240,6 +1241,249 @@ class MessageViewSet(viewsets.ModelViewSet):
             conversation__tenant=user.tenant,
             conversation__department__in=user_departments
         )
+
+
+class MessageReactionViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para reações de mensagens.
+    
+    Permite adicionar/remover reações (emoji) a mensagens.
+    """
+    
+    from apps.chat.models import MessageReaction, Message
+    from apps.chat.api.serializers import MessageReactionSerializer
+    
+    queryset = MessageReaction.objects.select_related('message', 'user', 'message__conversation')
+    serializer_class = MessageReactionSerializer
+    permission_classes = [IsAuthenticated, CanAccessChat]
+    
+    def get_queryset(self):
+        """Filtra reações por mensagens acessíveis ao usuário."""
+        user = self.request.user
+        
+        if user.is_superuser:
+            return self.queryset
+        
+        if user.is_admin:
+            return self.queryset.filter(message__conversation__tenant=user.tenant)
+        
+        # Gerente/Agente: apenas reações de mensagens de conversas dos seus departamentos
+        user_departments = user.departments.all()
+        if not user_departments.exists():
+            return self.queryset.none()
+        
+        return self.queryset.filter(
+            message__conversation__tenant=user.tenant,
+            message__conversation__department__in=user_departments
+        )
+    
+    def perform_create(self, serializer):
+        """Cria reação e garante que usuário é o atual."""
+        serializer.save(user=self.request.user)
+    
+    @action(detail=False, methods=['post'], url_path='add')
+    def add_reaction(self, request):
+        """
+        Adiciona uma reação a uma mensagem.
+        
+        Body:
+        {
+            "message_id": "uuid",
+            "emoji": "👍"
+        }
+        """
+        message_id = request.data.get('message_id')
+        emoji = request.data.get('emoji', '').strip()
+        
+        if not message_id:
+            return Response(
+                {'error': 'message_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not emoji:
+            return Response(
+                {'error': 'emoji é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar que mensagem existe e é acessível
+        try:
+            message = Message.objects.select_related('conversation', 'conversation__tenant').get(id=message_id)
+        except Message.DoesNotExist:
+            return Response(
+                {'error': 'Mensagem não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verificar acesso à conversa
+        if message.conversation.tenant != request.user.tenant:
+            return Response(
+                {'error': 'Acesso negado'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Verificar se usuário tem acesso ao departamento (se não for admin)
+        if not request.user.is_admin and not request.user.is_superuser:
+            if message.conversation.department and message.conversation.department not in request.user.departments.all():
+                return Response(
+                    {'error': 'Acesso negado ao departamento'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Criar ou obter reação (unique_together garante que não duplica)
+        reaction, created = MessageReaction.objects.get_or_create(
+            message=message,
+            user=request.user,
+            emoji=emoji,
+            defaults={}
+        )
+        
+        if not created:
+            # Reação já existe, retornar existente
+            serializer = self.get_serializer(reaction)
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        
+        # ✅ Broadcast via WebSocket
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        from apps.chat.utils.serialization import serialize_message_for_ws
+        
+        try:
+            channel_layer = get_channel_layer()
+            room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+            
+            # Serializar mensagem completa com reações atualizadas
+            message.refresh_from_db()
+            message_data = serialize_message_for_ws(message)
+            
+            async_to_sync(channel_layer.group_send)(
+                room_group_name,
+                {
+                    'type': 'message_reaction_update',
+                    'message': message_data,
+                    'reaction': {
+                        'id': str(reaction.id),
+                        'emoji': reaction.emoji,
+                        'user': {
+                            'id': str(request.user.id),
+                            'email': request.user.email,
+                            'first_name': request.user.first_name,
+                            'last_name': request.user.last_name,
+                        },
+                        'created_at': reaction.created_at.isoformat(),
+                    }
+                }
+            )
+            
+            logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
+            logger.info(f"   📡 Broadcast via WebSocket: {room_group_name}")
+        except Exception as e:
+            logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
+        
+        serializer = self.get_serializer(reaction)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    
+    @action(detail=False, methods=['post'], url_path='remove')
+    def remove_reaction(self, request):
+        """
+        Remove uma reação de uma mensagem.
+        
+        Body:
+        {
+            "message_id": "uuid",
+            "emoji": "👍"
+        }
+        """
+        message_id = request.data.get('message_id')
+        emoji = request.data.get('emoji', '').strip()
+        
+        if not message_id:
+            return Response(
+                {'error': 'message_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not emoji:
+            return Response(
+                {'error': 'emoji é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar que mensagem existe e é acessível
+        try:
+            message = Message.objects.select_related('conversation', 'conversation__tenant').get(id=message_id)
+        except Message.DoesNotExist:
+            return Response(
+                {'error': 'Mensagem não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verificar acesso à conversa
+        if message.conversation.tenant != request.user.tenant:
+            return Response(
+                {'error': 'Acesso negado'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Verificar se usuário tem acesso ao departamento (se não for admin)
+        if not request.user.is_admin and not request.user.is_superuser:
+            if message.conversation.department and message.conversation.department not in request.user.departments.all():
+                return Response(
+                    {'error': 'Acesso negado ao departamento'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Remover reação (se existir)
+        try:
+            reaction = MessageReaction.objects.get(
+                message=message,
+                user=request.user,
+                emoji=emoji
+            )
+            reaction.delete()
+            
+            # ✅ Broadcast via WebSocket
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.chat.utils.serialization import serialize_message_for_ws
+            
+            try:
+                channel_layer = get_channel_layer()
+                room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+                
+                # Serializar mensagem completa com reações atualizadas
+                message.refresh_from_db()
+                message_data = serialize_message_for_ws(message)
+                
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name,
+                    {
+                        'type': 'message_reaction_update',
+                        'message': message_data,
+                        'reaction': {
+                            'emoji': emoji,
+                            'removed': True,
+                            'user': {
+                                'id': str(request.user.id),
+                                'email': request.user.email,
+                            }
+                        }
+                    }
+                )
+                
+                logger.info(f"✅ [REACTION] Reação removida: {request.user.email} {emoji} em {message.id}")
+                logger.info(f"   📡 Broadcast via WebSocket: {room_group_name}")
+            except Exception as e:
+                logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
+            
+            return Response({'success': True}, status=status.HTTP_200_OK)
+            
+        except MessageReaction.DoesNotExist:
+            return Response(
+                {'error': 'Reação não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
     
     def perform_create(self, serializer):
         """

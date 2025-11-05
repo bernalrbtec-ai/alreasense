@@ -620,3 +620,58 @@ class MessageAttachment(models.Model):
         """Verifica se é um documento."""
         return self.mime_type.startswith('application/')
 
+
+class MessageReaction(models.Model):
+    """
+    Representa uma reação a uma mensagem (emoji).
+    
+    Attributes:
+        message: Mensagem à qual a reação pertence
+        user: Usuário que reagiu
+        emoji: Emoji da reação (ex: 👍, ❤️, 😂)
+        created_at: Timestamp da reação
+    """
+    
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='reactions',
+        verbose_name='Mensagem'
+    )
+    user = models.ForeignKey(
+        'authn.User',
+        on_delete=models.CASCADE,
+        related_name='message_reactions',
+        verbose_name='Usuário'
+    )
+    emoji = models.CharField(
+        max_length=10,
+        verbose_name='Emoji',
+        help_text='Emoji da reação (ex: 👍, ❤️, 😂)'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name='Criado em'
+    )
+    
+    class Meta:
+        db_table = 'chat_message_reaction'
+        verbose_name = 'Reação'
+        verbose_name_plural = 'Reações'
+        ordering = ['created_at']
+        # ✅ UNIQUE: Um usuário só pode reagir uma vez com cada emoji por mensagem
+        unique_together = [['message', 'user', 'emoji']]
+        indexes = [
+            models.Index(fields=['message', 'created_at']),
+            models.Index(fields=['user', 'created_at']),
+        ]
+    
+    def __str__(self):
+        return f"{self.user.email} {self.emoji} em {self.message.id}"
+

@@ -6,7 +6,8 @@ from rest_framework.routers import DefaultRouter
 from apps.chat.api.views import (
     ConversationViewSet,
     MessageViewSet,
-    MessageAttachmentViewSet
+    MessageAttachmentViewSet,
+    MessageReactionViewSet
 )
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
@@ -17,6 +18,7 @@ router = DefaultRouter()
 router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'messages', MessageViewSet, basename='message')
 router.register(r'attachments', MessageAttachmentViewSet, basename='attachment')
+router.register(r'reactions', MessageReactionViewSet, basename='reaction')
 
 urlpatterns = [
     # REST API
