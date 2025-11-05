@@ -717,12 +717,29 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if status_changed or name_or_pic_changed:
             try:
                 from apps.chat.utils.serialization import serialize_conversation_for_ws
+                from django.db.models import Count, Q
                 # ✅ Usar imports globais (linhas 12-13) ao invés de import local
                 # from channels.layers import get_channel_layer  # ❌ REMOVIDO: causava UnboundLocalError
                 # from asgiref.sync import async_to_sync  # ❌ REMOVIDO: causava UnboundLocalError
                 
                 # ✅ Recarregar do banco para garantir dados atualizados
                 conversation.refresh_from_db()
+                
+                # ✅ FIX CRÍTICO: Recalcular unread_count para garantir que está atualizado
+                if not hasattr(conversation, 'unread_count_annotated'):
+                    from apps.chat.models import Conversation as ConvModel
+                    conversation_with_annotate = ConvModel.objects.annotate(
+                        unread_count_annotated=Count(
+                            'messages',
+                            filter=Q(
+                                messages__direction='incoming',
+                                messages__status__in=['sent', 'delivered']
+                            ),
+                            distinct=True
+                        )
+                    ).get(id=conversation.id)
+                    conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
+                
                 conv_data_serializable = serialize_conversation_for_ws(conversation)
                 
                 channel_layer = get_channel_layer()  # ✅ Usa import global (linha 12)
@@ -737,7 +754,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 )
                 
                 change_type = "status mudou" if status_changed else "nome/foto atualizado"
-                logger.info(f"📡 [WEBSOCKET] Broadcast de conversa atualizada ({change_type}) enviado")
+                logger.info(f"📡 [WEBSOCKET] Broadcast de conversa atualizada ({change_type}) enviado (unread_count: {getattr(conversation, 'unread_count_annotated', 'N/A')})")
             except Exception as e:
                 logger.error(f"❌ [WEBSOCKET] Erro ao fazer broadcast de conversa atualizada: {e}", exc_info=True)
         
