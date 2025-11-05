@@ -266,6 +266,7 @@ export function useTenantSocket() {
           // ✅ Atualizar conversa na lista se fornecida (sempre atualizar para unread_count)
           if (data.conversation) {
             const { updateConversation, setDepartments } = useChatStore.getState();
+            console.log('🔄 [TENANT WS] Atualizando conversa com unread_count:', data.conversation.unread_count);
             updateConversation(data.conversation);
             
             // ✅ FIX CRÍTICO: Refetch departamentos quando nova mensagem chega
@@ -375,38 +376,29 @@ export function useTenantSocket() {
           }
           console.log('✅ [TENANT WS] Store atualizada!');
           
-          // ✅ FIX CRÍTICO: Sempre refetch departamentos quando conversa é atualizada
-          // Isso garante que pending_count seja atualizado em tempo real, especialmente quando:
-          // - Conversa muda de departamento (Inbox → Departamento)
-          // - Status muda para pending
-          // - unread_count muda
-          const departmentChanged = existingConversation && 
-            (existingConversation.department !== data.conversation.department ||
-             (typeof existingConversation.department === 'object' && existingConversation.department?.id) !== 
-             (typeof data.conversation.department === 'object' ? data.conversation.department?.id : data.conversation.department));
-          
-          if (statusChanged || unreadCountChanged || departmentChanged || isNewConversation) {
-            console.log('🔄 [TENANT WS] Conversa atualizada, refetching departamentos...', {
-              statusChanged,
-              unreadCountChanged,
-              departmentChanged,
-              isNewConversation
+          // ✅ FIX CRÍTICO: SEMPRE refetch departamentos quando conversation_updated é recebido
+          // Isso garante que pending_count seja atualizado em tempo real, mesmo se não houver mudanças aparentes
+          // O contador pode mudar mesmo sem mudanças visíveis (ex: mensagem nova em outra conversa do mesmo depto)
+          console.log('🔄 [TENANT WS] Conversa atualizada, refetching departamentos...', {
+            statusChanged,
+            unreadCountChanged,
+            isNewConversation,
+            unreadCount: data.conversation.unread_count
+          });
+          // Refetch departamentos para atualizar pending_count
+          import('@/lib/api').then(({ api }) => {
+            api.get('/auth/departments/').then(response => {
+              const depts = response.data.results || response.data;
+              setDepartments(depts);
+              console.log('✅ [TENANT WS] Departamentos atualizados:', depts.map((d: any) => ({
+                id: d.id,
+                name: d.name,
+                pending_count: d.pending_count
+              })));
+            }).catch(error => {
+              console.error('❌ [TENANT WS] Erro ao refetch departamentos:', error);
             });
-            // Refetch departamentos para atualizar pending_count
-            import('@/lib/api').then(({ api }) => {
-              api.get('/auth/departments/').then(response => {
-                const depts = response.data.results || response.data;
-                setDepartments(depts);
-                console.log('✅ [TENANT WS] Departamentos atualizados:', depts.map((d: any) => ({
-                  id: d.id,
-                  name: d.name,
-                  pending_count: d.pending_count
-                })));
-              }).catch(error => {
-                console.error('❌ [TENANT WS] Erro ao refetch departamentos:', error);
-              });
-            });
-          }
+          });
           
           // ✅ NOVO: Se conversa atualizada é a conversa ativa E foi criada recentemente,
           // forçar re-fetch de mensagens para garantir que mensagens novas sejam carregadas

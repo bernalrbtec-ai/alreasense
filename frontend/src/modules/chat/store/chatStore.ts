@@ -157,12 +157,14 @@ export const useChatStore = create<ChatState>((set) => ({
     const updatedConversations = state.conversations.map(c => {
       if (c.id === conversation.id) {
         // ✅ FIX: Merge completo para garantir que todos os campos sejam atualizados
-        return {
+        const updated = {
           ...c,
           ...conversation,  // Sobrescrever com dados atualizados (inclui unread_count)
           // Preservar mensagens existentes (não sobrescrever com mensagens vazias)
           messages: c.messages && c.messages.length > 0 ? c.messages : (conversation.messages || [])
         };
+        console.log(`   🔄 [STORE] Conversa ${c.id} atualizada: unread_count ${c.unread_count || 0} → ${updated.unread_count || 0}`);
+        return updated;
       }
       return c;
     });
