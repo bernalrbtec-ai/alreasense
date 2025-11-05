@@ -718,12 +718,40 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         logger.info(f"   message_id={message_id}")
         logger.info(f"   direction={direction} (fromMe={from_me})")
         logger.info(f"   conversation_id={conversation.id}")
-        logger.info(f"   content={content[:100]}...")
+        logger.info(f"   content={content[:100] if content else '(vazio)'}...")
         
-        message, msg_created = Message.objects.get_or_create(
-            message_id=message_id,
-            defaults=message_defaults
-        )
+        # ✅ FIX: Verificar se mensagem já existe antes de criar
+        # Isso evita duplicatas e garante que mensagens sejam encontradas
+        existing_message = None
+        if message_id:
+            existing_message = Message.objects.filter(message_id=message_id).first()
+        
+        if existing_message:
+            logger.info(f"⚠️ [WEBHOOK] Mensagem já existe no banco (message_id={message_id}), ignorando duplicata")
+            logger.info(f"   ID interno: {existing_message.id}")
+            logger.info(f"   Conversa: {existing_message.conversation.id}")
+            logger.info(f"   Content: {existing_message.content[:100] if existing_message.content else 'Sem conteúdo'}...")
+            message = existing_message
+            msg_created = False
+        else:
+            # ✅ FIX: Se não tem message_id, gerar um baseado no key.id
+            if not message_id:
+                key_id = key.get('id')
+                if key_id:
+                    message_id = key_id
+                    logger.info(f"⚠️ [WEBHOOK] message_id não fornecido, usando key.id: {message_id}")
+                else:
+                    # Fallback: gerar ID único baseado no timestamp e remoteJid
+                    import hashlib
+                    unique_str = f"{remote_jid}_{from_me}_{content[:50]}_{conversation.id}"
+                    message_id = hashlib.md5(unique_str.encode()).hexdigest()[:16]
+                    logger.warning(f"⚠️ [WEBHOOK] message_id não encontrado, gerando: {message_id}")
+            
+            message_defaults['message_id'] = message_id
+            message, msg_created = Message.objects.get_or_create(
+                message_id=message_id,
+                defaults=message_defaults
+            )
         
         if msg_created:
             logger.info(f"✅ [WEBHOOK] MENSAGEM NOVA CRIADA NO BANCO!")
