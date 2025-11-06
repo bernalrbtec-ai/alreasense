@@ -239,11 +239,23 @@ export const useChatStore = create<ChatState>((set) => ({
       return state;
     }
     
-    // ✅ FIX: Comparar conversation_id da mensagem com a conversa ativa
-    // O campo pode ser 'conversation' (UUID) ou 'conversation_id' (string)
-    const messageConversationId = message.conversation 
-      ? String(message.conversation) 
-      : (message.conversation_id ? String(message.conversation_id) : null);
+    // ✅ FIX CRÍTICO: Comparar conversation_id da mensagem com a conversa ativa
+    // O campo pode ser 'conversation' (UUID objeto ou string) ou 'conversation_id' (string)
+    // Precisamos normalizar para string para comparação correta
+    let messageConversationId: string | null = null;
+    
+    // Tentar extrair conversation_id de diferentes formatos
+    if (message.conversation) {
+      // Se é objeto UUID, extrair o id ou converter para string
+      if (typeof message.conversation === 'object' && message.conversation.id) {
+        messageConversationId = String(message.conversation.id);
+      } else {
+        messageConversationId = String(message.conversation);
+      }
+    } else if (message.conversation_id) {
+      messageConversationId = String(message.conversation_id);
+    }
+    
     const activeConversationId = state.activeConversation.id ? String(state.activeConversation.id) : null;
     
     console.log('🔍 [STORE] Verificando se mensagem pertence à conversa ativa:', {
@@ -251,18 +263,45 @@ export const useChatStore = create<ChatState>((set) => ({
       messageConversationId,
       activeConversationId,
       messageConversation: message.conversation,
+      messageConversationType: typeof message.conversation,
       messageConversationIdField: message.conversation_id,
-      match: messageConversationId === activeConversationId
+      activeConversationIdType: typeof state.activeConversation.id,
+      match: messageConversationId === activeConversationId,
+      messageContent: message.content?.substring(0, 50)
     });
     
-    if (messageConversationId !== activeConversationId) {
-      console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
-        messageId: message.id,
-        messageConversationId,
-        activeConversationId,
-        messageContent: message.content?.substring(0, 50)
-      });
-      return state; // Não adicionar mensagem se não for da conversa ativa
+    // ✅ FIX CRÍTICO: Se não conseguir extrair conversation_id, permitir adicionar se for mensagem enviada
+    // (pode ser mensagem enviada pelo próprio usuário que ainda não tem conversation_id definido)
+    if (!messageConversationId) {
+      // Se for mensagem enviada pelo próprio usuário (outgoing), permitir adicionar
+      if (message.direction === 'outgoing') {
+        console.warn('⚠️ [STORE] Mensagem enviada sem conversation_id, mas permitindo adicionar:', message.id);
+        // Continuar para adicionar mensagem mesmo sem conversation_id
+      } else {
+        console.warn('⚠️ [STORE] Mensagem recebida sem conversation_id, ignorando:', message.id);
+        return state; // Não adicionar mensagem recebida sem conversation_id
+      }
+    } else if (messageConversationId !== activeConversationId) {
+      // ✅ FIX CRÍTICO: Se for mensagem enviada pelo próprio usuário, permitir adicionar mesmo se conversation_id não bater
+      // (pode ser race condition onde a mensagem foi criada antes da conversa ser atualizada)
+      if (message.direction === 'outgoing') {
+        console.warn('⚠️ [STORE] Mensagem enviada com conversation_id diferente, mas permitindo adicionar (pode ser race condition):', {
+          messageId: message.id,
+          messageConversationId,
+          activeConversationId,
+          messageContent: message.content?.substring(0, 50)
+        });
+        // Continuar para adicionar mensagem mesmo se conversation_id não bater
+      } else {
+        console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
+          messageId: message.id,
+          messageConversationId,
+          activeConversationId,
+          messageContent: message.content?.substring(0, 50),
+          typeMismatch: typeof messageConversationId !== typeof activeConversationId
+        });
+        return state; // Não adicionar mensagem se não for da conversa ativa
+      }
     }
     
     console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);
