@@ -228,7 +228,7 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
     <>
       <div
         ref={menuRef}
-        className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 min-w-[200px]"
+        className="fixed bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-[9999] min-w-[200px]"
         style={{
           left: `${adjustedPosition.x}px`,
           top: `${adjustedPosition.y}px`,

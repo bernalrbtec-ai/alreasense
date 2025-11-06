@@ -304,6 +304,18 @@ export const useChatStore = create<ChatState>((set) => ({
       }
     }
     
+    // ✅ FIX ADICIONAL: Se a mensagem é outgoing e não tem conversation_id definido, 
+    // usar o ID da conversa ativa para garantir que será adicionada
+    if (message.direction === 'outgoing' && !messageConversationId && activeConversationId) {
+      // Atualizar a mensagem com o conversation_id da conversa ativa
+      message = {
+        ...message,
+        conversation: activeConversationId,
+        conversation_id: activeConversationId
+      };
+      console.log('✅ [STORE] Mensagem outgoing atualizada com conversation_id da conversa ativa:', activeConversationId);
+    }
+    
     console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);
     
     // Evitar duplicatas: verificar se mensagem já existe
