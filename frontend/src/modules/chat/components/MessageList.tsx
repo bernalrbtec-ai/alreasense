@@ -13,6 +13,8 @@ import { useUserAccess } from '@/hooks/useUserAccess';
 import { sortMessagesByTimestamp } from '../utils/messageUtils';
 import { EmojiPicker } from './EmojiPicker';
 import { useAuthStore } from '@/stores/authStore';
+import { MessageContextMenu } from './MessageContextMenu';
+import type { Message } from '../types';
 
 export function MessageList() {
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
@@ -23,6 +25,7 @@ export function MessageList() {
   const [isLoading, setIsLoading] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false); // ✅ NOVO: Paginação
   const [loadingOlder, setLoadingOlder] = useState(false); // ✅ NOVO: Loading mensagens antigas
+  const [contextMenu, setContextMenu] = useState<{ message: Message; position: { x: number; y: number } } | null>(null);
 
   useEffect(() => {
     if (!activeConversation?.id) return;
@@ -401,12 +404,19 @@ export function MessageList() {
               <div
                 className={`
                   max-w-[65%] md:max-w-md rounded-2xl px-4 py-2.5 shadow-md
-                  transform transition-all duration-200 hover:shadow-lg
+                  transform transition-all duration-200 hover:shadow-lg cursor-pointer
                   ${msg.direction === 'outgoing'
                     ? 'bg-[#d9fdd3] text-gray-900'
                     : 'bg-white text-gray-900'
                   }
                 `}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setContextMenu({
+                    message: msg,
+                    position: { x: e.clientX, y: e.clientY }
+                  });
+                }}
               >
                 {/* Nome do remetente (apenas para GRUPOS e mensagens RECEBIDAS) */}
                 {activeConversation.conversation_type === 'group' && msg.direction === 'incoming' && (msg.sender_name || msg.sender_phone) && (
@@ -481,6 +491,15 @@ export function MessageList() {
           
           <div ref={messagesEndRef} />
         </>
+      )}
+
+      {/* ✅ NOVO: Menu de contexto para mensagens */}
+      {contextMenu && (
+        <MessageContextMenu
+          message={contextMenu.message}
+          position={contextMenu.position}
+          onClose={() => setContextMenu(null)}
+        />
       )}
     </div>
   );

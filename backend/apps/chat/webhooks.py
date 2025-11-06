@@ -445,6 +445,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             try:
                 import httpx
                 
+                # ✅ CORREÇÃO: Garantir que EvolutionConnection está disponível no escopo
+                # Importar novamente para garantir que está no escopo local
+                from apps.connections.models import EvolutionConnection
+                
                 # Buscar instância WhatsApp ativa do tenant
                 wa_instance = WhatsAppInstance.objects.filter(
                     tenant=tenant,
@@ -578,6 +582,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # ✅ CORREÇÃO: Garantir que WhatsAppInstance está disponível no escopo
                 # Já está importado no topo do arquivo, mas garantir que não há conflito de escopo
                 from apps.notifications.models import WhatsAppInstance as WAInstance
+                
+                # ✅ CORREÇÃO: Garantir que EvolutionConnection está disponível no escopo
+                # Importar novamente para garantir que está no escopo local
+                from apps.connections.models import EvolutionConnection
                 
                 # Buscar instância WhatsApp ativa do tenant
                 wa_instance = WAInstance.objects.filter(
