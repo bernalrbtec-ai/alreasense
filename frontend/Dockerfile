@@ -3,14 +3,14 @@ FROM node:18-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from frontend directory (context is repo root)
+COPY frontend/package*.json ./
 
 # Install dependencies
 RUN npm ci --only=production
 
-# Copy source code (excluding node_modules)
-COPY . .
+# Copy frontend source code (context is repo root)
+COPY frontend/ .
 RUN rm -rf node_modules
 
 # Debug: List files to verify lib directory exists
