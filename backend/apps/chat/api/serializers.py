@@ -2,6 +2,7 @@
 Serializers para o módulo Flow Chat.
 """
 from rest_framework import serializers
+from django.db import models
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.authn.serializers import UserSerializer
 from apps.contacts.models import Contact
@@ -128,6 +129,25 @@ class MessageSerializer(serializers.ModelSerializer):
             'status', 'is_internal', 'attachments', 'reactions', 'reactions_summary', 'metadata', 'created_at'
         ]
         read_only_fields = ['id', 'conversation', 'sender', 'created_at', 'sender_data', 'attachments', 'reactions', 'reactions_summary']
+    
+    def to_representation(self, instance):
+        """
+        Garante que conversation sempre seja serializado como UUID (string).
+        """
+        data = super().to_representation(instance)
+        
+        # ✅ FIX CRÍTICO: Garantir que conversation sempre seja UUID (string), não nome
+        # O campo conversation pode vir como objeto Conversation ou UUID
+        if 'conversation' in data:
+            if isinstance(instance.conversation, models.Model):
+                # Se é objeto Conversation, usar o ID
+                data['conversation'] = str(instance.conversation.id)
+            elif hasattr(instance, 'conversation_id') and instance.conversation_id:
+                # Se tem conversation_id, usar ele
+                data['conversation'] = str(instance.conversation_id)
+            # Se já é string UUID, manter como está
+        
+        return data
     
     def get_reactions_summary(self, obj):
         """
