@@ -388,7 +388,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         elif not profile_url:
                             logger.info(f"ℹ️ [REFRESH CONTATO] Foto não disponível")
                     else:
-                        logger.warning(f"⚠️ [REFRESH CONTATO] Erro API: {response.status_code}")
+                        # ✅ CORREÇÃO: 404 é esperado se contato não tem foto de perfil
+                        if response.status_code == 404:
+                            logger.debug(f"ℹ️ [REFRESH CONTATO] Contato não tem foto de perfil (404) - normal")
+                        else:
+                            logger.warning(f"⚠️ [REFRESH CONTATO] Erro API: {response.status_code}")
             
             # Salvar alterações
             if update_fields:
