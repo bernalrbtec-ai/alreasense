@@ -44,6 +44,7 @@ export function useTenantSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectAttemptsRef = useRef(0);
+  const departmentsDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const { addConversation, setConnectionStatus } = useChatStore();
   const { token, user } = useAuthStore();
@@ -76,21 +77,24 @@ export function useTenantSocket() {
           
           // ✅ FIX CRÍTICO: Refetch departamentos quando nova conversa é criada com departamento
           // Isso garante que o contador do departamento seja atualizado imediatamente
+          // ✅ OTIMIZAÇÃO: Usar debounce para evitar múltiplas requisições
           const { setDepartments } = useChatStore.getState();
-          console.log('🔄 [TENANT WS] Nova conversa criada, refetching departamentos...');
-          import('@/lib/api').then(({ api }) => {
-            api.get('/auth/departments/').then(response => {
-              const depts = response.data.results || response.data;
-              setDepartments(depts);
-              console.log('✅ [TENANT WS] Departamentos atualizados após nova conversa:', depts.map((d: any) => ({
-                id: d.id,
-                name: d.name,
-                pending_count: d.pending_count
-              })));
-            }).catch(error => {
-              console.error('❌ [TENANT WS] Erro ao refetch departamentos após nova conversa:', error);
+          
+          // ✅ Debounce: aguardar 500ms antes de fazer requisição (evita múltiplas requisições)
+          if (departmentsDebounceRef.current) {
+            clearTimeout(departmentsDebounceRef.current);
+          }
+          
+          departmentsDebounceRef.current = setTimeout(() => {
+            import('@/lib/api').then(({ api }) => {
+              api.get('/auth/departments/').then(response => {
+                const depts = response.data.results || response.data;
+                setDepartments(depts);
+              }).catch(error => {
+                console.error('❌ [TENANT WS] Erro ao refetch departamentos após nova conversa:', error);
+              });
             });
-          });
+          }, 500); // 500ms de debounce
           
           const contactName = data.conversation.contact_name || data.conversation.contact_phone;
           const currentPath = window.location.pathname;

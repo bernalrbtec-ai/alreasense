@@ -80,36 +80,24 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    console.log('🎯 Gerando navegação...');
-    console.log('   activeProductSlugs:', activeProductSlugs);
-    console.log('   user:', user);
-    
     const items = [...baseNavigation]
     
     // Adicionar itens de menu dos produtos ativos, mas filtrar por acesso
     activeProductSlugs.forEach((productSlug) => {
-      console.log(`   Processando produto: ${productSlug}`);
       const productItems = productMenuItems[productSlug as keyof typeof productMenuItems]
       if (productItems) {
-        console.log(`     Itens do produto ${productSlug}:`, productItems);
         // Filtrar itens baseado no acesso do usuário
         const accessibleItems = productItems.filter(item => {
           if (!item.requiredProduct) {
-            console.log(`       Item ${item.name}: sem requiredProduct, permitindo`);
             return true
           }
           const access = hasProductAccess(item.requiredProduct)
-          console.log(`       Item ${item.name}: requiredProduct=${item.requiredProduct}, canAccess=${access.canAccess}`);
           return access.canAccess
         })
-        console.log(`     Itens acessíveis para ${productSlug}:`, accessibleItems);
         items.push(...accessibleItems)
-      } else {
-        console.log(`     ❌ Nenhum item encontrado para produto ${productSlug}`);
       }
     })
     
-    console.log('   ✅ Navegação final:', items);
     return items
   }, [activeProductSlugs, hasProductAccess])
 

@@ -13,34 +13,24 @@ export const useUserAccess = () => {
   const { products, loading } = useTenantProducts()
 
   const hasProductAccess = (productSlug: string): ProductAccess => {
-    console.log(`🔍 useUserAccess - Verificando acesso para ${productSlug}`)
-    console.log(`   User:`, user)
-    console.log(`   Products:`, products)
-    console.log(`   Loading:`, loading)
-    
     // Super admin tem acesso a tudo
     if (user?.role === 'superadmin') {
-      console.log(`   ✅ Superadmin - acesso total`)
       return { canAccess: true, isActive: true }
     }
 
     // Se não tem tenant_id ou produtos carregando, não tem acesso
     if (!user?.tenant_id || loading) {
-      console.log(`   ❌ Sem tenant_id (${user?.tenant_id}) ou carregando (${loading}) - sem acesso`)
       return { canAccess: false, isActive: false }
     }
 
     // Buscar o produto nas TenantProducts
     const tenantProduct = products.find(tp => tp.product.slug === productSlug)
-    console.log(`   TenantProduct encontrado:`, tenantProduct)
     
     if (!tenantProduct) {
-      console.log(`   ❌ Produto ${productSlug} não encontrado`)
       return { canAccess: false, isActive: false }
     }
 
     const canAccess = tenantProduct.is_active
-    console.log(`   ✅ Produto ${productSlug}: canAccess=${canAccess}`)
     
     return {
       canAccess: canAccess,
