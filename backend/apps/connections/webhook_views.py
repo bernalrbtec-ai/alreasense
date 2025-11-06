@@ -680,7 +680,8 @@ class EvolutionWebhookView(APIView):
                         self.update_message_model_by_message_id(message_id, status)
                 
                 if not success and key_id:
-                    logger.info(f"Trying with keyId instead: {key_id}")
+                    # ✅ CORREÇÃO: Log apenas em debug (não é erro, pode ser mensagem do chat normal)
+                    logger.debug(f"ℹ️ Trying with keyId instead: {key_id} (pode ser mensagem do chat normal)")
                     success = self.update_campaign_contact_by_message_id(key_id, status)
                     if success:
                         self.update_message_model_by_message_id(key_id, status)
@@ -751,10 +752,10 @@ class EvolutionWebhookView(APIView):
                 
                 return True
             else:
-                logger.warning(f"❌ No CampaignContact found for message_id: {message_id}")
-                # Debug: List all CampaignContacts with whatsapp_message_id
-                all_contacts = CampaignContact.objects.filter(whatsapp_message_id__isnull=False)
-                # Debug logs removed for cleaner output
+                # ✅ CORREÇÃO: Não é erro se não encontrar CampaignContact
+                # A mensagem pode ser do chat normal (não de campanha)
+                # Log apenas em debug para não poluir os logs
+                logger.debug(f"ℹ️ No CampaignContact found for message_id: {message_id} (pode ser mensagem do chat normal)")
                 return False
                 
         except Exception as e:
@@ -911,10 +912,12 @@ class EvolutionWebhookView(APIView):
                     
                     return True
                 else:
-                    logger.info(f"No Message record found for campaign message {message_id}")
+                    logger.debug(f"ℹ️ No Message record found for campaign message {message_id} (pode ser mensagem do chat normal)")
                     return False
             else:
-                logger.info(f"No CampaignContact found for message_id: {message_id}")
+                # ✅ CORREÇÃO: Não é erro se não encontrar CampaignContact
+                # A mensagem pode ser do chat normal (não de campanha)
+                logger.debug(f"ℹ️ No CampaignContact found for message_id: {message_id} (pode ser mensagem do chat normal)")
                 return False
                 
         except Exception as e:
