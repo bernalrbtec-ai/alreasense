@@ -109,9 +109,24 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true })
         try {
           api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-          const response = await api.get('/auth/me/')
+          // ✅ FIX: Adicionar timeout para evitar travamento
+          const controller = new AbortController()
+          const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 segundos
+          
+          const response = await api.get('/auth/me/', {
+            signal: controller.signal
+          })
+          
+          clearTimeout(timeoutId)
           set({ user: response.data, isLoading: false })
         } catch (error: any) {
+          // ✅ FIX: Verificar se foi abortado ou erro de rede
+          if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
+            console.error('Auth check timeout:', error)
+            set({ isLoading: false })
+            return
+          }
+          
           // Token is invalid, clear auth state
           console.error('Auth check failed:', error)
           delete api.defaults.headers.common['Authorization']

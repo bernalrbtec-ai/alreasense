@@ -44,8 +44,10 @@ function App() {
     
     // ✅ Check auth on mount and when token changes
     // Importante verificar token em todas as navegações para evitar perda de autenticação
+    // ✅ FIX: Usar apenas token como dependência para evitar loop infinito
     checkAuth()
-  }, [token])  // ✅ Adicionar token como dependência para revalidar quando mudar
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])  // ✅ Apenas token como dependência (checkAuth é estável do Zustand)
 
   if (isLoading) {
     return (
