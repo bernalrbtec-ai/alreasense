@@ -680,8 +680,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         """
         Marca todas as mensagens recebidas (não enviadas por nós) como lidas.
         Envia confirmação de leitura para Evolution API.
+        
+        ✅ CORREÇÕES:
+        - Verifica connection_state antes de enviar read receipt
+        - Trata erros adequadamente (não trava se uma mensagem falhar)
+        - Timeout adequado para evitar travamento
+        - Processa mensagens de forma eficiente
         """
         from apps.chat.webhooks import send_read_receipt
+        from django.db import transaction
+        import time
         
         conversation = self.get_object()
         
@@ -692,15 +700,62 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status__in=['sent', 'delivered']  # Ainda não lidas
         ).order_by('-created_at')
         
+        # ✅ CORREÇÃO: Limitar número de mensagens processadas por vez para evitar timeout
+        # Processar no máximo 50 mensagens por requisição
+        max_messages_per_request = 50
+        unread_messages = unread_messages[:max_messages_per_request]
+        
         marked_count = 0
-        for message in unread_messages:
-            # Enviar confirmação de leitura para Evolution API
-            send_read_receipt(conversation, message)
-            
-            # Atualizar status local
-            message.status = 'seen'
-            message.save(update_fields=['status'])
-            marked_count += 1
+        failed_count = 0
+        skipped_count = 0
+        
+        # ✅ CORREÇÃO: Processar mensagens com timeout adequado
+        start_time = time.time()
+        max_processing_time = 25.0  # 25 segundos máximo (deixar 5s para broadcast)
+        
+        with transaction.atomic():
+            for message in unread_messages:
+                # ✅ CORREÇÃO: Verificar timeout antes de processar próxima mensagem
+                elapsed_time = time.time() - start_time
+                if elapsed_time > max_processing_time:
+                    logger.warning(
+                        f"⚠️ [MARK AS READ] Timeout atingido após {elapsed_time:.2f}s. "
+                        f"Processadas {marked_count} mensagens, {len(unread_messages) - marked_count} restantes."
+                    )
+                    break
+                
+                try:
+                    # Enviar confirmação de leitura para Evolution API
+                    # ✅ CORREÇÃO: send_read_receipt agora retorna bool e verifica connection_state
+                    receipt_sent = send_read_receipt(conversation, message, max_retries=2)
+                    
+                    if receipt_sent:
+                        # Atualizar status local apenas se read receipt foi enviado com sucesso
+                        message.status = 'seen'
+                        message.save(update_fields=['status'])
+                        marked_count += 1
+                    else:
+                        # ✅ CORREÇÃO: Se read receipt falhou (ex: instância desconectada),
+                        # ainda marca como seen localmente para não ficar travado
+                        # O read receipt será enviado quando a instância reconectar
+                        message.status = 'seen'
+                        message.save(update_fields=['status'])
+                        marked_count += 1
+                        skipped_count += 1
+                        logger.debug(
+                            f"⚠️ [MARK AS READ] Read receipt não enviado (instância desconectada?), "
+                            f"mas mensagem marcada como seen localmente: {message.id}"
+                        )
+                        
+                except Exception as e:
+                    # ✅ CORREÇÃO: Não travar se uma mensagem falhar
+                    failed_count += 1
+                    logger.error(
+                        f"❌ [MARK AS READ] Erro ao processar mensagem {message.id}: {e}",
+                        exc_info=True
+                    )
+                    # Continuar processando outras mensagens
+                    continue
         
         # ✅ CORREÇÃO: Broadcast conversation_updated para atualizar lista em tempo real
         # ✅ FIX: Sempre fazer broadcast, mesmo se marked_count = 0 (para atualizar unread_count)
@@ -747,12 +802,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             }
         )
         
-        logger.info(f"📡 [WEBSOCKET] {marked_count} mensagens marcadas como lidas, broadcast enviado para tenant")
+        logger.info(
+            f"📡 [WEBSOCKET] {marked_count} mensagens marcadas como lidas "
+            f"(falhas: {failed_count}, puladas: {skipped_count}), broadcast enviado para tenant"
+        )
         
         return Response(
             {
                 'success': True,
                 'marked_count': marked_count,
+                'failed_count': failed_count,
+                'skipped_count': skipped_count,  # Mensagens marcadas localmente mas read receipt não enviado
                 'message': f'{marked_count} mensagens marcadas como lidas',
                 'conversation': conversation_data  # ✅ FIX: Retornar conversa atualizada
             },

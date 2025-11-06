@@ -1398,11 +1398,21 @@ def send_delivery_receipt(conversation: Conversation, message: Message):
         logger.error(f"❌ [DELIVERY ACK] Erro ao enviar ACK de entrega: {e}", exc_info=True)
 
 
-def send_read_receipt(conversation: Conversation, message: Message):
+def send_read_receipt(conversation: Conversation, message: Message, max_retries: int = 3):
     """
     Envia confirmação de LEITURA (read) para Evolution API.
     Isso fará com que o remetente veja ✓✓ azul no WhatsApp dele.
+    
+    Args:
+        conversation: Conversa da mensagem
+        message: Mensagem a ser marcada como lida
+        max_retries: Número máximo de tentativas (com backoff exponencial)
+    
+    Returns:
+        bool: True se enviado com sucesso, False caso contrário
     """
+    import time
+    
     try:
         # Buscar instância WhatsApp ativa do tenant
         wa_instance = WhatsAppInstance.objects.filter(
@@ -1413,13 +1423,22 @@ def send_read_receipt(conversation: Conversation, message: Message):
         
         if not wa_instance:
             logger.warning(f"⚠️ [READ RECEIPT] Nenhuma instância WhatsApp ativa para tenant {conversation.tenant.name}")
-            return
+            return False
+        
+        # ✅ CORREÇÃO CRÍTICA: Verificar connection_state antes de enviar
+        # Se a instância está "connecting", a Evolution API retornará erro 500
+        if wa_instance.connection_state not in ('open', 'connected'):
+            logger.warning(
+                f"⚠️ [READ RECEIPT] Instância não conectada (state: {wa_instance.connection_state}). "
+                f"Pulando read receipt para mensagem {message.id}"
+            )
+            return False
         
         # Buscar servidor Evolution
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
         if not evolution_server:
             logger.warning(f"⚠️ [READ RECEIPT] Servidor Evolution não configurado")
-            return
+            return False
         
         # Endpoint da Evolution API para marcar como lida
         # Formato: POST /chat/markMessageAsRead/{instance}
@@ -1449,18 +1468,67 @@ def send_read_receipt(conversation: Conversation, message: Message):
         logger.info(f"   URL: {url}")
         logger.info(f"   Message ID: {message.message_id}")
         logger.info(f"   Contact: {conversation.contact_phone}")
+        logger.info(f"   Connection State: {wa_instance.connection_state}")
         
-        # Enviar request de forma síncrona
-        with httpx.Client(timeout=10.0) as client:
-            response = client.post(url, json=payload, headers=headers)
-            
-            if response.status_code == 200 or response.status_code == 201:
-                logger.info(f"✅ [READ RECEIPT] Confirmação enviada com sucesso!")
-                logger.info(f"   Response: {response.text[:200]}")
-            else:
-                logger.warning(f"⚠️ [READ RECEIPT] Resposta não esperada: {response.status_code}")
-                logger.warning(f"   Response: {response.text[:300]}")
+        # ✅ CORREÇÃO: Retry com backoff exponencial para erros temporários
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                # Enviar request de forma síncrona com timeout adequado
+                with httpx.Client(timeout=5.0) as client:
+                    response = client.post(url, json=payload, headers=headers)
+                    
+                    if response.status_code == 200 or response.status_code == 201:
+                        logger.info(f"✅ [READ RECEIPT] Confirmação enviada com sucesso!")
+                        logger.info(f"   Response: {response.text[:200]}")
+                        return True
+                    elif response.status_code == 500:
+                        # ✅ CORREÇÃO: Verificar se é erro de conexão (1006, Connection Closed)
+                        response_text = response.text.lower()
+                        if 'connection closed' in response_text or '1006' in response_text:
+                            logger.warning(
+                                f"⚠️ [READ RECEIPT] Instância desconectada (Connection Closed/1006). "
+                                f"Pulando read receipt. Tentativa {attempt + 1}/{max_retries}"
+                            )
+                            # Não tentar novamente se a conexão está fechada
+                            return False
+                        else:
+                            # Outro erro 500 - pode ser temporário
+                            last_error = f"HTTP {response.status_code}: {response.text[:200]}"
+                            if attempt < max_retries - 1:
+                                wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s
+                                logger.warning(
+                                    f"⚠️ [READ RECEIPT] Erro temporário (tentativa {attempt + 1}/{max_retries}). "
+                                    f"Retry em {wait_time}s..."
+                                )
+                                time.sleep(wait_time)
+                                continue
+                    else:
+                        # Outros erros HTTP (400, 401, 403, 404, etc) - não tentar novamente
+                        logger.warning(f"⚠️ [READ RECEIPT] Resposta não esperada: {response.status_code}")
+                        logger.warning(f"   Response: {response.text[:300]}")
+                        return False
+                        
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
+                # ✅ CORREÇÃO: Erros de conexão - retry com backoff
+                last_error = str(e)
+                if attempt < max_retries - 1:
+                    wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s
+                    logger.warning(
+                        f"⚠️ [READ RECEIPT] Erro de conexão (tentativa {attempt + 1}/{max_retries}): {e}. "
+                        f"Retry em {wait_time}s..."
+                    )
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"❌ [READ RECEIPT] Erro de conexão após {max_retries} tentativas: {e}")
+                    return False
+        
+        # Se chegou aqui, todas as tentativas falharam
+        logger.error(f"❌ [READ RECEIPT] Falha após {max_retries} tentativas. Último erro: {last_error}")
+        return False
     
     except Exception as e:
-        logger.error(f"❌ [READ RECEIPT] Erro ao enviar confirmação de leitura: {e}", exc_info=True)
+        logger.error(f"❌ [READ RECEIPT] Erro inesperado ao enviar confirmação de leitura: {e}", exc_info=True)
+        return False
 
