@@ -1039,7 +1039,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             # ✅ FIX: Também enviar para o grupo do tenant para atualizar lista de conversas
             try:
-                from apps.chat.utils.serialization import serialize_message_for_ws
+                from apps.chat.utils.serialization import serialize_message_for_ws, serialize_conversation_for_ws
                 from apps.chat.api.serializers import ConversationSerializer
                 from django.db.models import Count, Q
                 
