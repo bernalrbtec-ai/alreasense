@@ -244,16 +244,27 @@ export const useChatStore = create<ChatState>((set) => ({
     // Precisamos normalizar para string para comparação correta
     let messageConversationId: string | null = null;
     
-    // Tentar extrair conversation_id de diferentes formatos
-    if (message.conversation) {
+    // ✅ FIX: Verificar se conversation_id existe primeiro (mais confiável)
+    if (message.conversation_id) {
+      messageConversationId = String(message.conversation_id);
+    } else if (message.conversation) {
       // Se é objeto UUID, extrair o id ou converter para string
       if (typeof message.conversation === 'object' && message.conversation.id) {
         messageConversationId = String(message.conversation.id);
+      } else if (typeof message.conversation === 'string') {
+        // ✅ FIX: Verificar se é UUID válido (não é nome da conversa)
+        // UUIDs têm formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRegex.test(message.conversation)) {
+          messageConversationId = message.conversation;
+        } else {
+          // Se não é UUID, é provavelmente o nome da conversa - ignorar
+          console.warn('⚠️ [STORE] conversation é string mas não é UUID (provavelmente nome):', message.conversation);
+          messageConversationId = null;
+        }
       } else {
         messageConversationId = String(message.conversation);
       }
-    } else if (message.conversation_id) {
-      messageConversationId = String(message.conversation_id);
     }
     
     const activeConversationId = state.activeConversation.id ? String(state.activeConversation.id) : null;
