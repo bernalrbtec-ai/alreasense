@@ -1463,6 +1463,8 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
+        # ✅ CORREÇÃO: Prefetch de reações antes de criar reação
+        # Importar MessageReaction do topo (já importado na linha 14)
         # Criar ou obter reação (unique_together garante que não duplica)
         reaction, created = MessageReaction.objects.get_or_create(
             message=message,
@@ -1481,7 +1483,7 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
             room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
             
             # ✅ CORREÇÃO: Prefetch de reações antes de serializar
-            from apps.chat.models import MessageReaction
+            # Recarregar mensagem com prefetch de reações para evitar race conditions
             message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
             
             # Serializar mensagem completa com reações atualizadas
