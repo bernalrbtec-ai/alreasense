@@ -454,6 +454,9 @@ export function MessageList() {
                     </span>
                   )}
                 </div>
+                
+                {/* ✅ NOVO: Reações de mensagem */}
+                <MessageReactions message={msg} />
               </div>
             </div>
           ))}
