@@ -239,16 +239,9 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         # Envia para RabbitMQ para processamento assíncrono
         await self.enqueue_message_for_evolution(message)
         
-        # Broadcast para grupo da conversa
-        room_group_name = f"chat_tenant_{self.tenant_id}_conversation_{conversation_id}"
-        await self.channel_layer.group_send(
-            room_group_name,
-            {
-                'type': 'message_received',
-                'message': await self.serialize_message(message)
-            }
-        )
-    
+        # Broadcast imediato como pendente
+        await self.broadcast_pending_message(message)
+ 
     async def handle_typing(self, data):
         """
         Broadcast de status 'digitando'.
@@ -433,6 +426,47 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         from apps.chat.utils.serialization import serialize_message_for_ws
         return serialize_message_for_ws(message)
     
+    @database_sync_to_async
+    def serialize_conversation(self, conversation):
+        """Serializa conversa para JSON."""
+        from apps.chat.utils.serialization import serialize_conversation_for_ws
+        return serialize_conversation_for_ws(conversation)
+    
+    async def broadcast_pending_message(self, message):
+        """Broadcast imediato para mostrar mensagem como pendente."""
+        message_data = await self.serialize_message(message)
+        conversation_data = await self.serialize_conversation(message.conversation)
+
+        conversation_id = str(message.conversation_id)
+        room_group_name = f"chat_tenant_{self.tenant_id}_conversation_{conversation_id}"
+        tenant_group = f"chat_tenant_{self.tenant_id}"
+
+        await self.channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'message_received',
+                'message': message_data
+            }
+        )
+
+        await self.channel_layer.group_send(
+            tenant_group,
+            {
+                'type': 'message_received',
+                'message': message_data,
+                'conversation': conversation_data
+            }
+        )
+
+        await self.channel_layer.group_send(
+            room_group_name,
+            {
+                'type': 'message_status_update',
+                'message_id': str(message.id),
+                'status': message.status or 'pending'
+            }
+        )
+
     @database_sync_to_async
     def mark_message_as_seen(self, message_id, conversation_id):
         """Marca mensagem como vista."""
