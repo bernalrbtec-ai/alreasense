@@ -41,6 +41,59 @@ QUEUE_PROCESS_UPLOADED_FILE = 'chat_process_uploaded_file'
 QUEUE_FETCH_GROUP_INFO = 'chat_fetch_group_info'  # ✅ NOVO: Busca informações de grupo de forma assíncrona
 
 
+def _mask_digits(value: str) -> str:
+    if not value or not isinstance(value, str):
+        return value
+    digits = ''.join(ch for ch in value if ch.isdigit())
+    if not digits:
+        return value
+    suffix = digits[-4:] if len(digits) > 4 else digits
+    return f"***{suffix}"
+
+
+def _mask_remote_jid(remote_jid: str) -> str:
+    if not remote_jid or not isinstance(remote_jid, str):
+        return remote_jid
+    if '@' not in remote_jid:
+        return _mask_digits(remote_jid)
+    user, domain = remote_jid.split('@', 1)
+    return f"{_mask_digits(user)}@{domain}"
+
+
+def _truncate_text(value: str, limit: int = 120) -> str:
+    if not isinstance(value, str):
+        return value
+    return value if len(value) <= limit else f"{value[:limit]}…"
+
+
+def mask_sensitive_data(data, parent_key: str = ""):
+    sensitive_keys_phone = {'number', 'phone', 'contact_phone'}
+    sensitive_keys_remote = {'remoteJid', 'jid', 'participant'}
+    sensitive_keys_ids = {'id', 'messageId', 'message_id', 'keyId', 'key_id'}
+    sensitive_keys_text = {'text', 'content', 'body'}
+
+    if isinstance(data, dict):
+        masked = {}
+        for key, value in data.items():
+            key_lower = key.lower()
+            if key in sensitive_keys_phone or key_lower in sensitive_keys_phone:
+                masked[key] = _mask_digits(value) if isinstance(value, str) else value
+            elif key in sensitive_keys_remote or key_lower in sensitive_keys_remote:
+                masked[key] = _mask_remote_jid(value) if isinstance(value, str) else value
+            elif key in sensitive_keys_ids or key_lower in sensitive_keys_ids:
+                masked[key] = _mask_digits(value) if isinstance(value, str) else value
+            elif key in sensitive_keys_text or key_lower in sensitive_keys_text:
+                masked[key] = _truncate_text(value)
+            else:
+                masked[key] = mask_sensitive_data(value, key)
+        return masked
+
+    if isinstance(data, list):
+        return [mask_sensitive_data(item, parent_key) for item in data]
+
+    return data
+
+
 # ========== PRODUCERS (enfileirar tasks) ==========
 
 # ✅ MIGRAÇÃO: Producers Redis para filas de latência crítica
@@ -364,10 +417,9 @@ async def handle_send_message(message_id: str):
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
                         }
                         
-                        logger.info(f"🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
-                        logger.info(f"   Phone: {phone}")
-                        logger.info(f"   Audio URL: {url[:100]}...")
-                        logger.info(f"   Payload: {payload}")
+                        logger.info("🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
+                        logger.info("   Phone: %s", _mask_remote_jid(phone))
+                        logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                     else:
                         # 📎 OUTROS TIPOS: Usar sendMedia normal
                         if mime_type.startswith('image/'):
@@ -395,13 +447,11 @@ async def handle_send_message(message_id: str):
                         logger.info(f"🎯 [CHAT] Usando sendWhatsAppAudio (PTT)")
                     else:
                         endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
-                        logger.info(f"📎 [CHAT] Usando sendMedia (outros anexos)")
+                        logger.info("📎 [CHAT] Usando sendMedia (outros anexos)")
 
-                    logger.info(f"🔍 [CHAT] Enviando mídia para Evolution API:")
-                    logger.info(f"   Endpoint: {endpoint}")
-                    logger.info(f"   Headers: {headers}")
-                    logger.info(f"   Payload (Python): {payload}")
-                    logger.info(f"   Payload (JSON): {json.dumps(payload)}")
+                    logger.info("🔍 [CHAT] Enviando mídia para Evolution API:")
+                    logger.info("   Endpoint: %s", endpoint)
+                    logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
 
                     try:
                         response = await client.post(
@@ -432,14 +482,30 @@ async def handle_send_message(message_id: str):
                                 headers=headers,
                                 json=fb_payload
                             )
-                            logger.info(f"📥 [CHAT] Resposta Evolution API (fallback): {fb_resp.status_code}")
-                            logger.info(f"   Body: {fb_resp.text}")
+                            logger.info("📥 [CHAT] Resposta Evolution API (fallback): %s", fb_resp.status_code)
+                            try:
+                                fb_json = fb_resp.json()
+                            except ValueError:
+                                fb_json = None
+                            if fb_json is not None:
+                                logger.info("   Body (mascado): %s", mask_sensitive_data(fb_json))
+                            else:
+                                logger.info("   Body (texto): %s", _truncate_text(fb_resp.text))
                             fb_resp.raise_for_status()
                             response = fb_resp
                         else:
                             raise
                     
-                    data = response.json()
+                    try:
+                        data = response.json()
+                    except ValueError:
+                        data = {}
+                        logger.warning("⚠️ [CHAT] Resposta Evolution API sem JSON. Texto: %s", _truncate_text(response.text))
+
+                    if data:
+                        logger.info("📥 [CHAT] Resposta Evolution API: status=%s body=%s", response.status_code, mask_sensitive_data(data))
+                    else:
+                        logger.info("📥 [CHAT] Resposta Evolution API: status=%s body=%s", response.status_code, _truncate_text(response.text))
                     evolution_message_id = data.get('key', {}).get('id')
                     
                     # ✅ FIX CRÍTICO: Salvar message_id IMEDIATAMENTE para evitar race condition
@@ -470,10 +536,10 @@ async def handle_send_message(message_id: str):
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   Tipo: {conversation.conversation_type}")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                logger.info(f"   Phone original: {phone}")
-                logger.info(f"   Phone formatado: {formatted_phone}")
-                logger.info(f"   Text: {content[:50]}...")
-                logger.info(f"   Payload completo: {payload}")
+                logger.info("   Phone original: %s", _mask_remote_jid(phone))
+                logger.info("   Phone formatado: %s", _mask_remote_jid(formatted_phone))
+                logger.info("   Text: %s", _truncate_text(content))
+                logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                 
                 response = await client.post(
                     f"{base_url}/message/sendText/{instance.instance_name}",

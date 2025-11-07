@@ -21,6 +21,64 @@ from apps.notifications.models import WhatsAppInstance
 logger = logging.getLogger(__name__)
 
 
+def _mask_digits(value: str) -> str:
+    """Masca números, preservando apenas os 4 últimos dígitos."""
+    if not value or not isinstance(value, str):
+        return value
+    digits = ''.join(ch for ch in value if ch.isdigit())
+    if not digits:
+        return value
+    suffix = digits[-4:] if len(digits) > 4 else digits
+    return f"***{suffix}"
+
+
+def _mask_remote_jid(remote_jid: str) -> str:
+    """Masca remoteJid, preservando domínio."""
+    if not remote_jid or not isinstance(remote_jid, str):
+        return remote_jid
+    if '@' not in remote_jid:
+        return _mask_digits(remote_jid)
+    user, domain = remote_jid.split('@', 1)
+    return f"{_mask_digits(user)}@{domain}"
+
+
+def _truncate_text(value: str, limit: int = 120) -> str:
+    if not isinstance(value, str):
+        return value
+    return value if len(value) <= limit else f"{value[:limit]}…"
+
+
+def mask_sensitive_data(data, parent_key: str = ""):
+    """
+    Retorna uma cópia do payload com dados sensíveis mascarados.
+    """
+    sensitive_keys_phone = {'number', 'phone', 'contact_phone'}
+    sensitive_keys_remote = {'remoteJid', 'jid', 'participant'}
+    sensitive_keys_ids = {'id', 'messageId', 'message_id', 'keyId', 'key_id'}
+    sensitive_keys_text = {'text', 'content', 'body'}
+
+    if isinstance(data, dict):
+        masked = {}
+        for key, value in data.items():
+            key_lower = key.lower()
+            if key in sensitive_keys_phone or key_lower in sensitive_keys_phone:
+                masked[key] = _mask_digits(value) if isinstance(value, str) else value
+            elif key in sensitive_keys_remote or key_lower in sensitive_keys_remote:
+                masked[key] = _mask_remote_jid(value) if isinstance(value, str) else value
+            elif key in sensitive_keys_ids or key_lower in sensitive_keys_ids:
+                masked[key] = _mask_digits(value) if isinstance(value, str) else value
+            elif key in sensitive_keys_text or key_lower in sensitive_keys_text:
+                masked[key] = _truncate_text(value)
+            else:
+                masked[key] = mask_sensitive_data(value, key)
+        return masked
+
+    if isinstance(data, list):
+        return [mask_sensitive_data(item, parent_key) for item in data]
+
+    return data
+
+
 def clean_filename(filename: str, message_id: str = None, mime_type: str = None) -> str:
     """
     Limpa e normaliza nome de arquivo recebido do WhatsApp.
@@ -575,9 +633,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # (Atualização on-demand acontece quando usuário ABRE o grupo no frontend)
         elif is_group and (not conversation.profile_pic_url or not conversation.group_metadata.get('group_name')):
             logger.info(f"📸 [GRUPO] Falta dados básicos → buscando agora")
-            logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
-            try:
-                import httpx
+                logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
+                try:
+                    import httpx
                 
                 # ✅ CORREÇÃO: Garantir que WhatsAppInstance está disponível no escopo
                 # Já está importado no topo do arquivo, mas garantir que não há conflito de escopo
@@ -586,86 +644,86 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # ✅ CORREÇÃO: Garantir que EvolutionConnection está disponível no escopo
                 # Importar novamente para garantir que está no escopo local
                 from apps.connections.models import EvolutionConnection
-                
-                # Buscar instância WhatsApp ativa do tenant
+                    
+                    # Buscar instância WhatsApp ativa do tenant
                 wa_instance = WAInstance.objects.filter(
-                    tenant=tenant,
-                    is_active=True,
-                    status='active'
-                ).first()
-                
-                # Buscar servidor Evolution
-                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-                
-                if wa_instance and evolution_server:
-                    group_jid = remote_jid
-                    logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
+                        tenant=tenant,
+                        is_active=True,
+                        status='active'
+                    ).first()
                     
-                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-                    api_key = wa_instance.api_key or evolution_server.api_key
-                    instance_name = wa_instance.instance_name
+                    # Buscar servidor Evolution
+                    evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
                     
-                    # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
-                    endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
-                    
-                    headers = {
-                        'apikey': api_key,
-                        'Content-Type': 'application/json'
-                    }
-                    
-                    with httpx.Client(timeout=5.0) as client:
-                        response = client.get(
-                            endpoint,
-                            params={'groupJid': group_jid},
-                            headers=headers
-                        )
+                    if wa_instance and evolution_server:
+                        group_jid = remote_jid
+                        logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
                         
-                        if response.status_code == 200:
-                            group_info = response.json()
-                            logger.info(f"✅ [GRUPO INFO] Informações recebidas: {group_info}")
+                        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                        api_key = wa_instance.api_key or evolution_server.api_key
+                        instance_name = wa_instance.instance_name
+                        
+                        # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
+                        endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                        
+                        headers = {
+                            'apikey': api_key,
+                            'Content-Type': 'application/json'
+                        }
+                        
+                        with httpx.Client(timeout=5.0) as client:
+                            response = client.get(
+                                endpoint,
+                                params={'groupJid': group_jid},
+                                headers=headers
+                            )
                             
-                            # Extrair dados do grupo
-                            group_name = group_info.get('subject', '')
-                            group_pic_url = group_info.get('pictureUrl')
-                            participants_count = group_info.get('size', 0)
-                            group_desc = group_info.get('desc', '')
-                            
-                            # Atualizar conversa
-                            update_fields = []
-                            
-                            if group_name:
-                                conversation.contact_name = group_name
-                                update_fields.append('contact_name')
-                                logger.info(f"✅ [GRUPO INFO] Nome do grupo: {group_name}")
-                            
-                            if group_pic_url:
-                                conversation.profile_pic_url = group_pic_url
-                                update_fields.append('profile_pic_url')
-                                logger.info(f"✅ [GRUPO INFO] Foto do grupo: {group_pic_url[:50]}...")
-                            
-                            # Atualizar metadados
-                            conversation.group_metadata = {
-                                'group_id': remote_jid,
-                                'group_name': group_name,
-                                'group_pic_url': group_pic_url,
-                                'participants_count': participants_count,
-                                'description': group_desc,
-                                'is_group': True,
-                            }
-                            update_fields.append('group_metadata')
-                            
-                            if update_fields:
-                                conversation.save(update_fields=update_fields)
-                                logger.info(f"✅ [GRUPO INFO] Conversa atualizada com {len(update_fields)} campos")
-                        else:
-                            logger.warning(f"⚠️ [GRUPO INFO] Erro ao buscar: {response.status_code}")
-                            logger.warning(f"   Response: {response.text[:200]}")
+                            if response.status_code == 200:
+                                group_info = response.json()
+                                logger.info(f"✅ [GRUPO INFO] Informações recebidas: {group_info}")
+                                
+                                # Extrair dados do grupo
+                                group_name = group_info.get('subject', '')
+                                group_pic_url = group_info.get('pictureUrl')
+                                participants_count = group_info.get('size', 0)
+                                group_desc = group_info.get('desc', '')
+                                
+                                # Atualizar conversa
+                                update_fields = []
+                                
+                                if group_name:
+                                    conversation.contact_name = group_name
+                                    update_fields.append('contact_name')
+                                    logger.info(f"✅ [GRUPO INFO] Nome do grupo: {group_name}")
+                                
+                                if group_pic_url:
+                                    conversation.profile_pic_url = group_pic_url
+                                    update_fields.append('profile_pic_url')
+                                    logger.info(f"✅ [GRUPO INFO] Foto do grupo: {group_pic_url[:50]}...")
+                                
+                                # Atualizar metadados
+                                conversation.group_metadata = {
+                                    'group_id': remote_jid,
+                                    'group_name': group_name,
+                                    'group_pic_url': group_pic_url,
+                                    'participants_count': participants_count,
+                                    'description': group_desc,
+                                    'is_group': True,
+                                }
+                                update_fields.append('group_metadata')
+                                
+                                if update_fields:
+                                    conversation.save(update_fields=update_fields)
+                                    logger.info(f"✅ [GRUPO INFO] Conversa atualizada com {len(update_fields)} campos")
+                            else:
+                                logger.warning(f"⚠️ [GRUPO INFO] Erro ao buscar: {response.status_code}")
+                                logger.warning(f"   Response: {response.text[:200]}")
                 else:
                     logger.warning(f"⚠️ [GRUPO INFO] Instância WhatsApp ou servidor Evolution não encontrado")
                     logger.warning(f"   wa_instance: {wa_instance is not None}")
                     logger.warning(f"   evolution_server: {evolution_server is not None}")
-            except Exception as e:
-                logger.error(f"❌ [GRUPO INFO] Erro ao buscar informações: {e}", exc_info=True)
+                except Exception as e:
+                    logger.error(f"❌ [GRUPO INFO] Erro ao buscar informações: {e}", exc_info=True)
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
@@ -1195,8 +1253,10 @@ def handle_message_update(data, tenant):
         logger.info(f"   Status recebido: {status_value}")
         
         if not message_id or not status_value:
-            # 🔇 Reduzir ruído: Evolution envia updates parciais de contato/chat sem status/mensagem
-            logger.debug(f"🔇 [WEBHOOK UPDATE] Ignorando update sem message_id/status (contacts.update/chat.update)")
+            logger.warning(
+                "⚠️ [WEBHOOK UPDATE] Payload sem message_id/status. Dados (mascados): %s",
+                mask_sensitive_data(message_data)
+            )
             return
         
         # Busca mensagem - tentar com keyId primeiro
@@ -1206,32 +1266,32 @@ def handle_message_update(data, tenant):
         retry_delay = 0.2  # 200ms entre tentativas
         
         for attempt in range(max_retries):
-            # Tentar com keyId
-            if key_id:
-                try:
-                    message = Message.objects.select_related('conversation').get(message_id=key_id)
+        # Tentar com keyId
+        if key_id:
+            try:
+                message = Message.objects.select_related('conversation').get(message_id=key_id)
                     logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via keyId (tentativa {attempt + 1})!")
                     break
-                except Message.DoesNotExist:
-                    pass
-            
-            # Se não encontrou, tentar com key.id
-            if not message and key.get('id'):
-                try:
-                    message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
+            except Message.DoesNotExist:
+                pass
+        
+        # Se não encontrou, tentar com key.id
+        if not message and key.get('id'):
+            try:
+                message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
                     logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via key.id (tentativa {attempt + 1})!")
                     break
-                except Message.DoesNotExist:
-                    pass
-            
-            # Se não encontrou, tentar com messageId do Evolution
-            if not message and message_id_evo:
-                try:
-                    message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
+            except Message.DoesNotExist:
+                pass
+        
+        # Se não encontrou, tentar com messageId do Evolution
+        if not message and message_id_evo:
+            try:
+                message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
                     logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via messageId (tentativa {attempt + 1})!")
                     break
-                except Message.DoesNotExist:
-                    pass
+            except Message.DoesNotExist:
+                pass
             
             # Se não encontrou e ainda tem tentativas, aguardar um pouco
             if not message and attempt < max_retries - 1:
@@ -1241,7 +1301,12 @@ def handle_message_update(data, tenant):
         
         if not message:
             logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco após {max_retries} tentativas!")
-            logger.warning(f"   Tentou: keyId={key_id}, key.id={key.get('id')}, messageId={message_id_evo}")
+            logger.warning(
+                "   Tentou: keyId=%s, key.id=%s, messageId=%s",
+                _mask_digits(key_id) if isinstance(key_id, str) else key_id,
+                _mask_digits(key.get('id')) if isinstance(key.get('id'), str) else key.get('id'),
+                _mask_digits(message_id_evo) if isinstance(message_id_evo, str) else message_id_evo
+            )
             logger.warning(f"   ⚠️ Possível race condition: webhook chegou antes do message_id ser salvo")
             return
         
@@ -1491,11 +1556,11 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
             try:
                 # Enviar request de forma síncrona com timeout adequado
                 with httpx.Client(timeout=5.0) as client:
-                    response = client.post(url, json=payload, headers=headers)
-                    
-                    if response.status_code == 200 or response.status_code == 201:
-                        logger.info(f"✅ [READ RECEIPT] Confirmação enviada com sucesso!")
-                        logger.info(f"   Response: {response.text[:200]}")
+            response = client.post(url, json=payload, headers=headers)
+            
+            if response.status_code == 200 or response.status_code == 201:
+                logger.info(f"✅ [READ RECEIPT] Confirmação enviada com sucesso!")
+                logger.info(f"   Response: {response.text[:200]}")
                         return True
                     elif response.status_code == 500:
                         # ✅ CORREÇÃO: Verificar se é erro de conexão (1006, Connection Closed)
@@ -1507,7 +1572,7 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
                             )
                             # Não tentar novamente se a conexão está fechada
                             return False
-                        else:
+            else:
                             # Outro erro 500 - pode ser temporário
                             last_error = f"HTTP {response.status_code}: {response.text[:200]}"
                             if attempt < max_retries - 1:
@@ -1520,8 +1585,8 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
                                 continue
                     else:
                         # Outros erros HTTP (400, 401, 403, 404, etc) - não tentar novamente
-                        logger.warning(f"⚠️ [READ RECEIPT] Resposta não esperada: {response.status_code}")
-                        logger.warning(f"   Response: {response.text[:300]}")
+                logger.warning(f"⚠️ [READ RECEIPT] Resposta não esperada: {response.status_code}")
+                logger.warning(f"   Response: {response.text[:300]}")
                         return False
                         
             except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
