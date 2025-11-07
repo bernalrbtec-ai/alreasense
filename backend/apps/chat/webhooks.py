@@ -632,98 +632,87 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # 📸 Para conversas EXISTENTES de GRUPO: atualizar APENAS se falta dados
         # (Atualização on-demand acontece quando usuário ABRE o grupo no frontend)
         elif is_group and (not conversation.profile_pic_url or not conversation.group_metadata.get('group_name')):
-            logger.info(f"📸 [GRUPO] Falta dados básicos → buscando agora")
-                logger.info(f"📸 [GRUPO INFO] Buscando informações completas do grupo...")
-                try:
-                    import httpx
-                
-                # ✅ CORREÇÃO: Garantir que WhatsAppInstance está disponível no escopo
-                # Já está importado no topo do arquivo, mas garantir que não há conflito de escopo
+            logger.info("📸 [GRUPO] Falta dados básicos → buscando agora")
+            logger.info("📸 [GRUPO INFO] Buscando informações completas do grupo...")
+            try:
+                import httpx
+
                 from apps.notifications.models import WhatsAppInstance as WAInstance
-                
-                # ✅ CORREÇÃO: Garantir que EvolutionConnection está disponível no escopo
-                # Importar novamente para garantir que está no escopo local
                 from apps.connections.models import EvolutionConnection
-                    
-                    # Buscar instância WhatsApp ativa do tenant
+
                 wa_instance = WAInstance.objects.filter(
-                        tenant=tenant,
-                        is_active=True,
-                        status='active'
-                    ).first()
-                    
-                    # Buscar servidor Evolution
-                    evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-                    
-                    if wa_instance and evolution_server:
-                        group_jid = remote_jid
-                        logger.info(f"👥 [GRUPO INFO] Buscando com Group JID: {group_jid}")
-                        
-                        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-                        api_key = wa_instance.api_key or evolution_server.api_key
-                        instance_name = wa_instance.instance_name
-                        
-                        # ✅ Endpoint CORRETO para grupos: /group/findGroupInfos
-                        endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
-                        
-                        headers = {
-                            'apikey': api_key,
-                            'Content-Type': 'application/json'
-                        }
-                        
-                        with httpx.Client(timeout=5.0) as client:
-                            response = client.get(
-                                endpoint,
-                                params={'groupJid': group_jid},
-                                headers=headers
-                            )
-                            
-                            if response.status_code == 200:
-                                group_info = response.json()
-                                logger.info(f"✅ [GRUPO INFO] Informações recebidas: {group_info}")
-                                
-                                # Extrair dados do grupo
-                                group_name = group_info.get('subject', '')
-                                group_pic_url = group_info.get('pictureUrl')
-                                participants_count = group_info.get('size', 0)
-                                group_desc = group_info.get('desc', '')
-                                
-                                # Atualizar conversa
-                                update_fields = []
-                                
-                                if group_name:
-                                    conversation.contact_name = group_name
-                                    update_fields.append('contact_name')
-                                    logger.info(f"✅ [GRUPO INFO] Nome do grupo: {group_name}")
-                                
-                                if group_pic_url:
-                                    conversation.profile_pic_url = group_pic_url
-                                    update_fields.append('profile_pic_url')
-                                    logger.info(f"✅ [GRUPO INFO] Foto do grupo: {group_pic_url[:50]}...")
-                                
-                                # Atualizar metadados
-                                conversation.group_metadata = {
-                                    'group_id': remote_jid,
-                                    'group_name': group_name,
-                                    'group_pic_url': group_pic_url,
-                                    'participants_count': participants_count,
-                                    'description': group_desc,
-                                    'is_group': True,
-                                }
-                                update_fields.append('group_metadata')
-                                
-                                if update_fields:
-                                    conversation.save(update_fields=update_fields)
-                                    logger.info(f"✅ [GRUPO INFO] Conversa atualizada com {len(update_fields)} campos")
-                            else:
-                                logger.warning(f"⚠️ [GRUPO INFO] Erro ao buscar: {response.status_code}")
-                                logger.warning(f"   Response: {response.text[:200]}")
+                    tenant=tenant,
+                    is_active=True,
+                    status='active'
+                ).first()
+
+                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+
+                if wa_instance and evolution_server:
+                    group_jid = remote_jid
+                    logger.info("👥 [GRUPO INFO] Buscando com Group JID: %s", group_jid)
+
+                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                    api_key = wa_instance.api_key or evolution_server.api_key
+                    instance_name = wa_instance.instance_name
+
+                    endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+
+                    headers = {
+                        'apikey': api_key,
+                        'Content-Type': 'application/json'
+                    }
+
+                    with httpx.Client(timeout=5.0) as client:
+                        response = client.get(
+                            endpoint,
+                            params={'groupJid': group_jid},
+                            headers=headers
+                        )
+
+                        if response.status_code == 200:
+                            group_info = response.json()
+                            logger.info("✅ [GRUPO INFO] Informações recebidas: %s", group_info)
+
+                            group_name = group_info.get('subject', '')
+                            group_pic_url = group_info.get('pictureUrl')
+                            participants_count = group_info.get('size', 0)
+                            group_desc = group_info.get('desc', '')
+
+                            update_fields = []
+
+                            if group_name:
+                                conversation.contact_name = group_name
+                                update_fields.append('contact_name')
+                                logger.info("✅ [GRUPO INFO] Nome do grupo: %s", group_name)
+
+                            if group_pic_url:
+                                conversation.profile_pic_url = group_pic_url
+                                update_fields.append('profile_pic_url')
+                                logger.info("✅ [GRUPO INFO] Foto do grupo: %s", group_pic_url[:50])
+
+                            conversation.group_metadata = {
+                                'group_id': remote_jid,
+                                'group_name': group_name,
+                                'group_pic_url': group_pic_url,
+                                'participants_count': participants_count,
+                                'description': group_desc,
+                                'is_group': True,
+                            }
+                            update_fields.append('group_metadata')
+
+                            if update_fields:
+                                conversation.save(update_fields=update_fields)
+                                logger.info("✅ [GRUPO INFO] Conversa atualizada com %s campos", len(update_fields))
+                        else:
+                            logger.warning("⚠️ [GRUPO INFO] Erro ao buscar: %s", response.status_code)
+                            logger.warning("   Response: %s", response.text[:200])
                 else:
-                    logger.warning(f"⚠️ [GRUPO INFO] Instância WhatsApp ou servidor Evolution não encontrado")
-                    logger.warning(f"   wa_instance: {wa_instance is not None}")
-                    logger.warning(f"   evolution_server: {evolution_server is not None}")
-                except Exception as e:
-                    logger.error(f"❌ [GRUPO INFO] Erro ao buscar informações: {e}", exc_info=True)
+                    logger.warning("⚠️ [GRUPO INFO] Instância WhatsApp ou servidor Evolution não encontrado")
+                    logger.warning("   wa_instance: %s", wa_instance is not None)
+                    logger.warning("   evolution_server: %s", evolution_server is not None)
+            except Exception as e:
+                logger.error("❌ [GRUPO INFO] Erro ao buscar informações: %s", e, exc_info=True)
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:
@@ -1266,38 +1255,38 @@ def handle_message_update(data, tenant):
         retry_delay = 0.2  # 200ms entre tentativas
         
         for attempt in range(max_retries):
-        # Tentar com keyId
-        if key_id:
-            try:
-                message = Message.objects.select_related('conversation').get(message_id=key_id)
-                    logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via keyId (tentativa {attempt + 1})!")
+            # Tentar com keyId
+            if key_id:
+                try:
+                    message = Message.objects.select_related('conversation').get(message_id=key_id)
+                    logger.info("✅ [WEBHOOK UPDATE] Mensagem encontrada via keyId (tentativa %s)!", attempt + 1)
                     break
-            except Message.DoesNotExist:
-                pass
-        
-        # Se não encontrou, tentar com key.id
-        if not message and key.get('id'):
-            try:
-                message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
-                    logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via key.id (tentativa {attempt + 1})!")
+                except Message.DoesNotExist:
+                    pass
+
+            # Se não encontrou, tentar com key.id
+            if not message and key.get('id'):
+                try:
+                    message = Message.objects.select_related('conversation').get(message_id=key.get('id'))
+                    logger.info("✅ [WEBHOOK UPDATE] Mensagem encontrada via key.id (tentativa %s)!", attempt + 1)
                     break
-            except Message.DoesNotExist:
-                pass
-        
-        # Se não encontrou, tentar com messageId do Evolution
-        if not message and message_id_evo:
-            try:
-                message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
-                    logger.info(f"✅ [WEBHOOK UPDATE] Mensagem encontrada via messageId (tentativa {attempt + 1})!")
+                except Message.DoesNotExist:
+                    pass
+
+            # Se não encontrou, tentar com messageId do Evolution
+            if not message and message_id_evo:
+                try:
+                    message = Message.objects.select_related('conversation').get(message_id=message_id_evo)
+                    logger.info("✅ [WEBHOOK UPDATE] Mensagem encontrada via messageId (tentativa %s)!", attempt + 1)
                     break
-            except Message.DoesNotExist:
-                pass
-            
+                except Message.DoesNotExist:
+                    pass
+
             # Se não encontrou e ainda tem tentativas, aguardar um pouco
             if not message and attempt < max_retries - 1:
                 import time
                 time.sleep(retry_delay)
-                logger.debug(f"⏳ [WEBHOOK UPDATE] Aguardando message_id ser salvo (tentativa {attempt + 1}/{max_retries})...")
+                logger.debug("⏳ [WEBHOOK UPDATE] Aguardando message_id ser salvo (tentativa %s/%s)...", attempt + 1, max_retries)
         
         if not message:
             logger.warning(f"⚠️ [WEBHOOK UPDATE] Mensagem não encontrada no banco após {max_retries} tentativas!")
@@ -1554,58 +1543,60 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
         last_error = None
         for attempt in range(max_retries):
             try:
-                # Enviar request de forma síncrona com timeout adequado
                 with httpx.Client(timeout=5.0) as client:
-            response = client.post(url, json=payload, headers=headers)
-            
-            if response.status_code == 200 or response.status_code == 201:
-                logger.info(f"✅ [READ RECEIPT] Confirmação enviada com sucesso!")
-                logger.info(f"   Response: {response.text[:200]}")
-                        return True
-                    elif response.status_code == 500:
-                        # ✅ CORREÇÃO: Verificar se é erro de conexão (1006, Connection Closed)
-                        response_text = response.text.lower()
-                        if 'connection closed' in response_text or '1006' in response_text:
-                            logger.warning(
-                                f"⚠️ [READ RECEIPT] Instância desconectada (Connection Closed/1006). "
-                                f"Pulando read receipt. Tentativa {attempt + 1}/{max_retries}"
-                            )
-                            # Não tentar novamente se a conexão está fechada
-                            return False
-            else:
-                            # Outro erro 500 - pode ser temporário
-                            last_error = f"HTTP {response.status_code}: {response.text[:200]}"
-                            if attempt < max_retries - 1:
-                                wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s
-                                logger.warning(
-                                    f"⚠️ [READ RECEIPT] Erro temporário (tentativa {attempt + 1}/{max_retries}). "
-                                    f"Retry em {wait_time}s..."
-                                )
-                                time.sleep(wait_time)
-                                continue
-                    else:
-                        # Outros erros HTTP (400, 401, 403, 404, etc) - não tentar novamente
-                logger.warning(f"⚠️ [READ RECEIPT] Resposta não esperada: {response.status_code}")
-                logger.warning(f"   Response: {response.text[:300]}")
+                    response = client.post(url, json=payload, headers=headers)
+
+                if response.status_code in (200, 201):
+                    logger.info("✅ [READ RECEIPT] Confirmação enviada com sucesso!")
+                    logger.info("   Response: %s", response.text[:200])
+                    return True
+
+                if response.status_code == 500:
+                    response_text = response.text.lower()
+                    if 'connection closed' in response_text or '1006' in response_text:
+                        logger.warning(
+                            "⚠️ [READ RECEIPT] Instância desconectada (Connection Closed/1006). "
+                            "Pulando read receipt. Tentativa %s/%s",
+                            attempt + 1,
+                            max_retries
+                        )
                         return False
-                        
+
+                    last_error = f"HTTP {response.status_code}: {response.text[:200]}"
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt  # 1s, 2s, 4s
+                        logger.warning(
+                            "⚠️ [READ RECEIPT] Erro temporário (tentativa %s/%s). Retry em %ss...",
+                            attempt + 1,
+                            max_retries,
+                            wait_time
+                        )
+                        time.sleep(wait_time)
+                        continue
+                else:
+                    logger.warning("⚠️ [READ RECEIPT] Resposta não esperada: %s", response.status_code)
+                    logger.warning("   Response: %s", response.text[:300])
+                    return False
+
             except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
-                # ✅ CORREÇÃO: Erros de conexão - retry com backoff
                 last_error = str(e)
                 if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt  # Backoff exponencial: 1s, 2s, 4s
+                    wait_time = 2 ** attempt
                     logger.warning(
-                        f"⚠️ [READ RECEIPT] Erro de conexão (tentativa {attempt + 1}/{max_retries}): {e}. "
-                        f"Retry em {wait_time}s..."
+                        "⚠️ [READ RECEIPT] Erro de conexão (tentativa %s/%s): %s. Retry em %ss...",
+                        attempt + 1,
+                        max_retries,
+                        e,
+                        wait_time
                     )
                     time.sleep(wait_time)
                     continue
-                else:
-                    logger.error(f"❌ [READ RECEIPT] Erro de conexão após {max_retries} tentativas: {e}")
-                    return False
+
+                logger.error("❌ [READ RECEIPT] Erro de conexão após %s tentativas: %s", max_retries, e)
+                return False
         
         # Se chegou aqui, todas as tentativas falharam
-        logger.error(f"❌ [READ RECEIPT] Falha após {max_retries} tentativas. Último erro: {last_error}")
+        logger.error("❌ [READ RECEIPT] Falha após %s tentativas. Último erro: %s", max_retries, last_error)
         return False
     
     except Exception as e:
