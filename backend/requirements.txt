@@ -45,6 +45,8 @@ python-decouple==3.8
 Pillow==10.1.0
 python-dateutil==2.8.2
 pydub==0.25.1  # Audio conversion (OGG → MP3)
+setuptools>=70.0.0
+wheel>=0.43.0
 
 # Development
 black==23.11.0
