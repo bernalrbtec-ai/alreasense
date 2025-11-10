@@ -1,0 +1,25 @@
+[phases.setup]
+aptPkgs = ["ffmpeg"]
+cmds = [
+  "mise use --yes python@3.11.9",
+  "PY=$(mise which python); echo \"[setup] python escolhido: $PY\"; \"$PY\" --version",
+  "PY=$(mise which python); ln -sf \"$PY\" /usr/local/bin/python && ln -sf \"$PY\" /usr/local/bin/python3 && ln -sf \"$PY\" /usr/bin/python3"
+]
+
+[phases.install]
+cmds = [
+  "rm -rf /app/.venv",
+  "PY=$(mise which python); echo \"[install] criando venv com: $PY\"; \"$PY\" --version; \"$PY\" -m venv /app/.venv",
+  "/app/.venv/bin/python --version",
+  "/app/.venv/bin/pip install --upgrade pip setuptools wheel",
+  "/app/.venv/bin/pip install -r requirements.txt"
+]
+
+[phases.build]
+cmds = [". /app/.venv/bin/activate"]
+
+[variables]
+PYTHON_VERSION = "3.11.9"
+RAILPACK_PYTHON_VERSION = "3.11.9"
+NIXPACKS_PYTHON_VERSION = "3.11.9"
+
