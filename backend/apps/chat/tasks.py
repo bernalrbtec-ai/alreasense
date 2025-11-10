@@ -25,15 +25,18 @@ import json
 import asyncio
 import aio_pika
 import httpx
+import time
 from typing import Optional
 from django.conf import settings
 from django.core.cache import cache
+from django.utils import timezone
 from apps.chat.webhooks import send_read_receipt
 from apps.chat.utils.instance_state import (
     should_defer_instance,
     InstanceTemporarilyUnavailable,
     compute_backoff,
 )
+from apps.chat.utils.metrics import record_latency, record_error
 
 logger = logging.getLogger(__name__)
 send_logger = logging.getLogger("flow.chat.send")
@@ -288,6 +291,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
 
     log = send_logger
 
+    overall_start = time.perf_counter()
+
     try:
         # Busca mensagem com todos os relacionamentos necessários para serialização
         message = await sync_to_async(
@@ -508,10 +513,21 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
 
                     try:
+                        request_start = time.perf_counter()
                         response = await client.post(
                             endpoint,
                             headers=headers,
                             json=payload
+                        )
+                        latency = time.perf_counter() - request_start
+                        record_latency(
+                            'send_message_media',
+                            latency,
+                            {
+                                'message_id': str(message.id),
+                                'conversation_id': str(conversation.id),
+                                'mediatype': 'audio' if is_audio else mediatype,
+                            }
                         )
                         logger.info(f"📥 [CHAT] Resposta Evolution API:")
                         logger.info(f"   Status: {response.status_code}")
@@ -531,10 +547,22 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             logger.warning("⚠️ [CHAT] sendWhatsAppAudio retornou 404. Tentando fallback sendMedia (audio)...")
                             logger.info(f"   FB Endpoint: {fb_endpoint}")
                             logger.info(f"   FB Payload: {json.dumps(fb_payload)}")
+                            request_start = time.perf_counter()
                             fb_resp = await client.post(
                                 fb_endpoint,
                                 headers=headers,
                                 json=fb_payload
+                            )
+                            latency = time.perf_counter() - request_start
+                            record_latency(
+                                'send_message_media',
+                                latency,
+                                {
+                                    'message_id': str(message.id),
+                                    'conversation_id': str(conversation.id),
+                                    'mediatype': 'audio',
+                                    'fallback': True,
+                                }
                             )
                             logger.info("📥 [CHAT] Resposta Evolution API (fallback): %s", fb_resp.status_code)
                             try:
@@ -589,10 +617,21 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 logger.info("   Text: %s", _truncate_text(content))
                 logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                 
+                request_start = time.perf_counter()
                 response = await client.post(
                     f"{base_url}/message/sendText/{instance.instance_name}",
                     headers=headers,
                     json=payload
+                )
+                latency = time.perf_counter() - request_start
+                record_latency(
+                    'send_message_text',
+                    latency,
+                    {
+                        'message_id': str(message.id),
+                        'conversation_id': str(conversation.id),
+                        'has_attachments': bool(attachment_urls),
+                    }
                 )
                 
                 logger.info(f"📥 [CHAT ENVIO] Resposta da Evolution API:")
@@ -676,9 +715,20 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         logger.info(f"   Phone: {message.conversation.contact_phone}")
         logger.info(f"   Status: {message.status}")
         logger.info(f"   Broadcast: message_received + message_status_update")
+
+        record_latency(
+            'send_message_total',
+            time.perf_counter() - overall_start,
+            {
+                'message_id': str(message.id),
+                'conversation_id': str(conversation.id),
+                'attachments': len(attachment_urls),
+            }
+        )
     
     except Exception as e:
         logger.error(f"❌ [CHAT] Erro ao enviar mensagem {message_id}: {e}", exc_info=True)
+        record_error('send_message', str(e))
         
         # Marca como falha
         try:

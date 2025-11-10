@@ -7,7 +7,9 @@ from apps.chat.api.views import (
     ConversationViewSet,
     MessageViewSet,
     MessageAttachmentViewSet,
-    MessageReactionViewSet
+    MessageReactionViewSet,
+    chat_metrics_overview,
+    chat_ping_evolution,
 )
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
@@ -34,6 +36,9 @@ urlpatterns = [
     path('media-proxy/', media_proxy, name='media-proxy'),
     # Alias para compatibilidade
     path('profile-pic-proxy/', media_proxy, name='profile-pic-proxy'),
+    # Monitores/diagnósticos
+    path('metrics/overview/', chat_metrics_overview, name='chat-metrics-overview'),
+    path('metrics/ping-evolution/', chat_ping_evolution, name='chat-ping-evolution'),
     
     # Webhook Evolution
     path('webhooks/evolution/', evolution_webhook, name='evolution-webhook'),

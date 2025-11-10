@@ -1,4 +1,4 @@
-"""
+""" 
 Redis Consumer para Flow Chat.
 
 Processa filas Redis do chat de forma assíncrona.
@@ -7,6 +7,7 @@ Performance: 10x mais rápido que RabbitMQ (2-6ms vs 15-65ms).
 import asyncio
 import logging
 import redis
+import os
 from apps.chat.redis_queue import (
     dequeue_message,
     enqueue_dead_letter,
@@ -28,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 # ✅ CORREÇÃO CRÍTICA: Dead-Letter Queue
 MAX_RETRIES = 3  # Máximo de tentativas antes de mover para dead-letter
+SEND_MESSAGE_WORKERS = max(1, int(os.getenv('CHAT_SEND_MESSAGE_WORKERS', '3')))
 
 
 QUEUE_ALIASES = {
@@ -58,12 +60,12 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
         queue_filters = None
     logger.info("=" * 80)
     
-    async def process_send_message():
+    async def process_send_message(worker_id: int = 1):
         """Processa fila send_message com retry e dead-letter queue."""
         if queue_filters and 'send_message' not in queue_filters:
             logger.info("⏭️ [REDIS CONSUMER] Fila send_message não selecionada, ignorando.")
             return
-        logger.info("📥 [REDIS CONSUMER] Consumer send_message iniciado")
+        logger.info("📥 [REDIS CONSUMER] Consumer send_message iniciado (worker #%s)", worker_id)
         
         backoff_delay = 1  # Delay inicial para backoff exponencial
         
@@ -87,17 +89,27 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                     message_id = payload.get('message_id')
                     retry_count = payload.get('_retry_count', 0)
                     
-                    logger.info(f"📥 [REDIS CONSUMER] Recebida task send_message: {message_id} (tentativa {retry_count + 1})")
+                    logger.info(
+                        "📥 [REDIS CONSUMER] [worker=%s] Recebida task send_message: %s (tentativa %s)",
+                        worker_id,
+                        message_id,
+                        retry_count + 1
+                    )
                     
                     try:
                         # Processar mensagem
                         await handle_send_message(message_id, retry_count=retry_count)
-                        logger.info(f"✅ [REDIS CONSUMER] send_message concluída: {message_id}")
+                        logger.info(
+                            "✅ [REDIS CONSUMER] [worker=%s] send_message concluída: %s",
+                            worker_id,
+                            message_id
+                        )
                     except InstanceTemporarilyUnavailable as e:
                         wait_time = e.wait_seconds or compute_backoff(retry_count)
                         next_retry = retry_count + 1
                         logger.warning(
-                            "⏳ [REDIS CONSUMER] Instância indisponível para send_message (id=%s). Reagendando em %ss. Detalhes: %s",
+                            "⏳ [REDIS CONSUMER] [worker=%s] Instância indisponível para send_message (id=%s). Reagendando em %ss. Detalhes: %s",
+                            worker_id,
                             message_id,
                             wait_time,
                             e.state_payload or {},
@@ -111,7 +123,12 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                         # ✅ CORREÇÃO CRÍTICA: Dead-Letter Queue
                         retry_count += 1
                         if retry_count >= MAX_RETRIES:
-                            logger.error(f"❌ [REDIS CONSUMER] send_message falhou após {retry_count} tentativas: {message_id}")
+                            logger.error(
+                                "❌ [REDIS CONSUMER] [worker=%s] send_message falhou após %s tentativas: %s",
+                                worker_id,
+                                retry_count,
+                                message_id
+                            )
                             enqueue_dead_letter(
                                 REDIS_QUEUE_SEND_MESSAGE,
                                 payload,
@@ -120,7 +137,12 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             )
                         else:
                             # Re-enfileirar com retry count incrementado
-                            logger.warning(f"⚠️ [REDIS CONSUMER] send_message falhou (tentativa {retry_count}/{MAX_RETRIES}), re-enfileirando...")
+                            logger.warning(
+                                "⚠️ [REDIS CONSUMER] [worker=%s] send_message falhou (tentativa %s/%s), re-enfileirando...",
+                                worker_id,
+                                retry_count,
+                                MAX_RETRIES
+                            )
                             from apps.chat.redis_queue import enqueue_message
                             payload['_retry_count'] = retry_count
                             enqueue_message(REDIS_QUEUE_SEND_MESSAGE, payload)
@@ -131,7 +153,7 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                 
             except Exception as e:
                 # ✅ Erros inesperados (não timeout) - logar e continuar
-                logger.error(f"❌ [REDIS CONSUMER] Erro send_message: {e}", exc_info=True)
+                logger.error(f"❌ [REDIS CONSUMER] [worker=%s] Erro send_message: %s", worker_id, e, exc_info=True)
                 await asyncio.sleep(1)  # Delay em caso de erro
     
     async def process_fetch_profile_pic():
@@ -348,7 +370,8 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
     try:
         consumers = []
         if not queue_filters or 'send_message' in queue_filters:
-            consumers.append(process_send_message())
+            for worker_id in range(1, SEND_MESSAGE_WORKERS + 1):
+                consumers.append(process_send_message(worker_id))
         if not queue_filters or 'fetch_profile_pic' in queue_filters:
             consumers.append(process_fetch_profile_pic())
         if not queue_filters or 'fetch_group_info' in queue_filters:

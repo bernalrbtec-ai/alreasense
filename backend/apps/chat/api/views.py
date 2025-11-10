@@ -10,6 +10,9 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+import time
 
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.chat.api.serializers import (
@@ -24,6 +27,12 @@ from apps.authn.permissions import CanAccessChat
 from apps.authn.mixins import DepartmentFilterMixin
 from apps.notifications.models import WhatsAppInstance
 from apps.connections.models import EvolutionConnection
+from apps.chat.utils.metrics import get_metrics, record_latency, record_error
+from apps.chat.redis_queue import get_queue_metrics
+
+
+REFRESH_INFO_MIN_INTERVAL_SECONDS = 900  # 15 minutos entre refresh completo
+REFRESH_INFO_CACHE_SECONDS = 300  # 5 minutos no cache curto
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +236,30 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         logger = logging.getLogger(__name__)
         conversation = self.get_object()
+        metadata = conversation.metadata or {}
+        
+        # Cooldown adicional baseado na última atualização persistida
+        last_refresh_str = metadata.get('last_refresh_at')
+        if last_refresh_str:
+            last_refresh_dt = parse_datetime(last_refresh_str)
+            if last_refresh_dt:
+                if timezone.is_naive(last_refresh_dt):
+                    last_refresh_dt = timezone.make_aware(last_refresh_dt, timezone.utc)
+                elapsed = (timezone.now() - last_refresh_dt).total_seconds()
+                if elapsed < REFRESH_INFO_MIN_INTERVAL_SECONDS:
+                    remaining = int(REFRESH_INFO_MIN_INTERVAL_SECONDS - elapsed)
+                    logger.info(
+                        "⏳ [REFRESH] Conversa %s atualizada há %.1fs - usando dados existentes",
+                        conversation.id,
+                        elapsed
+                    )
+                    cache.set(f"conversation_info_{conversation.id}", True, REFRESH_INFO_CACHE_SECONDS)
+                    return Response({
+                        'message': 'Informações atualizadas recentemente',
+                        'conversation': ConversationSerializer(conversation).data,
+                        'from_cache': True,
+                        'cooldown_seconds': max(0, remaining)
+                    })
         
         # Verificar cache (5min)
         cache_key = f"conversation_info_{conversation.id}"
@@ -300,6 +333,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 logger.info(f"   Raw phone: {raw_phone}")
                 logger.info(f"   Formatted JID: {group_jid}")
                 
+                request_start = time.perf_counter()
+                
                 with httpx.Client(timeout=10.0) as client:
                     response = client.get(
                         endpoint,
@@ -309,6 +344,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     
                     if response.status_code == 200:
                         group_info = response.json()
+                        record_latency(
+                            'refresh_info_group',
+                            time.perf_counter() - request_start,
+                            {
+                                'conversation_id': str(conversation.id),
+                                'instance_name': instance_name,
+                                'status_code': response.status_code,
+                            }
+                        )
                         
                         # Extrair dados
                         group_name = group_info.get('subject', '')
@@ -342,6 +386,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         logger.warning(f"⚠️ [REFRESH GRUPO] Grupo não encontrado (404) - pode ter sido deletado ou instância não tem acesso")
                         logger.warning(f"   JID: {group_jid}")
                         logger.warning(f"   Instance: {instance_name}")
+                        record_error('refresh_info_group', f'404 {group_jid}')
                         
                         # Retornar sucesso mas com aviso (não quebrar UI)
                         return Response({
@@ -353,6 +398,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     else:
                         logger.error(f"❌ [REFRESH GRUPO] Erro API: {response.status_code}")
                         logger.error(f"   Response: {response.text[:200]}")
+                        record_error('refresh_info_group', f'{response.status_code} response')
                         return Response(
                             {'error': f'Erro ao buscar grupo: {response.status_code}'},
                             status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -364,12 +410,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
                 
                 logger.info(f"🔄 [REFRESH CONTATO] Buscando foto do contato {clean_phone}")
+                request_start = time.perf_counter()
                 
                 with httpx.Client(timeout=10.0) as client:
                     response = client.get(
                         endpoint,
                         params={'number': clean_phone},
                         headers=headers
+                    )
+                    record_latency(
+                        'refresh_info_contact',
+                        time.perf_counter() - request_start,
+                        {
+                            'conversation_id': str(conversation.id),
+                            'instance_name': instance_name,
+                            'status_code': response.status_code,
+                        }
                     )
                     
                     if response.status_code == 200:
@@ -390,16 +446,25 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     elif response.status_code == 404:
                         # ✅ CORREÇÃO: 404 é esperado se contato não tem foto de perfil
                         logger.debug("ℹ️ [REFRESH CONTATO] Contato não tem foto de perfil (404) - normal")
+                        record_error('refresh_info_contact', '404 profile picture')
                     else:
                         logger.warning(f"⚠️ [REFRESH CONTATO] Erro API: {response.status_code}")
+                        record_error('refresh_info_contact', f'{response.status_code} response')
             
-            # Salvar alterações
+            # Salvar alterações + metadata (timestamp do refresh)
+            refresh_timestamp = timezone.now().isoformat()
+            metadata['last_refresh_at'] = refresh_timestamp
+            conversation.metadata = metadata
             if update_fields:
-                conversation.save(update_fields=update_fields)
-                logger.info(f"✅ [REFRESH] {len(update_fields)} campos atualizados")
+                if 'metadata' not in update_fields:
+                    update_fields.append('metadata')
+            else:
+                update_fields = ['metadata']
+            conversation.save(update_fields=update_fields)
+            logger.info(f"✅ [REFRESH] {len(update_fields)} campos atualizados (incluindo metadata)")
             
             # Salvar no cache por 5min
-            cache.set(cache_key, True, 300)
+            cache.set(cache_key, True, REFRESH_INFO_CACHE_SECONDS)
             
             # Broadcast atualização via WebSocket
             if update_fields:
@@ -426,14 +491,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         except httpx.TimeoutException:
             logger.error(f"⏱️ [REFRESH] Timeout ao buscar {conversation.id}")
+            record_error('refresh_info_timeout', f'timeout conversation {conversation.id}')
             return Response(
-                {'error': 'Timeout ao buscar informações'},
+                {'error': 'Timeout ao buscar informações da Evolution API'},
                 status=status.HTTP_504_GATEWAY_TIMEOUT
             )
         except Exception as e:
             logger.error(f"❌ [REFRESH] Erro: {e}", exc_info=True)
+            record_error('refresh_info_unexpected', str(e))
             return Response(
-                {'error': f'Erro interno: {str(e)}'},
+                {'error': f'Erro ao atualizar informações da conversa'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
@@ -1358,8 +1425,6 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
             "timestamp": "2025-11-04T..."
         }
         """
-        from apps.chat.redis_queue import get_queue_metrics
-        
         metrics = get_queue_metrics()
         
         # ✅ Alerta se filas estão muito grandes
@@ -1371,8 +1436,97 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
         return Response({
             'metrics': metrics,
             'alerts': alerts,
-            'timestamp': datetime.now().isoformat()
+            'timestamp': timezone.now().isoformat()
         })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanAccessChat])
+def chat_metrics_overview(request):
+    """
+    Retorna snapshot das filas Redis e métricas de integração com a Evolution.
+    """
+    return Response({
+        'queues': get_queue_metrics(),
+        'latencies': get_metrics(),
+        'timestamp': timezone.now().isoformat()
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanAccessChat])
+def chat_ping_evolution(request):
+    """
+    Executa um ping simples na Evolution API para medir latência em tempo real.
+    Aceita query-param opcional `instance` com UUID da instância.
+    """
+    from django.conf import settings
+    import httpx
+
+    tenant = request.user.tenant
+    instance_id = request.query_params.get('instance')
+
+    instance_qs = WhatsAppInstance.objects.filter(
+        tenant=tenant,
+        is_active=True
+    )
+    if instance_id:
+        instance_qs = instance_qs.filter(id=instance_id)
+
+    wa_instance = instance_qs.first()
+    if not wa_instance:
+        return Response(
+            {'error': 'Nenhuma instância WhatsApp ativa encontrada para o tenant'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+
+    evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+    if not evolution_server and not wa_instance.api_url:
+        return Response(
+            {'error': 'Configuração da Evolution API não encontrada'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+    health_path = getattr(settings, 'EVOLUTION_HEALTHCHECK_PATH', '/health')
+    health_path = '/' + health_path.lstrip('/')
+    url = f"{base_url}{health_path}"
+
+    request_start = time.perf_counter()
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(url)
+        latency = time.perf_counter() - request_start
+        record_latency(
+            'evolution_ping',
+            latency,
+            {
+                'status_code': response.status_code,
+                'instance_name': wa_instance.instance_name,
+            }
+        )
+        return Response({
+            'success': response.status_code < 500,
+            'status_code': response.status_code,
+            'latency_seconds': round(latency, 4),
+            'url': url,
+            'instance_name': wa_instance.instance_name,
+            'timestamp': timezone.now().isoformat(),
+        })
+    except Exception as exc:
+        latency = time.perf_counter() - request_start
+        record_error('evolution_ping', str(exc))
+        return Response(
+            {
+                'success': False,
+                'error': str(exc),
+                'latency_seconds': round(latency, 4),
+                'url': url,
+                'instance_name': wa_instance.instance_name,
+                'timestamp': timezone.now().isoformat(),
+            },
+            status=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
     
     @action(detail=False, methods=['post'], url_path='add')
     def add_reaction(self, request):
