@@ -20,6 +20,7 @@ QUEUE_PREFIX = "chat:queue:"
 REDIS_QUEUE_SEND_MESSAGE = f"{QUEUE_PREFIX}send_message"
 REDIS_QUEUE_FETCH_PROFILE_PIC = f"{QUEUE_PREFIX}fetch_profile_pic"
 REDIS_QUEUE_FETCH_GROUP_INFO = f"{QUEUE_PREFIX}fetch_group_info"
+REDIS_QUEUE_MARK_AS_READ = f"{QUEUE_PREFIX}mark_as_read"
 
 # ✅ CORREÇÃO CRÍTICA: Dead-Letter Queue
 REDIS_QUEUE_DEAD_LETTER = f"{QUEUE_PREFIX}dead_letter"
@@ -297,6 +298,10 @@ def get_queue_metrics():
             'fetch_group_info': {
                 'length': client.llen(REDIS_QUEUE_FETCH_GROUP_INFO),
                 'name': REDIS_QUEUE_FETCH_GROUP_INFO
+            },
+            'mark_as_read': {
+                'length': client.llen(REDIS_QUEUE_MARK_AS_READ),
+                'name': REDIS_QUEUE_MARK_AS_READ
             },
             'dead_letter': {
                 'length': client.llen(REDIS_QUEUE_DEAD_LETTER),

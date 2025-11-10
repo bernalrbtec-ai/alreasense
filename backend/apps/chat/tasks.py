@@ -28,6 +28,7 @@ import httpx
 from typing import Optional
 from django.conf import settings
 from django.core.cache import cache
+from apps.chat.webhooks import send_read_receipt
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,8 @@ from apps.chat.redis_queue import (
     enqueue_message,
     REDIS_QUEUE_SEND_MESSAGE,
     REDIS_QUEUE_FETCH_PROFILE_PIC,
-    REDIS_QUEUE_FETCH_GROUP_INFO
+    REDIS_QUEUE_FETCH_GROUP_INFO,
+    REDIS_QUEUE_MARK_AS_READ
 )
 
 # ❌ REMOVIDO: Função delay() RabbitMQ (substituída por Redis)
@@ -244,6 +246,14 @@ class fetch_group_info:
             'api_key': api_key,
             'base_url': base_url
         })
+
+
+def enqueue_mark_as_read(conversation_id: str, message_id: str):
+    """Producer auxiliar: enfileira envio de read receipt."""
+    enqueue_message(REDIS_QUEUE_MARK_AS_READ, {
+        'conversation_id': conversation_id,
+        'message_id': message_id
+    })
 
 
 # ========== CONSUMER HANDLERS ==========
@@ -779,6 +789,53 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     
     except Exception as e:
         logger.error(f"❌ [PROFILE PIC] Erro ao buscar foto: {e}", exc_info=True)
+
+
+async def handle_mark_message_as_read(conversation_id: str, message_id: str):
+    """
+    Handler: Envia read receipt para mensagens em background.
+    """
+    from apps.chat.models import Message
+    from asgiref.sync import sync_to_async
+
+    try:
+        message = await sync_to_async(
+            Message.objects.select_related('conversation', 'conversation__tenant').get
+        )(id=message_id, conversation_id=conversation_id)
+    except Message.DoesNotExist:
+        logger.warning(
+            "⚠️ [READ RECEIPT WORKER] Mensagem não encontrada (message_id=%s, conversation_id=%s)",
+            message_id,
+            conversation_id
+        )
+        return
+
+    if not message.message_id:
+        logger.warning(
+            "⚠️ [READ RECEIPT WORKER] Mensagem sem message_id da Evolution, pulando (message_id=%s)",
+            message_id
+        )
+        return
+
+    # Garantir status 'seen' no banco (caso ainda não atualizado)
+    if message.status != 'seen':
+        await sync_to_async(
+            Message.objects.filter(id=message.id).update
+        )(status='seen')
+        message.status = 'seen'
+
+    sent = await sync_to_async(send_read_receipt)(
+        message.conversation,
+        message,
+        max_retries=2
+    )
+
+    if not sent:
+        logger.warning(
+            "⚠️ [READ RECEIPT WORKER] Read receipt não enviado (message_id=%s, conversation_id=%s)",
+            message_id,
+            conversation_id
+        )
 
 
 # ========== CONSUMER (processa filas) ==========

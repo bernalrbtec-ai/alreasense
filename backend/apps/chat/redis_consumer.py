@@ -12,11 +12,13 @@ from apps.chat.redis_queue import (
     enqueue_dead_letter,
     REDIS_QUEUE_SEND_MESSAGE,
     REDIS_QUEUE_FETCH_PROFILE_PIC,
-    REDIS_QUEUE_FETCH_GROUP_INFO
+    REDIS_QUEUE_FETCH_GROUP_INFO,
+    REDIS_QUEUE_MARK_AS_READ
 )
 from apps.chat.tasks import (
     handle_send_message,
-    handle_fetch_profile_pic
+    handle_fetch_profile_pic,
+    handle_mark_message_as_read
 )
 from apps.chat.media_tasks import handle_fetch_group_info
 
@@ -208,6 +210,80 @@ async def start_redis_consumers():
                 logger.error(f"❌ [REDIS CONSUMER] Erro fetch_group_info: {e}", exc_info=True)
                 await asyncio.sleep(1)
     
+    async def process_mark_as_read():
+        """Processa fila mark_as_read com retry e dead-letter queue."""
+        logger.info("📥 [REDIS CONSUMER] Consumer mark_as_read iniciado")
+        
+        backoff_delay = 1
+        
+        while True:
+            try:
+                try:
+                    payload = dequeue_message(REDIS_QUEUE_MARK_AS_READ, timeout=5)
+                except redis.exceptions.ConnectionError as e:
+                    logger.warning(f"⚠️ [REDIS CONSUMER] Erro de conexão (mark_as_read): {e}")
+                    logger.warning(f"   Aguardando {backoff_delay}s antes de retry...")
+                    await asyncio.sleep(backoff_delay)
+                    backoff_delay = min(backoff_delay * 2, 60)
+                    continue
+                
+                backoff_delay = 1
+                
+                if payload:
+                    conversation_id = payload.get('conversation_id')
+                    message_id = payload.get('message_id')
+                    retry_count = payload.get('_retry_count', 0)
+                    
+                    if not conversation_id or not message_id:
+                        logger.warning(f"⚠️ [REDIS CONSUMER] Payload inválido em mark_as_read: {payload}")
+                        continue
+                    
+                    logger.info(
+                        "📥 [REDIS CONSUMER] Recebida task mark_as_read: message=%s conversation=%s (tentativa %s)",
+                        message_id,
+                        conversation_id,
+                        retry_count + 1
+                    )
+                    
+                    try:
+                        await handle_mark_message_as_read(conversation_id, message_id)
+                        logger.info(
+                            "✅ [REDIS CONSUMER] mark_as_read concluída: message=%s conversation=%s",
+                            message_id,
+                            conversation_id
+                        )
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= MAX_RETRIES:
+                            logger.error(
+                                "❌ [REDIS CONSUMER] mark_as_read falhou após %s tentativas: message=%s conversation=%s",
+                                retry_count,
+                                message_id,
+                                conversation_id
+                            )
+                            enqueue_dead_letter(
+                                REDIS_QUEUE_MARK_AS_READ,
+                                payload,
+                                str(e),
+                                retry_count
+                            )
+                        else:
+                            logger.warning(
+                                "⚠️ [REDIS CONSUMER] mark_as_read falhou (tentativa %s/%s), re-enfileirando...",
+                                retry_count,
+                                MAX_RETRIES
+                            )
+                            from apps.chat.redis_queue import enqueue_message
+                            payload['_retry_count'] = retry_count
+                            enqueue_message(REDIS_QUEUE_MARK_AS_READ, payload)
+                            await asyncio.sleep(1)
+                else:
+                    await asyncio.sleep(0.1)
+            
+            except Exception as e:
+                logger.error(f"❌ [REDIS CONSUMER] Erro mark_as_read: {e}", exc_info=True)
+                await asyncio.sleep(1)
+    
     # Executar consumers em paralelo
     logger.info("✅ [REDIS CONSUMER] Consumers iniciados!")
     logger.info("=" * 80)
@@ -216,7 +292,8 @@ async def start_redis_consumers():
         await asyncio.gather(
             process_send_message(),
             process_fetch_profile_pic(),
-            process_fetch_group_info()
+            process_fetch_group_info(),
+            process_mark_as_read()
         )
     except KeyboardInterrupt:
         logger.info("⚠️ [REDIS CONSUMER] Consumers interrompidos pelo usuário")
