@@ -703,8 +703,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         ).select_related('conversation').order_by('-created_at')
         
         # ✅ CORREÇÃO: Limitar número de mensagens processadas por vez para evitar timeout
-        # Processar no máximo 50 mensagens por requisição
-        max_messages_per_request = 50
+        # Processar no máximo 5 mensagens por requisição (lote pequeno)
+        max_messages_per_request = 5
         unread_messages = list(unread_qs[:max_messages_per_request])
         
         if not unread_messages:
