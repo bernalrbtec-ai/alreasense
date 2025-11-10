@@ -25,6 +25,9 @@ RUN pip install --no-cache-dir -r /app/requirements.txt
 # Copy project
 COPY backend/ /app/
 
+# Configure entrypoint script
+RUN chmod +x /app/entrypoint.sh
+
 # Create staticfiles directory
 RUN mkdir -p /app/staticfiles
 
@@ -35,4 +38,4 @@ RUN python manage.py collectstatic --noinput --clear
 EXPOSE 8000
 
 # Default command
-CMD ["sh", "-c", "python fix_tenant_migration.py && python manage.py fix_evolution_table && python fix_complete_database.py && python manage.py migrate && python create_superuser.py && python ensure_plan_table.py && python seed_plans.py && python check_user_permissions.py && daphne -b 0.0.0.0 -p 8000 alrea_sense.asgi:application"]
+CMD ["/app/entrypoint.sh"]
