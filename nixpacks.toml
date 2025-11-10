@@ -7,14 +7,15 @@ cmds = [
 
 [phases.install]
 cmds = [
-  "python3 -m venv /tmp/venv",
-  ". /tmp/venv/bin/activate",
+  "rm -rf /app/.venv",
+  "python -m venv /app/.venv",
+  ". /app/.venv/bin/activate",
   "pip install --upgrade pip setuptools wheel",
   "pip install -r requirements.txt"
 ]
 
 [phases.build]
-cmds = [". /tmp/venv/bin/activate"]
+cmds = [". /app/.venv/bin/activate"]
 
 [variables]
 PYTHON_VERSION = "3.11.9"
