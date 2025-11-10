@@ -26,7 +26,7 @@ import asyncio
 import aio_pika
 import httpx
 import time
-from typing import Optional
+from typing import Optional, Dict, Any
 from django.conf import settings
 from django.core.cache import cache
 from django.utils import timezone
@@ -42,6 +42,28 @@ from apps.chat.utils.metrics import record_latency, record_error
 logger = logging.getLogger(__name__)
 send_logger = logging.getLogger("flow.chat.send")
 read_logger = logging.getLogger("flow.chat.read")
+
+
+def extract_evolution_message_id(data: Optional[Dict[str, Any]]) -> Optional[str]:
+    """
+    Extrai o ID de mensagem retornado pela Evolution API.
+    O webhook usa o campo `messageId`, então priorizamos esse valor.
+    """
+    if not data:
+        return None
+
+    messages = data.get('messages')
+    first_message = messages[0] if isinstance(messages, list) and messages else {}
+
+    return (
+        data.get('messageId')
+        or data.get('id')
+        or first_message.get('messageId')
+        or first_message.get('id')
+        or first_message.get('key', {}).get('id')
+        or data.get('key', {}).get('id')
+    )
+
 
 # Nome das filas
 QUEUE_SEND_MESSAGE = 'chat_send_message'
@@ -616,7 +638,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         logger.info("📥 [CHAT] Resposta Evolution API: status=%s body=%s", response.status_code, mask_sensitive_data(data))
                     else:
                         logger.info("📥 [CHAT] Resposta Evolution API: status=%s body=%s", response.status_code, _truncate_text(response.text))
-                    evolution_message_id = data.get('key', {}).get('id')
+                    evolution_message_id = extract_evolution_message_id(data)
                     
                     # ✅ FIX CRÍTICO: Salvar message_id IMEDIATAMENTE para evitar race condition
                     if evolution_message_id:
@@ -676,7 +698,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 response.raise_for_status()
                 
                 data = response.json()
-                evolution_message_id = data.get('key', {}).get('id')
+                evolution_message_id = extract_evolution_message_id(data)
                 
                 # ✅ FIX CRÍTICO: Salvar message_id IMEDIATAMENTE para evitar race condition
                 # O webhook pode chegar muito rápido (antes do save completo)
