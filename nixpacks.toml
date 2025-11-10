@@ -1,6 +1,9 @@
 [phases.setup]
 aptPkgs = ["ffmpeg"]
-cmds = ["rm -f /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"]
+cmds = [
+  "mise use --yes python@3.11.9",
+  "PY=$(mise which python); ln -sf \"$PY\" /usr/local/bin/python && ln -sf \"$PY\" /usr/local/bin/python3 && ln -sf \"$PY\" /usr/bin/python3"
+]
 
 [phases.install]
 cmds = [
