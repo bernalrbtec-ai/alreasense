@@ -1,9 +1,10 @@
 [phases.setup]
-aptPkgs = ["ffmpeg", "python3.11", "python3.11-venv", "python3.11-dev"]
+aptPkgs = ["ffmpeg"]
+cmds = ["rm -f /usr/bin/python3 && ln -s /usr/bin/python3.11 /usr/bin/python3"]
 
 [phases.install]
 cmds = [
-  "python3.11 -m venv /tmp/venv",
+  "python3 -m venv /tmp/venv",
   ". /tmp/venv/bin/activate",
   "pip install --upgrade pip setuptools wheel",
   "pip install -r requirements.txt"
