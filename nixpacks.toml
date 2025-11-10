@@ -1,14 +1,9 @@
-[install]
-python = "3.11.9"
-includes = ["nixpacks/requirements.txt"]
-
 [phases.setup]
-aptPkgs = ["ffmpeg"]
-cmds = ["mise use --yes python@3.11.9"]
+aptPkgs = ["ffmpeg", "python3.11", "python3.11-venv", "python3.11-dev"]
 
 [phases.install]
 cmds = [
-  "python -m venv /tmp/venv",
+  "python3.11 -m venv /tmp/venv",
   ". /tmp/venv/bin/activate",
   "pip install --upgrade pip setuptools wheel",
   "pip install -r requirements.txt"
