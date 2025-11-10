@@ -37,6 +37,28 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3  # Máximo de tentativas antes de mover para dead-letter
 SEND_MESSAGE_WORKERS = max(1, int(os.getenv('CHAT_SEND_MESSAGE_WORKERS', '3')))
 
+_pending_requeues: set[asyncio.Task] = set()
+
+
+def _schedule_requeue(queue_name: str, payload: dict, delay_seconds: float = 0.0) -> None:
+    """
+    Reenfileira payload sem bloquear o worker. Mantém referência para evitar GC.
+    """
+    async def _requeue():
+        try:
+            if delay_seconds > 0:
+                await asyncio.sleep(delay_seconds)
+            from apps.chat.redis_queue import enqueue_message  # lazy import to avoid cycles
+            payload['enqueued_at'] = timezone.now().isoformat()
+            enqueue_message(queue_name, payload)
+        except Exception:
+            logger.exception("❌ [REDIS CONSUMER] Falha ao reenfileirar payload %s", queue_name)
+        finally:
+            _pending_requeues.discard(task)
+
+    task = asyncio.create_task(_requeue())
+    _pending_requeues.add(task)
+
 
 QUEUE_ALIASES = {
     'send_message': 'send_message',
@@ -75,7 +97,8 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
 
         backoff_delay = 1  # Delay inicial para backoff exponencial
         heartbeat_interval = 5.0
-        last_heartbeat = 0.0
+        update_worker_heartbeat('send_message', worker_id)
+        last_heartbeat = time.monotonic()
 
         while True:
             try:
@@ -146,11 +169,10 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             wait_time,
                             e.state_payload or {},
                         )
-                        from apps.chat.redis_queue import enqueue_message
                         payload['_retry_count'] = next_retry
                         payload['_last_error'] = e.state_payload or {}
-                        await asyncio.sleep(wait_time)
-                        enqueue_message(REDIS_QUEUE_SEND_MESSAGE, payload)
+                        _schedule_requeue(REDIS_QUEUE_SEND_MESSAGE, payload, delay_seconds=wait_time)
+                        update_worker_heartbeat('send_message', worker_id)
                     except Exception as e:
                         # ✅ CORREÇÃO CRÍTICA: Dead-Letter Queue
                         retry_count += 1
@@ -175,10 +197,9 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                                 retry_count,
                                 MAX_RETRIES
                             )
-                            from apps.chat.redis_queue import enqueue_message
                             payload['_retry_count'] = retry_count
-                            enqueue_message(REDIS_QUEUE_SEND_MESSAGE, payload)
-                            await asyncio.sleep(1)  # Delay antes de processar próxima mensagem
+                            _schedule_requeue(REDIS_QUEUE_SEND_MESSAGE, payload, delay_seconds=1)
+                            update_worker_heartbeat('send_message', worker_id)
                 else:
                     # Timeout (fila vazia), continuar loop - normal
                     await asyncio.sleep(0.1)
@@ -232,10 +253,8 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             )
                         else:
                             logger.warning(f"⚠️ [REDIS CONSUMER] fetch_profile_pic falhou (tentativa {retry_count}/{MAX_RETRIES}), re-enfileirando...")
-                            from apps.chat.redis_queue import enqueue_message
                             payload['_retry_count'] = retry_count
-                            enqueue_message(REDIS_QUEUE_FETCH_PROFILE_PIC, payload)
-                            await asyncio.sleep(1)
+                            _schedule_requeue(REDIS_QUEUE_FETCH_PROFILE_PIC, payload, delay_seconds=1)
                 else:
                     await asyncio.sleep(0.1)
                 
@@ -292,10 +311,8 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             )
                         else:
                             logger.warning(f"⚠️ [REDIS CONSUMER] fetch_group_info falhou (tentativa {retry_count}/{MAX_RETRIES}), re-enfileirando...")
-                            from apps.chat.redis_queue import enqueue_message
                             payload['_retry_count'] = retry_count
-                            enqueue_message(REDIS_QUEUE_FETCH_GROUP_INFO, payload)
-                            await asyncio.sleep(1)
+                            _schedule_requeue(REDIS_QUEUE_FETCH_GROUP_INFO, payload, delay_seconds=1)
                 else:
                     await asyncio.sleep(0.1)
                 
@@ -358,11 +375,9 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             wait_time,
                             e.state_payload or {},
                         )
-                        from apps.chat.redis_queue import enqueue_message
                         payload['_retry_count'] = next_retry
                         payload['_last_error'] = e.state_payload or {}
-                        await asyncio.sleep(wait_time)
-                        enqueue_message(REDIS_QUEUE_MARK_AS_READ, payload)
+                        _schedule_requeue(REDIS_QUEUE_MARK_AS_READ, payload, delay_seconds=wait_time)
                     except Exception as e:
                         retry_count += 1
                         if retry_count >= MAX_RETRIES:
@@ -384,10 +399,8 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                                 retry_count,
                                 MAX_RETRIES
                             )
-                            from apps.chat.redis_queue import enqueue_message
                             payload['_retry_count'] = retry_count
-                            enqueue_message(REDIS_QUEUE_MARK_AS_READ, payload)
-                            await asyncio.sleep(1)
+                            _schedule_requeue(REDIS_QUEUE_MARK_AS_READ, payload, delay_seconds=1)
                 else:
                     await asyncio.sleep(0.1)
             

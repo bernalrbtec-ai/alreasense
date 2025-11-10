@@ -580,6 +580,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 'message_id': str(message.id),
                                 'conversation_id': str(conversation.id),
                                 'mediatype': 'audio' if is_audio else mediatype,
+                                'status_code': response.status_code,
                             }
                         )
                         logger.info(f"📥 [CHAT] Resposta Evolution API:")
@@ -615,6 +616,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     'conversation_id': str(conversation.id),
                                     'mediatype': 'audio',
                                     'fallback': True,
+                                    'status_code': fb_resp.status_code,
                                 }
                             )
                             logger.info("📥 [CHAT] Resposta Evolution API (fallback): %s", fb_resp.status_code)
@@ -690,6 +692,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         'message_id': str(message.id),
                         'conversation_id': str(conversation.id),
                         'has_attachments': bool(attachment_urls),
+                        'status_code': response.status_code,
                     }
                 )
                 
