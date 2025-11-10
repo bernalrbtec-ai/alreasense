@@ -413,6 +413,16 @@ LOGGING = {
             'level': config('LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
+        'django.server': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
         'alrea_sense': {
             'handlers': ['console'],
             'level': config('LOG_LEVEL', default='INFO'),
@@ -422,6 +432,21 @@ LOGGING = {
         'apps.chat': {
             'handlers': ['console'],
             'level': config('CHAT_LOG_LEVEL', default='WARNING'),  # WARNING em prod, INFO em dev
+            'propagate': False,
+        },
+        'flow.chat.send': {
+            'handlers': ['console'],
+            'level': config('CHAT_LOG_LEVEL', default='INFO'),
+            'propagate': False,
+        },
+        'flow.chat.read': {
+            'handlers': ['console'],
+            'level': config('CHAT_LOG_LEVEL', default='INFO'),
+            'propagate': False,
+        },
+        'flow.chat.media': {
+            'handlers': ['console'],
+            'level': config('CHAT_LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
     },

@@ -16,10 +16,12 @@ from apps.chat.utils.s3 import (
     generate_media_path,
     get_public_url
 )
+from apps.chat.utils.instance_state import should_defer_instance, InstanceTemporarilyUnavailable, compute_backoff
 # ✅ Import image_processing apenas para profile_pic (foto de perfil ainda precisa processar)
 from apps.chat.utils.image_processing import process_image, is_valid_image
 
 logger = logging.getLogger(__name__)
+media_logger = logging.getLogger("flow.chat.media")
 
 
 async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance_name: str, api_key: str, base_url: str):
@@ -240,7 +242,8 @@ async def handle_process_incoming_media(
     api_key: str = None,
     evolution_api_url: str = None,
     decrypted_bytes: bytes = None,
-    message_key: dict = None
+    message_key: dict = None,
+    retry_count: int = 0,
 ):
     """
     Handler: Processa mídia recebida do WhatsApp.
@@ -267,15 +270,25 @@ async def handle_process_incoming_media(
     """
     from apps.chat.models import Message, MessageAttachment
     
-    logger.info(f"📦 [INCOMING MEDIA] Processando: {media_type}")
-    logger.info(f"   🔗 [INCOMING MEDIA] URL WhatsApp (original): {media_url}")
-    logger.info(f"   📌 [INCOMING MEDIA] message_id: {message_id}")
-    logger.info(f"   📌 [INCOMING MEDIA] tenant_id: {tenant_id}")
-    logger.info(f"   📌 [INCOMING MEDIA] instance_name: {instance_name}")
-    logger.info(f"   📌 [INCOMING MEDIA] api_key: {'Configurada' if api_key else 'Não configurada'}")
-    logger.info(f"   📌 [INCOMING MEDIA] evolution_api_url: {evolution_api_url}")
-    logger.info(f"   📌 [INCOMING MEDIA] message_key: {message_key}")
-    logger.info(f"   📌 [INCOMING MEDIA] decrypted_bytes: {'Presente' if decrypted_bytes else 'Não presente'}")
+    log = media_logger
+
+    log.info("📦 [INCOMING MEDIA] Processando %s | message_id=%s tenant=%s retry=%s", media_type, message_id, tenant_id, retry_count)
+    log.debug("   🔗 URL original: %s", (media_url or '')[:200])
+    log.debug("   📌 instance_name=%s api_key=%s evolution_api_url=%s", instance_name, bool(api_key), evolution_api_url)
+    log.debug("   📌 message_key=%s decrypted_bytes=%s", message_key, bool(decrypted_bytes))
+
+    if instance_name:
+        defer, state_info = should_defer_instance(instance_name)
+        if defer:
+            wait_seconds = compute_backoff(retry_count)
+            log.warning(
+                "⏳ [INCOMING MEDIA] Instância %s em estado %s (age=%.2fs). Reagendando em %ss.",
+                instance_name,
+                (state_info.state if state_info else 'unknown'),
+                (state_info.age if state_info else -1),
+                wait_seconds,
+            )
+            raise InstanceTemporarilyUnavailable(instance_name, (state_info.raw if state_info else {}), wait_seconds)
     
     # ✅ REFATORAÇÃO: Priorizar base64 quando message_key disponível (mais confiável)
     # Base64 é sempre descriptografado e não depende do MongoDB estar atualizado

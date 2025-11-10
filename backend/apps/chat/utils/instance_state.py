@@ -14,6 +14,7 @@ from django.utils import timezone
 CACHE_KEY = "chat:instance_state:{instance_name}"
 STATE_TTL_SECONDS = 180  # 3 minutos
 STALE_AFTER_SECONDS = 30  # Se não atualizar nesse período, considerar stale
+MAX_BACKOFF_SECONDS = 30
 
 
 @dataclass
@@ -95,4 +96,32 @@ def should_defer_instance(instance_name: str) -> Tuple[bool, Optional[InstanceSt
         return False, state
 
     return True, state
+
+
+class InstanceTemporarilyUnavailable(Exception):
+    """
+    Exceção usada quando a instância Evolution não está pronta para receber chamadas
+    (ex: state = connecting / close). Inclui payload do estado atual para logs.
+    """
+
+    def __init__(self, instance_name: str, state_payload: Optional[dict] = None, wait_seconds: Optional[int] = None):
+        self.instance_name = instance_name
+        self.state_payload = state_payload or {}
+        self.wait_seconds = wait_seconds
+        message = (
+            f"Instância '{instance_name}' indisponível. "
+            f"Estado atual: {self.state_payload}. "
+            f"Aguardar ~{wait_seconds}s antes de tentar novamente." if wait_seconds else
+            f"Instância '{instance_name}' indisponível. Estado atual: {self.state_payload}."
+        )
+        super().__init__(message)
+
+
+def compute_backoff(retry_count: int, base: int = 2, max_seconds: int = MAX_BACKOFF_SECONDS) -> int:
+    """
+    Calcula tempo (segundos) para aguardar antes de tentar novamente,
+    usando backoff exponencial limitado.
+    """
+    wait = base ** max(0, retry_count)
+    return min(wait, max_seconds)
 

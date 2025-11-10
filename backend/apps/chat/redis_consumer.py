@@ -21,6 +21,7 @@ from apps.chat.tasks import (
     handle_mark_message_as_read,
     InstanceTemporarilyUnavailable
 )
+from apps.chat.utils.instance_state import compute_backoff
 from apps.chat.media_tasks import handle_fetch_group_info
 
 logger = logging.getLogger(__name__)
@@ -90,18 +91,20 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                     
                     try:
                         # Processar mensagem
-                        await handle_send_message(message_id)
+                        await handle_send_message(message_id, retry_count=retry_count)
                         logger.info(f"✅ [REDIS CONSUMER] send_message concluída: {message_id}")
                     except InstanceTemporarilyUnavailable as e:
-                        wait_time = min(2 ** retry_count, 30)
+                        wait_time = e.wait_seconds or compute_backoff(retry_count)
+                        next_retry = retry_count + 1
                         logger.warning(
                             "⏳ [REDIS CONSUMER] Instância indisponível para send_message (id=%s). Reagendando em %ss. Detalhes: %s",
                             message_id,
                             wait_time,
-                            str(e),
+                            e.state_payload or {},
                         )
                         from apps.chat.redis_queue import enqueue_message
-                        payload['_retry_count'] = retry_count  # não incrementa, apenas reaplica backoff
+                        payload['_retry_count'] = next_retry
+                        payload['_last_error'] = e.state_payload or {}
                         await asyncio.sleep(wait_time)
                         enqueue_message(REDIS_QUEUE_SEND_MESSAGE, payload)
                     except Exception as e:
@@ -285,23 +288,25 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                     )
                     
                     try:
-                        await handle_mark_message_as_read(conversation_id, message_id)
+                        await handle_mark_message_as_read(conversation_id, message_id, retry_count=retry_count)
                         logger.info(
                             "✅ [REDIS CONSUMER] mark_as_read concluída: message=%s conversation=%s",
                             message_id,
                             conversation_id
                         )
                     except InstanceTemporarilyUnavailable as e:
-                        wait_time = min(2 ** retry_count, 20)
+                        wait_time = e.wait_seconds or compute_backoff(retry_count)
+                        next_retry = retry_count + 1
                         logger.warning(
-                            "⏳ [REDIS CONSUMER] Instância indisponível para mark_as_read (message=%s conversation=%s). Reagendando em %ss. Detalhes: %s",
+                            "⏳ [REDIS CONSUMER] Instância indisponível para mark_as_read (message=%s conversation=%s). Reagendando em %ss. Estado: %s",
                             message_id,
                             conversation_id,
                             wait_time,
-                            str(e),
+                            e.state_payload or {},
                         )
                         from apps.chat.redis_queue import enqueue_message
-                        payload['_retry_count'] = retry_count
+                        payload['_retry_count'] = next_retry
+                        payload['_last_error'] = e.state_payload or {}
                         await asyncio.sleep(wait_time)
                         enqueue_message(REDIS_QUEUE_MARK_AS_READ, payload)
                     except Exception as e:

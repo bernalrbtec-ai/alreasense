@@ -29,8 +29,15 @@ from typing import Optional
 from django.conf import settings
 from django.core.cache import cache
 from apps.chat.webhooks import send_read_receipt
+from apps.chat.utils.instance_state import (
+    should_defer_instance,
+    InstanceTemporarilyUnavailable,
+    compute_backoff,
+)
 
 logger = logging.getLogger(__name__)
+send_logger = logging.getLogger("flow.chat.send")
+read_logger = logging.getLogger("flow.chat.read")
 
 # Nome das filas
 QUEUE_SEND_MESSAGE = 'chat_send_message'
@@ -40,19 +47,6 @@ QUEUE_FETCH_PROFILE_PIC = 'chat_fetch_profile_pic'
 QUEUE_PROCESS_INCOMING_MEDIA = 'chat_process_incoming_media'
 QUEUE_PROCESS_UPLOADED_FILE = 'chat_process_uploaded_file'
 QUEUE_FETCH_GROUP_INFO = 'chat_fetch_group_info'  # ✅ NOVO: Busca informações de grupo de forma assíncrona
-
-
-class InstanceTemporarilyUnavailable(Exception):
-    """
-    Exceção usada para indicar que a instância Evolution não está pronta
-    para receber chamadas (state != open).
-    """
-
-    def __init__(self, instance_name: str, state_payload: Optional[dict] = None):
-        message = f"Instância '{instance_name}' indisponível - estado atual: {state_payload}"
-        super().__init__(message)
-        self.instance_name = instance_name
-        self.state_payload = state_payload or {}
 
 
 def _mask_digits(value: str) -> str:
@@ -272,7 +266,7 @@ def enqueue_mark_as_read(conversation_id: str, message_id: str):
 
 # ========== CONSUMER HANDLERS ==========
 
-async def handle_send_message(message_id: str):
+async def handle_send_message(message_id: str, retry_count: int = 0):
     """
     Handler: Envia mensagem via Evolution API.
     
@@ -290,9 +284,10 @@ async def handle_send_message(message_id: str):
     from asgiref.sync import sync_to_async
     import httpx
     
-    logger.info(f"📤 [CHAT ENVIO] Iniciando envio de mensagem...")
-    logger.info(f"   Message ID: {message_id}")
-    
+    send_logger.info("📤 [CHAT ENVIO] Iniciando envio | message_id=%s retry=%s", message_id, retry_count)
+
+    log = send_logger
+
     try:
         # Busca mensagem com todos os relacionamentos necessários para serialização
         message = await sync_to_async(
@@ -307,20 +302,22 @@ async def handle_send_message(message_id: str):
             ).get
         )(id=message_id)
         
-        logger.info(f"✅ [CHAT ENVIO] Mensagem encontrada no banco")
-        logger.info(f"   Conversa: {message.conversation.contact_phone}")
-        logger.info(f"   Tenant: {message.conversation.tenant.name}")
-        logger.info(f"   Content: {message.content[:50]}...")
+        log.debug(
+            "✅ Mensagem carregada | conversation=%s tenant=%s content_preview=%s",
+            message.conversation.contact_phone,
+            message.conversation.tenant.name,
+            (message.content or '')[:50],
+        )
         
         # Se for nota interna, não envia
         if message.is_internal:
             message.status = 'sent'
             await sync_to_async(message.save)(update_fields=['status'])
-            logger.info(f"📝 [CHAT ENVIO] Nota interna criada (não enviada ao WhatsApp)")
+            log.info("📝 Nota interna criada (não enviada ao WhatsApp)")
             return
         
         # Busca instância WhatsApp ativa do tenant (mesmo modelo das campanhas)
-        logger.info(f"🔍 [CHAT ENVIO] Buscando instância WhatsApp ativa...")
+        log.debug("🔍 Buscando instância WhatsApp ativa...")
         
         instance = await sync_to_async(
             WhatsAppInstance.objects.filter(
@@ -333,30 +330,36 @@ async def handle_send_message(message_id: str):
             message.status = 'failed'
             message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
             await sync_to_async(message.save)(update_fields=['status', 'error_message'])
-            logger.error(f"❌ [CHAT ENVIO] Nenhuma instância WhatsApp ativa!")
-            logger.error(f"   Tenant: {message.conversation.tenant.name}")
+            log.error("❌ Nenhuma instância WhatsApp ativa | tenant=%s", message.conversation.tenant.name)
             return
         
-        logger.info("✅ [CHAT ENVIO] Instância encontrada | nome=%s uuid=%s", instance.friendly_name, instance.instance_name)
-        logger.info("   API URL: %s", instance.api_url)
-        logger.info("   API Key: %s", f"{instance.api_key[:10]}..." if instance.api_key else "⚠️ NONE")
+        log.debug(
+            "✅ Instância ativa | nome=%s uuid=%s api_url=%s",
+            instance.friendly_name,
+            instance.instance_name,
+            instance.api_url,
+        )
 
         defer, state_info = should_defer_instance(instance.instance_name)
         if defer:
-            logger.warning(
-                "⏳ [CHAT ENVIO] Instância %s em estado %s (age=%.2fs). Reagendando envio.",
+            wait_seconds = compute_backoff(retry_count)
+            log.warning(
+                "⏳ [CHAT ENVIO] Instância %s em estado %s (age=%.2fs). Reagendando em %ss.",
                 instance.instance_name,
                 (state_info.state if state_info else 'unknown'),
                 (state_info.age if state_info else -1),
+                wait_seconds,
             )
-            raise InstanceTemporarilyUnavailable(instance.instance_name, (state_info.raw if state_info else {}))
+            raise InstanceTemporarilyUnavailable(instance.instance_name, (state_info.raw if state_info else {}), wait_seconds)
 
         if instance.connection_state and instance.connection_state not in ('open', 'connected', 'active'):
-            logger.warning(
-                "⏳ [CHAT ENVIO] connection_state do modelo é %s. Reagendando envio.",
+            wait_seconds = compute_backoff(retry_count)
+            log.warning(
+                "⏳ [CHAT ENVIO] connection_state=%s. Reagendando em %ss.",
                 instance.connection_state,
+                wait_seconds,
             )
-            raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': instance.connection_state})
+            raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': instance.connection_state}, wait_seconds)
         
         # Prepara dados
         conversation = message.conversation
@@ -819,7 +822,7 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
         logger.error(f"❌ [PROFILE PIC] Erro ao buscar foto: {e}", exc_info=True)
 
 
-async def handle_mark_message_as_read(conversation_id: str, message_id: str):
+async def handle_mark_message_as_read(conversation_id: str, message_id: str, retry_count: int = 0):
     """
     Handler: Envia read receipt para mensagens em background.
     """
@@ -831,7 +834,7 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str):
             Message.objects.select_related('conversation', 'conversation__tenant').get
         )(id=message_id, conversation_id=conversation_id)
     except Message.DoesNotExist:
-        logger.warning(
+        read_logger.warning(
             "⚠️ [READ RECEIPT WORKER] Mensagem não encontrada (message_id=%s, conversation_id=%s)",
             message_id,
             conversation_id
@@ -839,13 +842,13 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str):
         return
 
     if not message.message_id:
-        logger.warning(
+        read_logger.warning(
             "⚠️ [READ RECEIPT WORKER] Mensagem sem message_id da Evolution, pulando (message_id=%s)",
             message_id
         )
         return
 
-    logger.info(
+    read_logger.info(
         "📖 [READ RECEIPT] Processando message=%s conversation=%s",
         message_id,
         conversation_id,
@@ -870,20 +873,24 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str):
     if wa_instance:
         defer, state_info = should_defer_instance(wa_instance.instance_name)
         if defer:
-            logger.warning(
-                "⏳ [READ RECEIPT] Instância %s em estado %s (age=%.2fs). Read receipt reagendado.",
+            wait_seconds = compute_backoff(retry_count)
+            read_logger.warning(
+                "⏳ [READ RECEIPT] Instância %s em estado %s (age=%.2fs). Reagendando em %ss.",
                 wa_instance.instance_name,
                 (state_info.state if state_info else 'unknown'),
                 (state_info.age if state_info else -1),
+                wait_seconds,
             )
-            raise InstanceTemporarilyUnavailable(wa_instance.instance_name, (state_info.raw if state_info else {}))
+            raise InstanceTemporarilyUnavailable(wa_instance.instance_name, (state_info.raw if state_info else {}), wait_seconds)
 
         if wa_instance.connection_state and wa_instance.connection_state not in ('open', 'connected', 'active'):
-            logger.warning(
-                "⏳ [READ RECEIPT] connection_state=%s no modelo. Reagendando.",
+            wait_seconds = compute_backoff(retry_count)
+            read_logger.warning(
+                "⏳ [READ RECEIPT] connection_state=%s no modelo. Reagendando em %ss.",
                 wa_instance.connection_state,
+                wait_seconds,
             )
-            raise InstanceTemporarilyUnavailable(wa_instance.instance_name, {'state': wa_instance.connection_state})
+            raise InstanceTemporarilyUnavailable(wa_instance.instance_name, {'state': wa_instance.connection_state}, wait_seconds)
 
     sent = await sync_to_async(send_read_receipt)(
         message.conversation,
@@ -892,7 +899,7 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str):
     )
 
     if not sent:
-        logger.warning(
+        read_logger.warning(
             "⚠️ [READ RECEIPT WORKER] Read receipt não enviado (message_id=%s, conversation_id=%s)",
             message_id,
             conversation_id
@@ -1003,6 +1010,7 @@ async def start_chat_consumers():
                     message_key_from_payload = payload.get('message_key')
                     if message_key_from_payload:
                         logger.info(f"   ✅ [CHAT CONSUMER] message_key recebido: id={message_key_from_payload.get('id')}, remoteJid={message_key_from_payload.get('remoteJid')}")
+                    retry_count = payload.get('_retry_count', 0)
                     await handle_process_incoming_media(
                         tenant_id=payload['tenant_id'],
                         message_id=payload['message_id'],
@@ -1011,9 +1019,29 @@ async def start_chat_consumers():
                         instance_name=payload.get('instance_name'),
                         api_key=payload.get('api_key'),
                         evolution_api_url=payload.get('evolution_api_url'),
-                        message_key=message_key_from_payload
+                        message_key=message_key_from_payload,
+                        retry_count=retry_count,
                     )
                     logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
+                except InstanceTemporarilyUnavailable as e:
+                    wait_time = e.wait_seconds or compute_backoff(payload.get('_retry_count', 0))
+                    next_retry = payload.get('_retry_count', 0) + 1
+                    logger.warning(
+                        "⏳ [CHAT CONSUMER] Instância indisponível para process_incoming_media (message=%s). Reagendando em %ss. Estado: %s",
+                        payload.get('message_id'),
+                        wait_time,
+                        e.state_payload or {},
+                    )
+                    payload['_retry_count'] = next_retry
+                    payload['_last_error'] = e.state_payload or {}
+                    await asyncio.sleep(wait_time)
+                    await queue_process_incoming_media.channel.default_exchange.publish(
+                        aio_pika.Message(
+                            body=json.dumps(payload).encode(),
+                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                        ),
+                        routing_key=queue_process_incoming_media.name,
+                    )
                 except Exception as e:
                     logger.error(f"❌ [CHAT CONSUMER] Erro process_incoming_media: {e}", exc_info=True)
                     raise  # ✅ Re-raise para não silenciar erro
