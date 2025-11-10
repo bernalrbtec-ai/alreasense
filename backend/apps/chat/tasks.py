@@ -365,21 +365,23 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         conversation = message.conversation
         
         def get_recipient():
-            """Retorna tuple (field, value, masked) conforme tipo da conversa."""
+            """Retorna número formatado (E.164 ou group jid) e versão mascarada."""
             if conversation.conversation_type == 'group':
                 group_id = (conversation.group_metadata or {}).get('group_id') or conversation.contact_phone
                 group_id = (group_id or '').strip()
                 if group_id.endswith('@s.whatsapp.net'):
                     group_id = group_id.replace('@s.whatsapp.net', '@g.us')
-                return 'groupId', group_id, _mask_remote_jid(group_id)
+                if not group_id.endswith('@g.us'):
+                    group_id = f"{group_id.rstrip('@')}@g.us"
+                return group_id, _mask_remote_jid(group_id)
             # individuais
             phone_number = (conversation.contact_phone or '').strip()
             phone_number = phone_number.replace('@s.whatsapp.net', '')
             if not phone_number.startswith('+'):
                 phone_number = f'+{phone_number.lstrip("+")}'
-            return 'number', phone_number, _mask_remote_jid(phone_number)
+            return phone_number, _mask_remote_jid(phone_number)
 
-        recipient_field, recipient_value, masked_recipient = get_recipient()
+        recipient_value, masked_recipient = get_recipient()
         phone = recipient_value
         
         content = message.content
@@ -462,14 +464,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         # TESTADO E FUNCIONANDO: {number, audio, delay, linkPreview: false}
                         # ✅ CACHE STRATEGY: Redis 7 dias + S3 30 dias via /media/{hash}
                         payload = {
-                            recipient_field: recipient_value,
+                            'number': recipient_value,
                             'audio': final_url,   # URL CURTA! (/media/{hash})
                             'delay': 1200,        # Delay opcional
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
                         }
                         
                         logger.info("🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
-                        logger.info("   Destinatário: %s (%s)", masked_recipient, recipient_field)
+                        logger.info("   Destinatário: %s", masked_recipient)
                         logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                     else:
                         # 📎 OUTROS TIPOS: Usar sendMedia normal
@@ -484,7 +486,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         # Estrutura correta: direto no root
                         # ✅ USAR SHORT_URL (já configurado acima)
                         payload = {
-                            recipient_field: recipient_value,
+                            'number': recipient_value,
                             'media': final_url,      # URL CURTA! (/media/{hash})
                             'mediatype': mediatype,  # lowercase!
                             'fileName': filename     # Nome do arquivo
@@ -502,7 +504,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
 
                     logger.info("🔍 [CHAT] Enviando mídia para Evolution API:")
                     logger.info("   Endpoint: %s", endpoint)
-                    logger.info("   Destinatário: %s (%s)", masked_recipient, recipient_field)
+                    logger.info("   Destinatário: %s", masked_recipient)
                     logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
 
                     try:
@@ -520,7 +522,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         if is_audio and e.response is not None and e.response.status_code == 404:
                             fb_endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
                             fb_payload = {
-                                recipient_field: recipient_value,
+                                'number': recipient_value,
                                 'media': final_url,
                                 'mediatype': 'audio',
                                 'fileName': filename,
@@ -575,7 +577,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 # 🔍 PARA GRUPOS: não formatar (já vem como "120363...@g.us")
                 # Para contatos individuais: adicionar + se não tiver
                 payload = {
-                    recipient_field: recipient_value,
+                    'number': recipient_value,
                     'text': content,
                     'instance': instance.instance_name
                 }
@@ -583,7 +585,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   Tipo: {conversation.conversation_type}")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                logger.info("   Destinatário: %s (%s)", masked_recipient, recipient_field)
+                logger.info("   Destinatário: %s", masked_recipient)
                 logger.info("   Text: %s", _truncate_text(content))
                 logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                 
