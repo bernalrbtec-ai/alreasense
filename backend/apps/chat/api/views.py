@@ -3,6 +3,7 @@ Views para o módulo Flow Chat.
 Integra com permissões multi-tenant e departamentos.
 """
 import logging
+import os
 from datetime import datetime
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
@@ -27,7 +28,7 @@ from apps.authn.permissions import CanAccessChat
 from apps.authn.mixins import DepartmentFilterMixin
 from apps.notifications.models import WhatsAppInstance
 from apps.connections.models import EvolutionConnection
-from apps.chat.utils.metrics import get_metrics, record_latency, record_error
+from apps.chat.utils.metrics import get_metrics, get_worker_status, record_latency, record_error
 from apps.chat.redis_queue import get_queue_metrics
 
 
@@ -1446,9 +1447,18 @@ def chat_metrics_overview(request):
     """
     Retorna snapshot das filas Redis e métricas de integração com a Evolution.
     """
+    worker_status = get_worker_status()
+    configured_workers = {
+        'send_message': max(1, int(os.getenv('CHAT_SEND_MESSAGE_WORKERS', '3'))),
+    }
+
     return Response({
         'queues': get_queue_metrics(),
         'latencies': get_metrics(),
+        'workers': {
+            'configured': configured_workers,
+            'status': worker_status,
+        },
         'timestamp': timezone.now().isoformat()
     })
 

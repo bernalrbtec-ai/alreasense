@@ -1,4 +1,4 @@
-""" 
+"""
 Redis Consumer para Flow Chat.
 
 Processa filas Redis do chat de forma assíncrona.
@@ -6,24 +6,30 @@ Performance: 10x mais rápido que RabbitMQ (2-6ms vs 15-65ms).
 """
 import asyncio
 import logging
-import redis
 import os
+import time
+
+import redis
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+
 from apps.chat.redis_queue import (
     dequeue_message,
     enqueue_dead_letter,
     REDIS_QUEUE_SEND_MESSAGE,
     REDIS_QUEUE_FETCH_PROFILE_PIC,
     REDIS_QUEUE_FETCH_GROUP_INFO,
-    REDIS_QUEUE_MARK_AS_READ
+    REDIS_QUEUE_MARK_AS_READ,
 )
 from apps.chat.tasks import (
     handle_send_message,
     handle_fetch_profile_pic,
     handle_mark_message_as_read,
-    InstanceTemporarilyUnavailable
+    InstanceTemporarilyUnavailable,
 )
 from apps.chat.utils.instance_state import compute_backoff
 from apps.chat.media_tasks import handle_fetch_group_info
+from apps.chat.utils.metrics import update_worker_heartbeat, record_latency
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +72,18 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
             logger.info("⏭️ [REDIS CONSUMER] Fila send_message não selecionada, ignorando.")
             return
         logger.info("📥 [REDIS CONSUMER] Consumer send_message iniciado (worker #%s)", worker_id)
-        
+
         backoff_delay = 1  # Delay inicial para backoff exponencial
-        
+        heartbeat_interval = 5.0
+        last_heartbeat = 0.0
+
         while True:
             try:
+                now_monotonic = time.monotonic()
+                if now_monotonic - last_heartbeat >= heartbeat_interval:
+                    update_worker_heartbeat('send_message', worker_id)
+                    last_heartbeat = now_monotonic
+
                 # ✅ CORREÇÃO: Tratar timeout vs erro de conexão
                 try:
                     payload = dequeue_message(REDIS_QUEUE_SEND_MESSAGE, timeout=5)
@@ -88,14 +101,32 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                 if payload:
                     message_id = payload.get('message_id')
                     retry_count = payload.get('_retry_count', 0)
-                    
+                    enqueued_at = payload.get('enqueued_at')
+
                     logger.info(
                         "📥 [REDIS CONSUMER] [worker=%s] Recebida task send_message: %s (tentativa %s)",
                         worker_id,
                         message_id,
                         retry_count + 1
                     )
-                    
+
+                    if enqueued_at:
+                        enqueued_dt = parse_datetime(enqueued_at)
+                        if enqueued_dt:
+                            if timezone.is_naive(enqueued_dt):
+                                enqueued_dt = timezone.make_aware(enqueued_dt, timezone.get_current_timezone())
+                            queue_wait = (timezone.now() - enqueued_dt).total_seconds()
+                            if queue_wait >= 0:
+                                record_latency(
+                                    'send_message_queue_wait',
+                                    queue_wait,
+                                    {
+                                        'message_id': message_id,
+                                        'worker_id': worker_id,
+                                        'retry': retry_count,
+                                    }
+                                )
+
                     try:
                         # Processar mensagem
                         await handle_send_message(message_id, retry_count=retry_count)
@@ -104,6 +135,7 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             worker_id,
                             message_id
                         )
+                        update_worker_heartbeat('send_message', worker_id)
                     except InstanceTemporarilyUnavailable as e:
                         wait_time = e.wait_seconds or compute_backoff(retry_count)
                         next_retry = retry_count + 1

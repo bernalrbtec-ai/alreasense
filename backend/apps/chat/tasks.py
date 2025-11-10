@@ -192,7 +192,10 @@ class send_message_to_evolution:
     @staticmethod
     def delay(message_id: str):
         """Enfileira mensagem para envio (Redis)."""
-        enqueue_message(REDIS_QUEUE_SEND_MESSAGE, {'message_id': message_id})
+        enqueue_message(REDIS_QUEUE_SEND_MESSAGE, {
+            'message_id': message_id,
+            'enqueued_at': timezone.now().isoformat(),
+        })
 
 
 # ❌ download_attachment e migrate_to_s3 REMOVIDOS
@@ -655,7 +658,6 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             await handle_duplicate_message_id(evolution_message_id)
                     
                     logger.info(f"✅ [CHAT] Mídia enviada: {message_id}")
-                    await asyncio.sleep(0.2)
             
             # Envia texto (se não tiver anexo ou como caption separado)
             if content and not attachment_urls:
