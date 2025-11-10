@@ -367,6 +367,33 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             )
             raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': instance.connection_state}, wait_seconds)
         
+        # Helper para tratar message_id duplicado
+        async def handle_duplicate_message_id(evolution_message_id: str):
+            metadata = message.metadata or {}
+            metadata['duplicate_message_id'] = evolution_message_id
+            existing_message = await sync_to_async(
+                Message.objects.filter(message_id=evolution_message_id).exclude(id=message.id).first
+            )()
+            if existing_message:
+                metadata['duplicate_of'] = str(existing_message.id)
+                new_status = existing_message.status
+                new_evolution_status = existing_message.evolution_status
+            else:
+                new_status = 'sent'
+                new_evolution_status = 'sent'
+            await sync_to_async(
+                Message.objects.filter(id=message.id).update
+            )(
+                status=new_status,
+                evolution_status=new_evolution_status,
+                message_id=None,
+                metadata=metadata,
+            )
+            message.status = new_status
+            message.evolution_status = new_evolution_status
+            message.message_id = None
+            message.metadata = metadata
+
         # Prepara dados
         conversation = message.conversation
         
@@ -599,31 +626,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             await sync_to_async(message.save)(update_fields=['message_id'])
                             logger.info(f"💾 [CHAT] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
                         except IntegrityError:
-                            # Já existe mensagem com mesmo message_id (provavelmente webhook criou antes)
                             logger.warning(
                                 "⚠️ [CHAT] message_id duplicado (%s). Reutilizando mensagem existente.",
                                 evolution_message_id
                             )
-                            existing_message = await sync_to_async(
-                                Message.objects.filter(message_id=evolution_message_id).exclude(id=message.id).first
-                            )()
-                            metadata = message.metadata or {}
-                            metadata['duplicate_message_id'] = evolution_message_id
-                            if existing_message:
-                                metadata['duplicate_of'] = str(existing_message.id)
-                                message.status = existing_message.status
-                                message.evolution_status = existing_message.evolution_status
-                            else:
-                                message.status = 'sent'
-                                message.evolution_status = 'sent'
-                            message.message_id = None
-                            message.metadata = metadata
-                            await sync_to_async(Message.objects.filter(id=message.id).update)(
-                                status=message.status,
-                                evolution_status=message.evolution_status,
-                                message_id=None,
-                                metadata=metadata,
-                            )
+                            await handle_duplicate_message_id(evolution_message_id)
                     
                     logger.info(f"✅ [CHAT] Mídia enviada: {message_id}")
                     await asyncio.sleep(0.2)
@@ -673,38 +680,19 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 
                 # ✅ FIX CRÍTICO: Salvar message_id IMEDIATAMENTE para evitar race condition
                 # O webhook pode chegar muito rápido (antes do save completo)
-                    if evolution_message_id:
-                        message.message_id = evolution_message_id
-                        try:
-                            # ✅ Salvar message_id ANTES de salvar status completo
-                            # Isso garante que webhook encontra a mensagem mesmo se chegar muito rápido
-                            await sync_to_async(message.save)(update_fields=['message_id'])
-                            logger.info(f"💾 [CHAT ENVIO] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
-                        except IntegrityError:
-                            logger.warning(
-                                "⚠️ [CHAT] message_id duplicado (%s) ao enviar texto. Reutilizando mensagem existente.",
-                                evolution_message_id
-                            )
-                            existing_message = await sync_to_async(
-                                Message.objects.filter(message_id=evolution_message_id).exclude(id=message.id).first
-                            )()
-                            metadata = message.metadata or {}
-                            metadata['duplicate_message_id'] = evolution_message_id
-                            if existing_message:
-                                metadata['duplicate_of'] = str(existing_message.id)
-                                message.status = existing_message.status
-                                message.evolution_status = existing_message.evolution_status
-                            else:
-                                message.status = 'sent'
-                                message.evolution_status = 'sent'
-                            message.message_id = None
-                            message.metadata = metadata
-                            await sync_to_async(Message.objects.filter(id=message.id).update)(
-                                status=message.status,
-                                evolution_status=message.evolution_status,
-                                message_id=None,
-                                metadata=metadata,
-                            )
+                if evolution_message_id:
+                    message.message_id = evolution_message_id
+                    try:
+                        # ✅ Salvar message_id ANTES de salvar status completo
+                        # Isso garante que webhook encontra a mensagem mesmo se chegar muito rápido
+                        await sync_to_async(message.save)(update_fields=['message_id'])
+                        logger.info(f"💾 [CHAT ENVIO] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
+                    except IntegrityError:
+                        logger.warning(
+                            "⚠️ [CHAT] message_id duplicado (%s) ao enviar texto. Reutilizando mensagem existente.",
+                            evolution_message_id
+                        )
+                        await handle_duplicate_message_id(evolution_message_id)
                 
                 logger.info(f"✅ [CHAT ENVIO] Mensagem enviada com sucesso!")
                 logger.info(f"   Message ID Evolution: {message.message_id}")
