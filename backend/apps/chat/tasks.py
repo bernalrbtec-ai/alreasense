@@ -42,6 +42,19 @@ QUEUE_PROCESS_UPLOADED_FILE = 'chat_process_uploaded_file'
 QUEUE_FETCH_GROUP_INFO = 'chat_fetch_group_info'  # ✅ NOVO: Busca informações de grupo de forma assíncrona
 
 
+class InstanceTemporarilyUnavailable(Exception):
+    """
+    Exceção usada para indicar que a instância Evolution não está pronta
+    para receber chamadas (state != open).
+    """
+
+    def __init__(self, instance_name: str, state_payload: Optional[dict] = None):
+        message = f"Instância '{instance_name}' indisponível - estado atual: {state_payload}"
+        super().__init__(message)
+        self.instance_name = instance_name
+        self.state_payload = state_payload or {}
+
+
 def _mask_digits(value: str) -> str:
     if not value or not isinstance(value, str):
         return value
@@ -105,6 +118,7 @@ from apps.chat.redis_queue import (
     REDIS_QUEUE_FETCH_GROUP_INFO,
     REDIS_QUEUE_MARK_AS_READ
 )
+from apps.chat.utils.instance_state import should_defer_instance
 
 # ❌ REMOVIDO: Função delay() RabbitMQ (substituída por Redis)
 # Mantida apenas para process_incoming_media (durabilidade crítica)
@@ -323,11 +337,26 @@ async def handle_send_message(message_id: str):
             logger.error(f"   Tenant: {message.conversation.tenant.name}")
             return
         
-        logger.info(f"✅ [CHAT ENVIO] Instância encontrada!")
-        logger.info(f"   Nome: {instance.friendly_name}")
-        logger.info(f"   UUID: {instance.instance_name}")
-        logger.info(f"   API URL: {instance.api_url}")
-        logger.info(f"   API Key: {instance.api_key[:10]}..." if instance.api_key else "   ⚠️ API Key: NONE")
+        logger.info("✅ [CHAT ENVIO] Instância encontrada | nome=%s uuid=%s", instance.friendly_name, instance.instance_name)
+        logger.info("   API URL: %s", instance.api_url)
+        logger.info("   API Key: %s", f"{instance.api_key[:10]}..." if instance.api_key else "⚠️ NONE")
+
+        defer, state_info = should_defer_instance(instance.instance_name)
+        if defer:
+            logger.warning(
+                "⏳ [CHAT ENVIO] Instância %s em estado %s (age=%.2fs). Reagendando envio.",
+                instance.instance_name,
+                (state_info.state if state_info else 'unknown'),
+                (state_info.age if state_info else -1),
+            )
+            raise InstanceTemporarilyUnavailable(instance.instance_name, (state_info.raw if state_info else {}))
+
+        if instance.connection_state and instance.connection_state not in ('open', 'connected', 'active'):
+            logger.warning(
+                "⏳ [CHAT ENVIO] connection_state do modelo é %s. Reagendando envio.",
+                instance.connection_state,
+            )
+            raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': instance.connection_state})
         
         # Prepara dados
         conversation = message.conversation
@@ -362,8 +391,7 @@ async def handle_send_message(message_id: str):
         else:
             logger.info(f"✍️ [CHAT ENVIO] Assinatura desabilitada pelo usuário")
         
-        logger.info(f"📱 [CHAT ENVIO] Telefone/Grupo: {phone}")
-        logger.info(f"   Tipo: {conversation.conversation_type}")
+        logger.info("📱 [CHAT ENVIO] Destino=%s | tipo=%s", phone, conversation.conversation_type)
         
         # Buscar attachments para obter mime_type
         attachments_list = []
@@ -817,12 +845,45 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str):
         )
         return
 
+    logger.info(
+        "📖 [READ RECEIPT] Processando message=%s conversation=%s",
+        message_id,
+        conversation_id,
+    )
+
     # Garantir status 'seen' no banco (caso ainda não atualizado)
     if message.status != 'seen':
         await sync_to_async(
             Message.objects.filter(id=message.id).update
         )(status='seen')
         message.status = 'seen'
+
+    from apps.notifications.models import WhatsAppInstance
+
+    wa_instance = await sync_to_async(
+        WhatsAppInstance.objects.filter(
+            tenant=message.conversation.tenant,
+            is_active=True
+        ).first
+    )()
+
+    if wa_instance:
+        defer, state_info = should_defer_instance(wa_instance.instance_name)
+        if defer:
+            logger.warning(
+                "⏳ [READ RECEIPT] Instância %s em estado %s (age=%.2fs). Read receipt reagendado.",
+                wa_instance.instance_name,
+                (state_info.state if state_info else 'unknown'),
+                (state_info.age if state_info else -1),
+            )
+            raise InstanceTemporarilyUnavailable(wa_instance.instance_name, (state_info.raw if state_info else {}))
+
+        if wa_instance.connection_state and wa_instance.connection_state not in ('open', 'connected', 'active'):
+            logger.warning(
+                "⏳ [READ RECEIPT] connection_state=%s no modelo. Reagendando.",
+                wa_instance.connection_state,
+            )
+            raise InstanceTemporarilyUnavailable(wa_instance.instance_name, {'state': wa_instance.connection_state})
 
     sent = await sync_to_async(send_read_receipt)(
         message.conversation,

@@ -5,6 +5,8 @@ log_info() {
   printf '%s %s\n' "[$(date -u +"%Y-%m-%dT%H:%M:%SZ")]" "$1"
 }
 
+export CHAT_DISABLE_ASGI_CONSUMERS=1
+
 log_info "Iniciando rotinas de preparação do backend"
 
 python fix_tenant_migration.py

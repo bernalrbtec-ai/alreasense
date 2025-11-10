@@ -18,7 +18,8 @@ from apps.chat.redis_queue import (
 from apps.chat.tasks import (
     handle_send_message,
     handle_fetch_profile_pic,
-    handle_mark_message_as_read
+    handle_mark_message_as_read,
+    InstanceTemporarilyUnavailable
 )
 from apps.chat.media_tasks import handle_fetch_group_info
 
@@ -91,6 +92,18 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                         # Processar mensagem
                         await handle_send_message(message_id)
                         logger.info(f"✅ [REDIS CONSUMER] send_message concluída: {message_id}")
+                    except InstanceTemporarilyUnavailable as e:
+                        wait_time = min(2 ** retry_count, 30)
+                        logger.warning(
+                            "⏳ [REDIS CONSUMER] Instância indisponível para send_message (id=%s). Reagendando em %ss. Detalhes: %s",
+                            message_id,
+                            wait_time,
+                            str(e),
+                        )
+                        from apps.chat.redis_queue import enqueue_message
+                        payload['_retry_count'] = retry_count  # não incrementa, apenas reaplica backoff
+                        await asyncio.sleep(wait_time)
+                        enqueue_message(REDIS_QUEUE_SEND_MESSAGE, payload)
                     except Exception as e:
                         # ✅ CORREÇÃO CRÍTICA: Dead-Letter Queue
                         retry_count += 1
@@ -278,6 +291,19 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                             message_id,
                             conversation_id
                         )
+                    except InstanceTemporarilyUnavailable as e:
+                        wait_time = min(2 ** retry_count, 20)
+                        logger.warning(
+                            "⏳ [REDIS CONSUMER] Instância indisponível para mark_as_read (message=%s conversation=%s). Reagendando em %ss. Detalhes: %s",
+                            message_id,
+                            conversation_id,
+                            wait_time,
+                            str(e),
+                        )
+                        from apps.chat.redis_queue import enqueue_message
+                        payload['_retry_count'] = retry_count
+                        await asyncio.sleep(wait_time)
+                        enqueue_message(REDIS_QUEUE_MARK_AS_READ, payload)
                     except Exception as e:
                         retry_count += 1
                         if retry_count >= MAX_RETRIES:

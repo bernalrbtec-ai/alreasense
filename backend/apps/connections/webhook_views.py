@@ -7,6 +7,8 @@ from django.views.decorators.http import require_http_methods
 from django.utils.decorators import method_decorator
 from django.views import View
 from django.utils import timezone
+
+from apps.chat.utils.instance_state import set_instance_state
 from datetime import datetime
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import permission_classes
@@ -927,8 +929,42 @@ class EvolutionWebhookView(APIView):
     def handle_connection_update(self, data):
         """Handle connection status updates."""
         try:
-            # TODO: Update connection status
-            logger.info(f"Connection update received: {data}")
+            instance_name = data.get('instance') or (data.get('data') or {}).get('instance')
+            payload = data.get('data') or {}
+            state = (payload.get('state') or '').lower()
+            status_reason = payload.get('statusReason')
+
+            if instance_name:
+                set_instance_state(instance_name, payload)
+
+            logger.info(
+                "🔄 [EVOLUTION] connection.update recebido | instance=%s state=%s status_reason=%s",
+                instance_name,
+                state or 'unknown',
+                status_reason,
+            )
+
+            if instance_name:
+                from apps.notifications.models import WhatsAppInstance
+
+                qs = WhatsAppInstance.objects.filter(instance_name=instance_name)
+                updates = {
+                    'last_check': timezone.now(),
+                }
+
+                if state == 'open':
+                    updates.update({'connection_state': 'open', 'status': 'active', 'last_error': ''})
+                elif state == 'connecting':
+                    updates.update({'connection_state': 'connecting', 'status': 'inactive'})
+                elif state:
+                    updates.update({'connection_state': state, 'status': 'inactive'})
+
+                if status_reason is not None:
+                    updates['last_error'] = f"status_reason={status_reason}"
+
+                if updates:
+                    qs.update(**updates)
+
             return Response({'status': 'success'})
         except Exception as e:
             logger.error(f"Error handling connection update: {str(e)}")

@@ -101,8 +101,9 @@ def start_redis_chat_consumer():
     except Exception as e:
         print(f"❌ [REDIS CHAT] Erro ao iniciar Redis Chat Consumer: {e}")
 
-# Iniciar consumers apenas se não estiver em DEBUG (produção)
-if not os.environ.get('DEBUG', 'False').lower() == 'true':
+# Iniciar consumers apenas se não estiver em DEBUG (produção) e não estiver desabilitado via env
+disable_consumers = os.environ.get('CHAT_DISABLE_ASGI_CONSUMERS', '').strip() == '1'
+if not disable_consumers and not os.environ.get('DEBUG', 'False').lower() == 'true':
     # Consumer de campanhas (RabbitMQ)
     consumer_thread = threading.Thread(target=start_rabbitmq_consumer, daemon=True)
     consumer_thread.start()
@@ -117,3 +118,5 @@ if not os.environ.get('DEBUG', 'False').lower() == 'true':
     redis_chat_thread = threading.Thread(target=start_redis_chat_consumer, daemon=True)
     redis_chat_thread.start()
     print("🧵 [REDIS CHAT] Thread do Redis Chat Consumer iniciada")
+elif disable_consumers:
+    print("⏸️ [ASGI] Auto-start de consumers desabilitado por CHAT_DISABLE_ASGI_CONSUMERS=1")
