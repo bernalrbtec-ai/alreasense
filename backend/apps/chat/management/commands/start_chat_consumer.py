@@ -4,7 +4,7 @@ Executar: python manage.py start_chat_consumer
 """
 import asyncio
 from django.core.management.base import BaseCommand
-from apps.chat.redis_consumer import start_redis_consumers
+from apps.chat.redis_consumer import start_redis_consumers, QUEUE_ALIASES
 
 
 class Command(BaseCommand):
@@ -21,14 +21,43 @@ class Command(BaseCommand):
     """
     
     help = 'Inicia consumers Redis para Flow Chat (10x mais rápido que RabbitMQ)'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--queues',
+            nargs='+',
+            help='Lista de filas para processar (send_message, mark_as_read, fetch_profile_pic, fetch_group_info)'
+        )
     
     def handle(self, *args, **options):
         """Executa consumer."""
-        self.stdout.write(self.style.SUCCESS('🚀 Iniciando consumer do Flow Chat (Redis)...'))
-        self.stdout.write(self.style.SUCCESS('✅ Processando: send_message, fetch_profile_pic, fetch_group_info'))
+        requested_queues = options.get('queues') or []
+        queue_filters = None
+
+        if requested_queues:
+            normalized = set()
+            invalid = []
+            for queue in requested_queues:
+                key = (queue or '').strip().lower()
+                if key in QUEUE_ALIASES:
+                    normalized.add(QUEUE_ALIASES[key])
+                elif key:
+                    invalid.append(queue)
+            if invalid:
+                self.stdout.write(self.style.WARNING(f'⚠️ Filas desconhecidas ignoradas: {", ".join(invalid)}'))
+            if normalized:
+                queue_filters = normalized
+                self.stdout.write(self.style.SUCCESS(
+                    f'🚀 Iniciando consumer do Flow Chat (Redis) filtrado: {", ".join(sorted(normalized))}'
+                ))
+            else:
+                self.stdout.write(self.style.WARNING('⚠️ Nenhuma fila válida informada, processando todas.'))
+        else:
+            self.stdout.write(self.style.SUCCESS('🚀 Iniciando consumer do Flow Chat (Redis)...'))
+            self.stdout.write(self.style.SUCCESS('✅ Processando: send_message, mark_as_read, fetch_profile_pic, fetch_group_info'))
         
         try:
-            asyncio.run(start_redis_consumers())
+            asyncio.run(start_redis_consumers(queue_filters))
         except KeyboardInterrupt:
             self.stdout.write(self.style.WARNING('\n⚠️ Consumer interrompido pelo usuário'))
         except Exception as e:

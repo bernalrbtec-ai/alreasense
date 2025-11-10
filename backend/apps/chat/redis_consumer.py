@@ -28,7 +28,15 @@ logger = logging.getLogger(__name__)
 MAX_RETRIES = 3  # Máximo de tentativas antes de mover para dead-letter
 
 
-async def start_redis_consumers():
+QUEUE_ALIASES = {
+    'send_message': 'send_message',
+    'fetch_profile_pic': 'fetch_profile_pic',
+    'fetch_group_info': 'fetch_group_info',
+    'mark_as_read': 'mark_as_read',
+}
+
+
+async def start_redis_consumers(queue_filters: set[str] | None = None):
     """
     Inicia consumers Redis para processar filas do chat.
     Roda em loop infinito processando mensagens.
@@ -39,11 +47,20 @@ async def start_redis_consumers():
     - fetch_group_info: Buscar info de grupo
     """
     logger.info("=" * 80)
-    logger.info("🚀 [REDIS CONSUMER] Iniciando consumers Redis do chat...")
+    if queue_filters:
+        logger.info("🚀 [REDIS CONSUMER] Iniciando consumers Redis do chat (filtrados: %s)...", ', '.join(sorted(queue_filters)))
+        normalized_filters = {QUEUE_ALIASES.get(q.lower(), q.lower()) for q in queue_filters}
+        queue_filters = normalized_filters
+    else:
+        logger.info("🚀 [REDIS CONSUMER] Iniciando consumers Redis do chat (todas as filas)...")
+        queue_filters = None
     logger.info("=" * 80)
     
     async def process_send_message():
         """Processa fila send_message com retry e dead-letter queue."""
+        if queue_filters and 'send_message' not in queue_filters:
+            logger.info("⏭️ [REDIS CONSUMER] Fila send_message não selecionada, ignorando.")
+            return
         logger.info("📥 [REDIS CONSUMER] Consumer send_message iniciado")
         
         backoff_delay = 1  # Delay inicial para backoff exponencial
@@ -103,6 +120,9 @@ async def start_redis_consumers():
     
     async def process_fetch_profile_pic():
         """Processa fila fetch_profile_pic com retry e dead-letter queue."""
+        if queue_filters and 'fetch_profile_pic' not in queue_filters:
+            logger.info("⏭️ [REDIS CONSUMER] Fila fetch_profile_pic não selecionada, ignorando.")
+            return
         logger.info("📥 [REDIS CONSUMER] Consumer fetch_profile_pic iniciado")
         
         backoff_delay = 1
@@ -155,6 +175,9 @@ async def start_redis_consumers():
     
     async def process_fetch_group_info():
         """Processa fila fetch_group_info com retry e dead-letter queue."""
+        if queue_filters and 'fetch_group_info' not in queue_filters:
+            logger.info("⏭️ [REDIS CONSUMER] Fila fetch_group_info não selecionada, ignorando.")
+            return
         logger.info("📥 [REDIS CONSUMER] Consumer fetch_group_info iniciado")
         
         backoff_delay = 1
@@ -212,6 +235,9 @@ async def start_redis_consumers():
     
     async def process_mark_as_read():
         """Processa fila mark_as_read com retry e dead-letter queue."""
+        if queue_filters and 'mark_as_read' not in queue_filters:
+            logger.info("⏭️ [REDIS CONSUMER] Fila mark_as_read não selecionada, ignorando.")
+            return
         logger.info("📥 [REDIS CONSUMER] Consumer mark_as_read iniciado")
         
         backoff_delay = 1
@@ -289,12 +315,21 @@ async def start_redis_consumers():
     logger.info("=" * 80)
     
     try:
-        await asyncio.gather(
-            process_send_message(),
-            process_fetch_profile_pic(),
-            process_fetch_group_info(),
-            process_mark_as_read()
-        )
+        consumers = []
+        if not queue_filters or 'send_message' in queue_filters:
+            consumers.append(process_send_message())
+        if not queue_filters or 'fetch_profile_pic' in queue_filters:
+            consumers.append(process_fetch_profile_pic())
+        if not queue_filters or 'fetch_group_info' in queue_filters:
+            consumers.append(process_fetch_group_info())
+        if not queue_filters or 'mark_as_read' in queue_filters:
+            consumers.append(process_mark_as_read())
+
+        if not consumers:
+            logger.warning("⚠️ [REDIS CONSUMER] Nenhuma fila ativa configurada. Nada a processar.")
+            return
+
+        await asyncio.gather(*consumers)
     except KeyboardInterrupt:
         logger.info("⚠️ [REDIS CONSUMER] Consumers interrompidos pelo usuário")
     except Exception as e:

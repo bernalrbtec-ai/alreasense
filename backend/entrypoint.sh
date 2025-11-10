@@ -16,15 +16,23 @@ python ensure_plan_table.py
 python seed_plans.py
 python check_user_permissions.py
 
-log_info "Inicializando consumer Redis do chat"
-python manage.py start_chat_consumer &
-CHAT_CONSUMER_PID=$!
+log_info "Inicializando consumer Redis crítico (send_message, mark_as_read)"
+python manage.py start_chat_consumer --queues send_message mark_as_read &
+CHAT_CONSUMER_CRITICAL_PID=$!
+
+log_info "Inicializando consumer Redis de I/O (fetch_profile_pic, fetch_group_info)"
+python manage.py start_chat_consumer --queues fetch_profile_pic fetch_group_info &
+CHAT_CONSUMER_IO_PID=$!
 
 terminate_processes() {
   log_info "Encerrando processos"
-  if ps -p "${CHAT_CONSUMER_PID}" >/dev/null 2>&1; then
-    kill -TERM "${CHAT_CONSUMER_PID}" >/dev/null 2>&1 || true
-    wait "${CHAT_CONSUMER_PID}" >/dev/null 2>&1 || true
+  if ps -p "${CHAT_CONSUMER_CRITICAL_PID}" >/dev/null 2>&1; then
+    kill -TERM "${CHAT_CONSUMER_CRITICAL_PID}" >/dev/null 2>&1 || true
+    wait "${CHAT_CONSUMER_CRITICAL_PID}" >/dev/null 2>&1 || true
+  fi
+  if ps -p "${CHAT_CONSUMER_IO_PID}" >/dev/null 2>&1; then
+    kill -TERM "${CHAT_CONSUMER_IO_PID}" >/dev/null 2>&1 || true
+    wait "${CHAT_CONSUMER_IO_PID}" >/dev/null 2>&1 || true
   fi
   if [[ -n "${DAPHNE_PID:-}" ]] && ps -p "${DAPHNE_PID}" >/dev/null 2>&1; then
     kill -TERM "${DAPHNE_PID}" >/dev/null 2>&1 || true
