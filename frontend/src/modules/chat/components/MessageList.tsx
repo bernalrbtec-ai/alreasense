@@ -35,10 +35,10 @@ export function MessageList() {
         setIsLoading(true);
         setVisibleMessages(new Set()); // Reset visibilidade ao trocar conversa
         
-        // ✅ PERFORMANCE: Paginação - carregar apenas últimas 50 mensagens
+        // ✅ PERFORMANCE: Paginação - carregar apenas últimas 15 mensagens
         const response = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
           params: { 
-            limit: 50,
+            limit: 15,
             offset: 0
           }
         });
@@ -95,9 +95,9 @@ export function MessageList() {
         setMessages(mergedMessages);
         
         // ✅ PERFORMANCE: Animar mensagens em batch (mais rápido)
-        // Reduzido delay de 20ms para 10ms e limita animação a 50 mensagens
+        // Reduzido delay de 20ms para 10ms e limita animação a 15 mensagens
         setTimeout(() => {
-          const messagesToAnimate = mergedMessages.slice(-50); // Apenas últimas 50 para não demorar muito
+          const messagesToAnimate = mergedMessages.slice(-15); // Apenas últimas 15 para não demorar muito
           messagesToAnimate.forEach((msg, index) => {
             setTimeout(() => {
               setVisibleMessages(prev => new Set([...prev, msg.id]));
@@ -105,8 +105,8 @@ export function MessageList() {
           });
           
           // Adicionar mensagens restantes imediatamente (sem animação)
-          if (mergedMessages.length > 50) {
-            const restMessages = mergedMessages.slice(0, -50);
+          if (mergedMessages.length > 15) {
+            const restMessages = mergedMessages.slice(0, -15);
             restMessages.forEach(msg => {
               setVisibleMessages(prev => new Set([...prev, msg.id]));
             });
@@ -137,7 +137,7 @@ export function MessageList() {
                   console.log(`🔄 [MessageList] Re-fetch #${index + 1} após ${delay}ms...`);
                   const retryResponse = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
                     params: { 
-                      limit: 50,
+                      limit: 15,
                       offset: 0
                     }
                   });
@@ -337,7 +337,7 @@ export function MessageList() {
                     const currentCount = messages.length;
                     const response = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
                       params: { 
-                        limit: 50,
+                        limit: 15,
                         offset: currentCount
                       }
                     });

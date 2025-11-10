@@ -391,8 +391,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         # ✅ CORREÇÃO: 404 é esperado se contato não tem foto de perfil
                         if response.status_code == 404:
                             logger.debug(f"ℹ️ [REFRESH CONTATO] Contato não tem foto de perfil (404) - normal")
-                        else:
-                            logger.warning(f"⚠️ [REFRESH CONTATO] Erro API: {response.status_code}")
+                    else:
+                        logger.warning(f"⚠️ [REFRESH CONTATO] Erro API: {response.status_code}")
             
             # Salvar alterações
             if update_fields:
@@ -718,7 +718,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         max_processing_time = 25.0  # 25 segundos máximo (deixar 5s para broadcast)
         
         with transaction.atomic():
-            for message in unread_messages:
+        for message in unread_messages:
                 # ✅ CORREÇÃO: Verificar timeout antes de processar próxima mensagem
                 elapsed_time = time.time() - start_time
                 if elapsed_time > max_processing_time:
@@ -729,15 +729,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     break
                 
                 try:
-                    # Enviar confirmação de leitura para Evolution API
+            # Enviar confirmação de leitura para Evolution API
                     # ✅ CORREÇÃO: send_read_receipt agora retorna bool e verifica connection_state
                     receipt_sent = send_read_receipt(conversation, message, max_retries=2)
-                    
+            
                     if receipt_sent:
                         # Atualizar status local apenas se read receipt foi enviado com sucesso
-                        message.status = 'seen'
-                        message.save(update_fields=['status'])
-                        marked_count += 1
+            message.status = 'seen'
+            message.save(update_fields=['status'])
+            marked_count += 1
                     else:
                         # ✅ CORREÇÃO: Se read receipt falhou (ex: instância desconectada),
                         # ainda marca como seen localmente para não ficar travado
@@ -1023,7 +1023,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation = self.get_object()
         
         # Paginação
-        limit = int(request.query_params.get('limit', 50))  # Default 50 mensagens
+        limit = int(request.query_params.get('limit', 15))  # Default 15 mensagens
         offset = int(request.query_params.get('offset', 0))
         
         # Contar total de mensagens (para paginação)
@@ -1620,7 +1620,7 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': 'Reação não encontrada'},
                 status=status.HTTP_404_NOT_FOUND
-            )
+        )
     
     def perform_create(self, serializer):
         """
