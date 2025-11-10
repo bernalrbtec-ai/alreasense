@@ -25,6 +25,11 @@ interface ChatState {
   setMessages: (messages: Message[]) => void;
   addMessage: (message: Message) => void;
   updateMessageStatus: (messageId: string, status: string) => void;
+  updateMessageReactions: (
+    messageId: string,
+    reactions: Message['reactions'],
+    summary: Message['reactions_summary']
+  ) => void;
   updateAttachment: (attachmentId: string, updates: Partial<Message['attachments'][number]>) => void;
 
   // Estado do chat
@@ -409,6 +414,51 @@ export const useChatStore = create<ChatState>((set) => ({
       m.id === messageId ? { ...m, status: status as any } : m
     )
   })),
+  updateMessageReactions: (messageId, reactions, summary) => set((state) => {
+    const updatedMessages = state.messages.map((m) =>
+      m.id === messageId
+        ? {
+            ...m,
+            reactions: reactions ? [...reactions] : [],
+            reactions_summary: summary ? { ...summary } : {},
+          }
+        : m
+    );
+
+    const updatedConversations = state.conversations.map((conversation) => {
+      if (conversation.last_message?.id === messageId) {
+        return {
+          ...conversation,
+          last_message: {
+            ...conversation.last_message,
+            reactions: reactions ? [...reactions] : [],
+            reactions_summary: summary ? { ...summary } : {},
+          },
+        };
+      }
+      return conversation;
+    });
+
+    const updatedActiveConversation =
+      state.activeConversation?.last_message?.id === messageId
+        ? {
+            ...state.activeConversation,
+            last_message: state.activeConversation.last_message
+              ? {
+                  ...state.activeConversation.last_message,
+                  reactions: reactions ? [...reactions] : [],
+                  reactions_summary: summary ? { ...summary } : {},
+                }
+              : state.activeConversation.last_message,
+          }
+        : state.activeConversation;
+
+    return {
+      messages: updatedMessages,
+      conversations: updatedConversations,
+      activeConversation: updatedActiveConversation,
+    };
+  }),
   updateAttachment: (attachmentId, updates) => set((state) => ({
     messages: state.messages.map(m => {
       if (!m.attachments || m.attachments.length === 0) return m;

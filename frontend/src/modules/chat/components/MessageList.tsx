@@ -16,8 +16,43 @@ import { useAuthStore } from '@/stores/authStore';
 import { MessageContextMenu } from './MessageContextMenu';
 import type { Message } from '../types';
 
+type ReactionsSummary = NonNullable<Message['reactions_summary']>;
+
+const cloneReactions = (reactions?: MessageReaction[] | null): MessageReaction[] =>
+  reactions
+    ? reactions.map((reaction) => ({
+        ...reaction,
+        user_data: reaction.user_data ? { ...reaction.user_data } : undefined,
+      }))
+    : [];
+
+const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSummary => {
+  return reactions.reduce((acc, reaction) => {
+    if (!acc[reaction.emoji]) {
+      acc[reaction.emoji] = { count: 0, users: [] };
+    }
+
+    acc[reaction.emoji].count += 1;
+    acc[reaction.emoji].users.push({
+      id: reaction.user,
+      email: reaction.user_data?.email || '',
+      first_name: reaction.user_data?.first_name,
+      last_name: reaction.user_data?.last_name,
+    });
+
+    return acc;
+  }, {} as ReactionsSummary);
+};
+
 export function MessageList() {
-  const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore();
+  const {
+    activeConversation,
+    messages,
+    setMessages,
+    typing,
+    typingUser,
+    updateMessageReactions,
+  } = useChatStore();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
@@ -554,30 +589,56 @@ const MessageReactions = React.memo(function MessageReactions({ message }: { mes
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
+    const currentStoreMessage = useChatStore
+      .getState()
+      .messages.find((m) => m.id === message.id);
+    const previousReactions = cloneReactions(currentStoreMessage?.reactions);
+    const optimisticReaction: MessageReaction = {
+      id: `optimistic-${user.id}-${emoji}-${Date.now()}`,
+      message: message.id,
+      user: String(user.id),
+      user_data: {
+        id: String(user.id),
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+      },
+      emoji,
+      created_at: new Date().toISOString(),
+    };
+
+    const optimisticReactions = [
+      ...previousReactions.filter(
+        (reaction) => !(reaction.user === String(user.id) && reaction.emoji === emoji)
+      ),
+      optimisticReaction,
+    ];
+
+    const optimisticSummary = buildSummaryFromReactions(optimisticReactions);
+
+    updateMessageReactions(message.id, optimisticReactions, optimisticSummary);
+
     try {
       const response = await api.post('/chat/reactions/add/', {
         message_id: message.id,
         emoji: emoji,
       });
-      
-      // Atualizar mensagem no store
-      const updatedMessages = messages.map((m) => {
-        if (m.id === message.id) {
-          // Buscar mensagem atualizada do servidor se necessário
-          // Por enquanto, atualizar localmente
-          return {
-            ...m,
-            reactions: m.reactions || [],
-            reactions_summary: response.data.message?.reactions_summary || m.reactions_summary,
-          };
-        }
-        return m;
-      });
-      
-      setMessages(updatedMessages);
+
+      if (response.data?.message) {
+        updateMessageReactions(
+          response.data.message.id,
+          cloneReactions(response.data.message.reactions),
+          response.data.message.reactions_summary || {}
+        );
+      }
       setShowEmojiPicker(false);
     } catch (error) {
       console.error('❌ Erro ao adicionar reação:', error);
+      updateMessageReactions(
+        message.id,
+        previousReactions,
+        buildSummaryFromReactions(previousReactions)
+      );
     } finally {
       setProcessingEmoji(null); // ✅ CORREÇÃO: Remover loading state
     }
@@ -589,46 +650,30 @@ const MessageReactions = React.memo(function MessageReactions({ message }: { mes
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
+    const currentStoreMessage = useChatStore
+      .getState()
+      .messages.find((m) => m.id === message.id);
+    const previousReactions = cloneReactions(currentStoreMessage?.reactions);
+
+    const optimisticReactions = previousReactions.filter(
+      (reaction) => !(reaction.emoji === emoji && reaction.user === String(user.id))
+    );
+    const optimisticSummary = buildSummaryFromReactions(optimisticReactions);
+
+    updateMessageReactions(message.id, optimisticReactions, optimisticSummary);
+
     try {
       await api.post('/chat/reactions/remove/', {
         message_id: message.id,
         emoji: emoji,
       });
-      
-      // Atualizar mensagem no store (remoção local)
-      const updatedMessages = messages.map((m) => {
-        if (m.id === message.id) {
-          const updatedReactions = (m.reactions || []).filter(
-            (r: MessageReaction) => !(r.emoji === emoji && r.user === user.id)
-          );
-          
-          // Recalcular reactions_summary
-          const newSummary: Record<string, { count: number; users: any[] }> = {};
-          updatedReactions.forEach((r: MessageReaction) => {
-            if (!newSummary[r.emoji]) {
-              newSummary[r.emoji] = { count: 0, users: [] };
-            }
-            newSummary[r.emoji].count++;
-            newSummary[r.emoji].users.push({
-              id: r.user,
-              email: r.user_data?.email || '',
-              first_name: r.user_data?.first_name,
-              last_name: r.user_data?.last_name,
-            });
-          });
-          
-          return {
-            ...m,
-            reactions: updatedReactions,
-            reactions_summary: newSummary,
-          };
-        }
-        return m;
-      });
-      
-      setMessages(updatedMessages);
     } catch (error) {
       console.error('❌ Erro ao remover reação:', error);
+      updateMessageReactions(
+        message.id,
+        previousReactions,
+        buildSummaryFromReactions(previousReactions)
+      );
     } finally {
       setProcessingEmoji(null); // ✅ CORREÇÃO: Remover loading state
     }

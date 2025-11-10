@@ -19,7 +19,7 @@ import { useDesktopNotifications } from '@/hooks/useDesktopNotifications';
 export function useChatSocket(conversationId?: string) {
   const [isConnected, setIsConnected] = useState(false);
   const { token, user } = useAuthStore();
-  const { addMessage, updateMessageStatus, setTyping, updateConversation } = useChatStore();
+  const { addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions } = useChatStore();
   // ✅ REMOVIDO: updateAttachment não é mais usado aqui (movido para useTenantSocket)
   const { showNotification, isEnabled: notificationsEnabled } = useDesktopNotifications();
 
@@ -130,19 +130,11 @@ export function useChatSocket(conversationId?: string) {
     const handleReactionUpdate = (data: WebSocketMessage) => {
       if (data.message) {
         console.log('👍 [HOOK] Reação atualizada:', data.message.id, data.reaction);
-        // Atualizar mensagem com reações atualizadas
-        const { messages, setMessages } = useChatStore.getState();
-        const updatedMessages = messages.map((m) => {
-          if (m.id === data.message!.id) {
-            return {
-              ...m,
-              reactions: data.message!.reactions || [],
-              reactions_summary: data.message!.reactions_summary || {},
-            };
-          }
-          return m;
-        });
-        setMessages(updatedMessages);
+        updateMessageReactions(
+          data.message.id,
+          data.message.reactions || [],
+          data.message.reactions_summary || {}
+        );
       }
     };
 
@@ -183,7 +175,7 @@ export function useChatSocket(conversationId?: string) {
       // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
       chatWebSocketManager.off('new_conversation', handleNewConversation);
     };
-  }, [addMessage, updateMessageStatus, setTyping, updateConversation, notificationsEnabled, showNotification]);
+  }, [addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, notificationsEnabled, showNotification]);
 
   // API pública
   const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false): boolean => {
