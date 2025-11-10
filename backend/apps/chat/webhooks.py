@@ -535,14 +535,14 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.info(f"👥 [GRUPO NOVO] Enfileirando busca de informações para Group JID: {group_jid}")
                         
                         # ✅ Enfileirar task assíncrona para buscar informações do grupo
-                        from apps.chat.tasks import delay, QUEUE_FETCH_GROUP_INFO
-                        delay(QUEUE_FETCH_GROUP_INFO, {
-                            'conversation_id': str(conversation.id),
-                            'group_jid': group_jid,
-                            'instance_name': instance_name,
-                            'api_key': api_key,
-                            'base_url': base_url
-                        })
+                        from apps.chat.tasks import fetch_group_info
+                        fetch_group_info.delay(
+                            conversation_id=str(conversation.id),
+                            group_jid=group_jid,
+                            instance_name=instance_name,
+                            api_key=api_key,
+                            base_url=base_url
+                        )
                         logger.info(f"✅ [GRUPO NOVO] Task enfileirada - informações serão buscadas em background")
                     
                     # 👤 Para INDIVIDUAIS: buscar foto E nome do contato via API

@@ -3,6 +3,7 @@ Serializers para o módulo Flow Chat.
 """
 from rest_framework import serializers
 from django.db import models
+from django.db.models import Q
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.authn.serializers import UserSerializer
 from apps.contacts.models import Contact
@@ -180,6 +181,9 @@ class MessageSerializer(serializers.ModelSerializer):
 class MessageCreateSerializer(serializers.ModelSerializer):
     """Serializer para criação de mensagens (outgoing)."""
     
+    conversation = serializers.PrimaryKeyRelatedField(
+        queryset=Conversation.objects.none()
+    )
     attachment_urls = serializers.ListField(
         child=serializers.URLField(),
         required=False,
@@ -193,12 +197,51 @@ class MessageCreateSerializer(serializers.ModelSerializer):
             'conversation', 'content', 'is_internal', 'attachment_urls'
         ]
     
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        request = self.context.get('request')
+        if request and hasattr(request, 'user') and request.user.is_authenticated:
+            user = request.user
+            queryset = Conversation.objects.filter(tenant=user.tenant)
+            if not user.is_superuser and not user.is_admin:
+                department_ids = user.departments.values_list('id', flat=True)
+                queryset = queryset.filter(
+                    Q(department__in=department_ids) |
+                    Q(department__isnull=True, assigned_to=user)
+                )
+            self.fields['conversation'].queryset = queryset
+        else:
+            self.fields['conversation'].queryset = Conversation.objects.none()
+    
     def validate(self, attrs):
         """Valida que há conteúdo ou anexos."""
         if not attrs.get('content') and not attrs.get('attachment_urls'):
             raise serializers.ValidationError(
                 "Mensagem deve ter conteúdo de texto ou anexos."
             )
+        
+        request = self.context.get('request')
+        conversation = attrs.get('conversation')
+        if request and conversation:
+            user = request.user
+            
+            if conversation.tenant_id != user.tenant_id:
+                raise serializers.ValidationError({
+                    'conversation': 'Conversa não pertence ao seu tenant.'
+                })
+            
+            if not (user.is_superuser or user.is_admin):
+                department_ids = set(user.departments.values_list('id', flat=True))
+                if conversation.department_id:
+                    if conversation.department_id not in department_ids:
+                        raise serializers.ValidationError({
+                            'conversation': 'Você não tem acesso a este departamento.'
+                        })
+                elif conversation.assigned_to_id != user.id:
+                    raise serializers.ValidationError({
+                        'conversation': 'Conversa não está atribuída a você.'
+                    })
+        
         return attrs
     
     def create(self, validated_data):

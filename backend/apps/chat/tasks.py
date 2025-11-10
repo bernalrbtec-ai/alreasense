@@ -364,13 +364,23 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # Prepara dados
         conversation = message.conversation
         
-        # 🔍 PARA GRUPOS: usar group_id ao invés de contact_phone
-        if conversation.conversation_type == 'group' and conversation.group_metadata:
-            phone = conversation.group_metadata.get('group_id', conversation.contact_phone)
-            # Remover '+' se tiver (grupos não usam +)
-            phone = phone.replace('+', '')
-        else:
-            phone = conversation.contact_phone
+        def get_recipient():
+            """Retorna tuple (field, value) conforme tipo da conversa."""
+            if conversation.conversation_type == 'group':
+                group_id = (conversation.group_metadata or {}).get('group_id') or conversation.contact_phone
+                group_id = (group_id or '').strip()
+                if group_id.endswith('@s.whatsapp.net'):
+                    group_id = group_id.replace('@s.whatsapp.net', '@g.us')
+                return 'groupId', group_id
+            # individuais
+            phone_number = (conversation.contact_phone or '').strip()
+            phone_number = phone_number.replace('@s.whatsapp.net', '')
+            if not phone_number.startswith('+'):
+                phone_number = f'+{phone_number.lstrip("+")}'
+            return 'number', phone_number
+
+        recipient_field, recipient_value = get_recipient()
+        phone = recipient_value
         
         content = message.content
         attachment_urls = message.metadata.get('attachment_urls', []) if message.metadata else []
@@ -452,7 +462,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         # TESTADO E FUNCIONANDO: {number, audio, delay, linkPreview: false}
                         # ✅ CACHE STRATEGY: Redis 7 dias + S3 30 dias via /media/{hash}
                         payload = {
-                            'number': phone,
+                            recipient_field: recipient_value,
                             'audio': final_url,   # URL CURTA! (/media/{hash})
                             'delay': 1200,        # Delay opcional
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
@@ -474,7 +484,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         # Estrutura correta: direto no root
                         # ✅ USAR SHORT_URL (já configurado acima)
                         payload = {
-                            'number': phone,
+                            recipient_field: recipient_value,
                             'media': final_url,      # URL CURTA! (/media/{hash})
                             'mediatype': mediatype,  # lowercase!
                             'fileName': filename     # Nome do arquivo
@@ -509,7 +519,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         if is_audio and e.response is not None and e.response.status_code == 404:
                             fb_endpoint = f"{base_url}/message/sendMedia/{instance.instance_name}"
                             fb_payload = {
-                                'number': phone,
+                                recipient_field: recipient_value,
                                 'media': final_url,
                                 'mediatype': 'audio',
                                 'fileName': filename,
@@ -557,19 +567,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         logger.info(f"💾 [CHAT] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
                     
                     logger.info(f"✅ [CHAT] Mídia enviada: {message_id}")
+                    await asyncio.sleep(0.2)
             
             # Envia texto (se não tiver anexo ou como caption separado)
             if content and not attachment_urls:
                 # 🔍 PARA GRUPOS: não formatar (já vem como "120363...@g.us")
                 # Para contatos individuais: adicionar + se não tiver
-                if conversation.conversation_type == 'group':
-                    formatted_phone = phone  # Grupos: usar como está (ex: "120363...@g.us")
-                else:
-                    formatted_phone = phone if phone.startswith('+') else f'+{phone}'
-                
-                # Usar mesmo formato das campanhas
                 payload = {
-                    'number': formatted_phone,
+                    recipient_field: recipient_value,
                     'text': content,
                     'instance': instance.instance_name
                 }
