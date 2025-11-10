@@ -8,10 +8,9 @@ cmds = [
 [phases.install]
 cmds = [
   "rm -rf /app/.venv",
-  "python -m venv /app/.venv",
-  ". /app/.venv/bin/activate",
-  "pip install --upgrade pip setuptools wheel",
-  "pip install -r requirements.txt"
+  "PY=$(mise which python); \"$PY\" -m venv /app/.venv",
+  "/app/.venv/bin/pip install --upgrade pip setuptools wheel",
+  "/app/.venv/bin/pip install -r requirements.txt"
 ]
 
 [phases.build]
