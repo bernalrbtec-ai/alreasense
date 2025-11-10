@@ -19,11 +19,11 @@ RUN apt-get update \
 WORKDIR /app
 
 # Install Python dependencies
-COPY requirements.txt /app/
-RUN pip install --no-cache-dir -r requirements.txt
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
 
 # Copy project
-COPY . /app/
+COPY backend/ /app/
 
 # Create staticfiles directory
 RUN mkdir -p /app/staticfiles
