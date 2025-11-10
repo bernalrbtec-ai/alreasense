@@ -45,14 +45,14 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
 };
 
 export function MessageList() {
-  const {
-    activeConversation,
-    messages,
-    setMessages,
-    typing,
-    typingUser,
-    updateMessageReactions,
-  } = useChatStore();
+  const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
+  const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore((state) => ({
+    activeConversation: state.activeConversation,
+    messages: state.messages,
+    setMessages: state.setMessages,
+    typing: state.typing,
+    typingUser: state.typingUser,
+  }));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
