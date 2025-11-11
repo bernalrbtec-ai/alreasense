@@ -96,7 +96,12 @@ export function useTenantSocket() {
           });
           }, 500); // 500ms de debounce
           
-          const contactName = data.conversation.contact_name || data.conversation.contact_phone;
+          // ✅ MELHORIA: Para grupos, mostrar apenas o nome do grupo (sem nome do contato/sender)
+          const isGroup = data.conversation.conversation_type === 'group';
+          const displayName = isGroup 
+            ? (data.conversation.group_metadata?.group_name || data.conversation.contact_name || 'Grupo WhatsApp')
+            : (data.conversation.contact_name || data.conversation.contact_phone);
+          
           const currentPath = window.location.pathname;
           const isOnChatPage = currentPath === '/chat';
           
@@ -108,7 +113,8 @@ export function useTenantSocket() {
             // ✅ Verificar registry global antes de mostrar (simplificado)
             if (globalToastRegistry.addToast(toastKey)) {
               toast.success('Nova Mensagem Recebida! 💬', {
-                description: `De: ${contactName}`,
+                title: displayName, // ✅ Título mostra apenas o nome do grupo/contato
+                description: isGroup ? 'Nova mensagem no grupo' : `De: ${displayName}`,
                 duration: 3000, // ✅ Reduzido de 6s para 3s para aparecer mais rápido
                 id: toastKey, // ✅ Usar mesmo ID para deduplicação
                 action: {
@@ -132,7 +138,7 @@ export function useTenantSocket() {
           if ('Notification' in window) {
             if (Notification.permission === 'granted') {
               new Notification('Nova Mensagem no Chat', {
-                body: `De: ${contactName}`,
+                body: isGroup ? `Grupo: ${displayName}` : `De: ${displayName}`,
                 icon: data.conversation.profile_pic_url || '/logo.png',
                 badge: '/logo.png',
                 tag: `chat-${data.conversation.id}`, // Evita duplicar notificações
@@ -314,7 +320,12 @@ export function useTenantSocket() {
           const { updateConversation, activeConversation } = useChatStore.getState();
           updateConversation(data.conversation);
           
-          const contactName = data.conversation.contact_name || data.conversation.contact_phone;
+          // ✅ MELHORIA: Para grupos, mostrar apenas o nome do grupo (sem nome do contato/sender)
+          const isGroup = data.conversation.conversation_type === 'group';
+          const displayName = isGroup 
+            ? (data.conversation.group_metadata?.group_name || data.conversation.contact_name || 'Grupo WhatsApp')
+            : (data.conversation.contact_name || data.conversation.contact_phone);
+          
           const messagePreview = data.message?.content || 'Nova mensagem';
           const currentPath = window.location.pathname;
           const isOnChatPage = currentPath === '/chat';
@@ -330,8 +341,15 @@ export function useTenantSocket() {
           if (!isOnChatPage || !isActiveConversation) {
             // ✅ Verificar registry global antes de mostrar
             if (globalToastRegistry.addToast(toastKey)) {
+              // ✅ Para grupos: mostrar apenas nome do grupo + mensagem (sem nome do sender)
+              // ✅ Para contatos: mostrar nome do contato + mensagem
+              const toastDescription = isGroup
+                ? `${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`
+                : `${displayName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`;
+              
               toast.info('Nova Mensagem! 💬', {
-                description: `${contactName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`,
+                title: displayName, // ✅ Título mostra apenas o nome do grupo/contato
+                description: toastDescription,
                 duration: 5000,
                 id: toastKey, // ✅ Usar mesmo ID para deduplicação
                 action: {
@@ -353,7 +371,9 @@ export function useTenantSocket() {
           
           // 🔔 Desktop notification - apenas se não estiver na conversa ativa
           if (!isActiveConversation && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification(`${contactName}`, {
+            // ✅ Para grupos: mostrar apenas nome do grupo + mensagem (sem nome do sender)
+            // ✅ Para contatos: mostrar nome do contato + mensagem
+            new Notification(`${displayName}`, {
               body: messagePreview.substring(0, 100),
               icon: data.conversation.profile_pic_url || '/logo.png',
               badge: '/logo.png',
