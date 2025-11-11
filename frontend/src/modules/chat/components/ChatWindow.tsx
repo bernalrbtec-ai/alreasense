@@ -94,11 +94,25 @@ export function ChatWindow() {
   }, [activeConversation?.id]);
 
   // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
+  // ✅ MELHORIA: Só chamar refresh-info se não tiver foto/nome (WebSocket já atualiza automaticamente)
   useEffect(() => {
     if (activeConversation) {
       const refreshInfo = async () => {
         try {
           const type = activeConversation.conversation_type === 'group' ? 'GRUPO' : 'CONTATO';
+          
+          // ✅ OTIMIZAÇÃO: Se já tem foto e nome, não precisa chamar refresh-info
+          // O WebSocket já atualiza automaticamente quando mensagens chegam
+          const hasPhoto = activeConversation.profile_pic_url;
+          const hasName = activeConversation.contact_name && 
+                         activeConversation.contact_name !== 'Grupo WhatsApp' &&
+                         !activeConversation.contact_name.match(/^\d+$/); // Não é só número
+          
+          if (hasPhoto && hasName) {
+            console.log(`✅ [${type}] Informações já disponíveis (foto + nome), pulando refresh-info`);
+            return; // WebSocket já atualizou, não precisa chamar API
+          }
+          
           console.log(`🔄 [${type}] Atualizando informações...`);
           
           const response = await api.post(`/chat/conversations/${activeConversation.id}/refresh-info/`);
