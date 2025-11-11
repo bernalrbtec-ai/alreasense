@@ -1042,65 +1042,121 @@ async def handle_fetch_contact_name(
         logger.info(f"   Endpoint: {endpoint}")
         logger.info(f"   Phone (clean): {clean_phone}")
         
-        # Buscar nome
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.post(
-                endpoint,
-                json={'numbers': [clean_phone]},
-                headers=headers
-            )
-            
-            logger.info(f"📥 [CONTACT NAME] Response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
-                if data and len(data) > 0:
-                    contact_info = data[0]
-                    contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+        # ✅ MELHORIA: Retry com backoff exponencial para erros de rede
+        max_retries = 3
+        retry_count = 0
+        
+        while retry_count < max_retries:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.post(
+                        endpoint,
+                        json={'numbers': [clean_phone]},
+                        headers=headers
+                    )
                     
-                    if contact_name:
-                        # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
-                        conversation.contact_name = contact_name
-                        await sync_to_async(conversation.save)(update_fields=['contact_name'])
+                    logger.info(f"📥 [CONTACT NAME] Response status: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
+                        if data and len(data) > 0:
+                            contact_info = data[0]
+                            contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                            
+                            if contact_name:
+                                # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
+                                conversation.contact_name = contact_name
+                                await sync_to_async(conversation.save)(update_fields=['contact_name'])
+                                
+                                logger.info(f"✅ [CONTACT NAME] Nome atualizado: {contact_name}")
+                                
+                                # Broadcast atualização via WebSocket
+                                try:
+                                    from apps.chat.utils.serialization import serialize_conversation_for_ws
+                                    
+                                    conv_data_serializable = serialize_conversation_for_ws(conversation)
+                                    
+                                    channel_layer = get_channel_layer()
+                                    tenant_group = f"chat_tenant_{conversation.tenant_id}"
+                                    
+                                    await channel_layer.group_send(
+                                        tenant_group,
+                                        {
+                                            'type': 'conversation_updated',
+                                            'conversation': conv_data_serializable
+                                        }
+                                    )
+                                    
+                                    logger.info(f"📡 [CONTACT NAME] Atualização broadcast via WebSocket")
+                                except Exception as e:
+                                    logger.error(f"❌ [CONTACT NAME] Erro no broadcast: {e}")
+                            else:
+                                logger.warning(f"⚠️ [CONTACT NAME] Nome não disponível na API")
+                                # Fallback: usar telefone se não tiver nome
+                                if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                                    conversation.contact_name = clean_phone
+                                    await sync_to_async(conversation.save)(update_fields=['contact_name'])
+                                    logger.info(f"ℹ️ [CONTACT NAME] Usando telefone como nome")
+                        else:
+                            logger.warning(f"⚠️ [CONTACT NAME] Response vazio ou inválido")
                         
-                        logger.info(f"✅ [CONTACT NAME] Nome atualizado: {contact_name}")
-                        
-                        # Broadcast atualização via WebSocket
-                        try:
-                            from apps.chat.utils.serialization import serialize_conversation_for_ws
-                            
-                            conv_data_serializable = serialize_conversation_for_ws(conversation)
-                            
-                            channel_layer = get_channel_layer()
-                            tenant_group = f"chat_tenant_{conversation.tenant_id}"
-                            
-                            await channel_layer.group_send(
-                                tenant_group,
-                                {
-                                    'type': 'conversation_updated',
-                                    'conversation': conv_data_serializable
-                                }
-                            )
-                            
-                            logger.info(f"📡 [CONTACT NAME] Atualização broadcast via WebSocket")
-                        except Exception as e:
-                            logger.error(f"❌ [CONTACT NAME] Erro no broadcast: {e}")
+                        # ✅ Sucesso, sair do loop de retry
+                        return
+                    
+                    elif response.status_code >= 500:
+                        # Erro do servidor - pode tentar novamente
+                        retry_count += 1
+                        logger.warning(f"⚠️ [CONTACT NAME] Erro do servidor (tentativa {retry_count}/{max_retries}): HTTP {response.status_code}")
+                        if retry_count < max_retries:
+                            wait_time = 2 ** retry_count  # Backoff exponencial: 2s, 4s, 8s
+                            logger.info(f"⏳ [CONTACT NAME] Aguardando {wait_time}s antes de retry...")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(f"❌ [CONTACT NAME] Falhou após {max_retries} tentativas")
+                            return
                     else:
-                        logger.warning(f"⚠️ [CONTACT NAME] Nome não disponível na API")
-                        # Fallback: usar telefone se não tiver nome
-                        if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
-                            conversation.contact_name = clean_phone
-                            await sync_to_async(conversation.save)(update_fields=['contact_name'])
-                            logger.info(f"ℹ️ [CONTACT NAME] Usando telefone como nome")
+                        # Outros erros HTTP (400, 401, 403, 404) - não retry
+                        logger.warning(f"⚠️ [CONTACT NAME] Erro HTTP {response.status_code}: {response.text[:200]}")
+                        return
+                        
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError) as e:
+                # ✅ Erros de rede/conexão - fazer retry
+                retry_count += 1
+                logger.warning(f"⚠️ [CONTACT NAME] Erro de rede (tentativa {retry_count}/{max_retries}): {e}")
+                
+                if retry_count < max_retries:
+                    wait_time = 2 ** retry_count  # Backoff exponencial: 2s, 4s, 8s
+                    logger.info(f"⏳ [CONTACT NAME] Aguardando {wait_time}s antes de retry...")
+                    await asyncio.sleep(wait_time)
+                    continue
                 else:
-                    logger.warning(f"⚠️ [CONTACT NAME] Response vazio ou inválido")
-            else:
-                logger.warning(f"⚠️ [CONTACT NAME] Status não OK: {response.status_code}")
-                logger.warning(f"   Response: {response.text[:300]}")
+                    logger.error(f"❌ [CONTACT NAME] Falhou após {max_retries} tentativas: {e}")
+                    return
+            
+            except httpx.HTTPStatusError as e:
+                # ✅ Erros HTTP específicos
+                logger.warning(f"⚠️ [CONTACT NAME] Erro HTTP (tentativa {retry_count + 1}/{max_retries}): HTTP {e.response.status_code}")
+                
+                # Só retry para erros 5xx
+                if e.response.status_code >= 500:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        wait_time = 2 ** retry_count
+                        logger.info(f"⏳ [CONTACT NAME] Aguardando {wait_time}s antes de retry...")
+                        await asyncio.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(f"❌ [CONTACT NAME] Falhou após {max_retries} tentativas")
+                        return
+                else:
+                    # Erros 4xx - não retry
+                    logger.error(f"❌ [CONTACT NAME] Erro do cliente (não retry): HTTP {e.response.status_code}")
+                    return
     
     except Exception as e:
-        logger.error(f"❌ [CONTACT NAME] Erro ao buscar nome: {e}", exc_info=True)
+        logger.error(f"❌ [CONTACT NAME] Erro inesperado ao buscar nome: {e}", exc_info=True)
 
 
 async def handle_mark_message_as_read(conversation_id: str, message_id: str, retry_count: int = 0):

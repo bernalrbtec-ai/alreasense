@@ -55,93 +55,162 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
             'Content-Type': 'application/json'
         }
         
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                endpoint,
-                params={'groupJid': group_jid},
-                headers=headers
-            )
-            
-            if response.status_code == 200:
-                group_info = response.json()
-                logger.info(f"✅ [GROUP INFO] Informações recebidas para {group_jid}")
-                
-                # Extrair dados
-                group_name = group_info.get('subject', '')
-                group_pic_url = group_info.get('pictureUrl')
-                participants_count = group_info.get('size', 0)
-                group_desc = group_info.get('desc', '')
-                
-                # Buscar e atualizar conversa
-                conversation = await sync_to_async(
-                    Conversation.objects.select_related('tenant').get
-                )(id=conversation_id)
-                
-                update_fields = []
-                
-                # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
-                if group_name:
-                    conversation.contact_name = group_name
-                    update_fields.append('contact_name')
-                    logger.info(f"✅ [GROUP INFO] Nome atualizado: {group_name}")
-                elif not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
-                    # Se não tem nome ou é placeholder, usar JID como fallback
-                    conversation.contact_name = group_jid.split('@')[0]
-                    update_fields.append('contact_name')
-                    logger.info(f"⚠️ [GROUP INFO] Nome não disponível, usando JID como fallback")
-                
-                if group_pic_url:
-                    conversation.profile_pic_url = group_pic_url
-                    update_fields.append('profile_pic_url')
-                    logger.info(f"✅ [GROUP INFO] Foto atualizada")
-                
-                # Atualizar metadados
-                conversation.group_metadata = {
-                    'group_id': group_jid,
-                    'group_name': group_name,
-                    'group_pic_url': group_pic_url,
-                    'participants_count': participants_count,
-                    'description': group_desc,
-                    'is_group': True,
-                }
-                update_fields.append('group_metadata')
-                
-                if update_fields:
-                    await sync_to_async(conversation.save)(update_fields=update_fields)
-                    logger.info(f"✅ [GROUP INFO] Conversa atualizada: {conversation_id}")
+        # ✅ MELHORIA: Retry com backoff exponencial para erros de rede
+        max_retries = 3
+        retry_count = 0
+        last_error = None
+        
+        while retry_count < max_retries:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        endpoint,
+                        params={'groupJid': group_jid},
+                        headers=headers
+                    )
                     
-                    # Broadcast via WebSocket para atualizar frontend
-                    try:
-                        channel_layer = get_channel_layer()
-                        if channel_layer:
-                            room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
-                            async_to_sync(channel_layer.group_send)(
-                                room_group_name,
-                                {
-                                    'type': 'conversation_updated',
-                                    'conversation_id': str(conversation.id),
-                                    'updated_fields': update_fields
-                                }
-                            )
+                    # ✅ Verificar status HTTP antes de processar
+                    if response.status_code == 200:
+                        group_info = response.json()
+                        logger.info(f"✅ [GROUP INFO] Informações recebidas para {group_jid}")
+                        
+                        # Extrair dados
+                        group_name = group_info.get('subject', '')
+                        group_pic_url = group_info.get('pictureUrl')
+                        participants_count = group_info.get('size', 0)
+                        group_desc = group_info.get('desc', '')
+                        
+                        # Buscar e atualizar conversa
+                        conversation = await sync_to_async(
+                            Conversation.objects.select_related('tenant').get
+                        )(id=conversation_id)
+                        
+                        update_fields = []
+                        
+                        # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
+                        if group_name:
+                            conversation.contact_name = group_name
+                            update_fields.append('contact_name')
+                            logger.info(f"✅ [GROUP INFO] Nome atualizado: {group_name}")
+                        elif not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                            # Se não tem nome ou é placeholder, usar JID como fallback
+                            conversation.contact_name = group_jid.split('@')[0]
+                            update_fields.append('contact_name')
+                            logger.info(f"⚠️ [GROUP INFO] Nome não disponível, usando JID como fallback")
+                        
+                        if group_pic_url:
+                            conversation.profile_pic_url = group_pic_url
+                            update_fields.append('profile_pic_url')
+                            logger.info(f"✅ [GROUP INFO] Foto atualizada")
+                        
+                        # Atualizar metadados
+                        conversation.group_metadata = {
+                            'group_id': group_jid,
+                            'group_name': group_name,
+                            'group_pic_url': group_pic_url,
+                            'participants_count': participants_count,
+                            'description': group_desc,
+                            'is_group': True,
+                        }
+                        update_fields.append('group_metadata')
+                        
+                        if update_fields:
+                            await sync_to_async(conversation.save)(update_fields=update_fields)
+                            logger.info(f"✅ [GROUP INFO] Conversa atualizada: {conversation_id}")
                             
-                            # Broadcast global para tenant
-                            tenant_group_name = f"chat_tenant_{conversation.tenant_id}"
-                            async_to_sync(channel_layer.group_send)(
-                                tenant_group_name,
-                                {
-                                    'type': 'conversation_updated',
-                                    'conversation_id': str(conversation.id),
-                                    'updated_fields': update_fields
-                                }
-                            )
-                            logger.info(f"📡 [GROUP INFO] Broadcast WebSocket enviado")
-                    except Exception as ws_error:
-                        logger.warning(f"⚠️ [GROUP INFO] Erro ao enviar WebSocket: {ws_error}")
-            else:
-                logger.warning(f"⚠️ [GROUP INFO] Erro ao buscar grupo {group_jid}: HTTP {response.status_code}")
+                            # Broadcast via WebSocket para atualizar frontend
+                            try:
+                                channel_layer = get_channel_layer()
+                                if channel_layer:
+                                    room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+                                    async_to_sync(channel_layer.group_send)(
+                                        room_group_name,
+                                        {
+                                            'type': 'conversation_updated',
+                                            'conversation_id': str(conversation.id),
+                                            'updated_fields': update_fields
+                                        }
+                                    )
+                                    
+                                    # Broadcast global para tenant
+                                    tenant_group_name = f"chat_tenant_{conversation.tenant_id}"
+                                    async_to_sync(channel_layer.group_send)(
+                                        tenant_group_name,
+                                        {
+                                            'type': 'conversation_updated',
+                                            'conversation_id': str(conversation.id),
+                                            'updated_fields': update_fields
+                                        }
+                                    )
+                                    logger.info(f"📡 [GROUP INFO] Broadcast WebSocket enviado")
+                            except Exception as ws_error:
+                                logger.warning(f"⚠️ [GROUP INFO] Erro ao enviar WebSocket: {ws_error}")
+                        
+                        # ✅ Sucesso, sair do loop de retry
+                        return
+                    
+                    elif response.status_code == 404:
+                        # Grupo não encontrado - não é erro de rede, não retry
+                        logger.warning(f"⚠️ [GROUP INFO] Grupo não encontrado: {group_jid} (HTTP 404)")
+                        return
+                    
+                    elif response.status_code >= 500:
+                        # Erro do servidor - pode tentar novamente
+                        last_error = f"HTTP {response.status_code}: {response.text[:200]}"
+                        logger.warning(f"⚠️ [GROUP INFO] Erro do servidor (tentativa {retry_count + 1}/{max_retries}): {last_error}")
+                        retry_count += 1
+                        if retry_count < max_retries:
+                            wait_time = 2 ** retry_count  # Backoff exponencial: 2s, 4s, 8s
+                            logger.info(f"⏳ [GROUP INFO] Aguardando {wait_time}s antes de retry...")
+                            await asyncio.sleep(wait_time)
+                            continue
+                        else:
+                            logger.error(f"❌ [GROUP INFO] Falhou após {max_retries} tentativas")
+                            return
+                    
+                    else:
+                        # Outros erros HTTP (400, 401, 403) - não retry
+                        logger.warning(f"⚠️ [GROUP INFO] Erro HTTP {response.status_code}: {response.text[:200]}")
+                        return
+                        
+            except (httpx.TimeoutException, httpx.NetworkError, httpx.ConnectError) as e:
+                # ✅ Erros de rede/conexão - fazer retry
+                last_error = str(e)
+                retry_count += 1
+                logger.warning(f"⚠️ [GROUP INFO] Erro de rede (tentativa {retry_count}/{max_retries}): {last_error}")
+                
+                if retry_count < max_retries:
+                    wait_time = 2 ** retry_count  # Backoff exponencial: 2s, 4s, 8s
+                    logger.info(f"⏳ [GROUP INFO] Aguardando {wait_time}s antes de retry...")
+                    await asyncio.sleep(wait_time)
+                    continue
+                else:
+                    logger.error(f"❌ [GROUP INFO] Falhou após {max_retries} tentativas: {last_error}")
+                    return
+            
+            except httpx.HTTPStatusError as e:
+                # ✅ Erros HTTP específicos
+                last_error = f"HTTP {e.response.status_code}: {e.response.text[:200] if e.response else 'No response'}"
+                logger.warning(f"⚠️ [GROUP INFO] Erro HTTP (tentativa {retry_count + 1}/{max_retries}): {last_error}")
+                
+                # Só retry para erros 5xx
+                if e.response.status_code >= 500:
+                    retry_count += 1
+                    if retry_count < max_retries:
+                        wait_time = 2 ** retry_count
+                        logger.info(f"⏳ [GROUP INFO] Aguardando {wait_time}s antes de retry...")
+                        await asyncio.sleep(wait_time)
+                        continue
+                    else:
+                        logger.error(f"❌ [GROUP INFO] Falhou após {max_retries} tentativas")
+                        return
+                else:
+                    # Erros 4xx - não retry
+                    logger.error(f"❌ [GROUP INFO] Erro do cliente (não retry): {last_error}")
+                    return
                 
     except Exception as e:
-        logger.error(f"❌ [GROUP INFO] Erro ao buscar informações do grupo: {e}", exc_info=True)
+        logger.error(f"❌ [GROUP INFO] Erro inesperado ao buscar informações do grupo: {e}", exc_info=True)
 
 
 async def handle_process_profile_pic(tenant_id: str, phone: str, profile_url: str):
