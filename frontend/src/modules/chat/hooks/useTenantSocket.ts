@@ -114,7 +114,7 @@ export function useTenantSocket() {
             if (globalToastRegistry.addToast(toastKey)) {
               toast.success('Nova Mensagem Recebida! 💬', {
                 title: displayName, // ✅ Título mostra apenas o nome do grupo/contato
-                description: isGroup ? 'Nova mensagem no grupo' : `De: ${displayName}`,
+                description: isGroup ? 'Nova mensagem no grupo' : 'Nova mensagem recebida', // ✅ Descrição sem repetir nome
                 duration: 3000, // ✅ Reduzido de 6s para 3s para aparecer mais rápido
                 id: toastKey, // ✅ Usar mesmo ID para deduplicação
                 action: {
@@ -137,8 +137,9 @@ export function useTenantSocket() {
           // 🔔 Desktop notification (se permitido) - sempre mostrar para não perder
           if ('Notification' in window) {
             if (Notification.permission === 'granted') {
+              // ✅ Para grupos e contatos: título com nome, corpo sem repetir nome
               new Notification('Nova Mensagem no Chat', {
-                body: isGroup ? `Grupo: ${displayName}` : `De: ${displayName}`,
+                body: isGroup ? `Grupo: ${displayName}` : `Contato: ${displayName}`,
                 icon: data.conversation.profile_pic_url || '/logo.png',
                 badge: '/logo.png',
                 tag: `chat-${data.conversation.id}`, // Evita duplicar notificações
@@ -341,15 +342,12 @@ export function useTenantSocket() {
           if (!isOnChatPage || !isActiveConversation) {
             // ✅ Verificar registry global antes de mostrar
             if (globalToastRegistry.addToast(toastKey)) {
-              // ✅ Para grupos: mostrar apenas nome do grupo + mensagem (sem nome do sender)
-              // ✅ Para contatos: mostrar nome do contato + mensagem
-              const toastDescription = isGroup
-                ? `${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`
-                : `${displayName}: ${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`;
+              // ✅ Para grupos e contatos: mostrar apenas mensagem na descrição (nome já está no título)
+              const toastDescription = `${messagePreview.substring(0, 50)}${messagePreview.length > 50 ? '...' : ''}`;
               
               toast.info('Nova Mensagem! 💬', {
                 title: displayName, // ✅ Título mostra apenas o nome do grupo/contato
-                description: toastDescription,
+                description: toastDescription, // ✅ Descrição mostra apenas a mensagem (sem repetir nome)
                 duration: 5000,
                 id: toastKey, // ✅ Usar mesmo ID para deduplicação
                 action: {
@@ -371,8 +369,7 @@ export function useTenantSocket() {
           
           // 🔔 Desktop notification - apenas se não estiver na conversa ativa
           if (!isActiveConversation && 'Notification' in window && Notification.permission === 'granted') {
-            // ✅ Para grupos: mostrar apenas nome do grupo + mensagem (sem nome do sender)
-            // ✅ Para contatos: mostrar nome do contato + mensagem
+            // ✅ Para grupos e contatos: título com nome, corpo com apenas mensagem (sem repetir nome)
             new Notification(`${displayName}`, {
               body: messagePreview.substring(0, 100),
               icon: data.conversation.profile_pic_url || '/logo.png',
