@@ -13,7 +13,6 @@ class Command(BaseCommand):
     Roda em loop infinito processando mensagens.
     
     Filas processadas:
-    - send_message: Enviar mensagem via Evolution API
     - fetch_profile_pic: Buscar foto de perfil
     - fetch_group_info: Buscar info de grupo
     
@@ -26,7 +25,7 @@ class Command(BaseCommand):
         parser.add_argument(
             '--queues',
             nargs='+',
-            help='Lista de filas para processar (send_message, mark_as_read, fetch_profile_pic, fetch_group_info)'
+            help='Lista de filas para processar (fetch_profile_pic, fetch_group_info)'
         )
     
     def handle(self, *args, **options):
@@ -54,7 +53,7 @@ class Command(BaseCommand):
                 self.stdout.write(self.style.WARNING('⚠️ Nenhuma fila válida informada, processando todas.'))
         else:
             self.stdout.write(self.style.SUCCESS('🚀 Iniciando consumer do Flow Chat (Redis)...'))
-            self.stdout.write(self.style.SUCCESS('✅ Processando: send_message, mark_as_read, fetch_profile_pic, fetch_group_info'))
+            self.stdout.write(self.style.SUCCESS('✅ Processando: fetch_profile_pic, fetch_group_info'))
         
         try:
             asyncio.run(start_redis_consumers(queue_filters))

@@ -133,10 +133,12 @@ def mask_sensitive_data(data, parent_key: str = ""):
 # ✅ MIGRAÇÃO: Producers Redis para filas de latência crítica
 from apps.chat.redis_queue import (
     enqueue_message,
-    REDIS_QUEUE_SEND_MESSAGE,
     REDIS_QUEUE_FETCH_PROFILE_PIC,
     REDIS_QUEUE_FETCH_GROUP_INFO,
-    REDIS_QUEUE_MARK_AS_READ
+)
+from apps.chat.redis_streams import (
+    enqueue_send_message as enqueue_send_stream_message,
+    enqueue_mark_as_read as enqueue_mark_stream_message,
 )
 from apps.chat.utils.instance_state import should_defer_instance
 
@@ -192,10 +194,7 @@ class send_message_to_evolution:
     @staticmethod
     def delay(message_id: str):
         """Enfileira mensagem para envio (Redis)."""
-        enqueue_message(REDIS_QUEUE_SEND_MESSAGE, {
-            'message_id': message_id,
-            'enqueued_at': timezone.now().isoformat(),
-        })
+        enqueue_send_stream_message(message_id)
 
 
 # ❌ download_attachment e migrate_to_s3 REMOVIDOS
@@ -287,10 +286,7 @@ class fetch_group_info:
 
 def enqueue_mark_as_read(conversation_id: str, message_id: str):
     """Producer auxiliar: enfileira envio de read receipt."""
-    enqueue_message(REDIS_QUEUE_MARK_AS_READ, {
-        'conversation_id': conversation_id,
-        'message_id': message_id
-    })
+    enqueue_mark_stream_message(conversation_id, message_id)
 
 
 # ========== CONSUMER HANDLERS ==========

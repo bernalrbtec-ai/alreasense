@@ -310,6 +310,30 @@ print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
 print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
 print(f"🔧 [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
 
+# Redis Streams (Chat Send Pipeline)
+CHAT_STREAM_REDIS_URL = config(
+    'CHAT_STREAM_REDIS_URL',
+    default=(REDIS_URL.replace('/0', '/3') if REDIS_URL else '')
+)
+CHAT_STREAM_REDIS_PREFIX = config('CHAT_STREAM_REDIS_PREFIX', default='chat:stream:')
+CHAT_STREAM_SEND_NAME = config('CHAT_STREAM_SEND_NAME', default=f'{CHAT_STREAM_REDIS_PREFIX}send_message')
+CHAT_STREAM_MARK_READ_NAME = config('CHAT_STREAM_MARK_READ_NAME', default=f'{CHAT_STREAM_REDIS_PREFIX}mark_as_read')
+CHAT_STREAM_DLQ_NAME = config('CHAT_STREAM_DLQ_NAME', default=f'{CHAT_STREAM_REDIS_PREFIX}dead_letter')
+CHAT_STREAM_CONSUMER_GROUP = config('CHAT_STREAM_CONSUMER_GROUP', default='chat_send_workers')
+CHAT_STREAM_CONSUMER_NAME = config('CHAT_STREAM_CONSUMER_NAME', default='worker-default')
+CHAT_STREAM_MAXLEN = config('CHAT_STREAM_MAXLEN', default=5000, cast=int)
+CHAT_STREAM_DLQ_MAXLEN = config('CHAT_STREAM_DLQ_MAXLEN', default=2000, cast=int)
+CHAT_STREAM_MAX_RETRIES = config('CHAT_STREAM_MAX_RETRIES', default=5, cast=int)
+CHAT_STREAM_RECLAIM_IDLE_MS = config('CHAT_STREAM_RECLAIM_IDLE_MS', default=60000, cast=int)  # 60s
+CHAT_STREAM_BLOCK_TIMEOUT_MS = config('CHAT_STREAM_BLOCK_TIMEOUT_MS', default=5000, cast=int)  # 5s
+
+if CHAT_STREAM_REDIS_URL:
+    print(f"✅ [CHAT STREAM] URL configurada: {CHAT_STREAM_REDIS_URL[:60]}...")
+    print(f"✅ [CHAT STREAM] Grupo: {CHAT_STREAM_CONSUMER_GROUP}")
+    print(f"✅ [CHAT STREAM] Stream send: {CHAT_STREAM_SEND_NAME}")
+else:
+    print("⚠️ [CHAT STREAM] CHAT_STREAM_REDIS_URL não configurada. Fluxo de envio usará Redis padrão.")
+
 # Channels - Using Redis URL
 CHANNEL_LAYERS = {
     'default': {

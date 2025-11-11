@@ -1426,16 +1426,27 @@ class MessageReactionViewSet(viewsets.ModelViewSet):
             "timestamp": "2025-11-04T..."
         }
         """
-        metrics = get_queue_metrics()
-        
-        # ✅ Alerta se filas estão muito grandes
+        from apps.chat.redis_streams import get_stream_metrics
+
+        queue_metrics = get_queue_metrics()
+        stream_metrics = get_stream_metrics()
+
         alerts = []
-        for queue_name, queue_data in metrics.items():
+        for queue_name, queue_data in queue_metrics.items():
             if isinstance(queue_data, dict) and queue_data.get('length', 0) > 1000:
                 alerts.append(f"⚠️ Fila {queue_name} tem {queue_data['length']} mensagens (acima de 1000)")
-        
+
+        send_stream = stream_metrics.get('send_message_stream', {})
+        if send_stream.get('length', 0) > 200:
+            alerts.append(f"⚠️ Stream de envio tem {send_stream['length']} pendências (acima de 200)")
+
+        mark_stream = stream_metrics.get('mark_as_read_stream', {})
+        if mark_stream.get('length', 0) > 200:
+            alerts.append(f"⚠️ Stream mark_as_read tem {mark_stream['length']} pendências (acima de 200)")
+
         return Response({
-            'metrics': metrics,
+            'metrics': queue_metrics,
+            'stream_metrics': stream_metrics,
             'alerts': alerts,
             'timestamp': timezone.now().isoformat()
         })
