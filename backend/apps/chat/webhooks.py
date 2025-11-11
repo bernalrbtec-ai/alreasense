@@ -501,14 +501,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
             logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")
             try:
-                import httpx
-                
-                # ✅ CORREÇÃO: Garantir que EvolutionConnection está disponível no escopo
-                # Importar novamente para garantir que está no escopo local
+                # ✅ CORREÇÃO: Importar no escopo local para evitar problemas de escopo
+                from apps.notifications.models import WhatsAppInstance as WAInstance
                 from apps.connections.models import EvolutionConnection
                 
                 # Buscar instância WhatsApp ativa do tenant
-                wa_instance = WhatsAppInstance.objects.filter(
+                wa_instance = WAInstance.objects.filter(
                     tenant=tenant,
                     is_active=True,
                     status='active'
@@ -523,11 +521,6 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
                     api_key = wa_instance.api_key or evolution_server.api_key
                     instance_name = wa_instance.instance_name
-                    
-                    headers = {
-                        'apikey': api_key,
-                        'Content-Type': 'application/json'
-                    }
                     
                     # 👥 Para GRUPOS: enfileirar busca de informações (assíncrona, não bloqueia webhook)
                     if is_group:
@@ -573,7 +566,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
-                logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
+                logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}", exc_info=True)
         
         # 📸 Para conversas EXISTENTES de GRUPO: sempre enfileirar busca (garante dados atualizados)
         elif is_group:
