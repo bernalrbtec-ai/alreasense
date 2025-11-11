@@ -69,14 +69,18 @@ async def _xautoclaim_idle(
 
     try:
         while True:
-            start_id, messages = await client.xautoclaim(
+            # ✅ CORREÇÃO: redis-py async usa parâmetros posicionais, não keyword 'start'
+            # Assinatura: xautoclaim(name, groupname, consumername, min_idle_time, start='0-0', count=None)
+            result = await client.xautoclaim(
                 stream,
                 group,
                 consumer,
-                min_idle_time=min_idle_ms,
-                start=start_id,
-                count=count,
+                min_idle_ms,  # min_idle_time (posicional)
+                start_id,     # start (posicional, não keyword)
+                count,        # count (posicional)
             )
+            # Resultado: (start_id, messages) onde messages é lista de (message_id, {field: value})
+            start_id, messages = result
             if not messages:
                 break
             reclaimed.extend(messages)
