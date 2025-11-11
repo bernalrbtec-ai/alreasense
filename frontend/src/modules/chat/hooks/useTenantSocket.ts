@@ -86,14 +86,14 @@ export function useTenantSocket() {
           }
           
           departmentsDebounceRef.current = setTimeout(() => {
-            import('@/lib/api').then(({ api }) => {
-              api.get('/auth/departments/').then(response => {
-                const depts = response.data.results || response.data;
-                setDepartments(depts);
-              }).catch(error => {
-                console.error('❌ [TENANT WS] Erro ao refetch departamentos após nova conversa:', error);
-              });
+          import('@/lib/api').then(({ api }) => {
+            api.get('/auth/departments/').then(response => {
+              const depts = response.data.results || response.data;
+              setDepartments(depts);
+            }).catch(error => {
+              console.error('❌ [TENANT WS] Erro ao refetch departamentos após nova conversa:', error);
             });
+          });
           }, 500); // 500ms de debounce
           
           const contactName = data.conversation.contact_name || data.conversation.contact_phone;
