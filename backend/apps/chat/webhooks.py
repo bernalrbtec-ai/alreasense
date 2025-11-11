@@ -543,26 +543,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
                         logger.info(f"👤 [INDIVIDUAL] Enfileirando busca de informações do contato: {clean_phone}")
                         
-                        # ✅ MELHORIA: Sempre enfileirar busca de nome (não só quando vazio)
-                        # Isso garante que nomes incorretos sejam atualizados
-                        from apps.chat.tasks import fetch_contact_name, fetch_profile_pic
+                        # ✅ OTIMIZAÇÃO: fetch_profile_pic já busca nome E foto juntos (mais rápido que duas tasks separadas)
+                        # Similar ao comportamento de grupos que usa uma única task
+                        from apps.chat.tasks import fetch_profile_pic
                         
-                        # 1️⃣ Enfileirar busca de nome (sempre, para garantir nome correto)
-                        fetch_contact_name.delay(
-                            conversation_id=str(conversation.id),
-                            phone=clean_phone,
-                            instance_name=instance_name,
-                            api_key=api_key,
-                            base_url=base_url
-                        )
-                        logger.info(f"✅ [INDIVIDUAL] Task de nome enfileirada")
-                        
-                        # 2️⃣ Enfileirar busca de foto (sempre)
                         fetch_profile_pic.delay(
                             conversation_id=str(conversation.id),
                             phone=clean_phone
                         )
-                        logger.info(f"✅ [INDIVIDUAL] Task de foto enfileirada - informações serão buscadas em background")
+                        logger.info(f"✅ [INDIVIDUAL] Task de foto+nome enfileirada - informações serão buscadas em background")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
@@ -630,23 +619,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     api_key = wa_instance.api_key or evolution_server.api_key
                     instance_name = wa_instance.instance_name
 
-                    # ✅ MELHORIA: Sempre enfileirar busca de nome e foto (garante dados atualizados)
-                    # 1️⃣ Buscar nome
-                    fetch_contact_name.delay(
-                        conversation_id=str(conversation.id),
-                        phone=clean_phone,
-                        instance_name=instance_name,
-                        api_key=api_key,
-                        base_url=base_url
-                    )
-                    logger.info("✅ [INDIVIDUAL EXISTENTE] Task de nome enfileirada")
+                    # ✅ OTIMIZAÇÃO: fetch_profile_pic já busca nome E foto juntos (mais rápido que duas tasks separadas)
+                    # Similar ao comportamento de grupos que usa uma única task
+                    from apps.chat.tasks import fetch_profile_pic
                     
-                    # 2️⃣ Buscar foto
                     fetch_profile_pic.delay(
                         conversation_id=str(conversation.id),
                         phone=clean_phone
                     )
-                    logger.info("✅ [INDIVIDUAL EXISTENTE] Task de foto enfileirada - informações serão buscadas em background")
+                    logger.info("✅ [INDIVIDUAL EXISTENTE] Task de foto+nome enfileirada - informações serão buscadas em background")
                 else:
                     logger.warning("⚠️ [INDIVIDUAL EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
             except Exception as e:
