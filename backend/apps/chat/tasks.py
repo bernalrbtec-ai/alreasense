@@ -931,35 +931,42 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                     conversation.profile_pic_url = profile_url
                     update_fields.append('profile_pic_url')
             
-            # 2️⃣ ✅ NOVO: Buscar nome do contato (se não tiver ou for igual ao telefone)
-            if not conversation.contact_name or conversation.contact_name == clean_phone or conversation.contact_name == phone:
-                logger.info(f"👤 [PROFILE PIC] Buscando nome do contato também...")
-                endpoint_name = f"{base_url}/chat/whatsappNumbers/{instance_name}"
+            # 2️⃣ ✅ MELHORIA: Sempre buscar e atualizar nome do contato (garante nome correto)
+            # Mesmo se já existir um nome, atualizar para garantir que está correto
+            logger.info(f"👤 [PROFILE PIC] Buscando nome do contato...")
+            endpoint_name = f"{base_url}/chat/whatsappNumbers/{instance_name}"
+            
+            try:
+                response_name = await client.post(
+                    endpoint_name,
+                    json={'numbers': [clean_phone]},
+                    headers=headers
+                )
                 
-                try:
-                    response_name = await client.post(
-                        endpoint_name,
-                        json={'numbers': [clean_phone]},
-                        headers=headers
-                    )
-                    
-                    if response_name.status_code == 200:
-                        data_name = response_name.json()
-                        # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
-                        if data_name and len(data_name) > 0:
-                            contact_info = data_name[0]
-                            contact_name = contact_info.get('name') or contact_info.get('pushname', '')
-                            
-                            if contact_name:
-                                conversation.contact_name = contact_name
+                if response_name.status_code == 200:
+                    data_name = response_name.json()
+                    # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
+                    if data_name and len(data_name) > 0:
+                        contact_info = data_name[0]
+                        contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                        
+                        if contact_name:
+                            # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
+                            old_name = conversation.contact_name
+                            conversation.contact_name = contact_name
+                            update_fields.append('contact_name')
+                            logger.info(f"✅ [PROFILE PIC] Nome atualizado: '{old_name}' → '{contact_name}'")
+                        else:
+                            logger.info(f"ℹ️ [PROFILE PIC] Nome não disponível na API")
+                            # Fallback: usar telefone se não tiver nome ou se for placeholder
+                            if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                                conversation.contact_name = clean_phone
                                 update_fields.append('contact_name')
-                                logger.info(f"✅ [PROFILE PIC] Nome encontrado: {contact_name}")
-                            else:
-                                logger.info(f"ℹ️ [PROFILE PIC] Nome não disponível na API")
-                    else:
-                        logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {response_name.status_code}")
-                except Exception as e:
-                    logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {e}")
+                                logger.info(f"ℹ️ [PROFILE PIC] Usando telefone como nome")
+                else:
+                    logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {response_name.status_code}")
+            except Exception as e:
+                logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {e}")
             
             # Salvar atualizações
             if update_fields:
@@ -1066,10 +1073,11 @@ async def handle_fetch_contact_name(
                             
                             if contact_name:
                                 # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
+                                old_name = conversation.contact_name
                                 conversation.contact_name = contact_name
                                 await sync_to_async(conversation.save)(update_fields=['contact_name'])
                                 
-                                logger.info(f"✅ [CONTACT NAME] Nome atualizado: {contact_name}")
+                                logger.info(f"✅ [CONTACT NAME] Nome atualizado: '{old_name}' → '{contact_name}'")
                                 
                                 # Broadcast atualização via WebSocket
                                 try:
