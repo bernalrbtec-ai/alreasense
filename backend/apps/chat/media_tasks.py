@@ -79,10 +79,16 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
                 
                 update_fields = []
                 
+                # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
                 if group_name:
                     conversation.contact_name = group_name
                     update_fields.append('contact_name')
                     logger.info(f"✅ [GROUP INFO] Nome atualizado: {group_name}")
+                elif not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                    # Se não tem nome ou é placeholder, usar JID como fallback
+                    conversation.contact_name = group_jid.split('@')[0]
+                    update_fields.append('contact_name')
+                    logger.info(f"⚠️ [GROUP INFO] Nome não disponível, usando JID como fallback")
                 
                 if group_pic_url:
                     conversation.profile_pic_url = group_pic_url

@@ -545,100 +545,43 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         )
                         logger.info(f"✅ [GRUPO NOVO] Task enfileirada - informações serão buscadas em background")
                     
-                    # 👤 Para INDIVIDUAIS: buscar foto E nome do contato via API
+                    # 👤 Para INDIVIDUAIS: enfileirar busca de foto E nome (assíncrona, não bloqueia webhook)
                     else:
                         clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
-                        logger.info(f"👤 [INDIVIDUAL] Buscando informações do contato: {clean_phone}")
+                        logger.info(f"👤 [INDIVIDUAL] Enfileirando busca de informações do contato: {clean_phone}")
                         
-                        update_fields = []
+                        # ✅ MELHORIA: Sempre enfileirar busca de nome (não só quando vazio)
+                        # Isso garante que nomes incorretos sejam atualizados
+                        from apps.chat.tasks import fetch_contact_name, fetch_profile_pic
                         
-                        # 1️⃣ Buscar foto de perfil
-                        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
+                        # 1️⃣ Enfileirar busca de nome (sempre, para garantir nome correto)
+                        fetch_contact_name.delay(
+                            conversation_id=str(conversation.id),
+                            phone=clean_phone,
+                            instance_name=instance_name,
+                            api_key=api_key,
+                            base_url=base_url
+                        )
+                        logger.info(f"✅ [INDIVIDUAL] Task de nome enfileirada")
                         
-                        with httpx.Client(timeout=5.0) as client:
-                            response = client.get(
-                                endpoint,
-                                params={'number': clean_phone},
-                                headers=headers
-                            )
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                profile_url = (
-                                    data.get('profilePictureUrl') or
-                                    data.get('profilePicUrl') or
-                                    data.get('url') or
-                                    data.get('picture')
-                                )
-                                
-                                if profile_url:
-                                    conversation.profile_pic_url = profile_url
-                                    update_fields.append('profile_pic_url')
-                                    logger.info(f"✅ [INDIVIDUAL] Foto encontrada: {profile_url[:50]}...")
-                                else:
-                                    logger.info(f"ℹ️ [INDIVIDUAL] Foto não disponível")
-                            else:
-                                logger.warning(f"⚠️ [INDIVIDUAL] Erro ao buscar foto: {response.status_code}")
-                        
-                        # 2️⃣ Buscar nome do contato (se não tiver)
-                        if not conversation.contact_name:
-                            logger.info(f"👤 [INDIVIDUAL] Nome vazio, buscando na API...")
-                            endpoint = f"{base_url}/chat/whatsappNumbers/{instance_name}"
-                            
-                            with httpx.Client(timeout=5.0) as client:
-                                try:
-                                    response = client.post(
-                                        endpoint,
-                                        json={'numbers': [clean_phone]},
-                                        headers=headers
-                                    )
-                                    
-                                    if response.status_code == 200:
-                                        data = response.json()
-                                        # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
-                                        if data and len(data) > 0:
-                                            contact_info = data[0]
-                                            contact_name = contact_info.get('name') or contact_info.get('pushname', '')
-                                            
-                                            if contact_name:
-                                                conversation.contact_name = contact_name
-                                                update_fields.append('contact_name')
-                                                logger.info(f"✅ [INDIVIDUAL] Nome encontrado via API: {contact_name}")
-                                            else:
-                                                # Fallback: usar o número
-                                                conversation.contact_name = clean_phone
-                                                update_fields.append('contact_name')
-                                                logger.info(f"ℹ️ [INDIVIDUAL] Nome não disponível, usando número")
-                                    else:
-                                        logger.warning(f"⚠️ [INDIVIDUAL] Erro ao buscar nome: {response.status_code}")
-                                        # Fallback: usar o número
-                                        conversation.contact_name = clean_phone
-                                        update_fields.append('contact_name')
-                                except Exception as e:
-                                    logger.error(f"❌ [INDIVIDUAL] Erro ao buscar nome: {e}")
-                                    # Fallback: usar o número
-                                    conversation.contact_name = clean_phone
-                                    update_fields.append('contact_name')
-                        
-                        # Salvar atualizações
-                        if update_fields:
-                            conversation.save(update_fields=update_fields)
-                            logger.info(f"✅ [INDIVIDUAL] Conversa atualizada: {', '.join(update_fields)}")
+                        # 2️⃣ Enfileirar busca de foto (sempre)
+                        fetch_profile_pic.delay(
+                            conversation_id=str(conversation.id),
+                            phone=clean_phone
+                        )
+                        logger.info(f"✅ [INDIVIDUAL] Task de foto enfileirada - informações serão buscadas em background")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK] Erro ao buscar foto de perfil: {e}")
         
-        # 📸 Para conversas EXISTENTES de GRUPO: atualizar APENAS se falta dados
-        # (Atualização on-demand acontece quando usuário ABRE o grupo no frontend)
-        elif is_group and (not conversation.profile_pic_url or not conversation.group_metadata.get('group_name')):
-            logger.info("📸 [GRUPO] Falta dados básicos → buscando agora")
-            logger.info("📸 [GRUPO INFO] Buscando informações completas do grupo...")
+        # 📸 Para conversas EXISTENTES de GRUPO: sempre enfileirar busca (garante dados atualizados)
+        elif is_group:
+            logger.info("👥 [GRUPO EXISTENTE] Enfileirando busca de informações do grupo...")
             try:
-                import httpx
-
                 from apps.notifications.models import WhatsAppInstance as WAInstance
                 from apps.connections.models import EvolutionConnection
+                from apps.chat.tasks import fetch_group_info
 
                 wa_instance = WAInstance.objects.filter(
                     tenant=tenant,
@@ -650,69 +593,25 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
 
                 if wa_instance and evolution_server:
                     group_jid = remote_jid
-                    logger.info("👥 [GRUPO INFO] Buscando com Group JID: %s", group_jid)
+                    logger.info("👥 [GRUPO EXISTENTE] Enfileirando busca para Group JID: %s", group_jid)
 
                     base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
                     api_key = wa_instance.api_key or evolution_server.api_key
                     instance_name = wa_instance.instance_name
 
-                    endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
-
-                    headers = {
-                        'apikey': api_key,
-                        'Content-Type': 'application/json'
-                    }
-
-                    with httpx.Client(timeout=5.0) as client:
-                        response = client.get(
-                            endpoint,
-                            params={'groupJid': group_jid},
-                            headers=headers
-                        )
-
-                        if response.status_code == 200:
-                            group_info = response.json()
-                            logger.info("✅ [GRUPO INFO] Informações recebidas: %s", group_info)
-
-                            group_name = group_info.get('subject', '')
-                            group_pic_url = group_info.get('pictureUrl')
-                            participants_count = group_info.get('size', 0)
-                            group_desc = group_info.get('desc', '')
-
-                            update_fields = []
-
-                            if group_name:
-                                conversation.contact_name = group_name
-                                update_fields.append('contact_name')
-                                logger.info("✅ [GRUPO INFO] Nome do grupo: %s", group_name)
-
-                            if group_pic_url:
-                                conversation.profile_pic_url = group_pic_url
-                                update_fields.append('profile_pic_url')
-                                logger.info("✅ [GRUPO INFO] Foto do grupo: %s", group_pic_url[:50])
-
-                            conversation.group_metadata = {
-                                'group_id': remote_jid,
-                                'group_name': group_name,
-                                'group_pic_url': group_pic_url,
-                                'participants_count': participants_count,
-                                'description': group_desc,
-                                'is_group': True,
-                            }
-                            update_fields.append('group_metadata')
-
-                            if update_fields:
-                                conversation.save(update_fields=update_fields)
-                                logger.info("✅ [GRUPO INFO] Conversa atualizada com %s campos", len(update_fields))
-                        else:
-                            logger.warning("⚠️ [GRUPO INFO] Erro ao buscar: %s", response.status_code)
-                            logger.warning("   Response: %s", response.text[:200])
+                    # ✅ MELHORIA: Sempre enfileirar busca de info (garante nome e foto atualizados)
+                    fetch_group_info.delay(
+                        conversation_id=str(conversation.id),
+                        group_jid=group_jid,
+                        instance_name=instance_name,
+                        api_key=api_key,
+                        base_url=base_url
+                    )
+                    logger.info("✅ [GRUPO EXISTENTE] Task enfileirada - informações serão buscadas em background")
                 else:
-                    logger.warning("⚠️ [GRUPO INFO] Instância WhatsApp ou servidor Evolution não encontrado")
-                    logger.warning("   wa_instance: %s", wa_instance is not None)
-                    logger.warning("   evolution_server: %s", evolution_server is not None)
+                    logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
             except Exception as e:
-                logger.error("❌ [GRUPO INFO] Erro ao buscar informações: %s", e, exc_info=True)
+                logger.error("❌ [GRUPO EXISTENTE] Erro ao enfileirar busca: %s", e, exc_info=True)
             
             # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
             try:

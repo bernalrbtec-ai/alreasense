@@ -135,6 +135,7 @@ from apps.chat.redis_queue import (
     enqueue_message,
     REDIS_QUEUE_FETCH_PROFILE_PIC,
     REDIS_QUEUE_FETCH_GROUP_INFO,
+    REDIS_QUEUE_FETCH_CONTACT_NAME,  # ✅ NOVO: Busca nome de contato
 )
 from apps.chat.redis_streams import (
     enqueue_send_message as enqueue_send_stream_message,
@@ -278,6 +279,21 @@ class fetch_group_info:
         enqueue_message(REDIS_QUEUE_FETCH_GROUP_INFO, {
             'conversation_id': conversation_id,
             'group_jid': group_jid,
+            'instance_name': instance_name,
+            'api_key': api_key,
+            'base_url': base_url
+        })
+
+
+class fetch_contact_name:
+    """Producer: Busca nome de contato via Evolution API (Redis - 10x mais rápido)."""
+    
+    @staticmethod
+    def delay(conversation_id: str, phone: str, instance_name: str, api_key: str, base_url: str):
+        """Enfileira busca de nome de contato (Redis)."""
+        enqueue_message(REDIS_QUEUE_FETCH_CONTACT_NAME, {
+            'conversation_id': conversation_id,
+            'phone': phone,
             'instance_name': instance_name,
             'api_key': api_key,
             'base_url': base_url
@@ -813,11 +829,14 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     """
     Handler: Busca foto de perfil via Evolution API e salva.
     
+    ✅ MELHORIA: Também busca nome do contato se não tiver ou estiver incorreto.
+    
     Fluxo:
     1. Busca conversa e instância Evolution
     2. Chama endpoint /chat/fetchProfilePictureUrl
     3. Se retornar URL, salva no campo profile_pic_url
-    4. Broadcast atualização via WebSocket
+    4. ✅ NOVO: Busca nome do contato também
+    5. Broadcast atualização via WebSocket
     """
     from apps.chat.models import Conversation
     from apps.connections.models import EvolutionConnection
@@ -863,26 +882,28 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
         logger.info(f"✅ [PROFILE PIC] Instância encontrada: {wa_instance.friendly_name}")
         
         # Formatar telefone (sem + e sem @s.whatsapp.net)
-        clean_phone = phone.replace('+', '')
+        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
         
         # Endpoint Evolution API
         base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = wa_instance.api_key or evolution_server.api_key
         instance_name = wa_instance.instance_name
         
-        endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
-        
         headers = {
             'apikey': api_key,
             'Content-Type': 'application/json'
         }
         
-        logger.info(f"📡 [PROFILE PIC] Chamando Evolution API...")
-        logger.info(f"   Endpoint: {endpoint}")
-        logger.info(f"   Phone (clean): {clean_phone}")
+        update_fields = []
         
-        # Buscar foto
+        # Buscar foto E nome
         async with httpx.AsyncClient(timeout=10.0) as client:
+            # 1️⃣ Buscar foto de perfil
+            endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
+            
+            logger.info(f"📡 [PROFILE PIC] Chamando Evolution API...")
+            logger.info(f"   Endpoint: {endpoint}")
+            logger.info(f"   Phone (clean): {clean_phone}")
             response = await client.get(
                 endpoint,
                 params={'number': clean_phone},
@@ -907,41 +928,179 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                     logger.info(f"✅ [PROFILE PIC] Foto encontrada!")
                     logger.info(f"   URL: {profile_url[:100]}...")
                     
-                    # Atualizar conversa
                     conversation.profile_pic_url = profile_url
-                    await sync_to_async(conversation.save)(update_fields=['profile_pic_url'])
+                    update_fields.append('profile_pic_url')
+            
+            # 2️⃣ ✅ NOVO: Buscar nome do contato (se não tiver ou for igual ao telefone)
+            if not conversation.contact_name or conversation.contact_name == clean_phone or conversation.contact_name == phone:
+                logger.info(f"👤 [PROFILE PIC] Buscando nome do contato também...")
+                endpoint_name = f"{base_url}/chat/whatsappNumbers/{instance_name}"
+                
+                try:
+                    response_name = await client.post(
+                        endpoint_name,
+                        json={'numbers': [clean_phone]},
+                        headers=headers
+                    )
                     
-                    # Broadcast atualização via WebSocket
-                    try:
-                        from apps.chat.utils.serialization import serialize_conversation_for_ws
-                        
-                        conv_data_serializable = serialize_conversation_for_ws(conversation)
-                        
-                        channel_layer = get_channel_layer()
-                        tenant_group = f"chat_tenant_{conversation.tenant_id}"
-                        
-                        await channel_layer.group_send(
-                            tenant_group,
-                            {
-                                'type': 'conversation_updated',
-                                'conversation': conv_data_serializable
-                            }
-                        )
-                        
-                        logger.info(f"📡 [PROFILE PIC] Atualização broadcast via WebSocket")
-                    except Exception as e:
-                        logger.error(f"❌ [PROFILE PIC] Erro no broadcast: {e}")
+                    if response_name.status_code == 200:
+                        data_name = response_name.json()
+                        # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
+                        if data_name and len(data_name) > 0:
+                            contact_info = data_name[0]
+                            contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                            
+                            if contact_name:
+                                conversation.contact_name = contact_name
+                                update_fields.append('contact_name')
+                                logger.info(f"✅ [PROFILE PIC] Nome encontrado: {contact_name}")
+                            else:
+                                logger.info(f"ℹ️ [PROFILE PIC] Nome não disponível na API")
+                    else:
+                        logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {response_name.status_code}")
+                except Exception as e:
+                    logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {e}")
+            
+            # Salvar atualizações
+            if update_fields:
+                await sync_to_async(conversation.save)(update_fields=update_fields)
+                
+                # Broadcast atualização via WebSocket
+                try:
+                    from apps.chat.utils.serialization import serialize_conversation_for_ws
                     
-                    logger.info(f"✅ [PROFILE PIC] Foto de perfil atualizada com sucesso!")
-                else:
-                    logger.warning(f"⚠️ [PROFILE PIC] Response não contém URL de foto")
-                    logger.warning(f"   Data recebida: {data}")
+                    conv_data_serializable = serialize_conversation_for_ws(conversation)
+                    
+                    channel_layer = get_channel_layer()
+                    tenant_group = f"chat_tenant_{conversation.tenant_id}"
+                    
+                    await channel_layer.group_send(
+                        tenant_group,
+                        {
+                            'type': 'conversation_updated',
+                            'conversation': conv_data_serializable
+                        }
+                    )
+                    
+                    logger.info(f"📡 [PROFILE PIC] Atualização broadcast via WebSocket")
+                except Exception as e:
+                    logger.error(f"❌ [PROFILE PIC] Erro no broadcast: {e}")
+                
+                logger.info(f"✅ [PROFILE PIC] Atualizações salvas: {', '.join(update_fields)}")
             else:
-                logger.warning(f"⚠️ [PROFILE PIC] Status não OK: {response.status_code}")
-                logger.warning(f"   Response: {response.text[:300]}")
+                logger.info(f"ℹ️ [PROFILE PIC] Nenhuma atualização necessária")
     
     except Exception as e:
         logger.error(f"❌ [PROFILE PIC] Erro ao buscar foto: {e}", exc_info=True)
+
+
+async def handle_fetch_contact_name(
+    conversation_id: str, 
+    phone: str, 
+    instance_name: str, 
+    api_key: str, 
+    base_url: str
+):
+    """
+    Handler: Busca nome de contato via Evolution API.
+    
+    ✅ NOVO: Task assíncrona dedicada para buscar nome de contato.
+    
+    Fluxo:
+    1. Busca conversa
+    2. Chama endpoint /chat/whatsappNumbers
+    3. Atualiza contact_name
+    4. Broadcast via WebSocket
+    """
+    from apps.chat.models import Conversation
+    from channels.layers import get_channel_layer
+    from asgiref.sync import sync_to_async
+    import httpx
+    
+    logger.info(f"👤 [CONTACT NAME] Buscando nome de contato...")
+    logger.info(f"   Conversation ID: {conversation_id}")
+    logger.info(f"   Phone: {phone}")
+    
+    try:
+        # Busca conversa
+        conversation = await sync_to_async(
+            Conversation.objects.select_related('tenant').get
+        )(id=conversation_id)
+        
+        # Formatar telefone (sem + e sem @s.whatsapp.net)
+        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+        
+        # Endpoint Evolution API
+        endpoint = f"{base_url.rstrip('/')}/chat/whatsappNumbers/{instance_name}"
+        
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
+        
+        logger.info(f"📡 [CONTACT NAME] Chamando Evolution API...")
+        logger.info(f"   Endpoint: {endpoint}")
+        logger.info(f"   Phone (clean): {clean_phone}")
+        
+        # Buscar nome
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                endpoint,
+                json={'numbers': [clean_phone]},
+                headers=headers
+            )
+            
+            logger.info(f"📥 [CONTACT NAME] Response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
+                if data and len(data) > 0:
+                    contact_info = data[0]
+                    contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                    
+                    if contact_name:
+                        # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
+                        conversation.contact_name = contact_name
+                        await sync_to_async(conversation.save)(update_fields=['contact_name'])
+                        
+                        logger.info(f"✅ [CONTACT NAME] Nome atualizado: {contact_name}")
+                        
+                        # Broadcast atualização via WebSocket
+                        try:
+                            from apps.chat.utils.serialization import serialize_conversation_for_ws
+                            
+                            conv_data_serializable = serialize_conversation_for_ws(conversation)
+                            
+                            channel_layer = get_channel_layer()
+                            tenant_group = f"chat_tenant_{conversation.tenant_id}"
+                            
+                            await channel_layer.group_send(
+                                tenant_group,
+                                {
+                                    'type': 'conversation_updated',
+                                    'conversation': conv_data_serializable
+                                }
+                            )
+                            
+                            logger.info(f"📡 [CONTACT NAME] Atualização broadcast via WebSocket")
+                        except Exception as e:
+                            logger.error(f"❌ [CONTACT NAME] Erro no broadcast: {e}")
+                    else:
+                        logger.warning(f"⚠️ [CONTACT NAME] Nome não disponível na API")
+                        # Fallback: usar telefone se não tiver nome
+                        if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                            conversation.contact_name = clean_phone
+                            await sync_to_async(conversation.save)(update_fields=['contact_name'])
+                            logger.info(f"ℹ️ [CONTACT NAME] Usando telefone como nome")
+                else:
+                    logger.warning(f"⚠️ [CONTACT NAME] Response vazio ou inválido")
+            else:
+                logger.warning(f"⚠️ [CONTACT NAME] Status não OK: {response.status_code}")
+                logger.warning(f"   Response: {response.text[:300]}")
+    
+    except Exception as e:
+        logger.error(f"❌ [CONTACT NAME] Erro ao buscar nome: {e}", exc_info=True)
 
 
 async def handle_mark_message_as_read(conversation_id: str, message_id: str, retry_count: int = 0):
