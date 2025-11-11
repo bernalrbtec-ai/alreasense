@@ -69,8 +69,8 @@ async def _xautoclaim_idle(
 
     try:
         while True:
-            # ✅ CORREÇÃO: redis-py async usa parâmetros posicionais, não keyword 'start'
-            # Assinatura: xautoclaim(name, groupname, consumername, min_idle_time, start='0-0', count=None)
+            # ✅ CORREÇÃO: redis-py async xautoclaim retorna tupla
+            # Formato: (start_id, [(message_id, {field: value}), ...])
             result = await client.xautoclaim(
                 stream,
                 group,
@@ -79,8 +79,11 @@ async def _xautoclaim_idle(
                 start_id,     # start (posicional, não keyword)
                 count,        # count (posicional)
             )
-            # Resultado: (start_id, messages) onde messages é lista de (message_id, {field: value})
-            start_id, messages = result
+            # Resultado é sempre uma tupla: (start_id, messages)
+            # messages é lista de tuplas: [(message_id, {field: value}), ...]
+            start_id = result[0]
+            messages = result[1] if len(result) > 1 else []
+            
             if not messages:
                 break
             reclaimed.extend(messages)
