@@ -9,6 +9,7 @@ import { useChatStore } from '../store/chatStore';
 import { Conversation } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { upsertConversation } from '../store/conversationUpdater';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -49,10 +50,18 @@ export function ConversationList() {
     }
   }, [conversations, activeDepartment]);
 
-  // 🔄 FIX V2: Buscar conversas ao montar componente (apenas uma vez)
+  // 🔄 MELHORIA: Buscar conversas apenas na primeira carga (evita sobrescrever WebSocket)
   // WebSocket adicionará novas conversas automaticamente ao Zustand Store via useTenantSocket
   // Filtro por departamento é feito localmente (mais rápido e mantém conversas do WebSocket)
+  const [hasLoaded, setHasLoaded] = useState(false);
+  
   useEffect(() => {
+    // ✅ MELHORIA: Só buscar uma vez (primeira carga)
+    // Se já carregou antes, não buscar novamente (evita sobrescrever WebSocket)
+    if (hasLoaded) {
+      return;
+    }
+    
     const fetchConversations = async () => {
       try {
         setLoading(true);
@@ -64,16 +73,29 @@ export function ConversationList() {
         });
         
         const convs = response.data.results || response.data;
-        console.log(`✅ [ConversationList] ${convs.length} conversas carregadas`);
-        setConversations(convs);
+        console.log(`✅ [ConversationList] ${convs.length} conversas carregadas do backend`);
+        
+        // ✅ MELHORIA: Usar upsertConversation para cada conversa (evita sobrescrever WebSocket)
+        // Isso garante que se WebSocket adicionou conversas enquanto estava carregando, não serão perdidas
+        const { conversations: currentConvs } = useChatStore.getState();
+        let updatedConvs = currentConvs;
+        
+        for (const conv of convs) {
+          updatedConvs = upsertConversation(updatedConvs, conv);
+        }
+        
+        setConversations(updatedConvs);
+        setHasLoaded(true);
+        console.log(`✅ [ConversationList] Total após merge: ${updatedConvs.length} conversas (${currentConvs.length} já existiam do WebSocket)`);
       } catch (error) {
         console.error('❌ [ConversationList] Erro ao carregar conversas:', error);
+        setHasLoaded(true); // Marcar como carregado mesmo em erro para não tentar novamente
       } finally {
         setLoading(false);
       }
     };
 
-    // Buscar conversas ao montar componente (apenas uma vez)
+    // Buscar conversas apenas na primeira carga
     fetchConversations();
     
     // Limpar ao desmontar (boa prática)
