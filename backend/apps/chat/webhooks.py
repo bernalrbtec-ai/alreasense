@@ -612,38 +612,56 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
             except Exception as e:
                 logger.error("❌ [GRUPO EXISTENTE] Erro ao enfileirar busca: %s", e, exc_info=True)
-            
-            # 📡 Broadcast nova conversa para o tenant (todos os departamentos veem Inbox)
+        
+        # 👤 Para conversas EXISTENTES INDIVIDUAIS: sempre enfileirar busca (garante dados atualizados)
+        elif not is_group:
+            logger.info("👤 [INDIVIDUAL EXISTENTE] Enfileirando busca de informações do contato...")
             try:
-                from apps.chat.api.serializers import ConversationSerializer
-                from apps.chat.utils.serialization import serialize_conversation_for_ws
-                
-                conv_data_serializable = serialize_conversation_for_ws(conversation)
-                
-                # Broadcast para todo o tenant (Inbox é visível para todos)
-                channel_layer = get_channel_layer()
-                tenant_group = f"chat_tenant_{tenant.id}"
-                
-                logger.info(f"🚀 [WEBSOCKET] Enviando broadcast de NOVA CONVERSA...")
-                logger.info(f"   Tenant ID: {tenant.id}")
-                logger.info(f"   Tenant Group: {tenant_group}")
-                logger.info(f"   Conversation ID: {conversation.id}")
-                logger.info(f"   Contact: {conversation.contact_name or phone}")
-                
-                async_to_sync(channel_layer.group_send)(
-                    tenant_group,
-                    {
-                        'type': 'new_conversation',
-                        'conversation': conv_data_serializable
-                    }
-                )
-                
-                logger.info(f"✅ [WEBSOCKET] Broadcast de nova conversa enviado com sucesso!")
+                from apps.notifications.models import WhatsAppInstance as WAInstance
+                from apps.connections.models import EvolutionConnection
+                from apps.chat.tasks import fetch_contact_name, fetch_profile_pic
+
+                wa_instance = WAInstance.objects.filter(
+                    tenant=tenant,
+                    is_active=True,
+                    status='active'
+                ).first()
+
+                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+
+                if wa_instance and evolution_server:
+                    clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                    logger.info("👤 [INDIVIDUAL EXISTENTE] Enfileirando busca para telefone: %s", clean_phone)
+
+                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                    api_key = wa_instance.api_key or evolution_server.api_key
+                    instance_name = wa_instance.instance_name
+
+                    # ✅ MELHORIA: Sempre enfileirar busca de nome e foto (garante dados atualizados)
+                    # 1️⃣ Buscar nome
+                    fetch_contact_name.delay(
+                        conversation_id=str(conversation.id),
+                        phone=clean_phone,
+                        instance_name=instance_name,
+                        api_key=api_key,
+                        base_url=base_url
+                    )
+                    logger.info("✅ [INDIVIDUAL EXISTENTE] Task de nome enfileirada")
+                    
+                    # 2️⃣ Buscar foto
+                    fetch_profile_pic.delay(
+                        conversation_id=str(conversation.id),
+                        phone=clean_phone
+                    )
+                    logger.info("✅ [INDIVIDUAL EXISTENTE] Task de foto enfileirada - informações serão buscadas em background")
+                else:
+                    logger.warning("⚠️ [INDIVIDUAL EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
             except Exception as e:
-                logger.error(f"❌ [WEBSOCKET] Error broadcasting new conversation: {e}", exc_info=True)
-        else:
-            # ✅ CONVERSAS EXISTENTES: Se conversa estava fechada, reabrir automaticamente
-            # ✅ FIX: status_changed já foi inicializado antes do bloco if created else
+                logger.error("❌ [INDIVIDUAL EXISTENTE] Erro ao enfileirar busca: %s", e, exc_info=True)
+        
+        # ✅ CONVERSAS EXISTENTES: Se conversa estava fechada, reabrir automaticamente
+        # ✅ FIX: status_changed já foi inicializado antes do bloco if created else
+        if not created:
             if conversation.status == 'closed':
                 old_status = conversation.status
                 conversation.status = 'pending' if not from_me else 'open'
