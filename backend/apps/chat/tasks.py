@@ -940,42 +940,58 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                 response_name = await client.post(
                     endpoint_name,
                     json={'numbers': [clean_phone]},
-                    headers=headers
+                    headers=headers,
+                    timeout=10.0
                 )
+                
+                logger.info(f"📥 [PROFILE PIC] Nome response status: {response_name.status_code}")
                 
                 if response_name.status_code == 200:
                     data_name = response_name.json()
+                    logger.info(f"📦 [PROFILE PIC] Nome response data: {data_name}")
+                    
                     # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
                     if data_name and len(data_name) > 0:
                         contact_info = data_name[0]
                         contact_name = contact_info.get('name') or contact_info.get('pushname', '')
                         
-                        if contact_name:
+                        logger.info(f"🔍 [PROFILE PIC] Nome extraído: '{contact_name}' (exists: {contact_info.get('exists', False)})")
+                        
+                        if contact_name and contact_name.strip():
                             # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
                             old_name = conversation.contact_name
-                            conversation.contact_name = contact_name
+                            conversation.contact_name = contact_name.strip()
                             update_fields.append('contact_name')
-                            logger.info(f"✅ [PROFILE PIC] Nome atualizado: '{old_name}' → '{contact_name}'")
+                            logger.info(f"✅ [PROFILE PIC] Nome atualizado: '{old_name}' → '{contact_name.strip()}'")
                         else:
-                            logger.info(f"ℹ️ [PROFILE PIC] Nome não disponível na API")
+                            logger.warning(f"⚠️ [PROFILE PIC] Nome vazio ou não disponível na API")
+                            logger.warning(f"   Response: {contact_info}")
                             # Fallback: usar telefone se não tiver nome ou se for placeholder
-                            if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                            if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp' or conversation.contact_name == clean_phone:
                                 conversation.contact_name = clean_phone
                                 update_fields.append('contact_name')
-                                logger.info(f"ℹ️ [PROFILE PIC] Usando telefone como nome")
+                                logger.info(f"ℹ️ [PROFILE PIC] Usando telefone como nome: {clean_phone}")
+                    else:
+                        logger.warning(f"⚠️ [PROFILE PIC] Resposta vazia ou inválida da API de nomes")
+                        logger.warning(f"   Response: {data_name}")
                 else:
-                    logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {response_name.status_code}")
+                    logger.error(f"❌ [PROFILE PIC] Erro HTTP ao buscar nome: {response_name.status_code}")
+                    logger.error(f"   Response text: {response_name.text[:200]}")
             except Exception as e:
-                logger.warning(f"⚠️ [PROFILE PIC] Erro ao buscar nome: {e}")
+                logger.error(f"❌ [PROFILE PIC] Erro ao buscar nome: {e}", exc_info=True)
             
             # Salvar atualizações
             if update_fields:
                 await sync_to_async(conversation.save)(update_fields=update_fields)
+                logger.info(f"✅ [PROFILE PIC] Atualizações salvas: {', '.join(update_fields)}")
                 
-                # Broadcast atualização via WebSocket
+                # ✅ CRÍTICO: Sempre fazer broadcast se houver atualizações (foto OU nome)
+                # Isso garante que o frontend recebe atualizações mesmo se só o nome mudou
                 try:
                     from apps.chat.utils.serialization import serialize_conversation_for_ws
                     
+                    # ✅ IMPORTANTE: Recarregar conversa do banco para garantir dados atualizados
+                    await sync_to_async(conversation.refresh_from_db)()
                     conv_data_serializable = serialize_conversation_for_ws(conversation)
                     
                     channel_layer = get_channel_layer()
@@ -989,11 +1005,9 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                         }
                     )
                     
-                    logger.info(f"📡 [PROFILE PIC] Atualização broadcast via WebSocket")
+                    logger.info(f"📡 [PROFILE PIC] Atualização broadcast via WebSocket (campos: {', '.join(update_fields)})")
                 except Exception as e:
-                    logger.error(f"❌ [PROFILE PIC] Erro no broadcast: {e}")
-                
-                logger.info(f"✅ [PROFILE PIC] Atualizações salvas: {', '.join(update_fields)}")
+                    logger.error(f"❌ [PROFILE PIC] Erro no broadcast: {e}", exc_info=True)
             else:
                 logger.info(f"ℹ️ [PROFILE PIC] Nenhuma atualização necessária")
     
