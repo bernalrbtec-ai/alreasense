@@ -896,40 +896,73 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
         
         update_fields = []
         
-        # Buscar foto E nome
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            # 1️⃣ Buscar foto de perfil
-            endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
-            
-            logger.info(f"📡 [PROFILE PIC] Chamando Evolution API...")
-            logger.info(f"   Endpoint: {endpoint}")
-            logger.info(f"   Phone (clean): {clean_phone}")
-            response = await client.get(
-                endpoint,
-                params={'number': clean_phone},
-                headers=headers
-            )
-            
-            logger.info(f"📥 [PROFILE PIC] Response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                data = response.json()
-                logger.info(f"📦 [PROFILE PIC] Response data: {data}")
-                
-                # Extrair URL da foto
-                profile_url = (
-                    data.get('profilePictureUrl') or
-                    data.get('profilePicUrl') or
-                    data.get('url') or
-                    data.get('picture')
-                )
-                
-                if profile_url:
-                    logger.info(f"✅ [PROFILE PIC] Foto encontrada!")
-                    logger.info(f"   URL: {profile_url[:100]}...")
+        # ✅ MELHORIA: Retry com backoff exponencial para erros de rede (similar a grupos)
+        # 1️⃣ Buscar foto de perfil (com retry)
+        max_retries = 3
+        retry_count = 0
+        photo_fetched = False
+        
+        while retry_count < max_retries and not photo_fetched:
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    endpoint = f"{base_url}/chat/fetchProfilePictureUrl/{instance_name}"
                     
-                    conversation.profile_pic_url = profile_url
-                    update_fields.append('profile_pic_url')
+                    logger.info(f"📡 [PROFILE PIC] Chamando Evolution API (tentativa {retry_count + 1}/{max_retries})...")
+                    logger.info(f"   Endpoint: {endpoint}")
+                    logger.info(f"   Phone (clean): {clean_phone}")
+                    
+                    response = await client.get(
+                        endpoint,
+                        params={'number': clean_phone},
+                        headers=headers
+                    )
+                    
+                    logger.info(f"📥 [PROFILE PIC] Response status: {response.status_code}")
+                    
+                    if response.status_code == 200:
+                        data = response.json()
+                        logger.info(f"📦 [PROFILE PIC] Response data: {data}")
+                        
+                        # Extrair URL da foto
+                        profile_url = (
+                            data.get('profilePictureUrl') or
+                            data.get('profilePicUrl') or
+                            data.get('url') or
+                            data.get('picture')
+                        )
+                        
+                        if profile_url:
+                            logger.info(f"✅ [PROFILE PIC] Foto encontrada!")
+                            logger.info(f"   URL: {profile_url[:100]}...")
+                            
+                            conversation.profile_pic_url = profile_url
+                            update_fields.append('profile_pic_url')
+                            photo_fetched = True
+                        else:
+                            logger.info(f"ℹ️ [PROFILE PIC] Foto não disponível na API")
+                            photo_fetched = True  # Não é erro, só não tem foto
+                    elif response.status_code == 404:
+                        logger.info(f"ℹ️ [PROFILE PIC] Foto não encontrada (404) - contato pode não ter foto")
+                        photo_fetched = True  # Não é erro, só não tem foto
+                    else:
+                        raise Exception(f"HTTP {response.status_code}: {response.text[:200]}")
+                        
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as e:
+                retry_count += 1
+                if retry_count < max_retries:
+                    wait_time = 2 ** retry_count  # Backoff exponencial: 2s, 4s, 8s
+                    logger.warning(f"⚠️ [PROFILE PIC] Timeout/erro de conexão (tentativa {retry_count}/{max_retries}): {e}")
+                    logger.info(f"⏳ [PROFILE PIC] Aguardando {wait_time}s antes de tentar novamente...")
+                    import asyncio
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"❌ [PROFILE PIC] Falha após {max_retries} tentativas: {e}")
+            except Exception as e:
+                logger.error(f"❌ [PROFILE PIC] Erro inesperado ao buscar foto: {e}", exc_info=True)
+                photo_fetched = True  # Parar retry para erros não relacionados a rede
+        
+        # 2️⃣ Buscar nome do contato (sempre executar, mesmo se foto falhou)
+        async with httpx.AsyncClient(timeout=10.0) as client:
             
             # 2️⃣ ✅ MELHORIA: Sempre buscar e atualizar nome do contato (garante nome correto)
             # Mesmo se já existir um nome, atualizar para garantir que está correto
