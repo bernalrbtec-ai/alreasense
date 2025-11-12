@@ -287,14 +287,20 @@ export const useChatStore = create<ChatState>((set) => ({
           }
           return m;
         })
+        // ✅ Ordenar após atualizar (garantir ordem correta - mais recentes primeiro)
+        .sort((a, b) => {
+          const timeA = new Date(a.created_at).getTime();
+          const timeB = new Date(b.created_at).getTime();
+          return timeB - timeA; // ✅ Mais recente primeiro (timeB - timeA)
+        })
       };
     }
-    // ✅ FIX: Ordenar mensagens por timestamp antes de adicionar
+    // ✅ MELHORIA UX: Adicionar mensagem no início e ordenar (mais recentes primeiro)
     // Isso garante que mensagens fora de ordem via WebSocket sejam ordenadas corretamente
-    const newMessages = [...state.messages, message].sort((a, b) => {
+    const newMessages = [message, ...state.messages].sort((a, b) => {
       const timeA = new Date(a.created_at).getTime();
       const timeB = new Date(b.created_at).getTime();
-      return timeA - timeB; // Mais antiga primeiro
+      return timeB - timeA; // ✅ Mais recente primeiro (timeB - timeA)
     });
     
     return {
