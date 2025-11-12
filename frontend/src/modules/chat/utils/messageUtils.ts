@@ -6,13 +6,14 @@
 import type { Message, MessageAttachment } from '../types';
 
 /**
- * Ordena mensagens por timestamp (mais antiga primeiro)
+ * Ordena mensagens por timestamp (mais recente primeiro - feed moderno)
+ * ✅ MELHORIA UX: Mensagens mais recentes aparecem no topo
  */
 export function sortMessagesByTimestamp(messages: Message[]): Message[] {
   return [...messages].sort((a, b) => {
     const timeA = new Date(a.created_at).getTime();
     const timeB = new Date(b.created_at).getTime();
-    return timeA - timeB;
+    return timeB - timeA; // ✅ Invertido: mais recente primeiro (timeB - timeA)
   });
 }
 

@@ -1079,16 +1079,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Contar total de mensagens (para paginação)
         total_count = Message.objects.filter(conversation=conversation).count()
         
-        # Buscar mensagens com paginação (ordenado por created_at DESC para pegar mais recentes)
+        # ✅ MELHORIA UX: Buscar mensagens ordenadas por created_at DESC (mais recentes primeiro)
+        # Mensagens mais recentes aparecem no topo (feed moderno)
         messages = Message.objects.filter(
             conversation=conversation
         ).select_related(
             'sender', 'conversation', 'conversation__tenant', 'conversation__department'
         ).prefetch_related('attachments').order_by('-created_at')[offset:offset+limit]
         
-        # Reverter ordem para exibir (mais antigas primeiro, como WhatsApp)
+        # ✅ MANTÉM ordem DESC (mais recentes primeiro) - não reverte mais
         messages_list = list(messages)
-        messages_list.reverse()
         
         serializer = MessageSerializer(messages_list, many=True)
         

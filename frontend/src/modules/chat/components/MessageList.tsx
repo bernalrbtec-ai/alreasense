@@ -83,7 +83,7 @@ export function MessageList() {
         const msgs = data.results || data;
         setHasMoreMessages(data.has_more || false); // ✅ NOVO: Salvar se tem mais mensagens
         
-        // ✅ FIX: Ordenar mensagens por timestamp antes de fazer merge
+        // ✅ FIX: Ordenar mensagens por timestamp (mais recentes primeiro)
         // Isso garante que mensagens fora de ordem sejam ordenadas corretamente
         const sortedMsgs = sortMessagesByTimestamp(msgs);
         
@@ -130,9 +130,9 @@ export function MessageList() {
         setMessages(mergedMessages);
         
         // ✅ PERFORMANCE: Animar mensagens em batch (mais rápido)
-        // Reduzido delay de 20ms para 10ms e limita animação a 15 mensagens
+        // ✅ MELHORIA UX: Animar mensagens mais recentes primeiro (estão no topo)
         setTimeout(() => {
-          const messagesToAnimate = mergedMessages.slice(-15); // Apenas últimas 15 para não demorar muito
+          const messagesToAnimate = mergedMessages.slice(0, 15); // ✅ Primeiras 15 (mais recentes no topo)
           messagesToAnimate.forEach((msg, index) => {
             setTimeout(() => {
               setVisibleMessages(prev => new Set([...prev, msg.id]));
@@ -141,16 +141,16 @@ export function MessageList() {
           
           // Adicionar mensagens restantes imediatamente (sem animação)
           if (mergedMessages.length > 15) {
-            const restMessages = mergedMessages.slice(0, -15);
+            const restMessages = mergedMessages.slice(15); // ✅ Resto das mensagens (mais antigas)
             restMessages.forEach(msg => {
               setVisibleMessages(prev => new Set([...prev, msg.id]));
             });
           }
         }, 50);
         
-        // Scroll to bottom
+        // ✅ MELHORIA UX: Scroll para o topo (mensagens mais recentes estão no topo)
         setTimeout(() => {
-          messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+          messagesStartRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
         
         // ✅ FIX CRÍTICO: Se conversa não tem mensagens e foi criada recentemente (< 60s), 
@@ -184,9 +184,9 @@ export function MessageList() {
                     setMessages(retryMsgs);
                     setHasMoreMessages(retryData.has_more || false);
                     
-                    // Scroll to bottom
+                    // ✅ MELHORIA UX: Scroll para o topo (mensagens mais recentes estão no topo)
                     setTimeout(() => {
-                      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+                      messagesStartRef.current?.scrollIntoView({ behavior: 'smooth' });
                     }, 100);
                     
                     // Parar outros retries
@@ -227,10 +227,13 @@ export function MessageList() {
       });
     }
     
-    // Scroll suave ao final
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    // ✅ MELHORIA UX: Scroll para o topo quando novas mensagens chegam (mais recentes no topo)
+    // Só fazer scroll se houver novas mensagens
+    if (newMessages.length > 0) {
+      setTimeout(() => {
+        messagesStartRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
   }, [messages, visibleMessages]);
 
   // ✅ PERFORMANCE: Memoizar funções para evitar recriação a cada render
@@ -381,20 +384,14 @@ export function MessageList() {
                     const olderMsgs = data.results || data;
                     
                     if (olderMsgs.length > 0) {
-                      // Adicionar mensagens antigas no início
-                      setMessages([...olderMsgs.reverse(), ...messages]);
+                      // ✅ MELHORIA UX: Mensagens antigas vão para o final (mais recentes no topo)
+                      // Ordenar mensagens antigas (mais recentes primeiro) e adicionar ao final
+                      const sortedOlderMsgs = sortMessagesByTimestamp(olderMsgs);
+                      setMessages([...messages, ...sortedOlderMsgs]);
                       setHasMoreMessages(data.has_more || false);
                       
-                      // Manter scroll na posição atual (sem pular para o topo)
-                      const container = messagesStartRef.current?.parentElement;
-                      if (container) {
-                        const scrollHeightBefore = container.scrollHeight;
-                        setTimeout(() => {
-                          const scrollHeightAfter = container.scrollHeight;
-                          const scrollDiff = scrollHeightAfter - scrollHeightBefore;
-                          container.scrollTop += scrollDiff;
-                        }, 0);
-                      }
+                      // ✅ Manter scroll na posição atual (sem pular para o topo)
+                      // Como mensagens antigas vão para o final, não precisa ajustar scroll
                     } else {
                       setHasMoreMessages(false);
                     }
