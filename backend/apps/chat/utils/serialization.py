@@ -149,6 +149,7 @@ def serialize_message_for_ws(message) -> Dict[str, Any]:
     
     ✅ CORREÇÃO: Prefetch de reações para evitar race conditions.
     ✅ CORREÇÃO: Garantir que attachments também estão prefetched.
+    ✅ CORREÇÃO: Não fazer refetch se mensagem já tem dados necessários (evita problemas de sincronização).
     
     Args:
         message: Instância do modelo Message
@@ -160,23 +161,33 @@ def serialize_message_for_ws(message) -> Dict[str, Any]:
     from apps.chat.models import Message
     
     # ✅ CORREÇÃO: Prefetch de reações e attachments se ainda não foi feito
+    # Mas apenas se realmente necessário (evitar refetch desnecessário que pode causar problemas)
     needs_refetch = False
     prefetch_cache = getattr(message, '_prefetched_objects_cache', {})
     
-    if 'reactions' not in prefetch_cache:
+    # Verificar se precisa de refetch apenas se não tiver prefetch cache ou se cache está vazio
+    if not prefetch_cache:
         needs_refetch = True
-    if 'attachments' not in prefetch_cache:
-        needs_refetch = True
+    else:
+        if 'reactions' not in prefetch_cache:
+            needs_refetch = True
+        if 'attachments' not in prefetch_cache:
+            needs_refetch = True
     
-    if needs_refetch:
-        # Recarregar mensagem com prefetch completo
-        message = Message.objects.prefetch_related(
-            'reactions__user',
-            'attachments'
-        ).select_related(
-            'sender',
-            'conversation'
-        ).get(id=message.id)
+    # ✅ CORREÇÃO: Fazer refetch apenas se realmente necessário e se mensagem já foi salva
+    if needs_refetch and message.pk:
+        try:
+            # Recarregar mensagem com prefetch completo
+            message = Message.objects.prefetch_related(
+                'reactions__user',
+                'attachments'
+            ).select_related(
+                'sender',
+                'conversation'
+            ).get(id=message.id)
+        except Message.DoesNotExist:
+            # Se mensagem não existe mais, usar a original (pode ser mensagem ainda não salva)
+            pass
     
     msg_data = MessageSerializer(message).data
     return convert_uuids_to_str(msg_data)
