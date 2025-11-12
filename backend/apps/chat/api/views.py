@@ -1659,6 +1659,14 @@ def chat_ping_evolution(request):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
+        # ✅ CORREÇÃO CRÍTICA: Validar que mensagem tem message_id (ID externo do WhatsApp)
+        # Sem message_id, não é possível enviar reação para Evolution API
+        if not message.message_id:
+            return Response(
+                {'error': 'Mensagem não tem message_id (não foi enviada pelo sistema ou ainda não foi processada)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # ✅ CORREÇÃO: Prefetch de reações antes de criar reação
         # Importar MessageReaction do topo (já importado na linha 14)
         # Criar ou obter reação (unique_together garante que não duplica)
@@ -1668,6 +1676,19 @@ def chat_ping_evolution(request):
             emoji=emoji,
             defaults={}
         )
+        
+        # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
+        # Isso garante que a reação aparece no WhatsApp do destinatário
+        from apps.chat.tasks import send_reaction_to_evolution
+        from asgiref.sync import sync_to_async
+        
+        try:
+            # Enviar reação para Evolution API de forma assíncrona
+            await sync_to_async(send_reaction_to_evolution)(message, emoji)
+            logger.info(f"✅ [REACTION] Reação enviada para Evolution API: {request.user.email} {emoji} em {message.id}")
+        except Exception as e:
+            # Não bloquear se falhar envio (reação já foi salva no banco)
+            logger.error(f"⚠️ [REACTION] Erro ao enviar reação para Evolution API (reação salva no banco): {e}", exc_info=True)
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
         # Usar função helper que faz broadcast para tenant inteiro

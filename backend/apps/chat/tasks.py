@@ -305,6 +305,117 @@ def enqueue_mark_as_read(conversation_id: str, message_id: str):
     enqueue_mark_stream_message(conversation_id, message_id)
 
 
+# ========== FUNÇÕES AUXILIARES PARA REAÇÕES ==========
+
+async def send_reaction_to_evolution(message, emoji: str):
+    """
+    Envia reação para Evolution API.
+    
+    Args:
+        message: Instância do modelo Message (deve ter message_id preenchido)
+        emoji: Emoji da reação (ex: "👍", "❤️")
+    
+    Returns:
+        bool: True se enviado com sucesso, False caso contrário
+    """
+    from apps.chat.models import Message
+    from apps.notifications.models import WhatsAppInstance
+    from apps.connections.models import EvolutionConnection
+    from asgiref.sync import sync_to_async
+    import httpx
+    
+    logger.info(f"👍 [REACTION] Enviando reação para Evolution API...")
+    logger.info(f"   Message ID interno: {message.id}")
+    logger.info(f"   Message ID externo: {message.message_id}")
+    logger.info(f"   Emoji: {emoji}")
+    
+    try:
+        # Buscar instância WhatsApp ativa
+        instance = await sync_to_async(
+            WhatsAppInstance.objects.filter(
+                tenant=message.conversation.tenant,
+                is_active=True,
+                status='active'
+            ).first
+        )()
+        
+        if not instance:
+            logger.warning(f"⚠️ [REACTION] Nenhuma instância WhatsApp ativa para tenant {message.conversation.tenant.name}")
+            return False
+        
+        # Buscar servidor Evolution
+        evolution_server = await sync_to_async(
+            EvolutionConnection.objects.filter(is_active=True).first
+        )()
+        
+        if not evolution_server and not instance.api_url:
+            logger.error(f"❌ [REACTION] Configuração da Evolution API não encontrada")
+            return False
+        
+        # Preparar URL e credenciais
+        base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = instance.api_key or evolution_server.api_key
+        instance_name = instance.instance_name
+        
+        # Preparar remoteJid (número ou grupo)
+        if message.conversation.conversation_type == 'group':
+            remote_jid = message.conversation.contact_phone
+            if not remote_jid.endswith('@g.us'):
+                if remote_jid.endswith('@s.whatsapp.net'):
+                    remote_jid = remote_jid.replace('@s.whatsapp.net', '@g.us')
+                else:
+                    remote_jid = f"{remote_jid.rstrip('@')}@g.us"
+        else:
+            # Individual: remover @s.whatsapp.net se existir
+            remote_jid = message.conversation.contact_phone.replace('@s.whatsapp.net', '')
+            if not remote_jid.startswith('+'):
+                remote_jid = f'+{remote_jid.lstrip("+")}'
+        
+        # Preparar payload para Evolution API
+        payload = {
+            'key': {
+                'remoteJid': remote_jid,
+                'id': message.message_id,  # ID externo da mensagem no WhatsApp
+                'fromMe': message.direction == 'outgoing'
+            },
+            'reaction': emoji
+        }
+        
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
+        
+        endpoint = f"{base_url}/message/sendReaction/{instance_name}"
+        
+        logger.info(f"📡 [REACTION] Enviando para Evolution API...")
+        logger.info(f"   Endpoint: {endpoint}")
+        logger.info(f"   RemoteJID (mascado): {_mask_remote_jid(remote_jid)}")
+        logger.info(f"   Message ID externo: {message.message_id}")
+        logger.info(f"   Emoji: {emoji}")
+        logger.info(f"   Payload (mascado): {mask_sensitive_data(payload)}")
+        
+        # Enviar reação
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                endpoint,
+                json=payload,
+                headers=headers
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"✅ [REACTION] Reação enviada com sucesso para Evolution API")
+                return True
+            else:
+                logger.error(f"❌ [REACTION] Erro {response.status_code} ao enviar reação:")
+                logger.error(f"   Resposta: {response.text[:200]}")
+                return False
+                
+    except Exception as e:
+        logger.error(f"❌ [REACTION] Erro ao enviar reação para Evolution API: {e}", exc_info=True)
+        return False
+
+
 # ========== CONSUMER HANDLERS ==========
 
 async def handle_send_message(message_id: str, retry_count: int = 0):

@@ -363,7 +363,79 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Tipo de mensagem
         message_type = message_data.get('messageType', 'text')
         
-        # Conteúdo
+        # ✅ CORREÇÃO CRÍTICA: Tratar reactionMessage como tipo especial
+        # Reações NÃO são mensagens novas, são metadados de mensagens existentes
+        if message_type == 'reactionMessage':
+            logger.info(f"👍 [WEBHOOK REACTION] Reação recebida do WhatsApp")
+            
+            # Extrair dados da reação
+            reaction_data = message_info.get('reactionMessage', {})
+            reaction_key = reaction_data.get('key', {})
+            reaction_message_id = reaction_key.get('id')  # ID da mensagem original no WhatsApp
+            emoji = reaction_data.get('text', '')  # Emoji da reação
+            
+            logger.info(f"   Message ID original: {reaction_message_id}")
+            logger.info(f"   Emoji: {emoji}")
+            logger.info(f"   RemoteJID: {remote_jid}")
+            logger.info(f"   FromMe: {from_me}")
+            
+            if not reaction_message_id:
+                logger.warning(f"⚠️ [WEBHOOK REACTION] Reação sem message_id, ignorando")
+                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+            
+            if not emoji:
+                logger.warning(f"⚠️ [WEBHOOK REACTION] Reação sem emoji, ignorando")
+                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+            
+            # Buscar mensagem original pelo message_id externo
+            try:
+                original_message = Message.objects.select_related(
+                    'conversation', 'conversation__tenant'
+                ).get(
+                    message_id=reaction_message_id,
+                    conversation__tenant=tenant
+                )
+                
+                logger.info(f"✅ [WEBHOOK REACTION] Mensagem original encontrada: {original_message.id}")
+                
+                # Buscar ou criar reação
+                # Para reações recebidas, não temos usuário interno, então precisamos identificar pelo número
+                # Se from_me=False, é reação recebida de contato externo
+                # Se from_me=True, é reação que enviamos (já deve estar no banco)
+                
+                if from_me:
+                    # Reação que enviamos - já deve estar no banco, apenas fazer broadcast
+                    logger.info(f"ℹ️ [WEBHOOK REACTION] Reação enviada por nós, apenas fazer broadcast")
+                else:
+                    # Reação recebida de contato externo
+                    # Não temos usuário interno, então vamos apenas fazer broadcast da mensagem atualizada
+                    # O frontend vai atualizar as reações quando receber o broadcast
+                    logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo")
+                
+                # Recarregar mensagem com reações atualizadas
+                original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
+                
+                # Broadcast atualização de reação via WebSocket
+                from apps.chat.utils.websocket import broadcast_message_reaction_update
+                broadcast_message_reaction_update(original_message)
+                
+                logger.info(f"✅ [WEBHOOK REACTION] Broadcast de reação enviado")
+                
+                # ✅ IMPORTANTE: Retornar sem criar mensagem nova
+                # Reações não são mensagens, são metadados
+                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+                
+            except Message.DoesNotExist:
+                logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem original não encontrada (message_id={reaction_message_id})")
+                # Mensagem pode não existir ainda (race condition) ou ser de outro tenant
+                # Retornar OK para não bloquear webhook
+                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+            except Exception as e:
+                logger.error(f"❌ [WEBHOOK REACTION] Erro ao processar reação: {e}", exc_info=True)
+                # Retornar OK para não bloquear webhook
+                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+        
+        # Conteúdo (para outros tipos de mensagem)
         if message_type == 'conversation':
             content = message_info.get('conversation', '')
         elif message_type == 'extendedTextMessage':

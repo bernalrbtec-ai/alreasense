@@ -703,21 +703,40 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
         emoji: emoji,
       });
 
-      if (response.data?.message) {
-        updateMessageReactions(
-          response.data.message.id,
-          cloneReactions(response.data.message.reactions),
-          response.data.message.reactions_summary || {}
-        );
+      // ✅ CORREÇÃO: Verificar se resposta tem dados válidos antes de atualizar
+      if (response.data) {
+        // Se resposta tem message com reactions, atualizar
+        if (response.data.message) {
+          updateMessageReactions(
+            response.data.message.id,
+            cloneReactions(response.data.message.reactions),
+            response.data.message.reactions_summary || {}
+          );
+        } else if (response.data.emoji) {
+          // Se resposta tem apenas emoji (reação criada), manter optimistic update
+          // O WebSocket vai atualizar com dados completos
+          console.log('✅ [REACTION] Reação adicionada, aguardando broadcast WebSocket');
+        }
       }
       setShowEmojiPicker(false);
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao adicionar reação:', error);
+      
+      // ✅ CORREÇÃO: Mostrar erro específico ao usuário
+      const errorMessage = error?.response?.data?.error || 'Erro ao adicionar reação';
+      console.error('   Erro detalhado:', errorMessage);
+      
+      // Rollback do optimistic update
       updateMessageReactions(
         message.id,
         previousReactions,
         buildSummaryFromReactions(previousReactions)
       );
+      
+      // ✅ CORREÇÃO: Mostrar toast de erro (se disponível)
+      if (typeof window !== 'undefined' && (window as any).toast) {
+        (window as any).toast.error(errorMessage);
+      }
     } finally {
       setProcessingEmoji(null); // ✅ CORREÇÃO: Remover loading state
     }
@@ -742,17 +761,33 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     updateMessageReactions(message.id, optimisticReactions, optimisticSummary);
 
     try {
-      await api.post('/chat/reactions/remove/', {
+      const response = await api.post('/chat/reactions/remove/', {
         message_id: message.id,
         emoji: emoji,
       });
-    } catch (error) {
+      
+      // ✅ CORREÇÃO: Verificar resposta antes de considerar sucesso
+      if (!response.data?.success) {
+        throw new Error('Resposta inválida do servidor');
+      }
+    } catch (error: any) {
       console.error('❌ Erro ao remover reação:', error);
+      
+      // ✅ CORREÇÃO: Mostrar erro específico ao usuário
+      const errorMessage = error?.response?.data?.error || 'Erro ao remover reação';
+      console.error('   Erro detalhado:', errorMessage);
+      
+      // Rollback do optimistic update
       updateMessageReactions(
         message.id,
         previousReactions,
         buildSummaryFromReactions(previousReactions)
       );
+      
+      // ✅ CORREÇÃO: Mostrar toast de erro (se disponível)
+      if (typeof window !== 'undefined' && (window as any).toast) {
+        (window as any).toast.error(errorMessage);
+      }
     } finally {
       setProcessingEmoji(null); // ✅ CORREÇÃO: Remover loading state
     }
