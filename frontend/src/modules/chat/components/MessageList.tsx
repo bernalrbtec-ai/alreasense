@@ -434,7 +434,7 @@ export function MessageList() {
                 visibleMessages.has(msg.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
-              } transition-all duration-300 ease-out group`}
+              } transition-all duration-300 ease-out group group/message`}
             >
               <div
                 className={`
@@ -714,8 +714,9 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
 
   // ✅ MELHORIA UX: Estilo WhatsApp - reações ao final da mensagem, botão sempre visível ao passar mouse
   // Alinhar à direita para mensagens enviadas, à esquerda para recebidas
+  // ✅ CORREÇÃO: Usar group-hover/message (grupo está no elemento pai da mensagem)
   return (
-    <div className={`flex items-center gap-1.5 mt-0.5 group/reactions ${direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
+    <div className={`flex items-center gap-1.5 mt-0.5 ${direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
       {/* Reações existentes */}
       {hasReactions && (
         <div className="flex items-center gap-1 flex-wrap">
@@ -751,6 +752,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       )}
       
       {/* ✅ MELHORIA UX: Botão de reagir sempre visível ao passar mouse (estilo WhatsApp) */}
+      {/* ✅ CORREÇÃO: Usar group-hover/message (grupo está no elemento pai) */}
       <div className="relative">
         <button
           ref={buttonRef}
@@ -758,8 +760,8 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           className={`
             p-1 rounded-full transition-all
             ${showEmojiPicker 
-              ? 'bg-gray-200 dark:bg-gray-600' 
-              : 'opacity-0 group-hover/reactions:opacity-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+              ? 'bg-gray-200 dark:bg-gray-600 opacity-100' 
+              : 'opacity-0 group-hover/message:opacity-100 hover:bg-gray-100 dark:hover:bg-gray-700'
             }
           `}
           title="Adicionar reação"

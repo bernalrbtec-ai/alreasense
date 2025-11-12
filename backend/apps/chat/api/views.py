@@ -1080,11 +1080,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         total_count = Message.objects.filter(conversation=conversation).count()
         
         # Buscar mensagens com paginação (ordenado por created_at DESC para pegar mais recentes)
+        # ✅ CORREÇÃO: Prefetch de reações para incluir reactions e reactions_summary
         messages = Message.objects.filter(
             conversation=conversation
         ).select_related(
             'sender', 'conversation', 'conversation__tenant', 'conversation__department'
-        ).prefetch_related('attachments').order_by('-created_at')[offset:offset+limit]
+        ).prefetch_related(
+            'attachments',
+            'reactions__user'  # ✅ CORREÇÃO: Prefetch de reações para exibir corretamente
+        ).order_by('-created_at')[offset:offset+limit]
         
         # Reverter ordem para exibir (mais antigas primeiro, como WhatsApp)
         messages_list = list(messages)
