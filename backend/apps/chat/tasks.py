@@ -732,12 +732,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 logger.info(f"   Status: {response.status_code}")
                 logger.info(f"   Body completo: {response.text}")
                 
-                # ✅ CORREÇÃO: Log detalhado do erro antes de fazer raise_for_status
+                # ✅ CORREÇÃO: Tratar erros específicos da Evolution API antes de fazer raise_for_status
                 if response.status_code != 200:
                     logger.error(f"❌ [CHAT ENVIO] Erro {response.status_code} ao enviar mensagem:")
                     logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
                     logger.error(f"   Resposta completa: {response.text}")
                     logger.error(f"   Headers enviados: {dict(headers)}")
+                    
+                    # Tentar parsear resposta para identificar erro específico
+                    try:
+                        error_data = response.json()
+                        error_message = error_data.get('response', {}).get('message', [])
+                        
+                        # Verificar se é erro de número não existe
+                        if isinstance(error_message, list) and len(error_message) > 0:
+                            first_error = error_message[0]
+                            if isinstance(first_error, dict):
+                                exists = first_error.get('exists', True)
+                                jid = first_error.get('jid', '')
+                                number = first_error.get('number', '')
+                                
+                                if exists is False:
+                                    # Número não existe no WhatsApp
+                                    message.status = 'failed'
+                                    message.error_message = f'Número não está registrado no WhatsApp: {_mask_remote_jid(number)}'
+                                    await sync_to_async(message.save)(update_fields=['status', 'error_message'])
+                                    logger.error(f"❌ [CHAT ENVIO] Número não existe no WhatsApp: {_mask_remote_jid(number)}")
+                                    return  # Não fazer raise, já tratamos o erro
+                    except (ValueError, KeyError, TypeError):
+                        # Se não conseguir parsear, continuar com raise_for_status normal
+                        pass
                 
                 response.raise_for_status()
                 
