@@ -39,6 +39,11 @@ function mergeConversations(
     // - Última mensagem (preservar se não vier nova)
     last_message: incoming.last_message || existing.last_message,
     
+    // ✅ CORREÇÃO: Garantir que nome e foto sempre sejam atualizados se vierem novos dados
+    // Se incoming tem nome/foto, usar (mesmo que seja diferente de existing)
+    contact_name: incoming.contact_name !== undefined ? incoming.contact_name : existing.contact_name,
+    profile_pic_url: incoming.profile_pic_url !== undefined ? incoming.profile_pic_url : existing.profile_pic_url,
+    
     // ✅ GARANTIR campos obrigatórios:
     status: incoming.status || existing.status || 'pending',
     conversation_type: incoming.conversation_type || existing.conversation_type || 'individual',
