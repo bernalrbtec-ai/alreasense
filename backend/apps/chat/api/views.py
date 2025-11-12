@@ -1069,8 +1069,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         GET /conversations/{id}/messages/?limit=50&offset=0
         
         ✅ PERFORMANCE: Paginação implementada para melhor performance
+        ✅ CORREÇÃO: Tratamento explícito quando conversa não existe
         """
-        conversation = self.get_object()
+        try:
+            conversation = self.get_object()
+        except Conversation.DoesNotExist:
+            logger.warning(f"⚠️ [MESSAGES] Conversa {pk} não encontrada para tenant {request.user.tenant.id}")
+            return Response({
+                'results': [],
+                'count': 0,
+                'limit': int(request.query_params.get('limit', 15)),
+                'offset': int(request.query_params.get('offset', 0)),
+                'has_more': False,
+                'next': None,
+                'previous': None,
+                'error': 'Conversa não encontrada'
+            }, status=status.HTTP_404_NOT_FOUND)
         
         # Paginação
         limit = int(request.query_params.get('limit', 15))  # Default 15 mensagens
