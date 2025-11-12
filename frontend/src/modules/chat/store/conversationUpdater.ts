@@ -159,10 +159,9 @@ export function upsertConversation(
     ...conversations.slice(existingIndex + 1)
   ];
   
-  // ✅ Reordenar apenas se last_message_at mudou
-  const needsResort = existing.last_message_at !== incoming.last_message_at;
-  
-  return needsResort ? sortConversations(updatedConversations) : updatedConversations;
+  // ✅ MELHORIA UX: Sempre reordenar após atualizar conversa (garante ordem correta)
+  // Isso garante que conversas com mensagens novas (enviadas ou recebidas) vão para o topo
+  return sortConversations(updatedConversations);
 }
 
 /**
