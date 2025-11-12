@@ -1424,30 +1424,6 @@ class MessageReactionViewSet(viewsets.ViewSet):
     
     permission_classes = [IsAuthenticated, CanAccessChat]
     
-    def get_queryset(self):
-        """Filtra reações por mensagens acessíveis ao usuário."""
-        user = self.request.user
-        
-        if user.is_superuser:
-            return self.queryset
-        
-        if user.is_admin:
-            return self.queryset.filter(message__conversation__tenant=user.tenant)
-        
-        # Gerente/Agente: apenas reações de mensagens de conversas dos seus departamentos
-        user_departments = user.departments.all()
-        if not user_departments.exists():
-            return self.queryset.none()
-        
-        return self.queryset.filter(
-            message__conversation__tenant=user.tenant,
-            message__conversation__department__in=user_departments
-        )
-    
-    def perform_create(self, serializer):
-        """Cria reação e garante que usuário é o atual."""
-        serializer.save(user=self.request.user)
-    
     @action(detail=False, methods=['get'], url_path='queues/status')
     def queues_status(self, request):
         """

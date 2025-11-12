@@ -335,17 +335,41 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         logger.info(f"🔍 [TIPO] Conversa: {conversation_type} | RemoteJID: {remote_jid}")
         
-        # Telefone/ID (depende do tipo)
-        if is_group:
-            # 👥 GRUPOS: Usar ID completo
-            # Evolution API retorna: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
-            # Precisamos manter o formato completo (@g.us) para usar na API depois
-            phone = remote_jid  # Mantém formato completo: xxx@g.us
-        else:
-            # 👤 INDIVIDUAIS: Extrair número e adicionar +
-            phone = remote_jid.split('@')[0]
-            if not phone.startswith('+'):
-                phone = '+' + phone
+        # ✅ CORREÇÃO CRÍTICA: Normalizar telefone/ID de forma consistente
+        # Isso previne criação de conversas duplicadas para o mesmo contato
+        def normalize_contact_phone(remote_jid: str, is_group: bool) -> str:
+            """
+            Normaliza contact_phone para formato consistente usado no banco.
+            
+            Para grupos: mantém formato completo com @g.us
+            Para individuais: remove @s.whatsapp.net e adiciona + se necessário
+            
+            Returns:
+                Telefone normalizado no formato usado no banco de dados
+            """
+            if is_group:
+                # 👥 GRUPOS: Usar ID completo com @g.us
+                # Evolution API retorna: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
+                # Precisamos manter o formato completo (@g.us) para usar na API depois
+                if not remote_jid.endswith('@g.us'):
+                    if remote_jid.endswith('@s.whatsapp.net'):
+                        # Converter individual para grupo (caso raro)
+                        remote_jid = remote_jid.replace('@s.whatsapp.net', '@g.us')
+                    else:
+                        # Adicionar @g.us se não tiver sufixo
+                        remote_jid = f"{remote_jid}@g.us"
+                return remote_jid
+            else:
+                # 👤 INDIVIDUAIS: Remover @s.whatsapp.net e normalizar com +
+                phone = remote_jid.split('@')[0]  # Remove @s.whatsapp.net ou @g.us
+                # Remover espaços e caracteres especiais
+                phone = phone.strip()
+                # Adicionar + se não tiver
+                if not phone.startswith('+'):
+                    phone = '+' + phone.lstrip('+')
+                return phone
+        
+        phone = normalize_contact_phone(remote_jid, is_group)
         
         # Para grupos, extrair quem enviou
         sender_phone = ''
