@@ -675,7 +675,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     return emojiRegex.test(emoji);
   };
 
-  // Adicionar reação
+  // ✅ CORREÇÃO: Adicionar ou remover reação (comportamento WhatsApp)
   const handleAddReaction = async (emoji: string) => {
     if (!user || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
     
@@ -691,6 +691,58 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       .getState()
       .messages.find((m) => m.id === message.id);
     const previousReactions = cloneReactions(currentStoreMessage?.reactions);
+    
+    // ✅ CORREÇÃO CRÍTICA: Verificar se usuário já reagiu com este emoji
+    const userReaction = previousReactions.find(
+      (reaction) => reaction.user === String(user.id) && reaction.emoji === emoji
+    );
+    
+    // ✅ CORREÇÃO: Se já reagiu com este emoji, remover (toggle off)
+    if (userReaction) {
+      // Optimistic update: remover reação
+      const optimisticReactions = previousReactions.filter(
+        (reaction) => reaction.id !== userReaction.id
+      );
+      const optimisticSummary = buildSummaryFromReactions(optimisticReactions);
+      updateMessageReactions(message.id, optimisticReactions, optimisticSummary);
+      
+      try {
+        const response = await api.post('/chat/reactions/remove/', {
+          message_id: message.id,
+          emoji: emoji,
+        });
+        
+        if (!response.data?.success) {
+          throw new Error('Resposta inválida do servidor');
+        }
+        
+        setShowEmojiPicker(false);
+        return; // ✅ Sair após remover
+      } catch (error: any) {
+        console.error('❌ Erro ao remover reação:', error);
+        const errorMessage = error?.response?.data?.error || 'Erro ao remover reação';
+        
+        // Rollback
+        updateMessageReactions(
+          message.id,
+          previousReactions,
+          buildSummaryFromReactions(previousReactions)
+        );
+        
+        if (typeof window !== 'undefined' && (window as any).toast) {
+          (window as any).toast.error(errorMessage);
+        }
+      } finally {
+        setProcessingEmoji(null);
+      }
+      return;
+    }
+    
+    // ✅ CORREÇÃO: Se usuário já reagiu com outro emoji, substituir (remover antiga)
+    const otherUserReaction = previousReactions.find(
+      (reaction) => reaction.user === String(user.id) && reaction.emoji !== emoji
+    );
+    
     const optimisticReaction: MessageReaction = {
       id: `optimistic-${user.id}-${emoji}-${Date.now()}`,
       message: message.id,
@@ -705,11 +757,12 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       created_at: new Date().toISOString(),
     };
 
+    // ✅ CORREÇÃO: Remover reação antiga do usuário (se existir) e adicionar nova
     const optimisticReactions = [
       ...previousReactions.filter(
-        (reaction) => !(reaction.user === String(user.id) && reaction.emoji === emoji)
+        (reaction) => reaction.user !== String(user.id) // Remover TODAS as reações do usuário
       ),
-      optimisticReaction,
+      optimisticReaction, // Adicionar nova reação
     ];
 
     const optimisticSummary = buildSummaryFromReactions(optimisticReactions);

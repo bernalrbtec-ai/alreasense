@@ -1550,14 +1550,38 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # ✅ CORREÇÃO: Prefetch de reações antes de criar reação
-        # Criar ou obter reação (unique_together garante que não duplica)
-        reaction, created = MessageReaction.objects.get_or_create(
+        # ✅ CORREÇÃO CRÍTICA: Comportamento estilo WhatsApp - substituir reação anterior
+        # Se usuário já reagiu com outro emoji, remover a reação antiga primeiro
+        # Isso garante que usuário só tem uma reação por vez (comportamento WhatsApp)
+        existing_reaction = MessageReaction.objects.filter(
+            message=message,
+            user=request.user
+        ).first()
+        
+        if existing_reaction:
+            if existing_reaction.emoji == emoji:
+                # ✅ Se é o mesmo emoji, remover (toggle off)
+                existing_reaction.delete()
+                logger.info(f"✅ [REACTION] Reação removida (toggle off): {request.user.email} {emoji} em {message.id}")
+                
+                # Broadcast atualização após remover
+                message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
+                from apps.chat.utils.websocket import broadcast_message_reaction_update
+                broadcast_message_reaction_update(message)
+                
+                return Response({'success': True, 'removed': True}, status=status.HTTP_200_OK)
+            else:
+                # ✅ Se é emoji diferente, remover reação antiga e criar nova
+                existing_reaction.delete()
+                logger.info(f"✅ [REACTION] Reação antiga removida para substituir: {request.user.email} {existing_reaction.emoji} → {emoji}")
+        
+        # Criar nova reação
+        reaction = MessageReaction.objects.create(
             message=message,
             user=request.user,
-            emoji=emoji,
-            defaults={}
+            emoji=emoji
         )
+        created = True
         
         # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
         # Isso garante que a reação aparece no WhatsApp do destinatário

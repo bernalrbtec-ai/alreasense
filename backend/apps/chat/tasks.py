@@ -403,8 +403,9 @@ async def send_reaction_to_evolution(message, emoji: str):
                 headers=headers
             )
             
-            if response.status_code == 200:
-                logger.info(f"✅ [REACTION] Reação enviada com sucesso para Evolution API")
+            # ✅ CORREÇÃO: Evolution API retorna 201 Created para reações, não 200
+            if response.status_code in (200, 201):
+                logger.info(f"✅ [REACTION] Reação enviada com sucesso para Evolution API (status: {response.status_code})")
                 return True
             else:
                 logger.error(f"❌ [REACTION] Erro {response.status_code} ao enviar reação:")
