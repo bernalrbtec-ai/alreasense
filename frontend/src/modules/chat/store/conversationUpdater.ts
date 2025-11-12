@@ -117,18 +117,19 @@ export function upsertConversation(
   const existingIndex = conversations.findIndex(c => c.id === incoming.id);
   
   if (existingIndex === -1) {
-    // ✅ NOVA CONVERSA: Adicionar no início
+    // ✅ NOVA CONVERSA: Adicionar e ordenar
     console.log('✅ [UPDATER] Nova conversa adicionada:', incoming.contact_name || incoming.contact_phone);
     
     const newConversations = [
+      ...conversations,
       {
         ...incoming,
         status: incoming.status || 'pending',
         conversation_type: incoming.conversation_type || 'individual',
-      },
-      ...conversations
+      }
     ];
     
+    // ✅ Sempre ordenar após adicionar (garante ordem correta)
     return sortConversations(newConversations);
   }
   
