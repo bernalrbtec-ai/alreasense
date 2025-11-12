@@ -93,13 +93,20 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
         )
     ).get(id=conversation.id)
     
-    # Transferir o annotate para o objeto original
+    # ✅ FIX CRÍTICO: Transferir annotate E prefetch para o objeto original
+    # Isso garante que o serializer tenha acesso ao last_message_list
     conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
+    
+    # ✅ FIX CRÍTICO: Transferir last_message_list do prefetch para o objeto original
+    # O serializer precisa deste atributo para retornar last_message corretamente
+    if hasattr(conversation_with_annotate, 'last_message_list'):
+        conversation.last_message_list = conversation_with_annotate.last_message_list
     
     # ✅ FIX: Garantir que last_message_at está atualizado (vem do banco após refresh_from_db)
     # Não precisa fazer nada extra, refresh_from_db já atualiza last_message_at
     
     # Serializar com contexto se disponível
+    # ✅ IMPORTANTE: Usar conversation (que agora tem last_message_list) ao invés de conversation_with_annotate
     serializer_context = {'request': request} if request else {}
     conv_data = ConversationSerializer(conversation, context=serializer_context).data
     
