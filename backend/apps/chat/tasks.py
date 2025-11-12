@@ -371,14 +371,15 @@ async def send_reaction_to_evolution(message, emoji: str):
             if not remote_jid.startswith('+'):
                 remote_jid = f'+{remote_jid.lstrip("+")}'
         
-        # Preparar payload para Evolution API
+        # ✅ CORREÇÃO: Preparar payload para Evolution API
+        # Se emoji vazio, remove reação; senão, adiciona/substitui
         payload = {
             'key': {
                 'remoteJid': remote_jid,
                 'id': message.message_id,  # ID externo da mensagem no WhatsApp
                 'fromMe': message.direction == 'outgoing'
             },
-            'reaction': emoji
+            'reaction': emoji if emoji else ''  # ✅ Emoji vazio remove reação no WhatsApp
         }
         
         headers = {

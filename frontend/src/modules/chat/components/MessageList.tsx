@@ -607,27 +607,73 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
-  const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top'); // ✅ CORREÇÃO: Posição do picker
+  const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number } | null>(null); // ✅ CORREÇÃO: Posição calculada do picker
   const pickerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // ✅ CORREÇÃO: Calcular posição do picker (acima ou abaixo) baseado no espaço disponível
+  // ✅ CORREÇÃO CRÍTICA: Calcular posição do picker baseada no viewport
   useEffect(() => {
     if (showEmojiPicker && buttonRef.current) {
-      const buttonRect = buttonRef.current.getBoundingClientRect();
-      const viewportHeight = window.innerHeight;
-      const spaceAbove = buttonRect.top;
-      const spaceBelow = viewportHeight - buttonRect.bottom;
-      const pickerHeight = 320; // Altura aproximada do picker
+      const calculatePosition = () => {
+        if (!buttonRef.current) return;
+        
+        const buttonRect = buttonRef.current.getBoundingClientRect();
+        const pickerHeight = 320;
+        const pickerWidth = 320;
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        
+        // Calcular posição horizontal
+        let left = direction === 'outgoing' 
+          ? buttonRect.right - pickerWidth  // Alinhar à direita do botão
+          : buttonRect.left;  // Alinhar à esquerda do botão
+        
+        // Garantir que não saia da tela horizontalmente
+        if (left + pickerWidth > viewportWidth) {
+          left = viewportWidth - pickerWidth - 16; // 16px de margem
+        }
+        if (left < 16) {
+          left = 16; // 16px de margem
+        }
+        
+        // Calcular posição vertical
+        const spaceAbove = buttonRect.top;
+        const spaceBelow = viewportHeight - buttonRect.bottom;
+        let top: number;
+        
+        if (spaceAbove >= pickerHeight || (spaceAbove < pickerHeight && spaceBelow < pickerHeight)) {
+          // Posicionar acima se houver espaço OU se não houver espaço em nenhum lado
+          top = buttonRect.top - pickerHeight - 8;
+        } else {
+          // Posicionar abaixo
+          top = buttonRect.bottom + 8;
+        }
+        
+        // Garantir que não saia da tela verticalmente
+        if (top < 16) {
+          top = 16; // 16px de margem do topo
+        }
+        if (top + pickerHeight > viewportHeight - 16) {
+          top = viewportHeight - pickerHeight - 16; // 16px de margem do fundo
+        }
+        
+        setPickerPosition({ top, left });
+      };
       
-      // Se não houver espaço suficiente acima, posicionar abaixo
-      if (spaceAbove < pickerHeight && spaceBelow > pickerHeight) {
-        setPickerPosition('bottom');
-      } else {
-        setPickerPosition('top');
-      }
+      calculatePosition();
+      
+      // Recalcular ao redimensionar ou scrollar
+      window.addEventListener('resize', calculatePosition);
+      window.addEventListener('scroll', calculatePosition, true);
+      
+      return () => {
+        window.removeEventListener('resize', calculatePosition);
+        window.removeEventListener('scroll', calculatePosition, true);
+      };
+    } else {
+      setPickerPosition(null);
     }
-  }, [showEmojiPicker]);
+  }, [showEmojiPicker, direction]);
 
   // Fechar picker ao clicar fora
   useEffect(() => {
@@ -931,16 +977,13 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
         >
           <Smile className="w-4 h-4 text-gray-500" />
         </button>
-        {showEmojiPicker && (
+        {showEmojiPicker && pickerPosition && (
           <div 
             ref={pickerRef} 
-            className={`absolute z-50 ${direction === 'outgoing' ? 'right-0' : 'left-0'}`}
+            className="fixed z-50"
             style={{
-              // ✅ CORREÇÃO: Posicionar dinamicamente baseado no espaço disponível
-              [pickerPosition === 'top' ? 'bottom' : 'top']: '100%',
-              [pickerPosition === 'top' ? 'marginBottom' : 'marginTop']: '8px',
-              // ✅ CORREÇÃO: Garantir que não saia da tela horizontalmente
-              maxWidth: 'calc(100vw - 32px)',
+              top: `${pickerPosition.top}px`,
+              left: `${pickerPosition.left}px`,
             }}
           >
             <EmojiPicker

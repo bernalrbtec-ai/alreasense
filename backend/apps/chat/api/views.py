@@ -1561,8 +1561,29 @@ class MessageReactionViewSet(viewsets.ViewSet):
         if existing_reaction:
             if existing_reaction.emoji == emoji:
                 # ✅ Se é o mesmo emoji, remover (toggle off)
+                old_emoji = existing_reaction.emoji
                 existing_reaction.delete()
                 logger.info(f"✅ [REACTION] Reação removida (toggle off): {request.user.email} {emoji} em {message.id}")
+                
+                # ✅ CORREÇÃO CRÍTICA: Enviar remoção para Evolution API (WhatsApp)
+                # Enviar reação vazia remove a reação no WhatsApp
+                import asyncio
+                from apps.chat.tasks import send_reaction_to_evolution
+                
+                def remove_reaction_async():
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        # ✅ Enviar emoji vazio remove a reação no WhatsApp
+                        loop.run_until_complete(send_reaction_to_evolution(message, ''))
+                        loop.close()
+                        logger.info(f"✅ [REACTION] Remoção enviada para Evolution API: {request.user.email} removendo {old_emoji} em {message.id}")
+                    except Exception as e:
+                        logger.error(f"⚠️ [REACTION] Erro ao enviar remoção para Evolution API: {e}", exc_info=True)
+                
+                import threading
+                thread = threading.Thread(target=remove_reaction_async, daemon=True)
+                thread.start()
                 
                 # Broadcast atualização após remover
                 message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
@@ -1571,9 +1592,29 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 
                 return Response({'success': True, 'removed': True}, status=status.HTTP_200_OK)
             else:
-                # ✅ Se é emoji diferente, remover reação antiga e criar nova
+                # ✅ Se é emoji diferente, remover reação antiga no WhatsApp primeiro, depois criar nova
+                old_emoji = existing_reaction.emoji
                 existing_reaction.delete()
-                logger.info(f"✅ [REACTION] Reação antiga removida para substituir: {request.user.email} {existing_reaction.emoji} → {emoji}")
+                logger.info(f"✅ [REACTION] Reação antiga removida para substituir: {request.user.email} {old_emoji} → {emoji}")
+                
+                # ✅ CORREÇÃO CRÍTICA: Remover reação antiga no WhatsApp antes de enviar nova
+                import asyncio
+                from apps.chat.tasks import send_reaction_to_evolution
+                
+                def remove_old_reaction_async():
+                    try:
+                        loop = asyncio.new_event_loop()
+                        asyncio.set_event_loop(loop)
+                        # Remover reação antiga primeiro
+                        loop.run_until_complete(send_reaction_to_evolution(message, ''))
+                        loop.close()
+                        logger.info(f"✅ [REACTION] Reação antiga removida no WhatsApp: {old_emoji}")
+                    except Exception as e:
+                        logger.error(f"⚠️ [REACTION] Erro ao remover reação antiga no WhatsApp: {e}", exc_info=True)
+                
+                import threading
+                thread = threading.Thread(target=remove_old_reaction_async, daemon=True)
+                thread.start()
         
         # Criar nova reação
         reaction = MessageReaction.objects.create(
@@ -1695,6 +1736,13 @@ class MessageReactionViewSet(viewsets.ViewSet):
                     status=status.HTTP_403_FORBIDDEN
                 )
         
+        # ✅ CORREÇÃO CRÍTICA: Validar que mensagem tem message_id antes de remover
+        if not message.message_id:
+            return Response(
+                {'error': 'Mensagem não tem message_id (não foi enviada pelo sistema ou ainda não foi processada)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # Remover reação (se existir)
         try:
             reaction = MessageReaction.objects.get(
@@ -1703,6 +1751,26 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 emoji=emoji
             )
             reaction.delete()
+            
+            # ✅ CORREÇÃO CRÍTICA: Enviar remoção para Evolution API (WhatsApp)
+            # Enviar reação vazia remove a reação no WhatsApp
+            import asyncio
+            from apps.chat.tasks import send_reaction_to_evolution
+            
+            def remove_reaction_async():
+                try:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    # ✅ Enviar emoji vazio remove a reação no WhatsApp
+                    loop.run_until_complete(send_reaction_to_evolution(message, ''))
+                    loop.close()
+                    logger.info(f"✅ [REACTION] Remoção enviada para Evolution API: {request.user.email} removendo {emoji} em {message.id}")
+                except Exception as e:
+                    logger.error(f"⚠️ [REACTION] Erro ao enviar remoção para Evolution API: {e}", exc_info=True)
+            
+            import threading
+            thread = threading.Thread(target=remove_reaction_async, daemon=True)
+            thread.start()
             
             # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket após remover reação
             # Recarregar mensagem com prefetch de reações
