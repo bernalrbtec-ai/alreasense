@@ -1074,17 +1074,38 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         try:
             conversation = self.get_object()
         except Conversation.DoesNotExist:
-            logger.warning(f"⚠️ [MESSAGES] Conversa {pk} não encontrada para tenant {request.user.tenant.id}")
-            return Response({
-                'results': [],
-                'count': 0,
-                'limit': int(request.query_params.get('limit', 15)),
-                'offset': int(request.query_params.get('offset', 0)),
-                'has_more': False,
-                'next': None,
-                'previous': None,
-                'error': 'Conversa não encontrada'
-            }, status=status.HTTP_404_NOT_FOUND)
+            # ✅ CORREÇÃO: Verificar se conversa existe mas não está acessível (problema de filtro/permissão)
+            try:
+                # Tentar buscar diretamente sem filtros para ver se existe
+                direct_conversation = Conversation.objects.get(id=pk, tenant=request.user.tenant)
+                logger.warning(
+                    f"⚠️ [MESSAGES] Conversa {pk} existe mas não está acessível para usuário {request.user.id} "
+                    f"(role: {request.user.role}, department: {direct_conversation.department_id}, "
+                    f"status: {direct_conversation.status})"
+                )
+                return Response({
+                    'results': [],
+                    'count': 0,
+                    'limit': int(request.query_params.get('limit', 15)),
+                    'offset': int(request.query_params.get('offset', 0)),
+                    'has_more': False,
+                    'next': None,
+                    'previous': None,
+                    'error': 'Conversa não acessível (verifique permissões de departamento)'
+                }, status=status.HTTP_403_FORBIDDEN)
+            except Conversation.DoesNotExist:
+                # Conversa realmente não existe
+                logger.warning(f"⚠️ [MESSAGES] Conversa {pk} não existe para tenant {request.user.tenant.id}")
+                return Response({
+                    'results': [],
+                    'count': 0,
+                    'limit': int(request.query_params.get('limit', 15)),
+                    'offset': int(request.query_params.get('offset', 0)),
+                    'has_more': False,
+                    'next': None,
+                    'previous': None,
+                    'error': 'Conversa não encontrada'
+                }, status=status.HTTP_404_NOT_FOUND)
         
         # Paginação
         limit = int(request.query_params.get('limit', 15))  # Default 15 mensagens
