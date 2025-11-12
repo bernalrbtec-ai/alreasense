@@ -7,6 +7,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
+import { getDisplayName } from '../utils/phoneFormatter';
 
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
 
@@ -97,8 +98,6 @@ export function useTenantSocket() {
           }, 500); // 500ms de debounce
           
           // ✅ MELHORIA: Usar função centralizada para obter nome de exibição (nome ou telefone formatado)
-          // Importação síncrona (módulo já está disponível no build)
-          const { getDisplayName } = require('../utils/phoneFormatter');
           const displayName = getDisplayName(data.conversation);
           const isGroup = data.conversation.conversation_type === 'group';
           
