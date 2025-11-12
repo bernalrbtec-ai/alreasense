@@ -248,23 +248,23 @@ export function useTenantSocket() {
         console.log('💬 [TENANT WS] Mensagem recebida via WebSocket:', data);
         console.log('💬 [TENANT WS] Message conversation_id:', data.message?.conversation_id || data.message?.conversation);
         console.log('💬 [TENANT WS] Data conversation id:', data.conversation?.id);
+        console.log('💬 [TENANT WS] Data conversation_id (direto):', data.conversation_id);
         console.log('💬 [TENANT WS] Active conversation id:', useChatStore.getState().activeConversation?.id);
         
         if (data.message) {
           const { addMessage, activeConversation } = useChatStore.getState();
           
-          // ✅ FIX CRÍTICO: Verificar SE a mensagem pertence à conversa ativa de forma rigorosa
-          // Comparar IDs convertidos para string para garantir que tipos diferentes sejam comparados corretamente
-          // O campo 'conversation' pode ser UUID (objeto) ou string, e também pode vir em 'conversation_id'
+          // ✅ CORREÇÃO: Verificar conversation_id em TODAS as possíveis localizações
+          // Backend pode enviar: data.conversation_id OU data.message.conversation OU data.conversation.id
           const messageConversationId = data.message.conversation 
             ? String(data.message.conversation) 
             : (data.message.conversation_id ? String(data.message.conversation_id) : null);
           const dataConversationId = data.conversation?.id ? String(data.conversation.id) : null;
+          const directConversationId = data.conversation_id ? String(data.conversation_id) : null;
           const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
           
-          // ✅ FIX: Comparar apenas IDs válidos e converter para string para garantir comparação correta
-          // Usar messageConversationId OU dataConversationId (qualquer um que estiver disponível)
-          const finalMessageConvId = messageConversationId || dataConversationId;
+          // ✅ CORREÇÃO: Usar qualquer um dos IDs disponíveis (prioridade: direct > message > conversation)
+          const finalMessageConvId = directConversationId || messageConversationId || dataConversationId;
           const isActiveConversation = activeConversationId && finalMessageConvId && (
             activeConversationId === finalMessageConvId
           );
@@ -272,10 +272,12 @@ export function useTenantSocket() {
           console.log('🔍 [TENANT WS] Verificando se mensagem é da conversa ativa:', {
             messageConversationId: messageConversationId,
             dataConversationId: dataConversationId,
+            directConversationId: directConversationId,
             finalMessageConvId: finalMessageConvId,
             activeConversationId: activeConversationId,
             messageConversation: data.message.conversation,
             messageConversationIdField: data.message.conversation_id,
+            dataConversationIdField: data.conversation_id,
             isActiveConversation
           });
           
