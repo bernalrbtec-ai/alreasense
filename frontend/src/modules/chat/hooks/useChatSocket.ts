@@ -68,7 +68,35 @@ export function useChatSocket(conversationId?: string) {
   useEffect(() => {
     const handleMessageReceived = (data: WebSocketMessage) => {
       if (data.message) {
-        console.log('💬 [HOOK] Nova mensagem recebida:', data.message);
+        console.log('💬 [HOOK] Nova mensagem recebida via useChatSocket:', data.message);
+        console.log('💬 [HOOK] Conversation ID:', data.message.conversation || data.message.conversation_id);
+        console.log('💬 [HOOK] Active conversation ID:', conversationId);
+        
+        // ✅ CORREÇÃO: Verificar se mensagem pertence à conversa ativa (mesmo vindo do grupo específico)
+        // Isso garante que mensagens não sejam adicionadas se a conversa mudou rapidamente
+        const { activeConversation } = useChatStore.getState();
+        const messageConversationId = data.message.conversation 
+          ? String(data.message.conversation) 
+          : (data.message.conversation_id ? String(data.message.conversation_id) : null);
+        const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
+        const subscribedConversationId = conversationId ? String(conversationId) : null;
+        
+        // ✅ CORREÇÃO: Verificar se mensagem pertence à conversa subscrita OU à conversa ativa
+        // Isso trata o caso onde a conversa mudou rapidamente mas a mensagem ainda chegou
+        const belongsToSubscribed = subscribedConversationId && messageConversationId && 
+          messageConversationId === subscribedConversationId;
+        const belongsToActive = activeConversationId && messageConversationId && 
+          messageConversationId === activeConversationId;
+        
+        if (!belongsToSubscribed && !belongsToActive) {
+          console.log('⚠️ [HOOK] Mensagem não pertence à conversa subscrita/ativa, ignorando:', {
+            messageConversationId,
+            subscribedConversationId,
+            activeConversationId
+          });
+          return; // Não adicionar mensagem se não pertence à conversa correta
+        }
+        
         // ✅ Verificar se mensagem já existe e preservar attachments existentes
         const { messages } = useChatStore.getState();
         const existingMessage = messages.find(m => m.id === data.message.id);
