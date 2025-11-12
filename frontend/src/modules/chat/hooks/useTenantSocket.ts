@@ -97,7 +97,8 @@ export function useTenantSocket() {
           }, 500); // 500ms de debounce
           
           // ✅ MELHORIA: Usar função centralizada para obter nome de exibição (nome ou telefone formatado)
-          const { getDisplayName } = await import('../utils/phoneFormatter');
+          // Importação síncrona (módulo já está disponível no build)
+          const { getDisplayName } = require('../utils/phoneFormatter');
           const displayName = getDisplayName(data.conversation);
           const isGroup = data.conversation.conversation_type === 'group';
           
