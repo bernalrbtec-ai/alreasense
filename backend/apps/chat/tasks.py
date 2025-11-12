@@ -1049,10 +1049,15 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     logger.info(f"   Phone: {phone}")
     
     try:
-        # Busca conversa
-        conversation = await sync_to_async(
-            Conversation.objects.select_related('tenant').get
-        )(id=conversation_id)
+        # ✅ CORREÇÃO: Tratar caso de conversa não existir (pode ter sido deletada)
+        try:
+            conversation = await sync_to_async(
+                Conversation.objects.select_related('tenant').get
+            )(id=conversation_id)
+        except Conversation.DoesNotExist:
+            logger.warning(f"⚠️ [PROFILE PIC] Conversa não encontrada (pode ter sido deletada): {conversation_id}")
+            logger.warning(f"   Phone: {phone}")
+            return  # ✅ Retornar silenciosamente - conversa não existe mais
         
         # Busca instância WhatsApp ativa
         from apps.notifications.models import WhatsAppInstance
@@ -1309,10 +1314,15 @@ async def handle_fetch_contact_name(
     logger.info(f"   Phone: {phone}")
     
     try:
-        # Busca conversa
-        conversation = await sync_to_async(
-            Conversation.objects.select_related('tenant').get
-        )(id=conversation_id)
+        # ✅ CORREÇÃO: Tratar caso de conversa não existir (pode ter sido deletada)
+        try:
+            conversation = await sync_to_async(
+                Conversation.objects.select_related('tenant').get
+            )(id=conversation_id)
+        except Conversation.DoesNotExist:
+            logger.warning(f"⚠️ [CONTACT NAME] Conversa não encontrada (pode ter sido deletada): {conversation_id}")
+            logger.warning(f"   Phone: {phone}")
+            return  # ✅ Retornar silenciosamente - conversa não existe mais
         
         # Formatar telefone (sem + e sem @s.whatsapp.net)
         clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')

@@ -80,10 +80,15 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
                         participants_count = group_info.get('size', 0)
                         group_desc = group_info.get('desc', '')
                         
-                        # Buscar e atualizar conversa
-                        conversation = await sync_to_async(
-                            Conversation.objects.select_related('tenant').get
-                        )(id=conversation_id)
+                        # ✅ CORREÇÃO: Tratar caso de conversa não existir (pode ter sido deletada)
+                        try:
+                            conversation = await sync_to_async(
+                                Conversation.objects.select_related('tenant').get
+                            )(id=conversation_id)
+                        except Conversation.DoesNotExist:
+                            logger.warning(f"⚠️ [GROUP INFO] Conversa não encontrada (pode ter sido deletada): {conversation_id}")
+                            logger.warning(f"   Group JID: {group_jid}")
+                            break  # ✅ Sair do loop de retry - conversa não existe mais
                         
                         update_fields = []
                         
