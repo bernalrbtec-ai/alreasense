@@ -148,6 +148,7 @@ def serialize_message_for_ws(message) -> Dict[str, Any]:
     Serializa uma mensagem completa para WebSocket.
     
     ✅ CORREÇÃO: Prefetch de reações para evitar race conditions.
+    ✅ CORREÇÃO: Garantir que attachments também estão prefetched.
     
     Args:
         message: Instância do modelo Message
@@ -158,10 +159,24 @@ def serialize_message_for_ws(message) -> Dict[str, Any]:
     from apps.chat.api.serializers import MessageSerializer
     from apps.chat.models import Message
     
-    # ✅ CORREÇÃO: Prefetch de reações se ainda não foi feito
-    if not hasattr(message, '_prefetched_objects_cache') or 'reactions' not in getattr(message, '_prefetched_objects_cache', {}):
-        # Recarregar mensagem com prefetch de reações
-        message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
+    # ✅ CORREÇÃO: Prefetch de reações e attachments se ainda não foi feito
+    needs_refetch = False
+    prefetch_cache = getattr(message, '_prefetched_objects_cache', {})
+    
+    if 'reactions' not in prefetch_cache:
+        needs_refetch = True
+    if 'attachments' not in prefetch_cache:
+        needs_refetch = True
+    
+    if needs_refetch:
+        # Recarregar mensagem com prefetch completo
+        message = Message.objects.prefetch_related(
+            'reactions__user',
+            'attachments'
+        ).select_related(
+            'sender',
+            'conversation'
+        ).get(id=message.id)
     
     msg_data = MessageSerializer(message).data
     return convert_uuids_to_str(msg_data)

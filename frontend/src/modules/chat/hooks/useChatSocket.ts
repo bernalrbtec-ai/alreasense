@@ -129,12 +129,37 @@ export function useChatSocket(conversationId?: string) {
 
     const handleReactionUpdate = (data: WebSocketMessage) => {
       if (data.message) {
-        console.log('👍 [HOOK] Reação atualizada:', data.message.id, data.reaction);
-        updateMessageReactions(
-          data.message.id,
-          data.message.reactions || [],
-          data.message.reactions_summary || {}
-        );
+        // ✅ CORREÇÃO: Verificar se mensagem pertence à conversa ativa antes de atualizar
+        const { activeConversation } = useChatStore.getState();
+        const messageConversationId = data.message.conversation 
+          ? String(data.message.conversation) 
+          : (data.conversation_id ? String(data.conversation_id) : null);
+        const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
+        
+        // Só atualizar se mensagem pertence à conversa ativa OU se não há conversa ativa (pode ser mensagem de outra conversa)
+        // Mas sempre atualizar se conversation_id bater (mensagem está na conversa ativa)
+        if (activeConversationId && messageConversationId && messageConversationId === activeConversationId) {
+          console.log('👍 [HOOK] Reação atualizada (conversa ativa):', data.message.id, data.reaction);
+          updateMessageReactions(
+            data.message.id,
+            data.message.reactions || [],
+            data.message.reactions_summary || {}
+          );
+        } else if (!activeConversationId) {
+          // Se não há conversa ativa, atualizar de qualquer forma (pode ser necessário para outras conversas)
+          console.log('👍 [HOOK] Reação atualizada (sem conversa ativa):', data.message.id, data.reaction);
+          updateMessageReactions(
+            data.message.id,
+            data.message.reactions || [],
+            data.message.reactions_summary || {}
+          );
+        } else {
+          console.log('ℹ️ [HOOK] Reação atualizada ignorada (mensagem não pertence à conversa ativa):', {
+            messageId: data.message.id,
+            messageConversationId,
+            activeConversationId
+          });
+        }
       }
     };
 

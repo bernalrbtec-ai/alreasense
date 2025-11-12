@@ -1631,46 +1631,34 @@ def chat_ping_evolution(request):
         )
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
-        from channels.layers import get_channel_layer
-        from asgiref.sync import async_to_sync
-        from apps.chat.utils.serialization import serialize_message_for_ws
+        # Usar função helper que faz broadcast para tenant inteiro
+        from apps.chat.utils.websocket import broadcast_message_reaction_update
         
         try:
-            channel_layer = get_channel_layer()
-            room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
-            
             # ✅ CORREÇÃO: Prefetch de reações antes de serializar
             # Recarregar mensagem com prefetch de reações para evitar race conditions
             message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
             
-            # Serializar mensagem completa com reações atualizadas
-            message.refresh_from_db()
-            message_data = serialize_message_for_ws(message)
+            # Preparar dados da reação para o broadcast
+            reaction_data = {
+                'id': str(reaction.id),
+                'emoji': reaction.emoji,
+                'user': {
+                    'id': str(request.user.id),
+                    'email': request.user.email,
+                    'first_name': request.user.first_name,
+                    'last_name': request.user.last_name,
+                },
+                'created_at': reaction.created_at.isoformat(),
+            }
             
-            async_to_sync(channel_layer.group_send)(
-                room_group_name,
-                {
-                    'type': 'message_reaction_update',
-                    'message': message_data,
-                    'reaction': {
-                        'id': str(reaction.id),
-                        'emoji': reaction.emoji,
-                        'user': {
-                            'id': str(request.user.id),
-                            'email': request.user.email,
-                            'first_name': request.user.first_name,
-                            'last_name': request.user.last_name,
-                        },
-                        'created_at': reaction.created_at.isoformat(),
-                    }
-                }
-            )
+            # ✅ CORREÇÃO: Usar função helper que faz broadcast para tenant inteiro
+            broadcast_message_reaction_update(message, reaction_data)
             
             if created:
                 logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
             else:
                 logger.info(f"✅ [REACTION] Reação já existente (broadcast): {request.user.email} {emoji} em {message.id}")
-            logger.info(f"   📡 Broadcast via WebSocket: {room_group_name}")
         except Exception as e:
             logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
         
@@ -1737,37 +1725,28 @@ def chat_ping_evolution(request):
             )
             reaction.delete()
             
-            # ✅ Broadcast via WebSocket
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
-            from apps.chat.utils.serialization import serialize_message_for_ws
+            # ✅ CORREÇÃO: Broadcast via WebSocket usando função helper
+            from apps.chat.utils.websocket import broadcast_message_reaction_update
             
             try:
-                channel_layer = get_channel_layer()
-                room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+                # ✅ CORREÇÃO: Prefetch de reações antes de serializar
+                # Recarregar mensagem com prefetch de reações para evitar race conditions
+                message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
                 
-                # Serializar mensagem completa com reações atualizadas
-                message.refresh_from_db()
-                message_data = serialize_message_for_ws(message)
-                
-                async_to_sync(channel_layer.group_send)(
-                    room_group_name,
-                    {
-                        'type': 'message_reaction_update',
-                        'message': message_data,
-                        'reaction': {
-                            'emoji': emoji,
-                            'removed': True,
-                            'user': {
-                                'id': str(request.user.id),
-                                'email': request.user.email,
-                            }
-                        }
+                # Preparar dados da reação removida para o broadcast
+                reaction_data = {
+                    'emoji': emoji,
+                    'removed': True,
+                    'user': {
+                        'id': str(request.user.id),
+                        'email': request.user.email,
                     }
-                )
+                }
+                
+                # ✅ CORREÇÃO: Usar função helper que faz broadcast para tenant inteiro
+                broadcast_message_reaction_update(message, reaction_data)
                 
                 logger.info(f"✅ [REACTION] Reação removida: {request.user.email} {emoji} em {message.id}")
-                logger.info(f"   📡 Broadcast via WebSocket: {room_group_name}")
             except Exception as e:
                 logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
             

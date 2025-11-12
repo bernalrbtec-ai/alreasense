@@ -430,7 +430,7 @@ export function MessageList() {
           {messages.map((msg) => (
             <div
               key={msg.id}
-              className={`flex ${msg.direction === 'outgoing' ? 'justify-end' : 'justify-start'} ${
+              className={`flex flex-col ${msg.direction === 'outgoing' ? 'items-end' : 'items-start'} ${
                 visibleMessages.has(msg.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
@@ -499,10 +499,10 @@ export function MessageList() {
                     </span>
                   )}
                 </div>
-                
-                {/* ✅ NOVO: Reações de mensagem */}
-                <MessageReactions message={msg} />
               </div>
+              
+              {/* ✅ MELHORIA UX: Reações posicionadas como WhatsApp (ao final da mensagem, fora do card, alinhadas) */}
+              <MessageReactions message={msg} direction={msg.direction} />
             </div>
           ))}
           
@@ -545,7 +545,7 @@ export function MessageList() {
  * Mostra reações existentes e permite adicionar/remover
  */
 // ✅ CORREÇÃO: Memoização de componente de reações para evitar re-renders desnecessários
-const MessageReactions = React.memo(function MessageReactions({ message }: { message: any }) {
+const MessageReactions = React.memo(function MessageReactions({ message, direction }: { message: any; direction: 'incoming' | 'outgoing' }) {
   const { user } = useAuthStore();
   const { messages, setMessages } = useChatStore();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -583,9 +583,32 @@ const MessageReactions = React.memo(function MessageReactions({ message }: { mes
     return message.reactions.find((r: MessageReaction) => r.emoji === emoji && r.user === user.id) || null;
   };
 
+  // ✅ CORREÇÃO: Validação de emoji no frontend
+  const validateEmoji = (emoji: string): boolean => {
+    if (!emoji || emoji.trim().length === 0) return false;
+    if (emoji.length > 10) return false; // Limite de caracteres
+    
+    // Verificar se é emoji válido (regex básico para emojis Unicode)
+    // Emojis Unicode geralmente começam em U+1F300 ou são caracteres especiais
+    const emojiRegex = /[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{1F900}-\u{1F9FF}]|[\u{1FA00}-\u{1FA6F}]|[\u{1FA70}-\u{1FAFF}]|[\u{2190}-\u{21FF}]|[\u{2300}-\u{23FF}]|[\u{2B50}-\u{2B55}]|[\u{3030}-\u{303F}]|[\u{3297}-\u{3299}]/u;
+    
+    // Permitir também alguns emojis compostos (com zero-width joiner)
+    if (emoji.includes('\u200D')) {
+      return true; // Emoji composto (ex: 👨‍👩‍👧‍👦)
+    }
+    
+    return emojiRegex.test(emoji);
+  };
+
   // Adicionar reação
   const handleAddReaction = async (emoji: string) => {
     if (!user || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
+    
+    // ✅ CORREÇÃO: Validar emoji antes de enviar
+    if (!validateEmoji(emoji)) {
+      console.warn('⚠️ [REACTION] Emoji inválido:', emoji);
+      return;
+    }
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
@@ -689,79 +712,62 @@ const MessageReactions = React.memo(function MessageReactions({ message }: { mes
     }
   };
 
-  if (!hasReactions && !showEmojiPicker) {
-    // Mostrar apenas botão de adicionar reação se não houver reações
-    return (
-      <div className="mt-2 flex items-center gap-1">
-        <div className="relative">
-          <button
-            ref={buttonRef}
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors opacity-0 group-hover:opacity-100"
-            title="Adicionar reação"
-          >
-            <Smile className="w-4 h-4 text-gray-500" />
-          </button>
-          {showEmojiPicker && (
-            <div ref={pickerRef} className="absolute bottom-full left-0 mb-2 z-50">
-              <EmojiPicker
-                onSelect={(emoji) => {
-                  handleAddReaction(emoji);
-                  setShowEmojiPicker(false);
-                }}
-                onClose={() => setShowEmojiPicker(false)}
-              />
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
+  // ✅ MELHORIA UX: Estilo WhatsApp - reações ao final da mensagem, botão sempre visível ao passar mouse
+  // Alinhar à direita para mensagens enviadas, à esquerda para recebidas
   return (
-    <div className="mt-2 flex items-center gap-1 flex-wrap">
+    <div className={`flex items-center gap-1.5 mt-0.5 group/reactions ${direction === 'outgoing' ? 'justify-end' : 'justify-start'}`}>
       {/* Reações existentes */}
-      {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
-        const userReaction = getUserReaction(emoji);
-        const isUserReaction = !!userReaction;
-        
-        return (
-          <button
-            key={emoji}
-            onClick={() => handleToggleReaction(emoji)}
-            onMouseEnter={() => setHoveredEmoji(emoji)}
-            onMouseLeave={() => setHoveredEmoji(null)}
-            disabled={processingEmoji === emoji} // ✅ CORREÇÃO: Desabilitar durante processamento
-            className={`
-              px-2 py-1 rounded-full text-xs flex items-center gap-1.5 transition-all
-              ${processingEmoji === emoji ? 'opacity-50 cursor-wait' : ''}
-              ${isUserReaction
-                ? 'bg-blue-100 dark:bg-blue-900 border border-blue-300 dark:border-blue-700'
-                : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
-              }
-            `}
-            title={`${data.count} ${data.count === 1 ? 'reação' : 'reações'}: ${data.users.map((u: any) => u.email).join(', ')}`}
-          >
-            <span className="text-base">{emoji}</span>
-            <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
-              {processingEmoji === emoji ? '...' : data.count} {/* ✅ CORREÇÃO: Feedback visual */}
-            </span>
-          </button>
-        );
-      })}
+      {hasReactions && (
+        <div className="flex items-center gap-1 flex-wrap">
+          {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
+            const userReaction = getUserReaction(emoji);
+            const isUserReaction = !!userReaction;
+            
+            return (
+              <button
+                key={emoji}
+                onClick={() => handleToggleReaction(emoji)}
+                onMouseEnter={() => setHoveredEmoji(emoji)}
+                onMouseLeave={() => setHoveredEmoji(null)}
+                disabled={processingEmoji === emoji}
+                className={`
+                  px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-all
+                  ${processingEmoji === emoji ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
+                  ${isUserReaction
+                    ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
+                    : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600/50'
+                  }
+                `}
+                title={`${data.count} ${data.count === 1 ? 'reação' : 'reações'}: ${data.users.map((u: any) => u.email || u.first_name || 'Usuário').join(', ')}`}
+              >
+                <span className="text-sm">{emoji}</span>
+                <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
+                  {processingEmoji === emoji ? '...' : data.count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       
-      {/* Botão de adicionar reação */}
+      {/* ✅ MELHORIA UX: Botão de reagir sempre visível ao passar mouse (estilo WhatsApp) */}
       <div className="relative">
         <button
           ref={buttonRef}
           onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-full transition-colors"
+          className={`
+            p-1 rounded-full transition-all
+            ${showEmojiPicker 
+              ? 'bg-gray-200 dark:bg-gray-600' 
+              : 'opacity-0 group-hover/reactions:opacity-100 hover:bg-gray-100 dark:hover:bg-gray-700'
+            }
+          `}
           title="Adicionar reação"
         >
           <Smile className="w-4 h-4 text-gray-500" />
         </button>
         {showEmojiPicker && (
-          <div ref={pickerRef} className="absolute bottom-full left-0 mb-2 z-50">
+          <div ref={pickerRef} className={`absolute bottom-full mb-2 z-50 ${direction === 'outgoing' ? 'right-0' : 'left-0'}`}>
             <EmojiPicker
               onSelect={(emoji) => {
                 handleAddReaction(emoji);

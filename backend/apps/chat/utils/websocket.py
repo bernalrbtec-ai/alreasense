@@ -229,3 +229,53 @@ def broadcast_conversation_assigned(conversation, old_user, new_user) -> None:
         f"{old_user} → {new_user}"
     )
 
+
+def broadcast_message_reaction_update(message, reaction_data: Optional[Dict[str, Any]] = None) -> None:
+    """
+    Broadcast quando uma reação é adicionada ou removida de uma mensagem.
+    
+    ✅ CORREÇÃO CRÍTICA: Broadcast para tenant inteiro (não apenas conversa específica).
+    Isso garante que todos os usuários vejam atualizações de reações em tempo real.
+    
+    Usado após:
+    - Adicionar reação (POST /chat/reactions/add/)
+    - Remover reação (POST /chat/reactions/remove/)
+    
+    Args:
+        message: Instância do modelo Message (com reações prefetched)
+        reaction_data: Dados opcionais da reação (emoji, user, removed, etc)
+    """
+    from apps.chat.utils.serialization import serialize_message_for_ws
+    
+    # ✅ CORREÇÃO: Garantir que mensagem tem reações prefetched antes de serializar
+    # serialize_message_for_ws já faz isso, mas garantimos aqui também
+    from apps.chat.models import Message
+    if not hasattr(message, '_prefetched_objects_cache') or 'reactions' not in getattr(message, '_prefetched_objects_cache', {}):
+        message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
+    
+    # Serializar mensagem completa com reações atualizadas
+    message_data = serialize_message_for_ws(message)
+    
+    # Preparar dados do broadcast
+    broadcast_data = {
+        'message': message_data,
+        'conversation_id': str(message.conversation_id)
+    }
+    
+    # Adicionar dados da reação se fornecidos
+    if reaction_data:
+        broadcast_data['reaction'] = reaction_data
+    
+    # ✅ CORREÇÃO CRÍTICA: Broadcast para tenant inteiro (não apenas conversa específica)
+    # Isso garante que todos os usuários vejam atualizações de reações
+    broadcast_to_tenant(
+        tenant_id=str(message.conversation.tenant_id),
+        event_type='message_reaction_update',
+        data=broadcast_data
+    )
+    
+    logger.info(
+        f"📡 [WEBSOCKET] Reação atualizada para mensagem {message.id} "
+        f"(tenant: {message.conversation.tenant_id})"
+    )
+
