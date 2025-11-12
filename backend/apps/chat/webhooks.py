@@ -1012,56 +1012,30 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             # ✅ FIX: Também enviar para o grupo do tenant para atualizar lista de conversas
             try:
-                from apps.chat.utils.serialization import serialize_message_for_ws, serialize_conversation_for_ws
-                from apps.chat.api.serializers import ConversationSerializer
-                from django.db.models import Count, Q
+                from apps.chat.utils.serialization import serialize_message_for_ws
+                from apps.chat.utils.websocket import broadcast_conversation_updated
                 
-                # ✅ FIX CRÍTICO: Recalcular unread_count para garantir que está atualizado
-                conversation.refresh_from_db()
-                if not hasattr(conversation, 'unread_count_annotated'):
-                    from apps.chat.models import Conversation as ConvModel
-                    conversation_with_annotate = ConvModel.objects.annotate(
-                        unread_count_annotated=Count(
-                            'messages',
-                            filter=Q(
-                                messages__direction='incoming',
-                                messages__status__in=['sent', 'delivered']
-                            ),
-                            distinct=True
-                        )
-                    ).get(id=conversation.id)
-                    conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
+                # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+                # Isso garante que last_message seja incluído no broadcast
+                broadcast_conversation_updated(conversation)
                 
+                # ✅ FIX: Também enviar message_received para adicionar mensagem na conversa ativa
                 msg_data_serializable = serialize_message_for_ws(message)
-                conv_data_serializable = serialize_conversation_for_ws(conversation)
                 
                 channel_layer = get_channel_layer()
                 tenant_group = f"chat_tenant_{tenant.id}"
                 
-                # ✅ FIX: Enviar TANTO message_received QUANTO conversation_updated
-                # message_received: para adicionar mensagem na conversa ativa
-                # conversation_updated: para atualizar lista (unread_count, last_message, etc)
-                
-                # 1. Broadcast message_received (para adicionar mensagem)
+                # Broadcast message_received (para adicionar mensagem na conversa ativa)
                 async_to_sync(channel_layer.group_send)(
                     tenant_group,
                     {
                         'type': 'message_received',
                         'message': msg_data_serializable,
-                        'conversation': conv_data_serializable
+                        'conversation_id': str(conversation.id)
                     }
                 )
                 
-                # 2. Broadcast conversation_updated (para atualizar lista com unread_count correto)
-                async_to_sync(channel_layer.group_send)(
-                    tenant_group,
-                    {
-                        'type': 'conversation_updated',
-                        'conversation': conv_data_serializable
-                    }
-                )
-                
-                logger.info(f"📡 [WEBSOCKET] Mensagem e conversa atualizada broadcast para grupo do tenant (unread_count: {getattr(conversation, 'unread_count_annotated', 'N/A')})")
+                logger.info(f"📡 [WEBSOCKET] Mensagem e conversa atualizada broadcast para grupo do tenant")
             except Exception as e:
                 logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
             
@@ -1074,11 +1048,40 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # 1. Notificar tenant sobre nova mensagem (toast)
                 logger.info(f"📬 [WEBHOOK] Notificando tenant sobre nova mensagem...")
                 try:
-                    from apps.chat.utils.serialization import serialize_conversation_for_ws
+                    from apps.chat.api.serializers import ConversationSerializer
+                    from django.db.models import Count, Q, Prefetch
+                    from apps.chat.utils.serialization import convert_uuids_to_str
                     # ✅ Usar imports globais (linhas 12-13) ao invés de import local
                     # from asgiref.sync import async_to_sync  # ❌ REMOVIDO: causava UnboundLocalError
                     
-                    conv_data_serializable = serialize_conversation_for_ws(conversation)
+                    # ✅ FIX CRÍTICO: Fazer prefetch de last_message antes de serializar
+                    # Isso garante que last_message seja incluído na notificação
+                    conversation_with_prefetch = Conversation.objects.annotate(
+                        unread_count_annotated=Count(
+                            'messages',
+                            filter=Q(
+                                messages__direction='incoming',
+                                messages__status__in=['sent', 'delivered']
+                            ),
+                            distinct=True
+                        )
+                    ).prefetch_related(
+                        Prefetch(
+                            'messages',
+                            queryset=Message.objects.select_related('sender', 'conversation')
+                                .prefetch_related('attachments')
+                                .order_by('-created_at')[:1],
+                            to_attr='last_message_list'
+                        )
+                    ).get(id=conversation.id)
+                    
+                    # Transferir prefetch para o objeto original
+                    conversation.last_message_list = conversation_with_prefetch.last_message_list
+                    conversation.unread_count_annotated = conversation_with_prefetch.unread_count_annotated
+                    
+                    # Serializar com last_message incluído
+                    conv_data = ConversationSerializer(conversation).data
+                    conv_data_serializable = convert_uuids_to_str(conv_data)
                     
                     # Broadcast para todo o tenant (notificação de nova mensagem)
                     channel_layer = get_channel_layer()  # ✅ Usa import global (linha 12)
