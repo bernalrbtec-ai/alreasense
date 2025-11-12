@@ -98,11 +98,16 @@ export function upsertConversation(
   
   if (now - lastUpdate < DEBOUNCE_MS) {
     // ✅ Atualização muito recente, aguardar um pouco
-    // Mas ainda processar se for uma atualização importante (nova mensagem, mudança de status)
+    // Mas ainda processar se for uma atualização importante (nova mensagem, mudança de status, nome/foto)
+    const existing = conversations.find(c => c.id === incoming.id);
     const isImportantUpdate = 
       incoming.unread_count !== undefined ||
       incoming.status !== undefined ||
-      incoming.last_message_at !== undefined;
+      incoming.last_message_at !== undefined ||
+      // ✅ CORREÇÃO: Sempre processar atualizações de nome e foto (não ignorar por debounce)
+      (existing && existing.contact_name !== incoming.contact_name) ||
+      (existing && existing.profile_pic_url !== incoming.profile_pic_url) ||
+      (existing && existing.group_metadata?.group_name !== incoming.group_metadata?.group_name);
     
     if (!isImportantUpdate) {
       console.log(`⏸️ [UPDATER] Debounce: ignorando update muito frequente de ${incoming.id}`);
