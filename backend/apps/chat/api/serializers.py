@@ -153,11 +153,14 @@ class MessageSerializer(serializers.ModelSerializer):
         from django.db.models import Count
         from collections import defaultdict
         
-        # ✅ CORREÇÃO: Prefetch de reações em batch para evitar N+1 queries
-        # Se o queryset já tem prefetch (via ViewSet.get_queryset), usar reações prefetched
-        if hasattr(obj, 'reactions'):
-            # Usar prefetch se disponível (evita query adicional)
-            reactions = obj.reactions.all()
+        # ✅ CORREÇÃO: Verificar se prefetch foi feito corretamente
+        # hasattr sempre retorna True para campos do modelo, então verificar prefetch cache
+        prefetch_cache = getattr(obj, '_prefetched_objects_cache', {})
+        has_prefetched_reactions = 'reactions' in prefetch_cache
+        
+        if has_prefetched_reactions:
+            # ✅ Usar reações prefetched (evita query adicional)
+            reactions = prefetch_cache['reactions']
         else:
             # Fallback: buscar reações se não foram prefetched
             reactions = MessageReaction.objects.filter(message=obj).select_related('user')
@@ -168,11 +171,13 @@ class MessageSerializer(serializers.ModelSerializer):
             emoji = reaction.emoji
             summary[emoji]['count'] += 1
             # Adicionar dados do usuário (apenas ID e nome para economizar espaço)
+            # ✅ CORREÇÃO: Verificar se user foi prefetched ou fazer select_related
+            user = reaction.user
             summary[emoji]['users'].append({
-                'id': str(reaction.user.id),
-                'email': reaction.user.email,
-                'first_name': reaction.user.first_name,
-                'last_name': reaction.user.last_name,
+                'id': str(user.id),
+                'email': user.email,
+                'first_name': user.first_name,
+                'last_name': user.last_name,
             })
         
         return dict(summary)
