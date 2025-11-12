@@ -65,10 +65,24 @@ export function MessageList() {
   useEffect(() => {
     if (!activeConversation?.id) return;
 
-    const fetchMessages = async () => {
+    const fetchMessages = async (retryCount = 0) => {
       try {
         setIsLoading(true);
         setVisibleMessages(new Set()); // Reset visibilidade ao trocar conversa
+        
+        // ✅ CORREÇÃO: Se conversa é muito nova (< 5s), aguardar um pouco antes de buscar
+        // Isso evita erro 404 quando conversa ainda está sendo criada no backend
+        if (activeConversation.created_at && retryCount === 0) {
+          const createdDate = new Date(activeConversation.created_at);
+          const now = new Date();
+          const ageInSeconds = (now.getTime() - createdDate.getTime()) / 1000;
+          
+          if (ageInSeconds < 5) {
+            const waitTime = (5 - ageInSeconds) * 1000; // Aguardar até completar 5s
+            console.log(`⏳ [MessageList] Conversa muito nova (${Math.round(ageInSeconds)}s), aguardando ${Math.round(waitTime)}ms antes de buscar mensagens...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          }
+        }
         
         // ✅ PERFORMANCE: Paginação - carregar apenas últimas 15 mensagens
         const response = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
@@ -201,10 +215,52 @@ export function MessageList() {
             });
           }
         }
-      } catch (error) {
+      } catch (error: any) {
         console.error('❌ Erro ao carregar mensagens:', error);
+        
+        // ✅ CORREÇÃO: Se erro 404 e conversa é nova, fazer retry com backoff exponencial
+        // Isso trata o caso onde conversa ainda está sendo criada no backend
+        if (error?.response?.status === 404 && retryCount < 3) {
+          const createdDate = activeConversation.created_at ? new Date(activeConversation.created_at) : null;
+          const now = new Date();
+          const isNewConversation = createdDate && (now.getTime() - createdDate.getTime()) < 30000; // < 30s
+          
+          if (isNewConversation) {
+            const retryDelay = Math.min(1000 * Math.pow(2, retryCount), 5000); // 1s, 2s, 4s (max 5s)
+            console.log(`🔄 [MessageList] Conversa nova ainda não criada (404), retry #${retryCount + 1} em ${retryDelay}ms...`);
+            
+            setTimeout(() => {
+              fetchMessages(retryCount + 1);
+            }, retryDelay);
+            return; // Não fazer setIsLoading(false) ainda, vai tentar novamente
+          }
+        }
+        
+        // ✅ CORREÇÃO: Se erro 404 e não é conversa nova, verificar se há mensagens no WebSocket
+        if (error?.response?.status === 404) {
+          const { messages: wsMessages } = useChatStore.getState();
+          const messagesFromConversation = wsMessages.filter(m => 
+            (m.conversation === activeConversation.id) || 
+            (typeof m.conversation === 'object' && m.conversation?.id === activeConversation.id)
+          );
+          
+          if (messagesFromConversation.length > 0) {
+            console.log(`✅ [MessageList] Usando ${messagesFromConversation.length} mensagem(ns) do WebSocket (conversa não encontrada na API)`);
+            const sortedMsgs = sortMessagesByTimestamp(messagesFromConversation);
+            setMessages(sortedMsgs);
+            setHasMoreMessages(false);
+            
+            // Scroll to bottom
+            setTimeout(() => {
+              messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+            }, 100);
+            return;
+          }
+        }
       } finally {
-        setIsLoading(false);
+        if (retryCount === 0) {
+          setIsLoading(false);
+        }
       }
     };
 
