@@ -671,12 +671,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             conversation.update_last_message()
             
         # Atualiza nome e foto se mudaram
+        # ✅ CORREÇÃO CRÍTICA: Só atualizar contact_name se mensagem NÃO veio de você
+        # Se você enviou a mensagem, push_name é SEU nome, não do contato!
         update_fields = []
         name_or_pic_changed = False
-        if push_name and conversation.contact_name != push_name:
+        if push_name and not from_me and conversation.contact_name != push_name:
             conversation.contact_name = push_name
             update_fields.append('contact_name')
             name_or_pic_changed = True
+            logger.info(f"✅ [WEBHOOK] Nome atualizado: '{conversation.contact_name}' (pushName do contato)")
+        elif push_name and from_me:
+            logger.debug(f"ℹ️ [WEBHOOK] Ignorando pushName '{push_name}' - mensagem enviada por você (from_me=True)")
         
         if profile_pic_url and conversation.profile_pic_url != profile_pic_url:
             conversation.profile_pic_url = profile_pic_url
