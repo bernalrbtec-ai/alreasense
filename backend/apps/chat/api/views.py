@@ -1409,18 +1409,19 @@ class MessageViewSet(viewsets.ModelViewSet):
         )
 
 
-class MessageReactionViewSet(viewsets.ModelViewSet):
+class MessageReactionViewSet(viewsets.ViewSet):
     """
     ViewSet para reações de mensagens.
     
     Permite adicionar/remover reações (emoji) a mensagens.
+    
+    ✅ CORREÇÃO: Usar ViewSet ao invés de ModelViewSet para evitar rotas padrão conflitantes.
+    Isso garante que apenas os actions customizados (add/remove) sejam expostos.
     """
     
     from apps.chat.models import MessageReaction, Message
     from apps.chat.api.serializers import MessageReactionSerializer
     
-    queryset = MessageReaction.objects.select_related('message', 'user', 'message__conversation')
-    serializer_class = MessageReactionSerializer
     permission_classes = [IsAuthenticated, CanAccessChat]
     
     def get_queryset(self):
