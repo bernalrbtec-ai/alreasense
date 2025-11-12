@@ -1008,11 +1008,12 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
             endpoint_name = f"{base_url}/chat/whatsappNumbers/{instance_name}"
             
             try:
+                # ✅ Aumentar timeout para buscar nome (pode ser mais tolerante que foto)
                 response_name = await client.post(
                     endpoint_name,
                     json={'numbers': [clean_phone]},
                     headers=headers,
-                    timeout=10.0
+                    timeout=15.0  # ✅ Aumentado de 10s para 15s (mais tolerante)
                 )
                 
                 logger.info(f"📥 [PROFILE PIC] Nome response status: {response_name.status_code}")
@@ -1055,8 +1056,20 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                         conversation.contact_name = formatted_phone
                         update_fields.append('contact_name')
                         logger.info(f"ℹ️ [PROFILE PIC] Erro HTTP, usando telefone formatado: {formatted_phone}")
+            except (httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError) as e:
+                # ✅ Erros de rede/timeout - logar sem traceback completo (erro esperado)
+                logger.warning(f"⚠️ [PROFILE PIC] Timeout/erro de conexão ao buscar nome: {type(e).__name__}")
+                logger.warning(f"   Endpoint: {endpoint_name}")
+                logger.warning(f"   Telefone: {clean_phone}")
+                # ✅ FALLBACK: Se erro de rede, usar telefone formatado
+                if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                    formatted_phone = _format_phone_for_display(clean_phone)
+                    conversation.contact_name = formatted_phone
+                    update_fields.append('contact_name')
+                    logger.info(f"ℹ️ [PROFILE PIC] Erro de rede, usando telefone formatado: {formatted_phone}")
             except Exception as e:
-                logger.error(f"❌ [PROFILE PIC] Erro ao buscar nome: {e}", exc_info=True)
+                # ✅ Outros erros - logar com traceback (erro inesperado)
+                logger.error(f"❌ [PROFILE PIC] Erro inesperado ao buscar nome: {type(e).__name__}: {e}", exc_info=True)
                 # ✅ FALLBACK: Se erro ao buscar nome, garantir que tenha telefone formatado
                 if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
                     formatted_phone = _format_phone_for_display(clean_phone)
