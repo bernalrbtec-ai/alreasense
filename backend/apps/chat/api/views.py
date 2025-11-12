@@ -1679,16 +1679,26 @@ def chat_ping_evolution(request):
         
         # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
         # Isso garante que a reação aparece no WhatsApp do destinatário
+        # ✅ CORREÇÃO: Executar de forma assíncrona em thread separada para não bloquear resposta
+        import asyncio
         from apps.chat.tasks import send_reaction_to_evolution
-        from asgiref.sync import sync_to_async
         
-        try:
-            # Enviar reação para Evolution API de forma assíncrona
-            await sync_to_async(send_reaction_to_evolution)(message, emoji)
-            logger.info(f"✅ [REACTION] Reação enviada para Evolution API: {request.user.email} {emoji} em {message.id}")
-        except Exception as e:
-            # Não bloquear se falhar envio (reação já foi salva no banco)
-            logger.error(f"⚠️ [REACTION] Erro ao enviar reação para Evolution API (reação salva no banco): {e}", exc_info=True)
+        # Executar envio em background (não bloquear resposta HTTP)
+        def send_reaction_async():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(send_reaction_to_evolution(message, emoji))
+                loop.close()
+                logger.info(f"✅ [REACTION] Reação enviada para Evolution API: {request.user.email} {emoji} em {message.id}")
+            except Exception as e:
+                # Não bloquear se falhar envio (reação já foi salva no banco)
+                logger.error(f"⚠️ [REACTION] Erro ao enviar reação para Evolution API (reação salva no banco): {e}", exc_info=True)
+        
+        # Executar em thread separada para não bloquear resposta HTTP
+        import threading
+        thread = threading.Thread(target=send_reaction_async, daemon=True)
+        thread.start()
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
         # Usar função helper que faz broadcast para tenant inteiro
