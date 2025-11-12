@@ -26,15 +26,23 @@ log_info "Inicializando consumer Redis de I/O (fetch_profile_pic, fetch_group_in
 python manage.py start_chat_consumer --queues fetch_profile_pic fetch_group_info &
 CHAT_CONSUMER_IO_PID=$!
 
+log_info "Inicializando consumer RabbitMQ para processamento de mídia (process_incoming_media)"
+python manage.py start_chat_rabbitmq_consumer &
+CHAT_RABBITMQ_CONSUMER_PID=$!
+
 terminate_processes() {
   log_info "Encerrando processos"
   if ps -p "${CHAT_STREAM_WORKER_PID:-}" >/dev/null 2>&1; then
     kill -TERM "${CHAT_STREAM_WORKER_PID}" >/dev/null 2>&1 || true
     wait "${CHAT_STREAM_WORKER_PID}" >/dev/null 2>&1 || true
   fi
-  if ps -p "${CHAT_CONSUMER_IO_PID}" >/dev/null 2>&1; then
+  if ps -p "${CHAT_CONSUMER_IO_PID:-}" >/dev/null 2>&1; then
     kill -TERM "${CHAT_CONSUMER_IO_PID}" >/dev/null 2>&1 || true
     wait "${CHAT_CONSUMER_IO_PID}" >/dev/null 2>&1 || true
+  fi
+  if ps -p "${CHAT_RABBITMQ_CONSUMER_PID:-}" >/dev/null 2>&1; then
+    kill -TERM "${CHAT_RABBITMQ_CONSUMER_PID}" >/dev/null 2>&1 || true
+    wait "${CHAT_RABBITMQ_CONSUMER_PID}" >/dev/null 2>&1 || true
   fi
   if [[ -n "${DAPHNE_PID:-}" ]] && ps -p "${DAPHNE_PID}" >/dev/null 2>&1; then
     kill -TERM "${DAPHNE_PID}" >/dev/null 2>&1 || true
