@@ -677,10 +677,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             if content and not attachment_urls:
                 # 🔍 PARA GRUPOS: não formatar (já vem como "120363...@g.us")
                 # Para contatos individuais: adicionar + se não tiver
+                # ✅ CORREÇÃO: Remover campo 'instance' do payload (já está na URL)
                 payload = {
                     'number': recipient_value,
-                    'text': content,
-                    'instance': instance.instance_name
+                    'text': content
                 }
                 
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
