@@ -11,6 +11,7 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { useChatSocket } from '../hooks/useChatSocket';
+import { getDisplayName } from '../utils/phoneFormatter';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -266,7 +267,7 @@ export function ChatWindow() {
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                {activeConversation.conversation_type === 'group' ? '👥' : (activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
+                {activeConversation.conversation_type === 'group' ? '👥' : getDisplayName(activeConversation)[0].toUpperCase()}
               </div>
             )}
           </div>
@@ -276,10 +277,7 @@ export function ChatWindow() {
             {/* Nome */}
             <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
               {activeConversation.conversation_type === 'group' && <span>👥</span>}
-              {activeConversation.conversation_type === 'group'
-                ? (activeConversation.group_metadata?.group_name || activeConversation.contact_name || 'Grupo WhatsApp')
-                : (activeConversation.contact_name || activeConversation.contact_phone)
-              }
+              {getDisplayName(activeConversation)}
             </h2>
             
             {/* Tags: Instância + Tags do Contato */}
@@ -410,17 +408,17 @@ export function ChatWindow() {
                   {activeConversation.profile_pic_url ? (
                     <img 
                       src={`/api/chat/media-proxy/?url=${encodeURIComponent(activeConversation.profile_pic_url)}`}
-                      alt={activeConversation.contact_name || activeConversation.contact_phone}
+                      alt={getDisplayName(activeConversation)}
                       className="w-full h-full object-cover"
                     />
                   ) : (
                     <div className="w-full h-full flex items-center justify-center text-gray-600 font-medium text-3xl">
-                      {(activeConversation.contact_name || activeConversation.contact_phone)[0].toUpperCase()}
+                      {getDisplayName(activeConversation)[0].toUpperCase()}
                     </div>
                   )}
                 </div>
                 <h3 className="text-xl font-medium text-gray-900">
-                  {activeConversation.contact_name || activeConversation.contact_phone}
+                  {getDisplayName(activeConversation)}
                 </h3>
               </div>
 

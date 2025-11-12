@@ -107,15 +107,39 @@ def serialize_conversation_for_ws(conversation) -> Dict[str, Any]:
     """
     Serializa uma conversa completa para WebSocket.
     
+    ⚠️ ATENÇÃO: Esta função é SÍNCRONA e faz queries ao banco.
+    Use serialize_conversation_for_ws_async() em contextos assíncronos.
+    
     Args:
         conversation: Instância do modelo Conversation
-        
+    
     Returns:
         Dict serializável para JSON com todos os dados da conversa
     """
     from apps.chat.api.serializers import ConversationSerializer
     
     conv_data = ConversationSerializer(conversation).data
+    return convert_uuids_to_str(conv_data)
+
+
+async def serialize_conversation_for_ws_async(conversation) -> Dict[str, Any]:
+    """
+    Serializa uma conversa completa para WebSocket em contexto assíncrono.
+    
+    ✅ Use esta função em funções async (tasks, consumers, etc).
+    
+    Args:
+        conversation: Instância do modelo Conversation
+    
+    Returns:
+        Dict serializável para JSON com todos os dados da conversa
+    """
+    from apps.chat.api.serializers import ConversationSerializer
+    from asgiref.sync import sync_to_async
+    
+    # ✅ Serializar em thread separada para evitar SynchronousOnlyOperation
+    serializer = ConversationSerializer(conversation)
+    conv_data = await sync_to_async(lambda: serializer.data)()
     return convert_uuids_to_str(conv_data)
 
 

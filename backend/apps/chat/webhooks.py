@@ -406,7 +406,29 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # 🔧 FIX: Só usar pushName se mensagem veio do contato (not from_me)
         # Se você enviou a primeira mensagem, deixar vazio e buscar via API
-        contact_name_to_save = push_name if not from_me else ''
+        # ✅ MELHORIA: Se não tiver pushName, usar telefone formatado (como WhatsApp)
+        contact_name_to_save = push_name if (push_name and not from_me) else ''
+        
+        # ✅ FALLBACK: Se não tiver nome, formatar telefone para exibição
+        if not contact_name_to_save and not is_group:
+            def _format_phone_for_display(phone: str) -> str:
+                """Formata telefone para exibição (como WhatsApp faz)."""
+                import re
+                clean = re.sub(r'\D', '', phone)
+                if clean.startswith('55') and len(clean) >= 12:
+                    clean = clean[2:]
+                if len(clean) == 11:
+                    return f"({clean[0:2]}) {clean[2:7]}-{clean[7:11]}"
+                elif len(clean) == 10:
+                    return f"({clean[0:2]}) {clean[2:6]}-{clean[6:10]}"
+                elif len(clean) == 9:
+                    return f"{clean[0:5]}-{clean[5:9]}"
+                elif len(clean) == 8:
+                    return f"{clean[0:4]}-{clean[4:8]}"
+                return clean[:15] if clean else phone
+            
+            clean_phone_for_name = phone.replace('+', '').replace('@s.whatsapp.net', '')
+            contact_name_to_save = _format_phone_for_display(clean_phone_for_name)
         
         # Para grupos, usar o ID do grupo como identificador único
         defaults = {

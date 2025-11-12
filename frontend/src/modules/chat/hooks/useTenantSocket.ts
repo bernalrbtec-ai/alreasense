@@ -96,11 +96,10 @@ export function useTenantSocket() {
           });
           }, 500); // 500ms de debounce
           
-          // ✅ MELHORIA: Para grupos, mostrar apenas o nome do grupo (sem nome do contato/sender)
+          // ✅ MELHORIA: Usar função centralizada para obter nome de exibição (nome ou telefone formatado)
+          const { getDisplayName } = await import('../utils/phoneFormatter');
+          const displayName = getDisplayName(data.conversation);
           const isGroup = data.conversation.conversation_type === 'group';
-          const displayName = isGroup 
-            ? (data.conversation.group_metadata?.group_name || data.conversation.contact_name || 'Grupo WhatsApp')
-            : (data.conversation.contact_name || data.conversation.contact_phone);
           
           const currentPath = window.location.pathname;
           const isOnChatPage = currentPath === '/chat';

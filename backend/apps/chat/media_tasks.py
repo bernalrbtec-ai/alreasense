@@ -120,31 +120,35 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
                             
                             # Broadcast via WebSocket para atualizar frontend
                             try:
+                                from apps.chat.utils.serialization import serialize_conversation_for_ws_async
+                                
                                 channel_layer = get_channel_layer()
                                 if channel_layer:
+                                    # ✅ CORREÇÃO: Usar serialize_conversation_for_ws_async em contexto async
+                                    conv_data_serializable = await serialize_conversation_for_ws_async(conversation)
+                                    
+                                    # Broadcast para room específico da conversa
                                     room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
-                                    async_to_sync(channel_layer.group_send)(
+                                    await channel_layer.group_send(
                                         room_group_name,
                                         {
                                             'type': 'conversation_updated',
-                                            'conversation_id': str(conversation.id),
-                                            'updated_fields': update_fields
+                                            'conversation': conv_data_serializable
                                         }
                                     )
                                     
                                     # Broadcast global para tenant
                                     tenant_group_name = f"chat_tenant_{conversation.tenant_id}"
-                                    async_to_sync(channel_layer.group_send)(
+                                    await channel_layer.group_send(
                                         tenant_group_name,
                                         {
                                             'type': 'conversation_updated',
-                                            'conversation_id': str(conversation.id),
-                                            'updated_fields': update_fields
+                                            'conversation': conv_data_serializable
                                         }
                                     )
                                     logger.info(f"📡 [GROUP INFO] Broadcast WebSocket enviado")
                             except Exception as ws_error:
-                                logger.warning(f"⚠️ [GROUP INFO] Erro ao enviar WebSocket: {ws_error}")
+                                logger.warning(f"⚠️ [GROUP INFO] Erro ao enviar WebSocket: {ws_error}", exc_info=True)
                         
                         # ✅ Sucesso, sair do loop de retry
                         return

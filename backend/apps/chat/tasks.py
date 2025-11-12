@@ -825,6 +825,44 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
 # que faz download direto para S3 + cache Redis em uma única etapa
 
 
+def _format_phone_for_display(phone: str) -> str:
+    """
+    Formata telefone para exibição (como WhatsApp faz).
+    
+    Exemplos:
+    - +5511999999999 → (11) 99999-9999
+    - 5511999999999 → (11) 99999-9999
+    - 11999999999 → (11) 99999-9999
+    
+    Args:
+        phone: Telefone em qualquer formato
+    
+    Returns:
+        Telefone formatado para exibição
+    """
+    import re
+    
+    # Remover caracteres não numéricos
+    clean = re.sub(r'\D', '', phone)
+    
+    # Se começar com 55 (código do Brasil), remover
+    if clean.startswith('55') and len(clean) >= 12:
+        clean = clean[2:]
+    
+    # Formatar: (XX) XXXXX-XXXX para celular ou (XX) XXXX-XXXX para fixo
+    if len(clean) == 11:  # Celular com DDD
+        return f"({clean[0:2]}) {clean[2:7]}-{clean[7:11]}"
+    elif len(clean) == 10:  # Fixo com DDD
+        return f"({clean[0:2]}) {clean[2:6]}-{clean[6:10]}"
+    elif len(clean) == 9:  # Celular sem DDD
+        return f"{clean[0:5]}-{clean[5:9]}"
+    elif len(clean) == 8:  # Fixo sem DDD
+        return f"{clean[0:4]}-{clean[4:8]}"
+    else:
+        # Se não conseguir formatar, retornar como está (limitado a 15 chars)
+        return clean[:15] if clean else phone
+
+
 async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     """
     Handler: Busca foto de perfil via Evolution API e salva.
@@ -999,19 +1037,39 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                         else:
                             logger.warning(f"⚠️ [PROFILE PIC] Nome vazio ou não disponível na API")
                             logger.warning(f"   Response: {contact_info}")
-                            # Fallback: usar telefone se não tiver nome ou se for placeholder
+                            # ✅ FALLBACK: Sempre usar telefone formatado se não tiver nome (como WhatsApp)
+                            formatted_phone = _format_phone_for_display(clean_phone)
                             if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp' or conversation.contact_name == clean_phone:
-                                conversation.contact_name = clean_phone
+                                conversation.contact_name = formatted_phone
                                 update_fields.append('contact_name')
-                                logger.info(f"ℹ️ [PROFILE PIC] Usando telefone como nome: {clean_phone}")
+                                logger.info(f"ℹ️ [PROFILE PIC] Usando telefone formatado como nome: {formatted_phone}")
                     else:
                         logger.warning(f"⚠️ [PROFILE PIC] Resposta vazia ou inválida da API de nomes")
                         logger.warning(f"   Response: {data_name}")
                 else:
                     logger.error(f"❌ [PROFILE PIC] Erro HTTP ao buscar nome: {response_name.status_code}")
                     logger.error(f"   Response text: {response_name.text[:200]}")
+                    # ✅ FALLBACK: Se erro HTTP, usar telefone formatado
+                    if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                        formatted_phone = _format_phone_for_display(clean_phone)
+                        conversation.contact_name = formatted_phone
+                        update_fields.append('contact_name')
+                        logger.info(f"ℹ️ [PROFILE PIC] Erro HTTP, usando telefone formatado: {formatted_phone}")
             except Exception as e:
                 logger.error(f"❌ [PROFILE PIC] Erro ao buscar nome: {e}", exc_info=True)
+                # ✅ FALLBACK: Se erro ao buscar nome, garantir que tenha telefone formatado
+                if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                    formatted_phone = _format_phone_for_display(clean_phone)
+                    conversation.contact_name = formatted_phone
+                    update_fields.append('contact_name')
+                    logger.info(f"ℹ️ [PROFILE PIC] Erro ao buscar nome, usando telefone formatado: {formatted_phone}")
+            
+            # ✅ GARANTIR: Se ainda não tem nome após todas as tentativas, usar telefone formatado
+            if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
+                formatted_phone = _format_phone_for_display(clean_phone)
+                conversation.contact_name = formatted_phone
+                update_fields.append('contact_name')
+                logger.info(f"ℹ️ [PROFILE PIC] Garantindo telefone formatado como nome: {formatted_phone}")
             
             # Salvar atualizações
             if update_fields:
@@ -1021,11 +1079,11 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                 # ✅ CRÍTICO: Sempre fazer broadcast se houver atualizações (foto OU nome)
                 # Isso garante que o frontend recebe atualizações mesmo se só o nome mudou
                 try:
-                    from apps.chat.utils.serialization import serialize_conversation_for_ws
+                    from apps.chat.utils.serialization import serialize_conversation_for_ws_async
                     
                     # ✅ IMPORTANTE: Recarregar conversa do banco para garantir dados atualizados
                     await sync_to_async(conversation.refresh_from_db)()
-                    conv_data_serializable = serialize_conversation_for_ws(conversation)
+                    conv_data_serializable = await serialize_conversation_for_ws_async(conversation)
                     
                     channel_layer = get_channel_layer()
                     tenant_group = f"chat_tenant_{conversation.tenant_id}"

@@ -10,6 +10,7 @@ import { Conversation } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { upsertConversation } from '../store/conversationUpdater';
+import { getDisplayName } from '../utils/phoneFormatter';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -279,7 +280,7 @@ export function ConversationList() {
                 {conv.profile_pic_url ? (
                   <img 
                     src={getMediaProxyUrl(conv.profile_pic_url)}
-                    alt={conv.contact_name || conv.contact_phone}
+                    alt={getDisplayName(conv)}
                     className="w-full h-full object-cover"
                     onLoad={() => console.log(`✅ [IMG LIST] Foto carregada: ${conv.contact_name}`)}
                     onError={(e) => {
@@ -295,7 +296,7 @@ export function ConversationList() {
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                    {conv.conversation_type === 'group' ? '👥' : (conv.contact_name || conv.contact_phone)[0].toUpperCase()}
+                    {conv.conversation_type === 'group' ? '👥' : getDisplayName(conv)[0].toUpperCase()}
                   </div>
                 )}
                 
@@ -315,7 +316,7 @@ export function ConversationList() {
                     {conv.conversation_type === 'group' && <span>👥</span>}
                     {conv.conversation_type === 'group' 
                       ? (conv.group_metadata?.group_name || conv.contact_name || 'Grupo WhatsApp')
-                      : (conv.contact_name || conv.contact_phone)
+                      : getDisplayName(conv)
                     }
                   </h3>
                   <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
