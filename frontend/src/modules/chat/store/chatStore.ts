@@ -178,50 +178,31 @@ export const useChatStore = create<ChatState>((set) => ({
       messageContent: message.content?.substring(0, 50)
     });
     
-    // ✅ FIX CRÍTICO: Se não conseguir extrair conversation_id, permitir adicionar se for mensagem enviada
-    // (pode ser mensagem enviada pelo próprio usuário que ainda não tem conversation_id definido)
+    // ✅ FIX CRÍTICO: NUNCA adicionar mensagens sem conversation_id válido
+    // Isso previne mensagens de outras conversas aparecerem na conversa ativa
     if (!messageConversationId) {
-      // Se for mensagem enviada pelo próprio usuário (outgoing), permitir adicionar
-      if (message.direction === 'outgoing') {
-        console.warn('⚠️ [STORE] Mensagem enviada sem conversation_id, mas permitindo adicionar:', message.id);
-        // Continuar para adicionar mensagem mesmo sem conversation_id
-      } else {
-        console.warn('⚠️ [STORE] Mensagem recebida sem conversation_id, ignorando:', message.id);
-        return state; // Não adicionar mensagem recebida sem conversation_id
-      }
-    } else if (messageConversationId !== activeConversationId) {
-      // ✅ FIX CRÍTICO: Se for mensagem enviada pelo próprio usuário, permitir adicionar mesmo se conversation_id não bater
-      // (pode ser race condition onde a mensagem foi criada antes da conversa ser atualizada)
-      if (message.direction === 'outgoing') {
-        console.warn('⚠️ [STORE] Mensagem enviada com conversation_id diferente, mas permitindo adicionar (pode ser race condition):', {
-          messageId: message.id,
-          messageConversationId,
-          activeConversationId,
-          messageContent: message.content?.substring(0, 50)
-        });
-        // Continuar para adicionar mensagem mesmo se conversation_id não bater
-      } else {
-        console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
-          messageId: message.id,
-          messageConversationId,
-          activeConversationId,
-          messageContent: message.content?.substring(0, 50),
-          typeMismatch: typeof messageConversationId !== typeof activeConversationId
-        });
-        return state; // Não adicionar mensagem se não for da conversa ativa
-      }
+      console.warn('⚠️ [STORE] Mensagem sem conversation_id válido, ignorando:', {
+        messageId: message.id,
+        direction: message.direction,
+        conversation: message.conversation,
+        conversation_id: message.conversation_id,
+        messageContent: message.content?.substring(0, 50)
+      });
+      return state; // Não adicionar mensagem sem conversation_id válido
     }
     
-    // ✅ FIX ADICIONAL: Se a mensagem é outgoing e não tem conversation_id definido, 
-    // usar o ID da conversa ativa para garantir que será adicionada
-    if (message.direction === 'outgoing' && !messageConversationId && activeConversationId) {
-      // Atualizar a mensagem com o conversation_id da conversa ativa
-      message = {
-        ...message,
-        conversation: activeConversationId,
-        conversation_id: activeConversationId
-      };
-      console.log('✅ [STORE] Mensagem outgoing atualizada com conversation_id da conversa ativa:', activeConversationId);
+    // ✅ FIX CRÍTICO: NUNCA adicionar mensagens que não pertencem à conversa ativa
+    // Isso previne mensagens de outras conversas (incluindo WhatsApp Web) aparecerem na conversa errada
+    if (messageConversationId !== activeConversationId) {
+      console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
+        messageId: message.id,
+        messageConversationId,
+        activeConversationId,
+        direction: message.direction,
+        messageContent: message.content?.substring(0, 50),
+        typeMismatch: typeof messageConversationId !== typeof activeConversationId
+      });
+      return state; // Não adicionar mensagem se não for da conversa ativa
     }
     
     console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);
