@@ -368,23 +368,44 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if message_type == 'reactionMessage':
             logger.info(f"👍 [WEBHOOK REACTION] Reação recebida do WhatsApp")
             
-            # Extrair dados da reação
+            # ✅ CORREÇÃO: Estrutura do webhook pode variar, tentar múltiplas formas
+            # Formato 1: reactionMessage.text e reactionMessage.key.id
+            # Formato 2: reactionMessage.reactionText e key.id (ID da mensagem original)
             reaction_data = message_info.get('reactionMessage', {})
+            
+            # Tentar extrair emoji de múltiplas formas
+            emoji = (
+                reaction_data.get('text') or 
+                reaction_data.get('reactionText') or 
+                reaction_data.get('reaction') or
+                ''
+            )
+            
+            # Tentar extrair message_id da mensagem original
+            # O key.id do webhook principal pode ser o ID da mensagem original
+            # Ou pode estar em reactionMessage.key.id
             reaction_key = reaction_data.get('key', {})
-            reaction_message_id = reaction_key.get('id')  # ID da mensagem original no WhatsApp
-            emoji = reaction_data.get('text', '')  # Emoji da reação
+            reaction_message_id = (
+                reaction_key.get('id') or  # ID da mensagem original em reactionMessage.key
+                key.get('id')  # ID da mensagem original no key principal
+            )
             
             logger.info(f"   Message ID original: {reaction_message_id}")
             logger.info(f"   Emoji: {emoji}")
             logger.info(f"   RemoteJID: {remote_jid}")
             logger.info(f"   FromMe: {from_me}")
+            logger.info(f"   Key principal: {mask_sensitive_data(key)}")
+            logger.info(f"   Reaction data: {mask_sensitive_data(reaction_data)}")
             
             if not reaction_message_id:
                 logger.warning(f"⚠️ [WEBHOOK REACTION] Reação sem message_id, ignorando")
+                logger.warning(f"   Key principal: {key}")
+                logger.warning(f"   Reaction data: {reaction_data}")
                 return Response({'status': 'ok'}, status=status.HTTP_200_OK)
             
             if not emoji:
                 logger.warning(f"⚠️ [WEBHOOK REACTION] Reação sem emoji, ignorando")
+                logger.warning(f"   Reaction data: {reaction_data}")
                 return Response({'status': 'ok'}, status=status.HTTP_200_OK)
             
             # Buscar mensagem original pelo message_id externo
@@ -427,6 +448,24 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 
             except Message.DoesNotExist:
                 logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem original não encontrada (message_id={reaction_message_id})")
+                logger.warning(f"   Tentando buscar por message_id alternativo...")
+                # Tentar buscar pelo message_id do webhook principal (pode ser o mesmo)
+                try:
+                    if message_id and message_id != reaction_message_id:
+                        original_message = Message.objects.select_related(
+                            'conversation', 'conversation__tenant'
+                        ).get(
+                            message_id=message_id,
+                            conversation__tenant=tenant
+                        )
+                        logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo message_id alternativo: {original_message.id}")
+                        original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
+                        from apps.chat.utils.websocket import broadcast_message_reaction_update
+                        broadcast_message_reaction_update(original_message)
+                        return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+                except Message.DoesNotExist:
+                    pass
+                
                 # Mensagem pode não existir ainda (race condition) ou ser de outro tenant
                 # Retornar OK para não bloquear webhook
                 return Response({'status': 'ok'}, status=status.HTTP_200_OK)
