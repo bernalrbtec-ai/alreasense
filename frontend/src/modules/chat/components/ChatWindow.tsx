@@ -249,7 +249,7 @@ export function ChatWindow() {
               <>
                 <img 
                   src={getMediaProxyUrl(activeConversation.profile_pic_url)}
-                  alt={activeConversation.contact_name || activeConversation.contact_phone}
+                  alt={getDisplayName(activeConversation)}
                   className="w-full h-full object-cover"
                   onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
                 onError={(e) => {
