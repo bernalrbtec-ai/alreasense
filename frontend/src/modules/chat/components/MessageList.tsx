@@ -603,7 +603,7 @@ export function MessageList() {
 // ✅ CORREÇÃO: Memoização de componente de reações para evitar re-renders desnecessários
 const MessageReactions = React.memo(function MessageReactions({ message, direction }: { message: any; direction: 'incoming' | 'outgoing' }) {
   const { user } = useAuthStore();
-  const { messages, setMessages } = useChatStore();
+  const { messages, setMessages, updateMessageReactions } = useChatStore();
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
