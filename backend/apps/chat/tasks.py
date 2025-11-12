@@ -678,16 +678,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 # 🔍 PARA GRUPOS: não formatar (já vem como "120363...@g.us")
                 # Para contatos individuais: adicionar + se não tiver
                 # ✅ CORREÇÃO: Remover campo 'instance' do payload (já está na URL)
+                # ✅ CORREÇÃO: Garantir que número não tenha @s.whatsapp.net para individuais
+                final_number = recipient_value
+                if conversation.conversation_type == 'individual':
+                    # Remover @s.whatsapp.net se ainda estiver presente
+                    final_number = final_number.replace('@s.whatsapp.net', '').strip()
+                    # Garantir que começa com +
+                    if not final_number.startswith('+'):
+                        final_number = f'+{final_number.lstrip("+")}'
+                
+                # ✅ CORREÇÃO: Validar que conteúdo não está vazio após processamento
+                if not content or not content.strip():
+                    logger.error(f"❌ [CHAT ENVIO] Conteúdo vazio após processamento! message_id={message_id}")
+                    message.status = 'failed'
+                    message.error_message = 'Conteúdo da mensagem está vazio'
+                    await sync_to_async(message.save)(update_fields=['status', 'error_message'])
+                    return
+                
                 payload = {
-                    'number': recipient_value,
-                    'text': content
+                    'number': final_number,
+                    'text': content.strip()
                 }
                 
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   Tipo: {conversation.conversation_type}")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                logger.info("   Destinatário: %s", masked_recipient)
-                logger.info("   Text: %s", _truncate_text(content))
+                logger.info(f"   Número original: {recipient_value}")
+                logger.info(f"   Número final: {final_number}")
+                logger.info("   Destinatário (mascado): %s", _mask_remote_jid(final_number))
+                logger.info(f"   Tamanho do texto: {len(content)} caracteres")
+                logger.info("   Text (primeiros 100 chars): %s", _truncate_text(content, 100))
                 logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                 
                 request_start = time.perf_counter()
@@ -710,7 +730,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 
                 logger.info(f"📥 [CHAT ENVIO] Resposta da Evolution API:")
                 logger.info(f"   Status: {response.status_code}")
-                logger.info(f"   Body: {response.text[:300]}")
+                logger.info(f"   Body completo: {response.text}")
+                
+                # ✅ CORREÇÃO: Log detalhado do erro antes de fazer raise_for_status
+                if response.status_code != 200:
+                    logger.error(f"❌ [CHAT ENVIO] Erro {response.status_code} ao enviar mensagem:")
+                    logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
+                    logger.error(f"   Resposta completa: {response.text}")
+                    logger.error(f"   Headers enviados: {dict(headers)}")
                 
                 response.raise_for_status()
                 
