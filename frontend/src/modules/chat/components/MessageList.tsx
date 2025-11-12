@@ -607,8 +607,27 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
+  const [pickerPosition, setPickerPosition] = useState<'top' | 'bottom'>('top'); // ✅ CORREÇÃO: Posição do picker
   const pickerRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+
+  // ✅ CORREÇÃO: Calcular posição do picker (acima ou abaixo) baseado no espaço disponível
+  useEffect(() => {
+    if (showEmojiPicker && buttonRef.current) {
+      const buttonRect = buttonRef.current.getBoundingClientRect();
+      const viewportHeight = window.innerHeight;
+      const spaceAbove = buttonRect.top;
+      const spaceBelow = viewportHeight - buttonRect.bottom;
+      const pickerHeight = 320; // Altura aproximada do picker
+      
+      // Se não houver espaço suficiente acima, posicionar abaixo
+      if (spaceAbove < pickerHeight && spaceBelow > pickerHeight) {
+        setPickerPosition('bottom');
+      } else {
+        setPickerPosition('top');
+      }
+    }
+  }, [showEmojiPicker]);
 
   // Fechar picker ao clicar fora
   useEffect(() => {
@@ -860,7 +879,17 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           <Smile className="w-4 h-4 text-gray-500" />
         </button>
         {showEmojiPicker && (
-          <div ref={pickerRef} className={`absolute bottom-full mb-2 z-50 ${direction === 'outgoing' ? 'right-0' : 'left-0'}`}>
+          <div 
+            ref={pickerRef} 
+            className={`absolute z-50 ${direction === 'outgoing' ? 'right-0' : 'left-0'}`}
+            style={{
+              // ✅ CORREÇÃO: Posicionar dinamicamente baseado no espaço disponível
+              [pickerPosition === 'top' ? 'bottom' : 'top']: '100%',
+              [pickerPosition === 'top' ? 'marginBottom' : 'marginTop']: '8px',
+              // ✅ CORREÇÃO: Garantir que não saia da tela horizontalmente
+              maxWidth: 'calc(100vw - 32px)',
+            }}
+          >
             <EmojiPicker
               onSelect={(emoji) => {
                 handleAddReaction(emoji);

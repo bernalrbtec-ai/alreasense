@@ -1467,6 +1467,232 @@ class MessageReactionViewSet(viewsets.ViewSet):
             'alerts': alerts,
             'timestamp': timezone.now().isoformat()
         })
+    
+    @action(detail=False, methods=['post'], url_path='add')
+    def add_reaction(self, request):
+        """
+        Adiciona uma reação a uma mensagem.
+        
+        Body:
+        {
+            "message_id": "uuid",
+            "emoji": "👍"
+        }
+        """
+        from apps.chat.models import MessageReaction, Message
+        from apps.chat.api.serializers import MessageReactionSerializer
+        
+        message_id = request.data.get('message_id')
+        emoji = request.data.get('emoji', '').strip()
+        
+        if not message_id:
+            return Response(
+                {'error': 'message_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not emoji:
+            return Response(
+                {'error': 'emoji é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ CORREÇÃO: Validação de emoji (segurança)
+        import unicodedata
+        # Verificar se é realmente um emoji (não apenas string)
+        # Emojis têm categoria Unicode 'So' (Symbol, other) ou 'Sk' (Symbol, modifier)
+        if len(emoji) > 10:  # Limite de 10 caracteres (alguns emojis são compostos)
+            return Response(
+                {'error': 'Emoji inválido (muito longo)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verificar se todos os caracteres são emojis válidos
+        for char in emoji:
+            category = unicodedata.category(char)
+            if category not in ('So', 'Sk', 'Mn', 'Mc'):  # Symbol, Modifier
+                # Permitir alguns caracteres especiais comuns em emojis (variation selectors)
+                if ord(char) < 0x1F300 and char not in ('\uFE0F', '\u200D'):  # Emojis começam em U+1F300
+                    return Response(
+                        {'error': 'Emoji inválido (caracteres não permitidos)'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+        
+        # Validar que mensagem existe e é acessível
+        try:
+            message = Message.objects.select_related('conversation', 'conversation__tenant').get(id=message_id)
+        except Message.DoesNotExist:
+            return Response(
+                {'error': 'Mensagem não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verificar acesso à conversa
+        if message.conversation.tenant != request.user.tenant:
+            return Response(
+                {'error': 'Acesso negado'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Verificar se usuário tem acesso ao departamento (se não for admin)
+        if not request.user.is_admin and not request.user.is_superuser:
+            if message.conversation.department and message.conversation.department not in request.user.departments.all():
+                return Response(
+                    {'error': 'Acesso negado ao departamento'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # ✅ CORREÇÃO CRÍTICA: Validar que mensagem tem message_id (ID externo do WhatsApp)
+        # Sem message_id, não é possível enviar reação para Evolution API
+        if not message.message_id:
+            return Response(
+                {'error': 'Mensagem não tem message_id (não foi enviada pelo sistema ou ainda não foi processada)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ CORREÇÃO: Prefetch de reações antes de criar reação
+        # Criar ou obter reação (unique_together garante que não duplica)
+        reaction, created = MessageReaction.objects.get_or_create(
+            message=message,
+            user=request.user,
+            emoji=emoji,
+            defaults={}
+        )
+        
+        # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
+        # Isso garante que a reação aparece no WhatsApp do destinatário
+        # ✅ CORREÇÃO: Executar de forma assíncrona em thread separada para não bloquear resposta
+        import asyncio
+        from apps.chat.tasks import send_reaction_to_evolution
+        
+        # Executar envio em background (não bloquear resposta HTTP)
+        def send_reaction_async():
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(send_reaction_to_evolution(message, emoji))
+                loop.close()
+                logger.info(f"✅ [REACTION] Reação enviada para Evolution API: {request.user.email} {emoji} em {message.id}")
+            except Exception as e:
+                # Não bloquear se falhar envio (reação já foi salva no banco)
+                logger.error(f"⚠️ [REACTION] Erro ao enviar reação para Evolution API (reação salva no banco): {e}", exc_info=True)
+        
+        # Executar em thread separada para não bloquear resposta HTTP
+        import threading
+        thread = threading.Thread(target=send_reaction_async, daemon=True)
+        thread.start()
+        
+        # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
+        # Usar função helper que faz broadcast para tenant inteiro
+        from apps.chat.utils.websocket import broadcast_message_reaction_update
+        
+        try:
+            # ✅ CORREÇÃO: Prefetch de reações antes de serializar
+            # Recarregar mensagem com prefetch de reações para evitar race conditions
+            message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
+            
+            # Preparar dados da reação para o broadcast
+            reaction_data = {
+                'id': str(reaction.id),
+                'emoji': reaction.emoji,
+                'user': {
+                    'id': str(request.user.id),
+                    'email': request.user.email,
+                    'first_name': request.user.first_name,
+                    'last_name': request.user.last_name,
+                },
+                'created_at': reaction.created_at.isoformat(),
+            }
+            
+            # ✅ CORREÇÃO: Usar função helper que faz broadcast para tenant inteiro
+            broadcast_message_reaction_update(message, reaction_data)
+            
+            if created:
+                logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
+            else:
+                logger.info(f"✅ [REACTION] Reação já existente (broadcast): {request.user.email} {emoji} em {message.id}")
+        except Exception as e:
+            logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
+        
+        serializer = MessageReactionSerializer(reaction)
+        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
+        return Response(serializer.data, status=status_code)
+    
+    @action(detail=False, methods=['post'], url_path='remove')
+    def remove_reaction(self, request):
+        """
+        Remove uma reação de uma mensagem.
+        
+        Body:
+        {
+            "message_id": "uuid",
+            "emoji": "👍"
+        }
+        """
+        from apps.chat.models import MessageReaction, Message
+        from apps.chat.utils.websocket import broadcast_message_reaction_update
+        
+        message_id = request.data.get('message_id')
+        emoji = request.data.get('emoji', '').strip()
+        
+        if not message_id:
+            return Response(
+                {'error': 'message_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not emoji:
+            return Response(
+                {'error': 'emoji é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validar que mensagem existe e é acessível
+        try:
+            message = Message.objects.select_related('conversation', 'conversation__tenant').get(id=message_id)
+        except Message.DoesNotExist:
+            return Response(
+                {'error': 'Mensagem não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verificar acesso à conversa
+        if message.conversation.tenant != request.user.tenant:
+            return Response(
+                {'error': 'Acesso negado'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Verificar se usuário tem acesso ao departamento (se não for admin)
+        if not request.user.is_admin and not request.user.is_superuser:
+            if message.conversation.department and message.conversation.department not in request.user.departments.all():
+                return Response(
+                    {'error': 'Acesso negado ao departamento'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Remover reação (se existir)
+        try:
+            reaction = MessageReaction.objects.get(
+                message=message,
+                user=request.user,
+                emoji=emoji
+            )
+            reaction.delete()
+            
+            # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket após remover reação
+            # Recarregar mensagem com prefetch de reações
+            message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
+            broadcast_message_reaction_update(message)
+            
+            logger.info(f"✅ [REACTION] Reação removida: {request.user.email} {emoji} em {message.id}")
+            
+            return Response({'success': True}, status=status.HTTP_200_OK)
+        except MessageReaction.DoesNotExist:
+            return Response(
+                {'error': 'Reação não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
 
 
 @api_view(['GET'])
@@ -1564,246 +1790,6 @@ def chat_ping_evolution(request):
                 'timestamp': timezone.now().isoformat(),
             },
             status=status.HTTP_503_SERVICE_UNAVAILABLE
-        )
-    
-    @action(detail=False, methods=['post'], url_path='add')
-    def add_reaction(self, request):
-        """
-        Adiciona uma reação a uma mensagem.
-        
-        Body:
-        {
-            "message_id": "uuid",
-            "emoji": "👍"
-        }
-        """
-        message_id = request.data.get('message_id')
-        emoji = request.data.get('emoji', '').strip()
-        
-        if not message_id:
-            return Response(
-                {'error': 'message_id é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if not emoji:
-            return Response(
-                {'error': 'emoji é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # ✅ CORREÇÃO: Validação de emoji (segurança)
-        import unicodedata
-        # Verificar se é realmente um emoji (não apenas string)
-        # Emojis têm categoria Unicode 'So' (Symbol, other) ou 'Sk' (Symbol, modifier)
-        if len(emoji) > 10:  # Limite de 10 caracteres (alguns emojis são compostos)
-            return Response(
-                {'error': 'Emoji inválido (muito longo)'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Verificar se todos os caracteres são emojis válidos
-        for char in emoji:
-            category = unicodedata.category(char)
-            if category not in ('So', 'Sk', 'Mn', 'Mc'):  # Symbol, Modifier
-                # Permitir alguns caracteres especiais comuns em emojis (variation selectors)
-                if ord(char) < 0x1F300 and char not in ('\uFE0F', '\u200D'):  # Emojis começam em U+1F300
-                    return Response(
-                        {'error': 'Emoji inválido (caracteres não permitidos)'},
-                        status=status.HTTP_400_BAD_REQUEST
-                    )
-        
-        # Validar que mensagem existe e é acessível
-        try:
-            message = Message.objects.select_related('conversation', 'conversation__tenant').get(id=message_id)
-        except Message.DoesNotExist:
-            return Response(
-                {'error': 'Mensagem não encontrada'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Verificar acesso à conversa
-        if message.conversation.tenant != request.user.tenant:
-            return Response(
-                {'error': 'Acesso negado'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Verificar se usuário tem acesso ao departamento (se não for admin)
-        if not request.user.is_admin and not request.user.is_superuser:
-            if message.conversation.department and message.conversation.department not in request.user.departments.all():
-                return Response(
-                    {'error': 'Acesso negado ao departamento'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        
-        # ✅ CORREÇÃO CRÍTICA: Validar que mensagem tem message_id (ID externo do WhatsApp)
-        # Sem message_id, não é possível enviar reação para Evolution API
-        if not message.message_id:
-            return Response(
-                {'error': 'Mensagem não tem message_id (não foi enviada pelo sistema ou ainda não foi processada)'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # ✅ CORREÇÃO: Prefetch de reações antes de criar reação
-        # Importar MessageReaction do topo (já importado na linha 14)
-        # Criar ou obter reação (unique_together garante que não duplica)
-        reaction, created = MessageReaction.objects.get_or_create(
-            message=message,
-            user=request.user,
-            emoji=emoji,
-            defaults={}
-        )
-        
-        # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
-        # Isso garante que a reação aparece no WhatsApp do destinatário
-        # ✅ CORREÇÃO: Executar de forma assíncrona em thread separada para não bloquear resposta
-        import asyncio
-        from apps.chat.tasks import send_reaction_to_evolution
-        
-        # Executar envio em background (não bloquear resposta HTTP)
-        def send_reaction_async():
-            try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                loop.run_until_complete(send_reaction_to_evolution(message, emoji))
-                loop.close()
-                logger.info(f"✅ [REACTION] Reação enviada para Evolution API: {request.user.email} {emoji} em {message.id}")
-            except Exception as e:
-                # Não bloquear se falhar envio (reação já foi salva no banco)
-                logger.error(f"⚠️ [REACTION] Erro ao enviar reação para Evolution API (reação salva no banco): {e}", exc_info=True)
-        
-        # Executar em thread separada para não bloquear resposta HTTP
-        import threading
-        thread = threading.Thread(target=send_reaction_async, daemon=True)
-        thread.start()
-        
-        # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
-        # Usar função helper que faz broadcast para tenant inteiro
-        from apps.chat.utils.websocket import broadcast_message_reaction_update
-        
-        try:
-            # ✅ CORREÇÃO: Prefetch de reações antes de serializar
-            # Recarregar mensagem com prefetch de reações para evitar race conditions
-            message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
-            
-            # Preparar dados da reação para o broadcast
-            reaction_data = {
-                'id': str(reaction.id),
-                'emoji': reaction.emoji,
-                'user': {
-                    'id': str(request.user.id),
-                    'email': request.user.email,
-                    'first_name': request.user.first_name,
-                    'last_name': request.user.last_name,
-                },
-                'created_at': reaction.created_at.isoformat(),
-            }
-            
-            # ✅ CORREÇÃO: Usar função helper que faz broadcast para tenant inteiro
-            broadcast_message_reaction_update(message, reaction_data)
-            
-            if created:
-                logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
-            else:
-                logger.info(f"✅ [REACTION] Reação já existente (broadcast): {request.user.email} {emoji} em {message.id}")
-        except Exception as e:
-            logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
-        
-        serializer = self.get_serializer(reaction)
-        status_code = status.HTTP_201_CREATED if created else status.HTTP_200_OK
-        return Response(serializer.data, status=status_code)
-    
-    @action(detail=False, methods=['post'], url_path='remove')
-    def remove_reaction(self, request):
-        """
-        Remove uma reação de uma mensagem.
-        
-        Body:
-        {
-            "message_id": "uuid",
-            "emoji": "👍"
-        }
-        """
-        message_id = request.data.get('message_id')
-        emoji = request.data.get('emoji', '').strip()
-        
-        if not message_id:
-            return Response(
-                {'error': 'message_id é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if not emoji:
-            return Response(
-                {'error': 'emoji é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Validar que mensagem existe e é acessível
-        try:
-            message = Message.objects.select_related('conversation', 'conversation__tenant').get(id=message_id)
-        except Message.DoesNotExist:
-            return Response(
-                {'error': 'Mensagem não encontrada'},
-                status=status.HTTP_404_NOT_FOUND
-            )
-        
-        # Verificar acesso à conversa
-        if message.conversation.tenant != request.user.tenant:
-            return Response(
-                {'error': 'Acesso negado'},
-                status=status.HTTP_403_FORBIDDEN
-            )
-        
-        # Verificar se usuário tem acesso ao departamento (se não for admin)
-        if not request.user.is_admin and not request.user.is_superuser:
-            if message.conversation.department and message.conversation.department not in request.user.departments.all():
-                return Response(
-                    {'error': 'Acesso negado ao departamento'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-        
-        # Remover reação (se existir)
-        try:
-            reaction = MessageReaction.objects.get(
-                message=message,
-                user=request.user,
-                emoji=emoji
-            )
-            reaction.delete()
-            
-            # ✅ CORREÇÃO: Broadcast via WebSocket usando função helper
-            from apps.chat.utils.websocket import broadcast_message_reaction_update
-            
-            try:
-                # ✅ CORREÇÃO: Prefetch de reações antes de serializar
-                # Recarregar mensagem com prefetch de reações para evitar race conditions
-                message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
-                
-                # Preparar dados da reação removida para o broadcast
-                reaction_data = {
-                    'emoji': emoji,
-                    'removed': True,
-                    'user': {
-                        'id': str(request.user.id),
-                        'email': request.user.email,
-                    }
-                }
-                
-                # ✅ CORREÇÃO: Usar função helper que faz broadcast para tenant inteiro
-                broadcast_message_reaction_update(message, reaction_data)
-                
-                logger.info(f"✅ [REACTION] Reação removida: {request.user.email} {emoji} em {message.id}")
-            except Exception as e:
-                logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
-            
-            return Response({'success': True}, status=status.HTTP_200_OK)
-            
-        except MessageReaction.DoesNotExist:
-            return Response(
-                {'error': 'Reação não encontrada'},
-                status=status.HTTP_404_NOT_FOUND
         )
     
     def perform_create(self, serializer):
