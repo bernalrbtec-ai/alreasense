@@ -1758,11 +1758,28 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Remover reação (se existir)
+        # ✅ CORREÇÃO CRÍTICA: Buscar número da instância WhatsApp conectada
+        # A reação deve ser removida pelo número da instância, não pelo user
+        wa_instance = WhatsAppInstance.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True,
+            status='active'
+        ).first()
+        
+        if not wa_instance or not wa_instance.phone_number:
+            return Response(
+                {'error': 'Instância WhatsApp não encontrada ou não conectada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        instance_phone = wa_instance.phone_number
+        
+        # Remover reação (se existir) - buscar pelo número da instância
         try:
             reaction = MessageReaction.objects.get(
                 message=message,
-                user=request.user,
+                external_sender=instance_phone,
+                user__isnull=True,
                 emoji=emoji
             )
             reaction.delete()
@@ -1779,7 +1796,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
                     # ✅ Enviar emoji vazio remove a reação no WhatsApp
                     loop.run_until_complete(send_reaction_to_evolution(message, ''))
                     loop.close()
-                    logger.info(f"✅ [REACTION] Remoção enviada para Evolution API: {request.user.email} removendo {emoji} em {message.id}")
+                    logger.info(f"✅ [REACTION] Remoção enviada para Evolution API: {instance_phone} removendo {emoji} em {message.id}")
                 except Exception as e:
                     logger.error(f"⚠️ [REACTION] Erro ao enviar remoção para Evolution API: {e}", exc_info=True)
             
@@ -1792,7 +1809,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
             message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
             broadcast_message_reaction_update(message)
             
-            logger.info(f"✅ [REACTION] Reação removida: {request.user.email} {emoji} em {message.id}")
+            logger.info(f"✅ [REACTION] Reação removida: {instance_phone} {emoji} em {message.id}")
             
             return Response({'success': True}, status=status.HTTP_200_OK)
         except MessageReaction.DoesNotExist:
