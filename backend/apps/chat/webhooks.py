@@ -402,7 +402,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.info(f"⚠️ [WEBHOOK REACTION] reactionMessage encontrado em message_info mas messageType={message_type}, processando mesmo assim")
             logger.info(f"👍 [WEBHOOK REACTION] Reação recebida do WhatsApp")
             
-            # ✅ CORREÇÃO: Estrutura do webhook pode variar, tentar múltiplas formas
+            try:
+                # ✅ CORREÇÃO: Estrutura do webhook pode variar, tentar múltiplas formas
             # Formato 1: reactionMessage.text e reactionMessage.key.id
             # Formato 2: reactionMessage.reactionText e key.id (ID da mensagem original)
             reaction_data = message_info.get('reactionMessage', {})
@@ -595,10 +596,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # ✅ IMPORTANTE: Retornar sem criar mensagem nova
             # Reações não são mensagens, são metadados
             return Response({'status': 'ok'}, status=status.HTTP_200_OK)
-            except Exception as e:
-                logger.error(f"❌ [WEBHOOK REACTION] Erro ao processar reação: {e}", exc_info=True)
-                # Retornar OK para não bloquear webhook
-                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"❌ [WEBHOOK REACTION] Erro ao processar reação: {e}", exc_info=True)
+            # Retornar OK para não bloquear webhook
+            return Response({'status': 'ok'}, status=status.HTTP_200_OK)
         
         # Conteúdo (para outros tipos de mensagem)
         if message_type == 'conversation':
