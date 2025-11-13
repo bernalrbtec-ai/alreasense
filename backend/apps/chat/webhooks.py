@@ -596,11 +596,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # ✅ IMPORTANTE: Retornar sem criar mensagem nova
                 # Reações não são mensagens, são metadados
                 return Response({'status': 'ok'}, status=status.HTTP_200_OK)
-            
-        except Exception as e:
-            logger.error(f"❌ [WEBHOOK REACTION] Erro ao processar reação: {e}", exc_info=True)
-            # Retornar OK para não bloquear webhook
-            return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+                
+            except Exception as e:
+                logger.error(f"❌ [WEBHOOK REACTION] Erro ao processar reação: {e}", exc_info=True)
+                # Retornar OK para não bloquear webhook
+                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
         
         # Conteúdo (para outros tipos de mensagem)
         if message_type == 'conversation':
