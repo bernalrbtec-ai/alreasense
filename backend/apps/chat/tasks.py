@@ -357,8 +357,10 @@ async def send_reaction_to_evolution(message, emoji: str):
         api_key = instance.api_key or evolution_server.api_key
         instance_name = instance.instance_name
         
-        # Preparar remoteJid (número ou grupo)
+        # ✅ CORREÇÃO CRÍTICA: Preparar remoteJid no formato correto para Evolution API
+        # Evolution API requer formato completo: número@s.whatsapp.net (individual) ou ID@g.us (grupo)
         if message.conversation.conversation_type == 'group':
+            # Grupos: garantir formato @g.us
             remote_jid = message.conversation.contact_phone
             if not remote_jid.endswith('@g.us'):
                 if remote_jid.endswith('@s.whatsapp.net'):
@@ -366,18 +368,33 @@ async def send_reaction_to_evolution(message, emoji: str):
                 else:
                     remote_jid = f"{remote_jid.rstrip('@')}@g.us"
         else:
-            # Individual: remover @s.whatsapp.net se existir
-            remote_jid = message.conversation.contact_phone.replace('@s.whatsapp.net', '')
-            if not remote_jid.startswith('+'):
-                remote_jid = f'+{remote_jid.lstrip("+")}'
+            # ✅ CORREÇÃO: Individuais precisam do formato completo: número@s.whatsapp.net
+            # Não remover @s.whatsapp.net, apenas garantir que está no formato correto
+            phone = message.conversation.contact_phone
+            
+            # Se já tem @s.whatsapp.net, usar direto
+            if phone.endswith('@s.whatsapp.net'):
+                remote_jid = phone
+            else:
+                # Se não tem sufixo, adicionar @s.whatsapp.net
+                # Remover + se existir (Evolution API não precisa)
+                phone_clean = phone.lstrip('+')
+                remote_jid = f"{phone_clean}@s.whatsapp.net"
         
-        # ✅ CORREÇÃO: Preparar payload para Evolution API
-        # Se emoji vazio, remove reação; senão, adiciona/substitui
+        # ✅ CORREÇÃO CRÍTICA: Preparar payload para Evolution API conforme documentação
+        # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/5su0wie/send-reaction
+        # Payload deve ter: key.remoteJid (com @s.whatsapp.net ou @g.us), key.id (message_id), key.fromMe, reaction
+        
+        # ✅ VALIDAÇÃO: Garantir que message_id existe
+        if not message.message_id:
+            logger.error(f"❌ [REACTION] Mensagem {message.id} não tem message_id (não foi enviada pelo sistema)")
+            return False
+        
         payload = {
             'key': {
-                'remoteJid': remote_jid,
-                'id': message.message_id,  # ID externo da mensagem no WhatsApp
-                'fromMe': message.direction == 'outgoing'
+                'remoteJid': remote_jid,  # ✅ Formato completo: número@s.whatsapp.net ou ID@g.us
+                'id': message.message_id,  # ✅ ID externo da mensagem no WhatsApp (key.id do webhook)
+                'fromMe': message.direction == 'outgoing'  # ✅ True se mensagem foi enviada por nós
             },
             'reaction': emoji if emoji else ''  # ✅ Emoji vazio remove reação no WhatsApp
         }
