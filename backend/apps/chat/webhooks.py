@@ -448,103 +448,153 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.info(f"👍 [WEBHOOK REACTION] Reação com emoji: {emoji}")
             
             # Buscar mensagem original pelo message_id externo
+            # ✅ CORREÇÃO CRÍTICA: Tentar múltiplas formas de buscar mensagem (para suportar mensagens antigas)
+            original_message = None
+            
             try:
+                # Tentativa 1: Buscar pelo message_id exato
                 original_message = Message.objects.select_related(
                     'conversation', 'conversation__tenant'
                 ).get(
                     message_id=reaction_message_id,
                     conversation__tenant=tenant
                 )
-                
-                logger.info(f"✅ [WEBHOOK REACTION] Mensagem original encontrada: {original_message.id}")
-                
-                # Buscar ou criar reação
-                # Para reações recebidas, não temos usuário interno, então precisamos identificar pelo número
-                # Se from_me=False, é reação recebida de contato externo
-                # Se from_me=True, é reação que enviamos (já deve estar no banco)
-                
-                # ✅ CORREÇÃO CRÍTICA: Criar ou atualizar reação no banco de dados
-                from apps.chat.models import MessageReaction
-                
-                # ✅ CORREÇÃO CRÍTICA: Processar reações recebidas (from_me=False) e também reações que enviamos (from_me=True)
-                # Isso garante sincronização bidirecional completa
-                if from_me:
-                    # Reação que enviamos - pode já estar no banco, mas verificar e atualizar se necessário
-                    logger.info(f"ℹ️ [WEBHOOK REACTION] Reação enviada por nós (confirmação do WhatsApp)")
-                    # Não precisa salvar novamente (já foi salva quando enviamos)
-                    # Mas fazer broadcast para atualizar todos os clientes
-                else:
-                    # ✅ CORREÇÃO CRÍTICA: Reação recebida de contato externo - SALVAR NO BANCO
-                    # Extrair número do remetente (pode estar em participant ou remoteJid)
-                    sender_phone = ''
-                    if is_group and participant:
-                        # Grupo: usar participant (quem reagiu no grupo)
-                        sender_phone = participant.split('@')[0]
-                        if not sender_phone.startswith('+'):
-                            sender_phone = '+' + sender_phone.lstrip('+')
-                    else:
-                        # Individual: usar remoteJid (quem reagiu)
-                        sender_phone = remote_jid.split('@')[0]
-                        if not sender_phone.startswith('+'):
-                            sender_phone = '+' + sender_phone.lstrip('+')
-                    
-                    logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo: {sender_phone}")
-                    logger.info(f"   Emoji: '{emoji}' (vazio={is_removal})")
-                    
-                    # ✅ CORREÇÃO CRÍTICA: Processar remoção ou adição de reação
-                    if is_removal:
-                        # Remover reação existente deste contato
-                        deleted_count = MessageReaction.objects.filter(
-                            message=original_message,
-                            external_sender=sender_phone
-                        ).delete()[0]
-                        logger.info(f"✅ [WEBHOOK REACTION] Reação removida do contato externo (deletadas: {deleted_count})")
-                    else:
-                        # Criar ou atualizar reação do contato externo
-                        reaction, created = MessageReaction.objects.update_or_create(
-                            message=original_message,
-                            external_sender=sender_phone,
-                            defaults={'emoji': emoji}
-                        )
-                        action = 'criada' if created else 'atualizada'
-                        logger.info(f"✅ [WEBHOOK REACTION] Reação {action} no banco: {sender_phone} → {emoji}")
-                
-                # Recarregar mensagem com reações atualizadas (incluindo externas)
-                original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
-                
-                # Broadcast atualização de reação via WebSocket
-                from apps.chat.utils.websocket import broadcast_message_reaction_update
-                broadcast_message_reaction_update(original_message)
-                
-                logger.info(f"✅ [WEBHOOK REACTION] Broadcast de reação enviado")
-                
-                # ✅ IMPORTANTE: Retornar sem criar mensagem nova
-                # Reações não são mensagens, são metadados
-                return Response({'status': 'ok'}, status=status.HTTP_200_OK)
-                
+                logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo message_id: {original_message.id}")
             except Message.DoesNotExist:
-                logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem original não encontrada (message_id={reaction_message_id})")
-                logger.warning(f"   Tentando buscar por message_id alternativo...")
-                # Tentar buscar pelo message_id do webhook principal (pode ser o mesmo)
-                try:
-                    if message_id and message_id != reaction_message_id:
-                        original_message = Message.objects.select_related(
-                            'conversation', 'conversation__tenant'
-                        ).get(
-                            message_id=message_id,
-                            conversation__tenant=tenant
-                        )
-                        logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo message_id alternativo: {original_message.id}")
-                        original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
-                        from apps.chat.utils.websocket import broadcast_message_reaction_update
-                        broadcast_message_reaction_update(original_message)
-                        return Response({'status': 'ok'}, status=status.HTTP_200_OK)
-                except Message.DoesNotExist:
-                    pass
+                logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem não encontrada pelo message_id={reaction_message_id}")
                 
-                # Mensagem pode não existir ainda (race condition) ou ser de outro tenant
-                # Retornar OK para não bloquear webhook
+                # Tentativa 2: Buscar pela conversa + tentar encontrar mensagem mais recente sem message_id
+                # (para mensagens antigas que podem não ter message_id salvo)
+                try:
+                    # Buscar conversa primeiro
+                    conversation = Conversation.objects.filter(
+                        tenant=tenant,
+                        contact_phone=normalize_contact_phone(remote_jid, is_group)
+                    ).first()
+                    
+                    if conversation:
+                        logger.info(f"🔍 [WEBHOOK REACTION] Tentando buscar mensagem na conversa {conversation.id} sem message_id...")
+                        
+                        # Buscar mensagens da conversa ordenadas por data (mais recentes primeiro)
+                        # Limitar a últimas 50 mensagens para não sobrecarregar
+                        messages = Message.objects.filter(
+                            conversation=conversation,
+                            direction='incoming' if not from_me else 'outgoing'
+                        ).order_by('-created_at')[:50]
+                        
+                        # Tentar encontrar mensagem pelo timestamp aproximado (se disponível)
+                        message_timestamp = message_data.get('messageTimestamp')
+                        if message_timestamp:
+                            # Converter timestamp Unix para datetime
+                            from datetime import datetime
+                            try:
+                                msg_date = datetime.fromtimestamp(message_timestamp)
+                                logger.info(f"🔍 [WEBHOOK REACTION] Buscando mensagem próxima ao timestamp: {msg_date}")
+                                
+                                # Buscar mensagem criada próximo ao timestamp (dentro de 1 hora)
+                                from django.utils import timezone
+                                from datetime import timedelta
+                                
+                                time_window_start = timezone.make_aware(msg_date - timedelta(hours=1))
+                                time_window_end = timezone.make_aware(msg_date + timedelta(hours=1))
+                                
+                                original_message = Message.objects.filter(
+                                    conversation=conversation,
+                                    created_at__gte=time_window_start,
+                                    created_at__lte=time_window_end,
+                                    direction='incoming' if not from_me else 'outgoing'
+                                ).order_by('-created_at').first()
+                                
+                                if original_message:
+                                    logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo timestamp aproximado: {original_message.id}")
+                            except Exception as e:
+                                logger.warning(f"⚠️ [WEBHOOK REACTION] Erro ao processar timestamp: {e}")
+                        
+                        # Se ainda não encontrou, tentar última mensagem da conversa (fallback)
+                        if not original_message:
+                            logger.warning(f"⚠️ [WEBHOOK REACTION] Tentando última mensagem da conversa como fallback...")
+                            original_message = messages.first()
+                            if original_message:
+                                logger.warning(f"⚠️ [WEBHOOK REACTION] Usando última mensagem como fallback: {original_message.id} (pode estar incorreto)")
+                    else:
+                        logger.warning(f"⚠️ [WEBHOOK REACTION] Conversa não encontrada para {remote_jid}")
+                        
+                except Exception as e:
+                    logger.error(f"❌ [WEBHOOK REACTION] Erro ao buscar mensagem por fallback: {e}", exc_info=True)
+            
+            if not original_message:
+                logger.error(f"❌ [WEBHOOK REACTION] Mensagem original não encontrada após todas as tentativas")
+                logger.error(f"   reaction_message_id: {reaction_message_id}")
+                logger.error(f"   message_id (webhook): {message_id}")
+                logger.error(f"   remote_jid: {remote_jid}")
+                logger.error(f"   tenant: {tenant.name}")
                 return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+            
+            logger.info(f"✅ [WEBHOOK REACTION] Mensagem original encontrada: {original_message.id}")
+            
+            # Buscar ou criar reação
+            # Para reações recebidas, não temos usuário interno, então precisamos identificar pelo número
+            # Se from_me=False, é reação recebida de contato externo
+            # Se from_me=True, é reação que enviamos (já deve estar no banco)
+            
+            # ✅ CORREÇÃO CRÍTICA: Criar ou atualizar reação no banco de dados
+            from apps.chat.models import MessageReaction
+            
+            # ✅ CORREÇÃO CRÍTICA: Processar reações recebidas (from_me=False) e também reações que enviamos (from_me=True)
+            # Isso garante sincronização bidirecional completa
+            if from_me:
+                # Reação que enviamos - pode já estar no banco, mas verificar e atualizar se necessário
+                logger.info(f"ℹ️ [WEBHOOK REACTION] Reação enviada por nós (confirmação do WhatsApp)")
+                # Não precisa salvar novamente (já foi salva quando enviamos)
+                # Mas fazer broadcast para atualizar todos os clientes
+            else:
+                # ✅ CORREÇÃO CRÍTICA: Reação recebida de contato externo - SALVAR NO BANCO
+                # Extrair número do remetente (pode estar em participant ou remoteJid)
+                sender_phone = ''
+                if is_group and participant:
+                    # Grupo: usar participant (quem reagiu no grupo)
+                    sender_phone = participant.split('@')[0]
+                    if not sender_phone.startswith('+'):
+                        sender_phone = '+' + sender_phone.lstrip('+')
+                else:
+                    # Individual: usar remoteJid (quem reagiu)
+                    sender_phone = remote_jid.split('@')[0]
+                    if not sender_phone.startswith('+'):
+                        sender_phone = '+' + sender_phone.lstrip('+')
+                
+                logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo: {sender_phone}")
+                logger.info(f"   Emoji: '{emoji}' (vazio={is_removal})")
+                
+                # ✅ CORREÇÃO CRÍTICA: Processar remoção ou adição de reação
+                if is_removal:
+                    # Remover reação existente deste contato
+                    deleted_count = MessageReaction.objects.filter(
+                        message=original_message,
+                        external_sender=sender_phone
+                    ).delete()[0]
+                    logger.info(f"✅ [WEBHOOK REACTION] Reação removida do contato externo (deletadas: {deleted_count})")
+                else:
+                    # Criar ou atualizar reação do contato externo
+                    reaction, created = MessageReaction.objects.update_or_create(
+                        message=original_message,
+                        external_sender=sender_phone,
+                        defaults={'emoji': emoji}
+                    )
+                    action = 'criada' if created else 'atualizada'
+                    logger.info(f"✅ [WEBHOOK REACTION] Reação {action} no banco: {sender_phone} → {emoji}")
+            
+            # Recarregar mensagem com reações atualizadas (incluindo externas)
+            original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
+            
+            # Broadcast atualização de reação via WebSocket
+            from apps.chat.utils.websocket import broadcast_message_reaction_update
+            broadcast_message_reaction_update(original_message)
+            
+            logger.info(f"✅ [WEBHOOK REACTION] Broadcast de reação enviado")
+            
+            # ✅ IMPORTANTE: Retornar sem criar mensagem nova
+            # Reações não são mensagens, são metadados
+            return Response({'status': 'ok'}, status=status.HTTP_200_OK)
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK REACTION] Erro ao processar reação: {e}", exc_info=True)
                 # Retornar OK para não bloquear webhook
