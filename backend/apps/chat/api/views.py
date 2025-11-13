@@ -1558,12 +1558,30 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # ✅ CORREÇÃO CRÍTICA: Buscar número da instância WhatsApp conectada
+        # A reação deve ser criada com external_sender = número da instância, não com user=request.user
+        # Isso garante que aparece como vindo do número da instância (como no WhatsApp)
+        wa_instance = WhatsAppInstance.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True,
+            status='active'
+        ).first()
+        
+        if not wa_instance or not wa_instance.phone_number:
+            return Response(
+                {'error': 'Instância WhatsApp não encontrada ou não conectada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        instance_phone = wa_instance.phone_number
+        logger.info(f"📱 [REACTION] Usando número da instância para reação: {instance_phone}")
+        
         # ✅ CORREÇÃO CRÍTICA: Comportamento estilo WhatsApp - substituir reação anterior
-        # Se usuário já reagiu com outro emoji, remover a reação antiga primeiro
-        # Isso garante que usuário só tem uma reação por vez (comportamento WhatsApp)
+        # Buscar reação existente pelo número da instância (não pelo user)
         existing_reaction = MessageReaction.objects.filter(
             message=message,
-            user=request.user
+            external_sender=instance_phone,
+            user__isnull=True
         ).first()
         
         if existing_reaction:
@@ -1571,7 +1589,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 # ✅ Se é o mesmo emoji, remover (toggle off)
                 old_emoji = existing_reaction.emoji
                 existing_reaction.delete()
-                logger.info(f"✅ [REACTION] Reação removida (toggle off): {request.user.email} {emoji} em {message.id}")
+                logger.info(f"✅ [REACTION] Reação removida (toggle off): {instance_phone} {emoji} em {message.id}")
                 
                 # ✅ CORREÇÃO CRÍTICA: Enviar remoção para Evolution API (WhatsApp)
                 # Enviar reação vazia remove a reação no WhatsApp
@@ -1585,7 +1603,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
                         # ✅ Enviar emoji vazio remove a reação no WhatsApp
                         loop.run_until_complete(send_reaction_to_evolution(message, ''))
                         loop.close()
-                        logger.info(f"✅ [REACTION] Remoção enviada para Evolution API: {request.user.email} removendo {old_emoji} em {message.id}")
+                        logger.info(f"✅ [REACTION] Remoção enviada para Evolution API: {instance_phone} removendo {old_emoji} em {message.id}")
                     except Exception as e:
                         logger.error(f"⚠️ [REACTION] Erro ao enviar remoção para Evolution API: {e}", exc_info=True)
                 
@@ -1603,7 +1621,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 # ✅ Se é emoji diferente, remover reação antiga no WhatsApp primeiro, depois criar nova
                 old_emoji = existing_reaction.emoji
                 existing_reaction.delete()
-                logger.info(f"✅ [REACTION] Reação antiga removida para substituir: {request.user.email} {old_emoji} → {emoji}")
+                logger.info(f"✅ [REACTION] Reação antiga removida para substituir: {instance_phone} {old_emoji} → {emoji}")
                 
                 # ✅ CORREÇÃO CRÍTICA: Remover reação antiga no WhatsApp antes de enviar nova
                 import asyncio
@@ -1624,13 +1642,14 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 thread = threading.Thread(target=remove_old_reaction_async, daemon=True)
                 thread.start()
         
-        # Criar nova reação
-        reaction = MessageReaction.objects.create(
+        # ✅ CORREÇÃO CRÍTICA: Criar reação com external_sender = número da instância (NÃO com user=request.user)
+        # Isso garante que aparece como vindo do número da instância (como no WhatsApp)
+        reaction, created = MessageReaction.objects.update_or_create(
             message=message,
-            user=request.user,
-            emoji=emoji
+            external_sender=instance_phone,
+            user=None,  # ✅ Sempre None para reações da instância
+            defaults={'emoji': emoji}
         )
-        created = True
         
         # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
         # Isso garante que a reação aparece no WhatsApp do destinatário
@@ -1681,9 +1700,9 @@ class MessageReactionViewSet(viewsets.ViewSet):
             broadcast_message_reaction_update(message, reaction_data)
             
             if created:
-                logger.info(f"✅ [REACTION] Reação adicionada: {request.user.email} {emoji} em {message.id}")
+                logger.info(f"✅ [REACTION] Reação adicionada: {instance_phone} {emoji} em {message.id}")
             else:
-                logger.info(f"✅ [REACTION] Reação já existente (broadcast): {request.user.email} {emoji} em {message.id}")
+                logger.info(f"✅ [REACTION] Reação já existente (broadcast): {instance_phone} {emoji} em {message.id}")
         except Exception as e:
             logger.error(f"❌ [REACTION] Erro ao fazer broadcast: {e}", exc_info=True)
         
