@@ -614,61 +614,94 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
   // ✅ CORREÇÃO CRÍTICA: Calcular posição do picker baseada no viewport
   useEffect(() => {
     if (showEmojiPicker && buttonRef.current) {
-      const calculatePosition = () => {
-        if (!buttonRef.current) return;
+      // ✅ CORREÇÃO: Pequeno delay para garantir que o botão está renderizado
+      const timeoutId = setTimeout(() => {
+        const calculatePosition = () => {
+          if (!buttonRef.current) return;
+          
+          const buttonRect = buttonRef.current.getBoundingClientRect();
+          const pickerHeight = 320;
+          const pickerWidth = 320;
+          const viewportWidth = window.innerWidth;
+          const viewportHeight = window.innerHeight;
+          
+          // ✅ CORREÇÃO: Calcular posição horizontal próxima ao botão
+          let left: number;
+          
+          if (direction === 'outgoing') {
+            // Mensagens enviadas: alinhar à direita do botão
+            left = buttonRect.right - pickerWidth;
+            // Se não couber à direita, posicionar à esquerda do botão
+            if (left < 16) {
+              left = buttonRect.left;
+            }
+          } else {
+            // Mensagens recebidas: alinhar à esquerda do botão
+            left = buttonRect.left;
+            // Se não couber à esquerda, posicionar à direita do botão
+            if (left + pickerWidth > viewportWidth - 16) {
+              left = buttonRect.right - pickerWidth;
+            }
+          }
+          
+          // ✅ CORREÇÃO: Garantir que não saia da tela horizontalmente
+          if (left + pickerWidth > viewportWidth - 16) {
+            left = viewportWidth - pickerWidth - 16; // 16px de margem
+          }
+          if (left < 16) {
+            left = 16; // 16px de margem
+          }
+          
+          // ✅ CORREÇÃO: Calcular posição vertical próxima ao botão
+          const spaceAbove = buttonRect.top;
+          const spaceBelow = viewportHeight - buttonRect.bottom;
+          let top: number;
+          
+          // Preferir posicionar acima se houver espaço suficiente
+          if (spaceAbove >= pickerHeight + 8) {
+            top = buttonRect.top - pickerHeight - 8;
+          } 
+          // Se não houver espaço acima, posicionar abaixo
+          else if (spaceBelow >= pickerHeight + 8) {
+            top = buttonRect.bottom + 8;
+          }
+          // Se não houver espaço em nenhum lado, escolher o lado com mais espaço
+          else {
+            if (spaceAbove > spaceBelow) {
+              // Mais espaço acima, posicionar acima mesmo que fique cortado
+              top = Math.max(16, buttonRect.top - pickerHeight - 8);
+            } else {
+              // Mais espaço abaixo, posicionar abaixo mesmo que fique cortado
+              top = Math.min(viewportHeight - pickerHeight - 16, buttonRect.bottom + 8);
+            }
+          }
+          
+          // ✅ CORREÇÃO: Garantir que não saia da tela verticalmente
+          if (top < 16) {
+            top = 16; // 16px de margem do topo
+          }
+          if (top + pickerHeight > viewportHeight - 16) {
+            top = viewportHeight - pickerHeight - 16; // 16px de margem do fundo
+          }
+          
+          setPickerPosition({ top, left });
+        };
         
-        const buttonRect = buttonRef.current.getBoundingClientRect();
-        const pickerHeight = 320;
-        const pickerWidth = 320;
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
+        calculatePosition();
         
-        // Calcular posição horizontal
-        let left = direction === 'outgoing' 
-          ? buttonRect.right - pickerWidth  // Alinhar à direita do botão
-          : buttonRect.left;  // Alinhar à esquerda do botão
+        // Recalcular ao redimensionar ou scrollar
+        window.addEventListener('resize', calculatePosition);
+        window.addEventListener('scroll', calculatePosition, true);
         
-        // Garantir que não saia da tela horizontalmente
-        if (left + pickerWidth > viewportWidth) {
-          left = viewportWidth - pickerWidth - 16; // 16px de margem
-        }
-        if (left < 16) {
-          left = 16; // 16px de margem
-        }
-        
-        // Calcular posição vertical
-        const spaceAbove = buttonRect.top;
-        const spaceBelow = viewportHeight - buttonRect.bottom;
-        let top: number;
-        
-        if (spaceAbove >= pickerHeight || (spaceAbove < pickerHeight && spaceBelow < pickerHeight)) {
-          // Posicionar acima se houver espaço OU se não houver espaço em nenhum lado
-          top = buttonRect.top - pickerHeight - 8;
-        } else {
-          // Posicionar abaixo
-          top = buttonRect.bottom + 8;
-        }
-        
-        // Garantir que não saia da tela verticalmente
-        if (top < 16) {
-          top = 16; // 16px de margem do topo
-        }
-        if (top + pickerHeight > viewportHeight - 16) {
-          top = viewportHeight - pickerHeight - 16; // 16px de margem do fundo
-        }
-        
-        setPickerPosition({ top, left });
-      };
-      
-      calculatePosition();
-      
-      // Recalcular ao redimensionar ou scrollar
-      window.addEventListener('resize', calculatePosition);
-      window.addEventListener('scroll', calculatePosition, true);
+        return () => {
+          window.removeEventListener('resize', calculatePosition);
+          window.removeEventListener('scroll', calculatePosition, true);
+        };
+      }, 10); // ✅ Pequeno delay para garantir renderização
       
       return () => {
-        window.removeEventListener('resize', calculatePosition);
-        window.removeEventListener('scroll', calculatePosition, true);
+        clearTimeout(timeoutId);
+        setPickerPosition(null);
       };
     } else {
       setPickerPosition(null);
