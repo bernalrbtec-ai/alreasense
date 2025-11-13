@@ -653,35 +653,37 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           }
           
           // ✅ CORREÇÃO: Calcular posição vertical próxima ao botão
+          // SEMPRE tentar posicionar ACIMA primeiro (comportamento WhatsApp)
           const spaceAbove = buttonRect.top;
           const spaceBelow = viewportHeight - buttonRect.bottom;
           let top: number;
           
-          // Preferir posicionar acima se houver espaço suficiente
-          if (spaceAbove >= pickerHeight + 8) {
+          // ✅ CORREÇÃO CRÍTICA: Preferir SEMPRE posicionar acima do botão
+          // Se houver espaço suficiente acima (pelo menos 280px), posicionar acima
+          if (spaceAbove >= 280) {
             top = buttonRect.top - pickerHeight - 8;
           } 
+          // Se não houver espaço suficiente acima, mas houver mais espaço acima que abaixo, tentar acima mesmo assim
+          else if (spaceAbove > spaceBelow && spaceAbove >= 200) {
+            top = buttonRect.top - pickerHeight - 8;
+          }
           // Se não houver espaço acima, posicionar abaixo
-          else if (spaceBelow >= pickerHeight + 8) {
+          else {
             top = buttonRect.bottom + 8;
           }
-          // Se não houver espaço em nenhum lado, escolher o lado com mais espaço
-          else {
-            if (spaceAbove > spaceBelow) {
-              // Mais espaço acima, posicionar acima mesmo que fique cortado
-              top = Math.max(16, buttonRect.top - pickerHeight - 8);
-            } else {
-              // Mais espaço abaixo, posicionar abaixo mesmo que fique cortado
-              top = Math.min(viewportHeight - pickerHeight - 16, buttonRect.bottom + 8);
-            }
-          }
           
-          // ✅ CORREÇÃO: Garantir que não saia da tela verticalmente
+          // ✅ CORREÇÃO: Garantir que não saia da tela verticalmente (após calcular)
           if (top < 16) {
             top = 16; // 16px de margem do topo
           }
           if (top + pickerHeight > viewportHeight - 16) {
             top = viewportHeight - pickerHeight - 16; // 16px de margem do fundo
+          }
+          
+          // ✅ CORREÇÃO FINAL: Se ainda assim não couber, forçar acima do botão (mesmo que corte)
+          if (top > buttonRect.top) {
+            // Se o picker está abaixo do botão mas não cabe, tentar acima mesmo que corte
+            top = Math.max(16, buttonRect.top - pickerHeight - 8);
           }
           
           setPickerPosition({ top, left });
