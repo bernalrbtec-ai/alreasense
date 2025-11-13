@@ -1683,21 +1683,9 @@ class MessageReactionViewSet(viewsets.ViewSet):
             # Recarregar mensagem com prefetch de reações para evitar race conditions
             message = Message.objects.prefetch_related('reactions__user').get(id=message.id)
             
-            # Preparar dados da reação para o broadcast
-            reaction_data = {
-                'id': str(reaction.id),
-                'emoji': reaction.emoji,
-                'user': {
-                    'id': str(request.user.id),
-                    'email': request.user.email,
-                    'first_name': request.user.first_name,
-                    'last_name': request.user.last_name,
-                },
-                'created_at': reaction.created_at.isoformat(),
-            }
-            
-            # ✅ CORREÇÃO: Usar função helper que faz broadcast para tenant inteiro
-            broadcast_message_reaction_update(message, reaction_data)
+            # ✅ CORREÇÃO: Não passar reaction_data - o broadcast vai usar a mensagem completa com todas as reações
+            # A reação agora é com external_sender (número da instância), não com user
+            broadcast_message_reaction_update(message)
             
             if created:
                 logger.info(f"✅ [REACTION] Reação adicionada: {instance_phone} {emoji} em {message.id}")
