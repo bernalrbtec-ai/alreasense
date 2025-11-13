@@ -632,10 +632,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def close(self, request, pk=None):
-        """Fecha uma conversa."""
+        """
+        Fecha uma conversa.
+        
+        ✅ CORREÇÃO CRÍTICA: Remove departamento ao fechar para que quando
+        uma nova mensagem chegar, a conversa volte para o Inbox (sem departamento).
+        """
         conversation = self.get_object()
         conversation.status = 'closed'
-        conversation.save(update_fields=['status'])
+        conversation.department = None  # ✅ Remover departamento para voltar ao Inbox quando reabrir
+        conversation.save(update_fields=['status', 'department'])
+        
+        logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada e departamento removido (volta ao Inbox quando reabrir)")
         
         return Response(
             ConversationSerializer(conversation).data,

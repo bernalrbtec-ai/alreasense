@@ -920,11 +920,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if not created:
             if conversation.status == 'closed':
                 old_status = conversation.status
+                old_department = conversation.department.name if conversation.department else 'Nenhum'
+                
+                # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, remover departamento
+                # para que ela volte para o Inbox (comportamento esperado)
                 conversation.status = 'pending' if not from_me else 'open'
-                conversation.save(update_fields=['status'])
+                conversation.department = None  # ✅ Remover departamento para voltar ao Inbox
+                conversation.save(update_fields=['status', 'department'])
+                
                 status_str = "Inbox" if not from_me else "Aberta"
                 status_changed = True
                 logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status} ({status_str})")
+                logger.info(f"   📋 Departamento removido: {old_department} → Inbox (sem departamento)")
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista
