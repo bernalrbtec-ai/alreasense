@@ -387,9 +387,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Tipo de mensagem
         message_type = message_data.get('messageType', 'text')
         
+        # ✅ DEBUG: Log do tipo de mensagem recebido
+        logger.info(f"🔍 [WEBHOOK UPSERT] MessageType recebido: {message_type}")
+        logger.info(f"   Message data keys: {list(message_data.keys())}")
+        logger.info(f"   Message info keys: {list(message_info.keys()) if message_info else 'None'}")
+        
         # ✅ CORREÇÃO CRÍTICA: Tratar reactionMessage como tipo especial
         # Reações NÃO são mensagens novas, são metadados de mensagens existentes
-        if message_type == 'reactionMessage':
+        # ✅ CORREÇÃO: Verificar também se message_info tem reactionMessage diretamente
+        has_reaction_message = 'reactionMessage' in message_info if message_info else False
+        
+        if message_type == 'reactionMessage' or has_reaction_message:
+            if has_reaction_message and message_type != 'reactionMessage':
+                logger.info(f"⚠️ [WEBHOOK REACTION] reactionMessage encontrado em message_info mas messageType={message_type}, processando mesmo assim")
             logger.info(f"👍 [WEBHOOK REACTION] Reação recebida do WhatsApp")
             
             # ✅ CORREÇÃO: Estrutura do webhook pode variar, tentar múltiplas formas
