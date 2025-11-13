@@ -623,6 +623,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     
                     # ✅ CORREÇÃO CRÍTICA: Verificar se o sender_phone é o número da instância conectada
                     # Se for, não criar reação com external_sender (já existe reação do usuário interno)
+                    # Isso previne duplicação quando o webhook recebe confirmação com from_me=False mas sender_phone = número da instância
                     if wa_instance and wa_instance.phone_number:
                         instance_phone = wa_instance.phone_number
                         logger.info(f"🔍 [WEBHOOK REACTION] Comparando sender_phone ({sender_phone}) com instance_phone ({instance_phone})")
@@ -635,20 +636,41 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.info(f"🔍 [WEBHOOK REACTION] Números normalizados - sender: {sender_digits}, instance: {instance_digits}")
                         
                         if sender_digits == instance_digits:
-                            logger.warning(f"⚠️ [WEBHOOK REACTION] Reação recebida do número da instância conectada ({sender_phone} = {instance_phone}), ignorando (já existe reação do usuário interno)")
+                            logger.warning(f"⚠️ [WEBHOOK REACTION] Reação recebida do número da instância conectada ({sender_phone} = {instance_phone})")
+                            logger.warning(f"   ⚠️ IGNORANDO criação de reação com external_sender (já existe reação do usuário interno)")
                             
                             # Remover qualquer reação duplicada que possa ter sido criada antes desta verificação
-                            MessageReaction.objects.filter(
+                            # Tentar múltiplos formatos para garantir remoção completa
+                            deleted_count = 0
+                            deleted_count += MessageReaction.objects.filter(
                                 message=original_message,
                                 external_sender=sender_phone,
                                 user__isnull=True
-                            ).delete()
+                            ).delete()[0]
+                            
+                            # Também remover com outros formatos possíveis
+                            if sender_phone.startswith('+'):
+                                deleted_count += MessageReaction.objects.filter(
+                                    message=original_message,
+                                    external_sender=sender_phone.lstrip('+'),
+                                    user__isnull=True
+                                ).delete()[0]
+                            else:
+                                deleted_count += MessageReaction.objects.filter(
+                                    message=original_message,
+                                    external_sender=f"+{sender_phone}",
+                                    user__isnull=True
+                                ).delete()[0]
+                            
+                            if deleted_count > 0:
+                                logger.info(f"🗑️ [WEBHOOK REACTION] Removidas {deleted_count} reação(ões) duplicada(s) com external_sender")
                             
                             # Não criar reação com external_sender - já existe reação do usuário interno
-                            # Apenas fazer broadcast
+                            # Apenas fazer broadcast para sincronizar
                             original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
                             from apps.chat.utils.websocket import broadcast_message_reaction_update
                             broadcast_message_reaction_update(original_message)
+                            logger.info(f"✅ [WEBHOOK REACTION] Broadcast enviado (sem criar reação duplicada)")
                             return Response({'status': 'ok'}, status=status.HTTP_200_OK)
                     
                     logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo: {sender_phone}")
