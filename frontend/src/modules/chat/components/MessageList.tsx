@@ -1011,22 +1011,27 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           <Smile className="w-4 h-4 text-gray-500" />
         </button>
         {showEmojiPicker && pickerPosition && (
-          <div 
-            ref={pickerRef} 
-            className="fixed z-50"
-            style={{
-              top: `${pickerPosition.top}px`,
-              left: `${pickerPosition.left}px`,
-            }}
-          >
-            <EmojiPicker
-              onSelect={(emoji) => {
-                handleAddReaction(emoji);
-                setShowEmojiPicker(false);
+          <>
+            {/* ✅ CORREÇÃO: Portal para posicionar fora do fluxo normal */}
+            <div 
+              ref={pickerRef} 
+              className="fixed z-50"
+              style={{
+                top: `${pickerPosition.top}px`,
+                left: `${pickerPosition.left}px`,
+                width: '320px',
+                height: '280px',
               }}
-              onClose={() => setShowEmojiPicker(false)}
-            />
-          </div>
+            >
+              <EmojiPicker
+                onSelect={(emoji) => {
+                  handleAddReaction(emoji);
+                  setShowEmojiPicker(false);
+                }}
+                onClose={() => setShowEmojiPicker(false)}
+              />
+            </div>
+          </>
         )}
       </div>
     </div>
