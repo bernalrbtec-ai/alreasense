@@ -676,6 +676,29 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo: {sender_phone}")
                     logger.info(f"   Emoji: '{emoji}' (vazio={is_removal})")
                     
+                    # ✅ CORREÇÃO CRÍTICA FINAL: Verificar novamente ANTES de criar reação com external_sender
+                    # Isso garante que mesmo se a verificação anterior falhou, não criamos duplicata
+                    if wa_instance and wa_instance.phone_number:
+                        instance_phone = wa_instance.phone_number
+                        import re
+                        sender_digits = re.sub(r'\D', '', sender_phone)
+                        instance_digits = re.sub(r'\D', '', instance_phone)
+                        
+                        if sender_digits == instance_digits:
+                            logger.error(f"❌ [WEBHOOK REACTION] ERRO: Tentativa de criar reação com external_sender do número da instância ({sender_phone})")
+                            logger.error(f"   ⚠️ IGNORANDO - já existe reação do usuário interno")
+                            # Remover qualquer reação duplicada que possa ter sido criada
+                            MessageReaction.objects.filter(
+                                message=original_message,
+                                external_sender=sender_phone,
+                                user__isnull=True
+                            ).delete()
+                            # Apenas fazer broadcast
+                            original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
+                            from apps.chat.utils.websocket import broadcast_message_reaction_update
+                            broadcast_message_reaction_update(original_message)
+                            return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+                    
                     # ✅ CORREÇÃO CRÍTICA: Processar remoção ou adição de reação
                     if is_removal:
                         # Remover reação existente deste contato
@@ -685,7 +708,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         ).delete()[0]
                         logger.info(f"✅ [WEBHOOK REACTION] Reação removida do contato externo (deletadas: {deleted_count})")
                     else:
-                        # Criar ou atualizar reação do contato externo
+                        # Criar ou atualizar reação do contato externo (apenas se NÃO for número da instância)
                         reaction, created = MessageReaction.objects.update_or_create(
                             message=original_message,
                             external_sender=sender_phone,
