@@ -100,13 +100,14 @@ class MessageReactionSerializer(serializers.ModelSerializer):
     
     id = serializers.UUIDField(read_only=True)
     message = serializers.UUIDField(read_only=True)
-    user = serializers.UUIDField(read_only=True)
-    user_data = UserSerializer(source='user', read_only=True)
+    user = serializers.UUIDField(read_only=True, allow_null=True)
+    user_data = UserSerializer(source='user', read_only=True, allow_null=True)
+    external_sender = serializers.CharField(read_only=True, allow_blank=True)
     
     class Meta:
         model = MessageReaction
-        fields = ['id', 'message', 'user', 'user_data', 'emoji', 'created_at']
-        read_only_fields = ['id', 'message', 'user', 'user_data', 'created_at']
+        fields = ['id', 'message', 'user', 'user_data', 'external_sender', 'emoji', 'created_at']
+        read_only_fields = ['id', 'message', 'user', 'user_data', 'external_sender', 'created_at']
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -170,15 +171,26 @@ class MessageSerializer(serializers.ModelSerializer):
         for reaction in reactions:
             emoji = reaction.emoji
             summary[emoji]['count'] += 1
-            # Adicionar dados do usuário (apenas ID e nome para economizar espaço)
-            # ✅ CORREÇÃO: Verificar se user foi prefetched ou fazer select_related
-            user = reaction.user
-            summary[emoji]['users'].append({
-                'id': str(user.id),
-                'email': user.email,
-                'first_name': user.first_name,
-                'last_name': user.last_name,
-            })
+            # ✅ CORREÇÃO: Adicionar dados do usuário ou contato externo
+            if reaction.user:
+                # Reação de usuário interno
+                user = reaction.user
+                summary[emoji]['users'].append({
+                    'id': str(user.id),
+                    'email': user.email,
+                    'first_name': user.first_name,
+                    'last_name': user.last_name,
+                    'external': False,
+                })
+            elif reaction.external_sender:
+                # Reação de contato externo (WhatsApp)
+                summary[emoji]['users'].append({
+                    'id': None,
+                    'email': None,
+                    'first_name': reaction.external_sender,
+                    'last_name': '',
+                    'external': True,
+                })
         
         return dict(summary)
 

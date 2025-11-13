@@ -448,16 +448,47 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Se from_me=False, é reação recebida de contato externo
                 # Se from_me=True, é reação que enviamos (já deve estar no banco)
                 
+                # ✅ CORREÇÃO CRÍTICA: Criar ou atualizar reação no banco de dados
+                from apps.chat.models import MessageReaction
+                
                 if from_me:
                     # Reação que enviamos - já deve estar no banco, apenas fazer broadcast
                     logger.info(f"ℹ️ [WEBHOOK REACTION] Reação enviada por nós, apenas fazer broadcast")
                 else:
-                    # Reação recebida de contato externo
-                    # Não temos usuário interno, então vamos apenas fazer broadcast da mensagem atualizada
-                    # O frontend vai atualizar as reações quando receber o broadcast
-                    logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo")
+                    # ✅ CORREÇÃO: Reação recebida de contato externo - SALVAR NO BANCO
+                    # Extrair número do remetente (pode estar em participant ou remoteJid)
+                    sender_phone = ''
+                    if is_group and participant:
+                        # Grupo: usar participant
+                        sender_phone = participant.split('@')[0]
+                        if not sender_phone.startswith('+'):
+                            sender_phone = '+' + sender_phone.lstrip('+')
+                    else:
+                        # Individual: usar remoteJid
+                        sender_phone = remote_jid.split('@')[0]
+                        if not sender_phone.startswith('+'):
+                            sender_phone = '+' + sender_phone.lstrip('+')
+                    
+                    logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo: {sender_phone}")
+                    
+                    # ✅ Se emoji vazio, remover reação; senão, criar/atualizar
+                    if not emoji or emoji.strip() == '':
+                        # Remover reação existente deste contato
+                        MessageReaction.objects.filter(
+                            message=original_message,
+                            external_sender=sender_phone
+                        ).delete()
+                        logger.info(f"✅ [WEBHOOK REACTION] Reação removida do contato externo")
+                    else:
+                        # Criar ou atualizar reação do contato externo
+                        MessageReaction.objects.update_or_create(
+                            message=original_message,
+                            external_sender=sender_phone,
+                            defaults={'emoji': emoji}
+                        )
+                        logger.info(f"✅ [WEBHOOK REACTION] Reação salva no banco: {sender_phone} → {emoji}")
                 
-                # Recarregar mensagem com reações atualizadas
+                # Recarregar mensagem com reações atualizadas (incluindo externas)
                 original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
                 
                 # Broadcast atualização de reação via WebSocket

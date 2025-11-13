@@ -647,7 +647,16 @@ class MessageReaction(models.Model):
         'authn.User',
         on_delete=models.CASCADE,
         related_name='message_reactions',
-        verbose_name='Usuário'
+        verbose_name='Usuário',
+        null=True,
+        blank=True,
+        help_text='NULL para reações de contatos externos (WhatsApp)'
+    )
+    external_sender = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Remetente Externo',
+        help_text='Número do contato que reagiu (para reações recebidas do WhatsApp)'
     )
     emoji = models.CharField(
         max_length=10,
@@ -665,8 +674,20 @@ class MessageReaction(models.Model):
         verbose_name = 'Reação'
         verbose_name_plural = 'Reações'
         ordering = ['created_at']
-        # ✅ UNIQUE: Um usuário só pode reagir uma vez com cada emoji por mensagem
-        unique_together = [['message', 'user', 'emoji']]
+        # ✅ UNIQUE: Um usuário/contato externo só pode reagir uma vez com cada emoji por mensagem
+        # Se user existe, usa user; senão, usa external_sender
+        constraints = [
+            models.UniqueConstraint(
+                fields=['message', 'user', 'emoji'],
+                condition=models.Q(user__isnull=False),
+                name='unique_user_reaction_per_message_emoji'
+            ),
+            models.UniqueConstraint(
+                fields=['message', 'external_sender', 'emoji'],
+                condition=models.Q(external_sender__gt=''),
+                name='unique_external_reaction_per_message_emoji'
+            ),
+        ]
         indexes = [
             models.Index(fields=['message', 'created_at']),
             models.Index(fields=['user', 'created_at']),
