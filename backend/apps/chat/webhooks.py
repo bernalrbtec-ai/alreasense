@@ -453,75 +453,75 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 original_message = None
                 
                 try:
-                # Tentativa 1: Buscar pelo message_id exato
-                original_message = Message.objects.select_related(
-                    'conversation', 'conversation__tenant'
-                ).get(
-                    message_id=reaction_message_id,
-                    conversation__tenant=tenant
-                )
-                logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo message_id: {original_message.id}")
-            except Message.DoesNotExist:
-                logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem não encontrada pelo message_id={reaction_message_id}")
-                
-                # Tentativa 2: Buscar pela conversa + tentar encontrar mensagem mais recente sem message_id
-                # (para mensagens antigas que podem não ter message_id salvo)
-                try:
-                    # Buscar conversa primeiro
-                    conversation = Conversation.objects.filter(
-                        tenant=tenant,
-                        contact_phone=normalize_contact_phone(remote_jid, is_group)
-                    ).first()
+                    # Tentativa 1: Buscar pelo message_id exato
+                    original_message = Message.objects.select_related(
+                        'conversation', 'conversation__tenant'
+                    ).get(
+                        message_id=reaction_message_id,
+                        conversation__tenant=tenant
+                    )
+                    logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo message_id: {original_message.id}")
+                except Message.DoesNotExist:
+                    logger.warning(f"⚠️ [WEBHOOK REACTION] Mensagem não encontrada pelo message_id={reaction_message_id}")
                     
-                    if conversation:
-                        logger.info(f"🔍 [WEBHOOK REACTION] Tentando buscar mensagem na conversa {conversation.id} sem message_id...")
+                    # Tentativa 2: Buscar pela conversa + tentar encontrar mensagem mais recente sem message_id
+                    # (para mensagens antigas que podem não ter message_id salvo)
+                    try:
+                        # Buscar conversa primeiro
+                        conversation = Conversation.objects.filter(
+                            tenant=tenant,
+                            contact_phone=normalize_contact_phone(remote_jid, is_group)
+                        ).first()
                         
-                        # Buscar mensagens da conversa ordenadas por data (mais recentes primeiro)
-                        # Limitar a últimas 50 mensagens para não sobrecarregar
-                        messages = Message.objects.filter(
-                            conversation=conversation,
-                            direction='incoming' if not from_me else 'outgoing'
-                        ).order_by('-created_at')[:50]
-                        
-                        # Tentar encontrar mensagem pelo timestamp aproximado (se disponível)
-                        message_timestamp = message_data.get('messageTimestamp')
-                        if message_timestamp:
-                            # Converter timestamp Unix para datetime
-                            from datetime import datetime
-                            try:
-                                msg_date = datetime.fromtimestamp(message_timestamp)
-                                logger.info(f"🔍 [WEBHOOK REACTION] Buscando mensagem próxima ao timestamp: {msg_date}")
-                                
-                                # Buscar mensagem criada próximo ao timestamp (dentro de 1 hora)
-                                from django.utils import timezone
-                                from datetime import timedelta
-                                
-                                time_window_start = timezone.make_aware(msg_date - timedelta(hours=1))
-                                time_window_end = timezone.make_aware(msg_date + timedelta(hours=1))
-                                
-                                original_message = Message.objects.filter(
-                                    conversation=conversation,
-                                    created_at__gte=time_window_start,
-                                    created_at__lte=time_window_end,
-                                    direction='incoming' if not from_me else 'outgoing'
-                                ).order_by('-created_at').first()
-                                
+                        if conversation:
+                            logger.info(f"🔍 [WEBHOOK REACTION] Tentando buscar mensagem na conversa {conversation.id} sem message_id...")
+                            
+                            # Buscar mensagens da conversa ordenadas por data (mais recentes primeiro)
+                            # Limitar a últimas 50 mensagens para não sobrecarregar
+                            messages = Message.objects.filter(
+                                conversation=conversation,
+                                direction='incoming' if not from_me else 'outgoing'
+                            ).order_by('-created_at')[:50]
+                            
+                            # Tentar encontrar mensagem pelo timestamp aproximado (se disponível)
+                            message_timestamp = message_data.get('messageTimestamp')
+                            if message_timestamp:
+                                # Converter timestamp Unix para datetime
+                                from datetime import datetime
+                                try:
+                                    msg_date = datetime.fromtimestamp(message_timestamp)
+                                    logger.info(f"🔍 [WEBHOOK REACTION] Buscando mensagem próxima ao timestamp: {msg_date}")
+                                    
+                                    # Buscar mensagem criada próximo ao timestamp (dentro de 1 hora)
+                                    from django.utils import timezone
+                                    from datetime import timedelta
+                                    
+                                    time_window_start = timezone.make_aware(msg_date - timedelta(hours=1))
+                                    time_window_end = timezone.make_aware(msg_date + timedelta(hours=1))
+                                    
+                                    original_message = Message.objects.filter(
+                                        conversation=conversation,
+                                        created_at__gte=time_window_start,
+                                        created_at__lte=time_window_end,
+                                        direction='incoming' if not from_me else 'outgoing'
+                                    ).order_by('-created_at').first()
+                                    
+                                    if original_message:
+                                        logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo timestamp aproximado: {original_message.id}")
+                                except Exception as e:
+                                    logger.warning(f"⚠️ [WEBHOOK REACTION] Erro ao processar timestamp: {e}")
+                            
+                            # Se ainda não encontrou, tentar última mensagem da conversa (fallback)
+                            if not original_message:
+                                logger.warning(f"⚠️ [WEBHOOK REACTION] Tentando última mensagem da conversa como fallback...")
+                                original_message = messages.first()
                                 if original_message:
-                                    logger.info(f"✅ [WEBHOOK REACTION] Mensagem encontrada pelo timestamp aproximado: {original_message.id}")
-                            except Exception as e:
-                                logger.warning(f"⚠️ [WEBHOOK REACTION] Erro ao processar timestamp: {e}")
-                        
-                        # Se ainda não encontrou, tentar última mensagem da conversa (fallback)
-                        if not original_message:
-                            logger.warning(f"⚠️ [WEBHOOK REACTION] Tentando última mensagem da conversa como fallback...")
-                            original_message = messages.first()
-                            if original_message:
-                                logger.warning(f"⚠️ [WEBHOOK REACTION] Usando última mensagem como fallback: {original_message.id} (pode estar incorreto)")
-                    else:
-                        logger.warning(f"⚠️ [WEBHOOK REACTION] Conversa não encontrada para {remote_jid}")
-                        
-                except Exception as e:
-                    logger.error(f"❌ [WEBHOOK REACTION] Erro ao buscar mensagem por fallback: {e}", exc_info=True)
+                                    logger.warning(f"⚠️ [WEBHOOK REACTION] Usando última mensagem como fallback: {original_message.id} (pode estar incorreto)")
+                        else:
+                            logger.warning(f"⚠️ [WEBHOOK REACTION] Conversa não encontrada para {remote_jid}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ [WEBHOOK REACTION] Erro ao buscar mensagem por fallback: {e}", exc_info=True)
                 
                 if not original_message:
                     logger.error(f"❌ [WEBHOOK REACTION] Mensagem original não encontrada após todas as tentativas")
