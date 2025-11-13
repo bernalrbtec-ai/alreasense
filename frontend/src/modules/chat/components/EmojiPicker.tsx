@@ -26,7 +26,7 @@ export function EmojiPicker({ onSelect, onClose }: EmojiPickerProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>(Object.keys(EMOJI_CATEGORIES)[0]);
 
   return (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden z-50"
+    <div className="bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden"
          style={{ width: '100%', height: '100%' }}>
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">

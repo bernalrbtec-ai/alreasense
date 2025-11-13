@@ -1015,7 +1015,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
             {/* ✅ CORREÇÃO: Portal para posicionar fora do fluxo normal */}
             <div 
               ref={pickerRef} 
-              className="fixed z-50"
+              className="fixed z-[9999]"
               style={{
                 top: `${pickerPosition.top}px`,
                 left: `${pickerPosition.left}px`,
