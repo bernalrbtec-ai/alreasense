@@ -544,10 +544,31 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # ✅ CORREÇÃO CRÍTICA: Processar reações recebidas (from_me=False) e também reações que enviamos (from_me=True)
                 # Isso garante sincronização bidirecional completa
                 if from_me:
-                    # Reação que enviamos - pode já estar no banco, mas verificar e atualizar se necessário
+                    # ✅ CORREÇÃO CRÍTICA: Reação que enviamos - NÃO criar segunda reação
+                    # Quando enviamos uma reação da aplicação, ela já foi salva no banco com user=request.user
+                    # O webhook aqui é apenas confirmação do WhatsApp, não devemos criar duplicata
                     logger.info(f"ℹ️ [WEBHOOK REACTION] Reação enviada por nós (confirmação do WhatsApp)")
-                    # Não precisa salvar novamente (já foi salva quando enviamos)
-                    # Mas fazer broadcast para atualizar todos os clientes
+                    logger.info(f"   ✅ Reação já existe no banco (criada quando usuário reagiu na aplicação)")
+                    logger.info(f"   ✅ Apenas fazendo broadcast para sincronizar todos os clientes")
+                    
+                    # ✅ IMPORTANTE: Verificar se reação já existe (pode não existir se houve race condition)
+                    # Mas NÃO criar com external_sender, pois isso criaria duplicata
+                    # Se não existir, é porque ainda não foi salva (race condition) - apenas fazer broadcast
+                    existing_user_reaction = MessageReaction.objects.filter(
+                        message=original_message,
+                        user__isnull=False,
+                        emoji=emoji if not is_removal else None
+                    ).first()
+                    
+                    if existing_user_reaction:
+                        logger.info(f"✅ [WEBHOOK REACTION] Reação do usuário interno encontrada: {existing_user_reaction.id}")
+                    else:
+                        logger.warning(f"⚠️ [WEBHOOK REACTION] Reação do usuário interno não encontrada (pode ser race condition ou remoção)")
+                        # Não criar reação aqui - ela deve ter sido criada quando usuário reagiu na aplicação
+                        # Se não existe, pode ser porque:
+                        # 1. Race condition (ainda não foi salva)
+                        # 2. Foi removida pelo usuário
+                        # 3. Erro no envio da reação
                 else:
                     # ✅ CORREÇÃO CRÍTICA: Reação recebida de contato externo - SALVAR NO BANCO
                     # Extrair número do remetente (pode estar em participant ou remoteJid)
