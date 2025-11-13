@@ -551,25 +551,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"   ✅ Reação já existe no banco (criada quando usuário reagiu na aplicação)")
                     logger.info(f"   ✅ Apenas fazendo broadcast para sincronizar todos os clientes")
                     
-                    # ✅ CORREÇÃO CRÍTICA: Remover qualquer reação com external_sender do número conectado
+                    # ✅ CORREÇÃO CRÍTICA: Remover qualquer reação com external_sender do número da instância
                     # Isso evita duplicação quando o webhook recebe confirmação com from_me=True
-                    # mas também inclui o número conectado como external_sender
+                    # Usar somente o número da instância (sem normalizações)
                     if wa_instance and wa_instance.phone_number:
-                        connected_phone = wa_instance.phone_number
-                        # Normalizar número (remover @s.whatsapp.net se houver)
-                        connected_phone = connected_phone.replace('@s.whatsapp.net', '')
-                        if not connected_phone.startswith('+'):
-                            connected_phone = '+' + connected_phone.lstrip('+')
+                        instance_phone = wa_instance.phone_number
                         
-                        # Remover reações com external_sender do número conectado (duplicatas)
+                        # Remover reações com external_sender do número da instância (duplicatas)
                         deleted_count = MessageReaction.objects.filter(
                             message=original_message,
-                            external_sender=connected_phone,
+                            external_sender=instance_phone,
                             user__isnull=True  # Apenas reações externas
                         ).delete()[0]
                         
                         if deleted_count > 0:
-                            logger.info(f"🗑️ [WEBHOOK REACTION] Removidas {deleted_count} reação(ões) duplicada(s) com external_sender do número conectado")
+                            logger.info(f"🗑️ [WEBHOOK REACTION] Removidas {deleted_count} reação(ões) duplicada(s) com external_sender do número da instância: {instance_phone}")
                     
                     # ✅ IMPORTANTE: Verificar se reação já existe (pode não existir se houve race condition)
                     # Mas NÃO criar com external_sender, pois isso criaria duplicata
