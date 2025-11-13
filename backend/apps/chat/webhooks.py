@@ -600,6 +600,23 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         if not sender_phone.startswith('+'):
                             sender_phone = '+' + sender_phone.lstrip('+')
                     
+                    # ✅ CORREÇÃO CRÍTICA: Verificar se o sender_phone é o número da instância conectada
+                    # Se for, não criar reação com external_sender (já existe reação do usuário interno)
+                    if wa_instance and wa_instance.phone_number:
+                        instance_phone = wa_instance.phone_number
+                        # Comparar números (normalizar para comparação)
+                        sender_normalized = sender_phone.replace('+', '').replace('-', '').replace(' ', '')
+                        instance_normalized = instance_phone.replace('+', '').replace('-', '').replace(' ', '')
+                        
+                        if sender_normalized == instance_normalized:
+                            logger.warning(f"⚠️ [WEBHOOK REACTION] Reação recebida do número da instância conectada ({sender_phone}), ignorando (já existe reação do usuário interno)")
+                            # Não criar reação com external_sender - já existe reação do usuário interno
+                            # Apenas fazer broadcast
+                            original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
+                            from apps.chat.utils.websocket import broadcast_message_reaction_update
+                            broadcast_message_reaction_update(original_message)
+                            return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+                    
                     logger.info(f"📥 [WEBHOOK REACTION] Reação recebida de contato externo: {sender_phone}")
                     logger.info(f"   Emoji: '{emoji}' (vazio={is_removal})")
                     
