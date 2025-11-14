@@ -1537,14 +1537,17 @@ class MessageReactionViewSet(viewsets.ViewSet):
         
         # Verificar acesso à conversa
         if message.conversation.tenant != request.user.tenant:
+            logger.warning(f"⚠️ [REACTION] Acesso negado - Tenant diferente. Mensagem tenant: {message.conversation.tenant.id}, User tenant: {request.user.tenant.id}")
             return Response(
                 {'error': 'Acesso negado'},
                 status=status.HTTP_403_FORBIDDEN
             )
         
         # Verificar se usuário tem acesso ao departamento (se não for admin)
+        # ✅ CORREÇÃO: Se conversa não tem departamento (Inbox), qualquer usuário pode reagir
         if not request.user.is_admin and not request.user.is_superuser:
             if message.conversation.department and message.conversation.department not in request.user.departments.all():
+                logger.warning(f"⚠️ [REACTION] Acesso negado - Usuário {request.user.email} não tem acesso ao departamento {message.conversation.department.name}")
                 return Response(
                     {'error': 'Acesso negado ao departamento'},
                     status=status.HTTP_403_FORBIDDEN
@@ -1553,6 +1556,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
         # ✅ CORREÇÃO CRÍTICA: Validar que mensagem tem message_id (ID externo do WhatsApp)
         # Sem message_id, não é possível enviar reação para Evolution API
         if not message.message_id:
+            logger.warning(f"⚠️ [REACTION] Mensagem {message.id} não tem message_id")
             return Response(
                 {'error': 'Mensagem não tem message_id (não foi enviada pelo sistema ou ainda não foi processada)'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -1568,6 +1572,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
         ).first()
         
         if not wa_instance or not wa_instance.phone_number:
+            logger.warning(f"⚠️ [REACTION] Instância WhatsApp não encontrada - Tenant: {request.user.tenant.id}, is_active=True, status=active")
             return Response(
                 {'error': 'Instância WhatsApp não encontrada ou não conectada'},
                 status=status.HTTP_400_BAD_REQUEST
