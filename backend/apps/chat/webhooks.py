@@ -588,24 +588,48 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         if deleted_count > 0:
                             logger.info(f"🗑️ [WEBHOOK REACTION] Removidas {deleted_count} reação(ões) duplicada(s) com external_sender do número da instância: {instance_phone}")
                     
-                    # ✅ IMPORTANTE: Verificar se reação já existe (pode não existir se houve race condition)
-                    # Mas NÃO criar com external_sender, pois isso criaria duplicata
-                    # Se não existir, é porque ainda não foi salva (race condition) - apenas fazer broadcast
-                    existing_user_reaction = MessageReaction.objects.filter(
-                        message=original_message,
-                        user__isnull=False,
-                        emoji=emoji if not is_removal else None
-                    ).first()
-                    
-                    if existing_user_reaction:
-                        logger.info(f"✅ [WEBHOOK REACTION] Reação do usuário interno encontrada: {existing_user_reaction.id}")
+                    # ✅ CORREÇÃO CRÍTICA: Agora reações são criadas com external_sender = número da instância
+                    # Verificar se reação já existe pelo número da instância (não mais por user)
+                    if wa_instance and wa_instance.phone_number:
+                        instance_phone = wa_instance.phone_number
+                        logger.info(f"🔍 [WEBHOOK REACTION] Verificando reação existente - Número da instância: {instance_phone}")
+                        
+                        # Buscar reação pelo número da instância (formato atual)
+                        existing_reaction = MessageReaction.objects.filter(
+                            message=original_message,
+                            external_sender=instance_phone,
+                            user__isnull=True,
+                            emoji=emoji if not is_removal else None
+                        ).first()
+                        
+                        # Também tentar outros formatos possíveis
+                        if not existing_reaction:
+                            if instance_phone.startswith('+'):
+                                existing_reaction = MessageReaction.objects.filter(
+                                    message=original_message,
+                                    external_sender=instance_phone.lstrip('+'),
+                                    user__isnull=True,
+                                    emoji=emoji if not is_removal else None
+                                ).first()
+                            else:
+                                existing_reaction = MessageReaction.objects.filter(
+                                    message=original_message,
+                                    external_sender=f"+{instance_phone}",
+                                    user__isnull=True,
+                                    emoji=emoji if not is_removal else None
+                                ).first()
+                        
+                        if existing_reaction:
+                            logger.info(f"✅ [WEBHOOK REACTION] Reação encontrada pelo número da instância: {existing_reaction.id}")
+                        else:
+                            logger.warning(f"⚠️ [WEBHOOK REACTION] Reação não encontrada pelo número da instância (pode ser race condition ou remoção)")
+                            # Não criar reação aqui - ela deve ter sido criada quando usuário reagiu na aplicação
+                            # Se não existe, pode ser porque:
+                            # 1. Race condition (ainda não foi salva)
+                            # 2. Foi removida pelo usuário
+                            # 3. Erro no envio da reação
                     else:
-                        logger.warning(f"⚠️ [WEBHOOK REACTION] Reação do usuário interno não encontrada (pode ser race condition ou remoção)")
-                        # Não criar reação aqui - ela deve ter sido criada quando usuário reagiu na aplicação
-                        # Se não existe, pode ser porque:
-                        # 1. Race condition (ainda não foi salva)
-                        # 2. Foi removida pelo usuário
-                        # 3. Erro no envio da reação
+                        logger.warning(f"⚠️ [WEBHOOK REACTION] Instância WhatsApp não encontrada - não é possível verificar reação existente")
                 else:
                     # ✅ CORREÇÃO CRÍTICA: Reação recebida de contato externo - SALVAR NO BANCO
                     # Extrair número do remetente (pode estar em participant ou remoteJid)
