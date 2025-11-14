@@ -551,43 +551,6 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"   ✅ Reação já existe no banco (criada quando usuário reagiu na aplicação)")
                     logger.info(f"   ✅ Apenas fazendo broadcast para sincronizar todos os clientes")
                     
-                    # ✅ CORREÇÃO CRÍTICA: Remover qualquer reação com external_sender do número da instância
-                    # Isso evita duplicação quando o webhook recebe confirmação com from_me=True
-                    # Usar somente o número da instância (sem normalizações)
-                    if wa_instance and wa_instance.phone_number:
-                        instance_phone = wa_instance.phone_number
-                        logger.info(f"🔍 [WEBHOOK REACTION] Verificando duplicatas - Número da instância: {instance_phone}")
-                        
-                        # Remover reações com external_sender do número da instância (duplicatas)
-                        # Tentar múltiplos formatos para garantir que encontramos todas
-                        deleted_count = 0
-                        
-                        # Formato 1: exatamente como está salvo
-                        deleted_count += MessageReaction.objects.filter(
-                            message=original_message,
-                            external_sender=instance_phone,
-                            user__isnull=True
-                        ).delete()[0]
-                        
-                        # Formato 2: com + no início (se não tiver)
-                        if not instance_phone.startswith('+'):
-                            deleted_count += MessageReaction.objects.filter(
-                                message=original_message,
-                                external_sender=f"+{instance_phone}",
-                                user__isnull=True
-                            ).delete()[0]
-                        
-                        # Formato 3: sem + (se tiver)
-                        if instance_phone.startswith('+'):
-                            deleted_count += MessageReaction.objects.filter(
-                                message=original_message,
-                                external_sender=instance_phone.lstrip('+'),
-                                user__isnull=True
-                            ).delete()[0]
-                        
-                        if deleted_count > 0:
-                            logger.info(f"🗑️ [WEBHOOK REACTION] Removidas {deleted_count} reação(ões) duplicada(s) com external_sender do número da instância: {instance_phone}")
-                    
                     # ✅ CORREÇÃO CRÍTICA: Agora reações são criadas com external_sender = número da instância
                     # Verificar se reação já existe pelo número da instância (não mais por user)
                     if wa_instance and wa_instance.phone_number:
