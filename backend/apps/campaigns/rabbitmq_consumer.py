@@ -290,20 +290,54 @@ class RabbitMQConsumer:
                         logger.info(f"⏸️ [AIO-PIKA] Campanha {campaign_id} pausada/parada (status: {campaign.status})")
                         break
                     
+                    # ✅ CORREÇÃO: Verificar se há mais contatos ANTES de aguardar intervalo
+                    # Isso evita aguardar intervalo desnecessário após último contato
+                    @sync_to_async
+                    def has_more_contacts():
+                        from .models import CampaignContact
+                        return CampaignContact.objects.filter(
+                            campaign=campaign,
+                            status='pending'
+                        ).exists()
+                    
+                    has_more = await has_more_contacts()
+                    
+                    if not has_more:
+                        # Não há mais contatos pendentes, verificar se todos foram processados
+                        logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} - Nenhum contato pendente restante")
+                        await self._process_next_message_async(campaign)  # Processa último contato se houver
+                        # Verificar novamente após processar
+                        has_more_after = await has_more_contacts()
+                        if not has_more_after:
+                            # Realmente terminou, encerrar
+                            logger.info(f"✅ [AIO-PIKA] Campanha {campaign_id} - Todos os contatos processados, encerrando...")
+                            await self._update_campaign_status_async(campaign, 'completed')
+                            await self._log_campaign_completed(campaign)
+                            break
+                    
                     # Processar próxima mensagem
                     logger.info(f"🔍 [DEBUG] Processando próxima mensagem da campanha {campaign_id}")
                     logger.info(f"🔍 [DEBUG] Campanha status: {campaign.status}, total_contacts: {campaign.total_contacts}")
                     await self._process_next_message_async(campaign)
                     
-                    # 🎯 HUMANIZAÇÃO: Aguardar intervalo aleatório entre min e max configurados
-                    # Usa valores exatos configurados para garantir tempos distintos e humanizados
-                    import random
-                    min_interval = campaign.interval_min
-                    max_interval = campaign.interval_max
-                    random_interval = random.uniform(min_interval, max_interval)
-                    
-                    logger.info(f"⏰ [INTERVAL] Aguardando {random_interval:.1f}s antes do próximo disparo (min={min_interval}s, max={max_interval}s)")
-                    await asyncio.sleep(random_interval)
+                    # ✅ CORREÇÃO: Só aguardar intervalo se ainda há mais contatos
+                    has_more_after_send = await has_more_contacts()
+                    if has_more_after_send:
+                        # 🎯 HUMANIZAÇÃO: Aguardar intervalo aleatório entre min e max configurados
+                        # Usa valores exatos configurados para garantir tempos distintos e humanizados
+                        import random
+                        min_interval = campaign.interval_min
+                        max_interval = campaign.interval_max
+                        random_interval = random.uniform(min_interval, max_interval)
+                        
+                        logger.info(f"⏰ [INTERVAL] Aguardando {random_interval:.1f}s antes do próximo disparo (min={min_interval}s, max={max_interval}s)")
+                        await asyncio.sleep(random_interval)
+                    else:
+                        # Último contato foi enviado, não precisa aguardar
+                        logger.info(f"✅ [AIO-PIKA] Último contato enviado, encerrando campanha...")
+                        await self._update_campaign_status_async(campaign, 'completed')
+                        await self._log_campaign_completed(campaign)
+                        break
                     
                 except Exception as e:
                     logger.error(f"❌ [AIO-PIKA] Erro no loop da campanha {campaign_id}: {e}")
