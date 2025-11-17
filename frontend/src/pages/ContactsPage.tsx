@@ -388,22 +388,52 @@ export default function ContactsPage() {
     }
   }
 
-  const handleEdit = (contact: Contact) => {
-    setEditingContact(contact)
-    setFormData({
-      name: contact.name || '',
-      phone: contact.phone || '',
-      email: contact.email || '',
-      birth_date: contact.birth_date || '',
-      gender: contact.gender || '',
-      city: contact.city || '',
-      state: contact.state || '',
-      zipcode: contact.zipcode || '',
-      referred_by: contact.referred_by || '',
-      notes: contact.notes || '',
-      tag_ids: contact.tags ? contact.tags.map(t => t.id) : []
-    })
-    setIsModalOpen(true)
+  const handleEdit = async (contact: Contact) => {
+    // ✅ CORREÇÃO: Buscar contato completo da API para garantir tags carregadas
+    try {
+      const response = await api.get(`/contacts/contacts/${contact.id}/`)
+      const fullContact = response.data
+      
+      setEditingContact(fullContact)
+      setFormData({
+        name: fullContact.name || '',
+        phone: fullContact.phone || '',
+        email: fullContact.email || '',
+        birth_date: fullContact.birth_date || '',
+        gender: fullContact.gender || '',
+        city: fullContact.city || '',
+        state: fullContact.state || '',
+        zipcode: fullContact.zipcode || '',
+        referred_by: fullContact.referred_by || '',
+        notes: fullContact.notes || '',
+        // ✅ CORREÇÃO: Garantir que tags sejam extraídas corretamente
+        tag_ids: fullContact.tags && Array.isArray(fullContact.tags) 
+          ? fullContact.tags.map((t: any) => typeof t === 'string' ? t : t.id)
+          : []
+      })
+      setIsModalOpen(true)
+    } catch (error: any) {
+      console.error('❌ [CONTACT EDIT] Erro ao buscar contato completo:', error)
+      // Fallback: usar dados do contato da lista mesmo que incompletos
+      setEditingContact(contact)
+      setFormData({
+        name: contact.name || '',
+        phone: contact.phone || '',
+        email: contact.email || '',
+        birth_date: contact.birth_date || '',
+        gender: contact.gender || '',
+        city: contact.city || '',
+        state: contact.state || '',
+        zipcode: contact.zipcode || '',
+        referred_by: contact.referred_by || '',
+        notes: contact.notes || '',
+        tag_ids: contact.tags && Array.isArray(contact.tags)
+          ? contact.tags.map((t: any) => typeof t === 'string' ? t : t.id)
+          : []
+      })
+      setIsModalOpen(true)
+      showErrorToast('carregar', 'Contato', error)
+    }
   }
 
   const handleCloseModal = () => {
