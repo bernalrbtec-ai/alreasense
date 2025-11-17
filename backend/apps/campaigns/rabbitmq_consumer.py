@@ -577,7 +577,7 @@ class RabbitMQConsumer:
             }
             
             logger.info(f"📤 [PRESENCE] URL: {presence_url}")
-            logger.info(f"📤 [PRESENCE] Headers: apikey={instance.api_key}")
+            logger.info(f"📤 [PRESENCE] Headers: apikey={api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else api_key}")
             logger.info(f"📤 [PRESENCE] Body: {presence_data}")
             
             loop = asyncio.get_event_loop()
@@ -595,7 +595,8 @@ class RabbitMQConsumer:
                 logger.error("="*80)
                 logger.error(f"❌ [PRESENCE] Erro 401 (Unauthorized)")
                 logger.error(f"   URL: {presence_url}")
-                logger.error(f"   API Key usada: {instance.api_key}")
+                logger.error(f"   API Key usada: {api_key[:10]}...{api_key[-4:] if len(api_key) > 14 else api_key}")
+                logger.error(f"   Instance API Key: {instance.api_key or 'None (usando global)'}")
                 logger.error(f"   Instance Name: {instance.instance_name}")
                 logger.error(f"   Response: {response.text[:200] if hasattr(response, 'text') else 'N/A'}")
                 logger.error("="*80)
