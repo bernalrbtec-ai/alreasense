@@ -34,8 +34,8 @@ def campaign_retry_info(request, campaign_id):
                 'is_retrying': True,
                 'retry_contact_name': retry_contact.contact.name,
                 'retry_contact_phone': retry_contact.contact.phone,
-                'retry_attempt': 1,  # Simulado, pois não temos retry_count
-                'retry_error_reason': retry_contact.last_error or 'Erro desconhecido',
+                'retry_attempt': retry_contact.retry_count or 1,
+                'retry_error_reason': retry_contact.error_message or 'Erro desconhecido',  # ✅ CORREÇÃO: usar error_message ao invés de last_error
                 'retry_countdown': 30  # Countdown fixo
             }
         else:

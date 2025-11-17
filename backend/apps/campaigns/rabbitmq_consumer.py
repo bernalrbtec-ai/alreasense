@@ -558,10 +558,17 @@ class RabbitMQConsumer:
                 lambda: requests.post(presence_url, json=presence_data, headers=headers, timeout=10)
             )
             
-            logger.info(f"✍️ [PRESENCE] Status 'digitando' enviado para {contact_phone} por {typing_seconds}s - Status: {response.status_code}")
-            
-            # Aguardar o tempo de digitação
-            await asyncio.sleep(typing_seconds)
+            # ✅ CORREÇÃO: Verificar status antes de logar sucesso
+            if response.status_code == 200:
+                logger.info(f"✍️ [PRESENCE] Status 'digitando' enviado para {contact_phone} por {typing_seconds}s")
+                # Aguardar o tempo de digitação
+                await asyncio.sleep(typing_seconds)
+            elif response.status_code == 401:
+                logger.warning(f"⚠️ [PRESENCE] Erro 401 (Unauthorized) ao enviar presence para {contact_phone}. Verifique API key da instância {instance.instance_name}")
+                # Não bloquear envio se presence falhar por 401
+            else:
+                logger.warning(f"⚠️ [PRESENCE] Erro {response.status_code} ao enviar presence para {contact_phone}")
+                # Não bloquear envio se presence falhar
             
         except Exception as e:
             logger.warning(f"⚠️ [PRESENCE] Erro ao enviar status 'digitando': {e}")
