@@ -30,10 +30,16 @@ export const useMessageVariables = (contactId?: string): UseMessageVariablesRetu
         ? `/campaigns/campaigns/variables/?contact_id=${cid}`
         : '/campaigns/campaigns/variables/'
       
+      console.log('📋 [VARIABLES] Buscando variáveis:', url)
       const response = await api.get(url)
-      setVariables(response.data.variables || [])
+      const variables = response.data.variables || []
+      console.log('📋 [VARIABLES] Variáveis recebidas:', variables.length, 'total')
+      console.log('📋 [VARIABLES] Variáveis customizadas:', variables.filter((v: MessageVariable) => v.category === 'customizado').length)
+      console.log('📋 [VARIABLES] Lista completa:', variables.map((v: MessageVariable) => ({ variable: v.variable, category: v.category })))
+      
+      setVariables(variables)
     } catch (err: any) {
-      console.error('Erro ao buscar variáveis:', err)
+      console.error('❌ [VARIABLES] Erro ao buscar variáveis:', err)
       setError(err.response?.data?.error || 'Erro ao carregar variáveis')
       // Fallback para variáveis padrão se API falhar
       setVariables([

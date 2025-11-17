@@ -196,12 +196,17 @@ class CampaignViewSet(viewsets.ModelViewSet):
         Se contact_id fornecido: retorna variáveis incluindo custom_fields desse contato
         Se não fornecido: retorna variáveis incluindo TODOS os custom_fields únicos do tenant
         """
+        import logging
+        logger = logging.getLogger(__name__)
+        
         from .services import MessageVariableService
         from apps.contacts.models import Contact
         from types import SimpleNamespace
         
         contact = None
         contact_id = request.query_params.get('contact_id')
+        
+        logger.info(f"📋 [VARIABLES] Buscando variáveis. contact_id={contact_id}")
         
         if contact_id:
             # Se contact_id fornecido, usar esse contato específico
@@ -246,10 +251,17 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 
                 contact = SimpleNamespace()
                 contact.custom_fields = mock_custom_fields
+            else:
+                # Se não há custom_fields, contact continua None
+                all_custom_keys = set()
         
         variables = MessageVariableService.get_available_variables(contact)
         
-        custom_fields_count = len(all_custom_keys) if not contact_id and 'all_custom_keys' in locals() else 0
+        # Contar variáveis customizadas retornadas
+        custom_fields_count = len([v for v in variables if v.get('category') == 'customizado'])
+        
+        logger.info(f"📋 [VARIABLES] Retornando {len(variables)} variáveis ({custom_fields_count} customizadas)")
+        logger.debug(f"📋 [VARIABLES] Lista: {[v.get('variable') for v in variables]}")
         
         return Response({
             'variables': variables,

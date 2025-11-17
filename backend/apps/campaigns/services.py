@@ -854,6 +854,10 @@ class MessageVariableService:
         
         # Adicionar custom_fields se contato fornecido
         if contact and hasattr(contact, 'custom_fields') and contact.custom_fields:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f"📋 [VARIABLES SERVICE] Adicionando custom_fields. Tipo: {type(contact)}, custom_fields: {contact.custom_fields}")
+            
             for key, value in contact.custom_fields.items():
                 variables.append({
                     'variable': f'{{{{{key}}}}}',
@@ -862,6 +866,11 @@ class MessageVariableService:
                     'category': 'customizado',
                     'example_value': str(value) if value else ''
                 })
+                logger.debug(f"📋 [VARIABLES SERVICE] Adicionada variável customizada: {{{{key}}}}")
+        else:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.debug(f"📋 [VARIABLES SERVICE] Sem custom_fields. contact={contact}, hasattr={hasattr(contact, 'custom_fields') if contact else False}")
         
         return variables
     
