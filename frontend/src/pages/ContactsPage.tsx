@@ -155,17 +155,19 @@ export default function ContactsPage() {
       setCurrentPage(page)
       
       // Extrair campos customizados únicos dos contatos
+      // ✅ CORREÇÃO: Incluir TODOS os campos, mesmo que vazios/null (para garantir que todos apareçam)
       const customFieldsSet = new Set<string>()
       contactsData.forEach((contact: Contact) => {
         if (contact.custom_fields && typeof contact.custom_fields === 'object') {
           Object.keys(contact.custom_fields).forEach(key => {
-            if (contact.custom_fields![key]) {
-              customFieldsSet.add(key)
-            }
+            // Adicionar campo mesmo se vazio/null (para garantir que todos apareçam na tabela)
+            customFieldsSet.add(key)
           })
         }
       })
-      setAvailableCustomFields(Array.from(customFieldsSet).sort())
+      const sortedFields = Array.from(customFieldsSet).sort()
+      setAvailableCustomFields(sortedFields)
+      console.log(`📋 Campos customizados detectados (${sortedFields.length}):`, sortedFields)
       
       console.log(`📊 Página ${page}: ${contactsData.length} contatos de ${data.count || 0} total`)
     } catch (error: any) {

@@ -192,13 +192,19 @@ class CampaignViewSet(viewsets.ModelViewSet):
         Retorna variáveis disponíveis para mensagens
         
         GET /api/campaigns/campaigns/variables/?contact_id=uuid (opcional)
+        
+        Se contact_id fornecido: retorna variáveis incluindo custom_fields desse contato
+        Se não fornecido: retorna variáveis incluindo TODOS os custom_fields únicos do tenant
         """
         from .services import MessageVariableService
         from apps.contacts.models import Contact
+        from types import SimpleNamespace
         
         contact = None
         contact_id = request.query_params.get('contact_id')
+        
         if contact_id:
+            # Se contact_id fornecido, usar esse contato específico
             try:
                 contact = Contact.objects.get(
                     id=contact_id,
@@ -206,12 +212,49 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 )
             except Contact.DoesNotExist:
                 pass
+        else:
+            # ✅ CORREÇÃO: Se não fornecido, buscar TODOS os campos customizados únicos do tenant
+            # Buscar todos os custom_fields únicos do tenant
+            contacts_with_custom = Contact.objects.filter(
+                tenant=request.user.tenant,
+                custom_fields__isnull=False
+            ).exclude(custom_fields={})
+            
+            # Extrair todas as chaves únicas de custom_fields
+            all_custom_keys = set()
+            for c in contacts_with_custom:
+                if c.custom_fields and isinstance(c.custom_fields, dict):
+                    all_custom_keys.update(c.custom_fields.keys())
+            
+            # Criar objeto mock com todos os campos customizados
+            if all_custom_keys:
+                mock_custom_fields = {}
+                # Buscar um exemplo de cada campo (mais eficiente: uma query)
+                for c in contacts_with_custom:
+                    if c.custom_fields and isinstance(c.custom_fields, dict):
+                        for key in all_custom_keys:
+                            if key not in mock_custom_fields and key in c.custom_fields:
+                                mock_custom_fields[key] = c.custom_fields.get(key, '')
+                        # Se já encontrou exemplo de todos, parar
+                        if len(mock_custom_fields) == len(all_custom_keys):
+                            break
+                
+                # Preencher campos sem exemplo com string vazia
+                for key in all_custom_keys:
+                    if key not in mock_custom_fields:
+                        mock_custom_fields[key] = ''
+                
+                contact = SimpleNamespace()
+                contact.custom_fields = mock_custom_fields
         
         variables = MessageVariableService.get_available_variables(contact)
         
+        custom_fields_count = len(all_custom_keys) if not contact_id and 'all_custom_keys' in locals() else 0
+        
         return Response({
             'variables': variables,
-            'total': len(variables)
+            'total': len(variables),
+            'custom_fields_count': custom_fields_count
         })
     
     @action(detail=False, methods=['post'])

@@ -31,8 +31,8 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
   // Colunas padrão sempre visíveis
   const standardColumns = ['Nome', 'Telefone', 'Email', 'Cidade/Estado', 'Tags']
   
-  // Colunas customizadas (máximo 3 para não poluir)
-  const customColumns = availableCustomFields.slice(0, 3)
+  // Colunas customizadas (mostrar TODOS os campos disponíveis)
+  const customColumns = availableCustomFields
 
   const lifecycleColors: Record<string, string> = {
     lead: 'bg-gray-100 text-gray-700',
@@ -201,10 +201,10 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
         </table>
       </div>
       
-      {availableCustomFields.length > 3 && (
+      {availableCustomFields.length > 0 && (
         <div className="px-6 py-3 bg-purple-50 border-t border-purple-200">
           <p className="text-xs text-purple-700">
-            💡 Mostrando 3 campos customizados. Total disponível: {availableCustomFields.length}
+            ✨ Mostrando {availableCustomFields.length} campo{availableCustomFields.length !== 1 ? 's' : ''} customizado{availableCustomFields.length !== 1 ? 's' : ''} importado{availableCustomFields.length !== 1 ? 's' : ''}
           </p>
         </div>
       )}
