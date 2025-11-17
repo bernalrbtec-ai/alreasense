@@ -477,13 +477,11 @@ class TagViewSet(viewsets.ModelViewSet):
         if not user.tenant:
             return Tag.objects.none()
         
-        return Tag.objects.filter(tenant=user.tenant)
+        return Tag.objects.filter(tenant=user.tenant).prefetch_related('contacts')
     
     def perform_create(self, serializer):
         """Associa tenant na criação com tratamento de duplicação"""
         from django.db import IntegrityError
-        from rest_framework import status
-        from rest_framework.response import Response
         
         try:
             serializer.save(tenant=self.request.user.tenant)
@@ -499,6 +497,40 @@ class TagViewSet(viewsets.ModelViewSet):
                 raise serializers.ValidationError({
                     'non_field_errors': ['Erro ao criar tag. Tente novamente.']
                 })
+    
+    @action(detail=True, methods=['delete'])
+    def delete_with_options(self, request, pk=None):
+        """
+        Deleta tag com opções:
+        - delete_contacts: Se True, deleta todos os contatos associados
+        - Se False, apenas remove a tag dos contatos
+        
+        DELETE /api/contacts/tags/{id}/delete_with_options/?delete_contacts=true
+        """
+        tag = self.get_object()
+        delete_contacts = request.query_params.get('delete_contacts', 'false').lower() == 'true'
+        
+        # Contar contatos antes de deletar
+        contact_count = tag.contacts.count()
+        
+        if delete_contacts:
+            # Deletar todos os contatos associados
+            tag.contacts.all().delete()
+            message = f'Tag "{tag.name}" e {contact_count} contatos associados foram deletados.'
+        else:
+            # Apenas remover a tag dos contatos (não deletar os contatos)
+            tag.contacts.clear()
+            message = f'Tag "{tag.name}" foi deletada. {contact_count} contatos foram atualizados.'
+        
+        # Deletar a tag
+        tag.delete()
+        
+        return Response({
+            'status': 'success',
+            'message': message,
+            'contacts_affected': contact_count,
+            'contacts_deleted': contact_count if delete_contacts else 0
+        })
     
     @action(detail=False, methods=['get'])
     def stats(self, request):

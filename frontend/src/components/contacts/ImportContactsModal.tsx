@@ -187,15 +187,41 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
       })
       
       const result = response.data
+      console.log('📤 Resultado da importação:', result)
       
-      if (result.async_processing) {
-        // Importação assíncrona - acompanhar progresso
+      // Sempre usar polling se tiver import_id (mesmo que síncrono)
+      if (result.import_id) {
+        // Iniciar polling para acompanhar progresso
         setImportId(result.import_id)
-        startPolling(result.import_id)
-        updateToastSuccess(toastId, 'iniciar', 'Importação')
+        setProgress({
+          current: result.processed_rows || 0,
+          total: result.total_rows || 0,
+          created: result.created || 0,
+          updated: result.updated || 0,
+          skipped: result.skipped || 0,
+          errors: result.errors || 0,
+          percentage: result.total_rows > 0 ? Math.round(((result.processed_rows || 0) / result.total_rows) * 100) : 0
+        })
+        
+        // Se já está completo, mostrar resultado imediatamente
+        if (result.status === 'success' || result.status === 'completed') {
+          setImportResult(result)
+          setStep(5)
+          setIsLoading(false)
+          updateToastSuccess(toastId, 'importar', 'Contatos')
+          
+          // Chamar onSuccess após pequeno delay
+          setTimeout(() => {
+            onSuccess()
+          }, 2000)
+        } else {
+          // Iniciar polling para acompanhar progresso
+          startPolling(result.import_id)
+          updateToastSuccess(toastId, 'iniciar', 'Importação')
+        }
       } else {
-        // Importação síncrona - resultado imediato
-        console.log('📤 Resultado da importação:', result)
+        // Fallback: resultado imediato sem import_id
+        console.log('⚠️ Importação sem import_id, usando resultado direto')
         
         if (result.status === 'success' || result.status === 'completed') {
           updateToastSuccess(toastId, 'importar', 'Contatos')
@@ -203,12 +229,12 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
           setStep(5)
           setIsLoading(false)
           
-          // Chamar onSuccess após pequeno delay para mostrar resultado
+          // Chamar onSuccess após pequeno delay
           setTimeout(() => {
             onSuccess()
           }, 2000)
         } else {
-          // Tratar diferentes tipos de erro
+          // Tratar erro
           let errorMessage = 'Erro desconhecido'
           
           if (result.message) {
@@ -223,9 +249,9 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
           
           updateToastError(toastId, 'importar', 'Contatos', { message: errorMessage })
           setIsLoading(false)
-          setStep(2) // Volta para configuração em vez de preview
+          setStep(2)
           
-          // Reset do arquivo e preview para permitir nova tentativa
+          // Reset do arquivo e preview
           setFile(null)
           setPreviewData(null)
         }
@@ -286,6 +312,10 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
           
           if (status === 'completed') {
             showSuccessToast('importar', 'Contatos')
+            // Chamar onSuccess para atualizar lista de contatos
+            setTimeout(() => {
+              onSuccess()
+            }, 1000)
           } else {
             showErrorToast('importar', 'Contatos', new Error('Importação falhou'))
           }

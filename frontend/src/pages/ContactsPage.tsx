@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Upload, Download, Filter, X, Users as UsersIcon, Grid, Table as TableIcon } from 'lucide-react'
+import { Search, Plus, Upload, Download, Filter, X, Users as UsersIcon, Grid, Table as TableIcon, Edit, Trash2 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -8,6 +8,7 @@ import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess,
 import ContactCard from '../components/contacts/ContactCard'
 import ImportContactsModal from '../components/contacts/ImportContactsModal'
 import ContactsTable from '../components/contacts/ContactsTable'
+import TagEditModal from '../components/contacts/TagEditModal'
 
 interface Contact {
   id: string
@@ -36,6 +37,8 @@ interface Tag {
   id: string
   name: string
   color: string
+  description?: string
+  contact_count?: number
 }
 
 
@@ -49,6 +52,8 @@ export default function ContactsPage() {
   const [tags, setTags] = useState<Tag[]>([])
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState('#3B82F6')
+  const [editingTag, setEditingTag] = useState<Tag | null>(null)
+  const [isTagEditModalOpen, setIsTagEditModalOpen] = useState(false)
   
   // Paginação
   const [currentPage, setCurrentPage] = useState(1)
@@ -207,6 +212,39 @@ export default function ContactsPage() {
       console.error('Error creating tag:', error)
       showErrorToast('criar', 'Tag', error)
     }
+  }
+
+  const handleEditTag = (tag: Tag) => {
+    setEditingTag(tag)
+    setIsTagEditModalOpen(true)
+  }
+
+  const handleDeleteTag = async (tag: Tag, deleteContacts: boolean) => {
+    const toastId = showLoadingToast('excluir', 'Tag')
+    
+    try {
+      await api.delete(`/contacts/tags/${tag.id}/delete_with_options/?delete_contacts=${deleteContacts}`)
+      
+      // Remover tag da lista
+      setTags(prev => prev.filter(t => t.id !== tag.id))
+      
+      // Se estava selecionada, limpar seleção
+      if (selectedTag === tag.id) {
+        setSelectedTag('')
+      }
+      
+      // Recarregar contatos se necessário
+      fetchContacts(currentPage)
+      
+      updateToastSuccess(toastId, 'excluir', 'Tag')
+    } catch (error: any) {
+      updateToastError(toastId, 'excluir', 'Tag', error)
+    }
+  }
+
+  const handleTagEditSuccess = () => {
+    fetchTags()
+    fetchContacts(currentPage)
   }
 
   
@@ -864,31 +902,46 @@ export default function ContactsPage() {
                     {tags.map((tag) => {
                       const isSelected = formData.tag_ids.includes(tag.id)
                       return (
-                        <button
+                        <div
                           key={tag.id}
-                          type="button"
-                          onClick={() => {
-                            if (isSelected) {
-                              setFormData({
-                                ...formData,
-                                tag_ids: formData.tag_ids.filter(id => id !== tag.id)
-                              })
-                            } else {
-                              setFormData({
-                                ...formData,
-                                tag_ids: [...formData.tag_ids, tag.id]
-                              })
-                            }
-                          }}
-                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                          className={`group relative inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
                             isSelected
                               ? 'bg-blue-600 text-white border-2 border-blue-600'
                               : 'bg-white text-gray-700 border-2 border-gray-300 hover:border-blue-400'
                           }`}
                           style={{ backgroundColor: isSelected ? tag.color : 'white', borderColor: tag.color }}
                         >
-                          {tag.name}
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) {
+                                setFormData({
+                                  ...formData,
+                                  tag_ids: formData.tag_ids.filter(id => id !== tag.id)
+                                })
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  tag_ids: [...formData.tag_ids, tag.id]
+                                })
+                              }
+                            }}
+                            className="flex-1"
+                          >
+                            {tag.name}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditTag(tag)
+                            }}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 hover:bg-black/10 rounded transition-opacity"
+                            title="Editar tag"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </button>
+                        </div>
                       )
                     })}
                     {tags.length === 0 && (
@@ -943,6 +996,18 @@ export default function ContactsPage() {
           </div>
         </div>
       )}
+
+      {/* Tag Edit Modal */}
+      <TagEditModal
+        tag={editingTag}
+        isOpen={isTagEditModalOpen}
+        onClose={() => {
+          setIsTagEditModalOpen(false)
+          setEditingTag(null)
+        }}
+        onSuccess={handleTagEditSuccess}
+        onDelete={handleDeleteTag}
+      />
 
       {/* Import Modal */}
       {showImportModal && (

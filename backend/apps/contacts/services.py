@@ -490,28 +490,54 @@ class ContactImportService:
         # Normalizar telefone para formato E.164
         phone = normalize_phone(phone_raw)
         
-        # Verificar duplicata
-        existing = Contact.objects.filter(
-            tenant=self.tenant,
-            phone=phone
-        ).first()
-        
-        if existing:
+        # Verificar duplicata - SEMPRE verificar por telefone normalizado
+        # Usar get_or_create para evitar race conditions
+        try:
+            existing = Contact.objects.get(
+                tenant=self.tenant,
+                phone=phone
+            )
+            
+            # Contato já existe - atualizar ou pular
             if import_record.update_existing:
-                # Atualizar
+                # Atualizar contato existente
                 self._update_contact(existing, row)
                 import_record.updated_count += 1
+                
+                # Adicionar auto-tag se não tiver
+                if import_record.auto_tag and import_record.auto_tag not in existing.tags.all():
+                    existing.tags.add(import_record.auto_tag)
             else:
-                # Pular
+                # Pular contato existente
                 import_record.skipped_count += 1
-        else:
-            # Criar novo
-            contact = self._create_contact(row, phone)
-            import_record.created_count += 1
-            
-            # Adicionar auto-tag
-            if import_record.auto_tag:
-                contact.tags.add(import_record.auto_tag)
+                
+        except Contact.DoesNotExist:
+            # Contato não existe - criar novo
+            try:
+                contact = self._create_contact(row, phone)
+                import_record.created_count += 1
+                
+                # Adicionar auto-tag
+                if import_record.auto_tag:
+                    contact.tags.add(import_record.auto_tag)
+            except Exception as e:
+                # Se der erro de unique constraint (telefone duplicado), tentar atualizar
+                error_str = str(e).lower()
+                if 'unique constraint' in error_str or 'duplicate key' in error_str or 'unique_together' in error_str:
+                    # Tentar buscar novamente (pode ter sido criado em outra thread)
+                    try:
+                        existing = Contact.objects.get(tenant=self.tenant, phone=phone)
+                        if import_record.update_existing:
+                            self._update_contact(existing, row)
+                            import_record.updated_count += 1
+                        else:
+                            import_record.skipped_count += 1
+                    except Contact.DoesNotExist:
+                        # Se ainda não existe, re-lançar o erro original
+                        raise
+                else:
+                    # Outro tipo de erro, re-lançar
+                    raise
     
     def _create_contact(self, row, phone):
         """Cria novo contato a partir do CSV (row já mapeado)"""
@@ -568,38 +594,97 @@ class ContactImportService:
         return contact
     
     def _update_contact(self, contact, row):
-        """Atualiza contato existente"""
+        """Atualiza contato existente com dados do CSV (row já mapeado)"""
         
-        # Atualizar apenas campos não vazios
-        name = row.get('Nome') or row.get('name') or row.get('nome')
-        if name and name.strip():
-            contact.name = name.strip()
+        # Atualizar nome (row já está mapeado, usar 'name')
+        name = row.get('name', '').strip()
+        if name:
+            contact.name = name
         
-        email = row.get('email') or row.get('Email') or row.get('e-mail')
-        if email and email.strip():
-            contact.email = email.strip()
+        # Atualizar email
+        email = row.get('email', '').strip()
+        if email:
+            contact.email = email
         
-        birth_date = row.get('birth_date') or row.get('data_nascimento')
+        # Atualizar data de nascimento
+        birth_date = row.get('birth_date')
         if birth_date:
             parsed = self._parse_date(birth_date)
             if parsed:
                 contact.birth_date = parsed
         
-        city = row.get('city') or row.get('cidade') or row.get('Cidade')
-        if city and city.strip():
-            contact.city = city.strip()
+        # Atualizar cidade
+        city = row.get('city', '').strip()
+        if city:
+            contact.city = city
         
-        state = row.get('state') or row.get('estado') or row.get('uf')
+        # Atualizar estado
+        state = row.get('state', '').strip()
         if state and len(state) == 2:
             contact.state = state.upper()
+        elif not state:
+            # Tentar inferir estado pelo DDD do telefone
+            ddd = extract_ddd_from_phone(contact.phone)
+            if ddd:
+                inferred_state = get_state_from_ddd(ddd)
+                if inferred_state:
+                    contact.state = inferred_state
         
-        notes = row.get('notes') or row.get('observacoes') or row.get('Quem Indicou')
-        if notes and notes.strip():
-            # Append notes se já existir (não sobrescrever)
+        # Atualizar país
+        country = row.get('country')
+        if country:
+            contact.country = country
+        
+        # Atualizar CEP
+        zipcode = row.get('zipcode', '').strip()
+        if zipcode:
+            contact.zipcode = zipcode
+        
+        # Atualizar gênero
+        gender = row.get('gender')
+        if gender:
+            contact.gender = gender
+        
+        # Atualizar data da última compra
+        last_purchase_date = row.get('last_purchase_date')
+        if last_purchase_date:
+            parsed = self._parse_date(last_purchase_date)
+            if parsed:
+                contact.last_purchase_date = parsed
+        
+        # Atualizar valor da última compra
+        last_purchase_value = row.get('last_purchase_value')
+        if last_purchase_value:
+            parsed = self._parse_decimal(last_purchase_value)
+            if parsed is not None:
+                contact.last_purchase_value = parsed
+        
+        # Atualizar total de compras
+        total_purchases = row.get('total_purchases')
+        if total_purchases is not None:
+            parsed = self._parse_int(total_purchases)
+            if parsed is not None:
+                contact.total_purchases = parsed
+        
+        # Atualizar LTV
+        lifetime_value = row.get('lifetime_value')
+        if lifetime_value:
+            parsed = self._parse_decimal(lifetime_value)
+            if parsed is not None:
+                contact.lifetime_value = parsed
+        
+        # Atualizar notes (append se já existir)
+        notes = row.get('notes', '').strip()
+        if notes:
             if contact.notes:
-                contact.notes += f"\n{notes.strip()}"
+                contact.notes += f"\n{notes}"
             else:
-                contact.notes = notes.strip()
+                contact.notes = notes
+        
+        # Atualizar quem indicou
+        referred_by = row.get('referred_by', '').strip()
+        if referred_by:
+            contact.referred_by = referred_by
         
         # Atualizar custom_fields (merge, não sobrescrever)
         custom_fields = row.get('custom_fields', {})
@@ -607,6 +692,10 @@ class ContactImportService:
             if not contact.custom_fields:
                 contact.custom_fields = {}
             contact.custom_fields.update(custom_fields)
+        
+        # Atualizar source para 'import' se ainda não for
+        if contact.source != 'import':
+            contact.source = 'import'
         
         contact.save()
     
