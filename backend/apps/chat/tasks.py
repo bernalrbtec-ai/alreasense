@@ -525,14 +525,45 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             )
             raise InstanceTemporarilyUnavailable(instance.instance_name, (state_info.raw if state_info else {}), wait_seconds)
 
-        if instance.connection_state and instance.connection_state not in ('open', 'connected', 'active'):
-            wait_seconds = compute_backoff(retry_count)
-            log.warning(
-                "⏳ [CHAT ENVIO] connection_state=%s. Reagendando em %ss.",
-                instance.connection_state,
-                wait_seconds,
-            )
-            raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': instance.connection_state}, wait_seconds)
+        # ✅ CORREÇÃO: Verificação mais tolerante de connection_state
+        # Aceita estados transitórios (connecting) se forem recentes (< 5s)
+        # Isso evita reagendar mensagens quando a instância está apenas fazendo transição rápida
+        connection_state = instance.connection_state
+        if connection_state:
+            # Estados aceitos imediatamente
+            if connection_state in ('open', 'connected', 'active'):
+                log.debug("✅ [CHAT ENVIO] connection_state=%s (aceito)", connection_state)
+            # Estados transitórios: aceitar se recente ou se já tentamos várias vezes
+            elif connection_state == 'connecting':
+                # Se já tentamos 2+ vezes, tentar mesmo assim (pode ser instabilidade temporária)
+                if retry_count >= 2:
+                    log.warning(
+                        "⚠️ [CHAT ENVIO] connection_state=connecting mas retry_count=%s. Tentando mesmo assim.",
+                        retry_count
+                    )
+                # Se é primeira tentativa, verificar se estado foi atualizado recentemente
+                elif state_info and state_info.age < 5.0:
+                    log.warning(
+                        "⚠️ [CHAT ENVIO] connection_state=connecting mas estado recente (age=%.2fs). Tentando mesmo assim.",
+                        state_info.age
+                    )
+                else:
+                    wait_seconds = compute_backoff(retry_count)
+                    log.warning(
+                        "⏳ [CHAT ENVIO] connection_state=connecting (age=%.2fs). Reagendando em %ss.",
+                        (state_info.age if state_info else -1),
+                        wait_seconds,
+                    )
+                    raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': connection_state}, wait_seconds)
+            # Outros estados (close, closeTimeout, etc): sempre reagendar
+            else:
+                wait_seconds = compute_backoff(retry_count)
+                log.warning(
+                    "⏳ [CHAT ENVIO] connection_state=%s. Reagendando em %ss.",
+                    connection_state,
+                    wait_seconds,
+                )
+                raise InstanceTemporarilyUnavailable(instance.instance_name, {'state': connection_state}, wait_seconds)
         
         # Helper para tratar message_id duplicado
         async def handle_duplicate_message_id(evolution_message_id: str):
@@ -728,6 +759,20 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         logger.info(f"📥 [CHAT] Resposta Evolution API:")
                         logger.info(f"   Status: {response.status_code}")
                         logger.info(f"   Body completo: {response.text}")
+                        
+                        # ✅ CORREÇÃO CRÍTICA: Erros 500/503 são temporários - fazer retry
+                        if response.status_code >= 500:
+                            error_msg = f'Erro temporário do servidor ao enviar mídia (HTTP {response.status_code}): {response.text[:200]}'
+                            log.warning(
+                                "⏳ [CHAT ENVIO] Erro temporário do servidor ao enviar mídia (HTTP %s). Reagendando para retry.",
+                                response.status_code
+                            )
+                            raise InstanceTemporarilyUnavailable(
+                                instance.instance_name,
+                                {'http_status': response.status_code, 'error': error_msg, 'media_type': mediatype},
+                                compute_backoff(retry_count)
+                            )
+                        
                         response.raise_for_status()
                     except httpx.HTTPStatusError as e:
                         # Fallback: algumas instalações não expõem sendWhatsAppAudio; tentar sendMedia com mediatype=audio
@@ -770,6 +815,20 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 logger.info("   Body (mascado): %s", mask_sensitive_data(fb_json))
                             else:
                                 logger.info("   Body (texto): %s", _truncate_text(fb_resp.text))
+                            
+                            # ✅ CORREÇÃO CRÍTICA: Erros 500/503 são temporários - fazer retry
+                            if fb_resp.status_code >= 500:
+                                error_msg = f'Erro temporário do servidor ao enviar mídia (fallback, HTTP {fb_resp.status_code}): {fb_resp.text[:200]}'
+                                log.warning(
+                                    "⏳ [CHAT ENVIO] Erro temporário do servidor ao enviar mídia (fallback, HTTP %s). Reagendando para retry.",
+                                    fb_resp.status_code
+                                )
+                                raise InstanceTemporarilyUnavailable(
+                                    instance.instance_name,
+                                    {'http_status': fb_resp.status_code, 'error': error_msg, 'media_type': 'audio', 'fallback': True},
+                                    compute_backoff(retry_count)
+                                )
+                            
                             fb_resp.raise_for_status()
                             response = fb_resp
                         else:
@@ -868,6 +927,19 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
                     logger.error(f"   Resposta completa: {response.text}")
                     logger.error(f"   Headers enviados: {dict(headers)}")
+                    
+                    # ✅ CORREÇÃO CRÍTICA: Erros 500/503 são temporários - fazer retry
+                    if response.status_code >= 500:
+                        error_msg = f'Erro temporário do servidor (HTTP {response.status_code}): {response.text[:200]}'
+                        log.warning(
+                            "⏳ [CHAT ENVIO] Erro temporário do servidor (HTTP %s). Reagendando para retry.",
+                            response.status_code
+                        )
+                        raise InstanceTemporarilyUnavailable(
+                            instance.instance_name,
+                            {'http_status': response.status_code, 'error': error_msg},
+                            compute_backoff(retry_count)
+                        )
                     
                     # Tentar parsear resposta para identificar erro específico
                     try:
@@ -988,11 +1060,30 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             }
         )
     
+    except InstanceTemporarilyUnavailable:
+        # ✅ Re-raise para ser tratado pelo stream_consumer
+        raise
+    except (httpx.TimeoutException, httpx.ConnectTimeout, httpx.ReadTimeout, httpx.ConnectError, httpx.NetworkError) as e:
+        # ✅ CORREÇÃO CRÍTICA: Erros de rede/timeout são temporários - fazer retry
+        # Tentar obter instance_name do contexto (pode não estar disponível se erro ocorreu antes)
+        try:
+            instance_name = instance.instance_name if 'instance' in locals() and instance else 'unknown'
+        except:
+            instance_name = 'unknown'
+        log.warning(
+            "⏳ [CHAT ENVIO] Erro de rede/timeout (%s). Reagendando para retry.",
+            type(e).__name__
+        )
+        raise InstanceTemporarilyUnavailable(
+            instance_name,
+            {'error_type': type(e).__name__, 'error': str(e)},
+            compute_backoff(retry_count)
+        )
     except Exception as e:
         logger.error(f"❌ [CHAT] Erro ao enviar mensagem {message_id}: {e}", exc_info=True)
         record_error('send_message', str(e))
         
-        # Marca como falha
+        # Marca como falha apenas se não for erro temporário
         try:
             message.status = 'failed'
             message.error_message = str(e)
