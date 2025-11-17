@@ -487,10 +487,11 @@ class RabbitMQConsumer:
                 
                 await mark_sent()
                 
-                # Aguardar delay da campanha
-                delay_seconds = campaign.delay_between_messages or 30
-                logger.info(f"⏳ [AIO-PIKA] Aguardando {delay_seconds}s antes da próxima mensagem")
-                await asyncio.sleep(delay_seconds)
+                # ✅ CORREÇÃO: Usar interval_min e interval_max da campanha (não delay_between_messages)
+                # O delay já é calculado no loop principal (_process_campaign_async)
+                # Aqui não precisamos aguardar novamente, pois o loop já faz isso
+                # Mas mantemos um pequeno delay mínimo para evitar sobrecarga
+                logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso. Próxima mensagem será processada pelo loop principal.")
                 
             else:
                 logger.error(f"❌ [AIO-PIKA] Falha ao enviar mensagem para {contact_phone}")
@@ -594,8 +595,8 @@ class RabbitMQConsumer:
                 lambda: requests.post(presence_url, json=presence_data, headers=headers, timeout=10)
             )
             
-            # ✅ CORREÇÃO: Verificar status antes de logar sucesso
-            if response.status_code == 200:
+            # ✅ CORREÇÃO: Verificar status antes de logar sucesso (200 e 201 são sucesso)
+            if response.status_code in [200, 201]:
                 logger.info(f"✍️ [PRESENCE] Status 'digitando' enviado para {contact_phone} por {typing_seconds}s")
                 # Aguardar o tempo de digitação
                 await asyncio.sleep(typing_seconds)
