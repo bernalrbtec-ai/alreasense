@@ -94,7 +94,11 @@ const CampaignsPage: React.FC = () => {
         setLoading(true)
       }
       // Incluir campanhas paradas se solicitado
-      const url = showStoppedCampaigns ? '/campaigns/?status=stopped' : '/campaigns/'
+      // ✅ CORREÇÃO: Adicionar timestamp para evitar cache do navegador
+      const timestamp = new Date().getTime()
+      const url = showStoppedCampaigns 
+        ? `/campaigns/?status=stopped&_t=${timestamp}` 
+        : `/campaigns/?_t=${timestamp}`
       const response = await api.get(url)
       const campaigns = Array.isArray(response.data.results) ? response.data.results : 
                        Array.isArray(response.data) ? response.data : []

@@ -669,16 +669,16 @@ class RabbitMQConsumer:
                 typing_seconds = random.uniform(5.0, 10.0)
                 await self._send_typing_presence(instance, contact_phone, typing_seconds)
                 
-                # 🔧 SUBSTITUIR VARIÁVEIS NA MENSAGEM
+                # ✅ CORREÇÃO: Passar objeto Contact completo para renderizar variáveis
+                # Isso permite acesso a todos os campos padrão + custom_fields
                 @sync_to_async
-                def get_contact_data():
-                    return {
-                        'name': contact.contact.name or '',
-                        'referred_by': contact.contact.referred_by or ''
-                    }
+                def get_contact_obj():
+                    # Recarregar contato do banco para garantir dados atualizados
+                    contact.contact.refresh_from_db()
+                    return contact.contact
                 
-                contact_data = await get_contact_data()
-                message_text = await self._replace_variables(message.content, contact_data)
+                contact_obj = await get_contact_obj()
+                message_text = await self._replace_variables(message.content, contact_obj)
                 
                 # Preparar dados da mensagem
                 message_data = {
