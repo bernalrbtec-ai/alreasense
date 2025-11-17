@@ -351,7 +351,16 @@ export default function ContactsPage() {
       fetchContacts()
       fetchStats() // ✅ CORREÇÃO: Atualizar contadores após criar/editar contato
     } catch (error: any) {
-      console.error('Error saving contact:', error)
+      console.error('❌ [CONTACT] Error saving contact:', error)
+      console.error('❌ [CONTACT] Error response:', error.response?.data)
+      console.error('❌ [CONTACT] Error status:', error.response?.status)
+      console.error('❌ [CONTACT] Error message:', error.message)
+      
+      // Mostrar erro detalhado no console para debug
+      if (error.response?.data) {
+        console.error('❌ [CONTACT] Detalhes do erro:', JSON.stringify(error.response.data, null, 2))
+      }
+      
       updateToastError(toastId, editingContact ? 'atualizar' : 'criar', 'Contato', error)
     }
   }

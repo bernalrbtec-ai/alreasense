@@ -114,22 +114,33 @@ class ContactSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validação customizada"""
-        print(f"🔍 VALIDATE DATA: {data}")
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.debug(f"🔍 [SERIALIZER] VALIDATE DATA: {data}")
+        logger.debug(f"🔍 [SERIALIZER] Instance: {self.instance}")
+        logger.debug(f"🔍 [SERIALIZER] Instance PK: {self.instance.pk if self.instance else None}")
         
         # Verificar duplicata de telefone
         phone = data.get('phone')
         if phone:
             tenant = self.context['request'].user.tenant
+            instance_pk = self.instance.pk if self.instance else None
+            logger.debug(f"🔍 [SERIALIZER] Verificando duplicata. Phone: {phone}, Tenant: {tenant}, Instance PK: {instance_pk}")
+            
             existing = Contact.objects.filter(
                 tenant=tenant,
                 phone=phone
-            ).exclude(pk=self.instance.pk if self.instance else None)
+            ).exclude(pk=instance_pk)
             
+            logger.debug(f"🔍 [SERIALIZER] Contatos existentes com mesmo telefone: {existing.count()}")
             if existing.exists():
+                logger.warning(f"⚠️ [SERIALIZER] Telefone duplicado encontrado: {phone}")
                 raise serializers.ValidationError({
                     'phone': 'Telefone já cadastrado neste tenant'
                 })
         
+        logger.debug(f"✅ [SERIALIZER] Validação passou")
         return data
     
     def create(self, validated_data):
@@ -156,8 +167,14 @@ class ContactSerializer(serializers.ModelSerializer):
         return contact
     
     def update(self, instance, validated_data):
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.debug(f"🔄 [SERIALIZER UPDATE] Iniciando update. Instance: {instance.id}, Data: {validated_data}")
+        
         # Extrair tags
         tag_ids = validated_data.pop('tag_ids', None)
+        logger.debug(f"🔄 [SERIALIZER UPDATE] Tag IDs: {tag_ids}")
         
         # 🆕 Inferir estado pelo DDD se não fornecido E contato não tem estado
         if 'state' not in validated_data and not instance.state:
@@ -167,17 +184,32 @@ class ContactSerializer(serializers.ModelSerializer):
                 if state:
                     validated_data['state'] = state
                     ddd = extract_ddd_from_phone(phone)
-                    print(f"  ℹ️  Estado '{state}' inferido pelo DDD {ddd} (atualização via API)")
+                    logger.info(f"  ℹ️  Estado '{state}' inferido pelo DDD {ddd} (atualização via API)")
         
         # Atualizar campos
+        logger.debug(f"🔄 [SERIALIZER UPDATE] Atualizando campos: {list(validated_data.keys())}")
         for attr, value in validated_data.items():
-            setattr(instance, attr, value)
-        instance.save()
+            logger.debug(f"🔄 [SERIALIZER UPDATE] Set {attr} = {value} (type: {type(value)})")
+            try:
+                setattr(instance, attr, value)
+            except Exception as e:
+                logger.error(f"❌ [SERIALIZER UPDATE] Erro ao setar {attr} = {value}: {e}")
+                raise
+        
+        logger.debug(f"🔄 [SERIALIZER UPDATE] Salvando instância...")
+        try:
+            instance.save()
+            logger.debug(f"✅ [SERIALIZER UPDATE] Instância salva com sucesso")
+        except Exception as e:
+            logger.error(f"❌ [SERIALIZER UPDATE] Erro ao salvar instância: {e}", exc_info=True)
+            raise
         
         # Atualizar tags
         if tag_ids is not None:
+            logger.debug(f"🔄 [SERIALIZER UPDATE] Atualizando tags: {tag_ids}")
             instance.tags.set(tag_ids)
         
+        logger.info(f"✅ [SERIALIZER UPDATE] Update concluído com sucesso")
         return instance
 
 

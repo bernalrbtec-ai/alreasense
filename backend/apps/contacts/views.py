@@ -53,6 +53,37 @@ class ContactViewSet(viewsets.ModelViewSet):
             )
             raise
     
+    def update(self, request, *args, **kwargs):
+        """Override update to add detailed error logging"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        logger.info(f"📝 [CONTACT UPDATE] Iniciando atualização. ID: {kwargs.get('pk')}")
+        logger.debug(f"📝 [CONTACT UPDATE] Dados recebidos: {request.data}")
+        
+        try:
+            instance = self.get_object()
+            logger.debug(f"📝 [CONTACT UPDATE] Instância encontrada: {instance.name} ({instance.phone})")
+            
+            serializer = self.get_serializer(instance, data=request.data, partial=kwargs.get('partial', False))
+            
+            if serializer.is_valid():
+                logger.debug(f"📝 [CONTACT UPDATE] Serializer válido, salvando...")
+                self.perform_update(serializer)
+                logger.info(f"✅ [CONTACT UPDATE] Contato atualizado com sucesso: {instance.id}")
+                return Response(serializer.data)
+            else:
+                logger.error(f"❌ [CONTACT UPDATE] Erros de validação: {serializer.errors}")
+                return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+                
+        except Exception as e:
+            logger.error(
+                f"❌ [CONTACT UPDATE] Erro ao atualizar contato: {type(e).__name__}: {str(e)}", 
+                exc_info=True,
+                extra={'error_message': str(e), 'request_data': request.data}
+            )
+            raise
+    
     def get_queryset(self):
         """Retorna apenas contatos do tenant do usuário"""
         user = self.request.user
