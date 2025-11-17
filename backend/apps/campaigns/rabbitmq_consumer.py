@@ -179,6 +179,28 @@ class RabbitMQConsumer:
             logger.info(f"🚀 [AIO-PIKA] Iniciando campanha {campaign_id}")
             logger.info(f"🔍 [DEBUG] Threads ativas: {list(self.consumer_threads.keys())}")
             
+            # ✅ CORREÇÃO: Inicializar next_message_scheduled_at ao iniciar campanha
+            # para que o countdown apareça desde o início
+            from .models import Campaign
+            from django.utils import timezone
+            from datetime import timedelta
+            import random
+            
+            try:
+                campaign = Campaign.objects.get(id=campaign_id)
+                if campaign.status == 'running' and not campaign.next_message_scheduled_at:
+                    # Calcular primeiro disparo baseado no intervalo
+                    min_interval = campaign.interval_min
+                    max_interval = campaign.interval_max
+                    random_interval = random.uniform(min_interval, max_interval)
+                    campaign.next_message_scheduled_at = timezone.now() + timedelta(seconds=random_interval)
+                    campaign.save(update_fields=['next_message_scheduled_at'])
+                    logger.info(f"⏰ [AIO-PIKA] Primeiro disparo agendado para: {campaign.next_message_scheduled_at} (em {random_interval:.1f}s)")
+            except Campaign.DoesNotExist:
+                logger.warning(f"⚠️ [AIO-PIKA] Campanha {campaign_id} não encontrada ao inicializar scheduled_time")
+            except Exception as e:
+                logger.error(f"❌ [AIO-PIKA] Erro ao inicializar scheduled_time: {e}")
+            
             # Verificar se já está rodando
             if campaign_id in self.consumer_threads:
                 thread = self.consumer_threads[campaign_id]
