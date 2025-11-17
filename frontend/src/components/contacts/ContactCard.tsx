@@ -27,6 +27,8 @@ interface Contact {
   rfm_segment: string
   engagement_score: number
   lifetime_value: number
+  last_purchase_date?: string // ✅ Campo importado do CSV (data_compra)
+  last_purchase_value?: number // ✅ Campo importado do CSV (Valor)
   days_until_birthday?: number
   tags: Tag[]
   lists: ContactList[]
@@ -163,6 +165,26 @@ export default function ContactCard({ contact, onEdit, onDelete }: ContactCardPr
           <div className="flex items-center gap-2">
             <TrendingUp className="h-4 w-4 flex-shrink-0" />
             LTV: R$ {Number(contact.lifetime_value).toFixed(2)}
+          </div>
+        )}
+        
+        {/* Última Compra */}
+        {contact.last_purchase_date && (
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 flex-shrink-0" />
+            <span>Última compra: {new Date(contact.last_purchase_date).toLocaleDateString('pt-BR')}</span>
+            {contact.last_purchase_value && (
+              <span className="text-green-600 font-medium">
+                (R$ {Number(contact.last_purchase_value).toFixed(2).replace('.', ',')})
+              </span>
+            )}
+          </div>
+        )}
+        
+        {contact.last_purchase_value && !contact.last_purchase_date && (
+          <div className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4 flex-shrink-0" />
+            <span>Valor última compra: R$ {Number(contact.last_purchase_value).toFixed(2).replace('.', ',')}</span>
           </div>
         )}
 

@@ -16,6 +16,8 @@ interface Contact {
   city?: string
   state?: string
   lifecycle_stage: string
+  last_purchase_date?: string // ✅ Campo importado do CSV (data_compra)
+  last_purchase_value?: number // ✅ Campo importado do CSV (Valor)
   tags: Tag[]
   custom_fields?: Record<string, any>
 }
@@ -29,7 +31,7 @@ interface ContactsTableProps {
 
 export default function ContactsTable({ contacts, availableCustomFields, onEdit, onDelete }: ContactsTableProps) {
   // Colunas padrão sempre visíveis
-  const standardColumns = ['Nome', 'Telefone', 'Email', 'Cidade/Estado', 'Tags']
+  const standardColumns = ['Nome', 'Telefone', 'Email', 'Cidade/Estado', 'Última Compra', 'Tags']
   
   // Colunas customizadas (mostrar TODOS os campos disponíveis)
   const customColumns = availableCustomFields
@@ -131,6 +133,26 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                     <div className="flex items-center text-sm text-gray-900">
                       <MapPin className="h-4 w-4 mr-2 text-gray-400" />
                       {[contact.city, contact.state].filter(Boolean).join(', ') || '-'}
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400">-</span>
+                  )}
+                </td>
+
+                {/* Última Compra */}
+                <td className="px-6 py-4 whitespace-nowrap">
+                  {contact.last_purchase_date || contact.last_purchase_value ? (
+                    <div className="text-sm text-gray-900">
+                      {contact.last_purchase_date && (
+                        <div className="text-xs text-gray-500">
+                          {new Date(contact.last_purchase_date).toLocaleDateString('pt-BR')}
+                        </div>
+                      )}
+                      {contact.last_purchase_value && (
+                        <div className="font-medium text-green-600">
+                          R$ {Number(contact.last_purchase_value).toFixed(2).replace('.', ',')}
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <span className="text-sm text-gray-400">-</span>

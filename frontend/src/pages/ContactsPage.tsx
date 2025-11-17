@@ -23,6 +23,8 @@ interface Contact {
   rfm_segment: string
   engagement_score: number
   lifetime_value: number
+  last_purchase_date?: string // ✅ Campo importado do CSV (data_compra)
+  last_purchase_value?: number // ✅ Campo importado do CSV (Valor)
   days_until_birthday?: number
   tags: Tag[]
   is_active: boolean
