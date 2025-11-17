@@ -296,10 +296,10 @@ class RabbitMQConsumer:
                     await self._process_next_message_async(campaign)
                     
                     # 🎯 HUMANIZAÇÃO: Aguardar intervalo aleatório entre min e max configurados
-                    # Adicionar +20% ao intervalo máximo para parecer mais humano
+                    # Usa valores exatos configurados para garantir tempos distintos e humanizados
                     import random
                     min_interval = campaign.interval_min
-                    max_interval = int(campaign.interval_max * 1.2)  # 20% a mais
+                    max_interval = campaign.interval_max
                     random_interval = random.uniform(min_interval, max_interval)
                     
                     logger.info(f"⏰ [INTERVAL] Aguardando {random_interval:.1f}s antes do próximo disparo (min={min_interval}s, max={max_interval}s)")
@@ -771,13 +771,14 @@ class RabbitMQConsumer:
                             await save_message_id()
                         
                         # ✅ CORREÇÃO: Atualizar next_message_scheduled_at após envio bem-sucedido
-                        # Calcular próximo disparo baseado no intervalo da campanha
+                        # Calcular próximo disparo baseado no intervalo da campanha (valores configurados)
+                        # Usa random.uniform para garantir tempos distintos e humanizados
                         import random
                         from django.utils import timezone
                         from datetime import timedelta
                         
                         min_interval = campaign.interval_min
-                        max_interval = int(campaign.interval_max * 1.2)  # 20% a mais para humanização
+                        max_interval = campaign.interval_max
                         random_interval = random.uniform(min_interval, max_interval)
                         next_scheduled = timezone.now() + timedelta(seconds=random_interval)
                         

@@ -360,8 +360,9 @@ class CampaignSender:
             
             if next_campaign_contact:
                 # Calcular próximo disparo apenas se houver mais mensagens
+                # ✅ PADRONIZAÇÃO: Usa random.uniform para tempos distintos e humanizados (não random.randint)
                 import random
-                next_interval = random.randint(self.campaign.interval_min, self.campaign.interval_max)
+                next_interval = random.uniform(self.campaign.interval_min, self.campaign.interval_max)
                 self.campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=next_interval)
                 
                 # Armazenar informações do próximo contato
