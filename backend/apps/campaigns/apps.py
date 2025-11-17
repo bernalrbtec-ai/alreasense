@@ -35,34 +35,41 @@ class CampaignsConfig(AppConfig):
                 # 'paused' = foi pausada pelo usuário (NÃO recuperar automaticamente, mas pode ter sido interrompida)
                 active_campaigns = Campaign.objects.filter(status__in=['running', 'paused'])
                 
-                for campaign in active_campaigns:
-                    # Verificar se tem contatos pendentes
-                    pending_contacts = CampaignContact.objects.filter(
-                        campaign=campaign, 
-                        status='pending'
-                    ).count()
-                    
-                    if pending_contacts > 0:
-                        campaigns_to_recover.append(campaign)
-                        logger.info(f"🔄 [RECOVERY] Campanha {campaign.id} - {campaign.name} tem {pending_contacts} contatos pendentes - RECUPERANDO")
-                    else:
-                        logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} não tem contatos pendentes - marcando como concluída")
-                        # Marcar como concluída se não tem contatos pendentes
-                        campaign.status = 'completed'
-                        campaign.save()
+                from django.utils import timezone
+                from datetime import timedelta
                 
-                # Verificar campanhas pausadas/paradas que podem ter sido afetadas
-                user_stopped_campaigns = Campaign.objects.filter(status__in=['paused', 'stopped'])
-                for campaign in user_stopped_campaigns:
+                for campaign in active_campaigns:
+                    # Verificar se tem contatos pendentes (incluindo 'sending' que pode estar travado)
                     pending_contacts = CampaignContact.objects.filter(
                         campaign=campaign, 
-                        status='pending'
+                        status__in=['pending', 'sending']
                     ).count()
                     
-                    if pending_contacts > 0:
-                        logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} tem {pending_contacts} contatos pendentes mas foi pausada/parada pelo usuário - MANTENDO status")
-                    else:
-                        logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} foi pausada/parada pelo usuário e não tem contatos pendentes - MANTENDO status")
+                    if campaign.status == 'running':
+                        if pending_contacts > 0:
+                            campaigns_to_recover.append(campaign)
+                            logger.info(f"🔄 [RECOVERY] Campanha {campaign.id} - {campaign.name} (running) tem {pending_contacts} contatos pendentes - RECUPERANDO")
+                        else:
+                            logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} (running) não tem contatos pendentes - marcando como concluída")
+                            # Marcar como concluída se não tem contatos pendentes
+                            campaign.status = 'completed'
+                            campaign.completed_at = timezone.now()
+                            campaign.save()
+                    elif campaign.status == 'paused':
+                        # ✅ CORREÇÃO: Campanhas pausadas também podem ter sido interrompidas por build
+                        # Se foi atualizada recentemente (últimas 2 horas) e tem contatos pendentes,
+                        # provavelmente foi interrompida por build, então recuperar
+                        recent_threshold = timezone.now() - timedelta(hours=2)
+                        was_recently_updated = campaign.updated_at and campaign.updated_at >= recent_threshold
+                        
+                        if pending_contacts > 0 and was_recently_updated:
+                            # Provavelmente foi interrompida por build, recuperar
+                            campaigns_to_recover.append(campaign)
+                            logger.info(f"🔄 [RECOVERY] Campanha {campaign.id} - {campaign.name} (paused) atualizada recentemente com {pending_contacts} contatos pendentes - RECUPERANDO (possível interrupção por build)")
+                        elif pending_contacts > 0:
+                            logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} (paused) tem {pending_contacts} contatos pendentes mas foi pausada há mais tempo - MANTENDO status pausado")
+                        else:
+                            logger.info(f"ℹ️ [RECOVERY] Campanha {campaign.id} - {campaign.name} (paused) não tem contatos pendentes - MANTENDO status")
                 
                 if campaigns_to_recover:
                     logger.info(f"🔄 [RECOVERY] Encontradas {len(campaigns_to_recover)} campanhas para recuperar")
