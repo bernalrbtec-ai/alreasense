@@ -23,9 +23,10 @@ def campaign_retry_info(request, campaign_id):
     try:
         campaign = Campaign.objects.get(id=campaign_id, tenant=tenant)
         
-        # Verificar se há contato em retry (status 'sending' ou 'failed')
+        # ✅ CORREÇÃO: Verificar apenas contatos que REALMENTE falharam (não 'sending')
+        # 'sending' significa que ainda está tentando, não é erro ainda
         retry_contact = campaign.campaign_contacts.filter(
-            status__in=['sending', 'failed']
+            status='failed'  # ✅ Apenas contatos que falharam, não os que estão enviando
         ).select_related('contact').first()
         
         if retry_contact:

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card'
 import { Badge } from '../ui/badge'
 import { Tooltip } from '../ui/Tooltip'
 import { Button } from '../ui/Button'
-import { PieChart, Pie, Cell, ResponsiveContainer } from 'recharts'
+// Removido: gráfico circular não é mais usado
 import {
   Play,
   Pause,
@@ -181,23 +181,6 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
 
   const statusConfig = getStatusConfig(campaign.status)
 
-  // Dados para o gráfico circular
-  const getPieData = () => {
-    const sent = campaign.messages_sent
-    const delivered = campaign.messages_delivered
-    const read = campaign.messages_read
-    const failed = campaign.messages_failed
-    const pending = campaign.total_contacts - sent
-
-    return [
-      { name: 'Enviadas', value: sent, color: '#3B82F6' },
-      { name: 'Entregues', value: delivered, color: '#10B981' },
-      { name: 'Lidas', value: read, color: '#F59E0B' },
-      { name: 'Falhas', value: failed, color: '#EF4444' },
-      { name: 'Pendentes', value: Math.max(0, pending), color: '#E5E7EB' }
-    ].filter(item => item.value > 0)
-  }
-
   // Format countdown
   const formatCountdown = (seconds: number) => {
     if (seconds <= 0) return null
@@ -348,35 +331,6 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Gráfico Circular de Progresso */}
-          <div className="flex justify-center">
-            <div className="relative w-36 h-36">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={60}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                </PieChart>
-              </ResponsiveContainer>
-              
-              {/* Centro do gráfico com percentual */}
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div className="text-xl font-bold text-gray-900">{sentPercentage}%</div>
-                <div className="text-xs text-gray-600">Enviadas</div>
-              </div>
-            </div>
-          </div>
-
           {/* Métricas detalhadas */}
           <div className="grid grid-cols-4 gap-3">
             <div className="text-center">
