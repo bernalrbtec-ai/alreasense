@@ -540,14 +540,16 @@ class RabbitMQConsumer:
     async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
-            # ✅ CORREÇÃO: Usar API key da instância ou fallback para API key global
-            from django.conf import settings
-            api_key = instance.api_key or getattr(settings, 'EVOLUTION_API_KEY', '')
+            # ✅ CORREÇÃO: Usar mesmo padrão do chat - instance.api_key or evolution_server.api_key
+            from apps.connections.models import EvolutionConnection
+            
+            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+            api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
             
             if not api_key:
                 logger.error(f"❌ [PRESENCE] Nenhuma API key disponível para instância {instance.instance_name}")
                 logger.error(f"   Instance API Key: {instance.api_key}")
-                logger.error(f"   Global API Key: {getattr(settings, 'EVOLUTION_API_KEY', 'N/A')}")
+                logger.error(f"   Evolution Server API Key: {evolution_server.api_key if evolution_server else 'N/A'}")
                 return  # Não tentar enviar se não houver API key
             
             # ✅ DEBUG: Log detalhado das credenciais sendo usadas
@@ -678,14 +680,16 @@ class RabbitMQConsumer:
                     "instance": instance.instance_name
                 }
                 
-                # ✅ CORREÇÃO: Usar API key da instância ou fallback para API key global
-                from django.conf import settings
-                api_key = instance.api_key or getattr(settings, 'EVOLUTION_API_KEY', '')
+                # ✅ CORREÇÃO: Usar mesmo padrão do chat - instance.api_key or evolution_server.api_key
+                from apps.connections.models import EvolutionConnection
+                
+                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+                api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
                 
                 if not api_key:
                     logger.error(f"❌ [AIO-PIKA] Nenhuma API key disponível para instância {instance.instance_name}")
                     logger.error(f"   Instance API Key: {instance.api_key}")
-                    logger.error(f"   Global API Key: {getattr(settings, 'EVOLUTION_API_KEY', 'N/A')}")
+                    logger.error(f"   Evolution Server API Key: {evolution_server.api_key if evolution_server else 'N/A'}")
                     raise Exception(f"API key não configurada para instância {instance.instance_name}")
                 
                 # Enviar via Evolution API
