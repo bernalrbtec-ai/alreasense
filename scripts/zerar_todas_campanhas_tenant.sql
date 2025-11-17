@@ -18,7 +18,7 @@ BEGIN;
 -- ============================================================
 -- 1. DELETAR NOTIFICAÇÕES DE CAMPANHAS
 -- ============================================================
-DELETE FROM campaigns_campaignnotification 
+DELETE FROM campaigns_notification 
 WHERE tenant_id IN (
     SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
 );
@@ -107,7 +107,7 @@ WHERE campaign_id IN (
 
 -- Verificar se restou alguma notificação (deve retornar 0)
 SELECT COUNT(*) as notificacoes_restantes 
-FROM campaigns_campaignnotification 
+FROM campaigns_notification 
 WHERE tenant_id IN (
     SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
 );
