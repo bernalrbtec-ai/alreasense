@@ -122,32 +122,32 @@ class ContactSerializer(serializers.ModelSerializer):
         logger.debug(f"🔍 [SERIALIZER] Instance PK: {self.instance.pk if self.instance else None}")
         
         # Verificar duplicata de telefone
-        # ✅ CORREÇÃO: Verificar por usuário (created_by), não por tenant
-        # Cada usuário tem sua própria lista de contatos independente
+        # ✅ CORREÇÃO: Verificar por tenant (correto)
+        # Telefones são únicos por tenant, mas podem se repetir entre tenants diferentes
+        # Usuários do mesmo tenant compartilham a mesma lista de contatos
         phone = data.get('phone')
         if phone:
             user = self.context['request'].user
             tenant = user.tenant
             instance_pk = self.instance.pk if self.instance else None
             
-            # Se está atualizando, usar o created_by da instância existente
-            # Se está criando, usar o usuário atual
-            created_by_user = self.instance.created_by if self.instance else user
+            logger.debug(f"🔍 [SERIALIZER] Verificando duplicata. Phone: {phone}, Tenant: {tenant}, Instance PK: {instance_pk}")
             
-            logger.debug(f"🔍 [SERIALIZER] Verificando duplicata. Phone: {phone}, User: {user.email}, Created By: {created_by_user.email if created_by_user else None}, Instance PK: {instance_pk}")
-            
-            # Verificar duplicatas apenas para contatos criados pelo mesmo usuário
+            # Verificar duplicatas no mesmo tenant, excluindo o próprio contato se estiver atualizando
             existing = Contact.objects.filter(
-                tenant=tenant,  # Ainda filtra por tenant para segurança
-                phone=phone,
-                created_by=created_by_user  # ✅ CORREÇÃO: Verificar por usuário criador
-            ).exclude(pk=instance_pk)
+                tenant=tenant,
+                phone=phone
+            )
             
-            logger.debug(f"🔍 [SERIALIZER] Contatos existentes com mesmo telefone para este usuário: {existing.count()}")
+            # ✅ CORREÇÃO CRÍTICA: Se está atualizando, excluir o próprio contato da verificação
+            if instance_pk:
+                existing = existing.exclude(pk=instance_pk)
+            
+            logger.debug(f"🔍 [SERIALIZER] Contatos existentes com mesmo telefone no tenant: {existing.count()}")
             if existing.exists():
-                logger.warning(f"⚠️ [SERIALIZER] Telefone duplicado encontrado para usuário {created_by_user.email}: {phone}")
+                logger.warning(f"⚠️ [SERIALIZER] Telefone duplicado encontrado no tenant {tenant}: {phone}")
                 raise serializers.ValidationError({
-                    'phone': 'Telefone já cadastrado na sua lista de contatos'
+                    'phone': 'Telefone já cadastrado neste tenant'
                 })
         
         logger.debug(f"✅ [SERIALIZER] Validação passou")
