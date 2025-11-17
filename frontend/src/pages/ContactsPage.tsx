@@ -128,7 +128,7 @@ export default function ContactsPage() {
     return () => clearTimeout(debounceTimer)
   }, [searchTerm])
 
-  const fetchContacts = async (page = 1) => {
+  const fetchContacts = async (page = 1, forceRefresh = false) => {
     try {
       setIsLoading(true)
       const params = new URLSearchParams()
@@ -146,6 +146,11 @@ export default function ContactsPage() {
       
       // Ordenação alfabética
       params.append('ordering', 'name')
+      
+      // ✅ CORREÇÃO: Adicionar timestamp para evitar cache
+      if (forceRefresh) {
+        params.append('_t', Date.now().toString())
+      }
       
       const response = await api.get(`/contacts/contacts/?${params}`)
       const data = response.data
@@ -348,7 +353,8 @@ export default function ContactsPage() {
       }
       
       handleCloseModal()
-      fetchContacts()
+      // ✅ CORREÇÃO: Recarregar página atual (não página 1) e forçar refresh
+      fetchContacts(currentPage, true) // true = forceRefresh para evitar cache
       fetchStats() // ✅ CORREÇÃO: Atualizar contadores após criar/editar contato
     } catch (error: any) {
       console.error('❌ [CONTACT] Error saving contact:', error)

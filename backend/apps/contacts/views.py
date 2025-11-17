@@ -71,6 +71,11 @@ class ContactViewSet(viewsets.ModelViewSet):
                 logger.debug(f"📝 [CONTACT UPDATE] Serializer válido, salvando...")
                 self.perform_update(serializer)
                 logger.info(f"✅ [CONTACT UPDATE] Contato atualizado com sucesso: {instance.id}")
+                
+                # ✅ CORREÇÃO: Recarregar instância do banco para garantir dados atualizados
+                instance.refresh_from_db()
+                serializer = self.get_serializer(instance)
+                
                 return Response(serializer.data)
             else:
                 logger.error(f"❌ [CONTACT UPDATE] Erros de validação: {serializer.errors}")
