@@ -379,7 +379,8 @@ export default function ContactsPage() {
     try {
       await api.delete(`/contacts/contacts/${id}/`)
       updateToastSuccess(toastId, 'excluir', 'Contato')
-      fetchContacts()
+      // ✅ CORREÇÃO: Recarregar página atual e forçar refresh
+      fetchContacts(currentPage, true) // true = forceRefresh para evitar cache
       fetchStats() // ✅ CORREÇÃO: Atualizar contadores após exclusão
     } catch (error: any) {
       console.error('Error deleting contact:', error)
