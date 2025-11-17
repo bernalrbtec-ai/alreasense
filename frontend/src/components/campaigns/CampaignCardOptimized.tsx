@@ -78,6 +78,7 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
 }) => {
   const [isHovered, setIsHovered] = useState(false)
   const [countdown, setCountdown] = useState(campaign.countdown_seconds || 0)
+  const [retryCountdown, setRetryCountdown] = useState(campaign.retryInfo?.retry_countdown || 0)
 
   // Countdown em tempo real
   useEffect(() => {
@@ -95,10 +96,33 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
     return () => clearInterval(timer)
   }, [countdown])
 
+  // ✅ CORREÇÃO: Countdown do retry em tempo real
+  useEffect(() => {
+    if (retryCountdown <= 0) return
+
+    const timer = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev <= 1) {
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [retryCountdown])
+
   // Atualizar countdown quando campaign.countdown_seconds mudar
   useEffect(() => {
     setCountdown(campaign.countdown_seconds || 0)
   }, [campaign.countdown_seconds])
+
+  // ✅ CORREÇÃO: Atualizar retry countdown quando retryInfo mudar
+  useEffect(() => {
+    if (campaign.retryInfo?.retry_countdown !== undefined) {
+      setRetryCountdown(campaign.retryInfo.retry_countdown)
+    }
+  }, [campaign.retryInfo?.retry_countdown])
 
   // Status configuration
   const getStatusConfig = (status: string) => {
@@ -405,7 +429,7 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                     </div>
                   )}
                   <div className="text-sm text-blue-600">
-                    <strong>Próximo retry em:</strong> {campaign.retryInfo.retry_countdown}s
+                    <strong>Próximo retry em:</strong> {retryCountdown > 0 ? `${retryCountdown}s` : 'Aguardando...'}
                   </div>
                 </div>
               ) : countdown > 0 ? (

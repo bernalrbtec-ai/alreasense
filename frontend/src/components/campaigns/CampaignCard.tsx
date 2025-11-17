@@ -79,6 +79,31 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
   onDuplicate,
   onViewLogs
 }) => {
+  // ✅ CORREÇÃO: Estado para countdown do retry
+  const [retryCountdown, setRetryCountdown] = useState(campaign.retryInfo?.retry_countdown || 0)
+
+  // ✅ CORREÇÃO: Countdown do retry em tempo real
+  useEffect(() => {
+    if (retryCountdown <= 0) return
+
+    const timer = setInterval(() => {
+      setRetryCountdown(prev => {
+        if (prev <= 1) {
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [retryCountdown])
+
+  // Atualizar retry countdown quando retryInfo mudar
+  useEffect(() => {
+    if (campaign.retryInfo?.retry_countdown !== undefined) {
+      setRetryCountdown(campaign.retryInfo.retry_countdown)
+    }
+  }, [campaign.retryInfo?.retry_countdown])
   const [isHovered, setIsHovered] = useState(false)
 
   // Status configuration
@@ -381,7 +406,7 @@ const CampaignCard: React.FC<CampaignCardProps> = ({
                     </div>
                   )}
                   <div className="text-sm text-blue-600">
-                    <strong>Próximo retry em:</strong> {campaign.retryInfo.retry_countdown}s
+                    <strong>Próximo retry em:</strong> {retryCountdown > 0 ? `${retryCountdown}s` : 'Aguardando...'}
                   </div>
                 </div>
               ) : campaign.countdown_seconds && campaign.countdown_seconds > 0 ? (
