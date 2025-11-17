@@ -35,7 +35,8 @@ def campaign_retry_info(request, campaign_id):
             
             # Calcular quando será o próximo retry (baseado em exponential backoff)
             retry_attempt = retry_contact.retry_count or 1
-            retry_delay_seconds = RetryPolicy.calculate_delay(retry_attempt)
+            # ✅ CORREÇÃO: RetryPolicy.get_delay usa índice 0-based, então subtrair 1
+            retry_delay_seconds = RetryPolicy.get_delay(retry_attempt - 1)
             
             # Se tem failed_at, calcular tempo restante
             if retry_contact.failed_at:
