@@ -392,9 +392,13 @@ class ContactImportService:
                 'import_id': str(import_record.id),
                 'total_rows': import_record.total_rows,
                 'created': import_record.created_count,
+                'created_count': import_record.created_count,  # ✅ Compatibilidade com frontend
                 'updated': import_record.updated_count,
+                'updated_count': import_record.updated_count,  # ✅ Compatibilidade com frontend
                 'skipped': import_record.skipped_count,
+                'skipped_count': import_record.skipped_count,  # ✅ Compatibilidade com frontend
                 'errors': import_record.error_count,
+                'error_count': import_record.error_count,  # ✅ Compatibilidade com frontend
                 'errors_list': import_record.errors if import_record.error_count > 0 else []
             }
         
@@ -468,9 +472,17 @@ class ContactImportService:
         if custom_fields:
             mapped['custom_fields'] = custom_fields
         
-        # Debug primeira linha
+        # Debug primeira linha - mostrar TODOS os campos mapeados
         if mapped.get('name'):
-            print(f"✅ Row mapeado: name={mapped.get('name')}, phone={mapped.get('phone')}, custom_fields={custom_fields}")
+            debug_fields = {
+                'name': mapped.get('name'),
+                'phone': mapped.get('phone'),
+                'email': mapped.get('email'),
+                'last_purchase_date': mapped.get('last_purchase_date'),
+                'last_purchase_value': mapped.get('last_purchase_value'),
+                'custom_fields': custom_fields
+            }
+            print(f"✅ Row mapeado: {debug_fields}")
         
         return mapped
     
@@ -719,10 +731,16 @@ class ContactImportService:
         if not value:
             return default
         try:
-            # Remover símbolos de moeda e espaços
-            clean = value.replace('R$', '').replace(',', '.').strip()
+            # Remover símbolos de moeda, espaços e converter vírgula para ponto
+            clean = str(value).replace('R$', '').replace(' ', '').replace(',', '.').strip()
+            # Remover pontos que são separadores de milhar (ex: "1.500,00" -> "1500.00")
+            if clean.count('.') > 1:
+                # Se tem múltiplos pontos, o último é decimal, os outros são milhares
+                parts = clean.split('.')
+                clean = ''.join(parts[:-1]) + '.' + parts[-1]
             return Decimal(clean)
-        except (InvalidOperation, ValueError):
+        except (InvalidOperation, ValueError) as e:
+            print(f"⚠️ Erro ao parsear decimal '{value}': {e}")
             return default
     
     def _parse_int(self, value, default=0):

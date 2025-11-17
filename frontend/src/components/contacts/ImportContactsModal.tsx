@@ -719,19 +719,19 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
                 <div className="grid grid-cols-2 gap-3">
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Criados</p>
-                    <p className="text-2xl font-bold text-green-600">{importResult.created_count || 0}</p>
+                    <p className="text-2xl font-bold text-green-600">{importResult.created_count || importResult.created || 0}</p>
                 </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Atualizados</p>
-                    <p className="text-2xl font-bold text-blue-600">{importResult.updated_count || 0}</p>
+                    <p className="text-2xl font-bold text-blue-600">{importResult.updated_count || importResult.updated || 0}</p>
                 </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Ignorados</p>
-                    <p className="text-2xl font-bold text-gray-600">{importResult.skipped_count || 0}</p>
+                    <p className="text-2xl font-bold text-gray-600">{importResult.skipped_count || importResult.skipped || 0}</p>
                 </Card>
                   <Card className="p-3">
                     <p className="text-xs text-gray-500">Erros</p>
-                    <p className="text-2xl font-bold text-red-600">{importResult.error_count || 0}</p>
+                    <p className="text-2xl font-bold text-red-600">{importResult.error_count || importResult.errors || 0}</p>
                 </Card>
               </div>
               
