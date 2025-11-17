@@ -314,6 +314,8 @@ class RabbitMQConsumer:
                     
                     # ✅ CORREÇÃO: Verificar se há mais contatos ANTES de aguardar intervalo
                     # Isso evita aguardar intervalo desnecessário após último contato
+                    from asgiref.sync import sync_to_async
+                    
                     @sync_to_async
                     def has_more_contacts():
                         from .models import CampaignContact

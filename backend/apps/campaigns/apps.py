@@ -32,9 +32,8 @@ class CampaignsConfig(AppConfig):
                 
                 # Buscar campanhas que podem precisar de recuperação
                 # 'running' = estava rodando quando o sistema parou (recuperar)
-                # 'paused' = foi pausada pelo usuário (NÃO recuperar)
-                # 'stopped' = foi parada pelo usuário (NÃO recuperar)
-                active_campaigns = Campaign.objects.filter(status='running')
+                # 'paused' = foi pausada pelo usuário (NÃO recuperar automaticamente, mas pode ter sido interrompida)
+                active_campaigns = Campaign.objects.filter(status__in=['running', 'paused'])
                 
                 for campaign in active_campaigns:
                     # Verificar se tem contatos pendentes
