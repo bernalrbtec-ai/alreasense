@@ -1017,6 +1017,7 @@ export default function ContactsPage() {
           onClose={() => setShowImportModal(false)}
           onSuccess={() => {
             fetchContacts()
+            fetchStats() // ✅ CORREÇÃO: Atualizar contadores após importação
             setShowImportModal(false)
           }}
         />
