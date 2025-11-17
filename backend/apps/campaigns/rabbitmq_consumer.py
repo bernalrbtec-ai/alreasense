@@ -540,6 +540,16 @@ class RabbitMQConsumer:
     async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
+            # ✅ CORREÇÃO: Usar API key da instância ou fallback para API key global
+            from django.conf import settings
+            api_key = instance.api_key or getattr(settings, 'EVOLUTION_API_KEY', '')
+            
+            if not api_key:
+                logger.error(f"❌ [PRESENCE] Nenhuma API key disponível para instância {instance.instance_name}")
+                logger.error(f"   Instance API Key: {instance.api_key}")
+                logger.error(f"   Global API Key: {getattr(settings, 'EVOLUTION_API_KEY', 'N/A')}")
+                return  # Não tentar enviar se não houver API key
+            
             # ✅ DEBUG: Log detalhado das credenciais sendo usadas
             logger.info("="*80)
             logger.info(f"🔐 [PRESENCE DEBUG] Credenciais sendo usadas:")
@@ -547,9 +557,9 @@ class RabbitMQConsumer:
             logger.info(f"   Instance Name: {instance.instance_name}")
             logger.info(f"   Friendly Name: {instance.friendly_name}")
             logger.info(f"   API URL: {instance.api_url}")
-            logger.info(f"   API Key (primeiros 10 chars): {instance.api_key[:10] if instance.api_key else 'None'}...")
-            logger.info(f"   API Key (últimos 4 chars): ...{instance.api_key[-4:] if instance.api_key and len(instance.api_key) > 4 else 'None'}")
-            logger.info(f"   API Key completa: {instance.api_key}")
+            logger.info(f"   Instance API Key: {instance.api_key or 'None (usando global)'}")
+            logger.info(f"   API Key usada (primeiros 10): {api_key[:10] if api_key else 'None'}...")
+            logger.info(f"   API Key usada (últimos 4): ...{api_key[-4:] if api_key and len(api_key) > 4 else 'None'}")
             logger.info(f"   Phone Number: {instance.phone_number}")
             logger.info(f"   Connection State: {instance.connection_state}")
             logger.info("="*80)
@@ -563,7 +573,7 @@ class RabbitMQConsumer:
             }
             headers = {
                 "Content-Type": "application/json",
-                "apikey": instance.api_key  # ✅ CREDENCIAL USADA: instance.api_key do modelo WhatsAppInstance
+                "apikey": api_key  # ✅ CREDENCIAL USADA: instance.api_key ou EVOLUTION_API_KEY global como fallback
             }
             
             logger.info(f"📤 [PRESENCE] URL: {presence_url}")
@@ -667,11 +677,21 @@ class RabbitMQConsumer:
                     "instance": instance.instance_name
                 }
                 
+                # ✅ CORREÇÃO: Usar API key da instância ou fallback para API key global
+                from django.conf import settings
+                api_key = instance.api_key or getattr(settings, 'EVOLUTION_API_KEY', '')
+                
+                if not api_key:
+                    logger.error(f"❌ [AIO-PIKA] Nenhuma API key disponível para instância {instance.instance_name}")
+                    logger.error(f"   Instance API Key: {instance.api_key}")
+                    logger.error(f"   Global API Key: {getattr(settings, 'EVOLUTION_API_KEY', 'N/A')}")
+                    raise Exception(f"API key não configurada para instância {instance.instance_name}")
+                
                 # Enviar via Evolution API
                 url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
                 headers = {
                     "Content-Type": "application/json",
-                    "apikey": instance.api_key
+                    "apikey": api_key  # ✅ CREDENCIAL USADA: instance.api_key ou EVOLUTION_API_KEY global como fallback
                 }
                 
                 # Usar requests de forma assíncrona
