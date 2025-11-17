@@ -541,9 +541,15 @@ class RabbitMQConsumer:
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
             # ✅ CORREÇÃO: Usar mesmo padrão do chat - instance.api_key or evolution_server.api_key
+            # ✅ CORREÇÃO: Usar sync_to_async para buscar EvolutionConnection em contexto async
             from apps.connections.models import EvolutionConnection
+            from asgiref.sync import sync_to_async
             
-            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+            @sync_to_async
+            def get_evolution_server():
+                return EvolutionConnection.objects.filter(is_active=True).first()
+            
+            evolution_server = await get_evolution_server()
             api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
             
             if not api_key:
@@ -681,9 +687,15 @@ class RabbitMQConsumer:
                 }
                 
                 # ✅ CORREÇÃO: Usar mesmo padrão do chat - instance.api_key or evolution_server.api_key
+                # ✅ CORREÇÃO: Usar sync_to_async para buscar EvolutionConnection em contexto async
                 from apps.connections.models import EvolutionConnection
+                from asgiref.sync import sync_to_async
                 
-                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+                @sync_to_async
+                def get_evolution_server():
+                    return EvolutionConnection.objects.filter(is_active=True).first()
+                
+                evolution_server = await get_evolution_server()
                 api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
                 
                 if not api_key:
