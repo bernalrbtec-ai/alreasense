@@ -27,8 +27,8 @@ export const useMessageVariables = (contactId?: string): UseMessageVariablesRetu
       setError(null)
       
       const url = cid 
-        ? `/campaigns/campaigns/variables/?contact_id=${cid}`
-        : '/campaigns/campaigns/variables/'
+        ? `/campaigns/variables/?contact_id=${cid}`
+        : '/campaigns/variables/'
       
       console.log('📋 [VARIABLES] Buscando variáveis:', url)
       const response = await api.get(url)
