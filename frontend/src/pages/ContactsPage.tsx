@@ -308,22 +308,36 @@ export default function ContactsPage() {
         normalizedPhone = '+' + normalizedPhone
       }
       
-      // 🔧 CORREÇÃO: Garantir que tag_ids seja sempre array
-      const dataToSend = {
-        ...formData,
+      // 🔧 CORREÇÃO: Garantir que tag_ids seja sempre array e campos sejam strings válidas
+      const dataToSend: any = {
         tag_ids: Array.isArray(formData.tag_ids) ? formData.tag_ids : [],
-        // Garantir que campos vazios sejam strings vazias, não null
-        name: formData.name || '',
+        // Garantir que campos vazios sejam strings vazias, não null ou undefined
+        name: String(formData.name || '').trim(),
         phone: normalizedPhone || '',
-        email: formData.email || '',
-        birth_date: formData.birth_date || '',
-        gender: formData.gender || '',
-        city: formData.city || '',
-        state: formData.state || '',
-        zipcode: formData.zipcode || '',
-        referred_by: formData.referred_by || '',
-        notes: formData.notes || ''
+        email: String(formData.email || '').trim(),
+        birth_date: formData.birth_date || null, // null para campos de data vazios
+        gender: String(formData.gender || '').trim() || null,
+        city: String(formData.city || '').trim() || null,
+        state: String(formData.state || '').trim() || null,
+        zipcode: String(formData.zipcode || '').trim() || null,
+        referred_by: String(formData.referred_by || '').trim() || null,
+        notes: String(formData.notes || '').trim() || null
       }
+      
+      // Remover campos null/vazios para não enviar dados desnecessários
+      Object.keys(dataToSend).forEach(key => {
+        if (dataToSend[key] === null || dataToSend[key] === '') {
+          // Manter apenas campos obrigatórios (name, phone)
+          if (key !== 'name' && key !== 'phone') {
+            delete dataToSend[key]
+          } else if (dataToSend[key] === '') {
+            // Para campos obrigatórios, manter string vazia
+            dataToSend[key] = ''
+          }
+        }
+      })
+      
+      console.log('📤 [CONTACT] Enviando dados:', JSON.stringify(dataToSend, null, 2))
       
       if (editingContact) {
         await api.put(`/contacts/contacts/${editingContact.id}/`, dataToSend)
@@ -361,17 +375,17 @@ export default function ContactsPage() {
   const handleEdit = (contact: Contact) => {
     setEditingContact(contact)
     setFormData({
-      name: contact.name,
-      phone: contact.phone,
+      name: contact.name || '',
+      phone: contact.phone || '',
       email: contact.email || '',
       birth_date: contact.birth_date || '',
-      gender: '',
+      gender: contact.gender || '',
       city: contact.city || '',
       state: contact.state || '',
-      zipcode: '',
+      zipcode: contact.zipcode || '',
       referred_by: contact.referred_by || '',
-      notes: '',
-      tag_ids: contact.tags.map(t => t.id)
+      notes: contact.notes || '',
+      tag_ids: contact.tags ? contact.tags.map(t => t.id) : []
     })
     setIsModalOpen(true)
   }

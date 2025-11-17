@@ -85,9 +85,12 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
   console.log(`📝 Mensagem extraída:`, errorMessage)
   
   // Fallback se ainda estiver vazio
-  if (!errorMessage || errorMessage.trim() === '') {
+  // ✅ CORREÇÃO: Garantir que errorMessage seja string antes de chamar trim()
+  if (!errorMessage || (typeof errorMessage === 'string' && errorMessage.trim() === '') || typeof errorMessage !== 'string') {
     errorMessage = 'Erro desconhecido'
     console.warn(`⚠️ Usando fallback "Erro desconhecido" para:`, { action, entity, error })
+  } else {
+    errorMessage = String(errorMessage).trim()
   }
 
   const baseMessages: Record<Action, string> = {
@@ -209,8 +212,11 @@ export function updateToastError(toastId: string | number, action: Action, entit
   }
   
   // Fallback se ainda estiver vazio
-  if (!errorMessage || errorMessage.trim() === '') {
+  // ✅ CORREÇÃO: Garantir que errorMessage seja string antes de chamar trim()
+  if (!errorMessage || (typeof errorMessage === 'string' && errorMessage.trim() === '') || typeof errorMessage !== 'string') {
     errorMessage = 'Erro desconhecido'
+  } else {
+    errorMessage = String(errorMessage).trim()
   }
 
   const baseMessages: Record<Action, string> = {
