@@ -540,6 +540,20 @@ class RabbitMQConsumer:
     async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
+            # ✅ DEBUG: Log detalhado das credenciais sendo usadas
+            logger.info("="*80)
+            logger.info(f"🔐 [PRESENCE DEBUG] Credenciais sendo usadas:")
+            logger.info(f"   Instância ID: {instance.id}")
+            logger.info(f"   Instance Name: {instance.instance_name}")
+            logger.info(f"   Friendly Name: {instance.friendly_name}")
+            logger.info(f"   API URL: {instance.api_url}")
+            logger.info(f"   API Key (primeiros 10 chars): {instance.api_key[:10] if instance.api_key else 'None'}...")
+            logger.info(f"   API Key (últimos 4 chars): ...{instance.api_key[-4:] if instance.api_key and len(instance.api_key) > 4 else 'None'}")
+            logger.info(f"   API Key completa: {instance.api_key}")
+            logger.info(f"   Phone Number: {instance.phone_number}")
+            logger.info(f"   Connection State: {instance.connection_state}")
+            logger.info("="*80)
+            
             presence_url = f"{instance.api_url}/chat/sendPresence/{instance.instance_name}"
             # 🔧 CORREÇÃO: Evolution API espera delay e presence direto no root (não dentro de options)
             presence_data = {
@@ -549,8 +563,12 @@ class RabbitMQConsumer:
             }
             headers = {
                 "Content-Type": "application/json",
-                "apikey": instance.api_key
+                "apikey": instance.api_key  # ✅ CREDENCIAL USADA: instance.api_key do modelo WhatsAppInstance
             }
+            
+            logger.info(f"📤 [PRESENCE] URL: {presence_url}")
+            logger.info(f"📤 [PRESENCE] Headers: apikey={instance.api_key}")
+            logger.info(f"📤 [PRESENCE] Body: {presence_data}")
             
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
@@ -564,14 +582,24 @@ class RabbitMQConsumer:
                 # Aguardar o tempo de digitação
                 await asyncio.sleep(typing_seconds)
             elif response.status_code == 401:
-                logger.warning(f"⚠️ [PRESENCE] Erro 401 (Unauthorized) ao enviar presence para {contact_phone}. Verifique API key da instância {instance.instance_name}")
+                logger.error("="*80)
+                logger.error(f"❌ [PRESENCE] Erro 401 (Unauthorized)")
+                logger.error(f"   URL: {presence_url}")
+                logger.error(f"   API Key usada: {instance.api_key}")
+                logger.error(f"   Instance Name: {instance.instance_name}")
+                logger.error(f"   Response: {response.text[:200] if hasattr(response, 'text') else 'N/A'}")
+                logger.error("="*80)
                 # Não bloquear envio se presence falhar por 401
             else:
                 logger.warning(f"⚠️ [PRESENCE] Erro {response.status_code} ao enviar presence para {contact_phone}")
+                logger.warning(f"   Response: {response.text[:200] if hasattr(response, 'text') else 'N/A'}")
                 # Não bloquear envio se presence falhar
             
         except Exception as e:
             logger.warning(f"⚠️ [PRESENCE] Erro ao enviar status 'digitando': {e}")
+            logger.warning(f"   Exception type: {type(e).__name__}")
+            import traceback
+            logger.warning(f"   Traceback: {traceback.format_exc()}")
             # Não falhar o envio se o presence falhar
 
     async def _send_whatsapp_message_async(self, campaign, contact, instance):
