@@ -770,6 +770,25 @@ class RabbitMQConsumer:
                             
                             await save_message_id()
                         
+                        # ✅ CORREÇÃO: Atualizar next_message_scheduled_at após envio bem-sucedido
+                        # Calcular próximo disparo baseado no intervalo da campanha
+                        import random
+                        from django.utils import timezone
+                        from datetime import timedelta
+                        
+                        min_interval = campaign.interval_min
+                        max_interval = int(campaign.interval_max * 1.2)  # 20% a mais para humanização
+                        random_interval = random.uniform(min_interval, max_interval)
+                        next_scheduled = timezone.now() + timedelta(seconds=random_interval)
+                        
+                        @sync_to_async
+                        def update_next_scheduled():
+                            campaign.next_message_scheduled_at = next_scheduled
+                            campaign.save(update_fields=['next_message_scheduled_at'])
+                        
+                        await update_next_scheduled()
+                        logger.info(f"⏰ [AIO-PIKA] Próximo disparo agendado para: {next_scheduled} (em {random_interval:.1f}s)")
+                        
                         # Log de sucesso (passar message_text também)
                         await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
                         
