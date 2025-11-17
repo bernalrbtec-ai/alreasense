@@ -133,6 +133,27 @@ class ContactSerializer(serializers.ModelSerializer):
             
             logger.debug(f"🔍 [SERIALIZER] Verificando duplicata. Phone: {phone}, Tenant: {tenant}, Instance PK: {instance_pk}")
             
+            # ✅ NOVA VALIDAÇÃO: Verificar se telefone pertence a uma instância WhatsApp do tenant
+            from apps.notifications.models import WhatsAppInstance
+            
+            # Normalizar telefone para comparação (remover + e espaços)
+            phone_normalized = phone.replace('+', '').replace(' ', '').strip()
+            
+            # Verificar se existe instância WhatsApp com esse telefone no mesmo tenant
+            instance_with_phone = WhatsAppInstance.objects.filter(
+                tenant=tenant,
+                phone_number__isnull=False
+            ).exclude(phone_number='')
+            
+            for instance in instance_with_phone:
+                if instance.phone_number:
+                    instance_phone_normalized = instance.phone_number.replace('+', '').replace(' ', '').strip()
+                    if instance_phone_normalized == phone_normalized:
+                        logger.warning(f"⚠️ [SERIALIZER] Telefone pertence a instância WhatsApp: {instance.friendly_name}")
+                        raise serializers.ValidationError({
+                            'phone': f'Este telefone pertence à instância WhatsApp "{instance.friendly_name}". Não é possível criar contato com telefone de instância.'
+                        })
+            
             # Verificar duplicatas no mesmo tenant, excluindo o próprio contato se estiver atualizando
             existing = Contact.objects.filter(
                 tenant=tenant,
