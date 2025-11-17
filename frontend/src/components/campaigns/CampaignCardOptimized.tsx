@@ -342,6 +342,13 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                   style={{ width: `${Math.min(campaign.progress_percentage || 0, 100)}%` }}
                 />
               </div>
+              {/* Próximo disparo */}
+              {countdown > 0 && !campaign.retryInfo?.is_retrying && (
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <Clock className="h-3 w-3" />
+                  <span>Próximo disparo em: <strong className="text-gray-900">{formatCountdown(countdown)}</strong></span>
+                </div>
+              )}
             </div>
           )}
 
@@ -398,15 +405,6 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                   )}
                   <div className="text-sm text-blue-600">
                     <strong>Próximo retry em:</strong> {retryCountdown > 0 ? `${retryCountdown}s` : 'Aguardando...'}
-                  </div>
-                </div>
-              ) : countdown > 0 ? (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-blue-600" />
-                    <span className="text-sm text-blue-800">
-                      Próximo disparo em: <strong>{formatCountdown(countdown)}</strong>
-                    </span>
                   </div>
                 </div>
               ) : null}
