@@ -198,10 +198,6 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
     }
   }
 
-  const pieData = getPieData()
-  const totalSent = campaign.messages_sent
-  const sentPercentage = campaign.total_contacts > 0 ? Math.round((totalSent / campaign.total_contacts) * 100) : 0
-
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
