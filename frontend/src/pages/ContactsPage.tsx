@@ -335,6 +335,7 @@ export default function ContactsPage() {
       
       handleCloseModal()
       fetchContacts()
+      fetchStats() // ✅ CORREÇÃO: Atualizar contadores após criar/editar contato
     } catch (error: any) {
       console.error('Error saving contact:', error)
       updateToastError(toastId, editingContact ? 'atualizar' : 'criar', 'Contato', error)
@@ -350,6 +351,7 @@ export default function ContactsPage() {
       await api.delete(`/contacts/contacts/${id}/`)
       updateToastSuccess(toastId, 'excluir', 'Contato')
       fetchContacts()
+      fetchStats() // ✅ CORREÇÃO: Atualizar contadores após exclusão
     } catch (error: any) {
       console.error('Error deleting contact:', error)
       updateToastError(toastId, 'excluir', 'Contato', error)

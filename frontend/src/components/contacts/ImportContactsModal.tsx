@@ -698,19 +698,40 @@ export default function ImportContactsModal({ onClose, onSuccess }: ImportContac
           {step === 5 && importResult && (
               <div className="space-y-4">
               <div className="text-center">
-                  {importResult.status === 'completed' ? (
-                    <>
-                      <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
-                      <h3 className="text-lg font-semibold text-green-600 mb-2">
-                  Importação Concluída!
-                </h3>
-                    </>
-                  ) : (
+                  {/* ✅ CORREÇÃO: Verificar status E se há erros */}
+                  {(
+                    importResult.status === 'completed' || 
+                    importResult.status === 'success'
+                  ) && (
+                    (importResult.error_count || importResult.errors || 0) === 0 ? (
+                      <>
+                        <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
+                        <h3 className="text-lg font-semibold text-green-600 mb-2">
+                          Importação Concluída!
+                        </h3>
+                      </>
+                    ) : (
+                      <>
+                        <AlertCircle className="h-12 w-12 text-yellow-600 mx-auto mb-3" />
+                        <h3 className="text-lg font-semibold text-yellow-600 mb-2">
+                          Importação Concluída com Avisos
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          Alguns contatos não puderam ser importados, mas a maioria foi processada com sucesso.
+                        </p>
+                      </>
+                    )
+                  )}
+                  {/* Se status é 'failed' ou 'error', mostrar erro */}
+                  {(importResult.status === 'failed' || importResult.status === 'error') && (
                     <>
                       <AlertCircle className="h-12 w-12 text-red-600 mx-auto mb-3" />
                       <h3 className="text-lg font-semibold text-red-600 mb-2">
-                        Importação Concluída com Erros
+                        Importação Falhou
                       </h3>
+                      <p className="text-sm text-red-600">
+                        {importResult.message || importResult.error || 'Erro desconhecido'}
+                      </p>
                     </>
                   )}
               </div>
