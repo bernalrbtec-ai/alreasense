@@ -431,17 +431,27 @@ class RabbitMQConsumer:
             logger.error(f"❌ [AIO-PIKA] Erro ao atualizar status do contato {contact.id}: {e}")
 
     async def _update_campaign_status_async(self, campaign, status):
-        """Atualiza o status da campanha de forma assíncrona"""
+        """Atualiza status da campanha de forma assíncrona"""
         try:
             from asgiref.sync import sync_to_async
+            from django.utils import timezone
             
             @sync_to_async
             def update_status():
+                # Recarregar campanha do banco para garantir dados atualizados
+                campaign.refresh_from_db()
                 campaign.status = status
-                campaign.save()
+                # Se completando, definir completed_at
+                if status == 'completed':
+                    campaign.completed_at = timezone.now()
+                    # Limpar campos de próximo disparo
+                    campaign.next_message_scheduled_at = None
+                    campaign.next_contact_name = None
+                    campaign.next_contact_phone = None
+                campaign.save(update_fields=['status', 'completed_at', 'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+                logger.info(f"✅ [AIO-PIKA] Status da campanha {campaign.id} atualizado para {status}")
             
             await update_status()
-            logger.info(f"✅ [AIO-PIKA] Status da campanha {campaign.id} atualizado para {status}")
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao atualizar status da campanha {campaign.id}: {e}")
     
