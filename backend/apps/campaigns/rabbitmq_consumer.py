@@ -388,6 +388,7 @@ class RabbitMQConsumer:
             @sync_to_async
             def get_next_contact():
                 from .models import CampaignContact
+                # ✅ CORREÇÃO: Buscar apenas 'pending', não 'sending' (que já está sendo processado)
                 return CampaignContact.objects.filter(
                     campaign=campaign,
                     status='pending'
@@ -396,13 +397,33 @@ class RabbitMQConsumer:
             contact = await get_next_contact()
 
             if not contact:
-                logger.info(f"✅ [AIO-PIKA] Campanha {campaign.id} - Todos os contatos processados")
-                logger.info(f"🔍 [DEBUG] Campanha {campaign.id} - Status atual: {campaign.status}")
-                # Atualizar status da campanha
-                await self._update_campaign_status_async(campaign, 'completed')
-                # Log de encerramento
-                await self._log_campaign_completed(campaign)
-                return
+                # ✅ CORREÇÃO: Verificar se realmente não há mais contatos pendentes
+                # (não apenas 'pending', mas também verificar se todos foram enviados)
+                @sync_to_async
+                def check_all_processed():
+                    from .models import CampaignContact
+                    # Verificar se há contatos ainda pendentes ou enviando
+                    pending_count = CampaignContact.objects.filter(
+                        campaign=campaign,
+                        status__in=['pending', 'sending']
+                    ).count()
+                    return pending_count == 0
+                
+                all_processed = await check_all_processed()
+                
+                if all_processed:
+                    logger.info(f"✅ [AIO-PIKA] Campanha {campaign.id} - Todos os contatos processados")
+                    logger.info(f"🔍 [DEBUG] Campanha {campaign.id} - Status atual: {campaign.status}")
+                    # Atualizar status da campanha
+                    await self._update_campaign_status_async(campaign, 'completed')
+                    # Log de encerramento
+                    await self._log_campaign_completed(campaign)
+                    return
+                else:
+                    # Ainda há contatos sendo processados, aguardar um pouco
+                    logger.info(f"⏳ [AIO-PIKA] Campanha {campaign.id} - Aguardando processamento de contatos em andamento...")
+                    await asyncio.sleep(2)  # Aguardar 2s antes de verificar novamente
+                    return
             
             logger.info(f"🔍 [DEBUG] Próximo contato encontrado: {contact.id} - Status: {contact.status}")
             

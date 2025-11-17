@@ -327,6 +327,24 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
         </CardHeader>
 
         <CardContent className="space-y-4">
+          {/* Barra de Progresso */}
+          {campaign.status === 'running' && campaign.total_contacts > 0 && (
+            <div className="space-y-2">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-gray-600 font-medium">Progresso da Campanha</span>
+                <span className="text-gray-900 font-bold">
+                  {campaign.messages_sent} / {campaign.total_contacts} ({Math.round(campaign.progress_percentage || 0)}%)
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-500 ease-out rounded-full"
+                  style={{ width: `${Math.min(campaign.progress_percentage || 0, 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
+
           {/* Métricas detalhadas */}
           <div className="grid grid-cols-4 gap-3">
             <div className="text-center">
