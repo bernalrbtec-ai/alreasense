@@ -26,7 +26,7 @@ WHERE tenant_id IN (
 -- ============================================================
 -- 2. DELETAR LOGS DE CAMPANHAS
 -- ============================================================
-DELETE FROM campaigns_campaignlog 
+DELETE FROM campaigns_log 
 WHERE campaign_id IN (
     SELECT id FROM campaigns_campaign 
     WHERE tenant_id IN (
@@ -37,7 +37,7 @@ WHERE campaign_id IN (
 -- ============================================================
 -- 3. DELETAR CONTATOS DE CAMPANHAS (CampaignContact)
 -- ============================================================
-DELETE FROM campaigns_campaigncontact 
+DELETE FROM campaigns_contact 
 WHERE campaign_id IN (
     SELECT id FROM campaigns_campaign 
     WHERE tenant_id IN (
@@ -48,7 +48,7 @@ WHERE campaign_id IN (
 -- ============================================================
 -- 4. DELETAR MENSAGENS DE CAMPANHAS (CampaignMessage)
 -- ============================================================
-DELETE FROM campaigns_campaignmessage 
+DELETE FROM campaigns_message 
 WHERE campaign_id IN (
     SELECT id FROM campaigns_campaign 
     WHERE tenant_id IN (
@@ -87,7 +87,7 @@ WHERE tenant_id IN (
 
 -- Verificar se restou algum log (deve retornar 0)
 SELECT COUNT(*) as logs_restantes 
-FROM campaigns_campaignlog 
+FROM campaigns_log 
 WHERE campaign_id IN (
     SELECT id FROM campaigns_campaign 
     WHERE tenant_id IN (
@@ -97,7 +97,7 @@ WHERE campaign_id IN (
 
 -- Verificar se restou algum contato de campanha (deve retornar 0)
 SELECT COUNT(*) as contatos_campanha_restantes 
-FROM campaigns_campaigncontact 
+FROM campaigns_contact 
 WHERE campaign_id IN (
     SELECT id FROM campaigns_campaign 
     WHERE tenant_id IN (
@@ -114,7 +114,7 @@ WHERE tenant_id IN (
 
 -- Verificar se restou alguma mensagem de campanha (deve retornar 0)
 SELECT COUNT(*) as mensagens_campanha_restantes 
-FROM campaigns_campaignmessage 
+FROM campaigns_message 
 WHERE campaign_id IN (
     SELECT id FROM campaigns_campaign 
     WHERE tenant_id IN (
