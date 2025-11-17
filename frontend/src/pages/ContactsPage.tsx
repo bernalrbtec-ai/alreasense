@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Upload, Download, Filter, X, Users as UsersIcon } from 'lucide-react'
+import { Search, Plus, Upload, Download, Filter, X, Users as UsersIcon, Grid, Table as TableIcon } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -7,6 +7,7 @@ import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
 import ContactCard from '../components/contacts/ContactCard'
 import ImportContactsModal from '../components/contacts/ImportContactsModal'
+import ContactsTable from '../components/contacts/ContactsTable'
 
 interface Contact {
   id: string
@@ -28,6 +29,7 @@ interface Contact {
   msgs_sent: number
   msgs_delivered: number
   created_at: string
+  custom_fields?: Record<string, any> // Campos customizados importados
 }
 
 interface Tag {
@@ -57,6 +59,14 @@ export default function ContactsPage() {
   // Filtros
   const [selectedTag, setSelectedTag] = useState('')
   const [selectedState, setSelectedState] = useState('')
+  const [selectedCustomField, setSelectedCustomField] = useState('')
+  const [customFieldValue, setCustomFieldValue] = useState('')
+  
+  // Visualização
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards')
+  
+  // Campos customizados disponíveis (extraídos dos contatos)
+  const [availableCustomFields, setAvailableCustomFields] = useState<string[]>([])
   
   // Stats gerais
   const [stats, setStats] = useState({
@@ -133,12 +143,26 @@ export default function ContactsPage() {
       const response = await api.get(`/contacts/contacts/?${params}`)
       const data = response.data
       
-      setContacts(data.results || data)
-      setTotalCount(data.count || (data.results || data).length)
-      setTotalPages(Math.ceil((data.count || (data.results || data).length) / pageSize))
+      const contactsData = data.results || data
+      setContacts(contactsData)
+      setTotalCount(data.count || contactsData.length)
+      setTotalPages(Math.ceil((data.count || contactsData.length) / pageSize))
       setCurrentPage(page)
       
-      console.log(`📊 Página ${page}: ${(data.results || data).length} contatos de ${data.count || 0} total`)
+      // Extrair campos customizados únicos dos contatos
+      const customFieldsSet = new Set<string>()
+      contactsData.forEach((contact: Contact) => {
+        if (contact.custom_fields && typeof contact.custom_fields === 'object') {
+          Object.keys(contact.custom_fields).forEach(key => {
+            if (contact.custom_fields![key]) {
+              customFieldsSet.add(key)
+            }
+          })
+        }
+      })
+      setAvailableCustomFields(Array.from(customFieldsSet).sort())
+      
+      console.log(`📊 Página ${page}: ${contactsData.length} contatos de ${data.count || 0} total`)
     } catch (error: any) {
       console.error('Error fetching contacts:', error)
       showErrorToast('carregar', 'Contatos', error)
@@ -388,6 +412,28 @@ export default function ContactsPage() {
         </div>
       </div>
 
+      {/* Toggle de Visualização */}
+      <div className="flex justify-between items-center mb-4">
+        <div className="flex gap-2">
+          <Button
+            variant={viewMode === 'cards' ? 'default' : 'outline'}
+            onClick={() => setViewMode('cards')}
+            className="flex items-center gap-2"
+          >
+            <Grid className="h-4 w-4" />
+            Cards
+          </Button>
+          <Button
+            variant={viewMode === 'table' ? 'default' : 'outline'}
+            onClick={() => setViewMode('table')}
+            className="flex items-center gap-2"
+          >
+            <TableIcon className="h-4 w-4" />
+            Tabela
+          </Button>
+        </div>
+      </div>
+
       {/* Filtros e Busca */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {/* Busca por texto */}
@@ -454,6 +500,50 @@ export default function ContactsPage() {
           </select>
         </div>
       </div>
+      
+      {/* Filtro por Campo Customizado */}
+      {availableCustomFields.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Filtrar por Campo Customizado
+            </label>
+            <select
+              value={selectedCustomField}
+              onChange={(e) => {
+                setSelectedCustomField(e.target.value)
+                setCustomFieldValue('')
+                setCurrentPage(1)
+              }}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            >
+              <option value="">Selecione um campo</option>
+              {availableCustomFields.map((field) => (
+                <option key={field} value={field}>
+                  {field.charAt(0).toUpperCase() + field.slice(1)}
+                </option>
+              ))}
+            </select>
+          </div>
+          {selectedCustomField && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Valor do campo
+              </label>
+              <input
+                type="text"
+                placeholder={`Buscar por ${selectedCustomField}...`}
+                value={customFieldValue}
+                onChange={(e) => {
+                  setCustomFieldValue(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -509,17 +599,46 @@ export default function ContactsPage() {
         </Card>
       </div>
 
-      {/* Contact Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {contacts.map(contact => (
-          <ContactCard
-            key={contact.id}
-            contact={contact}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        ))}
-      </div>
+      {/* Contact Grid ou Tabela */}
+      {viewMode === 'cards' ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {contacts
+            .filter(contact => {
+              // Filtrar por campo customizado se selecionado
+              if (selectedCustomField && customFieldValue) {
+                const fieldValue = contact.custom_fields?.[selectedCustomField]
+                if (!fieldValue || !String(fieldValue).toLowerCase().includes(customFieldValue.toLowerCase())) {
+                  return false
+                }
+              }
+              return true
+            })
+            .map(contact => (
+              <ContactCard
+                key={contact.id}
+                contact={contact}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+        </div>
+      ) : (
+        <ContactsTable
+          contacts={contacts.filter(contact => {
+            // Filtrar por campo customizado se selecionado
+            if (selectedCustomField && customFieldValue) {
+              const fieldValue = contact.custom_fields?.[selectedCustomField]
+              if (!fieldValue || !String(fieldValue).toLowerCase().includes(customFieldValue.toLowerCase())) {
+                return false
+              }
+            }
+            return true
+          })}
+          availableCustomFields={availableCustomFields}
+          onEdit={handleEdit}
+          onDelete={handleDelete}
+        />
+      )}
       
       {/* Paginação */}
       {totalPages > 1 && (

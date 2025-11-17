@@ -1,4 +1,5 @@
-import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus } from 'lucide-react'
+import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState } from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 
@@ -32,6 +33,7 @@ interface Contact {
   is_active: boolean
   opted_out: boolean
   created_at: string
+  custom_fields?: Record<string, any> // Campos customizados importados
 }
 
 interface ContactCardProps {
@@ -41,6 +43,10 @@ interface ContactCardProps {
 }
 
 export default function ContactCard({ contact, onEdit, onDelete }: ContactCardProps) {
+  const [showCustomFields, setShowCustomFields] = useState(false)
+  
+  const customFields = contact.custom_fields || {}
+  const hasCustomFields = Object.keys(customFields).length > 0
   const lifecycleColors: Record<string, string> = {
     lead: 'bg-gray-100 text-gray-700',
     customer: 'bg-green-100 text-green-700',
@@ -185,6 +191,45 @@ export default function ContactCard({ contact, onEdit, onDelete }: ContactCardPr
           />
         </div>
       </div>
+
+      {/* Campos Customizados - Seção Expandível */}
+      {hasCustomFields && (
+        <div className="mt-3 pt-3 border-t">
+          <button
+            onClick={() => setShowCustomFields(!showCustomFields)}
+            className="w-full flex items-center justify-between text-sm font-medium text-purple-700 hover:text-purple-900 transition-colors"
+          >
+            <span className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4" />
+              Campos Customizados ({Object.keys(customFields).length})
+            </span>
+            {showCustomFields ? (
+              <ChevronUp className="h-4 w-4" />
+            ) : (
+              <ChevronDown className="h-4 w-4" />
+            )}
+          </button>
+          
+          {showCustomFields && (
+            <div className="mt-3 bg-purple-50 rounded-lg p-3">
+              <table className="w-full text-sm">
+                <tbody className="divide-y divide-purple-200">
+                  {Object.entries(customFields).map(([key, value]) => (
+                    <tr key={key}>
+                      <td className="py-1.5 pr-3 font-medium text-purple-900">
+                        {key.charAt(0).toUpperCase() + key.slice(1)}:
+                      </td>
+                      <td className="py-1.5 text-purple-700">
+                        {String(value) || '-'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </Card>
   )
 }
