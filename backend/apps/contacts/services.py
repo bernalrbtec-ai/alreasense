@@ -217,9 +217,18 @@ class ContactImportService:
                 mapping[header] = 'zipcode'
                 continue
             
-            # Campos personalizados (não reconhecidos)
-            # Ignorar por padrão, mas manter no mapeamento para o usuário poder escolher
-            mapping[header] = None
+            # Campos comerciais
+            if header_lower in ['data_compra', 'data compra', 'ultima_compra', 'última compra']:
+                mapping[header] = 'last_purchase_date'
+                continue
+            
+            if header_lower in ['valor', 'valor_compra', 'valor compra', 'ultimo_valor']:
+                mapping[header] = 'last_purchase_value'
+                continue
+            
+            # Campos personalizados (não reconhecidos) → custom_fields
+            # Mapear automaticamente para custom_fields.{nome_do_campo}
+            mapping[header] = f'custom_fields.{header_lower}'
         
         return mapping
     
@@ -432,11 +441,21 @@ class ContactImportService:
             print(f"   Auto-detected mapping: {mapping}")
         
         mapped = {}
+        custom_fields = {}
         
         for csv_col, model_field in mapping.items():
             if model_field and model_field != 'ignorado':
-                value = row.get(csv_col, '')
-                mapped[model_field] = value
+                value = row.get(csv_col, '').strip()
+                
+                # Separar custom_fields dos campos padrão
+                if model_field.startswith('custom_fields.'):
+                    # Campo customizado
+                    field_name = model_field.replace('custom_fields.', '')
+                    if value:
+                        custom_fields[field_name] = value
+                else:
+                    # Campo padrão
+                    mapped[model_field] = value
         
         # Combinar DDD + Telefone se necessário
         if 'ddd' in mapped and 'phone' in mapped:
@@ -445,9 +464,13 @@ class ContactImportService:
             if ddd and phone:
                 mapped['phone'] = f"{ddd}{phone}"
         
+        # Adicionar custom_fields ao mapped
+        if custom_fields:
+            mapped['custom_fields'] = custom_fields
+        
         # Debug primeira linha
         if mapped.get('name'):
-            print(f"✅ Row mapeado: name={mapped.get('name')}, phone={mapped.get('phone')}, ddd={mapped.get('ddd', 'N/A')}")
+            print(f"✅ Row mapeado: name={mapped.get('name')}, phone={mapped.get('phone')}, custom_fields={custom_fields}")
         
         return mapped
     
@@ -515,6 +538,11 @@ class ContactImportService:
                     state = inferred_state
                     print(f"  ℹ️  Estado '{state}' inferido pelo DDD {ddd}")
         
+        # Extrair custom_fields
+        custom_fields = row.get('custom_fields', {})
+        if not isinstance(custom_fields, dict):
+            custom_fields = {}
+        
         contact = Contact.objects.create(
             tenant=self.tenant,
             phone=phone,
@@ -532,6 +560,7 @@ class ContactImportService:
             lifetime_value=self._parse_decimal(row.get('lifetime_value'), Decimal('0')),
             notes=notes if notes else '',
             referred_by=row.get('referred_by'),
+            custom_fields=custom_fields,  # ✅ Adicionar custom_fields
             source='import',
             created_by=self.user
         )
@@ -571,6 +600,13 @@ class ContactImportService:
                 contact.notes += f"\n{notes.strip()}"
             else:
                 contact.notes = notes.strip()
+        
+        # Atualizar custom_fields (merge, não sobrescrever)
+        custom_fields = row.get('custom_fields', {})
+        if custom_fields and isinstance(custom_fields, dict):
+            if not contact.custom_fields:
+                contact.custom_fields = {}
+            contact.custom_fields.update(custom_fields)
         
         contact.save()
     

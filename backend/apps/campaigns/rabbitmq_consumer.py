@@ -509,39 +509,33 @@ class RabbitMQConsumer:
             import traceback
             logger.error(f"🔍 [DEBUG] Stack trace: {traceback.format_exc()}")
     
-    async def _replace_variables(self, message_text, contact_data):
-        """Substitui variáveis na mensagem com dados do contato"""
-        from datetime import datetime
+    async def _replace_variables(self, message_text, contact):
+        """Substitui variáveis na mensagem usando MessageVariableService"""
+        from apps.campaigns.services import MessageVariableService
         
-        # Saudação baseada no horário
-        hour = datetime.now().hour
-        if hour < 12:
-            saudacao = 'Bom dia'
-        elif hour < 18:
-            saudacao = 'Boa tarde'
-        else:
-            saudacao = 'Boa noite'
+        # Se contact é dict, converter para objeto Contact se necessário
+        if isinstance(contact, dict):
+            # Buscar contato do banco se tiver ID
+            contact_id = contact.get('id')
+            if contact_id:
+                from apps.contacts.models import Contact
+                try:
+                    contact = Contact.objects.get(id=contact_id)
+                except Contact.DoesNotExist:
+                    # Fallback: usar dados do dict diretamente
+                    from types import SimpleNamespace
+                    contact_obj = SimpleNamespace()
+                    contact_obj.name = contact.get('name', '')
+                    contact_obj.email = contact.get('email', '')
+                    contact_obj.city = contact.get('city', '')
+                    contact_obj.state = contact.get('state', '')
+                    contact_obj.referred_by = contact.get('referred_by', '')
+                    contact_obj.last_purchase_value = contact.get('last_purchase_value')
+                    contact_obj.last_purchase_date = contact.get('last_purchase_date')
+                    contact_obj.custom_fields = contact.get('custom_fields', {})
+                    contact = contact_obj
         
-        # Dia da semana
-        dias_semana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
-        dia_semana = dias_semana[datetime.now().weekday()]
-        
-        # Processar nomes
-        nome_completo = contact_data.get('name', '')
-        primeiro_nome = nome_completo.split()[0] if nome_completo else ''
-        
-        quem_indicou = contact_data.get('referred_by', '')
-        primeiro_nome_indicador = quem_indicou.split()[0] if quem_indicou else ''
-        
-        # Substituir variáveis
-        message_text = message_text.replace('{{nome}}', nome_completo)
-        message_text = message_text.replace('{{primeiro_nome}}', primeiro_nome)
-        message_text = message_text.replace('{{saudacao}}', saudacao)
-        message_text = message_text.replace('{{dia_semana}}', dia_semana)
-        message_text = message_text.replace('{{quem_indicou}}', quem_indicou)
-        message_text = message_text.replace('{{primeiro_nome_indicador}}', primeiro_nome_indicador)
-        
-        return message_text
+        return MessageVariableService.render_message(message_text, contact)
     
     async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""

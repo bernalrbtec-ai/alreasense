@@ -1,58 +1,30 @@
 import React, { useState } from 'react'
-import { Info, Copy, Check, MoreVertical, Hand, Mail, Users, Calendar, Clock, Sun } from 'lucide-react'
+import { Info, Copy, Check, MoreVertical, Hand, Mail, Users, Calendar, Clock, Sun, Sparkles } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { useMessageVariables, MessageVariable } from '../../hooks/useMessageVariables'
 
 interface MessageVariablesProps {
   className?: string
+  contactId?: string
 }
 
-const AVAILABLE_VARIABLES = [
-  {
-    variable: '{{nome}}',
-    displayName: 'Nome Completo',
-    description: 'Nome completo do contato',
-    example: 'João Silva',
-    icon: Users
-  },
-  {
-    variable: '{{primeiro_nome}}',
-    displayName: 'Primeiro Nome',
-    description: 'Primeiro nome do contato',
-    example: 'João',
-    icon: Hand
-  },
-  {
-    variable: '{{saudacao}}',
-    displayName: 'Saudação',
-    description: 'Saudação baseada no horário atual',
-    example: 'Bom dia',
-    icon: Sun
-  },
-  {
-    variable: '{{dia_semana}}',
-    displayName: 'Dia da Semana',
-    description: 'Dia da semana atual',
-    example: 'Segunda-feira',
-    icon: Calendar
-  },
-  {
-    variable: '{{quem_indicou}}',
-    displayName: 'Quem Indicou',
-    description: 'Nome de quem indicou o contato',
-    example: 'Maria Santos',
-    icon: Users
-  },
-  {
-    variable: '{{primeiro_nome_indicador}}',
-    displayName: 'Primeiro Nome Indicador',
-    description: 'Primeiro nome de quem indicou',
-    example: 'Maria',
-    icon: Hand
+// Ícones por categoria
+const getIconForCategory = (category: string) => {
+  switch (category) {
+    case 'padrão':
+      return Users
+    case 'sistema':
+      return Sun
+    case 'customizado':
+      return Sparkles
+    default:
+      return Info
   }
-]
+}
 
-export function MessageVariables({ className = '' }: MessageVariablesProps) {
+export function MessageVariables({ className = '', contactId }: MessageVariablesProps) {
   const [copiedVariable, setCopiedVariable] = useState<string | null>(null)
+  const { variables, loading } = useMessageVariables(contactId)
 
   const copyToClipboard = (variable: string) => {
     navigator.clipboard.writeText(variable)
@@ -74,10 +46,16 @@ export function MessageVariables({ className = '' }: MessageVariablesProps) {
         </p>
       </div>
       
-      <div className="grid grid-cols-2 gap-2">
-        {AVAILABLE_VARIABLES.map((item) => {
-          const IconComponent = item.icon
-          return (
+      {loading ? (
+        <div className="text-center py-4 text-sm text-gray-500">
+          Carregando variáveis...
+        </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-2">
+          {variables.map((item) => {
+            const IconComponent = getIconForCategory(item.category)
+            const example = item.example_value || item.variable.replace(/[{}]/g, '')
+            return (
             <div 
               key={item.variable} 
               className="group relative p-3 bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-lg cursor-pointer hover:from-blue-100 hover:to-indigo-100 hover:border-blue-300 transition-all duration-200 hover:shadow-md"
@@ -124,7 +102,7 @@ export function MessageVariables({ className = '' }: MessageVariablesProps) {
                   <IconComponent className="w-3 h-3 text-blue-600" />
                 </div>
                 <h4 className="text-xs font-medium text-gray-900 truncate">
-                  {item.displayName}
+                  {item.display_name}
                 </h4>
               </div>
               
@@ -135,8 +113,15 @@ export function MessageVariables({ className = '' }: MessageVariablesProps) {
               
               {/* Exemplo */}
               <p className="text-xs text-gray-500 italic">
-                Ex: {item.example}
+                {item.example_value ? `Ex: ${item.example_value}` : item.description}
               </p>
+              
+              {/* Badge de categoria */}
+              {item.category === 'customizado' && (
+                <span className="inline-block mt-1 px-1.5 py-0.5 text-xs bg-purple-100 text-purple-700 rounded">
+                  Customizado
+                </span>
+              )}
               
               {/* Botão de copiar */}
               <button
@@ -161,7 +146,8 @@ export function MessageVariables({ className = '' }: MessageVariablesProps) {
             </div>
           )
         })}
-      </div>
+        </div>
+      )}
       
       <div className="mt-3 p-2 bg-green-50 border border-green-200 rounded-lg">
         <p className="text-xs text-green-700">

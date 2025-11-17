@@ -3,7 +3,8 @@ Services para o sistema de campanhas
 Inclui lógica de rotação de instâncias
 """
 from typing import Optional, List
-from django.db.models import F
+from django.db import models
+from django.db.models import F, Q
 from apps.notifications.models import WhatsAppInstance
 from .models import Campaign, CampaignLog
 import random
@@ -277,37 +278,11 @@ class CampaignSender:
             if not phone.startswith('55'):
                 phone = f'55{phone}'
             
-            # Substituir variáveis na mensagem
-            from datetime import datetime
-            
-            # Saudação baseada no horário
-            hour = datetime.now().hour
-            if hour < 12:
-                saudacao = 'Bom dia'
-            elif hour < 18:
-                saudacao = 'Boa tarde'
-            else:
-                saudacao = 'Boa noite'
-            
-            # Dia da semana
-            dias_semana = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado', 'Domingo']
-            dia_semana = dias_semana[datetime.now().weekday()]
-            
-            # Processar nomes
-            nome_completo = contact.name or ''
-            primeiro_nome = nome_completo.split()[0] if nome_completo else ''
-            
-            quem_indicou = contact.referred_by or ''
-            primeiro_nome_indicador = quem_indicou.split()[0] if quem_indicou else ''
-            
-            # Substituir variáveis
-            message_text = message.content
-            message_text = message_text.replace('{{nome}}', nome_completo)
-            message_text = message_text.replace('{{primeiro_nome}}', primeiro_nome)
-            message_text = message_text.replace('{{saudacao}}', saudacao)
-            message_text = message_text.replace('{{dia_semana}}', dia_semana)
-            message_text = message_text.replace('{{quem_indicou}}', quem_indicou)
-            message_text = message_text.replace('{{primeiro_nome_indicador}}', primeiro_nome_indicador)
+            # Substituir variáveis na mensagem usando MessageVariableService
+            message_text = MessageVariableService.render_message(
+                template=message.content,
+                contact=contact
+            )
             
             # ✅ Enviar via Evolution API com RETRY e BACKOFF
             url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
@@ -709,3 +684,336 @@ class CampaignSender:
         except:
             return "Erro ao buscar mensagem"
 
+
+class MessageVariableService:
+    """
+    Service para renderizar variáveis em mensagens de campanha
+    Suporta campos padrão + custom_fields dinamicamente
+    """
+    
+    # Variáveis padrão disponíveis
+    STANDARD_VARIABLES = {
+        'nome': lambda c: c.name or '',
+        'primeiro_nome': lambda c: c.name.split()[0] if c.name else '',
+        'email': lambda c: c.email or '',
+        'cidade': lambda c: c.city or '',
+        'estado': lambda c: c.state or '',
+        'quem_indicou': lambda c: c.referred_by or '',
+        'primeiro_nome_indicador': lambda c: c.referred_by.split()[0] if c.referred_by else '',
+        'valor_compra': lambda c: f"R$ {c.last_purchase_value:.2f}".replace('.', ',') if c.last_purchase_value else '',
+        'data_compra': lambda c: c.last_purchase_date.strftime('%d/%m/%Y') if c.last_purchase_date else '',
+    }
+    
+    @staticmethod
+    def get_greeting():
+        """Retorna saudação baseada no horário"""
+        from datetime import datetime
+        hour = datetime.now().hour
+        if hour < 12:
+            return 'Bom dia'
+        elif hour < 18:
+            return 'Boa tarde'
+        else:
+            return 'Boa noite'
+    
+    @staticmethod
+    def get_day_of_week():
+        """Retorna dia da semana"""
+        from datetime import datetime
+        dias = ['Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 
+                'Sexta-feira', 'Sábado', 'Domingo']
+        return dias[datetime.now().weekday()]
+    
+    @staticmethod
+    def render_message(template: str, contact, extra_vars: dict = None) -> str:
+        """
+        Renderiza template de mensagem com dados do contato
+        
+        Variáveis suportadas:
+        - Padrão: {{nome}}, {{primeiro_nome}}, {{email}}, etc.
+        - Customizadas: {{clinica}}, {{valor}}, {{data_compra}}, etc.
+        - Sistema: {{saudacao}}, {{dia_semana}}
+        
+        Args:
+            template: Template da mensagem com variáveis {{variavel}}
+            contact: Objeto Contact
+            extra_vars: Variáveis extras (opcional)
+        
+        Returns:
+            str: Mensagem renderizada
+        """
+        rendered = template
+        
+        # 1. Variáveis padrão
+        for var_name, getter in MessageVariableService.STANDARD_VARIABLES.items():
+            try:
+                value = getter(contact)
+                rendered = rendered.replace(f'{{{{{var_name}}}}}', str(value))
+            except Exception:
+                # Se der erro, substituir por string vazia
+                rendered = rendered.replace(f'{{{{{var_name}}}}}', '')
+        
+        # 2. Variáveis de custom_fields (DINÂMICO!)
+        if hasattr(contact, 'custom_fields') and contact.custom_fields:
+            for key, value in contact.custom_fields.items():
+                if value is not None:
+                    # Suporta tanto {{clinica}} quanto {{custom.clinica}}
+                    rendered = rendered.replace(f'{{{{{key}}}}}', str(value))
+                    rendered = rendered.replace(f'{{{{custom.{key}}}}}', str(value))
+        
+        # 3. Variáveis do sistema
+        rendered = rendered.replace('{{saudacao}}', MessageVariableService.get_greeting())
+        rendered = rendered.replace('{{dia_semana}}', MessageVariableService.get_day_of_week())
+        
+        # 4. Variáveis extras (sobrescreve se houver)
+        if extra_vars:
+            for key, value in extra_vars.items():
+                rendered = rendered.replace(f'{{{{{key}}}}}', str(value))
+        
+        return rendered
+    
+    @staticmethod
+    def get_available_variables(contact=None) -> list:
+        """
+        Retorna lista de variáveis disponíveis
+        
+        Args:
+            contact: Contato opcional (para incluir custom_fields)
+        
+        Returns:
+            list: Lista de dicts com {variable, display_name, description, category}
+        """
+        variables = [
+            {
+                'variable': '{{nome}}',
+                'display_name': 'Nome Completo',
+                'description': 'Nome completo do contato',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{primeiro_nome}}',
+                'display_name': 'Primeiro Nome',
+                'description': 'Primeiro nome do contato',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{email}}',
+                'display_name': 'Email',
+                'description': 'Email do contato',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{cidade}}',
+                'display_name': 'Cidade',
+                'description': 'Cidade do contato',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{estado}}',
+                'display_name': 'Estado (UF)',
+                'description': 'Estado do contato',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{valor_compra}}',
+                'display_name': 'Valor da Última Compra',
+                'description': 'Valor formatado da última compra',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{data_compra}}',
+                'display_name': 'Data da Última Compra',
+                'description': 'Data da última compra (DD/MM/YYYY)',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{quem_indicou}}',
+                'display_name': 'Quem Indicou',
+                'description': 'Nome de quem indicou o contato',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{primeiro_nome_indicador}}',
+                'display_name': 'Primeiro Nome Indicador',
+                'description': 'Primeiro nome de quem indicou',
+                'category': 'padrão'
+            },
+            {
+                'variable': '{{saudacao}}',
+                'display_name': 'Saudação',
+                'description': 'Bom dia/Boa tarde/Boa noite (automático)',
+                'category': 'sistema'
+            },
+            {
+                'variable': '{{dia_semana}}',
+                'display_name': 'Dia da Semana',
+                'description': 'Dia da semana atual',
+                'category': 'sistema'
+            },
+        ]
+        
+        # Adicionar custom_fields se contato fornecido
+        if contact and hasattr(contact, 'custom_fields') and contact.custom_fields:
+            for key, value in contact.custom_fields.items():
+                variables.append({
+                    'variable': f'{{{{{key}}}}}',
+                    'display_name': key.replace('_', ' ').title(),
+                    'description': f'Campo customizado: {key}',
+                    'category': 'customizado',
+                    'example_value': str(value) if value else ''
+                })
+        
+        return variables
+    
+    @staticmethod
+    def validate_template(template: str) -> tuple[bool, list]:
+        """
+        Valida template de mensagem
+        
+        Returns:
+            tuple: (is_valid, errors)
+        """
+        errors = []
+        
+        # Verificar balanceamento de chaves
+        open_count = template.count('{{')
+        close_count = template.count('}}')
+        
+        if open_count != close_count:
+            errors.append('Chaves desbalanceadas: número de {{ não corresponde a }}')
+        
+        # Verificar variáveis malformadas
+        import re
+        malformed = re.findall(r'\{\{[^}]*[^}]$', template)
+        if malformed:
+            errors.append(f'Variáveis malformadas: {malformed}')
+        
+        return len(errors) == 0, errors
+
+
+class CampaignImportService:
+    """
+    Service para importar CSV e criar campanha automaticamente
+    """
+    
+    def __init__(self, tenant, user):
+        self.tenant = tenant
+        self.user = user
+        from apps.contacts.services import ContactImportService
+        self.contact_service = ContactImportService(tenant, user)
+    
+    def import_csv_and_create_campaign(
+        self,
+        file,
+        campaign_name,
+        campaign_description=None,
+        messages=None,
+        instances=None,
+        column_mapping=None,
+        update_existing=False,
+        auto_tag_id=None
+    ):
+        """
+        Importa CSV e cria campanha em um único processo
+        
+        Args:
+            file: Arquivo CSV
+            campaign_name: Nome da campanha
+            campaign_description: Descrição (opcional)
+            messages: Lista de mensagens [{content: "...", order: 1}]
+            instances: Lista de IDs de instâncias WhatsApp
+            column_mapping: Mapeamento customizado (opcional)
+            update_existing: Atualizar contatos existentes?
+            auto_tag_id: Tag para adicionar automaticamente
+        
+        Returns:
+            dict: {campaign_id, import_id, contacts_created, contacts_updated, total_contacts}
+        """
+        from django.utils import timezone
+        from apps.contacts.models import Contact, ContactImport
+        from .models import Campaign, CampaignMessage, CampaignContact
+        
+        # 1. Importar contatos
+        import_result = self.contact_service.process_csv(
+            file=file,
+            update_existing=update_existing,
+            auto_tag_id=auto_tag_id,
+            column_mapping=column_mapping
+        )
+        
+        if import_result['status'] != 'success':
+            return import_result
+        
+        # 2. Buscar contatos importados (via import_record)
+        import_record = ContactImport.objects.get(id=import_result['import_id'])
+        
+        # Buscar contatos criados/atualizados no período da importação
+        # Usar timestamp da importação como referência
+        import_timestamp = import_record.created_at
+        
+        # Buscar contatos criados após a importação ou atualizados
+        recent_contacts = Contact.objects.filter(
+            tenant=self.tenant
+        ).filter(
+            Q(created_at__gte=import_timestamp) |
+            Q(updated_at__gte=import_timestamp)
+        ).distinct()
+        
+        # Se não encontrou nenhum, buscar todos os contatos do tenant (fallback)
+        if not recent_contacts.exists():
+            recent_contacts = Contact.objects.filter(tenant=self.tenant)
+        
+        # 3. Criar campanha
+        campaign = Campaign.objects.create(
+            tenant=self.tenant,
+            name=campaign_name,
+            description=campaign_description or '',
+            created_by=self.user,
+            status='draft'
+        )
+        
+        # 4. Adicionar instâncias
+        if instances:
+            from apps.notifications.models import WhatsAppInstance
+            instance_objects = WhatsAppInstance.objects.filter(
+                id__in=instances,
+                tenant=self.tenant
+            )
+            campaign.instances.set(instance_objects)
+        
+        # 5. Criar mensagens
+        if messages:
+            for msg_data in messages:
+                CampaignMessage.objects.create(
+                    campaign=campaign,
+                    content=msg_data.get('content', ''),
+                    order=msg_data.get('order', 1)
+                )
+        
+        # 6. Associar contatos à campanha (apenas ativos e não opted-out)
+        campaign_contacts = []
+        for contact in recent_contacts.filter(is_active=True, opted_out=False):
+            campaign_contacts.append(
+                CampaignContact(
+                    campaign=campaign,
+                    contact=contact,
+                    status='pending'
+                )
+            )
+        
+        if campaign_contacts:
+            CampaignContact.objects.bulk_create(campaign_contacts, ignore_conflicts=True)
+        
+        # 7. Atualizar contador
+        campaign.total_contacts = len(campaign_contacts)
+        campaign.save()
+        
+        return {
+            'status': 'success',
+            'campaign_id': str(campaign.id),
+            'import_id': str(import_record.id),
+            'contacts_created': import_result.get('created', 0),
+            'contacts_updated': import_result.get('updated', 0),
+            'total_contacts': len(campaign_contacts),
+            'campaign_name': campaign.name
+        }

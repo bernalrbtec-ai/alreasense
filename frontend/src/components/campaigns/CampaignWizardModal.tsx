@@ -5,6 +5,7 @@ import { Card } from '../ui/Card'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
 import { MessageVariables } from './MessageVariables'
+import { renderMessagePreview } from '../../hooks/useMessageVariables'
 
 interface CampaignWizardModalProps {
   onClose: () => void
@@ -812,24 +813,19 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                       {/* Chat Area */}
                       <div className="bg-[#e5ddd5] h-96 p-3 overflow-y-auto">
                         {formData.messages.filter(m => m.content && typeof m.content === 'string' && m.content.trim()).map((msg, idx) => {
-                          // Substituir variáveis para preview
-                          const nomeCompleto = 'Maria Silva'
-                          const primeiroNome = nomeCompleto.split(' ')[0]
-                          const quemIndicou = 'João Santos'
-                          const primeiroNomeIndicador = quemIndicou.split(' ')[0]
-                          
-                          const previewText = msg.content
-                            .replace(/\{\{nome\}\}/g, nomeCompleto)
-                            .replace(/\{\{primeiro_nome\}\}/g, primeiroNome)
-                            .replace(/\{\{quem_indicou\}\}/g, quemIndicou)
-                            .replace(/\{\{primeiro_nome_indicador\}\}/g, primeiroNomeIndicador)
-                            .replace(/\{\{saudacao\}\}/g, 
-                              new Date().getHours() < 12 ? 'Bom dia' :
-                              new Date().getHours() < 18 ? 'Boa tarde' : 'Boa noite'
-                            )
-                            .replace(/\{\{dia_semana\}\}/g, 
-                              ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'][new Date().getDay()]
-                            )
+                          // Substituir variáveis para preview usando função helper
+                          const previewText = renderMessagePreview(msg.content, {
+                            nome: 'Maria Silva',
+                            primeiro_nome: 'Maria',
+                            email: 'maria@email.com',
+                            cidade: 'São Paulo',
+                            estado: 'SP',
+                            clinica: 'Hospital Veterinário Santa Inês',
+                            valor_compra: 'R$ 1.500,00',
+                            data_compra: '25/03/2024',
+                            quem_indicou: 'João Santos',
+                            primeiro_nome_indicador: 'João'
+                          })
                           
                           return (
                             <div key={idx} className="mb-3 flex justify-end">

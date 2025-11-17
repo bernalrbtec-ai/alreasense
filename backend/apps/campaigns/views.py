@@ -186,6 +186,128 @@ class CampaignViewSet(viewsets.ModelViewSet):
         campaign.cancel()
         return Response({'message': 'Campanha cancelada'})
     
+    @action(detail=False, methods=['get'])
+    def variables(self, request):
+        """
+        Retorna variáveis disponíveis para mensagens
+        
+        GET /api/campaigns/campaigns/variables/?contact_id=uuid (opcional)
+        """
+        from .services import MessageVariableService
+        from apps.contacts.models import Contact
+        
+        contact = None
+        contact_id = request.query_params.get('contact_id')
+        if contact_id:
+            try:
+                contact = Contact.objects.get(
+                    id=contact_id,
+                    tenant=request.user.tenant
+                )
+            except Contact.DoesNotExist:
+                pass
+        
+        variables = MessageVariableService.get_available_variables(contact)
+        
+        return Response({
+            'variables': variables,
+            'total': len(variables)
+        })
+    
+    @action(detail=False, methods=['post'])
+    def import_csv(self, request):
+        """
+        Importar CSV e criar campanha automaticamente
+        
+        POST /api/campaigns/campaigns/import_csv/
+        Body: multipart/form-data
+        - file: CSV file
+        - campaign_name: string (obrigatório)
+        - campaign_description: string (opcional)
+        - messages: JSON array (opcional) [{"content": "...", "order": 1}]
+        - instances: JSON array de IDs (opcional)
+        - column_mapping: JSON object (opcional)
+        - update_existing: bool
+        - auto_tag_id: UUID (opcional)
+        """
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                {'error': 'Arquivo CSV não fornecido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        campaign_name = request.data.get('campaign_name')
+        if not campaign_name:
+            return Response(
+                {'error': 'Nome da campanha é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Parse messages
+        messages = None
+        if request.data.get('messages'):
+            import json
+            try:
+                messages = json.loads(request.data['messages'])
+            except (json.JSONDecodeError, TypeError):
+                return Response(
+                    {'error': 'Formato inválido para messages. Deve ser JSON array.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Parse instances
+        instances = None
+        if request.data.get('instances'):
+            import json
+            try:
+                instances = json.loads(request.data['instances'])
+            except (json.JSONDecodeError, TypeError):
+                return Response(
+                    {'error': 'Formato inválido para instances. Deve ser JSON array.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        # Parse column_mapping
+        column_mapping = None
+        if request.data.get('column_mapping'):
+            import json
+            try:
+                column_mapping = json.loads(request.data['column_mapping'])
+            except (json.JSONDecodeError, TypeError):
+                # Não é erro crítico, usar auto-detecção
+                pass
+        
+        # Importar
+        from .services import CampaignImportService
+        
+        service = CampaignImportService(
+            tenant=request.user.tenant,
+            user=request.user
+        )
+        
+        try:
+            result = service.import_csv_and_create_campaign(
+                file=file,
+                campaign_name=campaign_name,
+                campaign_description=request.data.get('campaign_description'),
+                messages=messages,
+                instances=instances,
+                column_mapping=column_mapping,
+                update_existing=request.data.get('update_existing', 'false').lower() == 'true',
+                auto_tag_id=request.data.get('auto_tag_id')
+            )
+            
+            return Response(result)
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Erro ao importar CSV e criar campanha: {str(e)}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao importar: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=True, methods=['get'])
     def contacts(self, request, pk=None):
         """Listar contatos da campanha"""
