@@ -1258,6 +1258,18 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
           )}
         </div>
       </div>
+
+      {/* Modal de Confirmação para Iniciar Campanha */}
+      <ConfirmDialog
+        show={showStartCampaignModal}
+        title="Campanha Criada!"
+        message="Sua campanha foi criada com sucesso como rascunho. Deseja iniciá-la agora ou mantê-la como rascunho?"
+        confirmText="Iniciar Campanha"
+        cancelText="Salvar como Rascunho"
+        variant="info"
+        onConfirm={handleStartCampaign}
+        onCancel={handleSaveAsDraft}
+      />
     </div>
   )
 }
