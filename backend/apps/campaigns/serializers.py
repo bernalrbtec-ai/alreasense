@@ -113,6 +113,9 @@ class CampaignSerializer(serializers.ModelSerializer):
     
     def to_representation(self, instance):
         """Atualiza informações do próximo contato antes de serializar"""
+        # ✅ CORREÇÃO: Recalcular estatísticas antes de serializar
+        self._recalculate_campaign_stats(instance)
+        
         # Atualizar informações do próximo contato para campanhas em execução
         if instance.status == 'running':
             instance.update_next_contact_info()
@@ -123,6 +126,49 @@ class CampaignSerializer(serializers.ModelSerializer):
         data['countdown_seconds'] = self._calculate_countdown_seconds(instance)
         
         return data
+    
+    def _recalculate_campaign_stats(self, instance):
+        """Recalcula estatísticas da campanha baseado nos CampaignContacts"""
+        try:
+            from django.db.models import Q
+            
+            # Contar enviadas (têm sent_at OU status sent/delivered/read)
+            sent_count = instance.campaign_contacts.filter(
+                Q(sent_at__isnull=False) | Q(status__in=['sent', 'delivered', 'read'])
+            ).distinct().count()
+            
+            # Contar entregues (têm delivered_at OU status delivered/read)
+            delivered_count = instance.campaign_contacts.filter(
+                Q(delivered_at__isnull=False) | Q(status__in=['delivered', 'read'])
+            ).distinct().count()
+            
+            # Contar lidas (têm read_at OU status read)
+            read_count = instance.campaign_contacts.filter(
+                Q(read_at__isnull=False) | Q(status='read')
+            ).distinct().count()
+            
+            # Contar falhas
+            failed_count = instance.campaign_contacts.filter(status='failed').count()
+            
+            # Atualizar apenas se houver mudança
+            if (instance.messages_sent != sent_count or 
+                instance.messages_delivered != delivered_count or
+                instance.messages_read != read_count or
+                instance.messages_failed != failed_count):
+                
+                instance.messages_sent = sent_count
+                instance.messages_delivered = delivered_count
+                instance.messages_read = read_count
+                instance.messages_failed = failed_count
+                instance.save(update_fields=['messages_sent', 'messages_delivered', 'messages_read', 'messages_failed'])
+                
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"✅ [SERIALIZER] Stats recalculados para campanha {instance.id}: sent={sent_count}, delivered={delivered_count}, read={read_count}, failed={failed_count}")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ [SERIALIZER] Erro ao recalcular stats: {e}", exc_info=True)
     
     def _calculate_countdown_seconds(self, instance):
         """Calcula quantos segundos restam para o próximo disparo"""

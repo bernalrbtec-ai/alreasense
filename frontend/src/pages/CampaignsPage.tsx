@@ -203,7 +203,11 @@ const CampaignsPage: React.FC = () => {
       case 'started':
         return <Play className="h-4 w-4 text-green-500" />
       case 'message_sent':
+        return <Send className="h-4 w-4 text-blue-500" />
+      case 'message_delivered':
         return <CheckCircle className="h-4 w-4 text-green-500" />
+      case 'message_read':
+        return <Eye className="h-4 w-4 text-purple-500" />
       case 'message_failed':
         return <AlertCircle className="h-4 w-4 text-red-500" />
       case 'campaign_paused':
@@ -230,7 +234,11 @@ const CampaignsPage: React.FC = () => {
       case 'started':
         return 'border-l-green-500 bg-green-50'
       case 'message_sent':
+        return 'border-l-blue-500 bg-blue-50'
+      case 'message_delivered':
         return 'border-l-green-500 bg-green-50'
+      case 'message_read':
+        return 'border-l-purple-500 bg-purple-50'
       case 'message_failed':
         return 'border-l-red-500 bg-red-50'
       case 'campaign_paused':
