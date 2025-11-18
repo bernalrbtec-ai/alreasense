@@ -733,8 +733,11 @@ class EvolutionWebhookView(APIView):
             # Update status based on Evolution API status
             if status in ['delivered', 'delivery_ack']:
                 campaign_contact.delivered_at = timezone.now()
-                campaign_contact.status = 'delivered'
+                # ✅ CORREÇÃO: Só atualizar status para 'delivered' se ainda não foi lido
+                if campaign_contact.status != 'read':
+                    campaign_contact.status = 'delivered'
                 logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como entregue (status: {status})")
+                logger.info(f"   Status final: {campaign_contact.status}, delivered_at: {campaign_contact.delivered_at}")
                 
             elif status in ['read', 'read_ack']:
                 # Se ainda não foi entregue, marcar como entregue primeiro
@@ -744,6 +747,7 @@ class EvolutionWebhookView(APIView):
                 campaign_contact.read_at = timezone.now()
                 campaign_contact.status = 'read'
                 logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como lido (status: {status})")
+                logger.info(f"   Status final: {campaign_contact.status}, read_at: {campaign_contact.read_at}")
                 
             elif status in ['failed', 'error']:
                 campaign_contact.failed_at = timezone.now()
@@ -756,7 +760,7 @@ class EvolutionWebhookView(APIView):
                 return False
             
             campaign_contact.save(update_fields=['status', 'delivered_at', 'read_at', 'failed_at', 'error_message'])
-            logger.info(f"✅ [WEBHOOK] CampaignContact salvo com sucesso")
+            logger.info(f"✅ [WEBHOOK] CampaignContact salvo com sucesso. Status: {campaign_contact.status}")
             
             # 📊 ATUALIZAR LOG COM INFORMAÇÕES DE ENTREGA/LEITURA
             self.update_campaign_log(campaign_contact, status)
@@ -859,17 +863,31 @@ class EvolutionWebhookView(APIView):
         try:
             from apps.campaigns.models import CampaignContact
             from django.db import models
+            from django.db.models import Q
             
             total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
-            sent_count = CampaignContact.objects.filter(campaign=campaign, status__in=['sent', 'delivered', 'read']).count()
-            # Contar como entregues: mensagens com status 'delivered' OU que foram lidas (têm read_at)
-            from django.db.models import Q
+            
+            # ✅ CORREÇÃO: Contar enviadas como todas que têm sent_at OU status 'sent', 'delivered', 'read'
+            sent_count = CampaignContact.objects.filter(
+                campaign=campaign
+            ).filter(
+                Q(sent_at__isnull=False) | Q(status__in=['sent', 'delivered', 'read'])
+            ).distinct().count()
+            
+            # ✅ CORREÇÃO: Contar como entregues: mensagens com delivered_at OU status 'delivered' OU 'read'
             delivered_count = CampaignContact.objects.filter(
                 campaign=campaign
             ).filter(
-                Q(status='delivered') | Q(read_at__isnull=False)
-            ).count()
-            read_count = CampaignContact.objects.filter(campaign=campaign, status='read').count()
+                Q(delivered_at__isnull=False) | Q(status__in=['delivered', 'read'])
+            ).distinct().count()
+            
+            # ✅ CORREÇÃO: Contar como lidas: mensagens com read_at OU status 'read'
+            read_count = CampaignContact.objects.filter(
+                campaign=campaign
+            ).filter(
+                Q(read_at__isnull=False) | Q(status='read')
+            ).distinct().count()
+            
             failed_count = CampaignContact.objects.filter(campaign=campaign, status='failed').count()
             
             # Atualizar campos da campanha
@@ -879,10 +897,15 @@ class EvolutionWebhookView(APIView):
             campaign.messages_failed = failed_count
             campaign.save(update_fields=['messages_sent', 'messages_delivered', 'messages_read', 'messages_failed'])
             
-            logger.info(f"✅ Campaign {campaign.id} stats updated: {sent_count} sent, {delivered_count} delivered, {read_count} read, {failed_count} failed")
+            logger.info(f"✅ [WEBHOOK] Campaign {campaign.id} stats updated:")
+            logger.info(f"   Total contacts: {total_contacts}")
+            logger.info(f"   Sent: {sent_count}")
+            logger.info(f"   Delivered: {delivered_count}")
+            logger.info(f"   Read: {read_count}")
+            logger.info(f"   Failed: {failed_count}")
             
         except Exception as e:
-            logger.error(f"Error updating campaign stats: {str(e)}")
+            logger.error(f"❌ [WEBHOOK] Error updating campaign stats: {str(e)}", exc_info=True)
     
     def update_message_model_by_message_id(self, message_id, status):
         """Update Message model status by WhatsApp message ID."""
