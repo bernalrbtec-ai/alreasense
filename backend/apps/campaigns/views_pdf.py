@@ -214,21 +214,43 @@ def export_campaign_pdf(request, campaign_id):
             read_time = cc.read_at.strftime('%d/%m/%Y %H:%M:%S') if cc.read_at else '-'
             visualizado = 'Sim' if cc.read_at else ('Entregue' if cc.delivered_at else 'Não')
             
-            # Mensagem enviada (do message_used ou buscar do log)
+            # Mensagem enviada (buscar do log primeiro, depois message_used, depois padrão)
             message_sent = ''
-            if cc.message_used:
-                message_sent = cc.message_used.content[:100] + '...' if len(cc.message_used.content) > 100 else cc.message_used.content
-            else:
-                # Tentar buscar do log
-                sent_log = logs.filter(
-                    campaign_contact=cc,
-                    log_type='message_sent'
-                ).first()
-                if sent_log and sent_log.details and 'message_content' in sent_log.details:
-                    message_content = sent_log.details['message_content']
-                    message_sent = message_content[:100] + '...' if len(message_content) > 100 else message_content
-                else:
-                    message_sent = default_message[:100] + '...' if len(default_message) > 100 else default_message
+            # ✅ CORREÇÃO: Buscar primeiro do log (mensagem processada com variáveis substituídas)
+            sent_log = logs.filter(
+                campaign_contact=cc,
+                log_type='message_sent'
+            ).first()
+            
+            if sent_log and sent_log.details:
+                # ✅ CORREÇÃO: Usar 'message_text' ao invés de 'message_content'
+                if 'message_text' in sent_log.details:
+                    message_sent = sent_log.details['message_text']
+                elif 'message_content' in sent_log.details:
+                    message_sent = sent_log.details['message_content']
+            
+            # Se não encontrou no log, tentar do message_used (mas sem variáveis substituídas)
+            if not message_sent and cc.message_used:
+                message_sent = cc.message_used.content
+            
+            # Fallback para mensagem padrão
+            if not message_sent:
+                message_sent = default_message
+            
+            # Limitar tamanho para exibição (mas manter completo no PDF)
+            message_display = message_sent[:200] + '...' if len(message_sent) > 200 else message_sent
+            
+            # ✅ MELHORIA: Usar Paragraph para quebra de linha automática na mensagem
+            message_paragraph = Paragraph(
+                message_display.replace('\n', '<br/>'),
+                ParagraphStyle(
+                    'MessageCell',
+                    parent=normal_style,
+                    fontSize=8,
+                    leading=10,
+                    alignment=TA_LEFT
+                )
+            )
             
             contact_rows.append([
                 contact_name,
@@ -236,19 +258,23 @@ def export_campaign_pdf(request, campaign_id):
                 sent_time,
                 delivered_time,
                 visualizado,
-                message_sent
+                message_paragraph  # Usar Paragraph ao invés de string simples
             ])
         
         # Combinar cabeçalho com dados
         table_data = header_data + contact_rows
         
-        # Criar tabela (ajustar larguras para A4)
-        contact_table = Table(table_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2*cm, 5*cm])
+        # ✅ MELHORIA: Criar tabela com larguras ajustadas para melhor formatação
+        # A4 width = 21cm, margens padrão = 2.5cm cada lado = 16cm disponível
+        contact_table = Table(table_data, colWidths=[3*cm, 2.2*cm, 2.2*cm, 2.2*cm, 1.8*cm, 4.6*cm])
         contact_table.setStyle(TableStyle([
             # Cabeçalho
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
             ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
-            ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+            ('ALIGN', (0, 0), (4, 0), 'CENTER'),  # Centralizar cabeçalhos exceto mensagem
+            ('ALIGN', (5, 0), (5, 0), 'LEFT'),  # Mensagem alinhada à esquerda
+            ('ALIGN', (0, 1), (4, -1), 'CENTER'),  # Dados centralizados exceto mensagem
+            ('ALIGN', (5, 1), (5, -1), 'LEFT'),  # Mensagem alinhada à esquerda
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('FONTSIZE', (0, 0), (-1, 0), 9),
             ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
@@ -259,15 +285,19 @@ def export_campaign_pdf(request, campaign_id):
             
             # Fonte e padding das células
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
-            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('FONTSIZE', (0, 1), (4, -1), 8),  # Colunas normais
+            ('FONTSIZE', (5, 1), (5, -1), 7),  # Mensagem menor
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
+            ('TOPPADDING', (0, 1), (-1, -1), 8),
+            ('LEFTPADDING', (0, 1), (-1, -1), 4),
+            ('RIGHTPADDING', (0, 1), (-1, -1), 4),
             
             # Grid
             ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
             
-            # Quebra de linha automática
+            # Quebra de linha automática e alinhamento vertical
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+            ('WORDWRAP', (5, 1), (5, -1), True),  # Quebra de palavra na coluna de mensagem
         ]))
         
         story.append(contact_table)

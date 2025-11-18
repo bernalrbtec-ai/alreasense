@@ -88,6 +88,31 @@ const CampaignsPage: React.FC = () => {
     return () => clearInterval(interval)
   }, [showStoppedCampaigns])
 
+  // ✅ MELHORIA: Polling automático para atualizar logs quando o modal está aberto
+  useEffect(() => {
+    if (!showLogsModal || !selectedCampaignForLogs) return
+
+    const fetchLogs = async () => {
+      try {
+        const response = await api.get(`/campaigns/logs/?campaign_id=${selectedCampaignForLogs.id}`)
+        const data = response.data
+        
+        if (data.success) {
+          setLogs(data.logs)
+        }
+      } catch (error: any) {
+        console.error('Erro ao atualizar logs:', error)
+      }
+    }
+
+    // Buscar imediatamente
+    fetchLogs()
+
+    // Polling a cada 3 segundos quando o modal está aberto
+    const interval = setInterval(fetchLogs, 3000)
+    return () => clearInterval(interval)
+  }, [showLogsModal, selectedCampaignForLogs])
+
   const fetchData = async (showLoading = false) => {
     try {
       if (showLoading) {
