@@ -142,8 +142,17 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         api.get('/contacts/tags/stats/') // Usar endpoint de stats para contagem real
       ])
       
-      setInstances(instancesRes.data.results || instancesRes.data || [])
+      const instancesData = instancesRes.data.results || instancesRes.data || []
+      setInstances(instancesData)
       setTags(tagsStatsRes.data.tags || []) // Usar dados do stats
+      
+      // ✅ MELHORIA: Selecionar automaticamente a primeira instância se nenhuma estiver selecionada
+      setFormData(prev => {
+        if (prev.instance_ids.length === 0 && instancesData.length > 0) {
+          return { ...prev, instance_ids: [instancesData[0].id] }
+        }
+        return prev
+      })
       
       // Não precisamos mais buscar todos os contatos aqui
       // Eles serão carregados sob demanda quando necessário
@@ -210,14 +219,22 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
 
   const handleNext = () => {
     if (canProceed() && step < 6) {
-      console.log(`🔄 [NAVIGATION] Indo do step ${step} para ${step + 1}`)
+      const nextStep = step + 1
+      console.log(`🔄 [NAVIGATION] Indo do step ${step} para ${nextStep}`)
       console.log(`🔍 [NAVIGATION] Estado atual:`, {
         audience_type: formData.audience_type,
         tag_id: formData.tag_id,
         contact_ids: formData.contact_ids,
         contact_count: formData.contact_ids.length
       })
-      setStep(step + 1)
+      
+      // ✅ MELHORIA: Ao entrar no step 4 (Instâncias), selecionar automaticamente a primeira se nenhuma estiver selecionada
+      if (nextStep === 4 && formData.instance_ids.length === 0 && instances.length > 0) {
+        console.log(`✅ [NAVIGATION] Selecionando automaticamente a primeira instância: ${instances[0].id}`)
+        setFormData(prev => ({ ...prev, instance_ids: [instances[0].id] }))
+      }
+      
+      setStep(nextStep)
     } else {
       console.log(`❌ [NAVIGATION] Não pode prosseguir do step ${step}:`, {
         canProceed: canProceed(),
