@@ -824,9 +824,13 @@ class RabbitMQConsumer:
                             @sync_to_async
                             def save_message_id():
                                 contact.whatsapp_message_id = message_id
-                                contact.save()
+                                contact.save(update_fields=['whatsapp_message_id'])
+                                logger.info(f"✅ [AIO-PIKA] whatsapp_message_id salvo: {message_id} para contact {contact.id}")
                             
                             await save_message_id()
+                        else:
+                            logger.warning(f"⚠️ [AIO-PIKA] message_id não encontrado na resposta para {contact_phone}")
+                            logger.warning(f"   Response data: {response_data}")
                         
                         # ✅ CORREÇÃO: Atualizar next_message_scheduled_at após envio bem-sucedido
                         # Calcular próximo disparo baseado no intervalo da campanha (valores configurados)
