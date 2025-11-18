@@ -12,68 +12,107 @@
 -- 3. Todas as campanhas, mensagens, contatos, logs e notificações serão deletadas
 --
 -- ============================================================
+-- NOTA: Este script usa blocos DO com tratamento de erros
+-- para que um erro em uma tabela não impeça a limpeza das outras
+-- ============================================================
 
 BEGIN;
 
 -- ============================================================
 -- 1. DELETAR NOTIFICAÇÕES DE CAMPANHAS
 -- ============================================================
-DELETE FROM campaigns_notification 
-WHERE tenant_id IN (
-    SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
-);
+DO $$
+BEGIN
+    DELETE FROM campaigns_notification 
+    WHERE tenant_id IN (
+        SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
+    );
+    RAISE NOTICE 'Notificações deletadas com sucesso';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Erro ao deletar notificações: %', SQLERRM;
+END $$;
 
 -- ============================================================
 -- 2. DELETAR LOGS DE CAMPANHAS
 -- ============================================================
-DELETE FROM campaigns_log 
-WHERE campaign_id IN (
-    SELECT id FROM campaigns_campaign 
-    WHERE tenant_id IN (
-        SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
-    )
-);
+DO $$
+BEGIN
+    DELETE FROM campaigns_log 
+    WHERE campaign_id IN (
+        SELECT id FROM campaigns_campaign 
+        WHERE tenant_id IN (
+            SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
+        )
+    );
+    RAISE NOTICE 'Logs deletados com sucesso';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Erro ao deletar logs: %', SQLERRM;
+END $$;
 
 -- ============================================================
 -- 3. DELETAR CONTATOS DE CAMPANHAS (CampaignContact)
 -- ============================================================
-DELETE FROM campaigns_contact 
-WHERE campaign_id IN (
-    SELECT id FROM campaigns_campaign 
-    WHERE tenant_id IN (
-        SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
-    )
-);
+DO $$
+BEGIN
+    DELETE FROM campaigns_contact 
+    WHERE campaign_id IN (
+        SELECT id FROM campaigns_campaign 
+        WHERE tenant_id IN (
+            SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
+        )
+    );
+    RAISE NOTICE 'Contatos de campanha deletados com sucesso';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Erro ao deletar contatos de campanha: %', SQLERRM;
+END $$;
 
 -- ============================================================
 -- 4. DELETAR MENSAGENS DE CAMPANHAS (CampaignMessage)
 -- ============================================================
-DELETE FROM campaigns_message 
-WHERE campaign_id IN (
-    SELECT id FROM campaigns_campaign 
-    WHERE tenant_id IN (
-        SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
-    )
-);
+DO $$
+BEGIN
+    DELETE FROM campaigns_message 
+    WHERE campaign_id IN (
+        SELECT id FROM campaigns_campaign 
+        WHERE tenant_id IN (
+            SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
+        )
+    );
+    RAISE NOTICE 'Mensagens deletadas com sucesso';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Erro ao deletar mensagens: %', SQLERRM;
+END $$;
 
 -- ============================================================
 -- 5. DELETAR RELACIONAMENTOS MANY-TO-MANY (Campaign <-> WhatsAppInstance)
 -- ============================================================
-DELETE FROM campaigns_campaign_instances 
-WHERE campaign_id IN (
-    SELECT id FROM campaigns_campaign 
-    WHERE tenant_id IN (
-        SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
-    )
-);
+DO $$
+BEGIN
+    DELETE FROM campaigns_campaign_instances 
+    WHERE campaign_id IN (
+        SELECT id FROM campaigns_campaign 
+        WHERE tenant_id IN (
+            SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
+        )
+    );
+    RAISE NOTICE 'Relacionamentos Many-to-Many deletados com sucesso';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Erro ao deletar relacionamentos Many-to-Many: %', SQLERRM;
+END $$;
 
 -- ============================================================
 -- 6. FINALMENTE: DELETAR AS CAMPANHAS
 -- ============================================================
-DELETE FROM campaigns_campaign 
-WHERE tenant_id IN (
-    SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
-);
+DO $$
+BEGIN
+    DELETE FROM campaigns_campaign 
+    WHERE tenant_id IN (
+        SELECT id FROM tenancy_tenant WHERE name ILIKE '%RBTec Informática%'
+    );
+    RAISE NOTICE 'Campanhas deletadas com sucesso';
+EXCEPTION WHEN OTHERS THEN
+    RAISE NOTICE 'Erro ao deletar campanhas: %', SQLERRM;
+END $$;
 
 -- ============================================================
 -- VERIFICAÇÃO FINAL
@@ -136,4 +175,3 @@ WHERE campaign_id IN (
 
 -- Ou execute ROLLBACK para cancelar:
 -- ROLLBACK;
-
