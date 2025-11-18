@@ -94,15 +94,51 @@ export function UsersManager() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!editingUser && formData.password !== formData.password_confirm) {
-      toast.error('As senhas não coincidem');
-      return;
+    // ✅ CORREÇÃO: Validar senhas tanto na criação quanto na edição
+    if (!editingUser) {
+      // Na criação, senha é obrigatória
+      if (formData.password !== formData.password_confirm) {
+        toast.error('As senhas não coincidem');
+        return;
+      }
+      if (formData.password.length < 6) {
+        toast.error('A senha deve ter pelo menos 6 caracteres');
+        return;
+      }
+    } else {
+      // Na edição, senha é opcional, mas se preencher um, precisa preencher ambos
+      if (formData.password || formData.password_confirm) {
+        if (!formData.password || !formData.password_confirm) {
+          toast.error('Preencha ambos os campos de senha para alterar');
+          return;
+        }
+        if (formData.password !== formData.password_confirm) {
+          toast.error('As senhas não coincidem');
+          return;
+        }
+        if (formData.password.length < 6) {
+          toast.error('A senha deve ter pelo menos 6 caracteres');
+          return;
+        }
+      }
     }
     
     try {
       if (editingUser) {
-        // Update user (sem senha)
-        const { password, password_confirm, ...updateData } = formData;
+        // ✅ CORREÇÃO: Update user (incluindo senha se fornecida)
+        const updateData: any = {
+          first_name: formData.first_name,
+          last_name: formData.last_name,
+          role: formData.role,
+          department_ids: formData.department_ids
+        };
+        
+        // ✅ CORREÇÃO: Incluir senha apenas se foi preenchida
+        if (formData.password && formData.password_confirm) {
+          updateData.password = formData.password;
+          updateData.password_confirm = formData.password_confirm;
+        }
+        
         await api.patch(`/auth/users-api/${editingUser.id}/`, updateData);
         toast.success('Usuário atualizado!');
       } else {
@@ -339,34 +375,35 @@ export function UsersManager() {
                 </p>
               </div>
 
-              {!editingUser && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Senha *
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Confirmar Senha *
-                    </label>
-                    <input
-                      type="password"
-                      value={formData.password_confirm}
-                      onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      required
-                    />
-                  </div>
-                </>
-              )}
+              {/* ✅ CORREÇÃO: Campos de senha também na edição (opcionais) */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {editingUser ? 'Nova Senha' : 'Senha *'}
+                  {editingUser && <span className="text-xs font-normal text-gray-500 ml-1">(deixe em branco para não alterar)</span>}
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required={!editingUser}
+                  placeholder={editingUser ? "Deixe em branco para manter a senha atual" : ""}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {editingUser ? 'Confirmar Nova Senha' : 'Confirmar Senha *'}
+                  {editingUser && <span className="text-xs font-normal text-gray-500 ml-1">(deixe em branco para não alterar)</span>}
+                </label>
+                <input
+                  type="password"
+                  value={formData.password_confirm}
+                  onChange={(e) => setFormData({ ...formData, password_confirm: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                  required={!editingUser}
+                  placeholder={editingUser ? "Deixe em branco para manter a senha atual" : ""}
+                />
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
