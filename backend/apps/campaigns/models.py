@@ -751,24 +751,47 @@ class CampaignLog(models.Model):
                 # Se não encontrou log original, criar log direto
                 logger.warning(f"⚠️ [WEBHOOK_LOG] Log original não encontrado, criando log direto para {status}")
                 try:
+                    # Obter dados do campaign_contact
+                    campaign = campaign_contact.campaign
+                    instance = campaign_contact.instance_used
+                    contact = campaign_contact.contact
+                    
                     if status == 'delivered':
-                        new_log = CampaignLog.log_message_delivered(
-                            campaign=campaign_contact.campaign,
-                            instance=None,  # Pode ser None se não tiver
-                            contact=campaign_contact.contact,
-                            campaign_contact=campaign_contact
-                        )
-                        logger.info(f"✅ [WEBHOOK_LOG] Log direto de entrega criado: {new_log.id}")
+                        # ✅ CORREÇÃO: Verificar se já existe log de delivered para evitar duplicatas
+                        existing_delivered = CampaignLog.objects.filter(
+                            campaign_contact=campaign_contact,
+                            log_type='message_delivered'
+                        ).first()
+                        
+                        if not existing_delivered:
+                            new_log = CampaignLog.log_message_delivered(
+                                campaign=campaign,
+                                instance=instance,
+                                contact=contact,
+                                campaign_contact=campaign_contact
+                            )
+                            logger.info(f"✅ [WEBHOOK_LOG] Log direto de entrega criado: {new_log.id}")
+                        else:
+                            logger.info(f"ℹ️ [WEBHOOK_LOG] Log de entrega já existe: {existing_delivered.id}")
                     elif status == 'read':
-                        new_log = CampaignLog.log_message_read(
-                            campaign=campaign_contact.campaign,
-                            instance=None,
-                            contact=campaign_contact.contact,
-                            campaign_contact=campaign_contact
-                        )
-                        logger.info(f"✅ [WEBHOOK_LOG] Log direto de leitura criado: {new_log.id}")
+                        # ✅ CORREÇÃO: Verificar se já existe log de read para evitar duplicatas
+                        existing_read = CampaignLog.objects.filter(
+                            campaign_contact=campaign_contact,
+                            log_type='message_read'
+                        ).first()
+                        
+                        if not existing_read:
+                            new_log = CampaignLog.log_message_read(
+                                campaign=campaign,
+                                instance=instance,
+                                contact=contact,
+                                campaign_contact=campaign_contact
+                            )
+                            logger.info(f"✅ [WEBHOOK_LOG] Log direto de leitura criado: {new_log.id}")
+                        else:
+                            logger.info(f"ℹ️ [WEBHOOK_LOG] Log de leitura já existe: {existing_read.id}")
                 except Exception as e:
-                    logger.error(f"❌ [WEBHOOK_LOG] Erro ao criar log direto de {status}: {e}")
+                    logger.error(f"❌ [WEBHOOK_LOG] Erro ao criar log direto de {status}: {e}", exc_info=True)
                 
         except Exception as e:
             logger.error(f"❌ [WEBHOOK_LOG] Erro geral em update_message_delivery_status: {e}")

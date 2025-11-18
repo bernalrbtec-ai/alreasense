@@ -101,31 +101,12 @@ const CampaignsPage: React.FC = () => {
       const logsResponse = await api.get(`/campaigns/logs/?campaign_id=${campaignId}&page_size=10000`)
       const logsData = logsResponse.data
       
-      // ✅ CORREÇÃO: Também atualizar dados da campanha para ter estatísticas atualizadas
-      const campaignResponse = await api.get(`/campaigns/${campaignId}/`)
-      const campaignData = campaignResponse.data
-      
       if (logsData.success && logsData.logs) {
         // ✅ CORREÇÃO: Atualizar logs mesmo se já existirem
         setLogs(logsData.logs)
         
-        // ✅ CORREÇÃO: Atualizar dados da campanha para ter estatísticas corretas
-        setSelectedCampaignForLogs({
-          ...selectedCampaignForLogs,
-          messages_sent: campaignData.messages_sent || 0,
-          messages_delivered: campaignData.messages_delivered || 0,
-          messages_read: campaignData.messages_read || 0,
-          messages_failed: campaignData.messages_failed || 0,
-        })
-        
         console.log(`✅ [LOGS] Atualizados ${logsData.logs.length} logs para campanha ${campaignId}`)
-        console.log(`   📊 Estatísticas da campanha:`, {
-          sent: campaignData.messages_sent || 0,
-          delivered: campaignData.messages_delivered || 0,
-          read: campaignData.messages_read || 0,
-          failed: campaignData.messages_failed || 0,
-        })
-        console.log(`   📊 Estatísticas dos logs:`, {
+        console.log(`   📊 Estatísticas dos logs (unificado):`, {
           sent: logsData.logs.filter((l: any) => l.log_type === 'message_sent').length,
           delivered: logsData.logs.filter((l: any) => l.log_type === 'message_delivered').length,
           read: logsData.logs.filter((l: any) => l.log_type === 'message_read').length,
@@ -491,37 +472,29 @@ const CampaignsPage: React.FC = () => {
               ) : (
                 <div className="space-y-3 sm:space-y-4">
                   {/* Estatísticas Rápidas */}
-                  {/* ✅ CORREÇÃO: Usar dados da campanha (mais confiável) ao invés de contar logs */}
+                  {/* ✅ CORREÇÃO: Contar apenas logs separados (unificado) */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-4 mb-4">
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-blue-600">
-                        {selectedCampaignForLogs.messages_sent || logs.filter((log: any) => log.log_type === 'message_sent').length}
+                        {logs.filter((log: any) => log.log_type === 'message_sent').length}
                       </div>
                       <div className="text-xs sm:text-sm text-blue-800">Enviadas</div>
                     </div>
                     <div className="bg-green-50 border border-green-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-green-600">
-                        {selectedCampaignForLogs.messages_delivered || logs.filter((log: any) => {
-                          // Contar logs de delivered OU logs de sent com delivery_status
-                          return log.log_type === 'message_delivered' || 
-                                 (log.log_type === 'message_sent' && log.extra_data?.delivery_status === 'delivered')
-                        }).length}
+                        {logs.filter((log: any) => log.log_type === 'message_delivered').length}
                       </div>
                       <div className="text-xs sm:text-sm text-green-800">Entregues</div>
                     </div>
                     <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-purple-600">
-                        {selectedCampaignForLogs.messages_read || logs.filter((log: any) => {
-                          // Contar logs de read OU logs de sent com delivery_status read
-                          return log.log_type === 'message_read' || 
-                                 (log.log_type === 'message_sent' && log.extra_data?.delivery_status === 'read')
-                        }).length}
+                        {logs.filter((log: any) => log.log_type === 'message_read').length}
                       </div>
                       <div className="text-xs sm:text-sm text-purple-800">Lidas</div>
                     </div>
                     <div className="bg-red-50 border border-red-200 rounded-lg p-2 sm:p-3 text-center">
                       <div className="text-lg sm:text-xl font-bold text-red-600">
-                        {selectedCampaignForLogs.messages_failed || logs.filter((log: any) => log.log_type === 'message_failed').length}
+                        {logs.filter((log: any) => log.log_type === 'message_failed').length}
                       </div>
                       <div className="text-xs sm:text-sm text-red-800">Falhas</div>
                     </div>
