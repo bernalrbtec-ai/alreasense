@@ -142,6 +142,11 @@ class CampaignSerializer(serializers.ModelSerializer):
         tag_id = self.context.get('tag_id')
         contact_ids = self.context.get('contact_ids', [])
         
+        # ✅ MELHORIA: Se scheduled_at foi fornecido, definir status como 'scheduled'
+        scheduled_at = validated_data.get('scheduled_at')
+        if scheduled_at:
+            validated_data['status'] = 'scheduled'
+        
         # Criar campanha
         campaign = Campaign.objects.create(**validated_data)
         
