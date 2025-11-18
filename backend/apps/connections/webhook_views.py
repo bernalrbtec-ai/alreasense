@@ -799,7 +799,10 @@ class EvolutionWebhookView(APIView):
                 self.update_campaign_stats(campaign_contact.campaign)
                 
         except Exception as e:
-            logger.error(f"Error updating campaign contact status: {str(e)}")
+            # ✅ CORREÇÃO: Garantir que logger está disponível
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating campaign contact status: {str(e)}", exc_info=True)
     
     def update_campaign_log(self, campaign_contact, status):
         """Atualizar log existente com informações de entrega/leitura"""
