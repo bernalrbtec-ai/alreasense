@@ -98,6 +98,11 @@ def export_campaign_pdf(request, campaign_id):
         story.append(Paragraph("Relatório de Campanha", title_style))
         story.append(Spacer(1, 0.5*cm))
         
+        # Buscar mensagens da campanha para exibir mensagem padrão
+        from .models import CampaignMessage
+        campaign_messages = CampaignMessage.objects.filter(campaign=campaign).order_by('order')
+        default_message = campaign_messages.first().content if campaign_messages.exists() else 'Nenhuma mensagem configurada'
+        
         # Informações básicas
         info_data = [
             ['Campanha:', campaign.name],
@@ -122,7 +127,23 @@ def export_campaign_pdf(request, campaign_id):
         ]))
         
         story.append(info_table)
-        story.append(Spacer(1, 1*cm))
+        story.append(Spacer(1, 0.5*cm))
+        
+        # Mensagem padrão
+        story.append(Paragraph("Mensagem Padrão", heading_style))
+        message_style = ParagraphStyle(
+            'MessageStyle',
+            parent=normal_style,
+            fontSize=10,
+            textColor=colors.black,
+            alignment=TA_LEFT,
+            leftIndent=0.5*cm,
+            rightIndent=0.5*cm,
+            backColor=colors.HexColor('#f9fafb'),
+            borderPadding=8,
+        )
+        story.append(Paragraph(default_message.replace('\n', '<br/>'), message_style))
+        story.append(Spacer(1, 0.5*cm))
         
         # Gráficos de estatísticas
         story.append(Paragraph("Estatísticas de Envio", heading_style))
@@ -179,7 +200,7 @@ def export_campaign_pdf(request, campaign_id):
         story.append(Paragraph("Relatório Detalhado por Contato", heading_style))
         
         # Cabeçalho da tabela
-        header_data = [['Contato', 'Número', 'Hora do Disparo', 'Hora da Entrega', 'Visualizado', 'OBS']]
+        header_data = [['Contato', 'Número', 'Hora do Disparo', 'Hora da Entrega', 'Visualizado', 'Mensagem Enviada']]
         
         # Dados dos contatos
         contact_rows = []
@@ -193,14 +214,21 @@ def export_campaign_pdf(request, campaign_id):
             read_time = cc.read_at.strftime('%d/%m/%Y %H:%M:%S') if cc.read_at else '-'
             visualizado = 'Sim' if cc.read_at else ('Entregue' if cc.delivered_at else 'Não')
             
-            # Observações
-            obs = ''
-            if cc.error_message:
-                obs = f"Erro: {cc.error_message[:50]}"
-            elif cc.status == 'failed':
-                obs = 'Falha no envio'
-            elif cc.retry_count > 0:
-                obs = f'{cc.retry_count} tentativa(s)'
+            # Mensagem enviada (do message_used ou buscar do log)
+            message_sent = ''
+            if cc.message_used:
+                message_sent = cc.message_used.content[:100] + '...' if len(cc.message_used.content) > 100 else cc.message_used.content
+            else:
+                # Tentar buscar do log
+                sent_log = logs.filter(
+                    campaign_contact=cc,
+                    log_type='message_sent'
+                ).first()
+                if sent_log and sent_log.details and 'message_content' in sent_log.details:
+                    message_content = sent_log.details['message_content']
+                    message_sent = message_content[:100] + '...' if len(message_content) > 100 else message_content
+                else:
+                    message_sent = default_message[:100] + '...' if len(default_message) > 100 else default_message
             
             contact_rows.append([
                 contact_name,
@@ -208,14 +236,14 @@ def export_campaign_pdf(request, campaign_id):
                 sent_time,
                 delivered_time,
                 visualizado,
-                obs
+                message_sent
             ])
         
         # Combinar cabeçalho com dados
         table_data = header_data + contact_rows
         
         # Criar tabela (ajustar larguras para A4)
-        contact_table = Table(table_data, colWidths=[4*cm, 3*cm, 3*cm, 3*cm, 2.5*cm, 4.5*cm])
+        contact_table = Table(table_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 2*cm, 5*cm])
         contact_table.setStyle(TableStyle([
             # Cabeçalho
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
