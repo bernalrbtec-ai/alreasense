@@ -1,8 +1,9 @@
 # ✅ CHECKLIST DE DEPLOY - SISTEMA DE MÍDIA
 
-> **Data:** 18 de Novembro de 2025 - 10:35 BRT  
+> **Data:** 18 de Novembro de 2025 - 10:40 BRT  
 > **Versão:** 2025.11.18 - Fix webhooks e campanhas  
 > **Deploy:** Railway Automatic  
+> **Status:** Testando detecção automática após interrupção Cloudflare  
 
 ## 📝 Últimas Mudanças (18/11/2025)
 
