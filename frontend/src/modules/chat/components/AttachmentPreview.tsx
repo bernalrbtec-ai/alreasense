@@ -358,13 +358,6 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
                   WebkitUserSelect: 'none',
                 }}
               />
-              
-              {/* Nome do arquivo no rodapé */}
-              {attachment.original_filename && (
-                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-lg text-sm max-w-[90%] truncate">
-                  {attachment.original_filename}
-                </div>
-              )}
             </div>
           </div>
         )}
@@ -426,7 +419,6 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           <source src={fileUrl} type={attachment.mime_type} />
           Seu navegador não suporta vídeo.
         </video>
-        <p className="text-xs text-gray-500 mt-1">{attachment.original_filename}</p>
       </div>
     );
   }
@@ -719,11 +711,6 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         <div className={`w-16 h-16 ${docStyle.iconBg} rounded-lg flex items-center justify-center mb-3`}>
           <FileText className={docStyle.iconColor} size={40} />
         </div>
-        
-        {/* Nome do arquivo */}
-        <p className="text-sm font-medium text-gray-900 text-center mb-1 px-2 break-words w-full">
-          {filename}
-        </p>
         
         {/* Tamanho do arquivo */}
         <p className="text-xs text-gray-500 mb-3">

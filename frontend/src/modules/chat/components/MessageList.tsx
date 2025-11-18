@@ -359,9 +359,6 @@ export function MessageList() {
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">
-            {attachment.original_filename}
-          </p>
           <p className="text-xs text-gray-500">
             {isDownloading ? 'Baixando...' : formatFileSize(attachment.size_bytes)}
           </p>
