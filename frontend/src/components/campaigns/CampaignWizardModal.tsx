@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { X, ChevronRight, ChevronLeft, Check, AlertCircle, Info, Send, Users, MessageSquare, Settings, Eye, Zap } from 'lucide-react'
+import { X, ChevronRight, ChevronLeft, Check, AlertCircle, Info, Send, Users, MessageSquare, Settings, Eye, Zap, Play } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
 import { MessageVariables } from './MessageVariables'
 import { renderMessagePreview } from '../../hooks/useMessageVariables'
+import ConfirmDialog from '../ui/ConfirmDialog'
 
 interface CampaignWizardModalProps {
   onClose: () => void
@@ -44,6 +45,8 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
   const [contacts, setContacts] = useState<Contact[]>([])
   const [tagContacts, setTagContacts] = useState<Contact[]>([])  // ✅ Contatos da tag selecionada
   const [isLoading, setIsLoading] = useState(false)
+  const [showStartCampaignModal, setShowStartCampaignModal] = useState(false)
+  const [createdCampaignId, setCreatedCampaignId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     // Step 1: Básico
@@ -314,19 +317,21 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
         throw new Error('Pelo menos uma mensagem é obrigatória')
       }
 
-      await api.post('/campaigns/', payload)
+      // ✅ MELHORIA: Sempre salvar como rascunho primeiro (remover scheduled_at se existir)
+      const draftPayload = {
+        ...payload,
+        scheduled_at: null  // Sempre criar como rascunho primeiro
+      }
+      
+      const response = await api.post('/campaigns/', draftPayload)
+      const campaignId = response.data.id
       
       // ✅ Garantir que toast seja atualizado ANTES dos callbacks
       updateToastSuccess(toastId, 'criar', 'Campanha')
       
-      // ✅ Executar callbacks em try/catch separado para não afetar o toast
-      try {
-      onSuccess()
-      onClose()
-      } catch (callbackError) {
-        console.error('Erro nos callbacks:', callbackError)
-        // Toast já foi atualizado, não afeta o resultado
-      }
+      // ✅ MELHORIA: Mostrar modal perguntando se quer iniciar
+      setCreatedCampaignId(campaignId)
+      setShowStartCampaignModal(true)
       
     } catch (error: any) {
       console.error('Erro ao salvar campanha:', error)
@@ -334,6 +339,33 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleStartCampaign = async () => {
+    if (!createdCampaignId) return
+    
+    setIsLoading(true)
+    const toastId = showLoadingToast('iniciando', 'Campanha')
+    
+    try {
+      await api.post(`/campaigns/${createdCampaignId}/start/`)
+      updateToastSuccess(toastId, 'iniciada', 'Campanha')
+      
+      setShowStartCampaignModal(false)
+      onSuccess()
+      onClose()
+    } catch (error: any) {
+      console.error('Erro ao iniciar campanha:', error)
+      updateToastError(toastId, 'iniciar', 'Campanha', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleSaveAsDraft = () => {
+    setShowStartCampaignModal(false)
+    onSuccess()
+    onClose()
   }
 
   const addMessage = () => {
