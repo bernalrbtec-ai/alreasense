@@ -18,16 +18,18 @@ interface TagEditModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
-  onDelete: (tag: Tag, deleteContacts: boolean) => void
+  onDelete: (tag: Tag, deleteContacts: boolean, migrateToTagId?: string) => void
+  availableTags?: Tag[]
 }
 
-export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete }: TagEditModalProps) {
+export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete, availableTags = [] }: TagEditModalProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState('#3B82F6')
   const [description, setDescription] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [deleteContacts, setDeleteContacts] = useState(false)
+  const [deleteOption, setDeleteOption] = useState<'remove' | 'migrate' | 'delete'>('remove')
+  const [migrateToTagId, setMigrateToTagId] = useState<string>('')
 
   useEffect(() => {
     if (tag && isOpen) {
@@ -35,7 +37,8 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
       setColor(tag.color)
       setDescription(tag.description || '')
       setShowDeleteConfirm(false)
-      setDeleteContacts(false)
+      setDeleteOption('remove')
+      setMigrateToTagId('')
     }
   }, [tag, isOpen])
 
@@ -72,10 +75,15 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
   }
 
   const handleConfirmDelete = () => {
-    onDelete(tag, deleteContacts)
+    const deleteContacts = deleteOption === 'delete'
+    const migrateId = deleteOption === 'migrate' ? migrateToTagId : undefined
+    onDelete(tag, deleteContacts, migrateId)
     setShowDeleteConfirm(false)
     onClose()
   }
+
+  // Filtrar tags disponíveis (excluir a tag atual)
+  const tagsToMigrate = availableTags.filter(t => t.id !== tag?.id)
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -208,8 +216,8 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
                         <input
                           type="radio"
                           name="deleteOption"
-                          checked={!deleteContacts}
-                          onChange={() => setDeleteContacts(false)}
+                          checked={deleteOption === 'remove'}
+                          onChange={() => setDeleteOption('remove')}
                           className="mt-1"
                         />
                         <div>
@@ -222,12 +230,47 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
                         </div>
                       </label>
 
+                      {tagsToMigrate.length > 0 && (
+                        <label className="flex items-start gap-3 p-3 border border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50">
+                          <input
+                            type="radio"
+                            name="deleteOption"
+                            checked={deleteOption === 'migrate'}
+                            onChange={() => setDeleteOption('migrate')}
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-blue-900">
+                              Migrar contatos para outra tag
+                            </div>
+                            <div className="text-sm text-blue-700 mb-2">
+                              Os contatos receberão a tag escolhida antes da exclusão
+                            </div>
+                            {deleteOption === 'migrate' && (
+                              <select
+                                value={migrateToTagId}
+                                onChange={(e) => setMigrateToTagId(e.target.value)}
+                                className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                required
+                              >
+                                <option value="">Selecione uma tag...</option>
+                                {tagsToMigrate.map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </label>
+                      )}
+
                       <label className="flex items-start gap-3 p-3 border border-red-300 rounded-lg cursor-pointer hover:bg-red-50">
                         <input
                           type="radio"
                           name="deleteOption"
-                          checked={deleteContacts}
-                          onChange={() => setDeleteContacts(true)}
+                          checked={deleteOption === 'delete'}
+                          onChange={() => setDeleteOption('delete')}
                           className="mt-1"
                         />
                         <div>
@@ -258,6 +301,7 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
                 <Button
                   onClick={handleConfirmDelete}
                   className="bg-red-600 hover:bg-red-700 text-white"
+                  disabled={deleteOption === 'migrate' && !migrateToTagId}
                 >
                   <Trash2 className="h-4 w-4 mr-2" />
                   Confirmar Exclusão

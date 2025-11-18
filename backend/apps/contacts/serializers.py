@@ -207,8 +207,18 @@ class ContactSerializer(serializers.ModelSerializer):
         tag_ids = validated_data.pop('tag_ids', None)
         logger.debug(f"🔄 [SERIALIZER UPDATE] Tag IDs: {tag_ids}")
         
-        # 🆕 Inferir estado pelo DDD se não fornecido E contato não tem estado
-        if 'state' not in validated_data and not instance.state:
+        # ✅ MELHORIA: Sempre verificar UF quando telefone for alterado
+        phone_changed = 'phone' in validated_data and validated_data.get('phone') != instance.phone
+        if phone_changed:
+            phone = validated_data.get('phone')
+            if phone:
+                state = get_state_from_phone(phone)
+                if state:
+                    validated_data['state'] = state
+                    ddd = extract_ddd_from_phone(phone)
+                    logger.info(f"  ℹ️  Estado '{state}' recalculado pelo DDD {ddd} (telefone alterado)")
+        # Se telefone não mudou mas estado não está definido, tentar inferir
+        elif 'state' not in validated_data and not instance.state:
             phone = validated_data.get('phone', instance.phone)
             if phone:
                 state = get_state_from_phone(phone)

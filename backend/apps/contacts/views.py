@@ -539,12 +539,15 @@ class TagViewSet(viewsets.ModelViewSet):
         """
         Deleta tag com opções:
         - delete_contacts: Se True, deleta todos os contatos associados
-        - Se False, apenas remove a tag dos contatos
+        - migrate_to_tag_id: ID da tag para migrar os contatos antes de deletar
+        - Se ambos False/None, apenas remove a tag dos contatos
         
         DELETE /api/contacts/tags/{id}/delete_with_options/?delete_contacts=true
+        DELETE /api/contacts/tags/{id}/delete_with_options/?migrate_to_tag_id=uuid
         """
         tag = self.get_object()
         delete_contacts = request.query_params.get('delete_contacts', 'false').lower() == 'true'
+        migrate_to_tag_id = request.query_params.get('migrate_to_tag_id')
         
         # Contar contatos antes de deletar
         contact_count = tag.contacts.count()
@@ -553,10 +556,36 @@ class TagViewSet(viewsets.ModelViewSet):
             # Deletar todos os contatos associados
             tag.contacts.all().delete()
             message = f'Tag "{tag.name}" e {contact_count} contatos associados foram deletados.'
+            contacts_deleted = contact_count
+            contacts_migrated = 0
+        elif migrate_to_tag_id:
+            # Migrar contatos para outra tag antes de deletar
+            try:
+                target_tag = Tag.objects.get(id=migrate_to_tag_id, tenant=request.user.tenant)
+                contacts = tag.contacts.all()
+                
+                # Adicionar a nova tag aos contatos (sem remover outras tags)
+                for contact in contacts:
+                    contact.tags.add(target_tag)
+                
+                # Remover a tag antiga dos contatos
+                tag.contacts.clear()
+                
+                message = f'Tag "{tag.name}" foi deletada. {contact_count} contato(s) foram migrado(s) para a tag "{target_tag.name}".'
+                contacts_deleted = 0
+                contacts_migrated = contact_count
+            except Tag.DoesNotExist:
+                return Response({
+                    'status': 'error',
+                    'message': f'Tag de destino não encontrada.',
+                    'error': 'TAG_NOT_FOUND'
+                }, status=status.HTTP_404_NOT_FOUND)
         else:
             # Apenas remover a tag dos contatos (não deletar os contatos)
             tag.contacts.clear()
-            message = f'Tag "{tag.name}" foi deletada. {contact_count} contatos foram atualizados.'
+            message = f'Tag "{tag.name}" foi deletada. {contact_count} contato(s) foram atualizado(s).'
+            contacts_deleted = 0
+            contacts_migrated = 0
         
         # Deletar a tag
         tag.delete()
@@ -565,7 +594,8 @@ class TagViewSet(viewsets.ModelViewSet):
             'status': 'success',
             'message': message,
             'contacts_affected': contact_count,
-            'contacts_deleted': contact_count if delete_contacts else 0
+            'contacts_deleted': contacts_deleted,
+            'contacts_migrated': contacts_migrated
         })
     
     @action(detail=False, methods=['get'])

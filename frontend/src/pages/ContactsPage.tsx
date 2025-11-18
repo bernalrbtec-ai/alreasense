@@ -228,11 +228,16 @@ export default function ContactsPage() {
     setIsTagEditModalOpen(true)
   }
 
-  const handleDeleteTag = async (tag: Tag, deleteContacts: boolean) => {
+  const handleDeleteTag = async (tag: Tag, deleteContacts: boolean, migrateToTagId?: string) => {
     const toastId = showLoadingToast('excluir', 'Tag')
     
     try {
-      await api.delete(`/contacts/tags/${tag.id}/delete_with_options/?delete_contacts=${deleteContacts}`)
+      let url = `/contacts/tags/${tag.id}/delete_with_options/?delete_contacts=${deleteContacts}`
+      if (migrateToTagId) {
+        url = `/contacts/tags/${tag.id}/delete_with_options/?migrate_to_tag_id=${migrateToTagId}`
+      }
+      
+      await api.delete(url)
       
       // Remover tag da lista
       setTags(prev => prev.filter(t => t.id !== tag.id))
@@ -242,8 +247,9 @@ export default function ContactsPage() {
         setSelectedTag('')
       }
       
-      // Recarregar contatos se necessário
+      // Recarregar contatos e tags se necessário
       fetchContacts(currentPage)
+      fetchTags()
       
       updateToastSuccess(toastId, 'excluir', 'Tag')
     } catch (error: any) {
@@ -1073,6 +1079,7 @@ export default function ContactsPage() {
         }}
         onSuccess={handleTagEditSuccess}
         onDelete={handleDeleteTag}
+        availableTags={tags}
       />
 
       {/* Import Modal */}
