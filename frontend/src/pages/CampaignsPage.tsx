@@ -467,7 +467,7 @@ const CampaignsPage: React.FC = () => {
                         className={`border-l-4 p-4 rounded-r-lg ${getLogColor(log.log_type)}`}
                       >
                         {/* Card de Disparo com Detalhes */}
-                        {(log.log_type === 'message_sent' || log.log_type === 'message_failed') && log.contact_name ? (
+                        {(log.log_type === 'message_sent' || log.log_type === 'message_delivered' || log.log_type === 'message_read' || log.log_type === 'message_failed') && log.contact_name ? (
                           <div className="space-y-3">
                             {/* Header com Contato e Instância */}
                             <div className="flex items-center justify-between">
@@ -498,19 +498,19 @@ const CampaignsPage: React.FC = () => {
                               <div className="text-center">
                                 <div className="text-xs text-gray-500 mb-1">📤 Enviada em</div>
                                 <div className="text-sm font-medium text-gray-900">
-                                  {log.extra_data?.sent_at ? formatDate(log.extra_data.sent_at) : formatDate(log.created_at)}
+                                  {log.extra_data?.sent_at ? formatDate(log.extra_data.sent_at) : (log.log_type === 'message_sent' ? formatDate(log.created_at) : '---')}
                                 </div>
                               </div>
                               <div className="text-center border-l border-gray-200">
                                 <div className="text-xs text-gray-500 mb-1">✅ Entregue em</div>
                                 <div className="text-sm font-medium text-gray-600">
-                                  {log.extra_data?.delivered_at ? formatDate(log.extra_data.delivered_at) : '---'}
+                                  {log.extra_data?.delivered_at ? formatDate(log.extra_data.delivered_at) : (log.log_type === 'message_delivered' || log.log_type === 'message_read' ? formatDate(log.created_at) : '---')}
                                 </div>
                               </div>
                               <div className="text-center border-l border-gray-200">
                                 <div className="text-xs text-gray-500 mb-1">👁️ Visto em</div>
                                 <div className="text-sm font-medium text-gray-600">
-                                  {log.extra_data?.read_at ? formatDate(log.extra_data.read_at) : '---'}
+                                  {log.extra_data?.read_at ? formatDate(log.extra_data.read_at) : (log.log_type === 'message_read' ? formatDate(log.created_at) : '---')}
                                 </div>
                               </div>
                             </div>
