@@ -125,6 +125,21 @@ const CampaignsPage: React.FC = () => {
           read: campaignData.messages_read || 0,
           failed: campaignData.messages_failed || 0,
         })
+        console.log(`   📋 Logs separados encontrados:`, {
+          sent: logsData.logs.filter((l: any) => l.log_type === 'message_sent').length,
+          delivered: logsData.logs.filter((l: any) => l.log_type === 'message_delivered').length,
+          read: logsData.logs.filter((l: any) => l.log_type === 'message_read').length,
+          failed: logsData.logs.filter((l: any) => l.log_type === 'message_failed').length,
+        })
+        // ✅ DEBUG: Mostrar IDs dos logs de delivered e read
+        const deliveredLogs = logsData.logs.filter((l: any) => l.log_type === 'message_delivered')
+        const readLogs = logsData.logs.filter((l: any) => l.log_type === 'message_read')
+        if (deliveredLogs.length > 0) {
+          console.log(`   ✅ Logs de delivered:`, deliveredLogs.map((l: any) => ({ id: l.id, contact: l.contact_name, created: l.created_at })))
+        }
+        if (readLogs.length > 0) {
+          console.log(`   👁️ Logs de read:`, readLogs.map((l: any) => ({ id: l.id, contact: l.contact_name, created: l.created_at })))
+        }
       }
     } catch (error: any) {
       console.error('Erro ao atualizar logs:', error)
