@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users, Download } from 'lucide-react'
+import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users, Download, Send, Eye } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
