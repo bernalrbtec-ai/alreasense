@@ -761,7 +761,10 @@ class EvolutionWebhookView(APIView):
                 return False
                 
         except Exception as e:
-            logger.error(f"Error updating campaign contact by message_id: {str(e)}")
+            # ✅ CORREÇÃO: Garantir que logger está disponível
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error updating campaign contact by message_id: {str(e)}", exc_info=True)
             return False
     
     def update_campaign_contact_status(self, message_obj, status, timestamp):
