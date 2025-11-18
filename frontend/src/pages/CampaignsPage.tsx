@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react'
-import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users, Download, Send, Eye } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users, Download, Send, Eye, RefreshCw } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
@@ -79,6 +79,7 @@ const CampaignsPage: React.FC = () => {
   const [selectedCampaignForLogs, setSelectedCampaignForLogs] = useState<Campaign | null>(null)
   const [logs, setLogs] = useState<any[]>([])
   const [showStoppedCampaigns, setShowStoppedCampaigns] = useState(false)
+  const [logsLoading, setLogsLoading] = useState(false)
 
   useEffect(() => {
     fetchData(true) // Primeira carga com loading
@@ -88,30 +89,47 @@ const CampaignsPage: React.FC = () => {
     return () => clearInterval(interval)
   }, [showStoppedCampaigns])
 
+  // ✅ MELHORIA: Função para buscar logs (reutilizável e estável com useCallback)
+  const fetchLogsForModal = useCallback(async (showLoading = false) => {
+    if (!selectedCampaignForLogs) return
+
+    try {
+      if (showLoading) setLogsLoading(true)
+      
+      const campaignId = selectedCampaignForLogs.id
+      // ✅ CORREÇÃO: Buscar TODOS os logs sem paginação (page_size=10000)
+      const response = await api.get(`/campaigns/logs/?campaign_id=${campaignId}&page_size=10000`)
+      const data = response.data
+      
+      if (data.success && data.logs) {
+        // ✅ CORREÇÃO: Atualizar logs mesmo se já existirem
+        setLogs(data.logs)
+        console.log(`✅ [LOGS] Atualizados ${data.logs.length} logs para campanha ${campaignId}`)
+        console.log(`   📊 Estatísticas:`, {
+          sent: data.logs.filter((l: any) => l.log_type === 'message_sent').length,
+          delivered: data.logs.filter((l: any) => l.log_type === 'message_delivered').length,
+          read: data.logs.filter((l: any) => l.log_type === 'message_read').length,
+          failed: data.logs.filter((l: any) => l.log_type === 'message_failed').length,
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao atualizar logs:', error)
+    } finally {
+      if (showLoading) setLogsLoading(false)
+    }
+  }, [selectedCampaignForLogs])
+
   // ✅ MELHORIA: Polling automático para atualizar logs quando o modal está aberto
   useEffect(() => {
     if (!showLogsModal || !selectedCampaignForLogs) return
 
-    const fetchLogs = async () => {
-      try {
-        const response = await api.get(`/campaigns/logs/?campaign_id=${selectedCampaignForLogs.id}`)
-        const data = response.data
-        
-        if (data.success) {
-          setLogs(data.logs)
-        }
-      } catch (error: any) {
-        console.error('Erro ao atualizar logs:', error)
-      }
-    }
-
     // Buscar imediatamente
-    fetchLogs()
+    fetchLogsForModal(true)
 
-    // Polling a cada 3 segundos quando o modal está aberto
-    const interval = setInterval(fetchLogs, 3000)
+    // ✅ CORREÇÃO: Polling a cada 2 segundos (mais frequente) quando o modal está aberto
+    const interval = setInterval(() => fetchLogsForModal(false), 2000)
     return () => clearInterval(interval)
-  }, [showLogsModal, selectedCampaignForLogs])
+  }, [showLogsModal, selectedCampaignForLogs?.id, fetchLogsForModal]) // ✅ CORREÇÃO: Incluir fetchLogsForModal nas dependências
 
   const fetchData = async (showLoading = false) => {
     try {
@@ -200,22 +218,8 @@ const CampaignsPage: React.FC = () => {
   const handleViewLogs = async (campaign: Campaign) => {
     setSelectedCampaignForLogs(campaign)
     setShowLogsModal(true)
-    
-    try {
-      // Usar a nova API de logs com filtro por campanha
-      const response = await api.get(`/campaigns/logs/?campaign_id=${campaign.id}`)
-      const data = response.data
-      
-      if (data.success) {
-        setLogs(data.logs)
-      } else {
-        console.error('Erro na API de logs:', data.error)
-        setLogs([])
-      }
-    } catch (error: any) {
-      console.error('Erro ao buscar logs:', error)
-      showErrorToast('buscar', 'Logs', error)
-    }
+    // ✅ CORREÇÃO: Os logs serão buscados automaticamente pelo useEffect quando o modal abrir
+    // Não precisa buscar aqui, o useEffect já faz isso
   }
 
   // Função para obter ícone do tipo de log
@@ -410,6 +414,16 @@ const CampaignsPage: React.FC = () => {
                 <p className="text-xs sm:text-sm text-gray-500 truncate">{selectedCampaignForLogs.name}</p>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => fetchLogsForModal(true)}
+                  disabled={logsLoading}
+                  className="flex items-center gap-2"
+                >
+                  <RefreshCw className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
+                  <span className="hidden sm:inline">Atualizar</span>
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"

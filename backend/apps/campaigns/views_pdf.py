@@ -53,14 +53,22 @@ def export_campaign_pdf(request, campaign_id):
             'message_used'
         ).order_by('sent_at', 'created_at')
         
-        # Buscar logs para estatísticas
+        # Buscar logs para estatísticas e mensagens enviadas
         logs = CampaignLog.objects.filter(campaign=campaign)
         
-        # Calcular estatísticas
-        total_sent = logs.filter(log_type='message_sent').count()
-        total_delivered = logs.filter(log_type='message_delivered').count()
-        total_read = logs.filter(log_type='message_read').count()
-        total_failed = logs.filter(log_type='message_failed').count()
+        # ✅ CORREÇÃO: Calcular estatísticas baseado nos CampaignContacts (mais confiável)
+        # Os CampaignContacts têm os timestamps corretos de delivered_at/read_at
+        total_sent = campaign_contacts.filter(sent_at__isnull=False).count()
+        total_delivered = campaign_contacts.filter(delivered_at__isnull=False).count()
+        total_read = campaign_contacts.filter(read_at__isnull=False).count()
+        total_failed = campaign_contacts.filter(status='failed').count()
+        
+        # Log para debug
+        logger.info(f"📊 [PDF] Estatísticas da campanha {campaign.id}:")
+        logger.info(f"   Enviadas: {total_sent} (logs: {logs.filter(log_type='message_sent').count()})")
+        logger.info(f"   Entregues: {total_delivered} (logs: {logs.filter(log_type='message_delivered').count()})")
+        logger.info(f"   Lidas: {total_read} (logs: {logs.filter(log_type='message_read').count()})")
+        logger.info(f"   Falhas: {total_failed} (logs: {logs.filter(log_type='message_failed').count()})")
         
         # Criar buffer para PDF
         buffer = BytesIO()
@@ -217,17 +225,21 @@ def export_campaign_pdf(request, campaign_id):
             # Mensagem enviada (buscar do log primeiro, depois message_used, depois padrão)
             message_sent = ''
             # ✅ CORREÇÃO: Buscar primeiro do log (mensagem processada com variáveis substituídas)
-            sent_log = logs.filter(
+            sent_logs = logs.filter(
                 campaign_contact=cc,
                 log_type='message_sent'
-            ).first()
+            ).order_by('-created_at')
             
-            if sent_log and sent_log.details:
-                # ✅ CORREÇÃO: Usar 'message_text' ao invés de 'message_content'
-                if 'message_text' in sent_log.details:
-                    message_sent = sent_log.details['message_text']
-                elif 'message_content' in sent_log.details:
-                    message_sent = sent_log.details['message_content']
+            # Tentar encontrar mensagem processada nos logs
+            for sent_log in sent_logs:
+                if sent_log and sent_log.details:
+                    # ✅ CORREÇÃO: Usar 'message_text' ao invés de 'message_content'
+                    if 'message_text' in sent_log.details:
+                        message_sent = sent_log.details['message_text']
+                        break
+                    elif 'message_content' in sent_log.details:
+                        message_sent = sent_log.details['message_content']
+                        break
             
             # Se não encontrou no log, tentar do message_used (mas sem variáveis substituídas)
             if not message_sent and cc.message_used:
