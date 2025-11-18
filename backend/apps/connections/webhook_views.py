@@ -699,10 +699,14 @@ class EvolutionWebhookView(APIView):
     
     def update_campaign_contact_by_message_id(self, message_id, status):
         """Update campaign contact status by WhatsApp message ID."""
+        # ✅ CORREÇÃO: Garantir que logger está no escopo local
+        import logging
+        _logger = logging.getLogger(__name__)
+        
         try:
             from apps.campaigns.models import CampaignContact
             
-            logger.info(f"🔍 [WEBHOOK] Buscando CampaignContact com message_id: {message_id}, status: {status}")
+            _logger.info(f"🔍 [WEBHOOK] Buscando CampaignContact com message_id: {message_id}, status: {status}")
             
             # Find campaign contact by WhatsApp message ID
             campaign_contact = CampaignContact.objects.filter(
@@ -711,24 +715,24 @@ class EvolutionWebhookView(APIView):
             
             if not campaign_contact:
                 # Tentar buscar sem filtro para debug
-                logger.warning(f"⚠️ [WEBHOOK] CampaignContact não encontrado com message_id: {message_id}")
-                logger.warning(f"   Tentando buscar por outros campos...")
+                _logger.warning(f"⚠️ [WEBHOOK] CampaignContact não encontrado com message_id: {message_id}")
+                _logger.warning(f"   Tentando buscar por outros campos...")
                 
                 # Buscar contatos recentes para debug
                 recent_contacts = CampaignContact.objects.filter(
                     sent_at__isnull=False
                 ).order_by('-sent_at')[:5]
                 
-                logger.warning(f"   Últimos 5 contatos enviados:")
+                _logger.warning(f"   Últimos 5 contatos enviados:")
                 for cc in recent_contacts:
-                    logger.warning(f"     - ID: {cc.id}, message_id: {cc.whatsapp_message_id}, sent_at: {cc.sent_at}")
+                    _logger.warning(f"     - ID: {cc.id}, message_id: {cc.whatsapp_message_id}, sent_at: {cc.sent_at}")
                 
                 return False
             
-            logger.info(f"✅ [WEBHOOK] CampaignContact encontrado: {campaign_contact.id} para message_id: {message_id}")
-            logger.info(f"   Status atual: {campaign_contact.status}")
-            logger.info(f"   delivered_at: {campaign_contact.delivered_at}")
-            logger.info(f"   read_at: {campaign_contact.read_at}")
+            _logger.info(f"✅ [WEBHOOK] CampaignContact encontrado: {campaign_contact.id} para message_id: {message_id}")
+            _logger.info(f"   Status atual: {campaign_contact.status}")
+            _logger.info(f"   delivered_at: {campaign_contact.delivered_at}")
+            _logger.info(f"   read_at: {campaign_contact.read_at}")
             
             # Update status based on Evolution API status
             if status in ['delivered', 'delivery_ack']:
@@ -736,31 +740,31 @@ class EvolutionWebhookView(APIView):
                 # ✅ CORREÇÃO: Só atualizar status para 'delivered' se ainda não foi lido
                 if campaign_contact.status != 'read':
                     campaign_contact.status = 'delivered'
-                logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como entregue (status: {status})")
-                logger.info(f"   Status final: {campaign_contact.status}, delivered_at: {campaign_contact.delivered_at}")
+                _logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como entregue (status: {status})")
+                _logger.info(f"   Status final: {campaign_contact.status}, delivered_at: {campaign_contact.delivered_at}")
                 
             elif status in ['read', 'read_ack']:
                 # Se ainda não foi entregue, marcar como entregue primeiro
                 if not campaign_contact.delivered_at:
                     campaign_contact.delivered_at = timezone.now()
-                    logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como entregue antes de ler")
+                    _logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como entregue antes de ler")
                 campaign_contact.read_at = timezone.now()
                 campaign_contact.status = 'read'
-                logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como lido (status: {status})")
-                logger.info(f"   Status final: {campaign_contact.status}, read_at: {campaign_contact.read_at}")
+                _logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como lido (status: {status})")
+                _logger.info(f"   Status final: {campaign_contact.status}, read_at: {campaign_contact.read_at}")
                 
             elif status in ['failed', 'error']:
                 campaign_contact.failed_at = timezone.now()
                 campaign_contact.error_message = f"Message failed: {status}"
                 campaign_contact.status = 'failed'
-                logger.info(f"❌ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como falhou (status: {status})")
+                _logger.info(f"❌ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como falhou (status: {status})")
             
             else:
-                logger.warning(f"⚠️ [WEBHOOK] Status desconhecido recebido: {status}")
+                _logger.warning(f"⚠️ [WEBHOOK] Status desconhecido recebido: {status}")
                 return False
             
             campaign_contact.save(update_fields=['status', 'delivered_at', 'read_at', 'failed_at', 'error_message'])
-            logger.info(f"✅ [WEBHOOK] CampaignContact salvo com sucesso. Status: {campaign_contact.status}")
+            _logger.info(f"✅ [WEBHOOK] CampaignContact salvo com sucesso. Status: {campaign_contact.status}")
             
             # 📊 ATUALIZAR LOG COM INFORMAÇÕES DE ENTREGA/LEITURA
             self.update_campaign_log(campaign_contact, status)
@@ -772,16 +776,16 @@ class EvolutionWebhookView(APIView):
             from apps.campaigns.models import CampaignLog
             if status in ['delivered', 'delivery_ack']:
                 CampaignLog.update_message_delivery_status(campaign_contact, 'delivered')
-                logger.info(f"✅ [WEBHOOK] Log de entrega processado")
+                _logger.info(f"✅ [WEBHOOK] Log de entrega processado")
             elif status in ['read', 'read_ack']:
                 CampaignLog.update_message_delivery_status(campaign_contact, 'read')
-                logger.info(f"✅ [WEBHOOK] Log de leitura processado")
+                _logger.info(f"✅ [WEBHOOK] Log de leitura processado")
             
             return True
                 
         except Exception as e:
-            # ✅ CORREÇÃO: logger já está definido no topo do arquivo, não precisa redefinir
-            logger.error(f"❌ [WEBHOOK] Erro ao atualizar campaign contact por message_id: {str(e)}", exc_info=True)
+            # ✅ CORREÇÃO: Usar _logger local ao invés de logger global
+            _logger.error(f"❌ [WEBHOOK] Erro ao atualizar campaign contact por message_id: {str(e)}", exc_info=True)
             return False
     
     def update_campaign_contact_status(self, message_obj, status, timestamp):
