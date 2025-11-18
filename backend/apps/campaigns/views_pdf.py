@@ -249,8 +249,31 @@ def export_campaign_pdf(request, campaign_id):
             if not message_sent:
                 message_sent = default_message
             
-            # Limitar tamanho para exibição (mas manter completo no PDF)
-            message_display = message_sent[:200] + '...' if len(message_sent) > 200 else message_sent
+            # ✅ MELHORIA: Quebrar mensagem em linhas menores para melhor formatação
+            # Limitar comprimento por linha para evitar células muito largas
+            max_chars_per_line = 40
+            message_lines = []
+            current_line = ''
+            
+            # Quebrar por palavras para não cortar no meio
+            words = message_sent.split()
+            for word in words:
+                if len(current_line) + len(word) + 1 <= max_chars_per_line:
+                    current_line += (' ' if current_line else '') + word
+                else:
+                    if current_line:
+                        message_lines.append(current_line)
+                    current_line = word
+            
+            if current_line:
+                message_lines.append(current_line)
+            
+            # Limitar a 3 linhas máximo para não estourar a célula
+            if len(message_lines) > 3:
+                message_lines = message_lines[:3]
+                message_lines[-1] = message_lines[-1][:max_chars_per_line-3] + '...'
+            
+            message_display = '<br/>'.join(message_lines)
             
             # ✅ MELHORIA: Usar Paragraph para quebra de linha automática na mensagem
             message_paragraph = Paragraph(
@@ -258,27 +281,30 @@ def export_campaign_pdf(request, campaign_id):
                 ParagraphStyle(
                     'MessageCell',
                     parent=normal_style,
-                    fontSize=8,
-                    leading=10,
-                    alignment=TA_LEFT
+                    fontSize=7,
+                    leading=9,
+                    alignment=TA_LEFT,
+                    leftIndent=2,
+                    rightIndent=2,
                 )
             )
             
             contact_rows.append([
-                contact_name,
-                contact_phone,
-                sent_time,
-                delivered_time,
-                visualizado,
-                message_paragraph  # Usar Paragraph ao invés de string simples
+                Paragraph(contact_name[:30] + '...' if len(contact_name) > 30 else contact_name, ParagraphStyle('ContactName', parent=normal_style, fontSize=8, leading=10)),
+                Paragraph(contact_phone, ParagraphStyle('ContactPhone', parent=normal_style, fontSize=8, leading=10)),
+                Paragraph(sent_time, ParagraphStyle('SentTime', parent=normal_style, fontSize=7, leading=9)),
+                Paragraph(delivered_time, ParagraphStyle('DeliveredTime', parent=normal_style, fontSize=7, leading=9)),
+                Paragraph(visualizado, ParagraphStyle('Visualizado', parent=normal_style, fontSize=8, leading=10)),
+                message_paragraph
             ])
         
         # Combinar cabeçalho com dados
         table_data = header_data + contact_rows
         
-        # ✅ MELHORIA: Criar tabela com larguras ajustadas para melhor formatação
+        # ✅ MELHORIA: Ajustar larguras das colunas para melhor distribuição
         # A4 width = 21cm, margens padrão = 2.5cm cada lado = 16cm disponível
-        contact_table = Table(table_data, colWidths=[3*cm, 2.2*cm, 2.2*cm, 2.2*cm, 1.8*cm, 4.6*cm])
+        # Distribuição: 3.5cm (Contato) + 2.5cm (Número) + 2.5cm (Disparo) + 2.5cm (Entrega) + 1.5cm (Visualizado) + 3.5cm (Mensagem) = 16cm
+        contact_table = Table(table_data, colWidths=[3.5*cm, 2.5*cm, 2.5*cm, 2.5*cm, 1.5*cm, 3.5*cm])
         contact_table.setStyle(TableStyle([
             # Cabeçalho
             ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1e40af')),
@@ -288,28 +314,29 @@ def export_campaign_pdf(request, campaign_id):
             ('ALIGN', (0, 1), (4, -1), 'CENTER'),  # Dados centralizados exceto mensagem
             ('ALIGN', (5, 1), (5, -1), 'LEFT'),  # Mensagem alinhada à esquerda
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 9),
-            ('BOTTOMPADDING', (0, 0), (-1, 0), 10),
-            ('TOPPADDING', (0, 0), (-1, 0), 10),
+            ('FONTSIZE', (0, 0), (-1, 0), 8),
+            ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
+            ('TOPPADDING', (0, 0), (-1, 0), 8),
             
             # Linhas alternadas
             ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f9fafb')]),
             
             # Fonte e padding das células
             ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
-            ('FONTSIZE', (0, 1), (4, -1), 8),  # Colunas normais
-            ('FONTSIZE', (5, 1), (5, -1), 7),  # Mensagem menor
-            ('BOTTOMPADDING', (0, 1), (-1, -1), 8),
-            ('TOPPADDING', (0, 1), (-1, -1), 8),
-            ('LEFTPADDING', (0, 1), (-1, -1), 4),
-            ('RIGHTPADDING', (0, 1), (-1, -1), 4),
+            ('FONTSIZE', (0, 1), (4, -1), 7),  # Colunas normais menores
+            ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+            ('TOPPADDING', (0, 1), (-1, -1), 6),
+            ('LEFTPADDING', (0, 1), (-1, -1), 3),
+            ('RIGHTPADDING', (0, 1), (-1, -1), 3),
             
-            # Grid
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
+            # Grid mais fino
+            ('GRID', (0, 0), (-1, -1), 0.3, colors.grey),
             
             # Quebra de linha automática e alinhamento vertical
             ('VALIGN', (0, 0), (-1, -1), 'TOP'),
             ('WORDWRAP', (5, 1), (5, -1), True),  # Quebra de palavra na coluna de mensagem
+            # ✅ MELHORIA: Altura mínima das linhas para mensagens longas
+            ('LEADING', (5, 1), (5, -1), 9),
         ]))
         
         story.append(contact_table)

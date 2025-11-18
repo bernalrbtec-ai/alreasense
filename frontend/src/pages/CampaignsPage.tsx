@@ -446,16 +446,6 @@ const CampaignsPage: React.FC = () => {
                 <Button
                   size="sm"
                   variant="outline"
-                  onClick={() => fetchLogsForModal(true)}
-                  disabled={logsLoading}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className={`h-4 w-4 ${logsLoading ? 'animate-spin' : ''}`} />
-                  <span className="hidden sm:inline">Atualizar</span>
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
                   onClick={async () => {
                     try {
                       const toastId = showLoadingToast('exportar', 'Relatório PDF')
