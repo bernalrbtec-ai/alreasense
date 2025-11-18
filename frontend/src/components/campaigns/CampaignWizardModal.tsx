@@ -551,16 +551,6 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                           <button
                             type="button"
                             onClick={() => {
-                              // ✅ Enviar para TODOS os contatos da tag (sem contact_ids específicos)
-                              setFormData({ ...formData, contact_ids: [] })
-                            }}
-                            className="text-xs text-green-600 hover:text-green-800 font-medium"
-                          >
-                            Enviar para Todos
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
                               // ✅ Selecionar todos os contatos específicos
                               setFormData({ ...formData, contact_ids: tagContacts.map(c => c.id) })
                             }}
