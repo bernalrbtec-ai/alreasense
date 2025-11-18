@@ -326,6 +326,40 @@ export function MessageList() {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  // ✅ Função para converter URLs em links clicáveis que abrem em nova aba
+  const linkifyText = useCallback((text: string): string => {
+    if (!text) return '';
+    
+    // Regex para detectar URLs (http, https, www, ou sem protocolo)
+    const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+|[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}[^\s]*)/gi;
+    
+    // Primeiro, escapar HTML para segurança
+    let escaped = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+    
+    // Converter URLs em links
+    return escaped.replace(urlRegex, (url) => {
+      // Adicionar https:// se não tiver protocolo
+      let href = url;
+      if (!url.match(/^https?:\/\//i)) {
+        href = url.startsWith('www.') ? `https://${url}` : `https://${url}`;
+      }
+      
+      // Validar URL antes de criar link
+      try {
+        new URL(href);
+        return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline break-all">${url}</a>`;
+      } catch {
+        // Se não for URL válida, retornar texto original
+        return url;
+      }
+    });
+  }, []);
+
   const renderAttachment = (attachment: MessageAttachment) => {
     const isDownloading = !attachment.file_url || attachment.file_url === '';
     
@@ -527,17 +561,12 @@ export function MessageList() {
                 )}
 
                 {/* Texto (se houver) - mostrar mesmo se só tiver anexos */}
-                {/* ✅ FIX: Sanitizar conteúdo para prevenir XSS */}
+                {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
                 {msg.content && msg.content.trim() && (
                   <p 
                     className="text-sm whitespace-pre-wrap break-words mb-1"
                     dangerouslySetInnerHTML={{ 
-                      __html: msg.content
-                        .replace(/&/g, '&amp;')
-                        .replace(/</g, '&lt;')
-                        .replace(/>/g, '&gt;')
-                        .replace(/"/g, '&quot;')
-                        .replace(/'/g, '&#039;')
+                      __html: linkifyText(msg.content)
                     }}
                   />
                 )}
