@@ -44,9 +44,12 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   const [duration, setDuration] = useState(0);
   const audioRef = useRef<HTMLAudioElement>(null);
   
-  // ✅ Fechar lightbox com ESC
+  // ✅ Fechar lightbox com ESC e prevenir scroll do body
   useEffect(() => {
     if (!lightboxOpen) return;
+    
+    // Prevenir scroll do body quando modal está aberto
+    document.body.style.overflow = 'hidden';
     
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -55,7 +58,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     };
     
     window.addEventListener('keydown', handleEscape);
-    return () => window.removeEventListener('keydown', handleEscape);
+    
+    return () => {
+      document.body.style.overflow = '';
+      window.removeEventListener('keydown', handleEscape);
+    };
   }, [lightboxOpen]);
   
   // Atualizar progresso do áudio
@@ -159,8 +166,9 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           alt={attachment.original_filename}
           // ✅ REMOVIDO: crossOrigin="anonymous" - pode estar causando problema de CORS preflight
           // Se a imagem não carregar, o servidor já está configurado para aceitar qualquer origem
-          className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition"
+          className="max-w-xs rounded-lg cursor-pointer hover:opacity-90 transition-all hover:shadow-lg"
           onClick={() => setLightboxOpen(true)}
+          title="Clique para ampliar"
           onLoad={(e) => {
             const img = e.currentTarget;
             const blobUrl = (img as any).__blobUrl;
@@ -281,32 +289,36 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           }}
         />
         
-        {/* Lightbox - Fullscreen com controles */}
+        {/* Lightbox - Fullscreen com controles melhorados */}
         {lightboxOpen && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-95 z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black bg-opacity-95 z-[9999] flex items-center justify-center p-4 animate-fade-in"
             onClick={(e) => {
               // Fechar apenas se clicar no fundo (não na imagem ou botões)
               if (e.target === e.currentTarget) {
                 setLightboxOpen(false);
               }
             }}
+            style={{
+              backdropFilter: 'blur(4px)',
+            }}
           >
             {/* Botão Fechar */}
             <button
-              className="absolute top-4 right-4 z-10 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+              className="absolute top-4 right-4 z-10 p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
               onClick={(e) => {
                 e.stopPropagation();
                 setLightboxOpen(false);
               }}
               title="Fechar (ESC)"
+              aria-label="Fechar modal"
             >
               <X size={24} />
             </button>
 
             {/* Botão Download */}
             <button
-              className="absolute top-4 right-16 z-10 p-2 bg-black/50 hover:bg-black/70 rounded-full text-white transition-colors"
+              className="absolute top-4 right-20 z-10 p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
               onClick={(e) => {
                 e.stopPropagation();
                 const link = document.createElement('a');
@@ -319,26 +331,41 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
                 document.body.removeChild(link);
               }}
               title="Baixar imagem"
+              aria-label="Baixar imagem"
             >
               <Download size={24} />
             </button>
 
-            {/* Imagem Fullscreen */}
-            <img
-              src={fileUrl}
-              alt={attachment.original_filename}
-              className="max-w-full max-h-full object-contain cursor-zoom-out"
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightboxOpen(false);
-              }}
-              onError={(e) => {
-                console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
-                  fileUrl: fileUrl.substring(0, 100),
-                  filename: attachment.original_filename
-                });
-              }}
-            />
+            {/* Imagem Fullscreen - Melhorada */}
+            <div className="relative max-w-full max-h-full flex items-center justify-center">
+              <img
+                src={fileUrl}
+                alt={attachment.original_filename}
+                className="max-w-full max-h-[90vh] object-contain cursor-zoom-out select-none"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // Não fechar ao clicar na imagem, apenas no fundo
+                }}
+                onError={(e) => {
+                  console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
+                    fileUrl: fileUrl.substring(0, 100),
+                    filename: attachment.original_filename
+                  });
+                }}
+                draggable={false}
+                style={{
+                  userSelect: 'none',
+                  WebkitUserSelect: 'none',
+                }}
+              />
+              
+              {/* Nome do arquivo no rodapé */}
+              {attachment.original_filename && (
+                <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 text-white px-4 py-2 rounded-lg text-sm max-w-[90%] truncate">
+                  {attachment.original_filename}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
