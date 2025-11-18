@@ -9,7 +9,6 @@ import {
   Play,
   Pause,
   Edit,
-  Copy,
   FileText,
   Users,
   MessageSquare,
@@ -63,7 +62,6 @@ interface CampaignCardOptimizedProps {
   onPause: (campaign: Campaign) => void
   onResume: (campaign: Campaign) => void
   onEdit: (campaign: Campaign) => void
-  onDuplicate: (campaign: Campaign) => void
   onViewLogs: (campaign: Campaign) => void
 }
 
@@ -73,7 +71,6 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
   onPause,
   onResume,
   onEdit,
-  onDuplicate,
   onViewLogs
 }) => {
   const [isHovered, setIsHovered] = useState(false)
@@ -298,17 +295,6 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                   </Button>
                 </Tooltip>
               )}
-              
-              <Tooltip content="Duplicar campanha">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => onDuplicate(campaign)}
-                  className="h-8 w-8 p-0 hover:bg-purple-100 hover:text-purple-700"
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </Tooltip>
               
               {campaign.status !== 'draft' && (
                 <Tooltip content="Ver logs">

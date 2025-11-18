@@ -61,3 +61,6 @@ loguru==0.7.2
 # Security
 cryptography>=41.0.0
 django-cryptography==1.1
+
+# PDF Generation
+reportlab==4.0.7

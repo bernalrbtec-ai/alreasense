@@ -11,6 +11,7 @@ from .views_events_debug import campaign_events_debug
 from .views_status import campaign_status
 from .views_logs import campaign_logs as campaign_logs_new, campaign_logs_stats
 from .views_retry import campaign_retry_info
+from .views_pdf import export_campaign_pdf
 from .views_debug import debug_campaigns, test_retry_endpoint
 from .views_debug_campaign import debug_campaign_state
 from .views_test_presence import test_send_presence, list_instances_for_test
@@ -35,6 +36,9 @@ urlpatterns = [
     
     # API de informações de retry
     path('<uuid:campaign_id>/retry-info/', campaign_retry_info, name='campaign-retry-info'),
+    
+    # API de exportação de PDF
+    path('<uuid:campaign_id>/export-pdf/', export_campaign_pdf, name='campaign-export-pdf'),
     
     # API de debug para campanhas
     path('debug/', debug_campaigns, name='campaigns-debug'),

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users } from 'lucide-react'
+import { Plus, Search, X, FileText, CheckCircle, AlertCircle, MessageSquare, Play, Pause, Clock, Users, Download } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import { Input } from '../components/ui/Input'
@@ -170,31 +170,6 @@ const CampaignsPage: React.FC = () => {
   const handleEdit = (campaign: Campaign) => {
     setEditingCampaign(campaign)
     setShowModal(true)
-  }
-
-  const handleDuplicate = async (campaign: Campaign) => {
-    const toastId = showLoadingToast('duplicando', 'Campanha')
-    
-    try {
-      const duplicateData = {
-        name: `${campaign.name} (Cópia)`,
-        description: campaign.description,
-        rotation_mode: campaign.rotation_mode,
-        instances: campaign.instances,
-        messages: campaign.messages.map(msg => ({ content: msg.content, order: msg.order })),
-        interval_min: campaign.interval_min,
-        interval_max: campaign.interval_max,
-        daily_limit_per_instance: campaign.daily_limit_per_instance,
-        pause_on_health_below: campaign.pause_on_health_below
-      }
-      
-      await api.post('/campaigns/', duplicateData)
-      updateToastSuccess(toastId, 'duplicada', 'Campanha')
-      fetchData(false)
-    } catch (error: any) {
-      console.error('Erro ao duplicar campanha:', error)
-      updateToastError(toastId, 'duplicar', 'Campanha', error)
-    }
   }
 
   const handleViewLogs = async (campaign: Campaign) => {
@@ -374,7 +349,6 @@ const CampaignsPage: React.FC = () => {
             onPause={handlePause}
             onResume={handleResume}
             onEdit={handleEdit}
-            onDuplicate={handleDuplicate}
             onViewLogs={handleViewLogs}
           />
         ))}
@@ -402,9 +376,42 @@ const CampaignsPage: React.FC = () => {
                 <h2 className="text-lg sm:text-xl font-bold truncate">📊 Logs da Campanha</h2>
                 <p className="text-xs sm:text-sm text-gray-500 truncate">{selectedCampaignForLogs.name}</p>
               </div>
-              <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
-                <X className="h-5 w-5 sm:h-6 sm:w-6" />
-              </button>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const toastId = showLoadingToast('exportar', 'Relatório PDF')
+                      const response = await api.get(`/campaigns/${selectedCampaignForLogs.id}/export-pdf/`, {
+                        responseType: 'blob'
+                      })
+                      
+                      // Criar link para download
+                      const url = window.URL.createObjectURL(new Blob([response.data]))
+                      const link = document.createElement('a')
+                      link.href = url
+                      link.setAttribute('download', `campanha_${selectedCampaignForLogs.name.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`)
+                      document.body.appendChild(link)
+                      link.click()
+                      link.remove()
+                      window.URL.revokeObjectURL(url)
+                      
+                      updateToastSuccess(toastId, 'exportar', 'Relatório PDF')
+                    } catch (error: any) {
+                      console.error('Erro ao exportar PDF:', error)
+                      showErrorToast('exportar', 'Relatório PDF', error)
+                    }
+                  }}
+                  className="flex items-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  <span className="hidden sm:inline">Exportar Log</span>
+                </Button>
+                <button onClick={() => setShowLogsModal(false)} className="text-gray-400 hover:text-gray-600 ml-2 flex-shrink-0">
+                  <X className="h-5 w-5 sm:h-6 sm:w-6" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 sm:p-4">
