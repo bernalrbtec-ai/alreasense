@@ -96,6 +96,75 @@ class CampaignsConfig(AppConfig):
             except Exception as e:
                 logger.error(f"❌ [RECOVERY] Erro no processo de recuperação: {e}")
         
+        # ✅ NOVO: Função para verificar e iniciar campanhas agendadas automaticamente
+        def check_scheduled_campaigns():
+            """Verifica periodicamente campanhas agendadas e as inicia quando chega a hora"""
+            try:
+                # Aguardar um pouco para garantir que o Django está totalmente carregado
+                time.sleep(10)
+                
+                from .models import Campaign
+                from .rabbitmq_consumer import get_rabbitmq_consumer
+                from django.utils import timezone
+                
+                logger.info("⏰ [SCHEDULER] Iniciando verificador de campanhas agendadas")
+                
+                while True:
+                    try:
+                        now = timezone.now()
+                        
+                        # Buscar campanhas agendadas que chegaram na hora
+                        scheduled_campaigns = Campaign.objects.filter(
+                            status='scheduled',
+                            scheduled_at__isnull=False,
+                            scheduled_at__lte=now
+                        )
+                        
+                        if scheduled_campaigns.exists():
+                            logger.info(f"⏰ [SCHEDULER] Encontradas {scheduled_campaigns.count()} campanha(s) agendada(s) para iniciar")
+                            
+                            consumer = get_rabbitmq_consumer()
+                            
+                            for campaign in scheduled_campaigns:
+                                try:
+                                    logger.info(f"🚀 [SCHEDULER] Iniciando campanha agendada: {campaign.id} - {campaign.name} (agendada para {campaign.scheduled_at})")
+                                    
+                                    # Iniciar campanha (muda status para 'running')
+                                    campaign.start()
+                                    
+                                    # Log de início automático
+                                    from .models import CampaignLog
+                                    CampaignLog.log_campaign_started(campaign, None)  # None = iniciado automaticamente pelo scheduler
+                                    
+                                    # Iniciar processamento via RabbitMQ
+                                    if consumer:
+                                        success = consumer.start_campaign(str(campaign.id))
+                                        if success:
+                                            logger.info(f"✅ [SCHEDULER] Campanha {campaign.id} iniciada com sucesso")
+                                        else:
+                                            logger.error(f"❌ [SCHEDULER] Falha ao iniciar campanha {campaign.id} no RabbitMQ")
+                                    else:
+                                        logger.error(f"❌ [SCHEDULER] RabbitMQ Consumer não disponível para campanha {campaign.id}")
+                                        
+                                except Exception as e:
+                                    logger.error(f"❌ [SCHEDULER] Erro ao iniciar campanha agendada {campaign.id}: {e}", exc_info=True)
+                        
+                        # Aguardar 30 segundos antes da próxima verificação
+                        time.sleep(30)
+                        
+                    except Exception as e:
+                        logger.error(f"❌ [SCHEDULER] Erro no loop de verificação de campanhas agendadas: {e}", exc_info=True)
+                        # Aguardar antes de tentar novamente em caso de erro
+                        time.sleep(60)
+                        
+            except Exception as e:
+                logger.error(f"❌ [SCHEDULER] Erro fatal no verificador de campanhas agendadas: {e}", exc_info=True)
+        
         # Iniciar thread de recuperação
         recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True)
         recovery_thread.start()
+        
+        # ✅ NOVO: Iniciar thread de verificação de campanhas agendadas
+        scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True)
+        scheduler_thread.start()
+        logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
