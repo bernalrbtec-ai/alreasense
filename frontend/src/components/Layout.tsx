@@ -76,9 +76,17 @@ export default function Layout() {
   useTenantSocket()
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
+  const isAgente = user?.role === 'agente' || user?.is_agente
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
+    // ✅ Agente: Apenas Chat e Perfil (perfil via UserDropdown)
+    if (isAgente) {
+      return [
+        { name: 'Chat', href: '/chat', icon: MessageSquare }
+      ]
+    }
+    
     const items = [...baseNavigation]
     
     // Adicionar itens de menu dos produtos ativos, mas filtrar por acesso
@@ -98,7 +106,7 @@ export default function Layout() {
     })
     
     return items
-  }, [activeProductSlugs, hasProductAccess])
+  }, [activeProductSlugs, hasProductAccess, isAgente])
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -140,8 +148,8 @@ export default function Layout() {
               )
             })}
             
-            {/* Admin Section */}
-            {isSuperAdmin && (
+            {/* Admin Section - Oculto para agentes */}
+            {isSuperAdmin && !isAgente && (
               <>
                 <div className="pt-4 pb-2">
                   <div className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
@@ -215,8 +223,8 @@ export default function Layout() {
               )
             })}
             
-            {/* Admin Section */}
-            {isSuperAdmin && !sidebarCollapsed && (
+            {/* Admin Section - Oculto para agentes */}
+            {isSuperAdmin && !sidebarCollapsed && !isAgente && (
               <>
                 <div className="pt-4 pb-2">
                   <div className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">

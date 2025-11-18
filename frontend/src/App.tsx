@@ -67,6 +67,7 @@ function App() {
   }
 
   const isSuperAdmin = user?.is_superuser || user?.is_staff
+  const isAgente = user?.role === 'agente' || user?.is_agente
 
   return (
     <ErrorBoundary>
@@ -86,71 +87,88 @@ function App() {
       <Routes>
         {/* Todas as rotas - COM Layout */}
         <Route path="/" element={<Layout />}>
-          <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="billing" element={<BillingPage />} />
-          <Route path="profile" element={<ProfilePage />} />
-          <Route path="configurations" element={<ConfigurationsPage />} />
+          {/* ✅ Agente: Redirecionar para /chat se tentar acessar outras rotas */}
+          <Route index element={<Navigate to={isAgente ? "/chat" : "/dashboard"} replace />} />
           
-          {/* Chat - COM Layout mas tela cheia */}
-          <Route path="chat" element={
-            <ProtectedRoute requiredProduct="flow">
-              <ChatPage />
-            </ProtectedRoute>
-          } />
-          
-          {/* Rotas Protegidas por Produto */}
-          <Route path="contacts" element={
-            <ProtectedRoute requiredProduct="flow">
-              <ContactsPage />
-            </ProtectedRoute>
-          } />
-          <Route path="campaigns" element={
-            <ProtectedRoute requiredProduct="flow">
-              <CampaignsPage />
-            </ProtectedRoute>
-          } />
-          <Route path="campaigns/logs" element={
-            <ProtectedRoute requiredProduct="flow">
-              <CampaignLogsPage />
-            </ProtectedRoute>
-          } />
-          <Route path="campaigns/test-presence" element={
-            <ProtectedRoute requiredProduct="flow">
-              <TestPresencePage />
-            </ProtectedRoute>
-          } />
-          <Route path="connections" element={
-            <ProtectedRoute requiredProduct="flow">
-              <ConnectionsPage />
-            </ProtectedRoute>
-          } />
-          <Route path="experiments" element={
-            <ProtectedRoute requiredProduct="sense">
-              <ExperimentsPage />
-            </ProtectedRoute>
-          } />
-          
-          {/* Notificações - Acesso para usuários com Flow */}
-          <Route path="admin/notifications" element={
-            <ProtectedRoute requiredProduct="flow">
-              <NotificationsPage />
-            </ProtectedRoute>
-          } />
-          
-          {/* Super Admin Routes */}
-          {isSuperAdmin && (
+          {/* ✅ Agente: Apenas Chat e Perfil */}
+          {isAgente ? (
             <>
-              <Route path="admin/tenants" element={<TenantsPage />} />
-              <Route path="admin/products" element={<ProductsPage />} />
-              <Route path="admin/plans" element={<PlansPage />} />
-              <Route path="admin/system" element={<SystemStatusPage />} />
-              <Route path="admin/evolution" element={<EvolutionConfigPage />} />
-              <Route path="admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
+              <Route path="chat" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <ChatPage />
+                </ProtectedRoute>
+              } />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="*" element={<Navigate to="/chat" replace />} />
+            </>
+          ) : (
+            <>
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="billing" element={<BillingPage />} />
+              <Route path="profile" element={<ProfilePage />} />
+              <Route path="configurations" element={<ConfigurationsPage />} />
+              
+              {/* Chat - COM Layout mas tela cheia */}
+              <Route path="chat" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <ChatPage />
+                </ProtectedRoute>
+              } />
+              
+              {/* Rotas Protegidas por Produto */}
+              <Route path="contacts" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <ContactsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="campaigns" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <CampaignsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="campaigns/logs" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <CampaignLogsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="campaigns/test-presence" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <TestPresencePage />
+                </ProtectedRoute>
+              } />
+              <Route path="connections" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <ConnectionsPage />
+                </ProtectedRoute>
+              } />
+              <Route path="experiments" element={
+                <ProtectedRoute requiredProduct="sense">
+                  <ExperimentsPage />
+                </ProtectedRoute>
+              } />
+              
+              {/* Notificações - Acesso para usuários com Flow */}
+              <Route path="admin/notifications" element={
+                <ProtectedRoute requiredProduct="flow">
+                  <NotificationsPage />
+                </ProtectedRoute>
+              } />
+              
+              {/* Super Admin Routes */}
+              {isSuperAdmin && (
+                <>
+                  <Route path="admin/tenants" element={<TenantsPage />} />
+                  <Route path="admin/products" element={<ProductsPage />} />
+                  <Route path="admin/plans" element={<PlansPage />} />
+                  <Route path="admin/system" element={<SystemStatusPage />} />
+                  <Route path="admin/evolution" element={<EvolutionConfigPage />} />
+                  <Route path="admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
+                </>
+              )}
+              
+              <Route path="*" element={<Navigate to="/dashboard" replace />} />
             </>
           )}
-          
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </ErrorBoundary>

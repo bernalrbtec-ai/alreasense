@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../stores/authStore'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
@@ -8,7 +9,16 @@ export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const { login, isLoading } = useAuthStore()
+  const { login, isLoading, user } = useAuthStore()
+  const navigate = useNavigate()
+
+  // ✅ Redirecionar após login bem-sucedido
+  useEffect(() => {
+    if (user) {
+      const isAgente = user?.role === 'agente' || user?.is_agente
+      navigate(isAgente ? '/chat' : '/dashboard', { replace: true })
+    }
+  }, [user, navigate])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -16,6 +26,7 @@ export default function LoginPage() {
 
     try {
       await login(email, password)
+      // O redirecionamento será feito pelo useEffect quando user for atualizado
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Erro ao fazer login')
     }
