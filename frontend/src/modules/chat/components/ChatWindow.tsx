@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, Info, ArrowRightLeft, CheckCircle, XCircle } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, Info, ArrowRightLeft, CheckCircle, XCircle, Plus, User } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -12,6 +12,7 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { useChatSocket } from '../hooks/useChatSocket';
 import { getDisplayName } from '../utils/phoneFormatter';
+import ContactModal from '@/components/contacts/ContactModal';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -25,6 +26,9 @@ export function ChatWindow() {
   const [showMenu, setShowMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [existingContact, setExistingContact] = useState<any>(null);
+  const [isCheckingContact, setIsCheckingContact] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
   // 🔍 Debug: Log quando profile_pic_url muda
@@ -36,6 +40,58 @@ export function ChatWindow() {
 
   // 🔌 Conectar WebSocket para esta conversa (usa manager global)
   const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversation?.id);
+
+  // ✅ Verificar se contato existe quando conversa abre (apenas para contatos individuais)
+  useEffect(() => {
+    if (!activeConversation || activeConversation.conversation_type === 'group') {
+      setExistingContact(null);
+      return;
+    }
+
+    const checkContactExists = async () => {
+      if (!activeConversation.contact_phone) {
+        setExistingContact(null);
+        return;
+      }
+
+      setIsCheckingContact(true);
+      try {
+        // Normalizar telefone para comparação (remover caracteres não numéricos exceto +)
+        const normalizePhone = (phone: string) => {
+          if (!phone) return '';
+          // Manter + no início se existir, depois apenas números
+          const hasPlus = phone.startsWith('+');
+          const numbers = phone.replace(/\D/g, '');
+          return hasPlus ? `+${numbers}` : numbers;
+        };
+
+        const normalizedPhone = normalizePhone(activeConversation.contact_phone);
+        
+        // Buscar contato por telefone usando search (busca em name, phone, email)
+        const response = await api.get('/contacts/contacts/', {
+          params: {
+            search: normalizedPhone
+          }
+        });
+        
+        const contacts = response.data.results || response.data;
+        // Verificar se encontrou contato com telefone exato (comparação normalizada)
+        const contact = contacts.find((c: any) => {
+          const contactPhoneNormalized = normalizePhone(c.phone);
+          return contactPhoneNormalized === normalizedPhone;
+        });
+        
+        setExistingContact(contact || null);
+      } catch (error) {
+        console.error('Erro ao verificar contato:', error);
+        setExistingContact(null);
+      } finally {
+        setIsCheckingContact(false);
+      }
+    };
+
+    checkContactExists();
+  }, [activeConversation?.id, activeConversation?.contact_phone, activeConversation?.conversation_type]);
 
   // 📖 Marcar mensagens como lidas quando abre a conversa
   useEffect(() => {
@@ -274,11 +330,46 @@ export function ChatWindow() {
 
           {/* Nome e Tags */}
           <div className="flex-1 min-w-0">
-            {/* Nome */}
-            <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
-              {activeConversation.conversation_type === 'group' && <span>👥</span>}
-              {getDisplayName(activeConversation)}
-            </h2>
+            {/* Nome com botão de contato */}
+            <div className="flex items-center gap-2">
+              <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
+                {activeConversation.conversation_type === 'group' && <span>👥</span>}
+                {getDisplayName(activeConversation)}
+              </h2>
+              
+              {/* ✅ Botão Adicionar/Ver Contato (apenas para contatos individuais) */}
+              {activeConversation.conversation_type !== 'group' && (
+                <button
+                  onClick={() => {
+                    if (existingContact) {
+                      // Carregar contato completo antes de abrir modal
+                      api.get(`/contacts/contacts/${existingContact.id}/`)
+                        .then(response => {
+                          setExistingContact(response.data);
+                          setShowContactModal(true);
+                        })
+                        .catch(error => {
+                          console.error('Erro ao carregar contato:', error);
+                          toast.error('Erro ao carregar contato');
+                        });
+                    } else {
+                      setShowContactModal(true);
+                    }
+                  }}
+                  disabled={isCheckingContact}
+                  className="flex-shrink-0 p-1.5 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
+                  title={existingContact ? 'Ver Contato' : 'Adicionar Contato'}
+                >
+                  {isCheckingContact ? (
+                    <div className="w-4 h-4 border-2 border-gray-300 border-t-gray-600 rounded-full animate-spin" />
+                  ) : existingContact ? (
+                    <User className="w-4 h-4 text-blue-600" />
+                  ) : (
+                    <Plus className="w-4 h-4 text-green-600" />
+                  )}
+                </button>
+              )}
+            </div>
             
             {/* Tags: Instância + Tags do Contato */}
             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
@@ -449,6 +540,51 @@ export function ChatWindow() {
           onClose={() => setShowTransferModal(false)}
           onTransferSuccess={() => {
             setShowTransferModal(false);
+          }}
+        />
+      )}
+
+      {/* ✅ Modal de Contato */}
+      {showContactModal && activeConversation && (
+        <ContactModal
+          isOpen={showContactModal}
+          onClose={() => {
+            setShowContactModal(false);
+            setExistingContact(null);
+          }}
+          contact={existingContact}
+          initialPhone={activeConversation.contact_phone || ''}
+          initialName={getDisplayName(activeConversation)}
+          onSuccess={() => {
+            // Recarregar contato após criar/editar
+            if (activeConversation.contact_phone) {
+              // Normalizar telefone para comparação
+              const normalizePhone = (phone: string) => {
+                if (!phone) return '';
+                const hasPlus = phone.startsWith('+');
+                const numbers = phone.replace(/\D/g, '');
+                return hasPlus ? `+${numbers}` : numbers;
+              };
+
+              const normalizedPhone = normalizePhone(activeConversation.contact_phone);
+              
+              api.get('/contacts/contacts/', {
+                params: {
+                  search: normalizedPhone
+                }
+              })
+                .then(response => {
+                  const contacts = response.data.results || response.data;
+                  const contact = contacts.find((c: any) => {
+                    const contactPhoneNormalized = normalizePhone(c.phone);
+                    return contactPhoneNormalized === normalizedPhone;
+                  });
+                  setExistingContact(contact || null);
+                })
+                .catch(error => {
+                  console.error('Erro ao recarregar contato:', error);
+                });
+            }
           }}
         />
       )}
