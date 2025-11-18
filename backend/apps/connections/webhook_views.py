@@ -780,9 +780,7 @@ class EvolutionWebhookView(APIView):
             return True
                 
         except Exception as e:
-            # ✅ CORREÇÃO: Garantir que logger está disponível
-            import logging
-            logger = logging.getLogger(__name__)
+            # ✅ CORREÇÃO: logger já está definido no topo do arquivo, não precisa redefinir
             logger.error(f"❌ [WEBHOOK] Erro ao atualizar campaign contact por message_id: {str(e)}", exc_info=True)
             return False
     
