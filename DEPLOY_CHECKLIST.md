@@ -1,8 +1,16 @@
 # ✅ CHECKLIST DE DEPLOY - SISTEMA DE MÍDIA
 
-> **Data:** 20 de Outubro de 2025  
-> **Versão:** Sistema de Mídia v1.0  
+> **Data:** 18 de Novembro de 2025 - 10:35 BRT  
+> **Versão:** 2025.11.18 - Fix webhooks e campanhas  
 > **Deploy:** Railway Automatic  
+
+## 📝 Últimas Mudanças (18/11/2025)
+
+- ✅ Corrigido UnboundLocalError do logger nos webhooks de campanha
+- ✅ Adicionado recálculo automático de stats de campanha no serializer
+- ✅ Corrigida exibição de logs de delivered e read no modal
+- ✅ Melhorada exibição de contadores de campanha no frontend
+- ✅ Webhooks agora processam corretamente eventos de entrega e leitura
 
 ---
 
