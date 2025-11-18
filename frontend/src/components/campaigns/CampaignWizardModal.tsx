@@ -468,7 +468,21 @@ export default function CampaignWizardModal({ onClose, onSuccess, editingCampaig
                   <input
                     type="radio"
                     checked={formData.audience_type === 'contacts'}
-                    onChange={() => setFormData({ ...formData, audience_type: 'contacts', tag_id: '' })}
+                    onChange={async () => {
+                      setFormData({ ...formData, audience_type: 'contacts', tag_id: '' })
+                      // ✅ MELHORIA: Carregar contatos automaticamente quando selecionar "Selecionar Avulsos"
+                      if (contacts.length === 0) {
+                        try {
+                          console.log('📋 Carregando contatos automaticamente...')
+                          const response = await api.get('/contacts/contacts/?page_size=1000')
+                          const contactsData = response.data.results || response.data || []
+                          console.log(`✅ Carregados ${contactsData.length} contatos`)
+                          setContacts(contactsData)
+                        } catch (error) {
+                          console.error('❌ Erro ao carregar contatos:', error)
+                        }
+                      }
+                    }}
                     className="mr-2"
                   />
                   <span className="font-medium">Selecionar Avulsos</span>
