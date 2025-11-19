@@ -454,18 +454,67 @@ class CampaignSender:
                 'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone', 'next_instance_name'
             ])
             
-            # Salvar mensagem no modelo Message para contadores do dashboard
-            from apps.chat_messages.models import Message
-            from django.utils import timezone
-            
-            Message.objects.create(
-                tenant=self.campaign.tenant,
-                connection=instance.connection if hasattr(instance, 'connection') else None,
-                chat_id=f"campaign_{self.campaign.id}_{contact.id}",
-                sender=f"campaign_{self.campaign.id}",
-                text=message_text,
-                created_at=timezone.now()
-            )
+            # ✅ NOVO: Criar mensagem no chat para aparecer na conversa
+            try:
+                from apps.chat.models import Conversation, Message
+                from apps.contacts.signals import normalize_phone_for_search
+                from django.db.models import Q
+                
+                # Normalizar telefone para busca consistente
+                normalized_phone = normalize_phone_for_search(contact.phone)
+                
+                # Buscar ou criar conversa
+                existing_conversation = Conversation.objects.filter(
+                    Q(tenant=self.campaign.tenant) &
+                    (Q(contact_phone=normalized_phone) | Q(contact_phone=contact.phone))
+                ).first()
+                
+                if existing_conversation:
+                    conversation = existing_conversation
+                    # Atualizar telefone para formato normalizado se necessário
+                    if conversation.contact_phone != normalized_phone:
+                        conversation.contact_phone = normalized_phone
+                        conversation.save(update_fields=['contact_phone'])
+                else:
+                    # Criar nova conversa
+                    # Usar departamento padrão da instância se disponível
+                    default_department = instance.default_department if hasattr(instance, 'default_department') else None
+                    
+                    conversation = Conversation.objects.create(
+                        tenant=self.campaign.tenant,
+                        contact_phone=normalized_phone,
+                        contact_name=contact.name,
+                        department=default_department,
+                        status='open' if default_department else 'pending',
+                        conversation_type='individual',
+                        instance_name=instance.instance_name,
+                    )
+                    logger.info(f"✅ [CHAT] Nova conversa criada para campanha: {normalized_phone}")
+                
+                # Criar mensagem no chat
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=None,  # Mensagem de campanha não tem sender (sistema)
+                    content=message_text,
+                    direction='outgoing',
+                    status='sent',
+                    is_internal=False,
+                    message_id=campaign_contact.whatsapp_message_id,  # ID da mensagem WhatsApp
+                    metadata={
+                        'from_campaign': True,
+                        'campaign_id': str(self.campaign.id),
+                        'campaign_name': self.campaign.name,
+                        'instance_name': instance.instance_name,
+                    }
+                )
+                
+                # Atualizar timestamp da última mensagem da conversa
+                conversation.update_last_message()
+                
+                logger.info(f"✅ [CHAT] Mensagem criada no chat: conversation_id={conversation.id}, message_id={message.id}")
+            except Exception as e:
+                # Não falhar o envio da campanha se houver erro ao criar mensagem no chat
+                logger.error(f"❌ [CHAT] Erro ao criar mensagem no chat: {e}", exc_info=True)
             
             # ✅ Log de sucesso (SEMPRE registrado - sem limitação)
             from .models import CampaignLog

@@ -290,6 +290,11 @@ const CampaignsPage: React.FC = () => {
     // Não precisa buscar aqui, o useEffect já faz isso
   }
 
+  const handleAddContacts = (campaign: Campaign) => {
+    setSelectedCampaignForAddContacts(campaign)
+    setShowAddContactsModal(true)
+  }
+
   // Função para obter ícone do tipo de log
   const getLogIcon = (logType: string) => {
     switch (logType) {

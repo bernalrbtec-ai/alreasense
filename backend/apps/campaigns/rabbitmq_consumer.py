@@ -912,6 +912,9 @@ class RabbitMQConsumer:
                                 logger.info(f"✅ [AIO-PIKA] whatsapp_message_id salvo: {message_id} para contact {contact.id}")
                             
                             await save_message_id()
+                            
+                            # ✅ NOVO: Criar mensagem no chat para aparecer na conversa
+                            await self._create_chat_message(campaign, contact, instance, message_text, message_id, contact_phone)
                         else:
                             logger.warning(f"⚠️ [AIO-PIKA] message_id não encontrado na resposta para {contact_phone}")
                             logger.warning(f"   Response data: {response_data}")
@@ -1130,6 +1133,83 @@ class RabbitMQConsumer:
             
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao pausar campanha automaticamente: {e}")
+    
+    async def _create_chat_message(self, campaign, contact, instance, message_text, whatsapp_message_id, contact_phone):
+        """
+        Cria mensagem no chat para que apareça na conversa.
+        Busca ou cria a conversa e então cria a mensagem.
+        """
+        try:
+            from asgiref.sync import sync_to_async
+            from apps.chat.models import Conversation, Message
+            from apps.contacts.signals import normalize_phone_for_search
+            from django.db.models import Q
+            from django.utils import timezone
+            
+            @sync_to_async
+            def create_message_in_chat():
+                # Normalizar telefone para busca consistente
+                normalized_phone = normalize_phone_for_search(contact_phone)
+                
+                # Buscar ou criar conversa
+                existing_conversation = Conversation.objects.filter(
+                    Q(tenant=campaign.tenant) &
+                    (Q(contact_phone=normalized_phone) | Q(contact_phone=contact_phone))
+                ).first()
+                
+                if existing_conversation:
+                    conversation = existing_conversation
+                    # Atualizar telefone para formato normalizado se necessário
+                    if conversation.contact_phone != normalized_phone:
+                        conversation.contact_phone = normalized_phone
+                        conversation.save(update_fields=['contact_phone'])
+                else:
+                    # Criar nova conversa
+                    # Buscar nome do contato
+                    contact_name = contact.contact.name if hasattr(contact, 'contact') and contact.contact else contact_phone
+                    
+                    # Usar departamento padrão da instância se disponível
+                    default_department = instance.default_department if hasattr(instance, 'default_department') else None
+                    
+                    conversation = Conversation.objects.create(
+                        tenant=campaign.tenant,
+                        contact_phone=normalized_phone,
+                        contact_name=contact_name,
+                        department=default_department,
+                        status='open' if default_department else 'pending',
+                        conversation_type='individual',
+                        instance_name=instance.instance_name,
+                    )
+                    logger.info(f"✅ [CHAT] Nova conversa criada para campanha: {normalized_phone}")
+                
+                # Criar mensagem no chat
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=None,  # Mensagem de campanha não tem sender (sistema)
+                    content=message_text,
+                    direction='outgoing',
+                    status='sent',
+                    is_internal=False,
+                    message_id=whatsapp_message_id,  # ID da mensagem WhatsApp para rastreamento
+                    metadata={
+                        'from_campaign': True,
+                        'campaign_id': str(campaign.id),
+                        'campaign_name': campaign.name,
+                        'instance_name': instance.instance_name,
+                    }
+                )
+                
+                # Atualizar timestamp da última mensagem da conversa
+                conversation.update_last_message()
+                
+                logger.info(f"✅ [CHAT] Mensagem criada no chat: conversation_id={conversation.id}, message_id={message.id}")
+                return message
+            
+            await create_message_in_chat()
+            
+        except Exception as e:
+            # Não falhar o envio da campanha se houver erro ao criar mensagem no chat
+            logger.error(f"❌ [CHAT] Erro ao criar mensagem no chat: {e}", exc_info=True)
     
     async def _log_message_sent(self, campaign, contact, instance, message_id, contact_phone, message_text):
         """Log de mensagem enviada com todas as informações incluindo o texto da mensagem"""
