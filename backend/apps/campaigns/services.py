@@ -269,19 +269,24 @@ class CampaignSender:
         for msg in all_messages:
             logger.info(f"   - Mensagem ordem={msg['order']}, times_used={msg['times_used']}, id={str(msg['id'])[:8]}..., content={msg['content'][:50]}...")
         
-        # Buscar mensagem com menor uso usando query atômica
+        # ✅ CORREÇÃO CRÍTICA: Buscar mensagem com menor uso usando query atômica
+        # Ordenar por times_used ASC (menor primeiro), depois por order ASC (ordem de criação)
+        # Isso garante rotação balanceada: sempre escolhe a mensagem menos usada
         message = CampaignMessage.objects.filter(
             campaign=self.campaign,
             is_active=True
         ).order_by('times_used', 'order').first()  # ✅ Usar .first() ao invés de list()[0]
         
+        # ✅ DEBUG: Verificar se a mensagem foi encontrada
         if not message:
             logger.error(f"❌ [ROTAÇÃO] Nenhuma mensagem ativa encontrada para campanha {self.campaign.id}")
             return False, "Nenhuma mensagem ativa configurada"
         
-        # ✅ DEBUG: Log ANTES do incremento
+        # ✅ DEBUG: Log da mensagem selecionada ANTES do incremento
+        logger.info(f"🎯 [ROTAÇÃO] Mensagem selecionada ANTES incremento: ordem={message.order}, times_used={message.times_used}, id={str(message.id)[:8]}..., content={message.content[:50]}...")
+        
+        # ✅ DEBUG: Log ANTES do incremento (já verificado acima)
         times_used_before = message.times_used
-        logger.info(f"🔄 [ROTAÇÃO] ANTES incremento - Mensagem selecionada: ordem={message.order}, times_used={times_used_before}, id={str(message.id)[:8]}...")
         
         # ✅ CORREÇÃO CRÍTICA: Incrementar times_used ANTES de enviar (atomicamente)
         # Isso garante que a próxima seleção já veja o valor atualizado

@@ -622,38 +622,28 @@ class CampaignLog(models.Model):
     @staticmethod
     def log_message_delivered(campaign, instance, contact, campaign_contact, response_data=None):
         """Log de mensagem entregue"""
-        return CampaignLog.objects.create(
-            campaign=campaign,
-            log_type='message_delivered',
-            severity='info',
-            message=f'Mensagem entregue para {contact.name}',
-            details={
-                'contact_id': str(contact.id),
-                'contact_phone': contact.phone,
-            },
-            instance=instance,
-            contact=contact,
-            campaign_contact=campaign_contact,
-            response_data=response_data,
-            instance_health_score=instance.health_score
-        )
-    
-    @staticmethod
-    def log_message_delivered(campaign, instance, contact, campaign_contact):
-        """Log de mensagem entregue"""
         from django.utils import timezone
+        
+        details = {
+            'contact_id': str(contact.id),
+            'contact_phone': contact.phone,
+            'delivered_at': timezone.now().isoformat(),
+        }
+        
+        # Adicionar whatsapp_message_id se disponível
+        if campaign_contact and campaign_contact.whatsapp_message_id:
+            details['whatsapp_message_id'] = campaign_contact.whatsapp_message_id
+        
+        # Adicionar response_data se fornecido
+        if response_data:
+            details['response_data'] = response_data
         
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='message_delivered',
             severity='info',
-            message=f'Mensagem entregue para {contact.name}',
-            details={
-                'contact_id': str(contact.id),
-                'contact_phone': contact.phone,
-                'delivered_at': timezone.now().isoformat(),
-                'whatsapp_message_id': campaign_contact.whatsapp_message_id,
-            },
+            message=f'Mensagem entregue para {contact.name if contact else "contato"}',
+            details=details,
             instance=instance,
             contact=contact,
             campaign_contact=campaign_contact
