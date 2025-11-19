@@ -630,130 +630,9 @@ export function MessageList() {
 const MessageReactions = React.memo(function MessageReactions({ message, direction }: { message: any; direction: 'incoming' | 'outgoing' }) {
   const { user } = useAuthStore();
   const { messages, setMessages, updateMessageReactions } = useChatStore();
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
-  const [pickerPosition, setPickerPosition] = useState<{ top: number; left: number } | null>(null); // ✅ CORREÇÃO: Posição calculada do picker
-  const pickerRef = useRef<HTMLDivElement>(null);
-  const buttonRef = useRef<HTMLButtonElement>(null);
 
-  // ✅ CORREÇÃO CRÍTICA: Calcular posição do picker baseada no viewport
-  useEffect(() => {
-    if (showEmojiPicker && buttonRef.current) {
-      // ✅ CORREÇÃO: Pequeno delay para garantir que o botão está renderizado
-      const timeoutId = setTimeout(() => {
-        const calculatePosition = () => {
-          if (!buttonRef.current) return;
-          
-          const buttonRect = buttonRef.current.getBoundingClientRect();
-          const pickerHeight = 320;
-          const pickerWidth = 320;
-          const viewportWidth = window.innerWidth;
-          const viewportHeight = window.innerHeight;
-          
-          // ✅ CORREÇÃO: Calcular posição horizontal próxima ao botão
-          let left: number;
-          
-          if (direction === 'outgoing') {
-            // Mensagens enviadas: alinhar à direita do botão
-            left = buttonRect.right - pickerWidth;
-            // Se não couber à direita, posicionar à esquerda do botão
-            if (left < 16) {
-              left = buttonRect.left;
-            }
-          } else {
-            // Mensagens recebidas: alinhar à esquerda do botão
-            left = buttonRect.left;
-            // Se não couber à esquerda, posicionar à direita do botão
-            if (left + pickerWidth > viewportWidth - 16) {
-              left = buttonRect.right - pickerWidth;
-            }
-          }
-          
-          // ✅ CORREÇÃO: Garantir que não saia da tela horizontalmente
-          if (left + pickerWidth > viewportWidth - 16) {
-            left = viewportWidth - pickerWidth - 16; // 16px de margem
-          }
-          if (left < 16) {
-            left = 16; // 16px de margem
-          }
-          
-          // ✅ CORREÇÃO: Calcular posição vertical próxima ao botão
-          // SEMPRE tentar posicionar ACIMA primeiro (comportamento WhatsApp)
-          const spaceAbove = buttonRect.top;
-          const spaceBelow = viewportHeight - buttonRect.bottom;
-          let top: number;
-          
-          // ✅ CORREÇÃO CRÍTICA: Preferir SEMPRE posicionar acima do botão
-          // Se houver espaço suficiente acima (pelo menos 280px), posicionar acima
-          if (spaceAbove >= 280) {
-            top = buttonRect.top - pickerHeight - 8;
-          } 
-          // Se não houver espaço suficiente acima, mas houver mais espaço acima que abaixo, tentar acima mesmo assim
-          else if (spaceAbove > spaceBelow && spaceAbove >= 200) {
-            top = buttonRect.top - pickerHeight - 8;
-          }
-          // Se não houver espaço acima, posicionar abaixo
-          else {
-            top = buttonRect.bottom + 8;
-          }
-          
-          // ✅ CORREÇÃO: Garantir que não saia da tela verticalmente (após calcular)
-          if (top < 16) {
-            top = 16; // 16px de margem do topo
-          }
-          if (top + pickerHeight > viewportHeight - 16) {
-            top = viewportHeight - pickerHeight - 16; // 16px de margem do fundo
-          }
-          
-          // ✅ CORREÇÃO FINAL: Se ainda assim não couber, forçar acima do botão (mesmo que corte)
-          if (top > buttonRect.top) {
-            // Se o picker está abaixo do botão mas não cabe, tentar acima mesmo que corte
-            top = Math.max(16, buttonRect.top - pickerHeight - 8);
-          }
-          
-          setPickerPosition({ top, left });
-        };
-        
-        calculatePosition();
-        
-        // Recalcular ao redimensionar ou scrollar
-        window.addEventListener('resize', calculatePosition);
-        window.addEventListener('scroll', calculatePosition, true);
-        
-        return () => {
-          window.removeEventListener('resize', calculatePosition);
-          window.removeEventListener('scroll', calculatePosition, true);
-        };
-      }, 10); // ✅ Pequeno delay para garantir renderização
-      
-      return () => {
-        clearTimeout(timeoutId);
-        setPickerPosition(null);
-      };
-    } else {
-      setPickerPosition(null);
-    }
-  }, [showEmojiPicker, direction]);
-
-  // Fechar picker ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        pickerRef.current &&
-        !pickerRef.current.contains(event.target as Node) &&
-        buttonRef.current &&
-        !buttonRef.current.contains(event.target as Node)
-      ) {
-        setShowEmojiPicker(false);
-      }
-    };
-
-    if (showEmojiPicker) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
-    }
-  }, [showEmojiPicker]);
 
   // Reações agrupadas por emoji
   const reactionsSummary = message.reactions_summary || {};
@@ -823,7 +702,6 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           throw new Error('Resposta inválida do servidor');
         }
         
-        setShowEmojiPicker(false);
         return; // ✅ Sair após remover
       } catch (error: any) {
         console.error('❌ Erro ao remover reação:', error);
@@ -897,7 +775,6 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           console.log('✅ [REACTION] Reação adicionada, aguardando broadcast WebSocket');
         }
       }
-      setShowEmojiPicker(false);
     } catch (error: any) {
       console.error('❌ Erro ao adicionar reação:', error);
       
@@ -1021,47 +898,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
         </div>
       )}
       
-      {/* ✅ MELHORIA UX: Botão de reagir sempre visível ao passar mouse (estilo WhatsApp) */}
-      {/* ✅ CORREÇÃO: Usar group-hover/message (grupo está no elemento pai) */}
-      <div className="relative">
-        <button
-          ref={buttonRef}
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-          className={`
-            p-1 rounded-full transition-all
-            ${showEmojiPicker 
-              ? 'bg-gray-200 dark:bg-gray-600 opacity-100' 
-              : 'opacity-0 group-hover/message:opacity-100 hover:bg-gray-100 dark:hover:bg-gray-700'
-            }
-          `}
-          title="Adicionar reação"
-        >
-          <Smile className="w-4 h-4 text-gray-500" />
-        </button>
-        {showEmojiPicker && pickerPosition && (
-          <>
-            {/* ✅ CORREÇÃO: Portal para posicionar fora do fluxo normal */}
-            <div 
-              ref={pickerRef} 
-              className="fixed z-[9999]"
-              style={{
-                top: `${pickerPosition.top}px`,
-                left: `${pickerPosition.left}px`,
-                width: '320px',
-                height: '280px',
-              }}
-            >
-              <EmojiPicker
-                onSelect={(emoji) => {
-                  handleAddReaction(emoji);
-                  setShowEmojiPicker(false);
-                }}
-                onClose={() => setShowEmojiPicker(false)}
-              />
-            </div>
-          </>
-        )}
-      </div>
+      {/* ✅ REMOVIDO: Botão de reação abaixo da mensagem - usar apenas botão direito */}
     </div>
   );
 }); // ✅ CORREÇÃO: Fechar React.memo
