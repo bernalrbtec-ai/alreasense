@@ -396,6 +396,24 @@ class CampaignSender:
                 status__in=['pending', 'sending']  # ✅ Incluir 'sending' como pendente
             ).select_related('contact').first()
             
+            # ✅ CORREÇÃO CRÍTICA: Atualizar informações do próximo contato IMEDIATAMENTE após envio
+            # Isso garante que o frontend veja o próximo contato atualizado em tempo real
+            if next_campaign_contact:
+                self.campaign.next_contact_name = next_campaign_contact.contact.name
+                self.campaign.next_contact_phone = next_campaign_contact.contact.phone
+                
+                # Obter próxima instância usando o serviço de rotação
+                next_instance = self.select_next_instance()
+                if next_instance:
+                    self.campaign.next_instance_name = next_instance.friendly_name
+                else:
+                    self.campaign.next_instance_name = None
+            else:
+                # Não há mais contatos pendentes
+                self.campaign.next_contact_name = None
+                self.campaign.next_contact_phone = None
+                self.campaign.next_instance_name = None
+            
             if next_campaign_contact:
                 # Calcular próximo disparo apenas se houver mais mensagens
                 # ✅ PADRONIZAÇÃO: Usa random.uniform para tempos distintos e humanizados (não random.randint)
