@@ -9,6 +9,7 @@
  * - IA: Transcrição + Resumo (se addon ativo)
  */
 import React, { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { Download, FileText, X, Play, Pause } from 'lucide-react';
 // Removed unused imports: Image, Video, Music
 
@@ -289,8 +290,8 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           }}
         />
         
-        {/* Lightbox - Fullscreen com controles melhorados */}
-        {lightboxOpen && (
+        {/* Lightbox - Fullscreen usando Portal para renderizar direto no body */}
+        {lightboxOpen && typeof document !== 'undefined' && createPortal(
           <div 
             className="fixed inset-0 bg-black bg-opacity-95 z-[9999] flex items-center justify-center animate-fade-in"
             onClick={(e) => {
@@ -305,6 +306,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               height: '100vh',
               padding: 0,
               margin: 0,
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
             }}
           >
             {/* Botão Fechar */}
@@ -367,7 +373,8 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
                 margin: 'auto',
               }}
             />
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     );
