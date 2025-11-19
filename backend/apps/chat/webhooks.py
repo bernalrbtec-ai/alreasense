@@ -809,13 +809,44 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 'is_group': True,
             }
         
-        conversation, created = Conversation.objects.get_or_create(
-            tenant=tenant,
-            contact_phone=phone,
-            defaults=defaults
-        )
+        # ✅ CORREÇÃO CRÍTICA: Normalizar telefone para busca consistente
+        # Isso previne criação de conversas duplicadas quando mensagens vêm do celular
+        # em formatos diferentes (com/sem +, com/sem código do país)
+        from apps.contacts.signals import normalize_phone_for_search
         
-        logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {phone} | Tipo: {conversation_type}")
+        # Normalizar telefone para busca (garante formato E.164 consistente)
+        normalized_phone = normalize_phone_for_search(phone)
+        
+        # Buscar conversa existente usando telefone normalizado
+        # Usar Q() para buscar por telefone normalizado OU telefone original (para compatibilidade)
+        from django.db.models import Q
+        existing_conversation = Conversation.objects.filter(
+            tenant=tenant,
+            Q(contact_phone=normalized_phone) | Q(contact_phone=phone)
+        ).first()
+        
+        if existing_conversation:
+            # Conversa existe - usar telefone normalizado para garantir consistência
+            if existing_conversation.contact_phone != normalized_phone:
+                logger.info(
+                    f"🔄 [NORMALIZAÇÃO] Atualizando telefone da conversa {existing_conversation.id}: "
+                    f"{existing_conversation.contact_phone} → {normalized_phone}"
+                )
+                existing_conversation.contact_phone = normalized_phone
+                existing_conversation.save(update_fields=['contact_phone'])
+            
+            conversation = existing_conversation
+            created = False
+        else:
+            # Criar nova conversa com telefone normalizado
+            conversation = Conversation.objects.create(
+                tenant=tenant,
+                contact_phone=normalized_phone,
+                **defaults
+            )
+            created = True
+        
+        logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {normalized_phone} (original: {phone}) | Tipo: {conversation_type}")
         logger.info(f"   📋 Departamento atual ANTES: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
         logger.info(f"   📊 Status atual ANTES: {conversation.status}")
         logger.info(f"   🆔 ID: {conversation.id}")
