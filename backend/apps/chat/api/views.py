@@ -581,14 +581,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # ✅ CORREÇÃO: Normalizar telefone antes de buscar/criar para evitar duplicatas
         from apps.contacts.signals import normalize_phone_for_search
-        from django.db.models import Q
         
         normalized_phone = normalize_phone_for_search(contact_phone)
         
         # Verificar se já existe conversa (usando telefone normalizado OU original)
+        # ✅ CORREÇÃO: Usar Q() para tudo para evitar erro de sintaxe (keyword + positional)
         existing = Conversation.objects.filter(
-            tenant=request.user.tenant,
-            Q(contact_phone=normalized_phone) | Q(contact_phone=contact_phone)
+            Q(tenant=request.user.tenant) &
+            (Q(contact_phone=normalized_phone) | Q(contact_phone=contact_phone))
         ).first()
         
         if existing:
