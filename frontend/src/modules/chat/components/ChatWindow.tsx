@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, Info, ArrowRightLeft, CheckCircle, XCircle, Plus, User } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, CheckCircle, XCircle, Plus, User } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -24,7 +24,6 @@ export function ChatWindow() {
   const { activeConversation, setActiveConversation } = useChatStore();
   const { can_transfer_conversations } = usePermissions();
   const [showMenu, setShowMenu] = useState(false);
-  const [showInfoModal, setShowInfoModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
   const [existingContact, setExistingContact] = useState<any>(null);
@@ -422,17 +421,6 @@ export function ChatWindow() {
 
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
-                <button
-                  onClick={() => {
-                    setShowInfoModal(true);
-                    setShowMenu(false);
-                  }}
-                  className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
-                >
-                  <Info className="w-4 h-4" />
-                  Informações do contato
-                </button>
-
                 {can_transfer_conversations && (
                   <button
                     onClick={() => {
@@ -480,60 +468,6 @@ export function ChatWindow() {
       />
 
       {/* Modals */}
-      {showInfoModal && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md animate-scale-in">
-            <div className="flex items-center justify-between px-6 py-4 border-b">
-              <h2 className="text-lg font-semibold text-gray-900">Informações da Conversa</h2>
-              <button
-                onClick={() => setShowInfoModal(false)}
-                className="p-1 hover:bg-gray-100 rounded transition-colors"
-              >
-                <X className="w-5 h-5 text-gray-500" />
-              </button>
-            </div>
-            
-            <div className="p-6 space-y-4">
-              <div className="flex flex-col items-center pb-4 border-b">
-                <div className="w-24 h-24 rounded-full bg-gray-300 mb-3 overflow-hidden">
-                  {activeConversation.profile_pic_url ? (
-                    <img 
-                      src={`/api/chat/media-proxy/?url=${encodeURIComponent(activeConversation.profile_pic_url)}`}
-                      alt={getDisplayName(activeConversation)}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-600 font-medium text-3xl">
-                      {getDisplayName(activeConversation)[0].toUpperCase()}
-                    </div>
-                  )}
-                </div>
-                <h3 className="text-xl font-medium text-gray-900">
-                  {getDisplayName(activeConversation)}
-                </h3>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Telefone</p>
-                <p className="text-base text-gray-900">{activeConversation.contact_phone}</p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Departamento</p>
-                <p className="text-base text-gray-900">
-                  {activeConversation.department_name || 'Inbox (Não atribuído)'}
-                </p>
-              </div>
-
-              <div>
-                <p className="text-sm text-gray-500 mb-1">Status</p>
-                <p className="text-base text-gray-900 capitalize">{activeConversation.status}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showTransferModal && (
         <TransferModal
           conversation={activeConversation}
@@ -555,8 +489,8 @@ export function ChatWindow() {
           contact={existingContact}
           initialPhone={activeConversation.contact_phone || ''}
           initialName={getDisplayName(activeConversation)}
-          onSuccess={() => {
-            // Recarregar contato após criar/editar
+          onSuccess={async () => {
+            // ✅ MELHORIA: Recarregar contato completo e atualizar activeConversation com tags
             if (activeConversation.contact_phone) {
               // Normalizar telefone para comparação
               const normalizePhone = (phone: string) => {
@@ -568,22 +502,39 @@ export function ChatWindow() {
 
               const normalizedPhone = normalizePhone(activeConversation.contact_phone);
               
-              api.get('/contacts/contacts/', {
-                params: {
-                  search: normalizedPhone
-                }
-              })
-                .then(response => {
-                  const contacts = response.data.results || response.data;
-                  const contact = contacts.find((c: any) => {
-                    const contactPhoneNormalized = normalizePhone(c.phone);
-                    return contactPhoneNormalized === normalizedPhone;
-                  });
-                  setExistingContact(contact || null);
-                })
-                .catch(error => {
-                  console.error('Erro ao recarregar contato:', error);
+              try {
+                // Buscar contato completo com tags
+                const response = await api.get('/contacts/contacts/', {
+                  params: {
+                    search: normalizedPhone
+                  }
                 });
+                
+                const contacts = response.data.results || response.data;
+                const contact = contacts.find((c: any) => {
+                  const contactPhoneNormalized = normalizePhone(c.phone);
+                  return contactPhoneNormalized === normalizedPhone;
+                });
+                
+                if (contact) {
+                  // ✅ Atualizar existingContact com contato completo (incluindo tags)
+                  setExistingContact(contact);
+                  
+                  // ✅ Atualizar activeConversation no store com tags atualizadas
+                  const { updateConversation } = useChatStore.getState();
+                  updateConversation({
+                    ...activeConversation,
+                    contact_tags: contact.tags || []
+                  });
+                  
+                  console.log('✅ [CONTACT MODAL] Contato atualizado e conversa sincronizada com tags');
+                } else {
+                  // Se não encontrou, limpar existingContact (contato foi deletado)
+                  setExistingContact(null);
+                }
+              } catch (error) {
+                console.error('❌ [CONTACT MODAL] Erro ao recarregar contato:', error);
+              }
             }
           }}
         />
