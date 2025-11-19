@@ -288,10 +288,12 @@ class CampaignSender:
                 phone = f'55{phone}'
             
             # Substituir variáveis na mensagem usando MessageVariableService
+            logger.info(f"📝 [VARIÁVEIS] Template original: {message.content[:100]}...")
             message_text = MessageVariableService.render_message(
                 template=message.content,
                 contact=contact
             )
+            logger.info(f"✅ [VARIÁVEIS] Mensagem renderizada: {message_text[:100]}...")
             
             # ✅ Enviar via Evolution API com RETRY e BACKOFF
             url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
