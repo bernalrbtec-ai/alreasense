@@ -256,6 +256,18 @@ class CampaignSender:
         # ✅ CORREÇÃO CRÍTICA: Usar query direta (não list()) e incrementar ANTES de enviar
         from django.db.models import F
         from .models import CampaignMessage
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # ✅ DEBUG: Listar TODAS as mensagens antes da seleção
+        all_messages = CampaignMessage.objects.filter(
+            campaign=self.campaign,
+            is_active=True
+        ).order_by('order').values('id', 'order', 'times_used', 'content')
+        
+        logger.info(f"📋 [ROTAÇÃO DEBUG] Todas as mensagens disponíveis:")
+        for msg in all_messages:
+            logger.info(f"   - Mensagem ordem={msg['order']}, times_used={msg['times_used']}, id={str(msg['id'])[:8]}..., content={msg['content'][:50]}...")
         
         # Buscar mensagem com menor uso usando query atômica
         message = CampaignMessage.objects.filter(
@@ -264,20 +276,26 @@ class CampaignSender:
         ).order_by('times_used', 'order').first()  # ✅ Usar .first() ao invés de list()[0]
         
         if not message:
+            logger.error(f"❌ [ROTAÇÃO] Nenhuma mensagem ativa encontrada para campanha {self.campaign.id}")
             return False, "Nenhuma mensagem ativa configurada"
+        
+        # ✅ DEBUG: Log ANTES do incremento
+        times_used_before = message.times_used
+        logger.info(f"🔄 [ROTAÇÃO] ANTES incremento - Mensagem selecionada: ordem={message.order}, times_used={times_used_before}, id={str(message.id)[:8]}...")
         
         # ✅ CORREÇÃO CRÍTICA: Incrementar times_used ANTES de enviar (atomicamente)
         # Isso garante que a próxima seleção já veja o valor atualizado
-        CampaignMessage.objects.filter(id=message.id).update(times_used=F('times_used') + 1)
+        rows_updated = CampaignMessage.objects.filter(id=message.id).update(times_used=F('times_used') + 1)
+        logger.info(f"✅ [ROTAÇÃO] Incremento executado: rows_updated={rows_updated}")
         
         # Recarregar mensagem para ter times_used atualizado
         message.refresh_from_db()
         
-        # Log para debug
-        import logging
-        logger = logging.getLogger(__name__)
+        # ✅ DEBUG: Log DEPOIS do incremento
+        logger.info(f"🔄 [ROTAÇÃO] DEPOIS incremento - Mensagem: ordem={message.order}, times_used={message.times_used} (era {times_used_before})")
+        
         total_messages = CampaignMessage.objects.filter(campaign=self.campaign, is_active=True).count()
-        logger.info(f"🔄 [ROTAÇÃO] Mensagem selecionada: ordem={message.order}, times_used={message.times_used}, total_mensagens={total_messages}")
+        logger.info(f"📊 [ROTAÇÃO] Total de mensagens ativas: {total_messages}")
         
         # Atualizar status
         campaign_contact.status = 'sending'
