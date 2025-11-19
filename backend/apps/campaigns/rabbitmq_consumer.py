@@ -945,45 +945,42 @@ class RabbitMQConsumer:
                                 rotation_logger.info(f"⏰ [AIO-PIKA] Próximo disparo já agendado para: {campaign.next_message_scheduled_at}")
                             
                             # ✅ NOVO: Broadcast via WebSocket para atualizar frontend em tempo real
-                            @sync_to_async
-                            def broadcast_campaign_update():
-                                try:
-                                    from channels.layers import get_channel_layer
-                                    from asgiref.sync import async_to_sync
+                            # Nota: Esta função é sync (wrapped com @sync_to_async), então fazemos broadcast de forma síncrona
+                            try:
+                                from channels.layers import get_channel_layer
+                                from asgiref.sync import async_to_sync
+                                
+                                channel_layer = get_channel_layer()
+                                if channel_layer:
+                                    tenant_group = f"chat_tenant_{campaign.tenant.id}"
                                     
-                                    channel_layer = get_channel_layer()
-                                    if channel_layer:
-                                        tenant_group = f"chat_tenant_{campaign.tenant.id}"
-                                        
-                                        # Calcular countdown
-                                        from django.utils import timezone
-                                        now = timezone.now()
-                                        countdown_seconds = 0
-                                        if campaign.next_message_scheduled_at and campaign.next_message_scheduled_at > now:
-                                            delta = campaign.next_message_scheduled_at - now
-                                            countdown_seconds = int(delta.total_seconds())
-                                        
-                                        message = {
-                                            'type': 'campaign_update',
-                                            'payload': {
-                                                'campaign_id': str(campaign.id),
-                                                'campaign_name': campaign.name,
-                                                'type': 'next_contact_updated',
-                                                'next_contact_name': campaign.next_contact_name,
-                                                'next_contact_phone': campaign.next_contact_phone,
-                                                'next_instance_name': campaign.next_instance_name,
-                                                'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
-                                                'countdown_seconds': countdown_seconds,
-                                                'timestamp': timezone.now().isoformat()
-                                            }
+                                    # Calcular countdown
+                                    from django.utils import timezone
+                                    now = timezone.now()
+                                    countdown_seconds = 0
+                                    if campaign.next_message_scheduled_at and campaign.next_message_scheduled_at > now:
+                                        delta = campaign.next_message_scheduled_at - now
+                                        countdown_seconds = int(delta.total_seconds())
+                                    
+                                    message = {
+                                        'type': 'campaign_update',
+                                        'payload': {
+                                            'campaign_id': str(campaign.id),
+                                            'campaign_name': campaign.name,
+                                            'type': 'next_contact_updated',
+                                            'next_contact_name': campaign.next_contact_name,
+                                            'next_contact_phone': campaign.next_contact_phone,
+                                            'next_instance_name': campaign.next_instance_name,
+                                            'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
+                                            'countdown_seconds': countdown_seconds,
+                                            'timestamp': timezone.now().isoformat()
                                         }
-                                        
-                                        async_to_sync(channel_layer.group_send)(tenant_group, message)
-                                        rotation_logger.info(f"📡 [WEBSOCKET] Broadcast enviado: próximo contato atualizado para campanha {campaign.id}")
-                                except Exception as e:
-                                    rotation_logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast: {e}", exc_info=True)
-                            
-                            await broadcast_campaign_update()
+                                    }
+                                    
+                                    async_to_sync(channel_layer.group_send)(tenant_group, message)
+                                    rotation_logger.info(f"📡 [WEBSOCKET] Broadcast enviado: próximo contato atualizado para campanha {campaign.id}")
+                            except Exception as e:
+                                rotation_logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast: {e}", exc_info=True)
                         
                         await update_next_contact_info()
                         logger.info(f"✅ [AIO-PIKA] Próximo contato atualizado com sucesso")
