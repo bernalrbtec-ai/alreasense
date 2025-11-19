@@ -283,10 +283,8 @@ class CampaignSender:
             return False, "Nenhuma mensagem ativa configurada"
         
         # ✅ DEBUG: Log da mensagem selecionada ANTES do incremento
-        logger.info(f"🎯 [ROTAÇÃO] Mensagem selecionada ANTES incremento: ordem={message.order}, times_used={message.times_used}, id={str(message.id)[:8]}..., content={message.content[:50]}...")
-        
-        # ✅ DEBUG: Log ANTES do incremento (já verificado acima)
         times_used_before = message.times_used
+        logger.info(f"🎯 [ROTAÇÃO] Mensagem selecionada ANTES incremento: ordem={message.order}, times_used={times_used_before}, id={str(message.id)[:8]}..., content={message.content[:50]}...")
         
         # ✅ CORREÇÃO CRÍTICA: Incrementar times_used ANTES de enviar (atomicamente)
         # Isso garante que a próxima seleção já veja o valor atualizado
