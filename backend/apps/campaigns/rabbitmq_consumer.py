@@ -751,9 +751,9 @@ class RabbitMQConsumer:
                 @sync_to_async
                 def get_message_with_rotation():
                     # ✅ DEBUG: Listar TODAS as mensagens antes da seleção
+                    # ✅ CORREÇÃO: Removido filtro is_active (CampaignMessage não tem esse campo)
                     all_messages = CampaignMessage.objects.filter(
-                        campaign=campaign,
-                        is_active=True
+                        campaign=campaign
                     ).order_by('order').values('id', 'order', 'times_used', 'content')
                     
                     rotation_logger.info(f"📋 [ROTAÇÃO DEBUG] Todas as mensagens disponíveis:")

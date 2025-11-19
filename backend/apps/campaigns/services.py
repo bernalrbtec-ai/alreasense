@@ -260,9 +260,9 @@ class CampaignSender:
         logger = logging.getLogger(__name__)
         
         # ✅ DEBUG: Listar TODAS as mensagens antes da seleção
+        # ✅ CORREÇÃO: Removido filtro is_active (CampaignMessage não tem esse campo)
         all_messages = CampaignMessage.objects.filter(
-            campaign=self.campaign,
-            is_active=True
+            campaign=self.campaign
         ).order_by('order').values('id', 'order', 'times_used', 'content')
         
         logger.info(f"📋 [ROTAÇÃO DEBUG] Todas as mensagens disponíveis:")
@@ -272,9 +272,9 @@ class CampaignSender:
         # ✅ CORREÇÃO CRÍTICA: Buscar mensagem com menor uso usando query atômica
         # Ordenar por times_used ASC (menor primeiro), depois por order ASC (ordem de criação)
         # Isso garante rotação balanceada: sempre escolhe a mensagem menos usada
+        # ✅ CORREÇÃO: Removido filtro is_active (CampaignMessage não tem esse campo)
         message = CampaignMessage.objects.filter(
-            campaign=self.campaign,
-            is_active=True
+            campaign=self.campaign
         ).order_by('times_used', 'order').first()  # ✅ Usar .first() ao invés de list()[0]
         
         # ✅ DEBUG: Verificar se a mensagem foi encontrada
@@ -297,7 +297,8 @@ class CampaignSender:
         # ✅ DEBUG: Log DEPOIS do incremento
         logger.info(f"🔄 [ROTAÇÃO] DEPOIS incremento - Mensagem: ordem={message.order}, times_used={message.times_used} (era {times_used_before})")
         
-        total_messages = CampaignMessage.objects.filter(campaign=self.campaign, is_active=True).count()
+        # ✅ CORREÇÃO: Removido filtro is_active (CampaignMessage não tem esse campo)
+        total_messages = CampaignMessage.objects.filter(campaign=self.campaign).count()
         logger.info(f"📊 [ROTAÇÃO] Total de mensagens ativas: {total_messages}")
         
         # ✅ CORREÇÃO: Atualizar status e salvar message_used ANTES de enviar
