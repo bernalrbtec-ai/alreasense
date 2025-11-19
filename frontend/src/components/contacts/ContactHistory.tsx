@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Clock, MessageSquare, Send, CheckCircle, XCircle, User, ArrowRight, FileText, Plus, Edit, Trash2, X } from 'lucide-react'
+import { Clock, Send, CheckCircle, XCircle, User, ArrowRight, FileText, Plus, Edit, Trash2, X, Calendar, AlertCircle } from 'lucide-react'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast } from '../../lib/toastHelper'
 import { Button } from '../ui/Button'
 import LoadingSpinner from '../ui/LoadingSpinner'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import TaskModal from '../tasks/TaskModal'
 
 interface ContactHistoryItem {
   id: string
@@ -29,8 +30,7 @@ interface ContactHistoryProps {
 
 const EVENT_ICONS: Record<string, any> = {
   note: FileText,
-  message_sent: Send,
-  message_received: MessageSquare,
+  // message_sent e message_received removidos - já estão no chat
   campaign_message_sent: Send,
   campaign_message_delivered: CheckCircle,
   campaign_message_read: CheckCircle,
@@ -44,8 +44,7 @@ const EVENT_ICONS: Record<string, any> = {
 
 const EVENT_COLORS: Record<string, string> = {
   note: 'bg-blue-100 text-blue-700 border-blue-200',
-  message_sent: 'bg-green-100 text-green-700 border-green-200',
-  message_received: 'bg-purple-100 text-purple-700 border-purple-200',
+  // message_sent e message_received removidos - já estão no chat
   campaign_message_sent: 'bg-indigo-100 text-indigo-700 border-indigo-200',
   campaign_message_delivered: 'bg-teal-100 text-teal-700 border-teal-200',
   campaign_message_read: 'bg-emerald-100 text-emerald-700 border-emerald-200',
@@ -59,26 +58,71 @@ const EVENT_COLORS: Record<string, string> = {
 
 export default function ContactHistory({ contactId, onClose }: ContactHistoryProps) {
   const [history, setHistory] = useState<ContactHistoryItem[]>([])
+  const [tasks, setTasks] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showAddNote, setShowAddNote] = useState(false)
+  const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingNote, setEditingNote] = useState<ContactHistoryItem | null>(null)
   const [noteTitle, setNoteTitle] = useState('')
   const [noteDescription, setNoteDescription] = useState('')
+  const [departments, setDepartments] = useState<any[]>([])
+  const [users, setUsers] = useState<any[]>([])
 
   useEffect(() => {
     fetchHistory()
+    fetchTasks()
+    fetchDepartments()
+    fetchUsers()
   }, [contactId])
 
   const fetchHistory = async () => {
     try {
       setLoading(true)
       const response = await api.get(`/contacts/history/?contact_id=${contactId}`)
-      setHistory(response.data.results || response.data)
+      const allHistory = response.data.results || response.data
+      
+      // Filtrar eventos de conversa (message_sent, message_received) - já estão no chat
+      const filteredHistory = allHistory.filter((item: ContactHistoryItem) => {
+        // Remover mensagens de conversa normal (não campanhas)
+        if (item.event_type === 'message_sent' || item.event_type === 'message_received') {
+          return false
+        }
+        return true
+      })
+      
+      setHistory(filteredHistory)
     } catch (error: any) {
       console.error('Erro ao buscar histórico:', error)
       showErrorToast('Erro ao carregar histórico do contato')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchTasks = async () => {
+    try {
+      const response = await api.get(`/contacts/tasks/?contact_id=${contactId}`)
+      setTasks(response.data.results || response.data)
+    } catch (error: any) {
+      console.error('Erro ao buscar tarefas:', error)
+    }
+  }
+
+  const fetchDepartments = async () => {
+    try {
+      const response = await api.get('/auth/departments/')
+      setDepartments(response.data.results || response.data)
+    } catch (error) {
+      console.error('Erro ao buscar departamentos:', error)
+    }
+  }
+
+  const fetchUsers = async () => {
+    try {
+      const response = await api.get('/auth/users/')
+      setUsers(response.data.results || response.data)
+    } catch (error) {
+      console.error('Erro ao buscar usuários:', error)
     }
   }
 
@@ -233,6 +277,98 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
         </div>
       )}
 
+      {/* Tarefas Relacionadas */}
+      {tasks.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="font-semibold text-blue-900 flex items-center gap-2">
+              <Calendar className="h-4 w-4" />
+              Tarefas Relacionadas ({tasks.length})
+            </h4>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowTaskModal(true)}
+            >
+              <Plus className="h-4 w-4 mr-1" />
+              Nova Tarefa
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {tasks.slice(0, 3).map(task => (
+              <div
+                key={task.id}
+                className={`bg-white border rounded p-2 ${
+                  task.is_overdue && task.status !== 'completed'
+                    ? 'border-red-300'
+                    : 'border-blue-200'
+                }`}
+              >
+                <div className="flex items-start justify-between">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        task.status === 'completed' ? 'bg-green-100 text-green-700' :
+                        task.status === 'in_progress' ? 'bg-blue-100 text-blue-700' :
+                        'bg-yellow-100 text-yellow-700'
+                      }`}>
+                        {task.status_display}
+                      </span>
+                      {task.is_overdue && task.status !== 'completed' && (
+                        <AlertCircle className="h-3 w-3 text-red-600" />
+                      )}
+                    </div>
+                    <h5 className="font-medium text-sm">{task.title}</h5>
+                    {task.due_date && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {format(new Date(task.due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </p>
+                    )}
+                  </div>
+                  {task.status !== 'completed' && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.post(`/contacts/tasks/${task.id}/complete/`)
+                          showSuccessToast('Tarefa concluída')
+                          fetchTasks()
+                          fetchHistory()
+                        } catch (error) {
+                          console.error('Erro ao concluir tarefa:', error)
+                        }
+                      }}
+                      className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      title="Concluir"
+                    >
+                      <CheckCircle className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+            {tasks.length > 3 && (
+              <p className="text-xs text-blue-700 text-center">
+                +{tasks.length - 3} tarefa(s) relacionada(s)
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Botão Nova Tarefa (se não tem tarefas) */}
+      {tasks.length === 0 && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-center">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowTaskModal(true)}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Criar Tarefa para este Contato
+          </Button>
+        </div>
+      )}
+
       {/* Timeline */}
       <div className="space-y-4">
         {history.length === 0 ? (
@@ -306,6 +442,25 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
           })
         )}
       </div>
+
+      {/* Modal de Tarefa */}
+      {showTaskModal && (
+        <TaskModal
+          isOpen={showTaskModal}
+          onClose={() => {
+            setShowTaskModal(false)
+          }}
+          onSuccess={() => {
+            setShowTaskModal(false)
+            fetchTasks()
+            fetchHistory()
+          }}
+          task={null}
+          initialContactId={contactId}
+          departments={departments}
+          users={users}
+        />
+      )}
     </div>
   )
 }

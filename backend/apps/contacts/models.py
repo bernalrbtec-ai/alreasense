@@ -881,3 +881,169 @@ class ContactHistory(models.Model):
             metadata=metadata or {},
             related_campaign=campaign
         )
+
+
+class Task(models.Model):
+    """
+    Tarefas e agenda por departamento.
+    Permite criar tarefas simples (sem data) ou agendadas (com data/hora).
+    Tarefas podem ter contatos relacionados e atendente atribuído.
+    """
+    
+    STATUS_CHOICES = [
+        ('pending', 'Pendente'),
+        ('in_progress', 'Em Andamento'),
+        ('completed', 'Concluída'),
+        ('cancelled', 'Cancelada'),
+    ]
+    
+    PRIORITY_CHOICES = [
+        ('low', 'Baixa'),
+        ('medium', 'Média'),
+        ('high', 'Alta'),
+        ('urgent', 'Urgente'),
+    ]
+    
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    
+    tenant = models.ForeignKey(
+        'tenancy.Tenant',
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        verbose_name='Tenant'
+    )
+    
+    department = models.ForeignKey(
+        'authn.Department',
+        on_delete=models.CASCADE,
+        related_name='tasks',
+        verbose_name='Departamento',
+        help_text='Departamento responsável pela tarefa'
+    )
+    
+    title = models.CharField(
+        max_length=255,
+        verbose_name='Título',
+        help_text='Título da tarefa'
+    )
+    
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Descrição',
+        help_text='Descrição detalhada da tarefa'
+    )
+    
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default='pending',
+        db_index=True,
+        verbose_name='Status'
+    )
+    
+    priority = models.CharField(
+        max_length=20,
+        choices=PRIORITY_CHOICES,
+        default='medium',
+        db_index=True,
+        verbose_name='Prioridade'
+    )
+    
+    # Data/hora opcional - se preenchido, aparece no calendário
+    due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name='Data/Hora Agendada',
+        help_text='Se preenchido, a tarefa aparece no calendário e gera notificação'
+    )
+    
+    # Atendente atribuído (opcional)
+    assigned_to = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='assigned_tasks',
+        verbose_name='Atribuída Para',
+        help_text='Atendente responsável pela tarefa'
+    )
+    
+    # Contatos relacionados (opcional, many-to-many)
+    related_contacts = models.ManyToManyField(
+        'contacts.Contact',
+        related_name='tasks',
+        blank=True,
+        verbose_name='Contatos Relacionados',
+        help_text='Contatos relacionados à tarefa (opcional)'
+    )
+    
+    # Quem criou a tarefa
+    created_by = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_tasks',
+        verbose_name='Criada Por',
+        help_text='Usuário que criou a tarefa'
+    )
+    
+    # Timestamps
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name='Criada Em'
+    )
+    
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Atualizada Em'
+    )
+    
+    completed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Concluída Em',
+        help_text='Data/hora em que a tarefa foi concluída'
+    )
+    
+    class Meta:
+        db_table = 'contacts_task'
+        verbose_name = 'Tarefa'
+        verbose_name_plural = 'Tarefas'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['tenant', 'department', 'status']),
+            models.Index(fields=['tenant', 'department', 'due_date']),
+            models.Index(fields=['assigned_to', 'status']),
+            models.Index(fields=['created_by', 'status']),
+            models.Index(fields=['tenant', 'status', 'due_date']),
+        ]
+    
+    def __str__(self):
+        assigned = f" → {self.assigned_to.get_full_name()}" if self.assigned_to else ""
+        due = f" ({self.due_date.strftime('%d/%m/%Y %H:%M')})" if self.due_date else ""
+        return f"{self.title}{assigned}{due}"
+    
+    @property
+    def is_overdue(self):
+        """Verifica se a tarefa está atrasada"""
+        if not self.due_date or self.status in ['completed', 'cancelled']:
+            return False
+        return timezone.now() > self.due_date
+    
+    @property
+    def has_contacts(self):
+        """Verifica se a tarefa tem contatos relacionados"""
+        return self.related_contacts.exists()
+    
+    def mark_completed(self, user=None):
+        """Marca a tarefa como concluída"""
+        self.status = 'completed'
+        self.completed_at = timezone.now()
+        self.save(update_fields=['status', 'completed_at'])

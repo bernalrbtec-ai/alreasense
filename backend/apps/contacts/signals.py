@@ -2,7 +2,7 @@
 Signals para atualizar métricas de contatos automaticamente e sincronizar com conversas
 """
 
-from django.db.models.signals import post_save, post_delete, pre_save
+from django.db.models.signals import post_save, post_delete, pre_save, m2m_changed
 from django.dispatch import receiver
 from django.core.cache import cache
 import logging
@@ -343,3 +343,189 @@ def create_conversation_transfer_history(sender, instance, created, **kwargs):
         
     except Exception as e:
         logger.error(f"❌ [HISTORY] Erro ao criar histórico de transferência: {e}", exc_info=True)
+
+
+# ==================== TAREFAS E HISTÓRICO ====================
+
+@receiver(pre_save)
+def capture_task_old_values(sender, instance, **kwargs):
+    """Captura valores antigos da tarefa antes de salvar"""
+    def get_task_model():
+        from apps.contacts.models import Task
+        return Task
+    
+    Task = get_task_model()
+    if sender != Task:
+        return
+    
+    if instance.pk:
+        try:
+            old_instance = sender.objects.get(pk=instance.pk)
+            instance._old_status = old_instance.status
+            instance._old_due_date = old_instance.due_date
+        except sender.DoesNotExist:
+            instance._old_status = None
+            instance._old_due_date = None
+    else:
+        instance._old_status = None
+        instance._old_due_date = None
+
+
+@receiver(post_save)
+def create_task_history_events(sender, instance, created, **kwargs):
+    """
+    Cria eventos no histórico de contatos quando tarefa é criada ou atualizada.
+    """
+    def get_task_model():
+        from apps.contacts.models import Task
+        return Task
+    
+    Task = get_task_model()
+    if sender != Task:
+        return
+    
+    try:
+        from apps.contacts.models import ContactHistory
+        
+        # Se tarefa tem contatos relacionados, criar eventos no histórico
+        if instance.related_contacts.exists():
+            contacts = instance.related_contacts.all()
+            
+            if created:
+                # Tarefa criada - criar evento para cada contato
+                event_title = f"Tarefa criada: {instance.title}"
+                if instance.due_date:
+                    event_title += f" (Agendada para {instance.due_date.strftime('%d/%m/%Y às %H:%M')})"
+                
+                description_parts = []
+                if instance.description:
+                    description_parts.append(instance.description)
+                if instance.assigned_to:
+                    description_parts.append(f"Atribuída para: {instance.assigned_to.get_full_name() or instance.assigned_to.email}")
+                
+                for contact in contacts:
+                    ContactHistory.objects.create(
+                        contact=contact,
+                        tenant=instance.tenant,
+                        event_type='note',  # Usar 'note' pois é manual, mas poderia criar novo tipo
+                        title=event_title,
+                        description='\n'.join(description_parts) if description_parts else None,
+                        created_by=instance.created_by,
+                        is_editable=False,
+                        metadata={
+                            'task_id': str(instance.id),
+                            'task_title': instance.title,
+                            'task_status': instance.status,
+                            'task_priority': instance.priority,
+                            'due_date': instance.due_date.isoformat() if instance.due_date else None,
+                            'assigned_to_id': str(instance.assigned_to.id) if instance.assigned_to else None,
+                            'assigned_to_name': instance.assigned_to.get_full_name() if instance.assigned_to else None,
+                            'department_id': str(instance.department.id),
+                            'department_name': instance.department.name,
+                        }
+                    )
+                
+                logger.info(f"✅ [TASK HISTORY] Eventos criados no histórico para {contacts.count()} contato(s) - Tarefa: {instance.title}")
+            
+            elif not created:
+                # Tarefa atualizada - verificar mudanças importantes
+                old_status = getattr(instance, '_old_status', None)
+                
+                # Se status mudou para 'completed', criar evento de conclusão
+                if old_status != 'completed' and instance.status == 'completed':
+                    for contact in contacts:
+                        ContactHistory.objects.create(
+                            contact=contact,
+                            tenant=instance.tenant,
+                            event_type='note',
+                            title=f"Tarefa concluída: {instance.title}",
+                            description=f"Tarefa concluída por: {instance.assigned_to.get_full_name() if instance.assigned_to else 'Sistema'}",
+                            created_by=instance.assigned_to,  # Quem concluiu (ou quem estava atribuído)
+                            is_editable=False,
+                            metadata={
+                                'task_id': str(instance.id),
+                                'task_title': instance.title,
+                                'task_status': 'completed',
+                                'completed_at': instance.completed_at.isoformat() if instance.completed_at else None,
+                            }
+                        )
+                    
+                    logger.info(f"✅ [TASK HISTORY] Eventos de conclusão criados para {contacts.count()} contato(s) - Tarefa: {instance.title}")
+                
+                # Se contatos foram adicionados depois, criar eventos retroativamente
+                # (isso é tratado no m2m_changed signal abaixo)
+    
+    except Exception as e:
+        logger.error(f"❌ [TASK HISTORY] Erro ao criar histórico de tarefa: {e}", exc_info=True)
+
+
+@receiver(m2m_changed)
+def handle_task_contacts_changed(sender, instance, action, pk_set, **kwargs):
+    """
+    Quando contatos são adicionados/removidos de uma tarefa existente.
+    """
+    # Verificar se é o relacionamento correto (Task.related_contacts)
+    # O sender é a tabela intermediária, então verificamos pelo nome da tabela
+    from apps.contacts.models import Task
+    if not hasattr(sender, '_meta') or sender._meta.db_table != 'contacts_task_related_contacts':
+        return
+    
+    # Verificar se a instância é uma Task
+    if not isinstance(instance, Task):
+        return
+    
+    if action == 'post_add':
+        # Contatos foram adicionados - criar eventos no histórico
+        try:
+            from apps.contacts.models import ContactHistory, Contact
+            
+            if not instance.pk:
+                return  # Tarefa ainda não foi salva
+            
+            contacts = Contact.objects.filter(pk__in=pk_set)
+            
+            for contact in contacts:
+                # Verificar se já existe evento para esta tarefa
+                existing = ContactHistory.objects.filter(
+                    contact=contact,
+                    tenant=instance.tenant,
+                    metadata__task_id=str(instance.id)
+                ).first()
+                
+                if not existing:
+                    # Criar evento apenas se não existir
+                    event_title = f"Tarefa relacionada: {instance.title}"
+                    if instance.due_date:
+                        event_title += f" (Agendada para {instance.due_date.strftime('%d/%m/%Y às %H:%M')})"
+                    
+                    description_parts = []
+                    if instance.description:
+                        description_parts.append(instance.description)
+                    if instance.assigned_to:
+                        description_parts.append(f"Atribuída para: {instance.assigned_to.get_full_name() or instance.assigned_to.email}")
+                    
+                    ContactHistory.objects.create(
+                        contact=contact,
+                        tenant=instance.tenant,
+                        event_type='note',
+                        title=event_title,
+                        description='\n'.join(description_parts) if description_parts else None,
+                        created_by=instance.created_by,
+                        is_editable=False,
+                        metadata={
+                            'task_id': str(instance.id),
+                            'task_title': instance.title,
+                            'task_status': instance.status,
+                            'task_priority': instance.priority,
+                            'due_date': instance.due_date.isoformat() if instance.due_date else None,
+                            'assigned_to_id': str(instance.assigned_to.id) if instance.assigned_to else None,
+                            'assigned_to_name': instance.assigned_to.get_full_name() if instance.assigned_to else None,
+                            'department_id': str(instance.department.id),
+                            'department_name': instance.department.name,
+                        }
+                    )
+            
+            logger.info(f"✅ [TASK HISTORY] Eventos criados retroativamente para {contacts.count()} contato(s) adicionados à tarefa")
+        
+        except Exception as e:
+            logger.error(f"❌ [TASK HISTORY] Erro ao criar histórico ao adicionar contatos: {e}", exc_info=True)

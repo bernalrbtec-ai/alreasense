@@ -3,7 +3,7 @@ Serializers para o módulo de contatos
 """
 
 from rest_framework import serializers
-from .models import Contact, Tag, ContactList, ContactImport, ContactHistory
+from .models import Contact, Tag, ContactList, ContactImport, ContactHistory, Task
 from .utils import normalize_phone, get_state_from_ddd, extract_ddd_from_phone, get_state_from_phone
 
 
@@ -324,3 +324,155 @@ class ContactHistoryCreateSerializer(serializers.ModelSerializer):
             created_by=user,
             metadata=validated_data.get('metadata', {})
         )
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    """Serializer para tarefas"""
+    
+    status_display = serializers.CharField(source='get_status_display', read_only=True)
+    priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    assigned_to_name = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    related_contacts = serializers.SerializerMethodField()
+    is_overdue = serializers.BooleanField(read_only=True)
+    has_contacts = serializers.BooleanField(read_only=True)
+    can_edit = serializers.SerializerMethodField()
+    can_delete = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Task
+        fields = [
+            'id', 'title', 'description', 'status', 'status_display',
+            'priority', 'priority_display', 'due_date', 'assigned_to',
+            'assigned_to_name', 'related_contacts', 'department',
+            'department_name', 'created_by', 'created_by_name',
+            'created_at', 'updated_at', 'completed_at',
+            'is_overdue', 'has_contacts', 'can_edit', 'can_delete'
+        ]
+        read_only_fields = [
+            'id', 'created_by', 'created_at', 'updated_at', 'completed_at'
+        ]
+    
+    def get_assigned_to_name(self, obj):
+        """Retorna nome do atendente atribuído"""
+        if obj.assigned_to:
+            return obj.assigned_to.get_full_name() or obj.assigned_to.email
+        return None
+    
+    def get_created_by_name(self, obj):
+        """Retorna nome de quem criou"""
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.email
+        return None
+    
+    def get_related_contacts(self, obj):
+        """Retorna lista de contatos relacionados"""
+        from .serializers import ContactSerializer
+        return ContactSerializer(obj.related_contacts.all(), many=True).data
+    
+    def get_can_edit(self, obj):
+        """Verifica se o usuário atual pode editar"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        # Pode editar se criou ou é admin
+        return obj.created_by_id == request.user.id or request.user.is_superuser or request.user.role == 'admin'
+    
+    def get_can_delete(self, obj):
+        """Verifica se o usuário atual pode deletar"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        # Pode deletar se criou ou é admin
+        return obj.created_by_id == request.user.id or request.user.is_superuser or request.user.role == 'admin'
+
+
+class TaskCreateSerializer(serializers.ModelSerializer):
+    """Serializer para criar tarefas"""
+    
+    related_contact_ids = serializers.ListField(
+        child=serializers.UUIDField(),
+        required=False,
+        allow_empty=True,
+        write_only=True,
+        help_text='Lista de IDs dos contatos relacionados'
+    )
+    
+    class Meta:
+        model = Task
+        fields = [
+            'title', 'description', 'status', 'priority',
+            'due_date', 'assigned_to', 'department',
+            'related_contact_ids'
+        ]
+    
+    def validate_department(self, value):
+        """Valida se o departamento pertence ao tenant do usuário"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            raise serializers.ValidationError('Usuário não autenticado')
+        
+        # Verificar se o departamento pertence ao tenant
+        if value.tenant_id != request.user.tenant_id:
+            raise serializers.ValidationError('Departamento não pertence ao seu tenant')
+        
+        # Verificar se o usuário pertence a este departamento
+        if not request.user.is_superuser and request.user.role != 'admin':
+            if not request.user.departments.filter(id=value.id).exists():
+                raise serializers.ValidationError('Você não pertence a este departamento')
+        
+        return value
+    
+    def validate_assigned_to(self, value):
+        """Valida se o atendente atribuído pertence ao tenant"""
+        request = self.context.get('request')
+        if not request or not request.user:
+            raise serializers.ValidationError('Usuário não autenticado')
+        
+        if value and value.tenant_id != request.user.tenant_id:
+            raise serializers.ValidationError('Atendente não pertence ao seu tenant')
+        
+        return value
+    
+    def create(self, validated_data):
+        """Cria tarefa com contatos relacionados"""
+        related_contact_ids = validated_data.pop('related_contact_ids', [])
+        request = self.context.get('request')
+        
+        # Definir tenant e criador
+        validated_data['tenant'] = request.user.tenant
+        validated_data['created_by'] = request.user
+        
+        # Criar tarefa
+        task = Task.objects.create(**validated_data)
+        
+        # Adicionar contatos relacionados
+        if related_contact_ids:
+            contacts = Contact.objects.filter(
+                id__in=related_contact_ids,
+                tenant=request.user.tenant
+            )
+            task.related_contacts.set(contacts)
+        
+        return task
+    
+    def update(self, instance, validated_data):
+        """Atualiza tarefa com contatos relacionados"""
+        related_contact_ids = validated_data.pop('related_contact_ids', None)
+        request = self.context.get('request')
+        
+        # Atualizar campos
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        # Atualizar contatos relacionados se fornecido
+        if related_contact_ids is not None:
+            contacts = Contact.objects.filter(
+                id__in=related_contact_ids,
+                tenant=request.user.tenant
+            )
+            instance.related_contacts.set(contacts)
+        
+        instance.save()
+        return instance

@@ -11,14 +11,16 @@ from django.db.models import Q, Avg
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import Contact, Tag, ContactList, ContactImport, ContactHistory
+from .models import Contact, Tag, ContactList, ContactImport, ContactHistory, Task
 from .serializers import (
     ContactSerializer,
     TagSerializer,
     ContactListSerializer,
     ContactImportSerializer,
     ContactHistorySerializer,
-    ContactHistoryCreateSerializer
+    ContactHistoryCreateSerializer,
+    TaskSerializer,
+    TaskCreateSerializer
 )
 from .services import ContactImportService, ContactExportService
 
@@ -745,3 +747,124 @@ class ContactHistoryViewSet(viewsets.ModelViewSet):
             raise serializers.ValidationError('Apenas anotações manuais podem ser deletadas')
         
         instance.delete()
+
+
+class TaskViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para tarefas e agenda.
+    
+    Filtros disponíveis:
+    - ?status=pending
+    - ?assigned_to=<user_id>
+    - ?department=<department_id>
+    - ?my_tasks=true (apenas tarefas atribuídas para mim)
+    - ?created_by_me=true (apenas tarefas que criei)
+    - ?has_due_date=true (apenas tarefas com data agendada)
+    - ?overdue=true (apenas tarefas atrasadas)
+    - ?contact_id=<contact_id> (tarefas relacionadas a um contato)
+    """
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = TaskSerializer
+    filterset_fields = ['status', 'priority', 'department', 'assigned_to']
+    search_fields = ['title', 'description']
+    ordering_fields = ['created_at', 'due_date', 'priority', 'status']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        """Retorna tarefas dos departamentos do usuário"""
+        user = self.request.user
+        
+        # Base: tarefas do tenant
+        queryset = Task.objects.filter(tenant=user.tenant)
+        
+        # Filtrar por departamentos do usuário (exceto admin/superuser)
+        if not user.is_superuser and user.role != 'admin':
+            user_departments = user.departments.all()
+            queryset = queryset.filter(department__in=user_departments)
+        
+        # Filtros adicionais
+        my_tasks = self.request.query_params.get('my_tasks', '').lower() == 'true'
+        if my_tasks:
+            queryset = queryset.filter(assigned_to=user)
+        
+        created_by_me = self.request.query_params.get('created_by_me', '').lower() == 'true'
+        if created_by_me:
+            queryset = queryset.filter(created_by=user)
+        
+        has_due_date = self.request.query_params.get('has_due_date', '').lower() == 'true'
+        if has_due_date:
+            queryset = queryset.exclude(due_date__isnull=True)
+        
+        overdue = self.request.query_params.get('overdue', '').lower() == 'true'
+        if overdue:
+            from django.utils import timezone
+            queryset = queryset.filter(
+                due_date__lt=timezone.now(),
+                status__in=['pending', 'in_progress']
+            )
+        
+        contact_id = self.request.query_params.get('contact_id')
+        if contact_id:
+            queryset = queryset.filter(related_contacts__id=contact_id).distinct()
+        
+        return queryset.select_related(
+            'tenant', 'department', 'assigned_to', 'created_by'
+        ).prefetch_related('related_contacts')
+    
+    def get_serializer_class(self):
+        """Usa serializer de criação para POST/PUT"""
+        if self.action in ['create', 'update', 'partial_update']:
+            return TaskCreateSerializer
+        return TaskSerializer
+    
+    def perform_create(self, serializer):
+        """Cria tarefa com tenant e criador"""
+        serializer.save(
+            tenant=self.request.user.tenant,
+            created_by=self.request.user
+        )
+    
+    @action(detail=True, methods=['post'])
+    def complete(self, request, pk=None):
+        """Marca tarefa como concluída"""
+        task = self.get_object()
+        
+        if task.status == 'completed':
+            return Response(
+                {'detail': 'Tarefa já está concluída'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        task.mark_completed(user=request.user)
+        
+        serializer = self.get_serializer(task)
+        return Response(serializer.data)
+    
+    @action(detail=False, methods=['get'])
+    def stats(self, request):
+        """Estatísticas de tarefas do usuário"""
+        user = request.user
+        
+        # Base: tarefas dos departamentos do usuário
+        queryset = Task.objects.filter(tenant=user.tenant)
+        
+        if not user.is_superuser and user.role != 'admin':
+            user_departments = user.departments.all()
+            queryset = queryset.filter(department__in=user_departments)
+        
+        stats = {
+            'total': queryset.count(),
+            'pending': queryset.filter(status='pending').count(),
+            'in_progress': queryset.filter(status='in_progress').count(),
+            'completed': queryset.filter(status='completed').count(),
+            'cancelled': queryset.filter(status='cancelled').count(),
+            'my_assigned': queryset.filter(assigned_to=user, status__in=['pending', 'in_progress']).count(),
+            'overdue': queryset.filter(
+                due_date__lt=timezone.now(),
+                status__in=['pending', 'in_progress']
+            ).count(),
+            'with_due_date': queryset.exclude(due_date__isnull=True).count(),
+        }
+        
+        return Response(stats)
