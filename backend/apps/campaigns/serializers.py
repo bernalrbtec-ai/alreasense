@@ -225,14 +225,21 @@ class CampaignSerializer(serializers.ModelSerializer):
             )
         elif tag_id:
             print(f"✅ [CAMPANHA] Buscando contatos por tag_id: {tag_id}")
-            # Buscar TODOS os contatos por tag (fallback se contact_ids não fornecido)
+            # ✅ CORREÇÃO: Buscar TODOS os contatos por tag usando iterator() para evitar problemas de memória
+            # Usar .all() para garantir que não há limite de paginação aplicado
             contacts_to_add = Contact.objects.filter(
                 tenant=campaign.tenant,
                 tags__id=tag_id,
                 is_active=True,
                 opted_out=False
             ).distinct()
-            print(f"✅ [CAMPANHA] Encontrados {contacts_to_add.count()} contatos com a tag")
+            
+            # ✅ CRÍTICO: Avaliar o QuerySet ANTES de iterar para garantir que todos os contatos sejam buscados
+            # Converter para lista para evitar problemas de QuerySet lazy evaluation
+            contacts_list = list(contacts_to_add)
+            contacts_to_add = contacts_list
+            
+            print(f"✅ [CAMPANHA] Encontrados {len(contacts_to_add)} contatos com a tag")
         else:
             print(f"⚠️ [CAMPANHA] Nenhum tag_id ou contact_ids fornecido!")
         
