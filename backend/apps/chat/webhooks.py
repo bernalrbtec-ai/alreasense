@@ -837,10 +837,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Buscar conversa existente usando telefone normalizado
         # Usar Q() para buscar por telefone normalizado OU telefone original (para compatibilidade)
+        # ✅ CORREÇÃO: Usar Q() para tudo para evitar erro de sintaxe (keyword + positional)
         from django.db.models import Q
         existing_conversation = Conversation.objects.filter(
-            tenant=tenant,
-            Q(contact_phone=normalized_phone) | Q(contact_phone=phone)
+            Q(tenant=tenant) &
+            (Q(contact_phone=normalized_phone) | Q(contact_phone=phone))
         ).first()
         
         if existing_conversation:
