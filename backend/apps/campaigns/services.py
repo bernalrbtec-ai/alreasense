@@ -383,10 +383,13 @@ class CampaignSender:
             instance.record_message_sent()
             # ✅ times_used já foi incrementado ANTES do envio (rotação balanceada)
             
-            # Atualizar status do contato PRIMEIRO
+            # ✅ CORREÇÃO: Atualizar status do contato PRIMEIRO (message_used já foi salvo antes)
             campaign_contact.status = 'sent'
             campaign_contact.sent_at = timezone.now()
             campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
+            
+            # ✅ DEBUG: Confirmar qual mensagem foi enviada
+            logger.info(f"✅ [ENVIO] Mensagem enviada com sucesso - Contato: {contact.name}, Mensagem ordem={message.order}, times_used={message.times_used}")
             
             # Atualizar campanha APÓS sucesso no envio
             self.campaign.messages_sent += 1
