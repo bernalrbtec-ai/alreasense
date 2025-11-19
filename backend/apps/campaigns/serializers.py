@@ -122,6 +122,10 @@ class CampaignSerializer(serializers.ModelSerializer):
         
         data = super().to_representation(instance)
         
+        # ✅ CORREÇÃO: Forçar recálculo do progress_percentage usando a propriedade atualizada
+        # Isso garante que o valor sempre reflita (messages_sent + messages_failed) / total_contacts
+        data['progress_percentage'] = instance.progress_percentage
+        
         # Calcular countdown em segundos
         data['countdown_seconds'] = self._calculate_countdown_seconds(instance)
         
