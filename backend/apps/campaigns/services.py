@@ -253,21 +253,31 @@ class CampaignSender:
         print(f"🔍 [HEALTH] Status visual da instância {instance.friendly_name}: {health_status}")
         
         # Selecionar mensagem (rotacionar entre as disponíveis)
-        # ✅ CORREÇÃO: Filtrar apenas mensagens ativas e aprovadas
-        messages = list(self.campaign.messages.filter(
-            is_active=True
-        ).order_by('times_used', 'order'))  # Ordenar por times_used primeiro para rotação balanceada
+        # ✅ CORREÇÃO CRÍTICA: Usar query direta (não list()) e incrementar ANTES de enviar
+        from django.db.models import F
+        from .models import CampaignMessage
         
-        if not messages:
+        # Buscar mensagem com menor uso usando query atômica
+        message = CampaignMessage.objects.filter(
+            campaign=self.campaign,
+            is_active=True
+        ).order_by('times_used', 'order').first()  # ✅ Usar .first() ao invés de list()[0]
+        
+        if not message:
             return False, "Nenhuma mensagem ativa configurada"
         
-        # Escolher mensagem com menor uso (primeira da lista já ordenada)
-        message = messages[0]
+        # ✅ CORREÇÃO CRÍTICA: Incrementar times_used ANTES de enviar (atomicamente)
+        # Isso garante que a próxima seleção já veja o valor atualizado
+        CampaignMessage.objects.filter(id=message.id).update(times_used=F('times_used') + 1)
+        
+        # Recarregar mensagem para ter times_used atualizado
+        message.refresh_from_db()
         
         # Log para debug
         import logging
         logger = logging.getLogger(__name__)
-        logger.info(f"🔄 [ROTAÇÃO] Mensagem selecionada: ordem={message.order}, times_used={message.times_used}, total_mensagens={len(messages)}")
+        total_messages = CampaignMessage.objects.filter(campaign=self.campaign, is_active=True).count()
+        logger.info(f"🔄 [ROTAÇÃO] Mensagem selecionada: ordem={message.order}, times_used={message.times_used}, total_mensagens={total_messages}")
         
         # Atualizar status
         campaign_contact.status = 'sending'
@@ -346,8 +356,7 @@ class CampaignSender:
             
             # Atualizar contadores
             instance.record_message_sent()
-            message.times_used += 1
-            message.save(update_fields=['times_used'])
+            # ✅ times_used já foi incrementado ANTES do envio (rotação balanceada)
             
             # Atualizar status do contato PRIMEIRO
             campaign_contact.status = 'sent'
