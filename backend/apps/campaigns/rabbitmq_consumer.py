@@ -762,9 +762,9 @@ class RabbitMQConsumer:
                     
                     # ✅ CORREÇÃO CRÍTICA: Buscar mensagem com menor uso usando query atômica
                     # Ordenar por times_used ASC (menor primeiro), depois por order ASC (ordem de criação)
+                    # ✅ CORREÇÃO: Removido filtro is_active (CampaignMessage não tem esse campo)
                     message = CampaignMessage.objects.filter(
-                        campaign=campaign,
-                        is_active=True
+                        campaign=campaign
                     ).order_by('times_used', 'order').first()
                     
                     if not message:
