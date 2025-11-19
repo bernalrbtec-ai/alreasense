@@ -116,6 +116,7 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
   // Reagir (mostrar emoji picker)
   const handleReact = () => {
     setShowEmojiPicker(true);
+    onClose(); // ✅ Fechar menu ao abrir emoji picker
   };
 
   // Adicionar reação
