@@ -58,19 +58,49 @@ def create_superuser():
         print(f"✅ [SUPERUSER] Tenant existente: {tenant.name}")
     
     # Create superuser if it doesn't exist (check by role, not by specific email)
+    # ✅ CORREÇÃO: Usar paulo.bernal@alrea.ai como admin padrão
+    ADMIN_EMAIL = 'paulo.bernal@alrea.ai'
+    
     print("👤 [SUPERUSER] Verificando superuser...")
     if not User.objects.filter(is_superuser=True).exists():
         print("👤 [SUPERUSER] Criando novo superuser...")
         user = User.objects.create_superuser(
-            username='admin@alreasense.com',  # Use email as username
-            email='admin@alreasense.com',
+            username=ADMIN_EMAIL,  # Use email as username
+            email=ADMIN_EMAIL,
             password='admin123',
-            tenant=tenant
+            tenant=tenant,
+            first_name='Paulo',
+            last_name='Bernal',
+            role='admin'
         )
         print(f"✅ [SUPERUSER] Superuser criado: {user.email}")
     else:
         existing_superuser = User.objects.filter(is_superuser=True).first()
         print(f"✅ [SUPERUSER] Superuser já existe: {existing_superuser.email}")
+        
+        # ✅ CORREÇÃO: Se o superuser existente não for paulo.bernal@alrea.ai, corrigir
+        if existing_superuser.email != ADMIN_EMAIL:
+            print(f"⚠️  [SUPERUSER] Superuser atual ({existing_superuser.email}) não é o correto!")
+            print(f"🔄 [SUPERUSER] Verificando se {ADMIN_EMAIL} existe...")
+            
+            correct_admin = User.objects.filter(email=ADMIN_EMAIL).first()
+            if correct_admin:
+                print(f"✅ [SUPERUSER] Usuário {ADMIN_EMAIL} encontrado, promovendo...")
+                correct_admin.is_superuser = True
+                correct_admin.is_staff = True
+                correct_admin.is_active = True
+                correct_admin.role = 'admin'
+                correct_admin.save()
+                
+                # Desativar admin antigo
+                existing_superuser.is_superuser = False
+                existing_superuser.is_staff = False
+                existing_superuser.is_active = False
+                existing_superuser.save()
+                print(f"✅ [SUPERUSER] {ADMIN_EMAIL} promovido a superuser")
+                print(f"✅ [SUPERUSER] {existing_superuser.email} desativado")
+            else:
+                print(f"⚠️  [SUPERUSER] {ADMIN_EMAIL} não existe, mantendo {existing_superuser.email}")
     
     print("🎉 [SUPERUSER] Processo concluído com sucesso!")
 
