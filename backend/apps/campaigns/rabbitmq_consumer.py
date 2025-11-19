@@ -1034,7 +1034,8 @@ class RabbitMQConsumer:
                         
                         return True
                     else:
-                        error_msg = response_data.get('message', 'Erro desconhecido')
+                        # ✅ MELHORIA: Extrair informações detalhadas do erro
+                        error_msg = self._extract_error_message(response_data, response.status_code)
                         logger.error(f"❌ [AIO-PIKA] API retornou erro (tentativa {attempt}): {error_msg}")
                         
                         # Verificar se é erro de instância inativa
@@ -1049,11 +1050,24 @@ class RabbitMQConsumer:
                             await asyncio.sleep(delay)
                             continue
                         else:
-                            # Log de falha final
-                            await self._log_message_failed(campaign, contact, instance, error_msg, contact_phone)
+                            # Log de falha final com detalhes completos
+                            await self._log_message_failed(
+                                campaign, contact, instance, error_msg, contact_phone,
+                                request_data=message_data,
+                                response_data=response_data,
+                                http_status=response.status_code
+                            )
                             return False
                 else:
-                    logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} (tentativa {attempt}): {response.text}")
+                    # ✅ MELHORIA: Capturar resposta completa mesmo em caso de erro HTTP
+                    try:
+                        error_response_data = response.json() if response.text else {}
+                    except:
+                        error_response_data = {'raw_response': response.text[:500]}  # Limitar tamanho
+                    
+                    # Extrair mensagem de erro descritiva
+                    error_msg = self._extract_error_message(error_response_data, response.status_code, response.text)
+                    logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} (tentativa {attempt}): {error_msg}")
                     
                     # Verificar se é erro de instância inativa (500 pode indicar instância offline)
                     if response.status_code == 500:
@@ -1067,8 +1081,13 @@ class RabbitMQConsumer:
                         await asyncio.sleep(delay)
                         continue
                     else:
-                        # Log de falha final
-                        await self._log_message_failed(campaign, contact, instance, f"HTTP {response.status_code}", contact_phone)
+                        # Log de falha final com detalhes completos
+                        await self._log_message_failed(
+                            campaign, contact, instance, error_msg, contact_phone,
+                            request_data=message_data,
+                            response_data=error_response_data,
+                            http_status=response.status_code
+                        )
                         return False
 
             except Exception as e:
@@ -1248,7 +1267,56 @@ class RabbitMQConsumer:
             import traceback
             logger.error(f"🔍 [DEBUG] Traceback: {traceback.format_exc()}")
     
-    async def _log_message_failed(self, campaign, contact, instance, error_msg, contact_phone):
+    def _extract_error_message(self, response_data, http_status=None, raw_response=None):
+        """
+        Extrai mensagem de erro descritiva e amigável da resposta da API.
+        """
+        # Dicionário de mensagens amigáveis para códigos HTTP comuns
+        http_messages = {
+            400: "Requisição inválida - verifique os dados enviados",
+            401: "Não autorizado - verifique as credenciais da API",
+            403: "Acesso negado - verifique as permissões",
+            404: "Recurso não encontrado - instância ou endpoint não existe",
+            429: "Muitas requisições - limite de taxa excedido, aguarde antes de tentar novamente",
+            500: "Erro interno do servidor - problema temporário na API",
+            502: "Servidor indisponível - gateway ou proxy com problema",
+            503: "Serviço indisponível - servidor temporariamente fora do ar",
+        }
+        
+        # Tentar extrair mensagem da resposta JSON
+        error_message = None
+        if isinstance(response_data, dict):
+            # Possíveis campos de erro na resposta
+            error_message = (
+                response_data.get('message') or
+                response_data.get('error') or
+                response_data.get('errorMessage') or
+                response_data.get('error_description') or
+                response_data.get('detail')
+            )
+        
+        # Se não encontrou mensagem na resposta, usar mensagem HTTP padrão
+        if not error_message and http_status:
+            error_message = http_messages.get(http_status, f"Erro HTTP {http_status}")
+        
+        # Se ainda não tem mensagem, usar resposta raw (limitada)
+        if not error_message and raw_response:
+            # Limitar tamanho e remover quebras de linha
+            error_message = raw_response[:200].replace('\n', ' ').strip()
+            if len(raw_response) > 200:
+                error_message += "..."
+        
+        # Fallback final
+        if not error_message:
+            error_message = "Erro desconhecido ao enviar mensagem"
+        
+        # Adicionar código HTTP se disponível
+        if http_status:
+            error_message = f"{error_message} (HTTP {http_status})"
+        
+        return error_message
+    
+    async def _log_message_failed(self, campaign, contact, instance, error_msg, contact_phone, request_data=None, response_data=None, http_status=None):
         """Log de mensagem falhada com todas as informações"""
         try:
             from asgiref.sync import sync_to_async
@@ -1262,7 +1330,7 @@ class RabbitMQConsumer:
                     campaign=campaign,
                     campaign_contact=contact,
                     instance=instance,
-                    log_type='message_failed',  # ✅ CORRIGIDO: era event_type
+                    log_type='message_failed',
                     severity='error',
                     message=f'Falha ao enviar para {contact_name} ({contact_phone}): {error_msg}',
                     details={
@@ -1273,11 +1341,14 @@ class RabbitMQConsumer:
                         'instance_name': instance.friendly_name,
                         'error': error_msg,
                         'failed_at': timezone.now().isoformat()
-                    }
+                    },
+                    request_data=request_data,
+                    response_data=response_data,
+                    http_status=http_status
                 )
             
             await create_log()
-            logger.info(f"✅ [LOG] Log de falha criado para {contact_phone}")
+            logger.info(f"✅ [LOG] Log de falha criado para {contact_phone}: {error_msg}")
             
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao criar log de mensagem falhada: {e}")
