@@ -520,69 +520,147 @@ const CampaignsPage: React.FC = () => {
                   
                   {/* Lista de Logs */}
                   <div className="space-y-3">
-                    {logs.map((log: any, idx: number) => (
-                      <div
-                        key={log.id || idx}
-                        className={`border-l-4 p-4 rounded-r-lg ${getLogColor(log.log_type)}`}
-                      >
-                        {/* Card de Disparo com Detalhes */}
-                        {(log.log_type === 'message_sent' || log.log_type === 'message_delivered' || log.log_type === 'message_read' || log.log_type === 'message_failed') && log.contact_name ? (
-                          <div className="space-y-3">
-                            {/* Header com Contato e Instância */}
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                {getLogIcon(log.log_type)}
-                                <div>
-                                  <div className="font-medium text-gray-900">{log.contact_name}</div>
-                                  <div className="text-sm text-gray-500">{log.contact_phone}</div>
+                    {(() => {
+                      // ✅ AGRUPAR LOGS POR CONTATO
+                      const contactLogsMap = new Map<string, any>()
+                      const otherLogs: any[] = []
+                      
+                      logs.forEach((log: any) => {
+                        // Logs de mensagens (sent, delivered, read, failed) são agrupados por contato
+                        if ((log.log_type === 'message_sent' || log.log_type === 'message_delivered' || log.log_type === 'message_read' || log.log_type === 'message_failed') && log.contact_name) {
+                          const contactKey = `${log.contact_phone || log.contact_name}`
+                          
+                          if (!contactLogsMap.has(contactKey)) {
+                            contactLogsMap.set(contactKey, {
+                              contact_name: log.contact_name,
+                              contact_phone: log.contact_phone,
+                              instance_name: log.instance_name,
+                              message_text: log.extra_data?.message_text || null,
+                              sent_at: null,
+                              delivered_at: null,
+                              read_at: null,
+                              failed: false,
+                              error: null,
+                              first_log_id: log.id
+                            })
+                          }
+                          
+                          const contactLog = contactLogsMap.get(contactKey)!
+                          
+                          // Consolidar informações de cada tipo de log
+                          if (log.log_type === 'message_sent') {
+                            contactLog.sent_at = log.extra_data?.sent_at || log.created_at
+                            contactLog.message_text = log.extra_data?.message_text || contactLog.message_text
+                          } else if (log.log_type === 'message_delivered') {
+                            contactLog.delivered_at = log.extra_data?.delivered_at || log.created_at
+                            // Se não tinha sent_at, usar o delivered_at como referência
+                            if (!contactLog.sent_at) {
+                              contactLog.sent_at = log.extra_data?.sent_at || log.created_at
+                            }
+                          } else if (log.log_type === 'message_read') {
+                            contactLog.read_at = log.extra_data?.read_at || log.created_at
+                            // Se não tinha delivered_at, usar o read_at como referência
+                            if (!contactLog.delivered_at) {
+                              contactLog.delivered_at = log.extra_data?.delivered_at || log.created_at
+                            }
+                            // Se não tinha sent_at, usar o read_at como referência
+                            if (!contactLog.sent_at) {
+                              contactLog.sent_at = log.extra_data?.sent_at || log.created_at
+                            }
+                          } else if (log.log_type === 'message_failed') {
+                            contactLog.failed = true
+                            contactLog.error = log.extra_data?.error || log.message
+                            contactLog.sent_at = log.extra_data?.sent_at || log.created_at
+                          }
+                        } else {
+                          // Outros logs (campaign_created, campaign_started, etc) não são agrupados
+                          otherLogs.push(log)
+                        }
+                      })
+                      
+                      // Converter Map para Array e ordenar por sent_at (mais recente primeiro)
+                      const groupedContactLogs = Array.from(contactLogsMap.values()).sort((a, b) => {
+                        const aTime = a.sent_at ? new Date(a.sent_at).getTime() : 0
+                        const bTime = b.sent_at ? new Date(b.sent_at).getTime() : 0
+                        return bTime - aTime
+                      })
+                      
+                      // Combinar: primeiro logs de contatos agrupados, depois outros logs
+                      const allLogs = [...groupedContactLogs, ...otherLogs]
+                      
+                      return allLogs.map((log: any, idx: number) => {
+                        // Se é um log agrupado por contato (tem contact_name mas não tem log_type)
+                        if (log.contact_name && !log.log_type) {
+                          return (
+                            <div
+                              key={log.first_log_id || `contact-${idx}`}
+                              className="border-l-4 p-4 rounded-r-lg border-l-blue-500 bg-blue-50"
+                            >
+                              <div className="space-y-3">
+                                {/* Header com Contato e Instância */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-2">
+                                    <Send className="h-4 w-4 text-blue-500" />
+                                    <div>
+                                      <div className="font-medium text-gray-900">{log.contact_name}</div>
+                                      <div className="text-sm text-gray-500">{log.contact_phone}</div>
+                                    </div>
+                                  </div>
+                                  {log.instance_name && (
+                                    <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
+                                      {log.instance_name}
+                                    </span>
+                                  )}
                                 </div>
+
+                                {/* Mensagem Enviada */}
+                                {log.message_text && (
+                                  <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                                    <div className="text-xs text-blue-600 font-medium mb-1">💬 Mensagem:</div>
+                                    <div className="text-sm text-gray-700 whitespace-pre-wrap">{log.message_text}</div>
+                                  </div>
+                                )}
+
+                                {/* Timeline de Status */}
+                                <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded">
+                                  <div className="text-center">
+                                    <div className="text-xs text-gray-500 mb-1">📤 Enviada em</div>
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {log.sent_at ? formatDate(log.sent_at) : '---'}
+                                    </div>
+                                  </div>
+                                  <div className="text-center border-l border-gray-200">
+                                    <div className="text-xs text-gray-500 mb-1">✅ Entregue em</div>
+                                    <div className="text-sm font-medium text-gray-600">
+                                      {log.delivered_at ? formatDate(log.delivered_at) : '---'}
+                                    </div>
+                                  </div>
+                                  <div className="text-center border-l border-gray-200">
+                                    <div className="text-xs text-gray-500 mb-1">👁️ Visto em</div>
+                                    <div className="text-sm font-medium text-gray-600">
+                                      {log.read_at ? formatDate(log.read_at) : '---'}
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Erro se houver */}
+                                {log.failed && log.error && (
+                                  <div className="bg-red-50 border border-red-200 rounded p-2">
+                                    <div className="text-xs text-red-600 font-medium mb-1">❌ Motivo da Falha:</div>
+                                    <div className="text-sm text-red-700">{log.error}</div>
+                                  </div>
+                                )}
                               </div>
-                              {log.instance_name && (
-                                <span className="text-xs text-green-600 bg-green-100 px-2 py-1 rounded">
-                                  {log.instance_name}
-                                </span>
-                              )}
                             </div>
-
-                            {/* Mensagem Enviada */}
-                            {log.extra_data?.message_text && (
-                              <div className="bg-blue-50 border border-blue-200 rounded p-3">
-                                <div className="text-xs text-blue-600 font-medium mb-1">💬 Mensagem:</div>
-                                <div className="text-sm text-gray-700 whitespace-pre-wrap">{log.extra_data.message_text}</div>
-                              </div>
-                            )}
-
-                            {/* Timeline de Status */}
-                            <div className="grid grid-cols-3 gap-2 bg-gray-50 p-3 rounded">
-                              <div className="text-center">
-                                <div className="text-xs text-gray-500 mb-1">📤 Enviada em</div>
-                                <div className="text-sm font-medium text-gray-900">
-                                  {log.extra_data?.sent_at ? formatDate(log.extra_data.sent_at) : (log.log_type === 'message_sent' ? formatDate(log.created_at) : '---')}
-                                </div>
-                              </div>
-                              <div className="text-center border-l border-gray-200">
-                                <div className="text-xs text-gray-500 mb-1">✅ Entregue em</div>
-                                <div className="text-sm font-medium text-gray-600">
-                                  {log.extra_data?.delivered_at ? formatDate(log.extra_data.delivered_at) : (log.log_type === 'message_delivered' || log.log_type === 'message_read' ? formatDate(log.created_at) : '---')}
-                                </div>
-                              </div>
-                              <div className="text-center border-l border-gray-200">
-                                <div className="text-xs text-gray-500 mb-1">👁️ Visto em</div>
-                                <div className="text-sm font-medium text-gray-600">
-                                  {log.extra_data?.read_at ? formatDate(log.extra_data.read_at) : (log.log_type === 'message_read' ? formatDate(log.created_at) : '---')}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Erro se houver */}
-                            {log.log_type === 'message_failed' && log.extra_data?.error && (
-                              <div className="bg-red-50 border border-red-200 rounded p-2">
-                                <div className="text-xs text-red-600 font-medium mb-1">❌ Motivo da Falha:</div>
-                                <div className="text-sm text-red-700">{log.extra_data.error}</div>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
+                          )
+                        }
+                        
+                        // Log padrão (campaign_created, campaign_started, etc)
+                        return (
+                          <div
+                            key={log.id || idx}
+                            className={`border-l-4 p-4 rounded-r-lg ${getLogColor(log.log_type)}`}
+                          >
                           /* Card de Log Padrão (Campanha criada, iniciada, etc) */
                           <div className="flex items-start gap-3">
                             {getLogIcon(log.log_type)}
