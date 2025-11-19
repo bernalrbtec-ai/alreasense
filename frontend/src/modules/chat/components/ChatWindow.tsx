@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, CheckCircle, XCircle, Plus, User } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, CheckCircle, XCircle, Plus, User, Clock } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -13,6 +13,7 @@ import { toast } from 'sonner';
 import { useChatSocket } from '../hooks/useChatSocket';
 import { getDisplayName } from '../utils/phoneFormatter';
 import ContactModal from '@/components/contacts/ContactModal';
+import ContactHistory from '@/components/contacts/ContactHistory';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -28,6 +29,7 @@ export function ChatWindow() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [existingContact, setExistingContact] = useState<any>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
   // 🔍 Debug: Log quando profile_pic_url muda
@@ -285,9 +287,11 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#efeae2] animate-fade-in">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300 shadow-sm">
+    <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
+      {/* Main Chat Area */}
+      <div className={`flex flex-col flex-1 min-w-0 transition-all duration-300 ${showHistory ? 'md:mr-[320px]' : ''}`}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Botão Voltar (mobile) */}
           <button
@@ -402,6 +406,19 @@ export function ChatWindow() {
 
         {/* Actions */}
         <div className="flex items-center gap-2">
+          {/* Botão Histórico (apenas se contato existir) */}
+          {existingContact && activeConversation?.conversation_type !== 'group' && (
+            <button
+              onClick={() => setShowHistory(!showHistory)}
+              className={`p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md ${
+                showHistory ? 'bg-gray-200' : ''
+              }`}
+              title="Histórico do Contato"
+            >
+              <Clock className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
+          
           <button 
             className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md" 
             title="Buscar"
@@ -460,12 +477,34 @@ export function ChatWindow() {
         <MessageList />
       </div>
 
-      {/* Input */}
-      <MessageInput 
-        sendMessage={sendMessage}
-        sendTyping={sendTyping}
-        isConnected={isConnected}
-      />
+        {/* Input */}
+        <MessageInput 
+          sendMessage={sendMessage}
+          sendTyping={sendTyping}
+          isConnected={isConnected}
+        />
+      </div>
+
+      {/* Sidebar de Histórico */}
+      {showHistory && existingContact && activeConversation?.conversation_type !== 'group' && (
+        <div className="hidden md:flex flex-col w-[320px] bg-white border-l border-gray-200 shadow-lg flex-shrink-0 h-full overflow-hidden">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+            <h3 className="font-semibold text-gray-900">Histórico</h3>
+            <button
+              onClick={() => setShowHistory(false)}
+              className="p-1 hover:bg-gray-200 rounded transition-colors"
+            >
+              <X className="w-4 h-4 text-gray-600" />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <ContactHistory
+              contactId={existingContact.id}
+              onClose={() => setShowHistory(false)}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Modals */}
       {showTransferModal && (

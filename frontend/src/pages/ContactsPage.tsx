@@ -9,6 +9,7 @@ import ContactCard from '../components/contacts/ContactCard'
 import ImportContactsModal from '../components/contacts/ImportContactsModal'
 import ContactsTable from '../components/contacts/ContactsTable'
 import TagEditModal from '../components/contacts/TagEditModal'
+import ContactHistory from '../components/contacts/ContactHistory'
 
 interface Contact {
   id: string
@@ -50,6 +51,8 @@ export default function ContactsPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
+  const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [selectedContactId, setSelectedContactId] = useState<string | null>(null)
   const [editingContact, setEditingContact] = useState<Contact | null>(null)
   const [tags, setTags] = useState<Tag[]>([])
   const [newTagName, setNewTagName] = useState('')
@@ -729,6 +732,10 @@ export default function ContactsPage() {
                 contact={contact}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onShowHistory={(contactId) => {
+                  setSelectedContactId(contactId)
+                  setShowHistoryModal(true)
+                }}
               />
             ))}
         </div>
@@ -1092,6 +1099,35 @@ export default function ContactsPage() {
             setShowImportModal(false)
           }}
         />
+      )}
+
+      {/* History Modal */}
+      {showHistoryModal && selectedContactId && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-gray-900">Histórico do Contato</h2>
+              <button
+                onClick={() => {
+                  setShowHistoryModal(false)
+                  setSelectedContactId(null)
+                }}
+                className="p-2 hover:bg-gray-100 rounded transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4">
+              <ContactHistory
+                contactId={selectedContactId}
+                onClose={() => {
+                  setShowHistoryModal(false)
+                  setSelectedContactId(null)
+                }}
+              />
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

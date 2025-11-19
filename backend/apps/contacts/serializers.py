@@ -3,7 +3,7 @@ Serializers para o módulo de contatos
 """
 
 from rest_framework import serializers
-from .models import Contact, Tag, ContactList, ContactImport
+from .models import Contact, Tag, ContactList, ContactImport, ContactHistory
 from .utils import normalize_phone, get_state_from_ddd, extract_ddd_from_phone, get_state_from_phone
 
 
@@ -272,3 +272,55 @@ class ContactImportSerializer(serializers.ModelSerializer):
             'created_count', 'updated_count', 'skipped_count', 'error_count',
             'errors', 'created_at', 'completed_at'
         ]
+
+
+class ContactHistorySerializer(serializers.ModelSerializer):
+    """Serializer para histórico de contatos"""
+    
+    event_type_display = serializers.CharField(source='get_event_type_display', read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ContactHistory
+        fields = [
+            'id', 'event_type', 'event_type_display', 'title', 'description',
+            'metadata', 'created_by', 'created_by_name', 'created_at',
+            'is_editable', 'related_conversation', 'related_campaign',
+            'related_message'
+        ]
+        read_only_fields = [
+            'id', 'event_type', 'created_by', 'created_at',
+            'related_conversation', 'related_campaign', 'related_message'
+        ]
+    
+    def get_created_by_name(self, obj):
+        """Retorna nome do usuário que criou o evento"""
+        if obj.created_by:
+            return obj.created_by.get_full_name() or obj.created_by.email
+        return None
+
+
+class ContactHistoryCreateSerializer(serializers.ModelSerializer):
+    """Serializer para criar anotações manuais no histórico"""
+    
+    class Meta:
+        model = ContactHistory
+        fields = ['title', 'description', 'metadata']
+    
+    def create(self, validated_data):
+        """Cria anotação manual editável"""
+        contact = self.context.get('contact')
+        tenant = self.context.get('tenant')
+        user = self.context.get('user')
+        
+        if not contact or not tenant:
+            raise serializers.ValidationError('Contexto inválido: contact e tenant são obrigatórios')
+        
+        return ContactHistory.create_note(
+            contact=contact,
+            tenant=tenant,
+            title=validated_data['title'],
+            description=validated_data.get('description', ''),
+            created_by=user,
+            metadata=validated_data.get('metadata', {})
+        )

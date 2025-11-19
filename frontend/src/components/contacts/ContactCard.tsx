@@ -1,4 +1,4 @@
-import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus, Sparkles, ChevronDown, ChevronUp, Clock } from 'lucide-react'
 import { useState } from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -42,9 +42,10 @@ interface ContactCardProps {
   contact: Contact
   onEdit: (contact: Contact) => void
   onDelete: (id: string) => void
+  onShowHistory?: (contactId: string) => void
 }
 
-export default function ContactCard({ contact, onEdit, onDelete }: ContactCardProps) {
+export default function ContactCard({ contact, onEdit, onDelete, onShowHistory }: ContactCardProps) {
   const [showCustomFields, setShowCustomFields] = useState(false)
   
   const customFields = contact.custom_fields || {}
@@ -82,6 +83,17 @@ export default function ContactCard({ contact, onEdit, onDelete }: ContactCardPr
         </div>
         
         <div className="flex gap-1">
+          {onShowHistory && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onShowHistory(contact.id)}
+              className="p-1"
+              title="Ver histórico"
+            >
+              <Clock className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"

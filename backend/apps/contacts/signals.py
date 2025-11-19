@@ -2,7 +2,7 @@
 Signals para atualizar métricas de contatos automaticamente e sincronizar com conversas
 """
 
-from django.db.models.signals import post_save, post_delete
+from django.db.models.signals import post_save, post_delete, pre_save
 from django.dispatch import receiver
 from django.core.cache import cache
 import logging
@@ -164,3 +164,182 @@ def update_conversations_on_contact_delete(sender, instance, **kwargs):
                 logger.debug(f"✅ [CONTACT SIGNAL] Broadcast enviado para conversa {conversation.id} após deleção")
             except Exception as e:
                 logger.error(f"❌ [CONTACT SIGNAL] Erro ao fazer broadcast após deleção: {e}", exc_info=True)
+
+
+# ==================== HISTÓRICO DE CONTATOS ====================
+
+@receiver(post_save)
+def create_chat_message_history(sender, instance, created, **kwargs):
+    """
+    Cria evento no histórico quando uma mensagem do chat é criada.
+    """
+    # Verificar se é o modelo Message do chat
+    if sender.__name__ != 'Message' or not created:
+        return
+    
+    # Verificar se é do app chat (não chat_messages)
+    if not hasattr(instance, 'conversation'):
+        return
+    
+    try:
+        from apps.contacts.models import Contact, ContactHistory
+        from apps.contacts.signals import normalize_phone_for_search
+        from django.db.models import Q
+        
+        conversation = instance.conversation
+        
+        # Apenas para conversas individuais
+        if conversation.conversation_type != 'individual':
+            return
+        
+        # Buscar contato pelo telefone
+        normalized_phone = normalize_phone_for_search(conversation.contact_phone)
+        contact = Contact.objects.filter(
+            Q(tenant=conversation.tenant) &
+            (Q(phone=normalized_phone) | Q(phone=conversation.contact_phone))
+        ).first()
+        
+        if not contact:
+            return  # Contato não existe na lista
+        
+        # Criar evento no histórico
+        ContactHistory.create_chat_message_event(
+            contact=contact,
+            tenant=conversation.tenant,
+            message=instance,
+            conversation=conversation,
+            direction=instance.direction
+        )
+        
+        logger.debug(f"✅ [HISTORY] Evento criado para mensagem {instance.id} do contato {contact.id}")
+        
+    except Exception as e:
+        logger.error(f"❌ [HISTORY] Erro ao criar histórico de mensagem: {e}", exc_info=True)
+
+
+# ✅ OTIMIZAÇÃO: Usar pre_save para capturar valores antigos
+from django.db.models.signals import pre_save
+
+def get_conversation_model():
+    """Lazy import para evitar circular imports"""
+    from apps.chat.models import Conversation
+    return Conversation
+
+@receiver(pre_save)
+def capture_conversation_old_values(sender, instance, **kwargs):
+    """Captura valores antigos antes de salvar para detectar mudanças"""
+    Conversation = get_conversation_model()
+    if sender != Conversation:
+        return
+    
+    if instance.pk:
+        try:
+            old_instance = sender.objects.get(pk=instance.pk)
+            instance._old_department_id = old_instance.department_id
+            instance._old_assigned_to_id = old_instance.assigned_to_id
+            instance._old_assigned_to = old_instance.assigned_to
+        except sender.DoesNotExist:
+            instance._old_department_id = None
+            instance._old_assigned_to_id = None
+            instance._old_assigned_to = None
+    else:
+        instance._old_department_id = None
+        instance._old_assigned_to_id = None
+        instance._old_assigned_to = None
+
+
+@receiver(post_save)
+def create_conversation_transfer_history(sender, instance, created, **kwargs):
+    """
+    Cria evento no histórico quando uma conversa é transferida ou atribuída.
+    ✅ OTIMIZADO: Usa valores capturados em pre_save
+    """
+    Conversation = get_conversation_model()
+    if sender != Conversation:
+        return
+    
+    # Apenas para conversas individuais
+    if instance.conversation_type != 'individual':
+        return
+    
+    try:
+        from apps.contacts.models import Contact, ContactHistory
+        from apps.contacts.signals import normalize_phone_for_search
+        from django.db.models import Q
+        
+        # Buscar contato
+        normalized_phone = normalize_phone_for_search(instance.contact_phone)
+        contact = Contact.objects.filter(
+            Q(tenant=instance.tenant) &
+            (Q(phone=normalized_phone) | Q(phone=instance.contact_phone))
+        ).first()
+        
+        if not contact:
+            return
+        
+        # Verificar se houve mudança de departamento ou atribuição
+        if created:
+            # Nova conversa atribuída
+            if instance.assigned_to:
+                ContactHistory.objects.create(
+                    contact=contact,
+                    tenant=instance.tenant,
+                    event_type='assigned_to',
+                    title=f'Atribuído para {instance.assigned_to.get_full_name() or instance.assigned_to.email}',
+                    description=f'Conversa atribuída para {instance.assigned_to.get_full_name() or instance.assigned_to.email}',
+                    created_by=None,
+                    is_editable=False,
+                    metadata={
+                        'assigned_to_id': str(instance.assigned_to.id),
+                        'assigned_to_name': instance.assigned_to.get_full_name() or instance.assigned_to.email,
+                    },
+                    related_conversation=instance
+                )
+        else:
+            # ✅ OTIMIZAÇÃO: Verificar mudanças usando valores capturados
+            old_dept_id = getattr(instance, '_old_department_id', None)
+            old_assigned_id = getattr(instance, '_old_assigned_to_id', None)
+            
+            if old_dept_id != instance.department_id:
+                # Transferência de departamento
+                from apps.authn.models import Department
+                old_dept = Department.objects.filter(id=old_dept_id).first() if old_dept_id else None
+                new_dept = instance.department
+                
+                ContactHistory.objects.create(
+                    contact=contact,
+                    tenant=instance.tenant,
+                    event_type='department_transfer',
+                    title=f'Transferido para {new_dept.name if new_dept else "Sem departamento"}',
+                    description=f'Transferido de {old_dept.name if old_dept else "Sem departamento"} para {new_dept.name if new_dept else "Sem departamento"}',
+                    created_by=None,
+                    is_editable=False,
+                    metadata={
+                        'old_department_id': str(old_dept_id) if old_dept_id else None,
+                        'new_department_id': str(instance.department_id) if instance.department_id else None,
+                    },
+                    related_conversation=instance
+                )
+            
+            if old_assigned_id != (instance.assigned_to_id if instance.assigned_to_id else None):
+                # Mudança de atribuição
+                old_user = getattr(instance, '_old_assigned_to', None)
+                new_user = instance.assigned_to
+                
+                ContactHistory.objects.create(
+                    contact=contact,
+                    tenant=instance.tenant,
+                    event_type='assigned_to',
+                    title=f'Atribuição alterada para {new_user.get_full_name() if new_user else "Ninguém"}',
+                    description=f'Atribuição alterada de {old_user.get_full_name() if old_user else "Ninguém"} para {new_user.get_full_name() if new_user else "Ninguém"}',
+                    created_by=None,
+                    is_editable=False,
+                    metadata={
+                        'old_assigned_to_id': str(old_user.id) if old_user else None,
+                        'new_assigned_to_id': str(new_user.id) if new_user else None,
+                    },
+                    related_conversation=instance
+                )
+        
+    except Exception as e:
+        logger.error(f"❌ [HISTORY] Erro ao criar histórico de transferência: {e}", exc_info=True)

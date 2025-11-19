@@ -695,3 +695,189 @@ class ContactImport(models.Model):
         if self.total_rows == 0:
             return 0
         return ((self.created_count + self.updated_count) / self.total_rows) * 100
+
+
+class ContactHistory(models.Model):
+    """
+    Histórico global de interações com o contato.
+    Inclui mensagens do chat, campanhas, anotações e eventos do sistema.
+    """
+    
+    EVENT_TYPE_CHOICES = [
+        ('note', 'Anotação Manual'),
+        ('message_sent', 'Mensagem Enviada (Chat)'),
+        ('message_received', 'Mensagem Recebida (Chat)'),
+        ('campaign_message_sent', 'Mensagem de Campanha Enviada'),
+        ('campaign_message_delivered', 'Mensagem de Campanha Entregue'),
+        ('campaign_message_read', 'Mensagem de Campanha Lida'),
+        ('campaign_message_failed', 'Mensagem de Campanha Falhou'),
+        ('department_transfer', 'Transferência de Departamento'),
+        ('assigned_to', 'Atribuição de Atendente'),
+        ('status_changed', 'Mudança de Status'),
+        ('contact_created', 'Contato Criado'),
+        ('contact_updated', 'Contato Atualizado'),
+    ]
+    
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    
+    contact = models.ForeignKey(
+        Contact,
+        on_delete=models.CASCADE,
+        related_name='history',
+        verbose_name='Contato'
+    )
+    
+    tenant = models.ForeignKey(
+        'tenancy.Tenant',
+        on_delete=models.CASCADE,
+        related_name='contact_history',
+        verbose_name='Tenant'
+    )
+    
+    event_type = models.CharField(
+        max_length=30,
+        choices=EVENT_TYPE_CHOICES,
+        db_index=True,
+        verbose_name='Tipo de Evento'
+    )
+    
+    title = models.CharField(
+        max_length=255,
+        verbose_name='Título',
+        help_text='Título curto do evento'
+    )
+    
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Descrição',
+        help_text='Descrição detalhada do evento'
+    )
+    
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Metadados',
+        help_text='Dados extras do evento (JSON)'
+    )
+    
+    created_by = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_contact_history',
+        verbose_name='Criado Por',
+        help_text='Usuário que criou o evento (None para eventos automáticos)'
+    )
+    
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name='Criado Em'
+    )
+    
+    is_editable = models.BooleanField(
+        default=False,
+        verbose_name='Editável',
+        help_text='Se o evento pode ser editado (apenas anotações manuais)'
+    )
+    
+    # Relacionamentos opcionais para referência
+    related_conversation = models.ForeignKey(
+        'chat.Conversation',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contact_history',
+        verbose_name='Conversa Relacionada'
+    )
+    
+    related_campaign = models.ForeignKey(
+        'campaigns.Campaign',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contact_history',
+        verbose_name='Campanha Relacionada'
+    )
+    
+    related_message = models.ForeignKey(
+        'chat.Message',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='contact_history',
+        verbose_name='Mensagem Relacionada'
+    )
+    
+    class Meta:
+        db_table = 'contacts_history'
+        verbose_name = 'Histórico do Contato'
+        verbose_name_plural = 'Históricos de Contatos'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['contact', 'created_at']),
+            models.Index(fields=['tenant', 'event_type', 'created_at']),
+            models.Index(fields=['contact', 'event_type']),
+        ]
+    
+    def __str__(self):
+        return f"{self.contact.name} - {self.get_event_type_display()} - {self.created_at.strftime('%d/%m/%Y %H:%M')}"
+    
+    @classmethod
+    def create_note(cls, contact, tenant, title, description, created_by, metadata=None):
+        """Cria uma anotação manual editável"""
+        return cls.objects.create(
+            contact=contact,
+            tenant=tenant,
+            event_type='note',
+            title=title,
+            description=description,
+            created_by=created_by,
+            is_editable=True,
+            metadata=metadata or {}
+        )
+    
+    @classmethod
+    def create_chat_message_event(cls, contact, tenant, message, conversation, direction='sent'):
+        """Cria evento de mensagem do chat"""
+        event_type = 'message_sent' if direction == 'sent' else 'message_received'
+        title = f"Mensagem {'enviada' if direction == 'sent' else 'recebida'}"
+        description = message.content[:200] if message.content else '(sem conteúdo)'
+        
+        return cls.objects.create(
+            contact=contact,
+            tenant=tenant,
+            event_type=event_type,
+            title=title,
+            description=description,
+            created_by=message.sender if direction == 'sent' else None,
+            is_editable=False,
+            metadata={
+                'message_id': str(message.id),
+                'direction': direction,
+                'has_attachments': bool(message.attachments.exists()),
+            },
+            related_conversation=conversation,
+            related_message=message
+        )
+    
+    @classmethod
+    def create_campaign_event(cls, contact, tenant, campaign, event_type, title, description, metadata=None):
+        """Cria evento de campanha"""
+        return cls.objects.create(
+            contact=contact,
+            tenant=tenant,
+            event_type=event_type,
+            title=title,
+            description=description,
+            created_by=None,  # Eventos automáticos
+            is_editable=False,
+            metadata=metadata or {},
+            related_campaign=campaign
+        )

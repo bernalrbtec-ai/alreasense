@@ -2,7 +2,7 @@
 Views para o módulo de contatos
 """
 
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -11,12 +11,14 @@ from django.db.models import Q, Avg
 from django.utils import timezone
 from datetime import timedelta
 
-from .models import Contact, Tag, ContactList, ContactImport
+from .models import Contact, Tag, ContactList, ContactImport, ContactHistory
 from .serializers import (
     ContactSerializer,
     TagSerializer,
     ContactListSerializer,
-    ContactImportSerializer
+    ContactImportSerializer,
+    ContactHistorySerializer,
+    ContactHistoryCreateSerializer
 )
 from .services import ContactImportService, ContactExportService
 
@@ -673,3 +675,73 @@ class ContactImportViewSet(viewsets.ReadOnlyModelViewSet):
             return ContactImport.objects.all()
         
         return ContactImport.objects.filter(tenant=user.tenant)
+
+
+class ContactHistoryViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para histórico de contatos.
+    Permite listar, criar (anotações) e editar (apenas anotações editáveis).
+    """
+    
+    permission_classes = [IsAuthenticated]
+    serializer_class = ContactHistorySerializer
+    
+    def get_queryset(self):
+        """Retorna histórico do contato especificado"""
+        user = self.request.user
+        contact_id = self.request.query_params.get('contact_id')
+        
+        if not contact_id:
+            return ContactHistory.objects.none()
+        
+        # Verificar se o contato pertence ao tenant do usuário
+        try:
+            contact = Contact.objects.get(id=contact_id, tenant=user.tenant)
+        except Contact.DoesNotExist:
+            return ContactHistory.objects.none()
+        
+        # Retornar histórico ordenado por data (mais recente primeiro)
+        return ContactHistory.objects.filter(
+            contact=contact,
+            tenant=user.tenant
+        ).select_related('created_by', 'related_conversation', 'related_campaign', 'related_message')
+    
+    def get_serializer_class(self):
+        """Usa serializer de criação para POST"""
+        if self.action == 'create':
+            return ContactHistoryCreateSerializer
+        return ContactHistorySerializer
+    
+    def perform_create(self, serializer):
+        """Cria anotação manual"""
+        contact_id = self.request.data.get('contact_id')
+        if not contact_id:
+            raise serializers.ValidationError({'contact_id': 'Este campo é obrigatório'})
+        
+        try:
+            contact = Contact.objects.get(id=contact_id, tenant=self.request.user.tenant)
+        except Contact.DoesNotExist:
+            raise serializers.ValidationError({'contact_id': 'Contato não encontrado'})
+        
+        # Passar contexto para o serializer
+        serializer.context['contact'] = contact
+        serializer.context['tenant'] = self.request.user.tenant
+        serializer.context['user'] = self.request.user
+        
+        serializer.save()
+    
+    def perform_update(self, serializer):
+        """Permite editar apenas anotações editáveis"""
+        instance = self.get_object()
+        
+        if not instance.is_editable:
+            raise serializers.ValidationError('Apenas anotações manuais podem ser editadas')
+        
+        serializer.save()
+    
+    def perform_destroy(self, instance):
+        """Permite deletar apenas anotações editáveis"""
+        if not instance.is_editable:
+            raise serializers.ValidationError('Apenas anotações manuais podem ser deletadas')
+        
+        instance.delete()

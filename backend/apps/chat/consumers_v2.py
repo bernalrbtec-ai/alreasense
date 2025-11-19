@@ -212,6 +212,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         is_internal = data.get('is_internal', False)
         attachment_urls = data.get('attachment_urls', [])
         include_signature = data.get('include_signature', True)  # ✅ Por padrão inclui assinatura
+        reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
         
         if not content and not attachment_urls:
             await self.send(text_data=json.dumps({
@@ -226,7 +227,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             content=content,
             is_internal=is_internal,
             attachment_urls=attachment_urls,
-            include_signature=include_signature
+            include_signature=include_signature,
+            reply_to=reply_to  # ✅ NOVO: Passar reply_to
         )
         
         if not message:
@@ -411,7 +413,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             return False
     
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True):
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None):
         """Cria mensagem no banco."""
         from apps.chat.models import Message, Conversation
         
@@ -424,6 +426,10 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             }
             if attachment_urls:
                 metadata['attachment_urls'] = attachment_urls
+            
+            # ✅ NOVO: Adicionar reply_to no metadata se fornecido
+            if reply_to:
+                metadata['reply_to'] = reply_to
             
             message = Message.objects.create(
                 conversation=conversation,
