@@ -756,6 +756,24 @@ const CampaignsPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Modal de Adicionar Contatos */}
+      {showAddContactsModal && selectedCampaignForAddContacts && (
+        <AddContactsModal
+          campaign={{
+            id: selectedCampaignForAddContacts.id,
+            name: selectedCampaignForAddContacts.name,
+            total_contacts: selectedCampaignForAddContacts.total_contacts
+          }}
+          onClose={() => {
+            setShowAddContactsModal(false)
+            setSelectedCampaignForAddContacts(null)
+          }}
+          onSuccess={() => {
+            fetchData(false)
+          }}
+        />
+      )}
     </div>
   )
 }

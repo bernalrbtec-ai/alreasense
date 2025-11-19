@@ -20,7 +20,8 @@ import {
   Phone,
   RefreshCw,
   AlertCircle,
-  Activity
+  Activity,
+  UserPlus
 } from 'lucide-react'
 
 interface Campaign {
@@ -294,6 +295,20 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                     className="h-8 w-8 p-0 hover:bg-blue-100 hover:text-blue-700"
                   >
                     <Edit className="h-4 w-4" />
+                  </Button>
+                </Tooltip>
+              )}
+
+              {/* Botão Adicionar Contatos: para campanhas em rascunho ou pausadas */}
+              {onAddContacts && (campaign.status === 'draft' || campaign.status === 'paused') && (
+                <Tooltip content="Adicionar contatos faltantes">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => onAddContacts(campaign)}
+                    className="h-8 w-8 p-0 hover:bg-purple-100 hover:text-purple-700"
+                  >
+                    <UserPlus className="h-4 w-4" />
                   </Button>
                 </Tooltip>
               )}
