@@ -661,38 +661,41 @@ const CampaignsPage: React.FC = () => {
                             key={log.id || idx}
                             className={`border-l-4 p-4 rounded-r-lg ${getLogColor(log.log_type)}`}
                           >
-                          /* Card de Log Padrão (Campanha criada, iniciada, etc) */
-                          <div className="flex items-start gap-3">
-                            {getLogIcon(log.log_type)}
-                          <div className="flex-1">
-                              <div className="flex items-center gap-2 mb-1">
-                                <span className="font-medium text-gray-900">
-                                  {log.log_type_display}
-                                </span>
-                                {log.instance_name && (
-                                  <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
-                                    {log.instance_name}
-                              </span>
-                                )}
-                            </div>
-                              <p className="text-gray-700 mb-2">{log.message}</p>
-                              <div className="flex items-center gap-4 text-sm text-gray-500">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-3 w-3" />
-                                  {formatDate(log.created_at)}
-                                </span>
-                            {log.contact_name && (
-                                  <span className="flex items-center gap-1">
-                                    <Users className="h-3 w-3" />
-                                    {log.contact_name}
-                                    {log.contact_phone && ` (${log.contact_phone})`}
+                            {/* Card de Log Padrão (Campanha criada, iniciada, etc) */}
+                            <div className="flex items-start gap-3">
+                              {getLogIcon(log.log_type)}
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-medium text-gray-900">
+                                    {log.log_type_display}
                                   </span>
-                                )}
-                                <span>por {log.user_name}</span>
+                                  {log.instance_name && (
+                                    <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
+                                      {log.instance_name}
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-gray-700 mb-2">{log.message}</p>
+                                <div className="flex items-center gap-4 text-sm text-gray-500">
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {formatDate(log.created_at)}
+                                  </span>
+                                  {log.contact_name && (
+                                    <span className="flex items-center gap-1">
+                                      <Users className="h-3 w-3" />
+                                      {log.contact_name}
+                                      {log.contact_phone && ` (${log.contact_phone})`}
+                                    </span>
+                                  )}
+                                  <span>por {log.user_name}</span>
+                                </div>
                               </div>
-                              </div>
+                            </div>
                           </div>
-                        )}
+                        )
+                      })
+                    })()}
                       </div>
                     ))}
                   </div>
