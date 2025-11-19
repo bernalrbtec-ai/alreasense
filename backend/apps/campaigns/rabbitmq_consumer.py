@@ -741,14 +741,60 @@ class RabbitMQConsumer:
                 
                 logger.info(f"🔍 [DEBUG] Instância {instance.instance_name} está ativa")
                 
-                # Buscar mensagem da campanha
+                # ✅ CORREÇÃO CRÍTICA: Usar rotação de mensagens (menor times_used primeiro)
                 from asgiref.sync import sync_to_async
+                from django.db.models import F
+                from apps.campaigns.models import CampaignMessage
+                import logging
+                rotation_logger = logging.getLogger(__name__)
                 
                 @sync_to_async
-                def get_message():
-                    return campaign.messages.first()
+                def get_message_with_rotation():
+                    # ✅ DEBUG: Listar TODAS as mensagens antes da seleção
+                    all_messages = CampaignMessage.objects.filter(
+                        campaign=campaign,
+                        is_active=True
+                    ).order_by('order').values('id', 'order', 'times_used', 'content')
+                    
+                    rotation_logger.info(f"📋 [ROTAÇÃO DEBUG] Todas as mensagens disponíveis:")
+                    for msg in all_messages:
+                        rotation_logger.info(f"   - Mensagem ordem={msg['order']}, times_used={msg['times_used']}, id={str(msg['id'])[:8]}..., content={msg['content'][:50]}...")
+                    
+                    # ✅ CORREÇÃO CRÍTICA: Buscar mensagem com menor uso usando query atômica
+                    # Ordenar por times_used ASC (menor primeiro), depois por order ASC (ordem de criação)
+                    message = CampaignMessage.objects.filter(
+                        campaign=campaign,
+                        is_active=True
+                    ).order_by('times_used', 'order').first()
+                    
+                    if not message:
+                        rotation_logger.error(f"❌ [ROTAÇÃO] Nenhuma mensagem ativa encontrada para campanha {campaign.id}")
+                        return None
+                    
+                    # ✅ DEBUG: Log da mensagem selecionada ANTES do incremento
+                    times_used_before = message.times_used
+                    rotation_logger.info(f"🎯 [ROTAÇÃO] Mensagem selecionada ANTES incremento: ordem={message.order}, times_used={times_used_before}, id={str(message.id)[:8]}..., content={message.content[:50]}...")
+                    
+                    # ✅ CORREÇÃO CRÍTICA: Incrementar times_used ANTES de enviar (atomicamente)
+                    # Isso garante que a próxima seleção já veja o valor atualizado
+                    rows_updated = CampaignMessage.objects.filter(id=message.id).update(times_used=F('times_used') + 1)
+                    rotation_logger.info(f"✅ [ROTAÇÃO] Incremento executado: rows_updated={rows_updated}")
+                    
+                    # Recarregar mensagem para ter times_used atualizado
+                    message.refresh_from_db()
+                    
+                    # ✅ DEBUG: Log DEPOIS do incremento
+                    rotation_logger.info(f"🔄 [ROTAÇÃO] DEPOIS incremento - Mensagem: ordem={message.order}, times_used={message.times_used} (era {times_used_before})")
+                    
+                    # ✅ CORREÇÃO: Salvar message_used no campaign_contact ANTES de enviar
+                    contact.message_used = message
+                    contact.save(update_fields=['message_used'])
+                    
+                    rotation_logger.info(f"📤 [ENVIO] Preparando envio - Contato: {contact.contact.name}, Mensagem ordem={message.order}, times_used={message.times_used}, content={message.content[:50]}...")
+                    
+                    return message
                 
-                message = await get_message()
+                message = await get_message_with_rotation()
                 
                 if not message:
                     logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
@@ -832,25 +878,57 @@ class RabbitMQConsumer:
                             logger.warning(f"⚠️ [AIO-PIKA] message_id não encontrado na resposta para {contact_phone}")
                             logger.warning(f"   Response data: {response_data}")
                         
-                        # ✅ CORREÇÃO: Atualizar next_message_scheduled_at após envio bem-sucedido
-                        # Calcular próximo disparo baseado no intervalo da campanha (valores configurados)
-                        # Usa random.uniform para garantir tempos distintos e humanizados
-                        import random
-                        from django.utils import timezone
-                        from datetime import timedelta
-                        
-                        min_interval = campaign.interval_min
-                        max_interval = campaign.interval_max
-                        random_interval = random.uniform(min_interval, max_interval)
-                        next_scheduled = timezone.now() + timedelta(seconds=random_interval)
-                        
+                        # ✅ CORREÇÃO CRÍTICA: Atualizar próximo contato e instância após envio bem-sucedido
                         @sync_to_async
-                        def update_next_scheduled():
+                        def update_next_contact_info():
+                            from apps.campaigns.models import CampaignContact
+                            from apps.campaigns.services import RotationService
+                            
+                            # Buscar próximo contato pendente
+                            next_campaign_contact = CampaignContact.objects.filter(
+                                campaign=campaign,
+                                status__in=['pending', 'sending']
+                            ).select_related('contact').first()
+                            
+                            if next_campaign_contact:
+                                campaign.next_contact_name = next_campaign_contact.contact.name
+                                campaign.next_contact_phone = next_campaign_contact.contact.phone
+                                
+                                # Obter próxima instância usando o serviço de rotação
+                                rotation_service = RotationService(campaign)
+                                next_instance = rotation_service.select_next_instance()
+                                if next_instance:
+                                    campaign.next_instance_name = next_instance.friendly_name
+                                else:
+                                    campaign.next_instance_name = None
+                            else:
+                                # Não há mais contatos pendentes
+                                campaign.next_contact_name = None
+                                campaign.next_contact_phone = None
+                                campaign.next_instance_name = None
+                            
+                            # Calcular próximo disparo baseado no intervalo da campanha
+                            import random
+                            from django.utils import timezone
+                            from datetime import timedelta
+                            
+                            min_interval = campaign.interval_min
+                            max_interval = campaign.interval_max
+                            random_interval = random.uniform(min_interval, max_interval)
+                            next_scheduled = timezone.now() + timedelta(seconds=random_interval)
                             campaign.next_message_scheduled_at = next_scheduled
-                            campaign.save(update_fields=['next_message_scheduled_at'])
+                            
+                            # ✅ CORREÇÃO: Salvar todos os campos de próximo contato e disparo
+                            campaign.save(update_fields=[
+                                'next_contact_name', 'next_contact_phone', 'next_instance_name',
+                                'next_message_scheduled_at'
+                            ])
+                            
+                            rotation_logger.info(f"✅ [PRÓXIMO CONTATO] Atualizado: {campaign.next_contact_name} ({campaign.next_contact_phone})")
+                            rotation_logger.info(f"⏰ [AIO-PIKA] Próximo disparo agendado para: {next_scheduled} (em {random_interval:.1f}s)")
                         
-                        await update_next_scheduled()
-                        logger.info(f"⏰ [AIO-PIKA] Próximo disparo agendado para: {next_scheduled} (em {random_interval:.1f}s)")
+                        await update_next_contact_info()
+                        logger.info(f"✅ [AIO-PIKA] Próximo contato e disparo atualizados com sucesso")
                         
                         # Log de sucesso (passar message_text também)
                         await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
