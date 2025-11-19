@@ -85,12 +85,33 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         ✅ PERFORMANCE: Otimizações aplicadas:
         - Calcula unread_count em batch (evita N+1 queries)
         - Prefetch última mensagem (evita N+1 queries)
+        
+        ✅ SEGURANÇA CRÍTICA: SEMPRE filtrar por tenant para evitar vazamento de dados
         """
         from django.db.models import Prefetch, Count, Q, OuterRef, Subquery
         from apps.chat.models import Message
         
         queryset = super().get_queryset()
         user = self.request.user
+        
+        # ✅ SEGURANÇA CRÍTICA: SEMPRE filtrar por tenant primeiro
+        # Isso previne vazamento de dados entre tenants
+        # EXCEÇÃO: Superusers podem precisar acessar múltiplos tenants (para debug/admin)
+        # Mas por padrão, mesmo superusers devem ter tenant associado
+        if not user.is_authenticated:
+            return queryset.none()
+        
+        # Se não tem tenant, retornar vazio (mesmo para superuser)
+        # Superusers devem ter tenant associado para operações normais
+        if not user.tenant:
+            logger.warning(
+                f"⚠️ [SEGURANÇA] Usuário {user.email} sem tenant associado. "
+                f"Bloqueando acesso a conversas."
+            )
+            return queryset.none()
+        
+        # Filtrar por tenant (aplicado para TODOS os usuários, incluindo superusers)
+        queryset = queryset.filter(tenant=user.tenant)
         
         # ✅ PERFORMANCE: Calcular unread_count em batch usando annotate
         # Isso evita N+1 queries quando serializer acessa unread_count
@@ -1082,10 +1103,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         """
         try:
             conversation = self.get_object()
+            
+            # ✅ SEGURANÇA CRÍTICA: Verificar se conversa pertence ao tenant do usuário
+            if conversation.tenant_id != request.user.tenant_id:
+                logger.error(
+                    f"🚨 [SEGURANÇA] Tentativa de acesso a conversa de outro tenant! "
+                    f"Usuário: {request.user.email} (tenant: {request.user.tenant_id}), "
+                    f"Conversa: {pk} (tenant: {conversation.tenant_id})"
+                )
+                return Response({
+                    'error': 'Conversa não encontrada'
+                }, status=status.HTTP_404_NOT_FOUND)
+                
         except Conversation.DoesNotExist:
             # ✅ CORREÇÃO: Verificar se conversa existe mas não está acessível (problema de filtro/permissão)
             try:
-                # Tentar buscar diretamente sem filtros para ver se existe
+                # Tentar buscar diretamente COM filtro de tenant para ver se existe
                 direct_conversation = Conversation.objects.get(id=pk, tenant=request.user.tenant)
                 logger.warning(
                     f"⚠️ [MESSAGES] Conversa {pk} existe mas não está acessível para usuário {request.user.id} "

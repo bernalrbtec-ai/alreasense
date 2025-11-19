@@ -365,13 +365,26 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         try:
             conversation = Conversation.objects.get(id=conversation_id)
             
-            # Superuser pode tudo
+            # ✅ SEGURANÇA CRÍTICA: Verificar tenant PRIMEIRO
+            # Mesmo superusers devem ter tenant associado para operações normais
+            if not self.user.tenant:
+                logger.warning(
+                    f"🚨 [SEGURANÇA WS] Usuário {self.user.email} sem tenant tentou acessar conversa {conversation_id}"
+                )
+                return False
+            
+            # Verifica tenant (aplicado para TODOS, incluindo superusers)
+            if conversation.tenant_id != self.user.tenant_id:
+                logger.warning(
+                    f"🚨 [SEGURANÇA WS] Tentativa de acesso a conversa de outro tenant! "
+                    f"Usuário: {self.user.email} (tenant: {self.user.tenant_id}), "
+                    f"Conversa: {conversation_id} (tenant: {conversation.tenant_id})"
+                )
+                return False
+            
+            # Superuser com tenant correto pode tudo
             if self.user.is_superuser:
                 return True
-            
-            # Verifica tenant
-            if conversation.tenant_id != self.user.tenant_id:
-                return False
             
             # Admin do tenant pode tudo
             if self.user.is_admin:
