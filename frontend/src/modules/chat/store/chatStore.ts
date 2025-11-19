@@ -41,6 +41,11 @@ interface ChatState {
   connectionStatus: 'connecting' | 'connected' | 'disconnected';
   setConnectionStatus: (status: 'connecting' | 'connected' | 'disconnected') => void;
 
+  // Reply (responder mensagem)
+  replyToMessage: Message | null;
+  setReplyToMessage: (message: Message | null) => void;
+  clearReply: () => void;
+
   // Reset
   reset: () => void;
 }
@@ -353,6 +358,11 @@ export const useChatStore = create<ChatState>((set) => ({
   setTyping: (typing, user) => set({ typing, typingUser: user || null }),
   setConnectionStatus: (status) => set({ connectionStatus: status }),
 
+  // Reply (responder mensagem)
+  replyToMessage: null,
+  setReplyToMessage: (message) => set({ replyToMessage: message }),
+  clearReply: () => set({ replyToMessage: null }),
+
   // Reset
   reset: () => set({
     departments: [],
@@ -362,7 +372,8 @@ export const useChatStore = create<ChatState>((set) => ({
     messages: [],
     typing: false,
     typingUser: null,
-    connectionStatus: 'disconnected'
+    connectionStatus: 'disconnected',
+    replyToMessage: null
   })
 }));
 

@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip, PenTool } from 'lucide-react';
+import { Send, Smile, Paperclip, PenTool, X, Reply } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -12,13 +12,13 @@ import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { api } from '@/lib/api';
 
 interface MessageInputProps {
-  sendMessage: (content: string, includeSignature?: boolean) => boolean;
+  sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
 }
 
 export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageInputProps) {
-  const { activeConversation } = useChatStore();
+  const { activeConversation, replyToMessage, clearReply } = useChatStore();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
@@ -104,10 +104,15 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
       // 2️⃣ Se houver texto, enviar mensagem
       if (hasText) {
-        const success = sendMessage(message.trim(), includeSignature);
+        const replyToId = replyToMessage?.id;
+        const success = sendMessage(message.trim(), includeSignature, false, replyToId);
         
         if (success) {
           setMessage('');
+          // ✅ Limpar reply após enviar mensagem
+          if (replyToMessage) {
+            clearReply();
+          }
           // ✅ Removido toast "Mensagem enviada" - desnecessário e polui a interface
         } else {
           toast.error('Erro ao enviar mensagem. WebSocket desconectado.', {
@@ -118,6 +123,10 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       } else if (selectedFile) {
         // Se só tinha arquivo (sem texto), toast já foi mostrado no handleFileUpload
         console.log('✅ [SEND] Apenas arquivo enviado');
+        // ✅ Limpar reply após enviar arquivo também
+        if (replyToMessage) {
+          clearReply();
+        }
       }
     } catch (error: any) {
       console.error('Erro ao enviar mensagem/arquivo:', error);

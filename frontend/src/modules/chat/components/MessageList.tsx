@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Smile } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Smile, Reply } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
@@ -546,6 +546,31 @@ export function MessageList() {
                     {msg.sender_name || msg.sender_phone}
                   </p>
                 )}
+
+                {/* ✅ NOVO: Preview de mensagem respondida (reply_to) */}
+                {msg.metadata?.reply_to && (() => {
+                  const replyToId = msg.metadata.reply_to;
+                  const repliedMessage = messages.find(m => m.id === replyToId);
+                  
+                  if (repliedMessage) {
+                    return (
+                      <div className="mb-2 pl-3 border-l-4 border-l-blue-500 bg-gray-50 rounded-r-lg py-1.5">
+                        <div className="flex items-center gap-1 mb-0.5">
+                          <Reply className="w-3 h-3 text-blue-500" />
+                          <p className="text-xs font-medium text-blue-600">
+                            {repliedMessage.direction === 'incoming' 
+                              ? (repliedMessage.sender_name || repliedMessage.sender_phone || 'Contato')
+                              : 'Você'}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-600 line-clamp-1">
+                          {repliedMessage.content || (repliedMessage.attachments && repliedMessage.attachments.length > 0 ? '📎 Anexo' : 'Mensagem')}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
                 
                 {/* Anexos - renderizar ANTES do texto */}
                 {msg.attachments && msg.attachments.length > 0 && (
