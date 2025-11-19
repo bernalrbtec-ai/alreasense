@@ -253,12 +253,21 @@ class CampaignSender:
         print(f"🔍 [HEALTH] Status visual da instância {instance.friendly_name}: {health_status}")
         
         # Selecionar mensagem (rotacionar entre as disponíveis)
-        messages = list(self.campaign.messages.all().order_by('order'))
-        if not messages:
-            return False, "Nenhuma mensagem configurada"
+        # ✅ CORREÇÃO: Filtrar apenas mensagens ativas e aprovadas
+        messages = list(self.campaign.messages.filter(
+            is_active=True
+        ).order_by('times_used', 'order'))  # Ordenar por times_used primeiro para rotação balanceada
         
-        # Escolher mensagem com menor uso
-        message = min(messages, key=lambda m: m.times_used)
+        if not messages:
+            return False, "Nenhuma mensagem ativa configurada"
+        
+        # Escolher mensagem com menor uso (primeira da lista já ordenada)
+        message = messages[0]
+        
+        # Log para debug
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"🔄 [ROTAÇÃO] Mensagem selecionada: ordem={message.order}, times_used={message.times_used}, total_mensagens={len(messages)}")
         
         # Atualizar status
         campaign_contact.status = 'sending'
