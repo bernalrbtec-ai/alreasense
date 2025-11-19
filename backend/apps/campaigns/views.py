@@ -380,11 +380,23 @@ class CampaignViewSet(viewsets.ModelViewSet):
         
         campaign = self.get_object()
         
-        # Verificar se campanha pode receber novos contatos
+        # ✅ CORREÇÃO: Se campanha está 'completed', mudar para 'paused' automaticamente
+        # Isso permite adicionar contatos a campanhas finalizadas
         if campaign.status == 'completed':
-            return Response(
-                {'error': 'Não é possível adicionar contatos a uma campanha concluída'},
-                status=status.HTTP_400_BAD_REQUEST
+            logger.info(f"🔄 [ADD CONTACTS] Campanha {campaign.id} está 'completed', mudando para 'paused' para permitir adicionar contatos")
+            campaign.status = 'paused'
+            campaign.save(update_fields=['status'])
+            
+            # Log da mudança de status
+            CampaignLog.objects.create(
+                campaign=campaign,
+                event_type='campaign_status_changed',
+                message=f'Status alterado de "completed" para "paused" para permitir adicionar contatos',
+                extra_data={
+                    'old_status': 'completed',
+                    'new_status': 'paused',
+                    'reason': 'add_contacts'
+                }
             )
         
         tag_id = request.data.get('tag_id')
