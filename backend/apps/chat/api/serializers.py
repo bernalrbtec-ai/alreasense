@@ -372,25 +372,39 @@ class ConversationSerializer(serializers.ModelSerializer):
         """Busca as tags do contato pelo telefone (com cache)."""
         # ✅ PERFORMANCE: Cache de 10 minutos para evitar queries repetidas
         from django.core.cache import cache
-        cache_key = f"contact_tags:{obj.tenant_id}:{obj.contact_phone}"
+        from apps.contacts.signals import normalize_phone_for_search
+        
+        # ✅ CORREÇÃO CRÍTICA: Normalizar telefone antes de buscar no cache
+        # Isso garante que o cache seja encontrado mesmo se telefone estiver em formato diferente
+        normalized_phone = normalize_phone_for_search(obj.contact_phone)
+        cache_key = f"contact_tags:{obj.tenant_id}:{normalized_phone}"
+        
         tags = cache.get(cache_key)
         
         if tags is None:
             try:
-                contact = Contact.objects.prefetch_related('tags').get(
-                    tenant=obj.tenant,
-                    phone=obj.contact_phone,
-                    is_active=True
-                )
-                tags = [
-                    {
-                        'id': str(tag.id),
-                        'name': tag.name,
-                        'color': tag.color
-                    }
-                    for tag in contact.tags.all()
-                ]
-            except Contact.DoesNotExist:
+                # ✅ CORREÇÃO: Buscar contato usando telefone normalizado OU original
+                # Isso garante que encontre o contato mesmo com diferenças de formatação
+                from django.db.models import Q
+                contact = Contact.objects.prefetch_related('tags').filter(
+                    Q(tenant=obj.tenant) &
+                    (Q(phone=normalized_phone) | Q(phone=obj.contact_phone)) &
+                    Q(is_active=True)
+                ).first()
+                
+                if contact:
+                    tags = [
+                        {
+                            'id': str(tag.id),
+                            'name': tag.name,
+                            'color': tag.color
+                        }
+                        for tag in contact.tags.all()
+                    ]
+                else:
+                    tags = []
+            except Exception as e:
+                logger.error(f"❌ [SERIALIZER] Erro ao buscar tags do contato: {e}", exc_info=True)
                 tags = []
             
             # Cache por 10 minutos (600 segundos)

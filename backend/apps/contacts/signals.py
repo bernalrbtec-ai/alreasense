@@ -57,9 +57,20 @@ def update_conversations_on_contact_change(sender, instance, created, **kwargs):
     from apps.chat.utils.websocket import broadcast_conversation_updated
     
     # Invalidar cache de contact_tags para este contato
-    cache_key = f"contact_tags:{instance.tenant_id}:{instance.phone}"
-    cache.delete(cache_key)
-    logger.info(f"🗑️ [CONTACT SIGNAL] Cache invalidado: {cache_key}")
+    # ✅ CORREÇÃO CRÍTICA: Normalizar telefone antes de invalidar cache
+    # Isso garante que o cache seja invalidado mesmo se telefone estiver em formato diferente
+    normalized_phone = normalize_phone_for_search(instance.phone)
+    
+    # Invalidar cache com telefone normalizado (formato usado no serializer)
+    cache_key_normalized = f"contact_tags:{instance.tenant_id}:{normalized_phone}"
+    cache.delete(cache_key_normalized)
+    logger.info(f"🗑️ [CONTACT SIGNAL] Cache invalidado (normalizado): {cache_key_normalized}")
+    
+    # Também invalidar com telefone original (caso esteja em formato diferente)
+    cache_key_original = f"contact_tags:{instance.tenant_id}:{instance.phone}"
+    if cache_key_original != cache_key_normalized:
+        cache.delete(cache_key_original)
+        logger.info(f"🗑️ [CONTACT SIGNAL] Cache invalidado (original): {cache_key_original}")
     
     # Normalizar telefone do contato para busca
     normalized_contact_phone = normalize_phone_for_search(instance.phone)
