@@ -38,7 +38,8 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
   const menuRef = useRef<HTMLDivElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const { activeConversation, setMessages, messages } = useChatStore();
+  const [showForwardModal, setShowForwardModal] = useState(false);
+  const { activeConversation, setMessages, messages, setReplyToMessage } = useChatStore();
 
   // Fechar menu ao clicar fora
   useEffect(() => {
@@ -115,8 +116,11 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
 
   // Reagir (mostrar emoji picker)
   const handleReact = () => {
-    setShowEmojiPicker(true);
-    onClose(); // ✅ Fechar menu ao abrir emoji picker
+    onClose(); // ✅ Fechar menu primeiro
+    // ✅ Usar setTimeout para garantir que o menu feche antes de abrir o picker
+    setTimeout(() => {
+      setShowEmojiPicker(true);
+    }, 100);
   };
 
   // Adicionar reação
@@ -164,8 +168,7 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
 
   // Encaminhar mensagem
   const handleForward = () => {
-    // TODO: Implementar modal de encaminhamento
-    toast.info('Funcionalidade de encaminhar em desenvolvimento');
+    setShowForwardModal(true);
     onClose();
   };
 
@@ -194,9 +197,16 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
 
   // Responder mensagem
   const handleReply = () => {
-    // TODO: Implementar resposta a mensagem
-    toast.info('Funcionalidade de responder em desenvolvimento');
+    setReplyToMessage(message);
     onClose();
+    // ✅ Scroll para o input (será feito automaticamente pelo foco)
+    setTimeout(() => {
+      const input = document.querySelector('textarea[placeholder="Digite uma mensagem"]') as HTMLTextAreaElement;
+      if (input) {
+        input.focus();
+        input.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }, 100);
   };
 
   return (
@@ -305,6 +315,14 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
         <MessageInfoModal
           message={message}
           onClose={() => setShowInfoModal(false)}
+        />
+      )}
+
+      {/* Modal de Encaminhar Mensagem */}
+      {showForwardModal && (
+        <ForwardMessageModal
+          message={message}
+          onClose={() => setShowForwardModal(false)}
         />
       )}
     </>
