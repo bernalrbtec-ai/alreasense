@@ -800,6 +800,30 @@ class RabbitMQConsumer:
                     logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
                     return False
                 
+                # ✅ CORREÇÃO CRÍTICA: Calcular próximo disparo ANTES de enviar (baseado no momento atual)
+                # Isso garante que o countdown no frontend seja preciso, não afetado pelo tempo de envio
+                @sync_to_async
+                def calculate_next_scheduled_before_send():
+                    import random
+                    from django.utils import timezone
+                    from datetime import timedelta
+                    
+                    min_interval = campaign.interval_min
+                    max_interval = campaign.interval_max
+                    random_interval = random.uniform(min_interval, max_interval)
+                    # ✅ Calcular baseado no momento ATUAL (antes do envio), não depois
+                    next_scheduled = timezone.now() + timedelta(seconds=random_interval)
+                    
+                    # Salvar ANTES de enviar para que o frontend veja o countdown correto
+                    campaign.next_message_scheduled_at = next_scheduled
+                    campaign.save(update_fields=['next_message_scheduled_at'])
+                    
+                    rotation_logger.info(f"⏰ [AGENDAMENTO] Próximo disparo agendado ANTES do envio: {next_scheduled} (em {random_interval:.1f}s a partir de agora)")
+                    
+                    return next_scheduled, random_interval
+                
+                next_scheduled, random_interval = await calculate_next_scheduled_before_send()
+                
                 # 🎯 HUMANIZAÇÃO: Enviar status "digitando" com tempo aleatório entre 5s e 10s
                 typing_seconds = random.uniform(5.0, 10.0)
                 await self._send_typing_presence(instance, contact_phone, typing_seconds)
@@ -879,6 +903,7 @@ class RabbitMQConsumer:
                             logger.warning(f"   Response data: {response_data}")
                         
                         # ✅ CORREÇÃO CRÍTICA: Atualizar próximo contato e instância após envio bem-sucedido
+                        # NOTA: next_message_scheduled_at já foi calculado ANTES do envio, então não precisa recalcular aqui
                         @sync_to_async
                         def update_next_contact_info():
                             from apps.campaigns.models import CampaignContact
@@ -906,29 +931,21 @@ class RabbitMQConsumer:
                                 campaign.next_contact_name = None
                                 campaign.next_contact_phone = None
                                 campaign.next_instance_name = None
+                                # Limpar próximo disparo se não há mais contatos
+                                campaign.next_message_scheduled_at = None
                             
-                            # Calcular próximo disparo baseado no intervalo da campanha
-                            import random
-                            from django.utils import timezone
-                            from datetime import timedelta
-                            
-                            min_interval = campaign.interval_min
-                            max_interval = campaign.interval_max
-                            random_interval = random.uniform(min_interval, max_interval)
-                            next_scheduled = timezone.now() + timedelta(seconds=random_interval)
-                            campaign.next_message_scheduled_at = next_scheduled
-                            
-                            # ✅ CORREÇÃO: Salvar todos os campos de próximo contato e disparo
+                            # ✅ CORREÇÃO: Salvar campos de próximo contato (next_message_scheduled_at já foi salvo antes)
                             campaign.save(update_fields=[
                                 'next_contact_name', 'next_contact_phone', 'next_instance_name',
-                                'next_message_scheduled_at'
+                                'next_message_scheduled_at'  # Pode ser None se não há mais contatos
                             ])
                             
                             rotation_logger.info(f"✅ [PRÓXIMO CONTATO] Atualizado: {campaign.next_contact_name} ({campaign.next_contact_phone})")
-                            rotation_logger.info(f"⏰ [AIO-PIKA] Próximo disparo agendado para: {next_scheduled} (em {random_interval:.1f}s)")
+                            if campaign.next_message_scheduled_at:
+                                rotation_logger.info(f"⏰ [AIO-PIKA] Próximo disparo já agendado para: {campaign.next_message_scheduled_at}")
                         
                         await update_next_contact_info()
-                        logger.info(f"✅ [AIO-PIKA] Próximo contato e disparo atualizados com sucesso")
+                        logger.info(f"✅ [AIO-PIKA] Próximo contato atualizado com sucesso")
                         
                         # Log de sucesso (passar message_text também)
                         await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)

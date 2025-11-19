@@ -307,6 +307,25 @@ class CampaignSender:
         campaign_contact.message_used = message
         campaign_contact.save(update_fields=['status', 'instance_used', 'message_used'])
         
+        # ✅ CORREÇÃO CRÍTICA: Calcular próximo disparo ANTES de enviar (baseado no momento atual)
+        # Isso garante que o countdown no frontend seja preciso, não afetado pelo tempo de envio
+        # Verificar se há mais mensagens pendentes ANTES de calcular próximo disparo
+        from .models import CampaignContact
+        next_campaign_contact = CampaignContact.objects.filter(
+            campaign=self.campaign,
+            status__in=['pending', 'sending']
+        ).select_related('contact').first()
+        
+        if next_campaign_contact:
+            # Calcular próximo disparo baseado no momento ATUAL (antes do envio)
+            import random
+            next_interval = random.uniform(self.campaign.interval_min, self.campaign.interval_max)
+            self.campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=next_interval)
+            logger.info(f"⏰ [AGENDAMENTO] Próximo disparo agendado ANTES do envio: {self.campaign.next_message_scheduled_at} (em {next_interval:.1f}s)")
+        else:
+            # Última mensagem - limpar próximo disparo
+            self.campaign.next_message_scheduled_at = None
+        
         # ✅ DEBUG: Log da mensagem que será enviada
         logger.info(f"📤 [ENVIO] Preparando envio - Contato: {contact.name}, Mensagem ordem={message.order}, times_used={message.times_used}, content={message.content[:50]}...")
         
@@ -399,15 +418,15 @@ class CampaignSender:
             self.campaign.last_contact_phone = contact.phone
             self.campaign.last_instance_name = instance.friendly_name
             
-            # ✅ Verificar se há mais mensagens pendentes APÓS marcar como enviado (QUERY ATÔMICA)
+            # ✅ CORREÇÃO CRÍTICA: Atualizar informações do próximo contato IMEDIATAMENTE após envio
+            # NOTA: next_message_scheduled_at já foi calculado ANTES do envio, então não precisa recalcular aqui
             from .models import CampaignContact
             next_campaign_contact = CampaignContact.objects.filter(
                 campaign=self.campaign,
                 status__in=['pending', 'sending']  # ✅ Incluir 'sending' como pendente
             ).select_related('contact').first()
             
-            # ✅ CORREÇÃO CRÍTICA: Atualizar informações do próximo contato IMEDIATAMENTE após envio
-            # Isso garante que o frontend veja o próximo contato atualizado em tempo real
+            # Atualizar informações do próximo contato
             if next_campaign_contact:
                 self.campaign.next_contact_name = next_campaign_contact.contact.name
                 self.campaign.next_contact_phone = next_campaign_contact.contact.phone
@@ -423,18 +442,11 @@ class CampaignSender:
                 self.campaign.next_contact_name = None
                 self.campaign.next_contact_phone = None
                 self.campaign.next_instance_name = None
-            
-            if next_campaign_contact:
-                # Calcular próximo disparo apenas se houver mais mensagens
-                # ✅ PADRONIZAÇÃO: Usa random.uniform para tempos distintos e humanizados (não random.randint)
-                import random
-                next_interval = random.uniform(self.campaign.interval_min, self.campaign.interval_max)
-                self.campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=next_interval)
-            else:
-                # Última mensagem - limpar próximo disparo
+                # Limpar próximo disparo se não há mais contatos
                 self.campaign.next_message_scheduled_at = None
             
             # ✅ CORREÇÃO: Incluir next_instance_name no save para garantir atualização completa
+            # next_message_scheduled_at já foi salvo antes do envio, mas pode ser None se não há mais contatos
             self.campaign.save(update_fields=[
                 'messages_sent', 'last_message_sent_at', 
                 'last_contact_name', 'last_contact_phone', 'last_instance_name', 
