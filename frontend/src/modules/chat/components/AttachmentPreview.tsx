@@ -292,7 +292,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         {/* Lightbox - Fullscreen com controles melhorados */}
         {lightboxOpen && (
           <div 
-            className="fixed inset-0 bg-black bg-opacity-95 z-[9999] flex items-center justify-center p-4 animate-fade-in"
+            className="fixed inset-0 bg-black bg-opacity-95 z-[9999] flex items-center justify-center animate-fade-in"
             onClick={(e) => {
               // Fechar apenas se clicar no fundo (não na imagem ou botões)
               if (e.target === e.currentTarget) {
@@ -301,6 +301,10 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             }}
             style={{
               backdropFilter: 'blur(4px)',
+              width: '100vw',
+              height: '100vh',
+              padding: 0,
+              margin: 0,
             }}
           >
             {/* Botão Fechar */}
@@ -337,30 +341,32 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             </button>
 
             {/* Imagem Fullscreen - Ocupa toda a janela */}
-            <div className="relative w-full h-full flex items-center justify-center">
-              <img
-                src={fileUrl}
-                alt={attachment.original_filename}
-                className="w-full h-full object-contain cursor-zoom-out select-none"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  // Não fechar ao clicar na imagem, apenas no fundo
-                }}
-                onError={(e) => {
-                  console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
-                    fileUrl: fileUrl.substring(0, 100),
-                    filename: attachment.original_filename
-                  });
-                }}
-                draggable={false}
-                style={{
-                  userSelect: 'none',
-                  WebkitUserSelect: 'none',
-                  maxWidth: '100vw',
-                  maxHeight: '100vh',
-                }}
-              />
-            </div>
+            <img
+              src={fileUrl}
+              alt={attachment.original_filename}
+              className="object-contain cursor-zoom-out select-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                // Não fechar ao clicar na imagem, apenas no fundo
+              }}
+              onError={(e) => {
+                console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
+                  fileUrl: fileUrl.substring(0, 100),
+                  filename: attachment.original_filename
+                });
+              }}
+              draggable={false}
+              style={{
+                userSelect: 'none',
+                WebkitUserSelect: 'none',
+                maxWidth: '100vw',
+                maxHeight: '100vh',
+                width: 'auto',
+                height: 'auto',
+                display: 'block',
+                margin: 'auto',
+              }}
+            />
           </div>
         )}
       </div>
