@@ -579,13 +579,28 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
-        # Verificar se já existe conversa
+        # ✅ CORREÇÃO: Normalizar telefone antes de buscar/criar para evitar duplicatas
+        from apps.contacts.signals import normalize_phone_for_search
+        from django.db.models import Q
+        
+        normalized_phone = normalize_phone_for_search(contact_phone)
+        
+        # Verificar se já existe conversa (usando telefone normalizado OU original)
         existing = Conversation.objects.filter(
             tenant=request.user.tenant,
-            contact_phone=contact_phone
+            Q(contact_phone=normalized_phone) | Q(contact_phone=contact_phone)
         ).first()
         
         if existing:
+            # Se telefone está em formato diferente, atualizar para formato normalizado
+            if existing.contact_phone != normalized_phone:
+                logger.info(
+                    f"🔄 [NORMALIZAÇÃO API] Atualizando telefone da conversa {existing.id}: "
+                    f"{existing.contact_phone} → {normalized_phone}"
+                )
+                existing.contact_phone = normalized_phone
+                existing.save(update_fields=['contact_phone'])
+            
             return Response(
                 {
                     'message': 'Conversa já existe',
@@ -594,11 +609,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_200_OK
             )
         
-        # Criar nova conversa
+        # Criar nova conversa com telefone normalizado
         conversation = Conversation.objects.create(
             tenant=request.user.tenant,
             department=department,
-            contact_phone=contact_phone,
+            contact_phone=normalized_phone,  # ✅ Usar telefone normalizado
             contact_name=contact_name,
             assigned_to=request.user,
             status='open'
