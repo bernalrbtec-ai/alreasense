@@ -701,6 +701,7 @@ class EvolutionWebhookView(APIView):
         """Update campaign contact status by WhatsApp message ID."""
         # ✅ CORREÇÃO: Garantir que logger está no escopo local
         import logging
+        from django.utils import timezone
         _logger = logging.getLogger(__name__)
         
         try:
@@ -708,14 +709,29 @@ class EvolutionWebhookView(APIView):
             
             _logger.info(f"🔍 [WEBHOOK] Buscando CampaignContact com message_id: {message_id}, status: {status}")
             
-            # Find campaign contact by WhatsApp message ID
-            campaign_contact = CampaignContact.objects.filter(
-                whatsapp_message_id=message_id
-            ).first()
+            # ✅ CORREÇÃO: Adicionar retry para race condition (webhook pode chegar antes do message_id ser salvo)
+            campaign_contact = None
+            max_retries = 5
+            retry_delay = 0.3  # 300ms entre tentativas
+            
+            for attempt in range(max_retries):
+                # Find campaign contact by WhatsApp message ID
+                campaign_contact = CampaignContact.objects.filter(
+                    whatsapp_message_id=message_id
+                ).first()
+                
+                if campaign_contact:
+                    break
+                
+                # Se não encontrou e ainda tem tentativas, aguardar um pouco
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                    _logger.debug(f"⏳ [WEBHOOK] Aguardando whatsapp_message_id ser salvo (tentativa {attempt + 1}/{max_retries})...")
             
             if not campaign_contact:
                 # Tentar buscar sem filtro para debug
-                _logger.warning(f"⚠️ [WEBHOOK] CampaignContact não encontrado com message_id: {message_id}")
+                _logger.warning(f"⚠️ [WEBHOOK] CampaignContact não encontrado com message_id: {message_id} após {max_retries} tentativas")
                 _logger.warning(f"   Tentando buscar por outros campos...")
                 
                 # Buscar contatos recentes para debug
@@ -735,7 +751,17 @@ class EvolutionWebhookView(APIView):
             _logger.info(f"   read_at: {campaign_contact.read_at}")
             
             # Update status based on Evolution API status
-            if status in ['delivered', 'delivery_ack']:
+            if status in ['sent', 'server_ack']:
+                # ✅ NOVO: Tratar server_ack como mensagem enviada (mas ainda não entregue)
+                if campaign_contact.status == 'sending':
+                    campaign_contact.status = 'sent'
+                    campaign_contact.sent_at = campaign_contact.sent_at or timezone.now()
+                    _logger.info(f"✅ [WEBHOOK] Campaign contact {campaign_contact.id} marcado como enviado (status: {status})")
+                    _logger.info(f"   Status final: {campaign_contact.status}, sent_at: {campaign_contact.sent_at}")
+                else:
+                    _logger.info(f"ℹ️ [WEBHOOK] Campaign contact {campaign_contact.id} já está em status {campaign_contact.status}, ignorando server_ack")
+                
+            elif status in ['delivered', 'delivery_ack']:
                 campaign_contact.delivered_at = timezone.now()
                 # ✅ CORREÇÃO: Só atualizar status para 'delivered' se ainda não foi lido
                 if campaign_contact.status != 'read':
@@ -763,7 +789,12 @@ class EvolutionWebhookView(APIView):
                 _logger.warning(f"⚠️ [WEBHOOK] Status desconhecido recebido: {status}")
                 return False
             
-            campaign_contact.save(update_fields=['status', 'delivered_at', 'read_at', 'failed_at', 'error_message'])
+            # ✅ CORREÇÃO: Incluir sent_at nos campos de atualização se status for 'sent' ou 'server_ack'
+            update_fields = ['status', 'delivered_at', 'read_at', 'failed_at', 'error_message']
+            if status in ['sent', 'server_ack']:
+                update_fields.append('sent_at')
+            
+            campaign_contact.save(update_fields=update_fields)
             _logger.info(f"✅ [WEBHOOK] CampaignContact salvo com sucesso. Status: {campaign_contact.status}")
             
             # 📊 ATUALIZAR LOG COM INFORMAÇÕES DE ENTREGA/LEITURA
@@ -780,6 +811,26 @@ class EvolutionWebhookView(APIView):
             elif status in ['read', 'read_ack']:
                 CampaignLog.update_message_delivery_status(campaign_contact, 'read')
                 _logger.info(f"✅ [WEBHOOK] Log de leitura processado")
+            elif status in ['sent', 'server_ack']:
+                # ✅ NOVO: Criar log de envio se não existir (para casos onde webhook chega antes do log ser criado)
+                existing_log = CampaignLog.objects.filter(
+                    campaign_contact=campaign_contact,
+                    log_type='message_sent'
+                ).first()
+                
+                if not existing_log:
+                    _logger.info(f"⚠️ [WEBHOOK] Log de envio não encontrado, criando...")
+                    try:
+                        CampaignLog.log_message_sent(
+                            campaign=campaign_contact.campaign,
+                            instance=campaign_contact.instance_used,
+                            contact=campaign_contact.contact,
+                            campaign_contact=campaign_contact,
+                            whatsapp_message_id=message_id
+                        )
+                        _logger.info(f"✅ [WEBHOOK] Log de envio criado com sucesso")
+                    except Exception as e:
+                        _logger.error(f"❌ [WEBHOOK] Erro ao criar log de envio: {e}", exc_info=True)
             
             return True
                 

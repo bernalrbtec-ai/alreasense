@@ -898,11 +898,17 @@ class RabbitMQConsumer:
                         if not message_id and response_data.get('key'):
                             message_id = response_data['key'].get('id')
                         
+                        # ✅ CORREÇÃO CRÍTICA: Criar log ANTES de salvar message_id para evitar race condition
+                        # O log precisa existir quando o webhook chegar
+                        await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
+                        
                         if message_id:
                             @sync_to_async
                             def save_message_id():
                                 contact.whatsapp_message_id = message_id
-                                contact.save(update_fields=['whatsapp_message_id'])
+                                contact.status = 'sent'  # ✅ Marcar como 'sent' após envio bem-sucedido
+                                contact.sent_at = contact.sent_at or timezone.now()  # ✅ Garantir sent_at
+                                contact.save(update_fields=['whatsapp_message_id', 'status', 'sent_at'])
                                 logger.info(f"✅ [AIO-PIKA] whatsapp_message_id salvo: {message_id} para contact {contact.id}")
                             
                             await save_message_id()
@@ -1018,8 +1024,7 @@ class RabbitMQConsumer:
                         await update_next_contact_info()
                         logger.info(f"✅ [AIO-PIKA] Próximo contato atualizado com sucesso")
                         
-                        # Log de sucesso (passar message_text também)
-                        await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
+                        # ✅ Log já foi criado ANTES de salvar message_id para evitar race condition
                         
                         return True
                     else:

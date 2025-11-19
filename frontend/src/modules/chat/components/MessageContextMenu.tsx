@@ -8,8 +8,6 @@
  * - Reagir (Emoji)
  * - Baixar (se tiver anexo)
  * - Encaminhar
- * - Fixar
- * - Favoritar
  * - Apagar
  */
 import React, { useEffect, useRef, useState } from 'react';
@@ -20,8 +18,6 @@ import {
   Smile,
   Download,
   Forward,
-  Pin,
-  Star,
   Trash2,
   X
 } from 'lucide-react';
@@ -29,6 +25,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { EmojiPicker } from './EmojiPicker';
+import { MessageInfoModal } from './MessageInfoModal';
 import type { Message } from '../types';
 
 interface MessageContextMenuProps {
@@ -40,6 +37,7 @@ interface MessageContextMenuProps {
 export function MessageContextMenu({ message, position, onClose }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const { activeConversation, setMessages, messages } = useChatStore();
 
   // Fechar menu ao clicar fora
@@ -170,29 +168,6 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
     onClose();
   };
 
-  // Fixar mensagem
-  const handlePin = async () => {
-    try {
-      // TODO: Implementar endpoint de fixar mensagem
-      toast.info('Funcionalidade de fixar em desenvolvimento');
-      onClose();
-    } catch (error) {
-      console.error('❌ Erro ao fixar mensagem:', error);
-      toast.error('Erro ao fixar mensagem');
-    }
-  };
-
-  // Favoritar mensagem
-  const handleFavorite = async () => {
-    try {
-      // TODO: Implementar endpoint de favoritar mensagem
-      toast.info('Funcionalidade de favoritar em desenvolvimento');
-      onClose();
-    } catch (error) {
-      console.error('❌ Erro ao favoritar mensagem:', error);
-      toast.error('Erro ao favoritar mensagem');
-    }
-  };
 
   // Apagar mensagem
   const handleDelete = async () => {
@@ -212,8 +187,7 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
 
   // Dados da mensagem
   const handleInfo = () => {
-    // TODO: Implementar modal com informações da mensagem
-    toast.info('Funcionalidade de informações em desenvolvimento');
+    setShowInfoModal(true);
     onClose();
   };
 
@@ -292,24 +266,6 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
           <span>Encaminhar</span>
         </button>
 
-        {/* Fixar */}
-        <button
-          onClick={handlePin}
-          className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
-        >
-          <Pin className="w-4 h-4 text-gray-500" />
-          <span>Fixar</span>
-        </button>
-
-        {/* Favoritar */}
-        <button
-          onClick={handleFavorite}
-          className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
-        >
-          <Star className="w-4 h-4 text-gray-500" />
-          <span>Favoritar</span>
-        </button>
-
         {/* Apagar */}
         <button
           onClick={handleDelete}
@@ -341,6 +297,14 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
             />
           </div>
         </div>
+      )}
+
+      {/* Modal de Informações da Mensagem */}
+      {showInfoModal && (
+        <MessageInfoModal
+          message={message}
+          onClose={() => setShowInfoModal(false)}
+        />
       )}
     </>
   );
