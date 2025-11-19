@@ -31,11 +31,12 @@ def campaign_realtime_status(request, campaign_id):
             else:
                 time_remaining = 0
         
-        # Calcular progresso
+        # Calcular progresso (mensagens processadas = enviadas + falhas)
         total_contacts = campaign.total_contacts or 0
         progress_percentage = 0
         if total_contacts > 0:
-            progress_percentage = (campaign.messages_sent / total_contacts) * 100
+            processed = campaign.messages_sent + campaign.messages_failed
+            progress_percentage = (processed / total_contacts) * 100
         
         return Response({
             'campaign_id': str(campaign.id),

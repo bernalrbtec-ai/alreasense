@@ -33,7 +33,7 @@ def campaign_events_debug(request):
                 'messages_read': campaign.messages_read,
                 'messages_failed': campaign.messages_failed,
                 'total_contacts': campaign.total_contacts,
-                'progress_percentage': (campaign.messages_sent / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
+                'progress_percentage': ((campaign.messages_sent + campaign.messages_failed) / campaign.total_contacts * 100) if campaign.total_contacts > 0 else 0,
                 'last_message_sent_at': campaign.last_message_sent_at.isoformat() if campaign.last_message_sent_at else None,
                 'next_message_scheduled_at': campaign.next_message_scheduled_at.isoformat() if campaign.next_message_scheduled_at else None,
                 'next_contact_name': campaign.next_contact_name,

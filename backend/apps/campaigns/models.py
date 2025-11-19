@@ -164,10 +164,13 @@ class Campaign(models.Model):
     
     @property
     def progress_percentage(self):
-        """Progresso da campanha"""
+        """Progresso da campanha (mensagens processadas = enviadas + falhas)"""
         if self.total_contacts == 0:
             return 0
-        return (self.messages_sent / self.total_contacts) * 100
+        # Progresso = (enviadas + falhas) / total_contacts
+        # Isso garante que quando todas as mensagens forem processadas (sucesso ou falha), o progresso será 100%
+        processed = self.messages_sent + self.messages_failed
+        return (processed / self.total_contacts) * 100
     
     def start(self):
         """Inicia a campanha"""
