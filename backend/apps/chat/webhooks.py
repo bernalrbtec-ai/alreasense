@@ -1114,12 +1114,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # Buscar contato na lista novamente (pode ter sido criado desde a última mensagem)
             from apps.contacts.models import Contact
             from django.db.models import Q
-            from apps.contacts.signals import normalize_phone_for_search
             
-            normalized_phone_for_update = normalize_phone_for_search(phone)
+            # Reutilizar normalized_phone já calculado acima
             saved_contact = Contact.objects.filter(
                 Q(tenant=tenant) &
-                (Q(phone=normalized_phone_for_update) | Q(phone=phone))
+                (Q(phone=normalized_phone) | Q(phone=phone))
             ).first()
             
             new_contact_name = None
