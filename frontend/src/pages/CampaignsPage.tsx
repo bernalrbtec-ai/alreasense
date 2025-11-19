@@ -101,13 +101,27 @@ const CampaignsPage: React.FC = () => {
         setCampaigns((prevCampaigns) => {
           return prevCampaigns.map((campaign) => {
             if (campaign.id === update.campaign_id) {
+              // ✅ CORREÇÃO: Recalcular countdown baseado em next_message_scheduled_at se disponível
+              let countdown_seconds = update.countdown_seconds
+              if (update.next_message_scheduled_at) {
+                const scheduledTime = new Date(update.next_message_scheduled_at).getTime()
+                const now = Date.now()
+                const diffSeconds = Math.max(0, Math.floor((scheduledTime - now) / 1000))
+                countdown_seconds = diffSeconds
+                console.log('⏰ [CAMPAIGNS] Countdown recalculado:', {
+                  scheduled: update.next_message_scheduled_at,
+                  now: new Date(now).toISOString(),
+                  diffSeconds
+                })
+              }
+              
               return {
                 ...campaign,
                 next_contact_name: update.next_contact_name !== undefined ? update.next_contact_name : campaign.next_contact_name,
                 next_contact_phone: update.next_contact_phone !== undefined ? update.next_contact_phone : campaign.next_contact_phone,
                 next_instance_name: update.next_instance_name !== undefined ? update.next_instance_name : campaign.next_instance_name,
                 next_message_scheduled_at: update.next_message_scheduled_at !== undefined ? update.next_message_scheduled_at : campaign.next_message_scheduled_at,
-                countdown_seconds: update.countdown_seconds !== undefined ? update.countdown_seconds : campaign.countdown_seconds,
+                countdown_seconds: countdown_seconds !== undefined ? countdown_seconds : campaign.countdown_seconds,
               }
             }
             return campaign
@@ -620,8 +634,15 @@ const CampaignsPage: React.FC = () => {
                         return bTime - aTime
                       })
                       
-                      // Combinar: primeiro logs de contatos agrupados, depois outros logs
-                      const allLogs = [...groupedContactLogs, ...otherLogs]
+                      // ✅ CORREÇÃO: Ordenar outros logs por created_at (mais recente primeiro)
+                      const sortedOtherLogs = otherLogs.sort((a, b) => {
+                        const aTime = a.created_at ? new Date(a.created_at).getTime() : 0
+                        const bTime = b.created_at ? new Date(b.created_at).getTime() : 0
+                        return bTime - aTime
+                      })
+                      
+                      // Combinar: primeiro logs de contatos agrupados, depois outros logs (ambos ordenados por tempo)
+                      const allLogs = [...groupedContactLogs, ...sortedOtherLogs]
                       
                       return allLogs.map((log: any, idx: number) => {
                         // Se é um log agrupado por contato (tem contact_name mas não tem log_type)
