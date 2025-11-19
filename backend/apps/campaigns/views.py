@@ -390,9 +390,10 @@ class CampaignViewSet(viewsets.ModelViewSet):
             # Log da mudança de status
             CampaignLog.objects.create(
                 campaign=campaign,
-                event_type='campaign_status_changed',
+                log_type='paused',
+                severity='info',
                 message=f'Status alterado de "completed" para "paused" para permitir adicionar contatos',
-                extra_data={
+                details={
                     'old_status': 'completed',
                     'new_status': 'paused',
                     'reason': 'add_contacts'
