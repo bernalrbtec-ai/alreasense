@@ -696,8 +696,6 @@ const CampaignsPage: React.FC = () => {
                         )
                       })
                     })()}
-                      </div>
-                    ))}
                   </div>
                 </div>
               )}
