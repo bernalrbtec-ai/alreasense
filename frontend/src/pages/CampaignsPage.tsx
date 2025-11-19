@@ -89,6 +89,41 @@ const CampaignsPage: React.FC = () => {
     return () => clearInterval(interval)
   }, [showStoppedCampaigns])
 
+  // ✅ NOVO: Escutar atualizações de campanha via WebSocket (tempo real)
+  useEffect(() => {
+    // Criar um listener customizado para campaign_update
+    const handleCampaignUpdate = (event: CustomEvent) => {
+      const update = event.detail
+      if (update && update.campaign_id) {
+        console.log('📡 [CAMPAIGNS] Recebido update via WebSocket:', update.campaign_id, update.type)
+        
+        // Atualizar campanha específica no estado
+        setCampaigns((prevCampaigns) => {
+          return prevCampaigns.map((campaign) => {
+            if (campaign.id === update.campaign_id) {
+              return {
+                ...campaign,
+                next_contact_name: update.next_contact_name !== undefined ? update.next_contact_name : campaign.next_contact_name,
+                next_contact_phone: update.next_contact_phone !== undefined ? update.next_contact_phone : campaign.next_contact_phone,
+                next_instance_name: update.next_instance_name !== undefined ? update.next_instance_name : campaign.next_instance_name,
+                next_message_scheduled_at: update.next_message_scheduled_at !== undefined ? update.next_message_scheduled_at : campaign.next_message_scheduled_at,
+                countdown_seconds: update.countdown_seconds !== undefined ? update.countdown_seconds : campaign.countdown_seconds,
+              }
+            }
+            return campaign
+          })
+        })
+      }
+    }
+    
+    // Registrar listener customizado
+    window.addEventListener('campaign_update', handleCampaignUpdate as EventListener)
+    
+    return () => {
+      window.removeEventListener('campaign_update', handleCampaignUpdate as EventListener)
+    }
+  }, [])
+
   // ✅ MELHORIA: Função para buscar logs (reutilizável e estável com useCallback)
   const fetchLogsForModal = useCallback(async (showLoading = false) => {
     if (!selectedCampaignForLogs) return

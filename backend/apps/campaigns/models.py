@@ -209,8 +209,9 @@ class Campaign(models.Model):
     def update_next_contact_info(self):
         """Atualiza informações do próximo contato para campanhas em execução"""
         if self.status == 'running':
+            # ✅ CORREÇÃO: Incluir 'sending' para consistência com RabbitMQ consumer
             next_campaign_contact = self.campaign_contacts.filter(
-                status='pending'
+                status__in=['pending', 'sending']
             ).select_related('contact').first()
             
             if next_campaign_contact:
