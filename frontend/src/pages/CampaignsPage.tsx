@@ -697,9 +697,41 @@ const CampaignsPage: React.FC = () => {
 
                                 {/* Erro se houver */}
                                 {log.failed && log.error && (
-                                  <div className="bg-red-50 border border-red-200 rounded p-2">
-                                    <div className="text-xs text-red-600 font-medium mb-1">❌ Motivo da Falha:</div>
-                                    <div className="text-sm text-red-700">{log.error}</div>
+                                  <div className="bg-red-50 border border-red-200 rounded p-2 space-y-2">
+                                    <div>
+                                      <div className="text-xs text-red-600 font-medium mb-1">❌ Motivo da Falha:</div>
+                                      <div className="text-sm text-red-700 font-medium">{log.error}</div>
+                                    </div>
+                                    {/* ✅ MELHORIA: Mostrar detalhes adicionais se disponíveis */}
+                                    {log.extra_data && (
+                                      <div className="space-y-1 text-xs">
+                                        {log.extra_data.response_data && (
+                                          <div className="text-red-600">
+                                            <span className="font-medium">Resposta da API:</span>
+                                            <pre className="mt-1 p-2 bg-red-100 rounded text-xs overflow-x-auto">
+                                              {typeof log.extra_data.response_data === 'string' 
+                                                ? log.extra_data.response_data 
+                                                : JSON.stringify(log.extra_data.response_data, null, 2)}
+                                            </pre>
+                                          </div>
+                                        )}
+                                        {log.extra_data.request_data && (
+                                          <div className="text-red-600">
+                                            <span className="font-medium">Dados enviados:</span>
+                                            <pre className="mt-1 p-2 bg-red-100 rounded text-xs overflow-x-auto">
+                                              {typeof log.extra_data.request_data === 'string' 
+                                                ? log.extra_data.request_data 
+                                                : JSON.stringify(log.extra_data.request_data, null, 2)}
+                                            </pre>
+                                          </div>
+                                        )}
+                                        {log.extra_data.http_status && (
+                                          <div className="text-red-600">
+                                            <span className="font-medium">Status HTTP:</span> {log.extra_data.http_status}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>

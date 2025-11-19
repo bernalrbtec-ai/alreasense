@@ -1060,13 +1060,22 @@ class RabbitMQConsumer:
                             return False
                 else:
                     # ✅ MELHORIA: Capturar resposta completa mesmo em caso de erro HTTP
+                    # Logar resposta raw ANTES de tentar parse para diagnóstico
+                    response_text = response.text if hasattr(response, 'text') else str(response.content) if hasattr(response, 'content') else 'N/A'
+                    logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} - Resposta raw: {response_text[:500]}")
+                    
+                    error_response_data = {}
                     try:
-                        error_response_data = response.json() if response.text else {}
-                    except:
-                        error_response_data = {'raw_response': response.text[:500]}  # Limitar tamanho
+                        if response_text and response_text.strip():
+                            error_response_data = response.json()
+                            logger.debug(f"🔍 [AIO-PIKA] Resposta JSON parseada: {error_response_data}")
+                    except Exception as json_error:
+                        # Se não for JSON, salvar como texto
+                        logger.warning(f"⚠️ [AIO-PIKA] Resposta não é JSON válido: {json_error}")
+                        error_response_data = {'raw_response': response_text[:1000]}  # Aumentar limite para 1000 chars
                     
                     # Extrair mensagem de erro descritiva
-                    error_msg = self._extract_error_message(error_response_data, response.status_code, response.text)
+                    error_msg = self._extract_error_message(error_response_data, response.status_code, response_text)
                     logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} (tentativa {attempt}): {error_msg}")
                     
                     # Verificar se é erro de instância inativa (500 pode indicar instância offline)
@@ -1285,15 +1294,33 @@ class RabbitMQConsumer:
         
         # Tentar extrair mensagem da resposta JSON
         error_message = None
+        error_details = []
+        
         if isinstance(response_data, dict):
-            # Possíveis campos de erro na resposta
+            # ✅ MELHORIA: Verificar TODOS os campos possíveis de erro da Evolution API
             error_message = (
                 response_data.get('message') or
                 response_data.get('error') or
                 response_data.get('errorMessage') or
                 response_data.get('error_description') or
-                response_data.get('detail')
+                response_data.get('detail') or
+                response_data.get('reason') or  # Novo campo
+                response_data.get('code') or    # Novo campo
+                response_data.get('data')       # Novo campo (pode ser string ou dict)
             )
+            
+            # Se error_message é um dict, tentar extrair mensagem dele
+            if isinstance(error_message, dict):
+                error_message = error_message.get('message') or error_message.get('error') or str(error_message)
+            
+            # Coletar detalhes adicionais para incluir na mensagem
+            if response_data.get('code'):
+                error_details.append(f"Código: {response_data['code']}")
+            if response_data.get('reason'):
+                error_details.append(f"Motivo: {response_data['reason']}")
+            if response_data.get('data'):
+                data_str = str(response_data['data'])[:100] if not isinstance(response_data['data'], str) else response_data['data'][:100]
+                error_details.append(f"Dados: {data_str}")
         
         # Se não encontrou mensagem na resposta, usar mensagem HTTP padrão
         if not error_message and http_status:
@@ -1302,13 +1329,17 @@ class RabbitMQConsumer:
         # Se ainda não tem mensagem, usar resposta raw (limitada)
         if not error_message and raw_response:
             # Limitar tamanho e remover quebras de linha
-            error_message = raw_response[:200].replace('\n', ' ').strip()
-            if len(raw_response) > 200:
+            error_message = raw_response[:300].replace('\n', ' ').replace('\r', ' ').strip()
+            if len(raw_response) > 300:
                 error_message += "..."
         
         # Fallback final
         if not error_message:
             error_message = "Erro desconhecido ao enviar mensagem"
+        
+        # Adicionar detalhes se disponíveis
+        if error_details:
+            error_message = f"{error_message} - {', '.join(error_details)}"
         
         # Adicionar código HTTP se disponível
         if http_status:
