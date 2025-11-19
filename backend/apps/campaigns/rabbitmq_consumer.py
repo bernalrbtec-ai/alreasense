@@ -339,22 +339,24 @@ class RabbitMQConsumer:
                             await self._log_campaign_completed(campaign)
                             break
                     
-                    # Processar próxima mensagem
+                    # ✅ CORREÇÃO CRÍTICA: Calcular intervalo ANTES de processar para usar o mesmo valor
+                    # Isso garante que o countdown e o sleep usem o mesmo intervalo
+                    import random
+                    min_interval = campaign.interval_min
+                    max_interval = campaign.interval_max
+                    random_interval = random.uniform(min_interval, max_interval)
+                    
+                    # Processar próxima mensagem (passando o intervalo calculado)
                     logger.info(f"🔍 [DEBUG] Processando próxima mensagem da campanha {campaign_id}")
                     logger.info(f"🔍 [DEBUG] Campanha status: {campaign.status}, total_contacts: {campaign.total_contacts}")
-                    await self._process_next_message_async(campaign)
+                    logger.info(f"⏰ [INTERVAL] Intervalo calculado: {random_interval:.1f}s (min={min_interval}s, max={max_interval}s)")
+                    await self._process_next_message_async(campaign, random_interval)
                     
                     # ✅ CORREÇÃO: Só aguardar intervalo se ainda há mais contatos
                     has_more_after_send = await has_more_contacts()
                     if has_more_after_send:
-                        # 🎯 HUMANIZAÇÃO: Aguardar intervalo aleatório entre min e max configurados
-                        # Usa valores exatos configurados para garantir tempos distintos e humanizados
-                        import random
-                        min_interval = campaign.interval_min
-                        max_interval = campaign.interval_max
-                        random_interval = random.uniform(min_interval, max_interval)
-                        
-                        logger.info(f"⏰ [INTERVAL] Aguardando {random_interval:.1f}s antes do próximo disparo (min={min_interval}s, max={max_interval}s)")
+                        # Usar o MESMO intervalo calculado acima
+                        logger.info(f"⏰ [INTERVAL] Aguardando {random_interval:.1f}s antes do próximo disparo")
                         await asyncio.sleep(random_interval)
                     else:
                         # Último contato foi enviado, não precisa aguardar
@@ -438,10 +440,30 @@ class RabbitMQConsumer:
             logger.error(f"❌ [AIO-PIKA] Erro ao buscar campanha {campaign_id}: {e}")
             return None
     
-    async def _process_next_message_async(self, campaign):
-        """Processa próxima mensagem da campanha"""
+    async def _process_next_message_async(self, campaign, interval_seconds=None):
+        """Processa próxima mensagem da campanha
+        
+        Args:
+            campaign: Campanha a processar
+            interval_seconds: Intervalo calculado ANTES do processamento (para garantir sincronia)
+        """
         try:
             from asgiref.sync import sync_to_async
+            from apps.campaigns.services import RotationService
+            
+            # ✅ NOVO: Verificar se há instâncias disponíveis ANTES de processar
+            @sync_to_async
+            def check_available_instances():
+                rotation_service = RotationService(campaign)
+                available_instances = rotation_service._get_available_instances()
+                return len(available_instances) > 0
+            
+            has_instances = await check_available_instances()
+            
+            if not has_instances:
+                logger.warning(f"⚠️ [AIO-PIKA] Nenhuma instância disponível para campanha {campaign.id} - pausando automaticamente")
+                await self._auto_pause_campaign(campaign, "nenhuma instância disponível")
+                return
             
             @sync_to_async
             def get_next_contact():
@@ -487,9 +509,9 @@ class RabbitMQConsumer:
             
             # Marcar contato como enviando
             await self._update_contact_status_async(contact, 'sending')
-
-            # Enviar mensagem
-            await self._send_message_async(campaign, contact)
+            
+            # Enviar mensagem (passando o intervalo calculado)
+            await self._send_message_async(campaign, contact, interval_seconds)
             
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao processar próxima mensagem: {e}")
@@ -534,8 +556,14 @@ class RabbitMQConsumer:
         except Exception as e:
             logger.error(f"❌ [AIO-PIKA] Erro ao atualizar status da campanha {campaign.id}: {e}")
     
-    async def _send_message_async(self, campaign, contact):
-        """Envia mensagem de forma assíncrona"""
+    async def _send_message_async(self, campaign, contact, interval_seconds=None):
+        """Envia mensagem de forma assíncrona
+        
+        Args:
+            campaign: Campanha
+            contact: Contato da campanha
+            interval_seconds: Intervalo calculado no loop principal (para garantir sincronia)
+        """
         try:
             from asgiref.sync import sync_to_async
             
@@ -800,29 +828,9 @@ class RabbitMQConsumer:
                     logger.error(f"❌ [AIO-PIKA] Nenhuma mensagem encontrada para campanha {campaign.id}")
                     return False
                 
-                # ✅ CORREÇÃO CRÍTICA: Calcular próximo disparo ANTES de enviar (baseado no momento atual)
-                # Isso garante que o countdown no frontend seja preciso, não afetado pelo tempo de envio
-                @sync_to_async
-                def calculate_next_scheduled_before_send():
-                    import random
-                    from django.utils import timezone
-                    from datetime import timedelta
-                    
-                    min_interval = campaign.interval_min
-                    max_interval = campaign.interval_max
-                    random_interval = random.uniform(min_interval, max_interval)
-                    # ✅ Calcular baseado no momento ATUAL (antes do envio), não depois
-                    next_scheduled = timezone.now() + timedelta(seconds=random_interval)
-                    
-                    # Salvar ANTES de enviar para que o frontend veja o countdown correto
-                    campaign.next_message_scheduled_at = next_scheduled
-                    campaign.save(update_fields=['next_message_scheduled_at'])
-                    
-                    rotation_logger.info(f"⏰ [AGENDAMENTO] Próximo disparo agendado ANTES do envio: {next_scheduled} (em {random_interval:.1f}s a partir de agora)")
-                    
-                    return next_scheduled, random_interval
-                
-                next_scheduled, random_interval = await calculate_next_scheduled_before_send()
+                # ✅ CORREÇÃO CRÍTICA: Marcar início do processo para calcular tempo real decorrido
+                import time
+                process_start_time = time.time()
                 
                 # 🎯 HUMANIZAÇÃO: Enviar status "digitando" com tempo aleatório entre 5s e 10s
                 typing_seconds = random.uniform(5.0, 10.0)
@@ -902,10 +910,15 @@ class RabbitMQConsumer:
                             logger.warning(f"⚠️ [AIO-PIKA] message_id não encontrado na resposta para {contact_phone}")
                             logger.warning(f"   Response data: {response_data}")
                         
-                        # ✅ CORREÇÃO CRÍTICA: Atualizar próximo contato e instância após envio bem-sucedido
-                        # NOTA: next_message_scheduled_at já foi calculado ANTES do envio, então não precisa recalcular aqui
+                        # ✅ CORREÇÃO CRÍTICA: Calcular próximo disparo DEPOIS do envio bem-sucedido
+                        # Usar tempo real decorrido (process_start_time) para calcular countdown preciso
+                        process_elapsed_time = time.time() - process_start_time
+                        
                         @sync_to_async
                         def update_next_contact_info():
+                            import random
+                            from django.utils import timezone
+                            from datetime import timedelta
                             from apps.campaigns.models import CampaignContact
                             from apps.campaigns.services import RotationService
                             
@@ -926,15 +939,35 @@ class RabbitMQConsumer:
                                     campaign.next_instance_name = next_instance.friendly_name
                                 else:
                                     campaign.next_instance_name = None
+                                
+                                # ✅ CORREÇÃO CRÍTICA: Usar o MESMO intervalo calculado no loop principal
+                                # Isso garante sincronia entre countdown e sleep
+                                if interval_seconds is None:
+                                    # Fallback: calcular intervalo se não foi passado
+                                    min_interval = campaign.interval_min
+                                    max_interval = campaign.interval_max
+                                    interval_seconds = random.uniform(min_interval, max_interval)
+                                    rotation_logger.warning(f"⚠️ [AGENDAMENTO] Intervalo não foi passado, calculando novo: {interval_seconds:.1f}s")
+                                
+                                # Calcular baseado no momento ATUAL (depois do envio bem-sucedido)
+                                # O countdown será: intervalo completo a partir de AGORA
+                                # O loop principal vai aguardar esse MESMO intervalo antes de processar a próxima mensagem
+                                now = timezone.now()
+                                next_scheduled = now + timedelta(seconds=interval_seconds)
+                                
+                                campaign.next_message_scheduled_at = next_scheduled
+                                
+                                rotation_logger.info(f"⏰ [AGENDAMENTO] Próximo disparo calculado DEPOIS do envio: {next_scheduled} (em {interval_seconds:.1f}s a partir de agora)")
+                                rotation_logger.info(f"   Tempo de processamento decorrido: {process_elapsed_time:.2f}s")
+                                rotation_logger.info(f"   O loop principal aguardará {interval_seconds:.1f}s antes de processar a próxima mensagem")
                             else:
                                 # Não há mais contatos pendentes
                                 campaign.next_contact_name = None
                                 campaign.next_contact_phone = None
                                 campaign.next_instance_name = None
-                                # Limpar próximo disparo se não há mais contatos
                                 campaign.next_message_scheduled_at = None
                             
-                            # ✅ CORREÇÃO: Salvar campos de próximo contato (next_message_scheduled_at já foi salvo antes)
+                            # ✅ CORREÇÃO: Salvar campos de próximo contato incluindo next_message_scheduled_at
                             campaign.save(update_fields=[
                                 'next_contact_name', 'next_contact_phone', 'next_instance_name',
                                 'next_message_scheduled_at'  # Pode ser None se não há mais contatos
@@ -942,7 +975,7 @@ class RabbitMQConsumer:
                             
                             rotation_logger.info(f"✅ [PRÓXIMO CONTATO] Atualizado: {campaign.next_contact_name} ({campaign.next_contact_phone})")
                             if campaign.next_message_scheduled_at:
-                                rotation_logger.info(f"⏰ [AIO-PIKA] Próximo disparo já agendado para: {campaign.next_message_scheduled_at}")
+                                rotation_logger.info(f"⏰ [AIO-PIKA] Próximo disparo agendado para: {campaign.next_message_scheduled_at}")
                             
                             # ✅ NOVO: Broadcast via WebSocket para atualizar frontend em tempo real
                             # Nota: Esta função é sync (wrapped com @sync_to_async), então fazemos broadcast de forma síncrona
