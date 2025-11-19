@@ -7,6 +7,7 @@ import { showErrorToast, showLoadingToast, updateToastSuccess, updateToastError 
 import { api } from '../lib/api'
 import CampaignWizardModal from '../components/campaigns/CampaignWizardModal'
 import CampaignCardOptimized from '../components/campaigns/CampaignCardOptimized'
+import { AddContactsModal } from '../components/campaigns/AddContactsModal'
 
 interface Campaign {
   id: string
@@ -80,6 +81,8 @@ const CampaignsPage: React.FC = () => {
   const [logs, setLogs] = useState<any[]>([])
   const [showStoppedCampaigns, setShowStoppedCampaigns] = useState(false)
   const [logsLoading, setLogsLoading] = useState(false)
+  const [showAddContactsModal, setShowAddContactsModal] = useState(false)
+  const [selectedCampaignForAddContacts, setSelectedCampaignForAddContacts] = useState<Campaign | null>(null)
 
   useEffect(() => {
     fetchData(true) // Primeira carga com loading
@@ -452,6 +455,7 @@ const CampaignsPage: React.FC = () => {
             onResume={handleResume}
             onEdit={handleEdit}
             onViewLogs={handleViewLogs}
+            onAddContacts={handleAddContacts}
           />
         ))}
       </div>

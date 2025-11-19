@@ -363,6 +363,146 @@ class CampaignViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['post'], url_path='add-contacts')
+    def add_contacts(self, request, pk=None):
+        """
+        Adiciona contatos a uma campanha existente.
+        
+        Body:
+        {
+            "tag_id": "uuid",  # Opcional: adicionar todos os contatos de uma tag
+            "contact_ids": ["uuid1", "uuid2"],  # Opcional: adicionar contatos específicos
+            "add_missing_from_tag": true  # Se true e tag_id fornecido, adiciona apenas os que faltam
+        }
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        campaign = self.get_object()
+        
+        # Verificar se campanha pode receber novos contatos
+        if campaign.status == 'completed':
+            return Response(
+                {'error': 'Não é possível adicionar contatos a uma campanha concluída'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        tag_id = request.data.get('tag_id')
+        contact_ids = request.data.get('contact_ids', [])
+        add_missing_from_tag = request.data.get('add_missing_from_tag', False)
+        
+        from apps.contacts.models import Contact
+        from .models import CampaignContact
+        
+        contacts_to_add = []
+        
+        if add_missing_from_tag and tag_id:
+            # ✅ NOVO: Adicionar apenas contatos que faltam da tag
+            logger.info(f"🔍 [ADD CONTACTS] Buscando contatos faltantes da tag {tag_id} para campanha {campaign.id}")
+            
+            # Buscar todos os contatos da tag
+            all_tag_contacts = Contact.objects.filter(
+                tenant=campaign.tenant,
+                tags__id=tag_id,
+                is_active=True,
+                opted_out=False
+            ).distinct()
+            
+            # Buscar contatos já na campanha
+            existing_contact_ids = set(
+                CampaignContact.objects.filter(campaign=campaign)
+                .values_list('contact_id', flat=True)
+            )
+            
+            # Filtrar apenas os que não estão na campanha
+            contacts_to_add = [
+                contact for contact in all_tag_contacts
+                if contact.id not in existing_contact_ids
+            ]
+            
+            logger.info(f"✅ [ADD CONTACTS] Encontrados {len(contacts_to_add)} contatos faltantes de {all_tag_contacts.count()} total")
+            
+        elif tag_id:
+            # Adicionar todos os contatos da tag (mesma lógica do create)
+            logger.info(f"🔍 [ADD CONTACTS] Adicionando todos os contatos da tag {tag_id}")
+            contacts_to_add = list(Contact.objects.filter(
+                tenant=campaign.tenant,
+                tags__id=tag_id,
+                is_active=True,
+                opted_out=False
+            ).distinct())
+            
+            # Filtrar apenas os que não estão na campanha
+            existing_contact_ids = set(
+                CampaignContact.objects.filter(campaign=campaign)
+                .values_list('contact_id', flat=True)
+            )
+            contacts_to_add = [
+                contact for contact in contacts_to_add
+                if contact.id not in existing_contact_ids
+            ]
+            
+        elif contact_ids:
+            # Adicionar contatos específicos
+            logger.info(f"🔍 [ADD CONTACTS] Adicionando {len(contact_ids)} contatos específicos")
+            contacts_to_add = list(Contact.objects.filter(
+                tenant=campaign.tenant,
+                id__in=contact_ids,
+                is_active=True,
+                opted_out=False
+            ))
+            
+            # Filtrar apenas os que não estão na campanha
+            existing_contact_ids = set(
+                CampaignContact.objects.filter(campaign=campaign)
+                .values_list('contact_id', flat=True)
+            )
+            contacts_to_add = [
+                contact for contact in contacts_to_add
+                if contact.id not in existing_contact_ids
+            ]
+        else:
+            return Response(
+                {'error': 'Forneça tag_id, contact_ids ou add_missing_from_tag=true com tag_id'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if not contacts_to_add:
+            return Response({
+                'message': 'Nenhum contato novo para adicionar',
+                'added_count': 0
+            })
+        
+        # Criar CampaignContact para cada contato
+        campaign_contacts = []
+        for contact in contacts_to_add:
+            campaign_contacts.append(
+                CampaignContact(
+                    campaign=campaign,
+                    contact=contact,
+                    status='pending'
+                )
+            )
+        
+        # Bulk create com ignore_conflicts para evitar duplicatas
+        created = CampaignContact.objects.bulk_create(
+            campaign_contacts,
+            batch_size=1000,
+            ignore_conflicts=True
+        )
+        
+        # Atualizar contador total
+        campaign.total_contacts = CampaignContact.objects.filter(campaign=campaign).count()
+        campaign.save(update_fields=['total_contacts'])
+        
+        logger.info(f"✅ [ADD CONTACTS] Adicionados {len(created)} contatos à campanha {campaign.id}")
+        
+        return Response({
+            'message': f'{len(created)} contatos adicionados com sucesso',
+            'added_count': len(created),
+            'total_contacts': campaign.total_contacts
+        })
+    
     @action(detail=True, methods=['get'])
     def contacts(self, request, pk=None):
         """Listar contatos da campanha"""

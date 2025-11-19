@@ -63,6 +63,7 @@ interface CampaignCardOptimizedProps {
   onResume: (campaign: Campaign) => void
   onEdit: (campaign: Campaign) => void
   onViewLogs: (campaign: Campaign) => void
+  onAddContacts?: (campaign: Campaign) => void
 }
 
 const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
@@ -71,7 +72,8 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
   onPause,
   onResume,
   onEdit,
-  onViewLogs
+  onViewLogs,
+  onAddContacts
 }) => {
   const [isHovered, setIsHovered] = useState(false)
   const [countdown, setCountdown] = useState(campaign.countdown_seconds || 0)
