@@ -624,6 +624,13 @@ class CampaignLog(models.Model):
         """Log de mensagem entregue"""
         from django.utils import timezone
         
+        # ✅ CORREÇÃO: Usar contact do campaign_contact se contact for None
+        if not contact and campaign_contact:
+            contact = campaign_contact.contact
+        
+        if not contact:
+            raise ValueError("Contact não pode ser None para log_message_delivered")
+        
         details = {
             'contact_id': str(contact.id),
             'contact_phone': contact.phone,
@@ -654,6 +661,13 @@ class CampaignLog(models.Model):
         """Log de mensagem lida"""
         from django.utils import timezone
         
+        # ✅ CORREÇÃO: Usar contact do campaign_contact se contact for None
+        if not contact and campaign_contact:
+            contact = campaign_contact.contact
+        
+        if not contact:
+            raise ValueError("Contact não pode ser None para log_message_read")
+        
         return CampaignLog.objects.create(
             campaign=campaign,
             log_type='message_read',
@@ -663,8 +677,8 @@ class CampaignLog(models.Model):
                 'contact_id': str(contact.id),
                 'contact_phone': contact.phone,
                 'read_at': timezone.now().isoformat(),
-                'delivered_at': campaign_contact.delivered_at.isoformat() if campaign_contact.delivered_at else None,
-                'whatsapp_message_id': campaign_contact.whatsapp_message_id,
+                'delivered_at': campaign_contact.delivered_at.isoformat() if campaign_contact and campaign_contact.delivered_at else None,
+                'whatsapp_message_id': campaign_contact.whatsapp_message_id if campaign_contact else None,
             },
             instance=instance,
             contact=contact,
@@ -712,10 +726,12 @@ class CampaignLog(models.Model):
                         ).first()
                         
                         if not existing_delivered:
+                            # ✅ CORREÇÃO: Usar contact do campaign_contact se log.contact for None
+                            contact_to_use = log.contact if log.contact else campaign_contact.contact
                             new_log = CampaignLog.log_message_delivered(
                                 campaign=log.campaign,
                                 instance=log.instance,
-                                contact=log.contact,
+                                contact=contact_to_use,
                                 campaign_contact=campaign_contact
                             )
                             logger.info(f"✅ [WEBHOOK_LOG] Log de entrega criado: {new_log.id}")
@@ -729,10 +745,12 @@ class CampaignLog(models.Model):
                         ).first()
                         
                         if not existing_read:
+                            # ✅ CORREÇÃO: Usar contact do campaign_contact se log.contact for None
+                            contact_to_use = log.contact if log.contact else campaign_contact.contact
                             new_log = CampaignLog.log_message_read(
                                 campaign=log.campaign,
                                 instance=log.instance,
-                                contact=log.contact,
+                                contact=contact_to_use,
                                 campaign_contact=campaign_contact
                             )
                             logger.info(f"✅ [WEBHOOK_LOG] Log de leitura criado: {new_log.id}")

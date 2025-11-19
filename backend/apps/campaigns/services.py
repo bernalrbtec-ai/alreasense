@@ -300,11 +300,15 @@ class CampaignSender:
         total_messages = CampaignMessage.objects.filter(campaign=self.campaign, is_active=True).count()
         logger.info(f"📊 [ROTAÇÃO] Total de mensagens ativas: {total_messages}")
         
-        # Atualizar status
+        # ✅ CORREÇÃO: Atualizar status e salvar message_used ANTES de enviar
+        # Isso garante que sabemos qual mensagem foi usada mesmo se houver erro
         campaign_contact.status = 'sending'
         campaign_contact.instance_used = instance
         campaign_contact.message_used = message
-        campaign_contact.save()
+        campaign_contact.save(update_fields=['status', 'instance_used', 'message_used'])
+        
+        # ✅ DEBUG: Log da mensagem que será enviada
+        logger.info(f"📤 [ENVIO] Preparando envio - Contato: {contact.name}, Mensagem ordem={message.order}, times_used={message.times_used}, content={message.content[:50]}...")
         
         try:
             # Marcar tempo inicial
@@ -405,8 +409,8 @@ class CampaignSender:
                 self.campaign.next_contact_name = next_campaign_contact.contact.name
                 self.campaign.next_contact_phone = next_campaign_contact.contact.phone
                 
-                # Obter próxima instância usando o serviço de rotação
-                next_instance = self.select_next_instance()
+                # ✅ CORREÇÃO: Obter próxima instância usando o serviço de rotação (rotation_service)
+                next_instance = self.rotation_service.select_next_instance()
                 if next_instance:
                     self.campaign.next_instance_name = next_instance.friendly_name
                 else:
