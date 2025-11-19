@@ -336,12 +336,12 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               <Download size={24} />
             </button>
 
-            {/* Imagem Fullscreen - Melhorada */}
-            <div className="relative max-w-full max-h-full flex items-center justify-center">
+            {/* Imagem Fullscreen - Ocupa toda a janela */}
+            <div className="relative w-full h-full flex items-center justify-center">
               <img
                 src={fileUrl}
                 alt={attachment.original_filename}
-                className="max-w-full max-h-[90vh] object-contain cursor-zoom-out select-none"
+                className="w-full h-full object-contain cursor-zoom-out select-none"
                 onClick={(e) => {
                   e.stopPropagation();
                   // Não fechar ao clicar na imagem, apenas no fundo
@@ -356,6 +356,8 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
                 style={{
                   userSelect: 'none',
                   WebkitUserSelect: 'none',
+                  maxWidth: '100vw',
+                  maxHeight: '100vh',
                 }}
               />
             </div>
