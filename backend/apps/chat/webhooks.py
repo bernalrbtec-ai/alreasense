@@ -781,31 +781,53 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         else:
             logger.info(f"📋 [ROUTING] Instância sem departamento padrão - vai para Inbox")
         
-        # 🔧 FIX: Só usar pushName se mensagem veio do contato (not from_me)
-        # Se você enviou a primeira mensagem, deixar vazio e buscar via API
-        # ✅ MELHORIA: Se não tiver pushName, usar telefone formatado (como WhatsApp)
-        contact_name_to_save = push_name if (push_name and not from_me) else ''
+        # ✅ NOVO: Padronizar nome do contato - usar dados da lista de contatos se existir
+        # Se não existir, mostrar apenas o número formatado (não usar pushName)
+        def _format_phone_for_display(phone: str) -> str:
+            """Formata telefone para exibição (como WhatsApp faz)."""
+            import re
+            clean = re.sub(r'\D', '', phone)
+            if clean.startswith('55') and len(clean) >= 12:
+                clean = clean[2:]
+            if len(clean) == 11:
+                return f"({clean[0:2]}) {clean[2:7]}-{clean[7:11]}"
+            elif len(clean) == 10:
+                return f"({clean[0:2]}) {clean[2:6]}-{clean[6:10]}"
+            elif len(clean) == 9:
+                return f"{clean[0:5]}-{clean[5:9]}"
+            elif len(clean) == 8:
+                return f"{clean[0:4]}-{clean[4:8]}"
+            return clean[:15] if clean else phone
         
-        # ✅ FALLBACK: Se não tiver nome, formatar telefone para exibição
-        if not contact_name_to_save and not is_group:
-            def _format_phone_for_display(phone: str) -> str:
-                """Formata telefone para exibição (como WhatsApp faz)."""
-                import re
-                clean = re.sub(r'\D', '', phone)
-                if clean.startswith('55') and len(clean) >= 12:
-                    clean = clean[2:]
-                if len(clean) == 11:
-                    return f"({clean[0:2]}) {clean[2:7]}-{clean[7:11]}"
-                elif len(clean) == 10:
-                    return f"({clean[0:2]}) {clean[2:6]}-{clean[6:10]}"
-                elif len(clean) == 9:
-                    return f"{clean[0:5]}-{clean[5:9]}"
-                elif len(clean) == 8:
-                    return f"{clean[0:4]}-{clean[4:8]}"
-                return clean[:15] if clean else phone
+        # Normalizar telefone para buscar contato
+        from apps.contacts.signals import normalize_phone_for_search
+        normalized_phone = normalize_phone_for_search(phone)
+        
+        # ✅ NOVO: Buscar contato na lista de contatos do tenant
+        contact_name_to_save = None
+        if not is_group:
+            from apps.contacts.models import Contact
+            from django.db.models import Q
             
-            clean_phone_for_name = phone.replace('+', '').replace('@s.whatsapp.net', '')
-            contact_name_to_save = _format_phone_for_display(clean_phone_for_name)
+            # Buscar contato por telefone normalizado ou original
+            saved_contact = Contact.objects.filter(
+                Q(tenant=tenant) &
+                (Q(phone=normalized_phone) | Q(phone=phone))
+            ).first()
+            
+            if saved_contact:
+                # ✅ Contato existe na lista - usar nome salvo
+                contact_name_to_save = saved_contact.name
+                logger.info(f"✅ [CONTATO] Usando nome da lista de contatos: {contact_name_to_save} (telefone: {normalized_phone})")
+            else:
+                # ✅ Contato não existe - usar apenas número formatado (não pushName)
+                clean_phone_for_name = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                contact_name_to_save = _format_phone_for_display(clean_phone_for_name)
+                logger.info(f"📞 [CONTATO] Contato não encontrado na lista - usando número formatado: {contact_name_to_save}")
+        
+        # Para grupos, manter lógica atual
+        if is_group:
+            contact_name_to_save = 'Grupo WhatsApp'  # Placeholder até buscar da API
         
         # Para grupos, usar o ID do grupo como identificador único
         defaults = {
@@ -830,10 +852,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone para busca consistente
         # Isso previne criação de conversas duplicadas quando mensagens vêm do celular
         # em formatos diferentes (com/sem +, com/sem código do país)
-        from apps.contacts.signals import normalize_phone_for_search
-        
-        # Normalizar telefone para busca (garante formato E.164 consistente)
-        normalized_phone = normalize_phone_for_search(phone)
+        # Nota: normalized_phone já foi calculado acima ao buscar contato
         
         # Buscar conversa existente usando telefone normalizado
         # Usar Q() para buscar por telefone normalizado OU telefone original (para compatibilidade)
@@ -1086,18 +1105,40 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # Isso garante que a conversa aparece no topo da lista
             conversation.update_last_message()
             
-        # Atualiza nome e foto se mudaram
-        # ✅ CORREÇÃO CRÍTICA: Só atualizar contact_name se mensagem NÃO veio de você
-        # Se você enviou a mensagem, push_name é SEU nome, não do contato!
+        # ✅ NOVO: Atualizar nome da conversa com dados da lista de contatos se disponível
+        # Prioridade: 1) Nome do contato salvo, 2) Número formatado (nunca pushName)
         update_fields = []
         name_or_pic_changed = False
-        if push_name and not from_me and conversation.contact_name != push_name:
-            conversation.contact_name = push_name
-            update_fields.append('contact_name')
-            name_or_pic_changed = True
-            logger.info(f"✅ [WEBHOOK] Nome atualizado: '{conversation.contact_name}' (pushName do contato)")
-        elif push_name and from_me:
-            logger.debug(f"ℹ️ [WEBHOOK] Ignorando pushName '{push_name}' - mensagem enviada por você (from_me=True)")
+        
+        if not is_group:
+            # Buscar contato na lista novamente (pode ter sido criado desde a última mensagem)
+            from apps.contacts.models import Contact
+            from django.db.models import Q
+            from apps.contacts.signals import normalize_phone_for_search
+            
+            normalized_phone_for_update = normalize_phone_for_search(phone)
+            saved_contact = Contact.objects.filter(
+                Q(tenant=tenant) &
+                (Q(phone=normalized_phone_for_update) | Q(phone=phone))
+            ).first()
+            
+            new_contact_name = None
+            if saved_contact:
+                # ✅ Contato existe - usar nome salvo
+                new_contact_name = saved_contact.name
+                logger.info(f"✅ [CONTATO] Atualizando nome da conversa com nome da lista: {new_contact_name}")
+            else:
+                # ✅ Contato não existe - usar número formatado
+                clean_phone_for_name = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                new_contact_name = _format_phone_for_display(clean_phone_for_name)
+                logger.info(f"📞 [CONTATO] Atualizando nome da conversa com número formatado: {new_contact_name}")
+            
+            # Atualizar se mudou
+            if new_contact_name and conversation.contact_name != new_contact_name:
+                conversation.contact_name = new_contact_name
+                update_fields.append('contact_name')
+                name_or_pic_changed = True
+                logger.info(f"✅ [WEBHOOK] Nome da conversa atualizado: '{conversation.contact_name}'")
         
         if profile_pic_url and conversation.profile_pic_url != profile_pic_url:
             conversation.profile_pic_url = profile_pic_url
