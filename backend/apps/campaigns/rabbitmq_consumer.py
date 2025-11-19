@@ -1370,8 +1370,12 @@ class RabbitMQConsumer:
                         'phone': contact_phone,
                         'instance_id': instance.instance_name,
                         'instance_name': instance.friendly_name,
-                        'error': error_msg,
-                        'failed_at': timezone.now().isoformat()
+                        'error': error_msg,  # ✅ Mensagem completa e descritiva
+                        'failed_at': timezone.now().isoformat(),
+                        # ✅ MELHORIA: Incluir dados completos para diagnóstico
+                        'request_data': request_data,
+                        'response_data': response_data,
+                        'http_status': http_status
                     },
                     request_data=request_data,
                     response_data=response_data,
