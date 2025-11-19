@@ -58,8 +58,8 @@ def create_superuser():
         print(f"✅ [SUPERUSER] Tenant existente: {tenant.name}")
     
     # Create superuser if it doesn't exist (check by role, not by specific email)
-    # ✅ CORREÇÃO: Usar paulo.bernal@alrea.ai como admin padrão
-    ADMIN_EMAIL = 'paulo.bernal@alrea.ai'
+    # ✅ CORREÇÃO: Manter admin@alreasense.com e corrigir permissões
+    ADMIN_EMAIL = 'admin@alreasense.com'
     
     print("👤 [SUPERUSER] Verificando superuser...")
     if not User.objects.filter(is_superuser=True).exists():
@@ -69,8 +69,8 @@ def create_superuser():
             email=ADMIN_EMAIL,
             password='admin123',
             tenant=tenant,
-            first_name='Paulo',
-            last_name='Bernal',
+            first_name='Admin',
+            last_name='User',
             role='admin'
         )
         print(f"✅ [SUPERUSER] Superuser criado: {user.email}")
@@ -78,29 +78,31 @@ def create_superuser():
         existing_superuser = User.objects.filter(is_superuser=True).first()
         print(f"✅ [SUPERUSER] Superuser já existe: {existing_superuser.email}")
         
-        # ✅ CORREÇÃO: Se o superuser existente não for paulo.bernal@alrea.ai, corrigir
-        if existing_superuser.email != ADMIN_EMAIL:
-            print(f"⚠️  [SUPERUSER] Superuser atual ({existing_superuser.email}) não é o correto!")
-            print(f"🔄 [SUPERUSER] Verificando se {ADMIN_EMAIL} existe...")
-            
-            correct_admin = User.objects.filter(email=ADMIN_EMAIL).first()
-            if correct_admin:
-                print(f"✅ [SUPERUSER] Usuário {ADMIN_EMAIL} encontrado, promovendo...")
-                correct_admin.is_superuser = True
-                correct_admin.is_staff = True
-                correct_admin.is_active = True
-                correct_admin.role = 'admin'
-                correct_admin.save()
-                
-                # Desativar admin antigo
-                existing_superuser.is_superuser = False
-                existing_superuser.is_staff = False
-                existing_superuser.is_active = False
+        # ✅ CORREÇÃO: Garantir que admin@alreasense.com tem todas as permissões corretas
+        admin_user = User.objects.filter(email=ADMIN_EMAIL).first()
+        if admin_user:
+            print(f"🔄 [SUPERUSER] Corrigindo permissões de {ADMIN_EMAIL}...")
+            admin_user.is_superuser = True
+            admin_user.is_staff = True
+            admin_user.is_active = True
+            admin_user.role = 'admin'
+            admin_user.save()
+            print(f"✅ [SUPERUSER] Permissões corrigidas para {ADMIN_EMAIL}:")
+            print(f"   - is_superuser: {admin_user.is_superuser}")
+            print(f"   - is_staff: {admin_user.is_staff}")
+            print(f"   - is_active: {admin_user.is_active}")
+            print(f"   - role: {admin_user.role}")
+        else:
+            print(f"⚠️  [SUPERUSER] {ADMIN_EMAIL} não existe, mantendo {existing_superuser.email}")
+            # Corrigir permissões do superuser existente também
+            if not existing_superuser.is_superuser or not existing_superuser.is_staff:
+                print(f"🔄 [SUPERUSER] Corrigindo permissões de {existing_superuser.email}...")
+                existing_superuser.is_superuser = True
+                existing_superuser.is_staff = True
+                existing_superuser.is_active = True
+                existing_superuser.role = 'admin'
                 existing_superuser.save()
-                print(f"✅ [SUPERUSER] {ADMIN_EMAIL} promovido a superuser")
-                print(f"✅ [SUPERUSER] {existing_superuser.email} desativado")
-            else:
-                print(f"⚠️  [SUPERUSER] {ADMIN_EMAIL} não existe, mantendo {existing_superuser.email}")
+                print(f"✅ [SUPERUSER] Permissões corrigidas!")
     
     print("🎉 [SUPERUSER] Processo concluído com sucesso!")
 
