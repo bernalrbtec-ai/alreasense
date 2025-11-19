@@ -552,13 +552,17 @@ export function useTenantSocket() {
 
       case 'campaign_update':
         // ✅ NOVO: Handler para atualizações de campanha via WebSocket
-        console.log('📡 [TENANT WS] Evento: campaign_update', data.payload);
-        if (data.payload) {
+        console.log('📡 [TENANT WS] Evento: campaign_update', data);
+        // O backend envia: { type: 'campaign_update', data: payload, timestamp }
+        // O consumer espera: event.get('payload', {})
+        const campaignPayload = data.data || data.payload || data;
+        if (campaignPayload && campaignPayload.campaign_id) {
           // Disparar evento customizado para que CampaignsPage possa escutar
           const customEvent = new CustomEvent('campaign_update', {
-            detail: data.payload
+            detail: campaignPayload
           });
           window.dispatchEvent(customEvent);
+          console.log('📡 [TENANT WS] Evento customizado disparado para campanha:', campaignPayload.campaign_id);
         }
         break;
 
