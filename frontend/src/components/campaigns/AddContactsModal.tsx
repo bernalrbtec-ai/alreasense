@@ -18,6 +18,7 @@ interface AddContactsModalProps {
     id: string;
     name: string;
     total_contacts: number;
+    status?: string;
   };
   onClose: () => void;
   onSuccess: () => void;
@@ -122,6 +123,11 @@ export function AddContactsModal({ campaign, onClose, onSuccess }: AddContactsMo
                     </p>
                     <p className="text-xs text-blue-700">
                       Selecione a tag e adicione apenas os contatos que ainda não estão na campanha.
+                      {campaign.status === 'running' && (
+                        <span className="block mt-1 font-medium">
+                          ⚡ A campanha está em execução - os novos contatos serão processados automaticamente!
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>

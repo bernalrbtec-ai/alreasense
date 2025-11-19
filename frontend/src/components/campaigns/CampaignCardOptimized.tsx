@@ -299,9 +299,9 @@ const CampaignCardOptimized: React.FC<CampaignCardOptimizedProps> = ({
                 </Tooltip>
               )}
 
-              {/* Botão Adicionar Contatos: para campanhas em rascunho ou pausadas */}
-              {onAddContacts && (campaign.status === 'draft' || campaign.status === 'paused') && (
-                <Tooltip content="Adicionar contatos faltantes">
+              {/* Botão Adicionar Contatos: para campanhas em rascunho, pausadas ou em execução */}
+              {onAddContacts && (campaign.status === 'draft' || campaign.status === 'paused' || campaign.status === 'running') && (
+                <Tooltip content="Adicionar contatos faltantes (serão processados automaticamente)">
                   <Button
                     size="sm"
                     variant="outline"

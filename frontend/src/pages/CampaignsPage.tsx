@@ -763,7 +763,8 @@ const CampaignsPage: React.FC = () => {
           campaign={{
             id: selectedCampaignForAddContacts.id,
             name: selectedCampaignForAddContacts.name,
-            total_contacts: selectedCampaignForAddContacts.total_contacts
+            total_contacts: selectedCampaignForAddContacts.total_contacts,
+            status: selectedCampaignForAddContacts.status
           }}
           onClose={() => {
             setShowAddContactsModal(false)
