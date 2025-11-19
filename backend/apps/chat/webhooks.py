@@ -316,20 +316,38 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Extrai dados
         remote_jid = key.get('remoteJid', '')  # Ex: 5517999999999@s.whatsapp.net ou 120363123456789012@g.us (grupo)
+        remote_jid_alt = key.get('remoteJidAlt', '')  # ✅ Telefone real quando remoteJid é @lid
         from_me = key.get('fromMe', False)
         message_id = key.get('id')
         participant = key.get('participant', '')  # Quem enviou no grupo (apenas em grupos)
+        
+        # ✅ CORREÇÃO CRÍTICA: Se remoteJid termina com @lid, usar remoteJidAlt (telefone real)
+        # @lid é um ID longo que não é telefone, então precisamos do telefone real
+        if remote_jid.endswith('@lid') and remote_jid_alt:
+            logger.info(
+                f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
+            )
+            remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
         
         # 🔍 Detectar tipo de conversa
         # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE, não tipo de grupo!
         # Apenas @g.us indica grupos normais do WhatsApp
         is_group = remote_jid.endswith('@g.us')  # @g.us = grupos
         is_broadcast = remote_jid.endswith('@broadcast')
+        is_lid = remote_jid.endswith('@lid')  # ✅ Detectar se ainda é @lid (sem remoteJidAlt)
         
         if is_group:
             conversation_type = 'group'
         elif is_broadcast:
             conversation_type = 'broadcast'
+        elif is_lid:
+            # ✅ CORREÇÃO: @lid sem remoteJidAlt - tratar como grupo ou usar ID completo
+            # Não podemos usar como telefone individual
+            logger.warning(
+                f"⚠️ [@LID] RemoteJID é @lid sem remoteJidAlt: {remote_jid}. "
+                f"Usando ID completo como identificador."
+            )
+            conversation_type = 'group'  # Tratar como grupo para manter ID completo
         else:
             conversation_type = 'individual'
         
