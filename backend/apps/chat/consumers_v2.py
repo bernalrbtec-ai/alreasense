@@ -303,6 +303,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'status': event['status']
         }))
     
+    async def campaign_update(self, event):
+        """Broadcast atualização de campanha."""
+        # ✅ NOVO: Handler para mensagens do tipo campaign_update
+        await self.send(text_data=json.dumps({
+            'type': 'campaign_update',
+            'payload': event.get('payload', {})
+        }))
+    
     async def typing_status(self, event):
         """Broadcast status de digitando."""
         # Não envia para o próprio usuário

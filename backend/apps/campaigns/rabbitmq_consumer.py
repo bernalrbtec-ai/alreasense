@@ -591,8 +591,8 @@ class RabbitMQConsumer:
                 await self._update_campaign_status_async(campaign, 'paused')
                 return
             
-            # Enviar mensagem
-            success = await self._send_whatsapp_message_async(campaign, contact, instance)
+            # Enviar mensagem (passar interval_seconds para garantir sincronia)
+            success = await self._send_whatsapp_message_async(campaign, contact, instance, interval_seconds)
             
             if success:
                 # Marcar como enviado
@@ -739,7 +739,7 @@ class RabbitMQConsumer:
             logger.warning(f"   Traceback: {traceback.format_exc()}")
             # Não falhar o envio se o presence falhar
 
-    async def _send_whatsapp_message_async(self, campaign, contact, instance):
+    async def _send_whatsapp_message_async(self, campaign, contact, instance, interval_seconds=None):
         """Envia mensagem WhatsApp com retry e controle de erros"""
         from asgiref.sync import sync_to_async
         import random
@@ -927,6 +927,9 @@ class RabbitMQConsumer:
                             from datetime import timedelta
                             from apps.campaigns.models import CampaignContact
                             from apps.campaigns.services import RotationService
+                            
+                            # ✅ CORREÇÃO: Usar interval_seconds do escopo externo (closure)
+                            nonlocal interval_seconds
                             
                             # Buscar próximo contato pendente
                             next_campaign_contact = CampaignContact.objects.filter(
