@@ -1,12 +1,15 @@
 """
 Serializers para o módulo Flow Chat.
 """
+import logging
 from rest_framework import serializers
 from django.db import models
 from django.db.models import Q
 from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.authn.serializers import UserSerializer
 from apps.contacts.models import Contact
+
+logger = logging.getLogger(__name__)
 
 
 class MessageAttachmentSerializer(serializers.ModelSerializer):
