@@ -420,17 +420,16 @@ class CampaignSender:
                 import random
                 next_interval = random.uniform(self.campaign.interval_min, self.campaign.interval_max)
                 self.campaign.next_message_scheduled_at = timezone.now() + timezone.timedelta(seconds=next_interval)
-                
-                # Armazenar informações do próximo contato
-                self.campaign.next_contact_name = next_campaign_contact.contact.name
-                self.campaign.next_contact_phone = next_campaign_contact.contact.phone
             else:
                 # Última mensagem - limpar próximo disparo
                 self.campaign.next_message_scheduled_at = None
-                self.campaign.next_contact_name = None
-                self.campaign.next_contact_phone = None
             
-            self.campaign.save(update_fields=['messages_sent', 'last_message_sent_at', 'last_contact_name', 'last_contact_phone', 'last_instance_name', 'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone'])
+            # ✅ CORREÇÃO: Incluir next_instance_name no save para garantir atualização completa
+            self.campaign.save(update_fields=[
+                'messages_sent', 'last_message_sent_at', 
+                'last_contact_name', 'last_contact_phone', 'last_instance_name', 
+                'next_message_scheduled_at', 'next_contact_name', 'next_contact_phone', 'next_instance_name'
+            ])
             
             # Salvar mensagem no modelo Message para contadores do dashboard
             from apps.chat_messages.models import Message
