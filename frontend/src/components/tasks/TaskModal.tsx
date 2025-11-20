@@ -41,6 +41,7 @@ interface TaskModalProps {
   task?: Task | null
   initialDepartmentId?: string
   initialContactId?: string
+  initialDate?: Date
   departments: Department[]
   users: User[]
 }
@@ -52,6 +53,7 @@ export default function TaskModal({
   task,
   initialDepartmentId,
   initialContactId,
+  initialDate,
   departments,
   users
 }: TaskModalProps) {
@@ -92,6 +94,7 @@ export default function TaskModal({
         })
       } else {
         // Nova tarefa
+        const prefillDate = initialDate || (task?.due_date ? new Date(task.due_date) : null)
         setFormData({
           title: '',
           description: '',
@@ -99,9 +102,9 @@ export default function TaskModal({
           priority: 'medium',
           department: initialDepartmentId || '',
           assigned_to: '',
-          due_date: '',
-          due_time: '',
-          has_due_date: false,
+          due_date: prefillDate ? formatDateForInput(prefillDate) : '',
+          due_time: prefillDate ? formatTimeForInput(prefillDate) : '',
+          has_due_date: !!prefillDate,
           related_contact_ids: initialContactId ? [initialContactId] : []
         })
       }

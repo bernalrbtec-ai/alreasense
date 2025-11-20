@@ -63,7 +63,7 @@ const STATUS_COLORS: Record<string, string> = {
 export default function TaskList({ departmentId, contactId }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
-  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar')
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [currentMonth, setCurrentMonth] = useState(new Date())
@@ -156,8 +156,9 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
     setShowTaskModal(true)
   }
 
-  const handleCreate = () => {
+  const handleCreate = (date?: Date) => {
     setEditingTask(null)
+    setSelectedDate(date)
     setShowTaskModal(true)
   }
 
@@ -304,17 +305,6 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
       {/* Tabs */}
       <div className="flex gap-2 border-b border-gray-200">
         <button
-          onClick={() => setViewMode('list')}
-          className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
-            viewMode === 'list'
-              ? 'border-blue-600 text-blue-600'
-              : 'border-transparent text-gray-500 hover:text-gray-700'
-          }`}
-        >
-          <List className="h-4 w-4 inline mr-2" />
-          Lista
-        </button>
-        <button
           onClick={() => setViewMode('calendar')}
           className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
             viewMode === 'calendar'
@@ -324,6 +314,17 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
         >
           <Calendar className="h-4 w-4 inline mr-2" />
           Calendário
+        </button>
+        <button
+          onClick={() => setViewMode('list')}
+          className={`px-4 py-2 font-medium text-sm border-b-2 transition-colors ${
+            viewMode === 'list'
+              ? 'border-blue-600 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700'
+          }`}
+        >
+          <List className="h-4 w-4 inline mr-2" />
+          Lista
         </button>
       </div>
 
@@ -467,7 +468,16 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
                     key={idx}
                     className={`min-h-[100px] border border-gray-100 p-1 ${
                       isCurrentMonth ? 'bg-white' : 'bg-gray-50'
-                    } ${isCurrentDay ? 'bg-blue-50' : ''}`}
+                    } ${isCurrentDay ? 'bg-blue-50' : ''} ${
+                      isCurrentMonth && dayTasks.length === 0 ? 'hover:bg-gray-50 cursor-pointer' : ''
+                    } transition-colors relative group`}
+                    onClick={() => {
+                      if (isCurrentMonth && dayTasks.length === 0) {
+                        // Criar tarefa ao clicar em dia vazio
+                        handleCreate(day)
+                      }
+                    }}
+                    title={isCurrentMonth && dayTasks.length === 0 ? 'Clique para criar tarefa neste dia' : ''}
                   >
                     <div className={`text-xs mb-1 ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'} ${isCurrentDay ? 'font-bold text-blue-600' : ''}`}>
                       {format(day, 'd')}
@@ -484,14 +494,31 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
                               : 'bg-blue-100 text-blue-700 border border-blue-200'
                           }`}
                           title={task.title}
-                          onClick={() => handleEdit(task)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(task)
+                          }}
                         >
                           {task.title}
                         </div>
                       ))}
                       {dayTasks.length > 3 && (
-                        <div className="text-xs text-gray-500 px-1">
+                        <div 
+                          className="text-xs text-gray-500 px-1 cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            // Mostrar todas as tarefas do dia
+                            setViewMode('list')
+                            setFilters({ ...filters, has_due_date: true })
+                            setCurrentMonth(day)
+                          }}
+                        >
                           +{dayTasks.length - 3} mais
+                        </div>
+                      )}
+                      {isCurrentMonth && dayTasks.length === 0 && (
+                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                          <Plus className="h-5 w-5 text-gray-400" />
                         </div>
                       )}
                     </div>
@@ -510,11 +537,13 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
           onClose={() => {
             setShowTaskModal(false)
             setEditingTask(null)
+            setSelectedDate(undefined)
           }}
           onSuccess={handleModalSuccess}
           task={editingTask}
           initialDepartmentId={departmentId}
           initialContactId={contactId}
+          initialDate={selectedDate}
           departments={departments}
           users={users}
         />
