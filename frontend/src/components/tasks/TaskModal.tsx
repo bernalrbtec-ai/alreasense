@@ -190,7 +190,16 @@ export default function TaskModal({
         const dateTime = formData.due_time
           ? `${formData.due_date}T${formData.due_time}:00`
           : `${formData.due_date}T00:00:00`
-        payload.due_date = new Date(dateTime).toISOString()
+        const scheduledDate = new Date(dateTime)
+        const now = new Date()
+        
+        // Validar se não é no passado
+        if (scheduledDate < now) {
+          showErrorToast('Não é possível agendar tarefas no passado. A data/hora deve ser a partir de agora.')
+          return
+        }
+        
+        payload.due_date = scheduledDate.toISOString()
       }
 
       if (task) {
@@ -371,7 +380,33 @@ export default function TaskModal({
                   <input
                     type="date"
                     value={formData.due_date}
-                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    min={new Date().toISOString().split('T')[0]}
+                    onChange={(e) => {
+                      const selectedDate = e.target.value
+                      const today = new Date().toISOString().split('T')[0]
+                      
+                      // Se selecionou hoje, validar hora também
+                      if (selectedDate === today && formData.due_time) {
+                        const now = new Date()
+                        const [hours, minutes] = formData.due_time.split(':')
+                        const selectedDateTime = new Date()
+                        selectedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+                        
+                        if (selectedDateTime < now) {
+                          // Se hora selecionada já passou hoje, ajustar para próxima hora
+                          const nextHour = new Date(now)
+                          nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0)
+                          setFormData({
+                            ...formData,
+                            due_date: selectedDate,
+                            due_time: `${nextHour.getHours().toString().padStart(2, '0')}:${nextHour.getMinutes().toString().padStart(2, '0')}`
+                          })
+                          return
+                        }
+                      }
+                      
+                      setFormData({ ...formData, due_date: selectedDate })
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>
@@ -380,7 +415,28 @@ export default function TaskModal({
                   <input
                     type="time"
                     value={formData.due_time}
-                    onChange={(e) => setFormData({ ...formData, due_time: e.target.value })}
+                    min={formData.due_date === new Date().toISOString().split('T')[0] 
+                      ? new Date().toTimeString().slice(0, 5) 
+                      : undefined}
+                    onChange={(e) => {
+                      const selectedTime = e.target.value
+                      const today = new Date().toISOString().split('T')[0]
+                      
+                      // Se selecionou hoje, validar se hora não é no passado
+                      if (formData.due_date === today) {
+                        const now = new Date()
+                        const [hours, minutes] = selectedTime.split(':')
+                        const selectedDateTime = new Date()
+                        selectedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
+                        
+                        if (selectedDateTime < now) {
+                          showErrorToast('Não é possível agendar no passado. Selecione uma hora futura.')
+                          return
+                        }
+                      }
+                      
+                      setFormData({ ...formData, due_time: selectedTime })
+                    }}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                 </div>

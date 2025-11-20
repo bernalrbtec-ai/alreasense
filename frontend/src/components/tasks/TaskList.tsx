@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Plus, CheckCircle, Clock, AlertCircle, XCircle, Calendar, List, Filter, User, Users, Edit, X } from 'lucide-react'
+import { Plus, CheckCircle, Clock, AlertCircle, XCircle, Calendar, List, Filter, User, Users, Edit, X, Search } from 'lucide-react'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast } from '../../lib/toastHelper'
 import { Button } from '../ui/Button'
@@ -7,6 +7,7 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, isToday, addMonths, subMonths } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import TaskModal from './TaskModal'
+import TaskSearchModal from './TaskSearchModal'
 
 interface Task {
   id: string
@@ -44,6 +45,7 @@ interface User {
 interface TaskListProps {
   departmentId?: string
   contactId?: string
+  onTasksChange?: (tasks: Task[]) => void
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -60,7 +62,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
 }
 
-export default function TaskList({ departmentId, contactId }: TaskListProps) {
+export default function TaskList({ departmentId, contactId, onTasksChange }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar')
@@ -81,7 +83,9 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
     my_tasks: false,
     created_by_me: false,
     overdue: false,
+    search: '',
   })
+  const [showSearchModal, setShowSearchModal] = useState(false)
 
   useEffect(() => {
     fetchTasks()
@@ -100,10 +104,16 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
       if (filters.my_tasks) params.my_tasks = 'true'
       if (filters.created_by_me) params.created_by_me = 'true'
       if (filters.overdue) params.overdue = 'true'
+      if (filters.search) params.search = filters.search
       if (contactId) params.contact_id = contactId
 
       const response = await api.get('/contacts/tasks/', { params })
-      setTasks(response.data.results || response.data)
+      const fetchedTasks = response.data.results || response.data
+      setTasks(fetchedTasks)
+      // Notificar componente pai sobre mudanças nas tarefas
+      if (onTasksChange) {
+        onTasksChange(fetchedTasks)
+      }
     } catch (error: any) {
       console.error('Erro ao buscar tarefas:', error)
       showErrorToast('Erro ao carregar tarefas')
@@ -169,6 +179,18 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
   }
 
   const handleDayClick = (day: Date, event: React.MouseEvent) => {
+    // Verificar se o dia não é no passado
+    const now = new Date()
+    const dayStart = new Date(day)
+    dayStart.setHours(0, 0, 0, 0)
+    const nowStart = new Date(now)
+    nowStart.setHours(0, 0, 0, 0)
+    
+    if (dayStart < nowStart) {
+      showErrorToast('Não é possível criar tarefas em datas passadas')
+      return
+    }
+    
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
     const scrollX = window.scrollX || window.pageXOffset
     const scrollY = window.scrollY || window.pageYOffset
@@ -250,92 +272,18 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Tarefas e Agenda</h3>
         <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setShowSearchModal(true)}
+            title="Pesquisar e filtrar tarefas"
+          >
+            <Search className="h-4 w-4" />
+          </Button>
           <Button variant="outline" size="sm" onClick={handleCreate}>
             <Plus className="h-4 w-4 mr-1" />
             Nova Tarefa
           </Button>
-        </div>
-      </div>
-
-      {/* Filtros */}
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
-            <select
-              value={filters.status}
-              onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos</option>
-              <option value="pending">Pendente</option>
-              <option value="in_progress">Em Andamento</option>
-              <option value="completed">Concluída</option>
-              <option value="cancelled">Cancelada</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Departamento</label>
-            <select
-              value={filters.department}
-              onChange={(e) => setFilters({ ...filters, department: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos</option>
-              {departments.map(dept => (
-                <option key={dept.id} value={dept.id}>{dept.name}</option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Atribuída Para</label>
-            <select
-              value={filters.assigned_to}
-              onChange={(e) => setFilters({ ...filters, assigned_to: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="">Todos</option>
-              {users.map(user => (
-                <option key={user.id} value={user.id}>
-                  {user.first_name && user.last_name 
-                    ? `${user.first_name} ${user.last_name}`
-                    : user.email}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={filters.my_tasks}
-              onChange={(e) => setFilters({ ...filters, my_tasks: e.target.checked })}
-              className="rounded border-gray-300"
-            />
-            <span>Minhas tarefas atribuídas</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={filters.created_by_me}
-              onChange={(e) => setFilters({ ...filters, created_by_me: e.target.checked })}
-              className="rounded border-gray-300"
-            />
-            <span>Tarefas que criei</span>
-          </label>
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={filters.overdue}
-              onChange={(e) => setFilters({ ...filters, overdue: e.target.checked })}
-              className="rounded border-gray-300"
-            />
-            <span>Atrasadas</span>
-          </label>
         </div>
       </div>
 
@@ -500,20 +448,38 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
                 const isCurrentMonth = isSameMonth(day, currentMonth)
                 const isCurrentDay = isToday(day)
 
+                // Verificar se o dia é no passado
+                const now = new Date()
+                const dayStart = new Date(day)
+                dayStart.setHours(0, 0, 0, 0)
+                const nowStart = new Date(now)
+                nowStart.setHours(0, 0, 0, 0)
+                const isPast = dayStart < nowStart
+
                 return (
                   <div
                     key={idx}
                     className={`min-h-[100px] border border-gray-100 p-1 ${
                       isCurrentMonth ? 'bg-white' : 'bg-gray-50'
                     } ${isCurrentDay ? 'bg-blue-50' : ''} ${
-                      isCurrentMonth ? 'hover:bg-gray-50 cursor-pointer' : ''
+                      isPast && isCurrentMonth ? 'opacity-50 cursor-not-allowed' : ''
+                    } ${
+                      isCurrentMonth && !isPast ? 'hover:bg-gray-50 cursor-pointer' : ''
                     } transition-colors relative group`}
                     onClick={(e) => {
-                      if (isCurrentMonth) {
+                      if (isCurrentMonth && !isPast) {
                         handleDayClick(day, e)
+                      } else if (isPast && isCurrentMonth) {
+                        showErrorToast('Não é possível criar tarefas em datas passadas')
                       }
                     }}
-                    title={isCurrentMonth ? 'Clique para ver opções do dia' : ''}
+                    title={
+                      isPast && isCurrentMonth 
+                        ? 'Não é possível criar tarefas em datas passadas'
+                        : isCurrentMonth 
+                        ? 'Clique para ver opções do dia' 
+                        : ''
+                    }
                   >
                     <div className={`text-xs mb-1 ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'} ${isCurrentDay ? 'font-bold text-blue-600' : ''}`}>
                       {format(day, 'd')}
@@ -591,7 +557,21 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
           
           <div className="space-y-1">
             <button
-              onClick={() => handleCreate(selectedDay)}
+              onClick={() => {
+                // Validar se o dia não é no passado
+                const now = new Date()
+                const dayStart = new Date(selectedDay)
+                dayStart.setHours(0, 0, 0, 0)
+                const nowStart = new Date(now)
+                nowStart.setHours(0, 0, 0, 0)
+                
+                if (dayStart < nowStart) {
+                  showErrorToast('Não é possível criar tarefas em datas passadas')
+                  return
+                }
+                
+                handleCreate(selectedDay)
+              }}
               className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded flex items-center gap-2"
             >
               <Plus className="h-4 w-4" />

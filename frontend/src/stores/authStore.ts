@@ -61,6 +61,44 @@ export const useAuthStore = create<AuthState>()(
       isLoading: false,
 
       login: async (email: string, password: string) => {
+        console.log('🔐 [AUTH] Iniciando login e limpeza de cache anterior...')
+        
+        // Limpar caches antes do login para garantir que não há dados de usuário anterior
+        try {
+          // Limpar chat store
+          const { useChatStore } = await import('../modules/chat/store/chatStore')
+          useChatStore.getState().reset()
+          console.log('✅ [AUTH] Chat store limpo antes do login')
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao limpar chat store antes do login:', error)
+        }
+        
+        // Desconectar WebSocket anterior se existir
+        try {
+          const { ChatWebSocketManager } = await import('../modules/chat/services/ChatWebSocketManager')
+          ChatWebSocketManager.getInstance().disconnect()
+          console.log('✅ [AUTH] WebSocket anterior desconectado')
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao desconectar WebSocket anterior:', error)
+        }
+        
+        // Limpar localStorage de caches relacionados ao chat
+        try {
+          const keysToRemove: string[] = []
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (key && (key.includes('chat') || key.includes('conversation'))) {
+              keysToRemove.push(key)
+            }
+          }
+          keysToRemove.forEach(key => localStorage.removeItem(key))
+          if (keysToRemove.length > 0) {
+            console.log('✅ [AUTH] Caches de chat limpos do localStorage:', keysToRemove)
+          }
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao limpar localStorage de chat:', error)
+        }
+        
         set({ isLoading: true })
         try {
           const response = await api.post('/auth/login/', {
@@ -81,6 +119,8 @@ export const useAuthStore = create<AuthState>()(
             token: access,
             isLoading: false,
           })
+          
+          console.log('✅ [AUTH] Login realizado com sucesso')
         } catch (error) {
           set({ isLoading: false })
           throw error
@@ -88,8 +128,64 @@ export const useAuthStore = create<AuthState>()(
       },
 
       logout: () => {
+        console.log('🔐 [AUTH] Iniciando logout e limpeza de cache...')
+        
+        // 1. Limpar token da API
         delete api.defaults.headers.common['Authorization']
+        
+        // 2. Limpar estado do auth store
         set({ user: null, token: null })
+        
+        // 3. Limpar localStorage (auth-storage e outros possíveis caches)
+        try {
+          localStorage.removeItem('auth-storage')
+          // Limpar outros possíveis caches relacionados
+          const keysToRemove: string[] = []
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i)
+            if (key && (key.includes('auth') || key.includes('chat') || key.includes('conversation'))) {
+              keysToRemove.push(key)
+            }
+          }
+          keysToRemove.forEach(key => localStorage.removeItem(key))
+          console.log('✅ [AUTH] localStorage limpo:', keysToRemove)
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao limpar localStorage:', error)
+        }
+        
+        // 4. Limpar sessionStorage
+        try {
+          sessionStorage.clear()
+          console.log('✅ [AUTH] sessionStorage limpo')
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao limpar sessionStorage:', error)
+        }
+        
+        // 5. Limpar chat store (conversas, mensagens, etc)
+        try {
+          import('../modules/chat/store/chatStore').then(({ useChatStore }) => {
+            useChatStore.getState().reset()
+            console.log('✅ [AUTH] Chat store resetado')
+          }).catch((error) => {
+            console.error('❌ [AUTH] Erro ao resetar chat store:', error)
+          })
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao importar chat store:', error)
+        }
+        
+        // 6. Desconectar WebSocket
+        try {
+          import('../modules/chat/services/ChatWebSocketManager').then(({ ChatWebSocketManager }) => {
+            ChatWebSocketManager.getInstance().disconnect()
+            console.log('✅ [AUTH] WebSocket desconectado')
+          }).catch((error) => {
+            console.error('❌ [AUTH] Erro ao desconectar WebSocket:', error)
+          })
+        } catch (error) {
+          console.error('❌ [AUTH] Erro ao importar WebSocket manager:', error)
+        }
+        
+        console.log('✅ [AUTH] Logout completo - todos os caches foram limpos')
       },
 
       checkAuth: async () => {

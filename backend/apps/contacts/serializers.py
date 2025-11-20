@@ -435,6 +435,21 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         
         return value
     
+    def validate_due_date(self, value):
+        """Valida se a data agendada não é no passado"""
+        from django.utils import timezone
+        
+        if value:
+            # Comparar apenas data/hora, não timezone
+            now = timezone.now()
+            if value < now:
+                raise serializers.ValidationError(
+                    'Não é possível agendar tarefas no passado. '
+                    'A data/hora deve ser a partir de agora.'
+                )
+        
+        return value
+    
     def create(self, validated_data):
         """Cria tarefa com contatos relacionados"""
         related_contact_ids = validated_data.pop('related_contact_ids', [])
