@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { Plus, CheckCircle, Clock, AlertCircle, XCircle, Calendar, List, Filter, User, Users, Edit } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Plus, CheckCircle, Clock, AlertCircle, XCircle, Calendar, List, Filter, User, Users, Edit, X } from 'lucide-react'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast } from '../../lib/toastHelper'
 import { Button } from '../ui/Button'
@@ -66,7 +66,12 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar')
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined)
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null)
+  const [showDayMenu, setShowDayMenu] = useState(false)
+  const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 })
+  const menuRef = useRef<HTMLDivElement>(null)
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [filters, setFilters] = useState({
@@ -159,14 +164,46 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
   const handleCreate = (date?: Date) => {
     setEditingTask(null)
     setSelectedDate(date)
+    setShowDayMenu(false)
     setShowTaskModal(true)
+  }
+
+  const handleDayClick = (day: Date, event: React.MouseEvent) => {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+    const scrollX = window.scrollX || window.pageXOffset
+    const scrollY = window.scrollY || window.pageYOffset
+    
+    setSelectedDay(day)
+    // Posicionar menu no centro do dia, considerando scroll
+    setMenuPosition({
+      x: rect.left + rect.width / 2 + scrollX,
+      y: rect.top + rect.height / 2 + scrollY
+    })
+    setShowDayMenu(true)
   }
 
   const handleModalSuccess = () => {
     setShowTaskModal(false)
     setEditingTask(null)
+    setSelectedDate(undefined)
     fetchTasks()
   }
+
+  // Fechar menu ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowDayMenu(false)
+      }
+    }
+
+    if (showDayMenu) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [showDayMenu])
 
   // Calendário
   const monthStart = startOfMonth(currentMonth)
@@ -469,15 +506,14 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
                     className={`min-h-[100px] border border-gray-100 p-1 ${
                       isCurrentMonth ? 'bg-white' : 'bg-gray-50'
                     } ${isCurrentDay ? 'bg-blue-50' : ''} ${
-                      isCurrentMonth && dayTasks.length === 0 ? 'hover:bg-gray-50 cursor-pointer' : ''
+                      isCurrentMonth ? 'hover:bg-gray-50 cursor-pointer' : ''
                     } transition-colors relative group`}
-                    onClick={() => {
-                      if (isCurrentMonth && dayTasks.length === 0) {
-                        // Criar tarefa ao clicar em dia vazio
-                        handleCreate(day)
+                    onClick={(e) => {
+                      if (isCurrentMonth) {
+                        handleDayClick(day, e)
                       }
                     }}
-                    title={isCurrentMonth && dayTasks.length === 0 ? 'Clique para criar tarefa neste dia' : ''}
+                    title={isCurrentMonth ? 'Clique para ver opções do dia' : ''}
                   >
                     <div className={`text-xs mb-1 ${isCurrentMonth ? 'text-gray-900' : 'text-gray-400'} ${isCurrentDay ? 'font-bold text-blue-600' : ''}`}>
                       {format(day, 'd')}
@@ -526,6 +562,76 @@ export default function TaskList({ departmentId, contactId }: TaskListProps) {
                 )
               })}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Menu de Dia */}
+      {showDayMenu && selectedDay && (
+        <div
+          ref={menuRef}
+          className="fixed z-50 bg-white border border-gray-200 rounded-lg shadow-xl p-2 min-w-[200px] max-w-[300px]"
+          style={{
+            left: `${menuPosition.x}px`,
+            top: `${menuPosition.y}px`,
+            transform: 'translate(-50%, -50%)'
+          }}
+        >
+          <div className="flex items-center justify-between mb-2 pb-2 border-b">
+            <span className="text-sm font-semibold text-gray-900">
+              {format(selectedDay, "dd/MM/yyyy", { locale: ptBR })}
+            </span>
+            <button
+              onClick={() => setShowDayMenu(false)}
+              className="text-gray-400 hover:text-gray-600"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+          
+          <div className="space-y-1">
+            <button
+              onClick={() => handleCreate(selectedDay)}
+              className="w-full text-left px-3 py-2 text-sm text-blue-600 hover:bg-blue-50 rounded flex items-center gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Tarefa
+            </button>
+            
+            {getTasksForDate(selectedDay).length > 0 && (
+              <>
+                <div className="border-t my-1"></div>
+                <div className="text-xs text-gray-500 px-2 py-1">
+                  Tarefas do dia ({getTasksForDate(selectedDay).length})
+                </div>
+                {getTasksForDate(selectedDay).map(task => (
+                  <button
+                    key={task.id}
+                    onClick={() => {
+                      handleEdit(task)
+                      setShowDayMenu(false)
+                    }}
+                    className={`w-full text-left px-3 py-2 text-sm rounded flex items-center justify-between group ${
+                      task.can_edit 
+                        ? 'text-gray-700 hover:bg-gray-50' 
+                        : 'text-gray-400 cursor-not-allowed'
+                    }`}
+                    disabled={!task.can_edit}
+                    title={!task.can_edit ? 'Você não tem permissão para editar esta tarefa' : ''}
+                  >
+                    <div className="flex-1 truncate">
+                      <div className="font-medium truncate">{task.title}</div>
+                      <div className="text-xs text-gray-500">
+                        {task.status_display} • {task.priority_display}
+                      </div>
+                    </div>
+                    {task.can_edit && (
+                      <Edit className="h-3 w-3 text-gray-400 group-hover:text-blue-600 ml-2 flex-shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </>
+            )}
           </div>
         </div>
       )}
