@@ -10,7 +10,8 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, FileText, X, Play, Pause } from 'lucide-react';
+import { Download, FileText, X, Play, Pause, AlertCircle } from 'lucide-react';
+import { showWarningToast } from '@/lib/toastHelper';
 // Removed unused imports: Image, Video, Music
 
 interface Attachment {
@@ -329,16 +330,39 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
             {/* Botão Download */}
             <button
               className="absolute top-4 right-20 z-10 p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
-              onClick={(e) => {
+              onClick={async (e) => {
                 e.stopPropagation();
-                const link = document.createElement('a');
-                link.href = fileUrl;
-                link.download = attachment.original_filename || 'image.jpg';
-                link.target = '_blank';
-                link.rel = 'noopener noreferrer';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                
+                // ✅ NOVO: Verificar se arquivo existe antes de baixar
+                try {
+                  const response = await fetch(fileUrl, { method: 'HEAD' });
+                  if (!response.ok) {
+                    // Tentar verificar se é resposta JSON de erro
+                    const contentType = response.headers.get('content-type');
+                    if (contentType?.includes('application/json')) {
+                      const errorData = await response.json();
+                      if (errorData.error === 'Arquivo indisponível') {
+                        showWarningToast('Anexo indisponível', 'O arquivo não está mais disponível no servidor');
+                        return;
+                      }
+                    }
+                    showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
+                    return;
+                  }
+                  
+                  // Arquivo existe, fazer download
+                  const link = document.createElement('a');
+                  link.href = fileUrl;
+                  link.download = attachment.original_filename || 'image.jpg';
+                  link.target = '_blank';
+                  link.rel = 'noopener noreferrer';
+                  document.body.appendChild(link);
+                  link.click();
+                  document.body.removeChild(link);
+                } catch (error) {
+                  console.error('Erro ao verificar/download arquivo:', error);
+                  showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
+                }
               }}
               title="Baixar imagem"
               aria-label="Baixar imagem"
@@ -655,64 +679,108 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const handleDocumentClick = (e: React.MouseEvent) => {
+  const handleDocumentClick = async (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
     
-    if (isPDF) {
-      // ✅ PDF: Abrir em nova aba para não quebrar autenticação
-      const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
-      if (!newWindow) {
-        // Se popup foi bloqueado, tentar download direto
+    // ✅ NOVO: Verificar se arquivo existe antes de abrir/baixar
+    try {
+      const response = await fetch(attachment.file_url, { method: 'HEAD' });
+      if (!response.ok) {
+        // Tentar verificar se é resposta JSON de erro
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          if (errorData.error === 'Arquivo indisponível') {
+            showWarningToast('Anexo indisponível', 'O arquivo não está mais disponível no servidor');
+            return;
+          }
+        }
+        showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
+        return;
+      }
+      
+      // Arquivo existe, proceder com abertura/download
+      if (isPDF) {
+        // ✅ PDF: Abrir em nova aba para não quebrar autenticação
+        const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
+        if (!newWindow) {
+          // Se popup foi bloqueado, tentar download direto
+          const link = document.createElement('a');
+          link.href = attachment.file_url;
+          link.download = filename;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+      } else if (isWord || isExcel || isPowerPoint) {
+        // ✅ Word, Excel, PowerPoint: Download direto (abre no aplicativo padrão)
         const link = document.createElement('a');
         link.href = attachment.file_url;
         link.download = filename;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
+        // Forçar download para abrir no aplicativo padrão
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+      } else {
+        // Outros documentos: Tentar abrir em nova aba, fallback para download
+        const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
+        if (!newWindow) {
+          // Se popup foi bloqueado, tentar download direto
+          const link = document.createElement('a');
+          link.href = attachment.file_url;
+          link.download = filename;
+          link.target = '_blank';
+          link.rel = 'noopener noreferrer';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
       }
-    } else if (isWord || isExcel || isPowerPoint) {
-      // ✅ Word, Excel, PowerPoint: Download direto (abre no aplicativo padrão)
+    } catch (error) {
+      console.error('Erro ao verificar/acessar arquivo:', error);
+      showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
+    }
+  };
+
+  const handleDocumentDownload = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    // ✅ NOVO: Verificar se arquivo existe antes de baixar
+    try {
+      const response = await fetch(attachment.file_url, { method: 'HEAD' });
+      if (!response.ok) {
+        // Tentar verificar se é resposta JSON de erro
+        const contentType = response.headers.get('content-type');
+        if (contentType?.includes('application/json')) {
+          const errorData = await response.json();
+          if (errorData.error === 'Arquivo indisponível') {
+            showWarningToast('Anexo indisponível', 'O arquivo não está mais disponível no servidor');
+            return;
+          }
+        }
+        showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
+        return;
+      }
+      
+      // Arquivo existe, fazer download
       const link = document.createElement('a');
       link.href = attachment.file_url;
       link.download = filename;
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
-      // Forçar download para abrir no aplicativo padrão
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-    } else {
-      // Outros documentos: Tentar abrir em nova aba, fallback para download
-      const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
-      if (!newWindow) {
-        // Se popup foi bloqueado, tentar download direto
-        const link = document.createElement('a');
-        link.href = attachment.file_url;
-        link.download = filename;
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-      }
+    } catch (error) {
+      console.error('Erro ao verificar/download arquivo:', error);
+      showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
     }
-  };
-
-  const handleDocumentDownload = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    
-    const link = document.createElement('a');
-    link.href = attachment.file_url;
-    link.download = filename;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
   };
 
   return (

@@ -76,7 +76,47 @@ def serve_media(request, media_hash):
             logger.warning(f"⚠️ [MEDIA] Total de attachments no banco: {MessageAttachment.objects.count()}")
             raise Http404("Mídia não encontrada")
         
-        # 3. Baixar do S3
+        # 3. ✅ NOVO: Verificar se arquivo existe no S3 antes de tentar baixar
+        logger.info(f"☁️ [MEDIA] Verificando existência no S3: {attachment.file_path}")
+        
+        s3_client = boto3.client(
+            's3',
+            endpoint_url=settings.S3_ENDPOINT_URL,
+            aws_access_key_id=settings.S3_ACCESS_KEY,
+            aws_secret_access_key=settings.S3_SECRET_KEY,
+            region_name=settings.S3_REGION,
+            config=boto3.session.Config(signature_version='s3v4')
+        )
+        
+        # Verificar se arquivo existe
+        try:
+            s3_client.head_object(
+                Bucket=settings.S3_BUCKET,
+                Key=attachment.file_path
+            )
+            logger.info(f"✅ [MEDIA] Arquivo existe no S3: {attachment.file_path}")
+        except ClientError as e:
+            error_code = e.response.get('Error', {}).get('Code', '')
+            if error_code == '404' or error_code == 'NoSuchKey':
+                logger.warning(f"⚠️ [MEDIA] Arquivo não existe no S3: {attachment.file_path} (hash: {media_hash})")
+                # Retornar resposta JSON indicando que arquivo não está disponível
+                from rest_framework.response import Response
+                from rest_framework import status
+                return Response(
+                    {
+                        'error': 'Arquivo indisponível',
+                        'message': 'O anexo não está mais disponível no servidor. Pode ter sido removido ou expirado.',
+                        'media_hash': media_hash,
+                        'file_path': attachment.file_path
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                    content_type='application/json'
+                )
+            else:
+                logger.error(f"❌ [MEDIA] Erro ao verificar S3: {e}")
+                # Continuar tentando baixar mesmo assim (pode ser erro temporário)
+        
+        # 4. Baixar do S3
         logger.info(f"☁️ [MEDIA] Baixando do S3: {attachment.file_path}")
         
         try:
@@ -84,14 +124,26 @@ def serve_media(request, media_hash):
         except ClientError as e:
             error_code = e.response.get('Error', {}).get('Code', '')
             
-            if error_code == 'NoSuchKey':
-                logger.warning(f"⚠️ [MEDIA] Arquivo expirou do S3 (>30 dias): {media_hash}")
-                raise Http404("Mídia expirada (removida após 30 dias)")
+            if error_code == 'NoSuchKey' or error_code == '404':
+                logger.warning(f"⚠️ [MEDIA] Arquivo não existe no S3: {media_hash}")
+                # Retornar resposta JSON indicando que arquivo não está disponível
+                from rest_framework.response import Response
+                from rest_framework import status
+                return Response(
+                    {
+                        'error': 'Arquivo indisponível',
+                        'message': 'O anexo não está mais disponível no servidor. Pode ter sido removido ou expirado.',
+                        'media_hash': media_hash,
+                        'file_path': attachment.file_path
+                    },
+                    status=status.HTTP_404_NOT_FOUND,
+                    content_type='application/json'
+                )
             else:
                 logger.error(f"❌ [MEDIA] Erro S3: {e}")
                 raise Http404("Erro ao baixar mídia")
         
-        # 4. Cachear no Redis
+        # 5. Cachear no Redis
         cache_data = {
             'data': binary_data,
             'content_type': attachment.mime_type,
@@ -99,7 +151,7 @@ def serve_media(request, media_hash):
         cache.set(cache_key, cache_data, MEDIA_CACHE_TTL)
         logger.info(f"✅ [MEDIA CACHE] Cacheado por {MEDIA_CACHE_TTL} segundos: {media_hash}")
         
-        # 5. Retornar
+        # 6. Retornar
         return HttpResponse(
             binary_data,
             content_type=attachment.mime_type,

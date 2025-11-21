@@ -58,12 +58,25 @@ def media_proxy(request):
             from apps.chat.utils.s3 import get_s3_manager
             s3_manager = get_s3_manager()
             
+            # ✅ NOVO: Verificar se arquivo existe no S3 antes de tentar baixar
+            if not s3_manager.file_exists(s3_path):
+                logger.warning(f'⚠️ [MEDIA PROXY] Arquivo não existe no S3: {s3_path}')
+                return JsonResponse({
+                    'error': 'Arquivo indisponível',
+                    'message': 'O anexo não está mais disponível no servidor. Pode ter sido removido ou expirado.',
+                    's3_path': s3_path
+                }, status=404)
+            
             # Baixar do S3 usando boto3 (com credenciais do Django)
             success, content, msg = s3_manager.download_from_s3(s3_path)
             
             if not success:
                 logger.error(f'❌ [MEDIA PROXY] Erro ao baixar do S3: {msg}')
-                return JsonResponse({'error': f'Erro ao baixar do S3: {msg}'}, status=404)
+                return JsonResponse({
+                    'error': 'Arquivo indisponível',
+                    'message': 'O anexo não está mais disponível no servidor. Pode ter sido removido ou expirado.',
+                    's3_path': s3_path
+                }, status=404)
             
             # Detectar Content-Type baseado na extensão
             from urllib.parse import unquote
