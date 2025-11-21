@@ -995,6 +995,25 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       )}
       
       {/* ✅ REMOVIDO: Botão de reação abaixo da mensagem - usar apenas botão direito */}
+      
+      {/* Modal para adicionar contato compartilhado */}
+      {showContactModal && contactToAdd && (
+        <ContactModal
+          isOpen={showContactModal}
+          onClose={() => {
+            setShowContactModal(false);
+            setContactToAdd(null);
+          }}
+          contact={{
+            name: contactToAdd.name,
+            phone: contactToAdd.phone,
+          }}
+          onSuccess={() => {
+            setShowContactModal(false);
+            setContactToAdd(null);
+          }}
+        />
+      )}
     </div>
   );
 }); // ✅ CORREÇÃO: Fechar React.memo
