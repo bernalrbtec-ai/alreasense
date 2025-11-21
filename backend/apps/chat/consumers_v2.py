@@ -89,16 +89,21 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 self.channel_name
             )
         
-        # Remove de todas as conversas subscritas
-        for conversation_id in self.subscribed_conversations:
-            room_group_name = f"chat_tenant_{self.tenant_id}_conversation_{conversation_id}"
-            await self.channel_layer.group_discard(
-                room_group_name,
-                self.channel_name
-            )
+        # Remove de todas as conversas subscritas (se existir o atributo)
+        if hasattr(self, 'subscribed_conversations') and self.subscribed_conversations:
+            for conversation_id in self.subscribed_conversations:
+                room_group_name = f"chat_tenant_{self.tenant_id}_conversation_{conversation_id}"
+                await self.channel_layer.group_discard(
+                    room_group_name,
+                    self.channel_name
+                )
         
+        # Log de desconexão (com verificação de atributos)
+        user_email = getattr(self, 'user', None)
+        user_email = user_email.email if user_email and hasattr(user_email, 'email') else 'desconhecido'
+        conversations_count = len(self.subscribed_conversations) if hasattr(self, 'subscribed_conversations') else 0
         logger.info(
-            f"🔌 [CHAT WS V2] Usuário {self.user.email} desconectado (tinha {len(self.subscribed_conversations)} conversas subscritas)"
+            f"🔌 [CHAT WS V2] Usuário {user_email} desconectado (tinha {conversations_count} conversas subscritas)"
         )
     
     async def receive(self, text_data):
