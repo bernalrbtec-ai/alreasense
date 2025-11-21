@@ -600,6 +600,12 @@ export function MessageList() {
                   const formattedPhone = formatPhone(phone);
                   const whatsappLink = phone ? `https://wa.me/${phone.replace(/\+/g, '')}` : null;
                   
+                  // ✅ Capturar setContactToAdd e setShowContactModal do escopo do componente
+                  const handleAddContact = () => {
+                    setContactToAdd({ name, phone });
+                    setShowContactModal(true);
+                  };
+                  
                   return (
                     <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
                       <div className="flex items-start gap-3">
@@ -626,10 +632,7 @@ export function MessageList() {
                             )}
                             {phone && (
                               <button
-                                onClick={() => {
-                                  setContactToAdd({ name, phone });
-                                  setShowContactModal(true);
-                                }}
+                                onClick={handleAddContact}
                                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                               >
                                 <Plus className="w-3 h-3" />
