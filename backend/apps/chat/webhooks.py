@@ -741,6 +741,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 return Response({'status': 'ok'}, status=status.HTTP_200_OK)
         
         # Conteúdo (para outros tipos de mensagem)
+        contact_message_data = None
         if message_type == 'conversation':
             content = message_info.get('conversation', '')
         elif message_type == 'extendedTextMessage':
@@ -753,6 +754,61 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             content = message_info.get('documentMessage', {}).get('caption', '')
         elif message_type == 'audioMessage':
             content = ''  # Player de áudio já é auto-explicativo, não precisa de texto
+        elif message_type == 'contactMessage':
+            # ✅ NOVO: Extrair dados do contato compartilhado
+            contact_data = message_info.get('contactMessage', {})
+            contacts_array = contact_data.get('contactsArray', [])
+            
+            if contacts_array and len(contacts_array) > 0:
+                # Pegar primeiro contato (geralmente só vem um)
+                first_contact = contacts_array[0]
+                display_name = first_contact.get('displayName', '')
+                vcard = first_contact.get('vcard', '')
+                contact_id = first_contact.get('contactId', '')
+                
+                # Extrair telefone do vCard ou contactId
+                phone_from_contact = None
+                if contact_id and '@' in contact_id:
+                    # Formato: 5511999999999@s.whatsapp.net
+                    phone_from_contact = contact_id.split('@')[0]
+                    if not phone_from_contact.startswith('+'):
+                        phone_from_contact = f'+{phone_from_contact}'
+                
+                # Tentar extrair telefone do vCard se não tiver no contactId
+                if not phone_from_contact and vcard:
+                    import re
+                    tel_match = re.search(r'TEL[;:]?([^\n\r]+)', vcard, re.IGNORECASE)
+                    if tel_match:
+                        phone_from_contact = tel_match.group(1).strip()
+                        # Normalizar telefone
+                        phone_from_contact = ''.join(c for c in phone_from_contact if c.isdigit() or c == '+')
+                        if phone_from_contact and not phone_from_contact.startswith('+'):
+                            if phone_from_contact.startswith('55'):
+                                phone_from_contact = '+' + phone_from_contact
+                            else:
+                                phone_from_contact = '+55' + phone_from_contact
+                
+                # Salvar dados do contato no metadata
+                contact_message_data = {
+                    'name': display_name or 'Contato',
+                    'phone': phone_from_contact or '',
+                    'display_name': display_name,
+                    'vcard': vcard[:500] if vcard else None  # Limitar tamanho do vCard
+                }
+                
+                # Conteúdo amigável para exibição
+                if display_name and phone_from_contact:
+                    content = f"📇 Compartilhou contato: {display_name}"
+                elif display_name:
+                    content = f"📇 Compartilhou contato: {display_name}"
+                elif phone_from_contact:
+                    content = f"📇 Compartilhou contato: {phone_from_contact}"
+                else:
+                    content = "📇 Contato compartilhado"
+                
+                logger.info(f"📇 [CONTACT MESSAGE] Nome: {display_name}, Telefone: {phone_from_contact}")
+            else:
+                content = "📇 Contato compartilhado"
         else:
             content = f'[{message_type}]'
         
@@ -1202,8 +1258,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             'content': content,
             'direction': direction,
             'status': 'sent',
-            'evolution_status': 'sent'
+            'evolution_status': 'sent',
+            'metadata': {}
         }
+        
+        # ✅ NOVO: Adicionar dados do contato compartilhado ao metadata
+        if contact_message_data:
+            message_defaults['metadata']['contact_message'] = contact_message_data
         
         # Para grupos, adicionar quem enviou
         if is_group and sender_phone:

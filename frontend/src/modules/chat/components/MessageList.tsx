@@ -572,6 +572,75 @@ export function MessageList() {
                   return null;
                 })()}
                 
+                {/* ✅ NOVO: Contato compartilhado */}
+                {msg.metadata?.contact_message && (() => {
+                  const contactData = msg.metadata.contact_message;
+                  const phone = contactData.phone || '';
+                  const name = contactData.name || contactData.display_name || 'Contato';
+                  
+                  // Formatar telefone para exibição
+                  const formatPhone = (phone: string) => {
+                    if (!phone) return '';
+                    const clean = phone.replace(/\D/g, '');
+                    if (clean.startsWith('55') && clean.length >= 12) {
+                      const ddd = clean.substring(2, 4);
+                      const num = clean.substring(4);
+                      if (num.length === 9) {
+                        return `(${ddd}) ${num.substring(0, 5)}-${num.substring(5)}`;
+                      } else if (num.length === 8) {
+                        return `(${ddd}) ${num.substring(0, 4)}-${num.substring(4)}`;
+                      }
+                    }
+                    return phone;
+                  };
+                  
+                  const formattedPhone = formatPhone(phone);
+                  const whatsappLink = phone ? `https://wa.me/${phone.replace(/\+/g, '')}` : null;
+                  
+                  return (
+                    <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
+                      <div className="flex items-start gap-3">
+                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
+                          <User className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs text-gray-500 mb-1">📇 Contato compartilhado</div>
+                          <div className="font-medium text-gray-900 mb-1">{name}</div>
+                          {formattedPhone && (
+                            <div className="text-sm text-gray-600 mb-2">{formattedPhone}</div>
+                          )}
+                          <div className="flex gap-2">
+                            {whatsappLink && (
+                              <a
+                                href={whatsappLink}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                              >
+                                <Phone className="w-3 h-3" />
+                                Iniciar conversa
+                              </a>
+                            )}
+                            {phone && (
+                              <button
+                                onClick={() => {
+                                  // TODO: Abrir modal para adicionar contato à lista
+                                  // Por enquanto, apenas log
+                                  console.log('Adicionar contato:', { name, phone });
+                                }}
+                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
+                              >
+                                <Plus className="w-3 h-3" />
+                                Adicionar
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+                
                 {/* Anexos - renderizar ANTES do texto */}
                 {msg.attachments && msg.attachments.length > 0 && (
                   <div className="message-attachments mb-2 space-y-2">
