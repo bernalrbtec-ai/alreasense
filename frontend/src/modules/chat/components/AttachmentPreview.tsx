@@ -700,16 +700,31 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     
     // ✅ NOVO: Verificar se arquivo existe antes de abrir/baixar
     try {
-      const response = await fetch(attachment.file_url, { method: 'HEAD' });
-      if (!response.ok) {
+      // Tentar HEAD primeiro (mais rápido), se falhar, tentar GET com range
+      let response = await fetch(attachment.file_url, { method: 'HEAD' }).catch(() => null);
+      
+      // Se HEAD não funcionar, tentar GET com range (primeiros bytes)
+      if (!response || !response.ok) {
+        response = await fetch(attachment.file_url, { 
+          method: 'GET',
+          headers: { 'Range': 'bytes=0-0' } // Apenas primeiro byte
+        }).catch(() => null);
+      }
+      
+      if (!response || !response.ok) {
         // Tentar verificar se é resposta JSON de erro
-        const contentType = response.headers.get('content-type');
-        if (contentType?.includes('application/json')) {
-          const errorData = await response.json();
-          if (errorData.error === 'Arquivo indisponível') {
-            showWarningToast('Anexo indisponível', 'O arquivo não está mais disponível no servidor');
-            return;
+        try {
+          const errorResponse = await fetch(attachment.file_url, { method: 'GET' });
+          const contentType = errorResponse.headers.get('content-type');
+          if (contentType?.includes('application/json')) {
+            const errorData = await errorResponse.json();
+            if (errorData.error === 'Arquivo indisponível') {
+              showWarningToast('Anexo indisponível', errorData.message || 'O arquivo não está mais disponível no servidor');
+              return;
+            }
           }
+        } catch {
+          // Ignorar erro ao tentar ler JSON
         }
         showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
         return;
