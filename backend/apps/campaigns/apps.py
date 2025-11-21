@@ -265,22 +265,51 @@ class CampaignsConfig(AppConfig):
                     # Buscar instância WhatsApp ativa do tenant
                     instance = WhatsAppInstance.objects.filter(
                         tenant=task.tenant,
-                        is_active=True
+                        is_active=True,
+                        status='active'
                     ).first()
                     
                     if not instance:
                         logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma instância WhatsApp ativa para tenant {task.tenant_id}')
                         return
                     
-                    # Buscar conexão Evolution
-                    connection = EvolutionConnection.objects.filter(
-                        tenant=task.tenant,
-                        instance_name=instance.instance_name
-                    ).first()
+                    # ✅ CORREÇÃO: Usar api_url e api_key da instância diretamente
+                    # Se não tiver, buscar EvolutionConnection como fallback
+                    base_url = instance.api_url
+                    api_key = instance.api_key
                     
-                    if not connection:
-                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Conexão Evolution não encontrada para instância {instance.instance_name}')
+                    if not base_url or not api_key:
+                        # Fallback: buscar EvolutionConnection
+                        from apps.connections.models import EvolutionConnection
+                        connection = EvolutionConnection.objects.filter(
+                            tenant=task.tenant,
+                            is_active=True
+                        ).first()
+                        
+                        if connection:
+                            base_url = connection.base_url
+                            api_key = connection.api_key
+                        else:
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma conexão Evolution configurada para tenant {task.tenant_id}')
+                            return
+                    
+                    if not base_url or not api_key:
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] API URL ou API Key não configurados')
                         return
+                    
+                    # ✅ CORREÇÃO: Normalizar telefone do usuário (formato E.164)
+                    phone = user.phone.strip()
+                    if not phone.startswith('+'):
+                        # Assumir Brasil se não tiver código do país
+                        if phone.startswith('55'):
+                            phone = f'+{phone}'
+                        else:
+                            # Remover caracteres não numéricos e adicionar +55
+                            phone_clean = ''.join(filter(str.isdigit, phone))
+                            if phone_clean.startswith('55'):
+                                phone = f'+{phone_clean}'
+                            else:
+                                phone = f'+55{phone_clean}'
                     
                     # Formatar mensagem
                     due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
@@ -292,22 +321,28 @@ class CampaignsConfig(AppConfig):
                     if task.notes:
                         message_text += f"\n📝 Notas: {task.notes[:200]}"
                     
-                    # Enviar via Evolution API
-                    url = f"{connection.base_url}/message/sendText/{connection.instance_name}"
+                    # ✅ CORREÇÃO: Usar instance_name da instância e base_url normalizado
+                    base_url = base_url.rstrip('/')
+                    url = f"{base_url}/message/sendText/{instance.instance_name}"
                     headers = {
-                        'apikey': connection.api_key,
+                        'apikey': api_key,
                         'Content-Type': 'application/json'
                     }
                     payload = {
-                        'number': user.phone,
+                        'number': phone,
                         'text': message_text
                     }
                     
+                    logger.info(f'📤 [TASK NOTIFICATIONS] Enviando WhatsApp para {phone} (usuário: {user.email})')
+                    logger.info(f'   URL: {url}')
+                    logger.info(f'   Instância: {instance.instance_name}')
+                    
                     response = requests.post(url, json=payload, headers=headers, timeout=10)
-                    if response.status_code == 200:
-                        logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado para {user.phone}')
+                    if response.status_code in [200, 201]:
+                        logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone}')
                     else:
                         logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp: {response.status_code} - {response.text}')
+                        logger.warning(f'   Payload: {payload}')
                         
                 except Exception as e:
                     logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar WhatsApp: {e}', exc_info=True)
