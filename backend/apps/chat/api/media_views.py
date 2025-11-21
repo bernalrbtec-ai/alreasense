@@ -100,16 +100,15 @@ def serve_media(request, media_hash):
             if error_code == '404' or error_code == 'NoSuchKey':
                 logger.warning(f"⚠️ [MEDIA] Arquivo não existe no S3: {attachment.file_path} (hash: {media_hash})")
                 # Retornar resposta JSON indicando que arquivo não está disponível
-                from rest_framework.response import Response
-                from rest_framework import status
-                return Response(
-                    {
+                import json
+                return HttpResponse(
+                    json.dumps({
                         'error': 'Arquivo indisponível',
                         'message': 'O anexo não está mais disponível no servidor. Pode ter sido removido ou expirado.',
                         'media_hash': media_hash,
                         'file_path': attachment.file_path
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
+                    }),
+                    status=404,
                     content_type='application/json'
                 )
             else:
@@ -127,16 +126,15 @@ def serve_media(request, media_hash):
             if error_code == 'NoSuchKey' or error_code == '404':
                 logger.warning(f"⚠️ [MEDIA] Arquivo não existe no S3: {media_hash}")
                 # Retornar resposta JSON indicando que arquivo não está disponível
-                from rest_framework.response import Response
-                from rest_framework import status
-                return Response(
-                    {
+                import json
+                return HttpResponse(
+                    json.dumps({
                         'error': 'Arquivo indisponível',
                         'message': 'O anexo não está mais disponível no servidor. Pode ter sido removido ou expirado.',
                         'media_hash': media_hash,
                         'file_path': attachment.file_path
-                    },
-                    status=status.HTTP_404_NOT_FOUND,
+                    }),
+                    status=404,
                     content_type='application/json'
                 )
             else:
