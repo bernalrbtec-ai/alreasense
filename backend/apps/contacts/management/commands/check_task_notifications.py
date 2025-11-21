@@ -17,6 +17,8 @@ from apps.contacts.models import Task
 from apps.authn.models import User
 from apps.notifications.models import WhatsAppInstance
 from apps.connections.models import EvolutionConnection
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 import logging
 import requests
 import json
