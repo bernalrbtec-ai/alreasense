@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react'
-import { X, Calendar, User, Users, Clock } from 'lucide-react'
+import { X, User } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { api } from '../../lib/api'
-import { showSuccessToast, showErrorToast } from '../../lib/toastHelper'
+import { showSuccessToast, showErrorToast, showWarningToast } from '../../lib/toastHelper'
 
 interface Task {
   id: string
@@ -98,10 +98,13 @@ export default function TaskModal({
         let prefillDate: Date | null = null
         if (initialDate instanceof Date && !isNaN(initialDate.getTime())) {
           prefillDate = initialDate
-        } else if (task?.due_date) {
-          const taskDate = new Date(task.due_date)
-          if (!isNaN(taskDate.getTime())) {
-            prefillDate = taskDate
+        } else if (task) {
+          const taskDueDate = (task as Task).due_date
+          if (taskDueDate) {
+            const taskDate = new Date(taskDueDate)
+            if (!isNaN(taskDate.getTime())) {
+              prefillDate = taskDate
+            }
           }
         }
         
@@ -172,12 +175,12 @@ export default function TaskModal({
     e.preventDefault()
     
     if (!formData.title.trim()) {
-      showErrorToast('Título é obrigatório')
+      showWarningToast('Título é obrigatório')
       return
     }
 
     if (!formData.department) {
-      showErrorToast('Departamento é obrigatório')
+      showWarningToast('Departamento é obrigatório')
       return
     }
 
@@ -208,7 +211,7 @@ export default function TaskModal({
         
         // Validar se não é no passado
         if (scheduledDate < now) {
-          showErrorToast('Não é possível agendar tarefas no passado. A data/hora deve ser a partir de agora.')
+          showWarningToast('Não é possível agendar tarefas no passado. A data/hora deve ser a partir de agora.')
           return
         }
         
@@ -218,17 +221,17 @@ export default function TaskModal({
       if (task) {
         // Atualizar
         await api.patch(`/contacts/tasks/${task.id}/`, payload)
-        showSuccessToast('Tarefa atualizada com sucesso')
+        showSuccessToast('atualizar', 'Tarefa')
       } else {
         // Criar
         await api.post('/contacts/tasks/', payload)
-        showSuccessToast('Tarefa criada com sucesso')
+        showSuccessToast('criar', 'Tarefa')
       }
 
       onSuccess()
     } catch (error: any) {
       console.error('Erro ao salvar tarefa:', error)
-      showErrorToast(error.response?.data?.detail || 'Erro ao salvar tarefa')
+      showErrorToast(task ? 'atualizar' : 'criar', 'Tarefa', error)
     } finally {
       setIsLoading(false)
     }
@@ -443,7 +446,7 @@ export default function TaskModal({
                         selectedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
                         
                         if (selectedDateTime < now) {
-                          showErrorToast('Não é possível agendar no passado. Selecione uma hora futura.')
+                          showWarningToast('Não é possível agendar no passado. Selecione uma hora futura.')
                           return
                         }
                       }
