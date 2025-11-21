@@ -47,6 +47,7 @@ interface TaskListProps {
   contactId?: string
   onTasksChange?: (tasks: Task[]) => void
   onEditTaskRequest?: (task: Task) => void
+  refreshTrigger?: number // Quando muda, força recarregamento
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -63,7 +64,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
 }
 
-export default function TaskList({ departmentId, contactId, onTasksChange, onEditTaskRequest }: TaskListProps) {
+export default function TaskList({ departmentId, contactId, onTasksChange, onEditTaskRequest, refreshTrigger }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar')
@@ -92,7 +93,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
     fetchTasks()
     fetchDepartments()
     fetchUsers()
-  }, [filters, departmentId, contactId])
+  }, [filters, departmentId, contactId, refreshTrigger])
 
   const fetchTasks = async () => {
     try {

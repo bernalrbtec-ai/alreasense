@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [showTaskModal, setShowTaskModal] = useState(false)
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
 
   // Carregar departamentos e usuários para o modal (mesmos endpoints do TaskList)
   useEffect(() => {
@@ -87,7 +88,8 @@ export default function DashboardPage() {
   const handleModalSuccess = async () => {
     setShowTaskModal(false)
     setEditingTask(null)
-    // Recarregar tarefas será feito pelo TaskList através do onTasksChange
+    // Forçar recarregamento do TaskList
+    setRefreshTrigger(prev => prev + 1)
   }
 
   return (
@@ -107,6 +109,7 @@ export default function DashboardPage() {
           <TaskList 
             onTasksChange={setTasks} 
             onEditTaskRequest={handleEditTaskRequest}
+            refreshTrigger={refreshTrigger}
           />
         </div>
 
