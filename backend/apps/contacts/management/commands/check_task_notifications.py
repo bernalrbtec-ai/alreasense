@@ -58,13 +58,19 @@ class Command(BaseCommand):
         run_once = options['run_once']
         interval = options['interval']
         
+        # ✅ LOG INICIAL FORÇADO (para debug no Railway)
+        logger.info('🔔 [WORKER TASKS] ==========================================')
+        logger.info('🔔 [WORKER TASKS] INICIANDO TASK NOTIFICATIONS')
+        logger.info(f'⏰ Intervalo: {interval} segundos')
+        logger.info(f'📅 Janela de notificação: {minutes_before} minutos antes')
+        self.stdout.write(
+            self.style.SUCCESS('🔔 [WORKER TASKS] Iniciando verificador de notificações de tarefas...')
+        )
+        
         if run_once:
             self._check_and_notify(minutes_before)
         else:
             # Loop contínuo (similar ao engine de campanhas)
-            self.stdout.write(
-                self.style.SUCCESS('🔔 Iniciando verificador de notificações de tarefas...')
-            )
             self.stdout.write(f'⏰ Intervalo: {interval} segundos')
             self.stdout.write(f'📅 Janela de notificação: {minutes_before} minutos antes')
             
