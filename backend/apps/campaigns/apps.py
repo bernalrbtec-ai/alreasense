@@ -170,11 +170,14 @@ class CampaignsConfig(AppConfig):
                             notification_window_end = now + timedelta(minutes=minutes_before + 1)
                             
                             # Buscar tarefas que estão no período de notificação
+                            # ✅ IMPORTANTE: Excluir tarefas concluídas ou canceladas
                             tasks_to_notify = Task.objects.filter(
                                 due_date__gte=notification_window_start,
                                 due_date__lte=notification_window_end,
-                                status__in=['pending', 'in_progress'],
+                                status__in=['pending', 'in_progress'],  # Apenas pendentes ou em andamento
                                 notification_sent=False
+                            ).exclude(
+                                status__in=['completed', 'cancelled']  # ✅ Garantir que concluídas/canceladas não sejam notificadas
                             ).select_related('assigned_to', 'created_by', 'tenant', 'department')
                             
                             total_tasks = tasks_to_notify.count()
@@ -185,6 +188,12 @@ class CampaignsConfig(AppConfig):
                             count = 0
                             for task in tasks_to_notify:
                                 try:
+                                    # ✅ VERIFICAÇÃO ADICIONAL: Garantir que tarefa não foi concluída/cancelada
+                                    # (pode ter sido alterada entre a query e agora)
+                                    if task.status in ['completed', 'cancelled']:
+                                        logger.info(f'⏭️ [TASK NOTIFICATIONS] Pulando tarefa {task.id} - status: {task.status}')
+                                        continue
+                                    
                                     # Notificar usuário atribuído (se houver)
                                     if task.assigned_to:
                                         _notify_task_user(task, task.assigned_to)
