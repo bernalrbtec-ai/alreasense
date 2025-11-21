@@ -1,0 +1,175 @@
+"""
+Management command para verificar tarefas próximas e enviar notificações.
+
+Executa a cada minuto (via cron ou celery beat) e verifica tarefas que:
+- Estão agendadas para os próximos 15 minutos
+- Não foram notificadas ainda
+- Não estão concluídas ou canceladas
+
+Envia:
+1. Notificação no navegador (via WebSocket/API)
+2. Mensagem WhatsApp (se usuário tiver notify_whatsapp=True e telefone)
+"""
+from django.core.management.base import BaseCommand
+from django.utils import timezone
+from datetime import timedelta
+from apps.contacts.models import Task
+from apps.authn.models import User
+from apps.notifications.models import WhatsAppInstance
+from apps.connections.models import EvolutionConnection
+import logging
+import requests
+import json
+
+logger = logging.getLogger(__name__)
+
+
+class Command(BaseCommand):
+    help = 'Verifica tarefas próximas e envia notificações'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--minutes-before',
+            type=int,
+            default=15,
+            help='Minutos antes do evento para enviar notificação (padrão: 15)'
+        )
+
+    def handle(self, *args, **options):
+        minutes_before = options['minutes_before']
+        now = timezone.now()
+        notification_window_start = now + timedelta(minutes=minutes_before - 1)
+        notification_window_end = now + timedelta(minutes=minutes_before + 1)
+        
+        self.stdout.write(f'🔔 Verificando tarefas entre {notification_window_start} e {notification_window_end}')
+        
+        # Buscar tarefas que estão no período de notificação
+        tasks_to_notify = Task.objects.filter(
+            due_date__gte=notification_window_start,
+            due_date__lte=notification_window_end,
+            status__in=['pending', 'in_progress'],
+            notification_sent=False  # Campo que vamos adicionar
+        ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+        
+        count = 0
+        for task in tasks_to_notify:
+            try:
+                # Notificar usuário atribuído (se houver)
+                if task.assigned_to:
+                    self._notify_user(task, task.assigned_to)
+                
+                # Notificar criador (se diferente do atribuído)
+                if task.created_by and task.created_by != task.assigned_to:
+                    self._notify_user(task, task.created_by)
+                
+                # Marcar como notificada
+                task.notification_sent = True
+                task.save(update_fields=['notification_sent'])
+                count += 1
+                
+            except Exception as e:
+                logger.error(f'❌ Erro ao notificar tarefa {task.id}: {e}', exc_info=True)
+                self.stdout.write(self.style.ERROR(f'Erro ao notificar tarefa {task.id}: {e}'))
+        
+        self.stdout.write(self.style.SUCCESS(f'✅ {count} tarefa(s) notificada(s)'))
+    
+    def _notify_user(self, task: Task, user: User):
+        """Notifica um usuário sobre uma tarefa"""
+        # 1. Notificação no navegador (via WebSocket)
+        self._send_browser_notification(task, user)
+        
+        # 2. Mensagem WhatsApp (se habilitado)
+        if user.notify_whatsapp and user.phone:
+            self._send_whatsapp_notification(task, user)
+    
+    def _send_browser_notification(self, task: Task, user: User):
+        """Envia notificação no navegador via WebSocket"""
+        try:
+            channel_layer = get_channel_layer()
+            if not channel_layer:
+                logger.warning('⚠️ Channel layer não configurado, pulando notificação no navegador')
+                return
+            
+            # Formatar mensagem
+            due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+            message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+            
+            # Enviar via WebSocket para o grupo do tenant (usuários conectados receberão)
+            async_to_sync(channel_layer.group_send)(
+                f"tenant_{task.tenant_id}",
+                {
+                    'type': 'task_notification',
+                    'task_id': str(task.id),
+                    'title': task.title,
+                    'message': message,
+                    'due_date': task.due_date.isoformat(),
+                    'user_id': str(user.id),  # Filtrar no frontend para mostrar apenas para o usuário correto
+                }
+            )
+            
+            logger.info(f'✅ Notificação no navegador enviada para {user.email}')
+            
+        except Exception as e:
+            logger.error(f'❌ Erro ao enviar notificação no navegador: {e}', exc_info=True)
+    
+    def _send_whatsapp_notification(self, task: Task, user: User):
+        """Envia notificação via WhatsApp"""
+        try:
+            # Buscar instância WhatsApp ativa do tenant
+            instance = WhatsAppInstance.objects.filter(
+                tenant=task.tenant,
+                is_active=True,
+                status='active'
+            ).first()
+            
+            if not instance:
+                logger.warning(f'⚠️ Nenhuma instância WhatsApp ativa para tenant {task.tenant.name}')
+                return
+            
+            # Buscar servidor Evolution
+            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+            
+            if not evolution_server and not instance.api_url:
+                logger.error('❌ Configuração da Evolution API não encontrada')
+                return
+            
+            # Preparar URL e credenciais
+            base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
+            api_key = instance.api_key or evolution_server.api_key
+            
+            # Formatar mensagem
+            due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+            message = f"🔔 *Lembrete de Tarefa*\n\n"
+            message += f"*{task.title}*\n\n"
+            if task.description:
+                message += f"{task.description[:200]}\n\n"
+            message += f"📅 Data/Hora: {due_time}\n"
+            if task.department:
+                message += f"🏢 Departamento: {task.department.name}\n"
+            message += f"\nAcesse o sistema para mais detalhes."
+            
+            # Normalizar telefone do usuário
+            phone = user.phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
+            if not phone.startswith('55'):
+                # Assumir Brasil se não tiver código do país
+                phone = f'55{phone}'
+            
+            # Enviar mensagem
+            response = requests.post(
+                f"{base_url}/message/sendText/{instance.instance_name}",
+                headers={'apikey': api_key},
+                json={
+                    'number': phone,
+                    'text': message
+                },
+                timeout=10
+            )
+            
+            if response.status_code in [200, 201]:
+                logger.info(f'✅ WhatsApp enviado para {user.email} ({phone})')
+            else:
+                logger.error(f'❌ Erro ao enviar WhatsApp: {response.status_code} - {response.text}')
+                
+        except Exception as e:
+            logger.error(f'❌ Erro ao enviar WhatsApp para {user.email}: {e}', exc_info=True)
+

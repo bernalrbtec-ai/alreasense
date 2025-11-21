@@ -550,6 +550,43 @@ export function useTenantSocket() {
         }
         break;
 
+      case 'task_notification':
+        // Notificação de tarefa/evento da agenda
+        console.log('🔔 [TENANT WS] Notificação de tarefa recebida:', data);
+        if (data.data && data.data.user_id === String(user?.id)) {
+          // Mostrar notificação no navegador
+          if ('Notification' in window && Notification.permission === 'granted') {
+            const notification = new Notification(`🔔 ${data.data.title}`, {
+              body: data.data.message,
+              icon: '/logo.png',
+              tag: `task_${data.data.task_id}`,
+              badge: '/logo.png',
+              requireInteraction: false,
+            });
+            
+            notification.onclick = () => {
+              window.focus();
+              window.location.href = '/dashboard';
+              notification.close();
+            };
+            
+            setTimeout(() => notification.close(), 10000);
+          }
+          
+          // Mostrar toast também
+          toast.info('🔔 Lembrete de Tarefa', {
+            description: data.data.message,
+            duration: 10000,
+            action: {
+              label: 'Ver',
+              onClick: () => {
+                window.location.href = '/dashboard';
+              }
+            }
+          });
+        }
+        break;
+
       case 'campaign_update':
         // ✅ NOVO: Handler para atualizações de campanha via WebSocket
         console.log('📡 [TENANT WS] Evento: campaign_update', data);

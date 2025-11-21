@@ -1012,6 +1012,14 @@ class Task(models.Model):
         help_text='Data/hora em que a tarefa foi concluída'
     )
     
+    # Notificações
+    notification_sent = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Notificação Enviada',
+        help_text='Indica se a notificação foi enviada para os usuários'
+    )
+    
     class Meta:
         db_table = 'contacts_task'
         verbose_name = 'Tarefa'

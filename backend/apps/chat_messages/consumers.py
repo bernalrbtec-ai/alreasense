@@ -122,3 +122,16 @@ class TenantConsumer(AsyncJsonWebsocketConsumer):
             'type': 'billing_update',
             'data': event['payload']
         })
+    
+    async def task_notification(self, event):
+        """Handle task notifications."""
+        await self.send_json({
+            'type': 'task_notification',
+            'data': {
+                'task_id': event.get('task_id'),
+                'title': event.get('title'),
+                'message': event.get('message'),
+                'due_date': event.get('due_date'),
+                'user_id': event.get('user_id'),  # Para filtrar no frontend
+            }
+        })

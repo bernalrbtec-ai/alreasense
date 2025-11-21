@@ -188,9 +188,16 @@ export default function ProfilePage() {
                     <Crown className="h-3 w-3 mr-1" /> Super Admin
                   </span>
                 )}
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${user.tenant.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                  {user.tenant.status === 'active' ? 'Ativo' : 'Inativo'}
-                </span>
+                {user.tenant && (
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${user.tenant.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+                    {user.tenant.status === 'active' ? 'Ativo' : 'Inativo'}
+                  </span>
+                )}
+                {user.tenant_name && !user.tenant && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                    {user.tenant_name}
+                  </span>
+                )}
               </div>
             </div>
           </div>
