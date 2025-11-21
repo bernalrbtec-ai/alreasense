@@ -94,7 +94,17 @@ export default function TaskModal({
         })
       } else {
         // Nova tarefa
-        const prefillDate = initialDate || (task?.due_date ? new Date(task.due_date) : null)
+        // Garantir que initialDate é um Date válido
+        let prefillDate: Date | null = null
+        if (initialDate instanceof Date && !isNaN(initialDate.getTime())) {
+          prefillDate = initialDate
+        } else if (task?.due_date) {
+          const taskDate = new Date(task.due_date)
+          if (!isNaN(taskDate.getTime())) {
+            prefillDate = taskDate
+          }
+        }
+        
         setFormData({
           title: '',
           description: '',
@@ -115,6 +125,9 @@ export default function TaskModal({
   }, [isOpen, task, initialDepartmentId, initialContactId])
 
   const formatDateForInput = (date: Date) => {
+    if (!(date instanceof Date) || isNaN(date.getTime())) {
+      return ''
+    }
     return date.toISOString().split('T')[0]
   }
 
