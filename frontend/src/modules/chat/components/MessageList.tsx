@@ -1004,10 +1004,8 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
             setShowContactModal(false);
             setContactToAdd(null);
           }}
-          contact={{
-            name: contactToAdd.name,
-            phone: contactToAdd.phone,
-          }}
+          initialName={contactToAdd.name}
+          initialPhone={contactToAdd.phone}
           onSuccess={() => {
             setShowContactModal(false);
             setContactToAdd(null);
