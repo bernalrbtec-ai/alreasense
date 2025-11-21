@@ -775,10 +775,6 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       console.error('Erro ao verificar/acessar arquivo:', error);
       showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
     }
-    } catch (error) {
-      console.error('Erro ao verificar/acessar arquivo:', error);
-      showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
-    }
   };
 
   const handleDocumentDownload = async (e: React.MouseEvent) => {
