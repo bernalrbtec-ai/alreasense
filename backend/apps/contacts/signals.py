@@ -238,14 +238,17 @@ def capture_conversation_old_values(sender, instance, **kwargs):
             instance._old_department_id = old_instance.department_id
             instance._old_assigned_to_id = old_instance.assigned_to_id
             instance._old_assigned_to = old_instance.assigned_to
+            instance._old_status = old_instance.status  # ✅ NOVO: Capturar status antigo
         except sender.DoesNotExist:
             instance._old_department_id = None
             instance._old_assigned_to_id = None
             instance._old_assigned_to = None
+            instance._old_status = None
     else:
         instance._old_department_id = None
         instance._old_assigned_to_id = None
         instance._old_assigned_to = None
+        instance._old_status = None
 
 
 @receiver(post_save)
@@ -299,6 +302,7 @@ def create_conversation_transfer_history(sender, instance, created, **kwargs):
             # ✅ OTIMIZAÇÃO: Verificar mudanças usando valores capturados
             old_dept_id = getattr(instance, '_old_department_id', None)
             old_assigned_id = getattr(instance, '_old_assigned_to_id', None)
+            old_status = getattr(instance, '_old_status', None)  # ✅ NOVO: Status antigo
             
             if old_dept_id != instance.department_id:
                 # Transferência de departamento
@@ -337,6 +341,48 @@ def create_conversation_transfer_history(sender, instance, created, **kwargs):
                     metadata={
                         'old_assigned_to_id': str(old_user.id) if old_user else None,
                         'new_assigned_to_id': str(new_user.id) if new_user else None,
+                    },
+                    related_conversation=instance
+                )
+            
+            # ✅ NOVO: Detectar mudança de status (fechamento/reabertura)
+            if old_status and old_status != instance.status:
+                # Mapear status para nomes amigáveis
+                status_names = {
+                    'pending': 'Pendente',
+                    'open': 'Aberta',
+                    'closed': 'Fechada',
+                }
+                old_status_name = status_names.get(old_status, old_status)
+                new_status_name = status_names.get(instance.status, instance.status)
+                
+                # Determinar título e descrição baseado na mudança
+                if instance.status == 'closed':
+                    title = 'Conversa fechada'
+                    description = f'Status alterado de {old_status_name} para {new_status_name}'
+                elif instance.status == 'open' and old_status == 'closed':
+                    title = 'Conversa reaberta'
+                    description = f'Status alterado de {old_status_name} para {new_status_name}'
+                elif instance.status == 'open' and old_status == 'pending':
+                    title = 'Conversa aberta'
+                    description = f'Status alterado de {old_status_name} para {new_status_name}'
+                else:
+                    title = f'Status alterado para {new_status_name}'
+                    description = f'Status alterado de {old_status_name} para {new_status_name}'
+                
+                ContactHistory.objects.create(
+                    contact=contact,
+                    tenant=instance.tenant,
+                    event_type='status_changed',
+                    title=title,
+                    description=description,
+                    created_by=None,
+                    is_editable=False,
+                    metadata={
+                        'old_status': old_status,
+                        'new_status': instance.status,
+                        'old_status_display': old_status_name,
+                        'new_status_display': new_status_name,
                     },
                     related_conversation=instance
                 )

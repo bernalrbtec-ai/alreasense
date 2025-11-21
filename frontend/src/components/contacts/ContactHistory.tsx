@@ -81,13 +81,16 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
       const response = await api.get(`/contacts/history/?contact_id=${contactId}`)
       const allHistory = response.data.results || response.data
       
-      // Filtrar eventos de conversa (message_sent, message_received) - já estão no chat
+      // ✅ NOVO: Filtrar apenas eventos relacionados à conversa
+      // Mostrar apenas: transferências, atribuições e mudanças de status
+      const conversationEvents = [
+        'department_transfer',  // Transferência de departamento
+        'assigned_to',          // Atribuição de atendente
+        'status_changed',       // Fechamento/reabertura da conversa
+      ]
+      
       const filteredHistory = allHistory.filter((item: ContactHistoryItem) => {
-        // Remover mensagens de conversa normal (não campanhas)
-        if (item.event_type === 'message_sent' || item.event_type === 'message_received') {
-          return false
-        }
-        return true
+        return conversationEvents.includes(item.event_type)
       })
       
       setHistory(filteredHistory)
