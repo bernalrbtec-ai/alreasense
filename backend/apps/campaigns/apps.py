@@ -166,8 +166,13 @@ class CampaignsConfig(AppConfig):
                             import json
                             
                             minutes_before = 15  # Janela de notificação: 15 minutos antes
-                            notification_window_start = now + timedelta(minutes=minutes_before - 1)
-                            notification_window_end = now + timedelta(minutes=minutes_before + 1)
+                            # ✅ CORREÇÃO: Ampliar janela para 5 minutos (de 14 a 16 minutos antes)
+                            # Isso garante que não perca tarefas mesmo com delay na verificação
+                            notification_window_start = now + timedelta(minutes=minutes_before - 2)
+                            notification_window_end = now + timedelta(minutes=minutes_before + 2)
+                            
+                            # ✅ DEBUG: Log a cada verificação (mesmo sem tarefas)
+                            logger.debug(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")} (agora: {now.strftime("%H:%M:%S")})')
                             
                             # Buscar tarefas que estão no período de notificação
                             # ✅ IMPORTANTE: Excluir tarefas concluídas ou canceladas
@@ -182,7 +187,7 @@ class CampaignsConfig(AppConfig):
                             
                             total_tasks = tasks_to_notify.count()
                             if total_tasks > 0:
-                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start} e {notification_window_end}')
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")}')
                                 logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_tasks} tarefa(s) para notificar')
                             
                             count = 0
@@ -190,28 +195,43 @@ class CampaignsConfig(AppConfig):
                                 try:
                                     # ✅ VERIFICAÇÃO ADICIONAL: Garantir que tarefa não foi concluída/cancelada
                                     # (pode ter sido alterada entre a query e agora)
+                                    task.refresh_from_db()  # Recarregar do banco para pegar status mais recente
                                     if task.status in ['completed', 'cancelled']:
                                         logger.info(f'⏭️ [TASK NOTIFICATIONS] Pulando tarefa {task.id} - status: {task.status}')
                                         continue
                                     
+                                    # ✅ DEBUG: Log detalhado da tarefa
+                                    logger.info(f'📋 [TASK NOTIFICATIONS] Processando tarefa: {task.title} (ID: {task.id})')
+                                    logger.info(f'   Data/Hora: {task.due_date.strftime("%d/%m/%Y %H:%M:%S")}')
+                                    logger.info(f'   Status: {task.status}')
+                                    logger.info(f'   Atribuído: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
+                                    logger.info(f'   Criador: {task.created_by.email if task.created_by else "N/A"}')
+                                    
                                     # Notificar usuário atribuído (se houver)
                                     if task.assigned_to:
+                                        logger.info(f'📤 [TASK NOTIFICATIONS] Notificando usuário atribuído: {task.assigned_to.email}')
                                         _notify_task_user(task, task.assigned_to)
                                     
                                     # Notificar criador (se diferente do atribuído)
                                     if task.created_by and task.created_by != task.assigned_to:
+                                        logger.info(f'📤 [TASK NOTIFICATIONS] Notificando criador: {task.created_by.email}')
                                         _notify_task_user(task, task.created_by)
                                     
                                     # Marcar como notificada
                                     task.notification_sent = True
                                     task.save(update_fields=['notification_sent'])
                                     count += 1
+                                    logger.info(f'✅ [TASK NOTIFICATIONS] Tarefa {task.id} marcada como notificada')
                                     
                                 except Exception as e:
                                     logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao notificar tarefa {task.id}: {e}', exc_info=True)
                             
                             if count > 0:
-                                logger.info(f'✅ [TASK NOTIFICATIONS] {count} tarefa(s) notificada(s)')
+                                logger.info(f'✅ [TASK NOTIFICATIONS] {count} tarefa(s) notificada(s) com sucesso')
+                            else:
+                                # ✅ DEBUG: Log mesmo quando não há tarefas (a cada 10 verificações para não poluir)
+                                if int(time.time()) % 600 == 0:  # A cada ~10 minutos
+                                    logger.debug(f'🔔 [TASK NOTIFICATIONS] Nenhuma tarefa para notificar no momento')
                                 
                         except Exception as e:
                             logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao verificar tarefas: {e}', exc_info=True)
@@ -260,6 +280,7 @@ class CampaignsConfig(AppConfig):
                 logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar notificação no navegador: {e}', exc_info=True)
             
             # 2. Mensagem WhatsApp (se habilitado)
+            logger.info(f'📱 [TASK NOTIFICATIONS] Verificando WhatsApp para {user.email}: notify_whatsapp={user.notify_whatsapp}, phone={user.phone if user.phone else "N/A"}')
             if user.notify_whatsapp and user.phone:
                 try:
                     # Buscar instância WhatsApp ativa do tenant
