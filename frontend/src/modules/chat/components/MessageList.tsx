@@ -15,6 +15,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { useAuthStore } from '@/stores/authStore';
 import { MessageContextMenu } from './MessageContextMenu';
 import type { Message } from '../types';
+import ContactModal from '@/components/contacts/ContactModal';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -45,6 +46,8 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
 };
 
 export function MessageList() {
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [contactToAdd, setContactToAdd] = useState<{ name: string; phone: string } | null>(null);
   const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
   const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore((state) => ({
     activeConversation: state.activeConversation,
@@ -624,9 +627,8 @@ export function MessageList() {
                             {phone && (
                               <button
                                 onClick={() => {
-                                  // TODO: Abrir modal para adicionar contato à lista
-                                  // Por enquanto, apenas log
-                                  console.log('Adicionar contato:', { name, phone });
+                                  setContactToAdd({ name, phone });
+                                  setShowContactModal(true);
                                 }}
                                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
                               >

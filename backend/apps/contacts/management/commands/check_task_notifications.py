@@ -87,6 +87,9 @@ class Command(BaseCommand):
         notification_window_start = now + timedelta(minutes=minutes_before - 1)
         notification_window_end = now + timedelta(minutes=minutes_before + 1)
         
+        logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start} e {notification_window_end}')
+        self.stdout.write(f'🔔 Verificando tarefas entre {notification_window_start} e {notification_window_end}')
+        
         # Buscar tarefas que estão no período de notificação
         tasks_to_notify = Task.objects.filter(
             due_date__gte=notification_window_start,
@@ -94,6 +97,22 @@ class Command(BaseCommand):
             status__in=['pending', 'in_progress'],
             notification_sent=False
         ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+        
+        total_tasks = tasks_to_notify.count()
+        logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_tasks} tarefa(s) para notificar')
+        self.stdout.write(f'📋 Encontradas {total_tasks} tarefa(s) para notificar')
+        
+        # ✅ DEBUG: Listar todas as tarefas próximas (mesmo que já notificadas)
+        all_upcoming = Task.objects.filter(
+            due_date__gte=now,
+            due_date__lte=now + timedelta(hours=24),
+            status__in=['pending', 'in_progress']
+        ).select_related('assigned_to', 'created_by', 'tenant', 'department').order_by('due_date')[:10]
+        
+        if all_upcoming.exists():
+            logger.info(f'📅 [TASK NOTIFICATIONS] Próximas 10 tarefas nas próximas 24h:')
+            for task in all_upcoming:
+                logger.info(f'   - {task.title} ({task.tenant.name}): {task.due_date} | Notificada: {task.notification_sent} | Status: {task.status}')
         
         count = 0
         for task in tasks_to_notify:
