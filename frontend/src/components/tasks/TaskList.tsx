@@ -46,6 +46,7 @@ interface TaskListProps {
   departmentId?: string
   contactId?: string
   onTasksChange?: (tasks: Task[]) => void
+  onEditTaskRequest?: (task: Task) => void
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -62,7 +63,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
 }
 
-export default function TaskList({ departmentId, contactId, onTasksChange }: TaskListProps) {
+export default function TaskList({ departmentId, contactId, onTasksChange, onEditTaskRequest }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar')
@@ -167,8 +168,14 @@ export default function TaskList({ departmentId, contactId, onTasksChange }: Tas
   }
 
   const handleEdit = (task: Task) => {
-    setEditingTask(task)
-    setShowTaskModal(true)
+    // Se há um callback externo (do DashboardPage), usar ele
+    if (onEditTaskRequest) {
+      onEditTaskRequest(task)
+    } else {
+      // Caso contrário, usar o modal interno
+      setEditingTask(task)
+      setShowTaskModal(true)
+    }
   }
 
   const handleCreate = (date?: Date) => {
