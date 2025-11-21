@@ -97,8 +97,10 @@ class CampaignsConfig(AppConfig):
                 logger.error(f"❌ [RECOVERY] Erro no processo de recuperação: {e}")
         
         # ✅ NOVO: Função para verificar e iniciar campanhas agendadas automaticamente
+        # ✅ ADICIONADO: Também verifica notificações de tarefas
         def check_scheduled_campaigns():
-            """Verifica periodicamente campanhas agendadas e as inicia quando chega a hora"""
+            """Verifica periodicamente campanhas agendadas e as inicia quando chega a hora
+            Também verifica e envia notificações de tarefas"""
             try:
                 # Aguardar um pouco para garantir que o Django está totalmente carregado
                 time.sleep(10)
@@ -106,13 +108,16 @@ class CampaignsConfig(AppConfig):
                 from .models import Campaign
                 from .rabbitmq_consumer import get_rabbitmq_consumer
                 from django.utils import timezone
+                from datetime import timedelta
                 
                 logger.info("⏰ [SCHEDULER] Iniciando verificador de campanhas agendadas")
+                logger.info("🔔 [SCHEDULER] Verificador de notificações de tarefas integrado")
                 
                 while True:
                     try:
                         now = timezone.now()
                         
+                        # ========== VERIFICAR CAMPANHAS AGENDADAS ==========
                         # Buscar campanhas agendadas que chegaram na hora
                         scheduled_campaigns = Campaign.objects.filter(
                             status='scheduled',
@@ -149,16 +154,154 @@ class CampaignsConfig(AppConfig):
                                 except Exception as e:
                                     logger.error(f"❌ [SCHEDULER] Erro ao iniciar campanha agendada {campaign.id}: {e}", exc_info=True)
                         
-                        # Aguardar 30 segundos antes da próxima verificação
-                        time.sleep(30)
+                        # ========== VERIFICAR NOTIFICAÇÕES DE TAREFAS ==========
+                        try:
+                            from apps.contacts.models import Task
+                            from apps.authn.models import User
+                            from apps.notifications.models import WhatsAppInstance
+                            from apps.connections.models import EvolutionConnection
+                            from channels.layers import get_channel_layer
+                            from asgiref.sync import async_to_sync
+                            import requests
+                            import json
+                            
+                            minutes_before = 15  # Janela de notificação: 15 minutos antes
+                            notification_window_start = now + timedelta(minutes=minutes_before - 1)
+                            notification_window_end = now + timedelta(minutes=minutes_before + 1)
+                            
+                            # Buscar tarefas que estão no período de notificação
+                            tasks_to_notify = Task.objects.filter(
+                                due_date__gte=notification_window_start,
+                                due_date__lte=notification_window_end,
+                                status__in=['pending', 'in_progress'],
+                                notification_sent=False
+                            ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                            
+                            total_tasks = tasks_to_notify.count()
+                            if total_tasks > 0:
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start} e {notification_window_end}')
+                                logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_tasks} tarefa(s) para notificar')
+                            
+                            count = 0
+                            for task in tasks_to_notify:
+                                try:
+                                    # Notificar usuário atribuído (se houver)
+                                    if task.assigned_to:
+                                        _notify_task_user(task, task.assigned_to)
+                                    
+                                    # Notificar criador (se diferente do atribuído)
+                                    if task.created_by and task.created_by != task.assigned_to:
+                                        _notify_task_user(task, task.created_by)
+                                    
+                                    # Marcar como notificada
+                                    task.notification_sent = True
+                                    task.save(update_fields=['notification_sent'])
+                                    count += 1
+                                    
+                                except Exception as e:
+                                    logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao notificar tarefa {task.id}: {e}', exc_info=True)
+                            
+                            if count > 0:
+                                logger.info(f'✅ [TASK NOTIFICATIONS] {count} tarefa(s) notificada(s)')
+                                
+                        except Exception as e:
+                            logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao verificar tarefas: {e}', exc_info=True)
+                        
+                        # Aguardar 60 segundos antes da próxima verificação
+                        time.sleep(60)
                         
                     except Exception as e:
-                        logger.error(f"❌ [SCHEDULER] Erro no loop de verificação de campanhas agendadas: {e}", exc_info=True)
+                        logger.error(f"❌ [SCHEDULER] Erro no loop de verificação: {e}", exc_info=True)
                         # Aguardar antes de tentar novamente em caso de erro
                         time.sleep(60)
                         
             except Exception as e:
-                logger.error(f"❌ [SCHEDULER] Erro fatal no verificador de campanhas agendadas: {e}", exc_info=True)
+                logger.error(f"❌ [SCHEDULER] Erro fatal no verificador: {e}", exc_info=True)
+        
+        # ✅ Função auxiliar para notificar usuário sobre tarefa
+        def _notify_task_user(task, user):
+            """Notifica um usuário sobre uma tarefa"""
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.notifications.models import WhatsAppInstance
+            from apps.connections.models import EvolutionConnection
+            import requests
+            import json
+            
+            # 1. Notificação no navegador (via WebSocket)
+            try:
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+                    message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+                    
+                    async_to_sync(channel_layer.group_send)(
+                        f"tenant_{task.tenant_id}",
+                        {
+                            'type': 'task_notification',
+                            'task_id': str(task.id),
+                            'title': task.title,
+                            'message': message,
+                            'due_date': task.due_date.isoformat(),
+                            'user_id': str(user.id),
+                        }
+                    )
+                    logger.info(f'✅ [TASK NOTIFICATIONS] Notificação no navegador enviada para {user.email}')
+            except Exception as e:
+                logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar notificação no navegador: {e}', exc_info=True)
+            
+            # 2. Mensagem WhatsApp (se habilitado)
+            if user.notify_whatsapp and user.phone:
+                try:
+                    # Buscar instância WhatsApp ativa do tenant
+                    instance = WhatsAppInstance.objects.filter(
+                        tenant=task.tenant,
+                        is_active=True
+                    ).first()
+                    
+                    if not instance:
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma instância WhatsApp ativa para tenant {task.tenant_id}')
+                        return
+                    
+                    # Buscar conexão Evolution
+                    connection = EvolutionConnection.objects.filter(
+                        tenant=task.tenant,
+                        instance_name=instance.instance_name
+                    ).first()
+                    
+                    if not connection:
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Conexão Evolution não encontrada para instância {instance.instance_name}')
+                        return
+                    
+                    # Formatar mensagem
+                    due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+                    message_text = f"🔔 *Lembrete de Tarefa*\n\n"
+                    message_text += f"*{task.title}*\n\n"
+                    message_text += f"📅 Data/Hora: {due_time}\n"
+                    if task.department:
+                        message_text += f"🏢 Departamento: {task.department.name}\n"
+                    if task.notes:
+                        message_text += f"\n📝 Notas: {task.notes[:200]}"
+                    
+                    # Enviar via Evolution API
+                    url = f"{connection.base_url}/message/sendText/{connection.instance_name}"
+                    headers = {
+                        'apikey': connection.api_key,
+                        'Content-Type': 'application/json'
+                    }
+                    payload = {
+                        'number': user.phone,
+                        'text': message_text
+                    }
+                    
+                    response = requests.post(url, json=payload, headers=headers, timeout=10)
+                    if response.status_code == 200:
+                        logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado para {user.phone}')
+                    else:
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp: {response.status_code} - {response.text}')
+                        
+                except Exception as e:
+                    logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar WhatsApp: {e}', exc_info=True)
         
         # Iniciar thread de recuperação
         recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True)
