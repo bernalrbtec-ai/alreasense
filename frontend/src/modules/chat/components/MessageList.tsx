@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Smile, Reply } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Smile, Reply, User, Phone, Plus } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
