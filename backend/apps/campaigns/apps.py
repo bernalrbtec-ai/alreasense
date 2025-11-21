@@ -110,8 +110,10 @@ class CampaignsConfig(AppConfig):
                 from django.utils import timezone
                 from datetime import timedelta
                 
+                logger.info("=" * 60)
                 logger.info("⏰ [SCHEDULER] Iniciando verificador de campanhas agendadas")
                 logger.info("🔔 [SCHEDULER] Verificador de notificações de tarefas integrado")
+                logger.info("=" * 60)
                 
                 while True:
                     try:
@@ -171,8 +173,10 @@ class CampaignsConfig(AppConfig):
                             notification_window_start = now + timedelta(minutes=minutes_before - 2)
                             notification_window_end = now + timedelta(minutes=minutes_before + 2)
                             
-                            # ✅ DEBUG: Log a cada verificação (mesmo sem tarefas)
-                            logger.debug(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")} (agora: {now.strftime("%H:%M:%S")})')
+                            # ✅ DEBUG: Log a cada verificação (mesmo sem tarefas) - MUDADO PARA INFO para aparecer nos logs
+                            # Log apenas a cada 5 minutos para não poluir muito
+                            if int(time.time()) % 300 == 0:  # A cada 5 minutos
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")} (agora: {now.strftime("%H:%M:%S")})')
                             
                             # Buscar tarefas que estão no período de notificação
                             # ✅ IMPORTANTE: Excluir tarefas concluídas ou canceladas
@@ -229,9 +233,9 @@ class CampaignsConfig(AppConfig):
                             if count > 0:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] {count} tarefa(s) notificada(s) com sucesso')
                             else:
-                                # ✅ DEBUG: Log mesmo quando não há tarefas (a cada 10 verificações para não poluir)
-                                if int(time.time()) % 600 == 0:  # A cada ~10 minutos
-                                    logger.debug(f'🔔 [TASK NOTIFICATIONS] Nenhuma tarefa para notificar no momento')
+                                # ✅ DEBUG: Log mesmo quando não há tarefas (a cada 5 minutos)
+                                if int(time.time()) % 300 == 0:  # A cada 5 minutos
+                                    logger.info(f'🔔 [TASK NOTIFICATIONS] Nenhuma tarefa para notificar no momento (verificando entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")})')
                                 
                         except Exception as e:
                             logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao verificar tarefas: {e}', exc_info=True)
