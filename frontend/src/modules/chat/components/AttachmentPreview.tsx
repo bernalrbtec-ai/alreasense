@@ -781,21 +781,27 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     e.preventDefault();
     e.stopPropagation();
     
-    // ✅ NOVO: Verificar se arquivo existe antes de baixar
+    // ✅ MELHORIA: Usar fetch + blob para garantir download correto (especialmente para Excel)
     try {
-      // Tentar HEAD primeiro (mais rápido), se falhar, tentar GET com range
-      let response = await fetch(attachment.file_url, { method: 'HEAD' }).catch(() => null);
+      console.log('📥 [AttachmentPreview] Iniciando download:', {
+        file_url: attachment.file_url,
+        filename: attachment.original_filename,
+        mime_type: attachment.mime_type
+      });
       
-      // Se HEAD não funcionar, tentar GET com range (primeiros bytes)
-      if (!response || !response.ok) {
-        response = await fetch(attachment.file_url, { 
+      // 1. Verificar se arquivo existe (HEAD request)
+      let headResponse = await fetch(attachment.file_url, { method: 'HEAD' }).catch(() => null);
+      
+      if (!headResponse || !headResponse.ok) {
+        // Se HEAD falhar, tentar GET com range (primeiros bytes)
+        headResponse = await fetch(attachment.file_url, { 
           method: 'GET',
-          headers: { 'Range': 'bytes=0-0' } // Apenas primeiro byte
+          headers: { 'Range': 'bytes=0-0' }
         }).catch(() => null);
       }
       
-      if (!response || !response.ok) {
-        // Tentar verificar se é resposta JSON de erro
+      if (!headResponse || !headResponse.ok) {
+        // Verificar se é resposta JSON de erro
         try {
           const errorResponse = await fetch(attachment.file_url, { method: 'GET' });
           const contentType = errorResponse.headers.get('content-type');
@@ -813,18 +819,43 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         return;
       }
       
-      // Arquivo existe, fazer download
+      // 2. Baixar arquivo completo via fetch
+      const response = await fetch(attachment.file_url);
+      
+      if (!response.ok) {
+        showWarningToast('Erro ao baixar', `Erro HTTP ${response.status}`);
+        return;
+      }
+      
+      // 3. Converter para blob
+      const blob = await response.blob();
+      
+      console.log('✅ [AttachmentPreview] Arquivo baixado:', {
+        size: blob.size,
+        type: blob.type,
+        filename: attachment.original_filename
+      });
+      
+      // 4. Criar URL do blob e fazer download
+      const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = attachment.file_url;
-      link.download = filename;
+      link.href = blobUrl;
+      link.download = attachment.original_filename || 'arquivo';
       link.target = '_blank';
       link.rel = 'noopener noreferrer';
+      
+      // ✅ IMPORTANTE: Adicionar ao DOM antes de clicar (alguns browsers requerem)
       document.body.appendChild(link);
       link.click();
+      
+      // ✅ Limpar: remover link e revogar blob URL
       document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+      
+      console.log('✅ [AttachmentPreview] Download concluído');
     } catch (error) {
-      console.error('Erro ao verificar/download arquivo:', error);
-      showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
+      console.error('❌ [AttachmentPreview] Erro ao baixar arquivo:', error);
+      showWarningToast('Erro ao baixar', 'Não foi possível baixar o arquivo. Tente novamente.');
     }
   };
 

@@ -102,6 +102,18 @@ def media_proxy(request):
                     content_type = 'audio/mpeg'
                 elif ext == 'pdf':
                     content_type = 'application/pdf'
+                elif ext == 'xlsx':
+                    content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                elif ext == 'xls':
+                    content_type = 'application/vnd.ms-excel'
+                elif ext == 'docx':
+                    content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                elif ext == 'doc':
+                    content_type = 'application/msword'
+                elif ext == 'pptx':
+                    content_type = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                elif ext == 'ppt':
+                    content_type = 'application/vnd.ms-powerpoint'
                 else:
                     content_type = 'application/octet-stream'
             else:
@@ -200,6 +212,18 @@ def media_proxy(request):
                         content_type = 'audio/mpeg'
                     elif ext == 'pdf':
                         content_type = 'application/pdf'
+                    elif ext == 'xlsx':
+                        content_type = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                    elif ext == 'xls':
+                        content_type = 'application/vnd.ms-excel'
+                    elif ext == 'docx':
+                        content_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                    elif ext == 'doc':
+                        content_type = 'application/msword'
+                    elif ext == 'pptx':
+                        content_type = 'application/vnd.openxmlformats-officedocument.presentationml.presentation'
+                    elif ext == 'ppt':
+                        content_type = 'application/vnd.ms-powerpoint'
                 
                 # Se ainda for genérico, tentar detectar pelo magic number (primeiros bytes)
                 if content_type == 'application/octet-stream' and len(content) > 4:
@@ -286,7 +310,34 @@ def media_proxy(request):
         # 3. Cache headers
         response['Cache-Control'] = 'public, max-age=604800'
         
-        # 4. Custom headers
+        # 4. Content-Disposition para documentos (forçar download)
+        # ✅ NOVO: Adicionar Content-Disposition para arquivos que devem ser baixados
+        # Extrair nome do arquivo do s3_path ou media_url
+        filename = None
+        if s3_path:
+            filename = s3_path.split('/')[-1]
+        elif media_url:
+            from urllib.parse import urlparse, unquote
+            parsed = urlparse(unquote(media_url))
+            filename = parsed.path.split('/')[-1]
+        
+        # Se for documento (não imagem/vídeo/áudio), adicionar Content-Disposition
+        is_document = (
+            content_type.startswith('application/') and 
+            not content_type.startswith('application/json') and
+            content_type not in ['application/xml', 'application/javascript']
+        )
+        
+        if is_document and filename:
+            # ✅ IMPORTANTE: Usar filename* com encoding UTF-8 para caracteres especiais
+            from urllib.parse import quote
+            # Filtrar caracteres problemáticos do nome do arquivo
+            safe_filename = filename.encode('utf-8', errors='ignore').decode('utf-8')
+            # Usar RFC 5987 para suportar caracteres especiais
+            response['Content-Disposition'] = f'attachment; filename="{safe_filename}"; filename*=UTF-8\'\'{quote(safe_filename)}'
+            logger.info(f'📎 [MEDIA PROXY] Content-Disposition adicionado: {safe_filename}')
+        
+        # 5. Custom headers
         response['X-Cache'] = 'DIRECT'  # ✅ Sem cache - download direto
         response['X-Content-Size'] = str(len(content))
         if request.method != 'HEAD':
