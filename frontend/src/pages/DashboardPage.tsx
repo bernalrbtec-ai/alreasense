@@ -46,13 +46,13 @@ export default function DashboardPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
 
-  // Carregar departamentos e usuários para o modal
+  // Carregar departamentos e usuários para o modal (mesmos endpoints do TaskList)
   useEffect(() => {
     const fetchData = async () => {
       try {
         const [deptsRes, usersRes] = await Promise.all([
-          api.get('/chat/departments/'),
-          api.get('/chat/users/')
+          api.get('/auth/departments/'),
+          api.get('/auth/users/')
         ])
         setDepartments(deptsRes.data.results || deptsRes.data || [])
         setUsers(usersRes.data.results || usersRes.data || [])
