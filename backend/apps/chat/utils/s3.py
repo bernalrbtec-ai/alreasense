@@ -15,9 +15,9 @@ from pathlib import Path
 from typing import Optional, Tuple
 from datetime import datetime, timedelta
 
-import boto3
-from botocore.exceptions import ClientError
-from botocore.config import Config
+# ✅ LAZY IMPORT: boto3 só é importado quando necessário (evita lentidão no startup)
+# from botocore.exceptions import ClientError
+# from botocore.config import Config
 from django.conf import settings
 
 logger = logging.getLogger(__name__)
@@ -27,19 +27,29 @@ class S3Manager:
     """Gerenciador de operações S3/MinIO"""
     
     def __init__(self):
-        self.s3_client = boto3.client(
-            's3',
-            endpoint_url=settings.S3_ENDPOINT_URL,
-            aws_access_key_id=settings.S3_ACCESS_KEY,
-            aws_secret_access_key=settings.S3_SECRET_KEY,
-            region_name=settings.S3_REGION,
-            config=Config(
-                signature_version='s3v4',
-                s3={'addressing_style': 'path'}  # Force path-style URLs for MinIO
-            )
-        )
+        # ✅ LAZY IMPORT: boto3 só é importado quando necessário
+        # Isso evita tentar conectar ao S3 durante o import (pode estar lento)
+        self.s3_client = None
         self.bucket = settings.S3_BUCKET
         self._bucket_checked = False  # Flag para evitar múltiplas verificações
+    
+    def _get_s3_client(self):
+        """Lazy initialization do cliente S3"""
+        if self.s3_client is None:
+            import boto3
+            from botocore.config import Config
+            self.s3_client = boto3.client(
+                's3',
+                endpoint_url=settings.S3_ENDPOINT_URL,
+                aws_access_key_id=settings.S3_ACCESS_KEY,
+                aws_secret_access_key=settings.S3_SECRET_KEY,
+                region_name=settings.S3_REGION,
+                config=Config(
+                    signature_version='s3v4',
+                    s3={'addressing_style': 'path'}  # Force path-style URLs for MinIO
+                )
+            )
+        return self.s3_client
     
     def ensure_bucket_exists(self) -> bool:
         """
@@ -53,8 +63,9 @@ class S3Manager:
             return True
         
         try:
+            from botocore.exceptions import ClientError
             # Verificar se bucket existe
-            self.s3_client.head_bucket(Bucket=self.bucket)
+            self._get_s3_client().head_bucket(Bucket=self.bucket)
             logger.info(f"✅ [S3] Bucket '{self.bucket}' já existe")
             self._bucket_checked = True
             return True
@@ -67,7 +78,7 @@ class S3Manager:
                 logger.warning(f"⚠️ [S3] Bucket '{self.bucket}' não existe, tentando criar...")
                 
                 try:
-                    self.s3_client.create_bucket(Bucket=self.bucket)
+                    self._get_s3_client().create_bucket(Bucket=self.bucket)
                     logger.info(f"✅ [S3] Bucket '{self.bucket}' criado com sucesso")
                     
                     # Configurar CORS para permitir uploads do frontend
@@ -81,7 +92,7 @@ class S3Manager:
                                 'MaxAgeSeconds': 3600
                             }]
                         }
-                        self.s3_client.put_bucket_cors(
+                        self._get_s3_client().put_bucket_cors(
                             Bucket=self.bucket,
                             CORSConfiguration=cors_configuration
                         )
@@ -140,7 +151,7 @@ class S3Manager:
                 extra_args['Metadata'] = metadata
             
             # Upload
-            self.s3_client.put_object(
+            self._get_s3_client().put_object(
                 Bucket=self.bucket,
                 Key=file_path,
                 Body=file_data,
@@ -168,7 +179,7 @@ class S3Manager:
             (sucesso: bool, dados: bytes | None, mensagem: str)
         """
         try:
-            response = self.s3_client.get_object(
+            response = self._get_s3_client().get_object(
                 Bucket=self.bucket,
                 Key=file_path
             )
@@ -199,7 +210,7 @@ class S3Manager:
             (sucesso: bool, mensagem: str)
         """
         try:
-            self.s3_client.delete_object(
+            self._get_s3_client().delete_object(
                 Bucket=self.bucket,
                 Key=file_path
             )
@@ -236,7 +247,7 @@ class S3Manager:
                 logger.error("❌ [S3] Não foi possível garantir que o bucket existe")
                 return None
             
-            url = self.s3_client.generate_presigned_url(
+            url = self._get_s3_client().generate_presigned_url(
                 'put_object' if http_method == 'PUT' else 'get_object',
                 Params={
                     'Bucket': self.bucket,
@@ -300,7 +311,7 @@ class S3Manager:
             True se existe, False caso contrário
         """
         try:
-            self.s3_client.head_object(
+            self._get_s3_client().head_object(
                 Bucket=self.bucket,
                 Key=file_path
             )

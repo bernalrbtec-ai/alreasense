@@ -31,8 +31,8 @@ RUN chmod +x /app/entrypoint.sh
 # Create staticfiles directory
 RUN mkdir -p /app/staticfiles
 
-# Collect static files
-RUN python manage.py collectstatic --noinput --clear
+# ✅ REMOVIDO: collectstatic do Dockerfile - será executado no Procfile durante deploy
+# Isso evita duplicação e permite que seja executado apenas quando necessário
 
 # Expose port
 EXPOSE 8000
