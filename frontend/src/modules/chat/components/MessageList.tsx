@@ -1014,4 +1014,4 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       )}
     </div>
   );
-}); // ✅ CORREÇÃO: Fechar React.memo
+}
