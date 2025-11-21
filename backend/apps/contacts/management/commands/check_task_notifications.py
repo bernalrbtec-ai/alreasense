@@ -1,7 +1,7 @@
 """
 Management command para verificar tarefas próximas e enviar notificações.
 
-Executa a cada minuto (via cron ou celery beat) e verifica tarefas que:
+Roda em loop contínuo (similar ao engine de campanhas) e verifica tarefas que:
 - Estão agendadas para os próximos 15 minutos
 - Não foram notificadas ainda
 - Não estão concluídas ou canceladas
@@ -9,6 +9,10 @@ Executa a cada minuto (via cron ou celery beat) e verifica tarefas que:
 Envia:
 1. Notificação no navegador (via WebSocket/API)
 2. Mensagem WhatsApp (se usuário tiver notify_whatsapp=True e telefone)
+
+Uso:
+    python manage.py check_task_notifications  # Roda em loop contínuo
+    python manage.py check_task_notifications --run-once  # Executa uma vez e sai
 """
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -22,6 +26,7 @@ from asgiref.sync import async_to_sync
 import logging
 import requests
 import json
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -36,21 +41,58 @@ class Command(BaseCommand):
             default=15,
             help='Minutos antes do evento para enviar notificação (padrão: 15)'
         )
+        parser.add_argument(
+            '--run-once',
+            action='store_true',
+            help='Executa uma vez e sai (ao invés de rodar em loop)'
+        )
+        parser.add_argument(
+            '--interval',
+            type=int,
+            default=60,
+            help='Intervalo entre verificações em segundos (padrão: 60)'
+        )
 
     def handle(self, *args, **options):
         minutes_before = options['minutes_before']
+        run_once = options['run_once']
+        interval = options['interval']
+        
+        if run_once:
+            self._check_and_notify(minutes_before)
+        else:
+            # Loop contínuo (similar ao engine de campanhas)
+            self.stdout.write(
+                self.style.SUCCESS('🔔 Iniciando verificador de notificações de tarefas...')
+            )
+            self.stdout.write(f'⏰ Intervalo: {interval} segundos')
+            self.stdout.write(f'📅 Janela de notificação: {minutes_before} minutos antes')
+            
+            try:
+                while True:
+                    self._check_and_notify(minutes_before)
+                    time.sleep(interval)
+            except KeyboardInterrupt:
+                self.stdout.write(
+                    self.style.WARNING('\n⏹️ Verificador interrompido pelo usuário')
+                )
+            except Exception as e:
+                logger.error(f'❌ Erro no loop principal: {e}', exc_info=True)
+                self.stdout.write(self.style.ERROR(f'❌ Erro no loop principal: {e}'))
+                raise
+    
+    def _check_and_notify(self, minutes_before):
+        """Verifica e notifica tarefas"""
         now = timezone.now()
         notification_window_start = now + timedelta(minutes=minutes_before - 1)
         notification_window_end = now + timedelta(minutes=minutes_before + 1)
-        
-        self.stdout.write(f'🔔 Verificando tarefas entre {notification_window_start} e {notification_window_end}')
         
         # Buscar tarefas que estão no período de notificação
         tasks_to_notify = Task.objects.filter(
             due_date__gte=notification_window_start,
             due_date__lte=notification_window_end,
             status__in=['pending', 'in_progress'],
-            notification_sent=False  # Campo que vamos adicionar
+            notification_sent=False
         ).select_related('assigned_to', 'created_by', 'tenant', 'department')
         
         count = 0
@@ -73,7 +115,8 @@ class Command(BaseCommand):
                 logger.error(f'❌ Erro ao notificar tarefa {task.id}: {e}', exc_info=True)
                 self.stdout.write(self.style.ERROR(f'Erro ao notificar tarefa {task.id}: {e}'))
         
-        self.stdout.write(self.style.SUCCESS(f'✅ {count} tarefa(s) notificada(s)'))
+        if count > 0:
+            self.stdout.write(self.style.SUCCESS(f'✅ {count} tarefa(s) notificada(s)'))
     
     def _notify_user(self, task: Task, user: User):
         """Notifica um usuário sobre uma tarefa"""
