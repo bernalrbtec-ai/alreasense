@@ -717,6 +717,23 @@ export function MessageList() {
           onClose={() => setContextMenu(null)}
         />
       )}
+
+      {/* Modal para adicionar contato compartilhado */}
+      {showContactModal && contactToAdd && (
+        <ContactModal
+          isOpen={showContactModal}
+          onClose={() => {
+            setShowContactModal(false);
+            setContactToAdd(null);
+          }}
+          initialName={contactToAdd.name}
+          initialPhone={contactToAdd.phone}
+          onSuccess={() => {
+            setShowContactModal(false);
+            setContactToAdd(null);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -998,23 +1015,6 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       )}
       
       {/* ✅ REMOVIDO: Botão de reação abaixo da mensagem - usar apenas botão direito */}
-      
-      {/* Modal para adicionar contato compartilhado */}
-      {showContactModal && contactToAdd && (
-        <ContactModal
-          isOpen={showContactModal}
-          onClose={() => {
-            setShowContactModal(false);
-            setContactToAdd(null);
-          }}
-          initialName={contactToAdd.name}
-          initialPhone={contactToAdd.phone}
-          onSuccess={() => {
-            setShowContactModal(false);
-            setContactToAdd(null);
-          }}
-        />
-      )}
     </div>
   );
-}
+});
