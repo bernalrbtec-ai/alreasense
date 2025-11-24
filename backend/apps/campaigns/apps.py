@@ -303,9 +303,32 @@ class CampaignsConfig(AppConfig):
                             # Processar lembretes (15 minutos antes)
                             for task in tasks_reminder_list:
                                 try:
-                                    task.refresh_from_db()
-                                    if task.status in ['completed', 'cancelled']:
-                                        continue
+                                    # ✅ CRÍTICO: Adquirir lock ANTES de processar e marcar como notificada IMEDIATAMENTE
+                                    # Isso garante que apenas uma instância processe, mesmo com múltiplas instâncias do scheduler
+                                    with transaction.atomic():
+                                        locked_task = Task.objects.select_for_update(skip_locked=True).filter(
+                                            id=task.id,
+                                            notification_sent=False  # Só processar se ainda não foi notificada
+                                        ).select_related('assigned_to', 'created_by', 'tenant', 'department').first()
+                                        
+                                        if not locked_task:
+                                            # Outra instância já está processando ou já foi notificada
+                                            logger.info(f'⏭️ [TASK NOTIFICATIONS] Tarefa {task.id} está sendo processada por outra instância ou já foi notificada, pulando')
+                                            continue
+                                        
+                                        # Verificar status (pode ter mudado)
+                                        if locked_task.status in ['completed', 'cancelled']:
+                                            continue
+                                        
+                                        # ✅ CRÍTICO: Marcar como notificada IMEDIATAMENTE para evitar que outras instâncias processem
+                                        # Isso garante que apenas esta instância processará, mesmo que as notificações falhem depois
+                                        locked_task.notification_sent = True
+                                        locked_task.save(update_fields=['notification_sent'])
+                                        
+                                        # Atualizar referência para usar a tarefa com lock
+                                        task = locked_task
+                                        
+                                        logger.info(f'🔒 [TASK NOTIFICATIONS] Lock adquirido e notification_sent=True marcado para tarefa {task.id}')
                                     
                                     logger.info(f'📋 [TASK NOTIFICATIONS] Lembrete: {task.title} (ID: {task.id}) - {task.due_date.strftime("%d/%m/%Y %H:%M:%S")}')
                                     logger.info(f'   👤 Assigned to: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
@@ -351,20 +374,16 @@ class CampaignsConfig(AppConfig):
                                         contacts_notified = _notify_task_contacts(task, is_reminder=True, contacts_notified_set=contacts_notified_set)
                                         notification_sent = notification_sent or contacts_notified
                                     
-                                    # ✅ MELHORIA: Só marcar como notificada se pelo menos uma notificação foi enviada com sucesso
+                                    # ✅ NOTA: notification_sent já foi marcado como True quando adquirimos o lock
+                                    # Agora apenas contabilizar e logar o resultado
                                     if notification_sent:
-                                        # ✅ CORREÇÃO: Usar select_for_update para garantir atomicidade
-                                        with transaction.atomic():
-                                            task.refresh_from_db()
-                                            if not task.notification_sent:  # Double-check
-                                                task.notification_sent = True
-                                                task.save(update_fields=['notification_sent'])
-                                                count_reminder += 1
-                                                logger.info(f'✅ [TASK NOTIFICATIONS] Lembrete enviado ({notifications_count} notificação(ões)) e marcado como notificado')
-                                            else:
-                                                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Tarefa já estava marcada como notificada (race condition evitada)')
+                                        count_reminder += 1
+                                        logger.info(f'✅ [TASK NOTIFICATIONS] Lembrete enviado ({notifications_count} notificação(ões))')
                                     else:
-                                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma notificação foi enviada com sucesso, mantendo notification_sent=False para retry')
+                                        # Se nenhuma notificação foi enviada, resetar notification_sent para permitir retry
+                                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma notificação foi enviada com sucesso, resetando notification_sent=False para retry')
+                                        with transaction.atomic():
+                                            Task.objects.filter(id=task.id).update(notification_sent=False)
                                     
                                 except Exception as e:
                                     logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar lembrete para tarefa {task.id}: {e}', exc_info=True)
@@ -372,13 +391,35 @@ class CampaignsConfig(AppConfig):
                             # ✅ NOVO: Processar notificações no momento exato do compromisso
                             for task in tasks_exact_time_list:
                                 try:
-                                    task.refresh_from_db()
-                                    if task.status in ['completed', 'cancelled']:
-                                        continue
-                                    
-                                    # Verificar se já passou do horário (não notificar se passou mais de 1 minuto)
-                                    if task.due_date < now - timedelta(minutes=1):
-                                        continue
+                                    # ✅ CRÍTICO: Adquirir lock ANTES de processar e marcar como notificada IMEDIATAMENTE
+                                    # Isso garante que apenas uma instância processe, mesmo com múltiplas instâncias do scheduler
+                                    with transaction.atomic():
+                                        locked_task = Task.objects.select_for_update(skip_locked=True).filter(
+                                            id=task.id,
+                                            notification_sent=False  # Só processar se ainda não foi notificada
+                                        ).select_related('assigned_to', 'created_by', 'tenant', 'department').first()
+                                        
+                                        if not locked_task:
+                                            # Outra instância já está processando ou já foi notificada
+                                            logger.info(f'⏭️ [TASK NOTIFICATIONS] Tarefa {task.id} está sendo processada por outra instância ou já foi notificada, pulando')
+                                            continue
+                                        
+                                        # Verificar status (pode ter mudado)
+                                        if locked_task.status in ['completed', 'cancelled']:
+                                            continue
+                                        
+                                        # Verificar se já passou do horário (não notificar se passou mais de 1 minuto)
+                                        if locked_task.due_date < now - timedelta(minutes=1):
+                                            continue
+                                        
+                                        # ✅ CRÍTICO: Marcar como notificada IMEDIATAMENTE para evitar que outras instâncias processem
+                                        locked_task.notification_sent = True
+                                        locked_task.save(update_fields=['notification_sent'])
+                                        
+                                        # Atualizar referência para usar a tarefa com lock
+                                        task = locked_task
+                                        
+                                        logger.info(f'🔒 [TASK NOTIFICATIONS] Lock adquirido e notification_sent=True marcado para tarefa {task.id}')
                                     
                                     logger.info(f'⏰ [TASK NOTIFICATIONS] Compromisso chegando: {task.title} (ID: {task.id}) - {task.due_date.strftime("%d/%m/%Y %H:%M:%S")}')
                                     logger.info(f'   👤 Assigned to: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
@@ -423,9 +464,16 @@ class CampaignsConfig(AppConfig):
                                         contacts_notified = _notify_task_contacts(task, is_reminder=False, contacts_notified_set=contacts_notified_set)
                                         notification_sent = notification_sent or contacts_notified
                                     
+                                    # ✅ NOTA: notification_sent já foi marcado como True quando adquirimos o lock
+                                    # Agora apenas contabilizar e logar o resultado
                                     if notification_sent:
                                         count_exact += 1
-                                        logger.info(f'✅ [TASK NOTIFICATIONS] Notificação de compromisso enviada')
+                                        logger.info(f'✅ [TASK NOTIFICATIONS] Notificação de compromisso enviada ({notifications_count} notificação(ões))')
+                                    else:
+                                        # Se nenhuma notificação foi enviada, resetar notification_sent para permitir retry
+                                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma notificação foi enviada com sucesso, resetando notification_sent=False para retry')
+                                        with transaction.atomic():
+                                            Task.objects.filter(id=task.id).update(notification_sent=False)
                                     
                                 except Exception as e:
                                     logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar notificação de compromisso para tarefa {task.id}: {e}', exc_info=True)
