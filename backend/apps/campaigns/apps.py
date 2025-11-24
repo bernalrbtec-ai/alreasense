@@ -307,6 +307,7 @@ class CampaignsConfig(AppConfig):
                                     notification_sent = False
                                     notifications_count = 0
                                     users_notified = set()  # ✅ NOVO: Rastrear usuários já notificados para evitar duplicação
+                                    contacts_notified_set = set()  # ✅ NOVO: Rastrear contatos já notificados neste ciclo
                                     
                                     # Notificar usuário atribuído
                                     if task.assigned_to:
@@ -337,7 +338,8 @@ class CampaignsConfig(AppConfig):
                                     notify_contacts = task_metadata.get('notify_contacts', False)
                                     
                                     if notify_contacts and task.related_contacts.exists():
-                                        contacts_notified = _notify_task_contacts(task, is_reminder=True)
+                                        logger.info(f'   📞 Notificando {task.related_contacts.count()} contato(s) relacionado(s)')
+                                        contacts_notified = _notify_task_contacts(task, is_reminder=True, contacts_notified_set=contacts_notified_set)
                                         notification_sent = notification_sent or contacts_notified
                                     
                                     # ✅ MELHORIA: Só marcar como notificada se pelo menos uma notificação foi enviada com sucesso
@@ -377,6 +379,7 @@ class CampaignsConfig(AppConfig):
                                     notification_sent = False
                                     notifications_count = 0
                                     users_notified = set()  # ✅ NOVO: Rastrear usuários já notificados para evitar duplicação
+                                    contacts_notified_set = set()  # ✅ NOVO: Rastrear contatos já notificados neste ciclo
                                     
                                     # Notificar usuário atribuído
                                     if task.assigned_to:
@@ -407,7 +410,8 @@ class CampaignsConfig(AppConfig):
                                     notify_contacts = task_metadata.get('notify_contacts', False)
                                     
                                     if notify_contacts and task.related_contacts.exists():
-                                        contacts_notified = _notify_task_contacts(task, is_reminder=False)
+                                        logger.info(f'   📞 Notificando {task.related_contacts.count()} contato(s) relacionado(s)')
+                                        contacts_notified = _notify_task_contacts(task, is_reminder=False, contacts_notified_set=contacts_notified_set)
                                         notification_sent = notification_sent or contacts_notified
                                     
                                     if notification_sent:
@@ -662,17 +666,20 @@ class CampaignsConfig(AppConfig):
             return notification_sent
         
         # ✅ NOVO: Função para notificar contatos relacionados
-        def _notify_task_contacts(task, is_reminder=True):
+        def _notify_task_contacts(task, is_reminder=True, contacts_notified_set=None):
             """
             Notifica contatos relacionados à tarefa via WhatsApp.
             
             Args:
                 task: Tarefa a ser notificada
                 is_reminder: Se True, é lembrete (15min antes). Se False, é notificação no momento exato.
+                contacts_notified_set: Set de IDs de contatos já notificados neste ciclo (para evitar duplicação)
             
             Returns:
                 bool: True se pelo menos um contato foi notificado com sucesso
             """
+            if contacts_notified_set is None:
+                contacts_notified_set = set()
             from apps.notifications.models import WhatsAppInstance
             from apps.connections.models import EvolutionConnection
             import requests
@@ -759,11 +766,17 @@ class CampaignsConfig(AppConfig):
             }
             
             for contact in task.related_contacts.all():
+                # ✅ CORREÇÃO: Verificar se contato já foi notificado neste ciclo
+                if contact.id in contacts_notified_set:
+                    logger.info(f'   ⏭️ [TASK NOTIFICATIONS] Contato {contact.name} (ID: {contact.id}) já foi notificado neste ciclo, pulando')
+                    continue
+                
                 if not contact.phone:
                     logger.warning(f'⚠️ [TASK NOTIFICATIONS] Contato {contact.name} não tem telefone, pulando')
                     continue
                 
                 try:
+                    logger.info(f'   📤 [TASK NOTIFICATIONS] Notificando contato: {contact.name} (ID: {contact.id}, Telefone: {contact.phone})')
                     # Normalizar telefone do contato
                     phone = contact.phone.strip()
                     phone_clean = re.sub(r'[^\d+]', '', phone)
@@ -808,6 +821,8 @@ class CampaignsConfig(AppConfig):
                                 logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado para contato {contact.name} ({phone_clean})')
                                 contact_notified = True
                                 contacts_notified = True
+                                # ✅ CORREÇÃO: Adicionar contato ao set para evitar duplicação no mesmo ciclo
+                                contacts_notified_set.add(contact.id)
                                 break
                             else:
                                 logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
