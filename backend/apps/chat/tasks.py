@@ -240,9 +240,9 @@ class process_incoming_media:
     """
     
     @staticmethod
-    def delay(tenant_id: str, message_id: str, media_url: str, media_type: str, 
+    def delay(tenant_id: str, message_id: str, media_url: str, media_type: str,
               instance_name: str = None, api_key: str = None, evolution_api_url: str = None,
-              message_key: dict = None):
+              message_key: dict = None, mime_type: str = None):
         """Enfileira processamento de mídia recebida (RabbitMQ)."""
         delay_rabbitmq(QUEUE_PROCESS_INCOMING_MEDIA, {
             'tenant_id': tenant_id,
@@ -252,7 +252,8 @@ class process_incoming_media:
             'instance_name': instance_name,
             'api_key': api_key,
             'evolution_api_url': evolution_api_url,
-            'message_key': message_key
+            'message_key': message_key,
+            'mime_type': mime_type
         })
 
 
@@ -1766,6 +1767,7 @@ async def start_chat_consumers():
                         evolution_api_url=payload.get('evolution_api_url'),
                         message_key=message_key_from_payload,
                         retry_count=retry_count,
+                        mime_type=payload.get('mime_type')
                     )
                     logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
                 except InstanceTemporarilyUnavailable as e:

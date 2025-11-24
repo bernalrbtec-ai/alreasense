@@ -329,6 +329,7 @@ async def handle_process_incoming_media(
     decrypted_bytes: bytes = None,
     message_key: dict = None,
     retry_count: int = 0,
+    mime_type: Optional[str] = None,
 ):
     """
     Handler: Processa mídia recebida do WhatsApp.
@@ -352,6 +353,7 @@ async def handle_process_incoming_media(
         evolution_api_url: URL base do Evolution API (opcional, para descriptografar)
         decrypted_bytes: Bytes já descriptografados (opcional, se obtido via base64)
         message_key: Key completo da mensagem (opcional, para getBase64FromMediaMessage)
+        mime_type: MIME type original informado pelo WhatsApp (ex: application/vnd.ms-excel)
     """
     from apps.chat.models import Message, MessageAttachment
     
@@ -595,7 +597,8 @@ async def handle_process_incoming_media(
     max_retries = 3
     retry_count = 0
     media_data = None
-    content_type = 'application/octet-stream'
+    original_mime_type = (mime_type or '').strip()
+    content_type = original_mime_type or 'application/octet-stream'
     
     # ✅ OPÇÃO 1: Se já temos bytes descriptografados, usar diretamente
     if decrypted_data:
@@ -611,13 +614,13 @@ async def handle_process_incoming_media(
         else:
             # Inferir do media_type
             if media_type == 'image':
-                content_type = 'image/jpeg'
+                content_type = original_mime_type or 'image/jpeg'
             elif media_type == 'video':
-                content_type = 'video/mp4'
+                content_type = original_mime_type or 'video/mp4'
             elif media_type == 'audio':
-                content_type = 'audio/mpeg'
+                content_type = original_mime_type or 'audio/mpeg'
             elif media_type == 'document':
-                content_type = 'application/pdf'
+                content_type = original_mime_type or 'application/octet-stream'
     
     # ✅ OPÇÃO 2: Se não temos bytes descriptografados, baixar da URL
     if not media_data:

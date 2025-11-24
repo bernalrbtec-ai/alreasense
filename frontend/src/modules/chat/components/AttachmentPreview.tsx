@@ -637,6 +637,10 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   // 📄 DOCUMENTO (estilo WhatsApp - vertical com ícone grande)
   const filename = attachment.original_filename || 'document';
   const fileExt = filename.toLowerCase().split('.').pop() || '';
+  const metadata = attachment.metadata || {};
+  const fileUrl = (attachment.file_url || '').trim();
+  const isProcessing = !!metadata.processing || !fileUrl;
+  const hasError = Boolean(metadata.error);
   const isPDF = attachment.mime_type === 'application/pdf' || fileExt === 'pdf';
   const isWord = fileExt === 'doc' || fileExt === 'docx' || 
                  attachment.mime_type?.includes('word');
@@ -687,6 +691,32 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
 
   const docStyle = getDocumentStyle();
   
+  if (hasError) {
+    return (
+      <div className="attachment-preview document max-w-xs rounded-lg border border-red-200 bg-red-50 p-4">
+        <div className="flex items-center gap-3 text-red-600">
+          <AlertCircle size={24} />
+          <div>
+            <p className="text-sm font-semibold">Erro ao processar arquivo</p>
+            <p className="text-xs opacity-80">{metadata.error || 'Não foi possível concluir o processamento do arquivo.'}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  if (isProcessing) {
+    return (
+      <div className="attachment-preview document max-w-xs rounded-lg border border-gray-200 bg-gray-50 p-4">
+        <div className="flex flex-col items-center gap-3 text-gray-500">
+          <div className="w-12 h-12 rounded-full border-4 border-gray-200 border-t-gray-400 animate-spin" />
+          <p className="text-sm font-medium">Processando arquivo...</p>
+          <p className="text-xs text-center opacity-70">Você será notificado automaticamente assim que o download estiver disponível.</p>
+        </div>
+      </div>
+    );
+  }
+  
   // Formatar tamanho do arquivo
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -698,14 +728,24 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     e.preventDefault();
     e.stopPropagation();
     
+    if (hasError) {
+      showWarningToast('Arquivo indisponível', metadata.error || 'Erro ao processar o arquivo.');
+      return;
+    }
+    
+    if (isProcessing) {
+      showWarningToast('Processando arquivo', 'Ainda estamos preparando este arquivo. Tente novamente em alguns segundos.');
+      return;
+    }
+    
     // ✅ NOVO: Verificar se arquivo existe antes de abrir/baixar
     try {
       // Tentar HEAD primeiro (mais rápido), se falhar, tentar GET com range
-      let response = await fetch(attachment.file_url, { method: 'HEAD' }).catch(() => null);
+      let response = await fetch(fileUrl, { method: 'HEAD' }).catch(() => null);
       
       // Se HEAD não funcionar, tentar GET com range (primeiros bytes)
       if (!response || !response.ok) {
-        response = await fetch(attachment.file_url, { 
+        response = await fetch(fileUrl, { 
           method: 'GET',
           headers: { 'Range': 'bytes=0-0' } // Apenas primeiro byte
         }).catch(() => null);
@@ -714,7 +754,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       if (!response || !response.ok) {
         // Tentar verificar se é resposta JSON de erro
         try {
-          const errorResponse = await fetch(attachment.file_url, { method: 'GET' });
+          const errorResponse = await fetch(fileUrl, { method: 'GET' });
           const contentType = errorResponse.headers.get('content-type');
           if (contentType?.includes('application/json')) {
             const errorData = await errorResponse.json();
@@ -733,11 +773,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       // Arquivo existe, proceder com abertura/download
       if (isPDF) {
         // ✅ PDF: Abrir em nova aba para não quebrar autenticação
-        const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
+        const newWindow = window.open(fileUrl, '_blank', 'noopener,noreferrer');
         if (!newWindow) {
           // Se popup foi bloqueado, tentar download direto
           const link = document.createElement('a');
-          link.href = attachment.file_url;
+          link.href = fileUrl;
           link.download = filename;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
@@ -748,7 +788,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       } else if (isWord || isExcel || isPowerPoint) {
         // ✅ Word, Excel, PowerPoint: Download direto (abre no aplicativo padrão)
         const link = document.createElement('a');
-        link.href = attachment.file_url;
+        link.href = fileUrl;
         link.download = filename;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
@@ -758,11 +798,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         document.body.removeChild(link);
       } else {
         // Outros documentos: Tentar abrir em nova aba, fallback para download
-        const newWindow = window.open(attachment.file_url, '_blank', 'noopener,noreferrer');
+        const newWindow = window.open(fileUrl, '_blank', 'noopener,noreferrer');
         if (!newWindow) {
           // Se popup foi bloqueado, tentar download direto
           const link = document.createElement('a');
-          link.href = attachment.file_url;
+          link.href = fileUrl;
           link.download = filename;
           link.target = '_blank';
           link.rel = 'noopener noreferrer';
@@ -781,20 +821,30 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
     e.preventDefault();
     e.stopPropagation();
     
+    if (hasError) {
+      showWarningToast('Arquivo indisponível', metadata.error || 'Erro ao processar o arquivo.');
+      return;
+    }
+    
+    if (isProcessing) {
+      showWarningToast('Processando arquivo', 'Ainda estamos preparando este arquivo. Tente novamente em alguns segundos.');
+      return;
+    }
+    
     // ✅ MELHORIA: Usar fetch + blob para garantir download correto (especialmente para Excel)
     try {
       console.log('📥 [AttachmentPreview] Iniciando download:', {
-        file_url: attachment.file_url,
+        file_url: fileUrl,
         filename: attachment.original_filename,
         mime_type: attachment.mime_type
       });
       
       // 1. Verificar se arquivo existe (HEAD request)
-      let headResponse = await fetch(attachment.file_url, { method: 'HEAD' }).catch(() => null);
+      let headResponse = await fetch(fileUrl, { method: 'HEAD' }).catch(() => null);
       
       if (!headResponse || !headResponse.ok) {
         // Se HEAD falhar, tentar GET com range (primeiros bytes)
-        headResponse = await fetch(attachment.file_url, { 
+        headResponse = await fetch(fileUrl, { 
           method: 'GET',
           headers: { 'Range': 'bytes=0-0' }
         }).catch(() => null);
@@ -803,7 +853,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       if (!headResponse || !headResponse.ok) {
         // Verificar se é resposta JSON de erro
         try {
-          const errorResponse = await fetch(attachment.file_url, { method: 'GET' });
+          const errorResponse = await fetch(fileUrl, { method: 'GET' });
           const contentType = errorResponse.headers.get('content-type');
           if (contentType?.includes('application/json')) {
             const errorData = await errorResponse.json();
@@ -820,7 +870,7 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       }
       
       // 2. Baixar arquivo completo via fetch
-      const response = await fetch(attachment.file_url);
+      const response = await fetch(fileUrl);
       
       if (!response.ok) {
         showWarningToast('Erro ao baixar', `Erro HTTP ${response.status}`);

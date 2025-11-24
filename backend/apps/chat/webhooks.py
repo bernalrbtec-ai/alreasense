@@ -1368,7 +1368,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         file_url='',  # Será preenchido com URL proxy após processamento
                         storage_type='s3',  # Direto para S3 (sem storage local)
                         size_bytes=0,  # Será preenchido após download
-                        metadata={'processing': True, 'media_type': incoming_media_type}  # Flag para frontend mostrar loading
+                        metadata={
+                            'processing': True,
+                            'media_type': incoming_media_type,
+                            'mime_type': mime_type
+                        }  # Flag para frontend mostrar loading + mime original
                     )
                     
                     attachment_id_str = str(attachment.id)
@@ -1511,7 +1515,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                                 instance_name=instance_name_for_media,
                                 api_key=api_key_for_media,
                                 evolution_api_url=evolution_api_url_for_media,
-                                message_key=message_key_data
+                                message_key=message_key_data,
+                                mime_type=mime_type
                             )
                             logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso na fila chat_process_incoming_media!")
                         except Exception as e:
