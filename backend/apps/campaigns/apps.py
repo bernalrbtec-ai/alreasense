@@ -192,27 +192,41 @@ class CampaignsConfig(AppConfig):
                             exact_time_window_end = now + timedelta(minutes=1)
                             
                             # 1. Buscar tarefas para lembrete (15 minutos antes)
-                            tasks_reminder = Task.objects.filter(
-                                due_date__gte=notification_window_start,
-                                due_date__lte=notification_window_end,
-                                status__in=['pending', 'in_progress'],
-                                notification_sent=False
-                            ).exclude(
-                                status__in=['completed', 'cancelled']
-                            ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                            # ✅ CORREÇÃO: Usar select_for_update para evitar race condition
+                            from django.db import transaction
+                            with transaction.atomic():
+                                tasks_reminder = Task.objects.select_for_update(skip_locked=True).filter(
+                                    due_date__gte=notification_window_start,
+                                    due_date__lte=notification_window_end,
+                                    status__in=['pending', 'in_progress'],
+                                    notification_sent=False
+                                ).exclude(
+                                    status__in=['completed', 'cancelled']
+                                ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                
+                                # Converter para lista para processar fora do lock
+                                tasks_reminder_list = list(tasks_reminder)
                             
                             # 2. ✅ NOVO: Buscar tarefas que chegaram no momento exato (últimos 5 minutos)
                             # Envia notificação "Compromisso chegou" mesmo se já foi notificado 15min antes
                             # ✅ CORREÇÃO: Filtrar por notification_sent=False para evitar duplicação
+                            # ✅ CORREÇÃO: Usar select_for_update para evitar race condition
                             # Só notificar no momento exato se NÃO foi notificado no lembrete (15min antes)
-                            tasks_exact_time = Task.objects.filter(
-                                due_date__gte=exact_time_window_start,
-                                due_date__lte=exact_time_window_end,
-                                status__in=['pending', 'in_progress'],
-                                notification_sent=False  # ✅ CORREÇÃO: Só notificar se não foi notificado antes
-                            ).exclude(
-                                status__in=['completed', 'cancelled']
-                            ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                            with transaction.atomic():
+                                tasks_exact_time = Task.objects.select_for_update(skip_locked=True).filter(
+                                    due_date__gte=exact_time_window_start,
+                                    due_date__lte=exact_time_window_end,
+                                    status__in=['pending', 'in_progress'],
+                                    notification_sent=False  # ✅ CORREÇÃO: Só notificar se não foi notificado antes
+                                ).exclude(
+                                    status__in=['completed', 'cancelled']
+                                ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                
+                                # Converter para lista para processar fora do lock
+                                tasks_exact_time_list = list(tasks_exact_time)
+                            
+                            total_reminder = len(tasks_reminder_list)
+                            total_exact = len(tasks_exact_time_list)
                             
                             total_reminder = tasks_reminder.count()
                             total_exact = tasks_exact_time.count()
@@ -234,25 +248,37 @@ class CampaignsConfig(AppConfig):
                             count_exact = 0
                             
                             # Processar lembretes (15 minutos antes)
-                            for task in tasks_reminder:
+                            for task in tasks_reminder_list:
                                 try:
                                     task.refresh_from_db()
                                     if task.status in ['completed', 'cancelled']:
                                         continue
                                     
                                     logger.info(f'📋 [TASK NOTIFICATIONS] Lembrete: {task.title} (ID: {task.id}) - {task.due_date.strftime("%d/%m/%Y %H:%M:%S")}')
+                                    logger.info(f'   👤 Assigned to: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
+                                    logger.info(f'   👤 Created by: {task.created_by.email if task.created_by else "Ninguém"}')
+                                    logger.info(f'   📞 Contatos relacionados: {task.related_contacts.count()}')
                                     
                                     notification_sent = False
+                                    notifications_count = 0
                                     
                                     # Notificar usuário atribuído
                                     if task.assigned_to:
+                                        logger.info(f'   📤 Notificando assigned_to: {task.assigned_to.email}')
                                         success = _notify_task_user(task, task.assigned_to, is_reminder=True)
+                                        if success:
+                                            notifications_count += 1
                                         notification_sent = notification_sent or success
                                     
-                                    # Notificar criador
+                                    # Notificar criador (só se for diferente de assigned_to)
                                     if task.created_by and task.created_by != task.assigned_to:
+                                        logger.info(f'   📤 Notificando created_by: {task.created_by.email}')
                                         success = _notify_task_user(task, task.created_by, is_reminder=True)
+                                        if success:
+                                            notifications_count += 1
                                         notification_sent = notification_sent or success
+                                    elif task.created_by and task.created_by == task.assigned_to:
+                                        logger.info(f'   ⏭️ Pulando created_by (mesmo usuário de assigned_to)')
                                     
                                     # ✅ NOVO: Notificar contatos relacionados (se habilitado)
                                     # Verificar se notificação de contatos está habilitada no metadata
@@ -265,10 +291,16 @@ class CampaignsConfig(AppConfig):
                                     
                                     # ✅ MELHORIA: Só marcar como notificada se pelo menos uma notificação foi enviada com sucesso
                                     if notification_sent:
-                                        task.notification_sent = True
-                                        task.save(update_fields=['notification_sent'])
-                                        count_reminder += 1
-                                        logger.info(f'✅ [TASK NOTIFICATIONS] Lembrete enviado e marcado como notificado')
+                                        # ✅ CORREÇÃO: Usar select_for_update para garantir atomicidade
+                                        with transaction.atomic():
+                                            task.refresh_from_db()
+                                            if not task.notification_sent:  # Double-check
+                                                task.notification_sent = True
+                                                task.save(update_fields=['notification_sent'])
+                                                count_reminder += 1
+                                                logger.info(f'✅ [TASK NOTIFICATIONS] Lembrete enviado ({notifications_count} notificação(ões)) e marcado como notificado')
+                                            else:
+                                                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Tarefa já estava marcada como notificada (race condition evitada)')
                                     else:
                                         logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma notificação foi enviada com sucesso, mantendo notification_sent=False para retry')
                                     
@@ -276,7 +308,7 @@ class CampaignsConfig(AppConfig):
                                     logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar lembrete para tarefa {task.id}: {e}', exc_info=True)
                             
                             # ✅ NOVO: Processar notificações no momento exato do compromisso
-                            for task in tasks_exact_time:
+                            for task in tasks_exact_time_list:
                                 try:
                                     task.refresh_from_db()
                                     if task.status in ['completed', 'cancelled']:
