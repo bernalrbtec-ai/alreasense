@@ -635,7 +635,8 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   }
 
   // 📄 DOCUMENTO (estilo WhatsApp - vertical com ícone grande)
-  const filename = attachment.original_filename || 'document';
+  // ✅ MELHORIA: Usar nome original ou fallback melhor
+  const filename = attachment.original_filename || attachment.mime_type?.split('/')[1] || 'document';
   const fileExt = filename.toLowerCase().split('.').pop() || '';
   const metadata = attachment.metadata || {};
   const fileUrl = (attachment.file_url || '').trim();
@@ -710,6 +711,12 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
       <div className="attachment-preview document max-w-xs rounded-lg border border-gray-200 bg-gray-50 p-4">
         <div className="flex flex-col items-center gap-3 text-gray-500">
           <div className="w-12 h-12 rounded-full border-4 border-gray-200 border-t-gray-400 animate-spin" />
+          {/* ✅ MELHORIA: Mostrar nome do arquivo mesmo durante processamento */}
+          {filename && filename !== 'document' && (
+            <p className="text-sm font-medium text-gray-700 text-center max-w-full truncate px-2" title={filename}>
+              {filename}
+            </p>
+          )}
           <p className="text-sm font-medium">Processando arquivo...</p>
           <p className="text-xs text-center opacity-70">Você será notificado automaticamente assim que o download estiver disponível.</p>
         </div>
@@ -921,9 +928,14 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           <FileText className={docStyle.iconColor} size={40} />
         </div>
         
+        {/* Nome do arquivo */}
+        <p className="text-xs font-medium text-gray-700 mb-1 text-center max-w-full truncate px-2" title={filename}>
+          {filename}
+        </p>
+        
         {/* Tamanho do arquivo */}
         <p className="text-xs text-gray-500 mb-3">
-          {formatFileSize(attachment.size_bytes)}
+          {attachment.size_bytes > 0 ? formatFileSize(attachment.size_bytes) : 'Processando...'}
         </p>
         
         {/* Botões de ação */}

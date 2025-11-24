@@ -1083,6 +1083,8 @@ async def handle_process_incoming_media(
                 'thumbnail_url': None,  # ✅ Removido: não geramos thumbnail mais (padronizado com ENVIO)
                 'mime_type': content_type,
                 'file_type': media_type,
+                'size_bytes': len(processed_data),  # ✅ NOVO: Incluir tamanho do arquivo
+                'original_filename': filename,  # ✅ NOVO: Incluir nome original do arquivo
                 'metadata': metadata_for_ws  # ✅ Incluir metadata sem flag processing
             }
         }

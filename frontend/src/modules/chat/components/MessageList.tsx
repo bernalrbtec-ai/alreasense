@@ -396,8 +396,14 @@ export function MessageList() {
           )}
         </div>
         <div className="flex-1 min-w-0">
+          {/* ✅ MELHORIA: Mostrar nome do arquivo quando disponível */}
+          {!isDownloading && attachment.original_filename && (
+            <p className="text-xs font-medium text-gray-700 truncate mb-0.5" title={attachment.original_filename}>
+              {attachment.original_filename}
+            </p>
+          )}
           <p className="text-xs text-gray-500">
-            {isDownloading ? 'Baixando...' : formatFileSize(attachment.size_bytes)}
+            {isDownloading ? 'Baixando...' : (attachment.size_bytes > 0 ? formatFileSize(attachment.size_bytes) : 'Processando...')}
           </p>
         </div>
         {!isDownloading && (

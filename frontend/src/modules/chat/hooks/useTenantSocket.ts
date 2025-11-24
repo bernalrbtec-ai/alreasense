@@ -210,11 +210,13 @@ export function useTenantSocket() {
             const updatedMetadata = { ...(data.data.metadata || {}) };
             delete updatedMetadata.processing;
             
-            // Atualizar attachment
+            // ✅ MELHORIA: Atualizar todos os campos relevantes, incluindo size_bytes e original_filename
             updateAttachment(attachmentId, {
               file_url: fileUrl,
               thumbnail_url: data.data.thumbnail_url,
               mime_type: data.data.mime_type,
+              size_bytes: data.data.size_bytes || existingAttachment?.size_bytes || 0,  // ✅ NOVO: Atualizar tamanho
+              original_filename: data.data.original_filename || existingAttachment?.original_filename || 'arquivo',  // ✅ NOVO: Atualizar nome original
               metadata: updatedMetadata,  // ✅ Metadata sem flag processing
             } as any);
             
