@@ -254,6 +254,11 @@ class CampaignsConfig(AppConfig):
                                         success = _notify_task_user(task, task.created_by, is_reminder=True)
                                         notification_sent = notification_sent or success
                                     
+                                    # ✅ NOVO: Notificar contatos relacionados
+                                    if task.related_contacts.exists():
+                                        contacts_notified = _notify_task_contacts(task, is_reminder=True)
+                                        notification_sent = notification_sent or contacts_notified
+                                    
                                     # ✅ MELHORIA: Só marcar como notificada se pelo menos uma notificação foi enviada com sucesso
                                     if notification_sent:
                                         task.notification_sent = True
@@ -290,6 +295,11 @@ class CampaignsConfig(AppConfig):
                                     if task.created_by and task.created_by != task.assigned_to:
                                         success = _notify_task_user(task, task.created_by, is_reminder=False)
                                         notification_sent = notification_sent or success
+                                    
+                                    # ✅ NOVO: Notificar contatos relacionados
+                                    if task.related_contacts.exists():
+                                        contacts_notified = _notify_task_contacts(task, is_reminder=False)
+                                        notification_sent = notification_sent or contacts_notified
                                     
                                     if notification_sent:
                                         count_exact += 1
