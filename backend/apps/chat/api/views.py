@@ -9,6 +9,7 @@ from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
 from django.utils import timezone
@@ -1893,10 +1894,6 @@ def chat_metrics_overview(request):
         'timestamp': timezone.now().isoformat()
     })
 
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated, CanAccessChat])
-from rest_framework.views import APIView
 
 class UploadPresignedUrlView(APIView):
     """
