@@ -254,7 +254,7 @@ export function VoiceRecorder({
       console.log('✅ [VOICE] Upload S3 completo');
 
       // 3️⃣ Confirmar backend
-      const { data: confirmData } = await api.post('/chat/messages/confirm-upload/', {
+      const { data: confirmData } = await api.post('/chat/confirm-upload/', {
         conversation_id: conversationId,
         attachment_id: presignedData.attachment_id,
         s3_key: presignedData.s3_key,

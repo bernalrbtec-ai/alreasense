@@ -2257,7 +2257,18 @@ def chat_ping_evolution(request):
             )
     
     @action(detail=False, methods=['post'], url_path='confirm-upload')
-    def confirm_upload(self, request):
+    def confirm_upload_old(self, request):
+        """Método antigo - mantido para referência"""
+        pass
+
+class ConfirmUploadView(APIView):
+    """
+    View baseada em classe para confirm-upload (rota customizada).
+    Confirma upload e cria MessageAttachment + envia para Evolution API.
+    """
+    permission_classes = [IsAuthenticated, CanAccessChat]
+    
+    def post(self, request):
         """
         Confirma upload e cria MessageAttachment + envia para Evolution API.
         
@@ -2278,11 +2289,18 @@ def chat_ping_evolution(request):
         }
         """
         import logging
+        import uuid
         from django.utils import timezone
         from datetime import timedelta
         from apps.chat.utils.s3 import S3Manager
+        from apps.chat.models import Conversation, Message, MessageAttachment
+        from apps.chat.api.serializers import MessageSerializer, MessageAttachmentSerializer
+        from django.conf import settings
         
         logger = logging.getLogger(__name__)
+        
+        # Log CRÍTICO para debug
+        logger.error(f"🚨 [CONFIRM UPLOAD VIEW] FUNÇÃO CHAMADA! method={request.method}, path={request.path}, user={request.user.email if hasattr(request, 'user') else 'None'}")
         
         # Validar dados
         conversation_id = request.data.get('conversation_id')
@@ -2401,8 +2419,8 @@ def chat_ping_evolution(request):
                 'attachment_filename': filename
             }
         )
-            
-            # Criar attachment
+        
+        # Criar attachment
         try:
             logger.info(f"📤 [UPLOAD] Criando attachment com ID: {attachment_id}")
             
