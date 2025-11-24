@@ -422,7 +422,7 @@ class CampaignsConfig(AppConfig):
                                         
                                         # Verificar se já passou do horário (não notificar se passou mais de 1 minuto)
                                         if locked_task.due_date < now - timedelta(minutes=1):
-                                            continue
+                                        continue
                                         
                                         # ✅ CRÍTICO: Marcar como notificada IMEDIATAMENTE para evitar que outras instâncias processem
                                         locked_task.notification_sent = True
@@ -513,6 +513,22 @@ class CampaignsConfig(AppConfig):
                         except Exception as e:
                             logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao verificar tarefas: {e}', exc_info=True)
                         
+                        # ========== VERIFICAR NOTIFICAÇÕES DIÁRIAS PERSONALIZADAS ==========
+                        try:
+                            from apps.notifications.models import UserNotificationPreferences
+                            from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
+                            
+                            # Obter hora atual no timezone local (America/Sao_Paulo)
+                            local_now = timezone.localtime(now)
+                            current_time = local_now.time()
+                            current_date = local_now.date()
+                            
+                            # Verificar notificações diárias (resumo diário)
+                            check_user_daily_summaries(current_time, current_date)
+                            
+                        except Exception as e:
+                            logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao verificar notificações diárias: {e}', exc_info=True)
+                        
                         # Aguardar 60 segundos antes da próxima verificação
                         time.sleep(60)
                         
@@ -558,7 +574,7 @@ class CampaignsConfig(AppConfig):
                     
                     # ✅ MELHORIA: Mensagem diferente para lembrete vs compromisso chegando
                     if is_reminder:
-                        message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+                    message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
                         notification_type = "lembrete"
                     else:
                         message = f"⏰ Compromisso chegando: {task.title}\n📅 {due_time}"
@@ -652,7 +668,7 @@ class CampaignsConfig(AppConfig):
                     
                     if is_reminder:
                         message_text = f"🔔 *Lembrete de Tarefa*\n\n"
-                    else:
+                            else:
                         message_text = f"⏰ *Compromisso Agendado*\n\n"
                     
                     message_text += f"*{task.title}*\n\n"
@@ -714,13 +730,13 @@ class CampaignsConfig(AppConfig):
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
-                            response = requests.post(url, json=payload, headers=headers, timeout=10)
+                    response = requests.post(url, json=payload, headers=headers, timeout=10)
                             
-                            if response.status_code in [200, 201]:
+                    if response.status_code in [200, 201]:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone_clean} (usuário: {user.email}, ID: {user.id})')
                                 notification_sent = True
                                 break
-                            else:
+                    else:
                                 logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
                                 if attempt < max_retries - 1:
                                     time.sleep(2)  # Aguardar 2 segundos antes de tentar novamente
@@ -918,19 +934,316 @@ class CampaignsConfig(AppConfig):
             
             return contacts_notified
         
+        # ========== FUNÇÕES DE NOTIFICAÇÕES DIÁRIAS PERSONALIZADAS ==========
+        
+        def check_user_daily_summaries(current_time, current_date):
+            """
+            Verifica e envia resumos diários para usuários individuais.
+            
+            ⚠️ VALIDAÇÕES:
+            - Verifica apenas usuários ativos
+            - Verifica apenas tenants ativos
+            - Considera timezone do tenant
+            - Janela de ±1 minuto para evitar perda de notificações
+            
+            Args:
+                current_time: time object no timezone local
+                current_date: date object no timezone local
+            """
+            from apps.notifications.models import UserNotificationPreferences
+            from datetime import datetime, timedelta
+            
+            # Janela de ±1 minuto para evitar perda de notificações devido a delays
+            time_window_start = (datetime.combine(datetime.min, current_time) - timedelta(minutes=1)).time()
+            time_window_end = (datetime.combine(datetime.min, current_time) + timedelta(minutes=1)).time()
+            
+            # Buscar preferências ativas no horário atual
+            preferences = UserNotificationPreferences.objects.filter(
+                daily_summary_enabled=True,
+                daily_summary_time__isnull=False,
+                daily_summary_time__gte=time_window_start,
+                daily_summary_time__lte=time_window_end,
+                tenant__is_active=True,
+                user__is_active=True
+            ).select_related('user', 'tenant', 'user__tenant')
+            
+            count = 0
+            for pref in preferences:
+                try:
+                    # ✅ VALIDAÇÃO: Verificar se pelo menos um canal está habilitado
+                    has_whatsapp = pref.notify_via_whatsapp and pref.user.notify_whatsapp
+                    has_websocket = pref.notify_via_websocket
+                    has_email = pref.notify_via_email
+                    
+                    if not (has_whatsapp or has_websocket or has_email):
+                        logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Pulando {pref.user.email} - Nenhum canal habilitado')
+                        continue
+                    
+                    # ✅ VALIDAÇÃO: Verificar se horário está configurado
+                    if not pref.daily_summary_time:
+                        logger.warning(f'⚠️ [DAILY NOTIFICATIONS] {pref.user.email} tem resumo habilitado mas sem horário configurado')
+                        continue
+                    
+                    send_user_daily_summary(pref.user, pref, current_date)
+                    count += 1
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar resumo para {pref.user.email}: {e}', exc_info=True)
+            
+            if count > 0:
+                logger.info(f'✅ [DAILY NOTIFICATIONS] {count} resumo(s) diário(s) enviado(s) para usuários')
+        
+        
+        def send_user_daily_summary(user, preferences, current_date):
+            """
+            Envia resumo diário de tarefas para o usuário.
+            
+            ⚠️ VALIDAÇÕES:
+            - Aplica filtros baseados nas preferências do usuário
+            - Considera apenas tarefas do tenant do usuário
+            - Filtra tarefas do dia atual (no timezone local)
+            - Agrupa tarefas por status para facilitar leitura
+            
+            Args:
+                user: Instância de User
+                preferences: Instância de UserNotificationPreferences
+                current_date: date object no timezone local
+            """
+            from apps.contacts.models import Task
+            from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
+            
+            # Buscar tarefas do usuário (apenas do tenant)
+            tasks = Task.objects.filter(
+                assigned_to=user,
+                tenant=user.tenant
+            ).exclude(
+                status__in=['cancelled']  # Sempre excluir canceladas
+            ).select_related('department', 'created_by', 'tenant')
+            
+            # Aplicar filtros baseados nas preferências
+            if not preferences.notify_pending:
+                tasks = tasks.exclude(status='pending')
+            if not preferences.notify_in_progress:
+                tasks = tasks.exclude(status='in_progress')
+            if not preferences.notify_completed:
+                tasks = tasks.exclude(status='completed')
+            
+            # Filtrar tarefas do dia (hoje no timezone local)
+            local_now = timezone.localtime(timezone.now())
+            tasks_today = tasks.filter(
+                due_date__date=current_date
+            )
+            
+            # Tarefas atrasadas (independente da data)
+            overdue_tasks = tasks.filter(
+                due_date__lt=local_now,
+                status__in=['pending', 'in_progress']
+            )
+            
+            # Agrupar por status
+            tasks_by_status = {
+                'pending': list(tasks_today.filter(status='pending')[:10]),  # Limitar para não sobrecarregar
+                'in_progress': list(tasks_today.filter(status='in_progress')[:10]),
+                'completed': list(tasks_today.filter(status='completed')[:10]),
+                'overdue': list(overdue_tasks[:10]),
+            }
+            
+            # ✅ VALIDAÇÃO: Verificar se há tarefas para notificar
+            total_tasks = sum(len(tasks) for tasks in tasks_by_status.values())
+            if total_tasks == 0:
+                logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Nenhuma tarefa para {user.email} hoje')
+                return
+            
+            # Formatar mensagem
+            message = format_daily_summary_message(user, tasks_by_status, current_date)
+            
+            # ✅ VALIDAÇÃO: Verificar se mensagem não está vazia
+            if not message or len(message.strip()) == 0:
+                logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Mensagem vazia para {user.email}, pulando envio')
+                return
+            
+            # ✅ CONTROLE: Enviar notificações com tratamento de erros individual
+            notifications_sent = 0
+            notifications_failed = 0
+            
+            # WhatsApp
+            if preferences.notify_via_whatsapp and user.notify_whatsapp:
+                try:
+                    success = send_whatsapp_notification(user, message)
+                    if success:
+                        notifications_sent += 1
+                    else:
+                        notifications_failed += 1
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WhatsApp para {user.email}: {e}', exc_info=True)
+                    notifications_failed += 1
+            
+            # WebSocket
+            if preferences.notify_via_websocket:
+                try:
+                    success = send_websocket_notification(user, 'daily_summary', {
+                        'date': current_date.isoformat(),
+                        'tasks': {
+                            'pending': len(tasks_by_status['pending']),
+                            'in_progress': len(tasks_by_status['in_progress']),
+                            'completed': len(tasks_by_status['completed']),
+                            'overdue': len(tasks_by_status['overdue']),
+                        }
+                    })
+                    if success:
+                        notifications_sent += 1
+                    else:
+                        notifications_failed += 1
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WebSocket para {user.email}: {e}', exc_info=True)
+                    notifications_failed += 1
+            
+            # Email (se implementado)
+            if preferences.notify_via_email:
+                try:
+                    # TODO: Implementar envio de email
+                    logger.debug(f'📧 [DAILY NOTIFICATIONS] Email não implementado ainda para {user.email}')
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar Email para {user.email}: {e}', exc_info=True)
+                    notifications_failed += 1
+            
+            # ✅ CONTROLE: Logar resultado final
+            if notifications_sent > 0:
+                logger.info(f'✅ [DAILY NOTIFICATIONS] Resumo diário enviado para {user.email} ({notifications_sent} canal(is) enviado(s), {notifications_failed} falhou(aram))')
+            else:
+                logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Nenhuma notificação enviada para {user.email} (todos os {notifications_failed} canal(is) falharam)')
+        
+        
+        def format_daily_summary_message(user, tasks_by_status, current_date):
+            """
+            Formata mensagem de resumo diário para WhatsApp.
+            
+            ⚠️ FORMATO:
+            - Usa formatação Markdown do WhatsApp (*negrito*, _itálico_)
+            - Limita quantidade de tarefas por seção (máx 5)
+            - Inclui emojis para facilitar leitura
+            - Formata data e hora no timezone local
+            
+            Args:
+                user: Instância de User
+                tasks_by_status: Dict com listas de tarefas agrupadas por status
+                current_date: date object no timezone local
+            
+            Returns:
+                str: Mensagem formatada para WhatsApp
+            """
+            date_str = current_date.strftime('%d/%m/%Y')
+            weekday = current_date.strftime('%A')  # Nome do dia da semana
+            
+            # Traduzir dia da semana (opcional)
+            weekdays_pt = {
+                'Monday': 'Segunda-feira',
+                'Tuesday': 'Terça-feira',
+                'Wednesday': 'Quarta-feira',
+                'Thursday': 'Quinta-feira',
+                'Friday': 'Sexta-feira',
+                'Saturday': 'Sábado',
+                'Sunday': 'Domingo',
+            }
+            weekday_pt = weekdays_pt.get(weekday, weekday)
+            
+            # ✅ UX: Saudação personalizada baseada no horário
+            current_hour = timezone.localtime(timezone.now()).hour
+            if 5 <= current_hour < 12:
+                greeting = "Bom dia"
+            elif 12 <= current_hour < 18:
+                greeting = "Boa tarde"
+            else:
+                greeting = "Boa noite"
+            
+            user_name = user.first_name or user.email.split('@')[0]
+            
+            # ✅ UX: Mensagem mais amigável e motivacional
+            message = f"👋 *{greeting}, {user_name}!*\n\n"
+            message += f"📋 *Resumo do seu dia - {weekday_pt}, {date_str}*\n\n"
+            
+            # Tarefas atrasadas (prioridade máxima)
+            overdue = tasks_by_status['overdue']
+            if overdue:
+                message += f"⚠️ *Tarefas Atrasadas: {len(overdue)}*\n"
+                for task in overdue[:5]:
+                    local_due = timezone.localtime(task.due_date)
+                    days_overdue = (timezone.now().date() - local_due.date()).days
+                    message += f"  • {task.title}"
+                    if days_overdue > 0:
+                        message += f" ({days_overdue} dia(s) atrasada)"
+                    message += "\n"
+                if len(overdue) > 5:
+                    message += f"  ... e mais {len(overdue) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # Tarefas pendentes
+            pending = tasks_by_status['pending']
+            if pending:
+                message += f"📝 *Tarefas para hoje: {len(pending)}*\n"
+                for task in pending[:5]:
+                    local_due = timezone.localtime(task.due_date)
+                    due_time = local_due.strftime('%H:%M')
+                    message += f"  • {task.title} às {due_time}\n"
+                if len(pending) > 5:
+                    message += f"  ... e mais {len(pending) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # Tarefas em progresso
+            in_progress = tasks_by_status['in_progress']
+            if in_progress:
+                message += f"🔄 *Em andamento: {len(in_progress)}*\n"
+                for task in in_progress[:5]:
+                    message += f"  • {task.title}\n"
+                if len(in_progress) > 5:
+                    message += f"  ... e mais {len(in_progress) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # Tarefas concluídas
+            completed = tasks_by_status['completed']
+            if completed:
+                message += f"✅ *Concluídas hoje: {len(completed)}*\n"
+                for task in completed[:5]:
+                    message += f"  • {task.title}\n"
+                if len(completed) > 5:
+                    message += f"  ... e mais {len(completed) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # ✅ UX: Mensagem motivacional baseada no progresso
+            total = len(overdue) + len(pending) + len(in_progress) + len(completed)
+            completed_count = len(completed)
+            
+            if completed_count > 0 and total > 0:
+                progress = (completed_count / total) * 100
+                if progress >= 50:
+                    message += f"🎉 *Ótimo trabalho! Você já concluiu {int(progress)}% das suas tarefas.*\n\n"
+                elif progress >= 25:
+                    message += f"💪 *Continue assim! Você já concluiu {int(progress)}% das suas tarefas.*\n\n"
+            
+            message += f"📊 *Total: {total} tarefa(s) no seu dia*\n\n"
+            
+            # ✅ UX: Call to action amigável
+            if overdue:
+                message += "💡 *Dica:* Priorize as tarefas atrasadas para manter tudo em dia!"
+            elif pending:
+                message += "✨ *Bom dia!* Você tem um dia produtivo pela frente!"
+            elif completed_count == total and total > 0:
+                message += "🌟 *Parabéns!* Você concluiu todas as suas tarefas de hoje!"
+            
+            return message
+        
         # ✅ PROTEÇÃO: Iniciar threads apenas se ainda não foram iniciadas
         if not _recovery_started:
             recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True, name="CampaignRecovery")
-            recovery_thread.start()
+        recovery_thread.start()
             _recovery_started = True
             logger.info("✅ [APPS] Thread de recuperação de campanhas iniciada")
         
         # ✅ NOVO: Iniciar thread de verificação de campanhas agendadas
         if not _scheduler_started:
             scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True, name="CampaignScheduler")
-            scheduler_thread.start()
+        scheduler_thread.start()
             _scheduler_started = True
             logger.info("=" * 60)
-            logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
+        logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
             logger.info("✅ [APPS] Verificador de notificações de tarefas iniciado")
             logger.info("=" * 60)

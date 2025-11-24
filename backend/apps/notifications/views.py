@@ -5,7 +5,10 @@ from rest_framework.response import Response
 from django.contrib.auth import get_user_model
 from django.db import models
 
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, WhatsAppConnectionLog
+from .models import (
+    NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, 
+    WhatsAppConnectionLog, UserNotificationPreferences, DepartmentNotificationPreferences
+)
 from .serializers import (
     NotificationTemplateSerializer,
     WhatsAppInstanceSerializer,
@@ -13,7 +16,9 @@ from .serializers import (
     SendNotificationSerializer,
     SMTPConfigSerializer,
     TestSMTPSerializer,
-    WhatsAppConnectionLogSerializer
+    WhatsAppConnectionLogSerializer,
+    UserNotificationPreferencesSerializer,
+    DepartmentNotificationPreferencesSerializer
 )
 from apps.billing.decorators import require_product
 
@@ -515,5 +520,113 @@ class SMTPConfigViewSet(viewsets.ModelViewSet):
         smtp_config.save()
         
         serializer = self.get_serializer(smtp_config)
+        return Response(serializer.data)
+
+
+# ========== SISTEMA DE NOTIFICAÇÕES PERSONALIZADAS ==========
+
+class UserNotificationPreferencesViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar preferências de notificação do usuário.
+    """
+    serializer_class = UserNotificationPreferencesSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        return UserNotificationPreferences.objects.filter(
+            user=self.request.user,
+            tenant=self.request.user.tenant
+        )
+    
+    def get_object(self):
+        # Sempre retorna ou cria as preferências do usuário atual
+        obj, created = UserNotificationPreferences.objects.get_or_create(
+            user=self.request.user,
+            tenant=self.request.user.tenant,
+            defaults={
+                'daily_summary_enabled': False,
+                'agenda_reminder_enabled': False,
+            }
+        )
+        return obj
+    
+    @action(detail=False, methods=['get', 'patch', 'put'])
+    def mine(self, request):
+        """Retorna ou atualiza as preferências do usuário atual."""
+        obj, created = UserNotificationPreferences.objects.get_or_create(
+            user=request.user,
+            tenant=request.user.tenant,
+            defaults={
+                'daily_summary_enabled': False,
+                'agenda_reminder_enabled': False,
+            }
+        )
+        
+        if request.method in ['PATCH', 'PUT']:
+            serializer = self.get_serializer(obj, data=request.data, partial=True)
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        
+        serializer = self.get_serializer(obj)
+        return Response(serializer.data)
+
+
+class DepartmentNotificationPreferencesViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet para gerenciar preferências de notificação do departamento.
+    Apenas gestores podem configurar.
+    """
+    serializer_class = DepartmentNotificationPreferencesSerializer
+    permission_classes = [IsAuthenticated]
+    
+    def get_queryset(self):
+        user = self.request.user
+        
+        # Admin vê todos os departamentos do tenant
+        if user.role == 'admin':
+            return DepartmentNotificationPreferences.objects.filter(
+                tenant=user.tenant
+            ).select_related('department')
+        
+        # Gerente vê apenas departamentos que gerencia
+        if user.role == 'gerente':
+            managed_departments = user.departments.filter(tenant=user.tenant, is_active=True)
+            return DepartmentNotificationPreferences.objects.filter(
+                department__in=managed_departments,
+                tenant=user.tenant
+            ).select_related('department')
+        
+        # Agente não vê nenhum
+        return DepartmentNotificationPreferences.objects.none()
+    
+    @action(detail=False, methods=['get'])
+    def my_departments(self, request):
+        """Retorna preferências de todos os departamentos que o usuário gerencia."""
+        user = request.user
+        
+        # Admin gerencia todos os departamentos do tenant
+        if user.role == 'admin':
+            from apps.authn.models import Department
+            managed_departments = Department.objects.filter(tenant=user.tenant, is_active=True)
+        # Gerente gerencia apenas departamentos onde está vinculado
+        elif user.role == 'gerente':
+            managed_departments = user.departments.filter(tenant=user.tenant, is_active=True)
+        else:
+            managed_departments = []
+        
+        preferences = []
+        for dept in managed_departments:
+            pref, created = DepartmentNotificationPreferences.objects.get_or_create(
+                department=dept,
+                tenant=request.user.tenant,
+                defaults={
+                    'daily_summary_enabled': False,
+                    'agenda_reminder_enabled': False,
+                }
+            )
+            preferences.append(pref)
+        
+        serializer = self.get_serializer(preferences, many=True)
         return Response(serializer.data)
 

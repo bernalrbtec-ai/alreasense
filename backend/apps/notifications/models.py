@@ -9,6 +9,228 @@ import uuid
 User = get_user_model()
 
 
+# ========== SISTEMA DE NOTIFICAÇÕES PERSONALIZADAS ==========
+
+class UserNotificationPreferences(models.Model):
+    """
+    Preferências de notificação individuais do usuário.
+    Cada usuário pode configurar suas próprias notificações.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(
+        User,
+        on_delete=models.CASCADE,
+        related_name='notification_preferences',
+        verbose_name='Usuário'
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='user_notification_preferences',
+        verbose_name='Tenant'
+    )
+    
+    # Horários de resumo diário
+    daily_summary_enabled = models.BooleanField(
+        default=False,
+        verbose_name='Resumo diário ativado'
+    )
+    daily_summary_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Horário do resumo diário',
+        help_text='Ex: 07:00'
+    )
+    
+    # Lembrete de agenda
+    agenda_reminder_enabled = models.BooleanField(
+        default=False,
+        verbose_name='Lembrete de agenda ativado'
+    )
+    agenda_reminder_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Horário do lembrete de agenda',
+        help_text='Ex: 08:00'
+    )
+    
+    # Tipos de notificação
+    notify_pending = models.BooleanField(
+        default=True,
+        verbose_name='Notificar tarefas pendentes'
+    )
+    notify_in_progress = models.BooleanField(
+        default=True,
+        verbose_name='Notificar tarefas em progresso'
+    )
+    notify_status_changes = models.BooleanField(
+        default=True,
+        verbose_name='Notificar mudanças de status'
+    )
+    notify_completed = models.BooleanField(
+        default=False,
+        verbose_name='Notificar tarefas concluídas'
+    )
+    notify_overdue = models.BooleanField(
+        default=True,
+        verbose_name='Notificar tarefas atrasadas'
+    )
+    
+    # Canais de notificação
+    notify_via_whatsapp = models.BooleanField(
+        default=True,
+        verbose_name='Notificar via WhatsApp'
+    )
+    notify_via_websocket = models.BooleanField(
+        default=True,
+        verbose_name='Notificar via WebSocket'
+    )
+    notify_via_email = models.BooleanField(
+        default=False,
+        verbose_name='Notificar via Email'
+    )
+    
+    # Metadados
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'notifications_user_notification_preferences'
+        verbose_name = 'Preferência de Notificação do Usuário'
+        verbose_name_plural = 'Preferências de Notificação dos Usuários'
+        unique_together = ['user', 'tenant']
+        indexes = [
+            models.Index(fields=['user', 'tenant']),
+            models.Index(fields=['daily_summary_enabled', 'daily_summary_time']),
+            models.Index(fields=['agenda_reminder_enabled', 'agenda_reminder_time']),
+        ]
+    
+    def __str__(self):
+        return f'Notificações de {self.user.email}'
+
+
+class DepartmentNotificationPreferences(models.Model):
+    """
+    Preferências de notificação do departamento para gestores.
+    Apenas gestores do departamento podem configurar.
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    department = models.OneToOneField(
+        'authn.Department',
+        on_delete=models.CASCADE,
+        related_name='notification_preferences',
+        verbose_name='Departamento'
+    )
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='department_notification_preferences',
+        verbose_name='Tenant'
+    )
+    
+    # Horários de resumo diário
+    daily_summary_enabled = models.BooleanField(
+        default=False,
+        verbose_name='Resumo diário ativado'
+    )
+    daily_summary_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Horário do resumo diário',
+        help_text='Ex: 07:00'
+    )
+    
+    # Lembrete de agenda
+    agenda_reminder_enabled = models.BooleanField(
+        default=False,
+        verbose_name='Lembrete de agenda ativado'
+    )
+    agenda_reminder_time = models.TimeField(
+        null=True,
+        blank=True,
+        verbose_name='Horário do lembrete de agenda',
+        help_text='Ex: 08:00'
+    )
+    
+    # Tipos de notificação
+    notify_pending = models.BooleanField(
+        default=True,
+        verbose_name='Notificar tarefas pendentes'
+    )
+    notify_in_progress = models.BooleanField(
+        default=True,
+        verbose_name='Notificar tarefas em progresso'
+    )
+    notify_status_changes = models.BooleanField(
+        default=True,
+        verbose_name='Notificar mudanças de status'
+    )
+    notify_completed = models.BooleanField(
+        default=False,
+        verbose_name='Notificar tarefas concluídas'
+    )
+    notify_overdue = models.BooleanField(
+        default=True,
+        verbose_name='Notificar tarefas atrasadas'
+    )
+    
+    # Filtros avançados para gestores
+    notify_only_critical = models.BooleanField(
+        default=False,
+        verbose_name='Apenas tarefas críticas',
+        help_text='Se True, apenas tarefas com prioridade alta ou atrasadas'
+    )
+    notify_only_assigned = models.BooleanField(
+        default=False,
+        verbose_name='Apenas tarefas atribuídas',
+        help_text='Se True, apenas tarefas com assigned_to definido'
+    )
+    max_tasks_per_notification = models.IntegerField(
+        default=20,
+        verbose_name='Máximo de tarefas por notificação',
+        help_text='Limite para evitar mensagens muito longas'
+    )
+    
+    # Canais de notificação
+    notify_via_whatsapp = models.BooleanField(
+        default=True,
+        verbose_name='Notificar via WhatsApp'
+    )
+    notify_via_websocket = models.BooleanField(
+        default=True,
+        verbose_name='Notificar via WebSocket'
+    )
+    notify_via_email = models.BooleanField(
+        default=False,
+        verbose_name='Notificar via Email'
+    )
+    
+    # Metadados
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='created_department_notification_preferences',
+        verbose_name='Criado por'
+    )
+    
+    class Meta:
+        db_table = 'notifications_department_notification_preferences'
+        verbose_name = 'Preferência de Notificação do Departamento'
+        verbose_name_plural = 'Preferências de Notificação dos Departamentos'
+        unique_together = ['department', 'tenant']
+        indexes = [
+            models.Index(fields=['department', 'tenant']),
+            models.Index(fields=['daily_summary_enabled', 'daily_summary_time']),
+            models.Index(fields=['agenda_reminder_enabled', 'agenda_reminder_time']),
+        ]
+    
+    def __str__(self):
+        return f'Notificações de {self.department.name}'
+
+
 class NotificationTemplate(models.Model):
     """Template for email and WhatsApp notifications."""
     

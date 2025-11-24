@@ -1,5 +1,8 @@
 from rest_framework import serializers
-from .models import NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, WhatsAppConnectionLog
+from .models import (
+    NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, 
+    WhatsAppConnectionLog, UserNotificationPreferences, DepartmentNotificationPreferences
+)
 
 
 class NotificationTemplateSerializer(serializers.ModelSerializer):
@@ -220,4 +223,108 @@ class TestSMTPSerializer(serializers.Serializer):
     """Serializer for testing SMTP configuration."""
     
     test_email = serializers.EmailField(required=True, help_text="Email para receber o teste")
+
+
+# ========== SISTEMA DE NOTIFICAÇÕES PERSONALIZADAS ==========
+
+class UserNotificationPreferencesSerializer(serializers.ModelSerializer):
+    """Serializer para preferências de notificação do usuário."""
+    
+    class Meta:
+        model = UserNotificationPreferences
+        fields = [
+            'id',
+            'daily_summary_enabled',
+            'daily_summary_time',
+            'agenda_reminder_enabled',
+            'agenda_reminder_time',
+            'notify_pending',
+            'notify_in_progress',
+            'notify_status_changes',
+            'notify_completed',
+            'notify_overdue',
+            'notify_via_whatsapp',
+            'notify_via_websocket',
+            'notify_via_email',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['user'] = request.user
+        validated_data['tenant'] = request.user.tenant
+        return super().create(validated_data)
+
+
+class DepartmentNotificationPreferencesSerializer(serializers.ModelSerializer):
+    """Serializer para preferências de notificação do departamento."""
+    
+    department_name = serializers.CharField(source='department.name', read_only=True)
+    can_manage = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DepartmentNotificationPreferences
+        fields = [
+            'id',
+            'department',
+            'department_name',
+            'daily_summary_enabled',
+            'daily_summary_time',
+            'agenda_reminder_enabled',
+            'agenda_reminder_time',
+            'notify_pending',
+            'notify_in_progress',
+            'notify_status_changes',
+            'notify_completed',
+            'notify_overdue',
+            'notify_only_critical',
+            'notify_only_assigned',
+            'max_tasks_per_notification',
+            'notify_via_whatsapp',
+            'notify_via_websocket',
+            'notify_via_email',
+            'can_manage',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at', 'can_manage']
+    
+    def get_can_manage(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user:
+            return False
+        # TODO: Implementar verificação de permissão quando criar utils
+        # from apps.authn.utils import can_manage_department_notifications
+        # return can_manage_department_notifications(request.user, obj.department)
+        # Por enquanto, verificar se é admin ou gerente
+        user = request.user
+        if user.role == 'admin':
+            return True
+        if user.role == 'gerente':
+            return user.departments.filter(id=obj.department.id).exists()
+        return False
+    
+    def validate_department(self, value):
+        request = self.context.get('request')
+        # TODO: Implementar validação de permissão quando criar utils
+        # from apps.authn.utils import can_manage_department_notifications
+        # if not can_manage_department_notifications(request.user, value):
+        #     raise serializers.ValidationError("Você não tem permissão para gerenciar notificações deste departamento.")
+        # Por enquanto, verificar se é admin ou gerente
+        user = request.user
+        if user.role == 'admin':
+            return value
+        if user.role == 'gerente':
+            if not user.departments.filter(id=value.id).exists():
+                raise serializers.ValidationError("Você não tem permissão para gerenciar notificações deste departamento.")
+            return value
+        raise serializers.ValidationError("Apenas administradores e gestores podem configurar notificações de departamento.")
+    
+    def create(self, validated_data):
+        request = self.context.get('request')
+        validated_data['tenant'] = request.user.tenant
+        validated_data['created_by'] = request.user
+        return super().create(validated_data)
 
