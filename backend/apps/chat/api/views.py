@@ -1901,12 +1901,101 @@ def chat_metrics_overview(request):
 def upload_presigned_url_view(request):
     """
     View function para upload-presigned-url (rota customizada).
-    Chama o método do MessageViewSet.
+    Gera presigned URL para upload direto no S3/MinIO.
     """
-    viewset = MessageViewSet()
-    viewset.request = request
-    viewset.format_kwarg = None
-    return viewset.get_upload_presigned_url(request)
+    import logging
+    import uuid
+    from datetime import timedelta
+    from django.utils import timezone
+    from apps.chat.utils.s3 import S3Manager
+    from apps.chat.models import Conversation
+    from django.conf import settings
+    
+    logger = logging.getLogger(__name__)
+    
+    # Log para debug
+    logger.info(f"📤 [PRESIGNED] Recebido request: method={request.method}, path={request.path}, data={request.data}")
+    
+    # Validar dados
+    conversation_id = request.data.get('conversation_id')
+    filename = request.data.get('filename')
+    content_type = request.data.get('content_type')
+    file_size = request.data.get('file_size', 0)
+    
+    if not all([conversation_id, filename, content_type]):
+        return Response(
+            {'error': 'conversation_id, filename e content_type são obrigatórios'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # Validar tamanho (max do settings)
+    max_size = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024
+    if file_size > max_size:
+        return Response(
+            {'error': f'Arquivo muito grande. Máximo: {max_size / 1024 / 1024}MB'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # Validar MIME
+    allowed_mime = getattr(settings, 'ATTACHMENTS_ALLOWED_MIME', '')
+    if allowed_mime:
+        allowed = [m.strip() for m in allowed_mime.split(',') if m.strip()]
+        def mime_ok(m):
+            return any((a.endswith('/*') and m.startswith(a[:-1])) or (a == m) for a in allowed)
+        if not mime_ok(content_type):
+            return Response(
+                {'error': 'Tipo de arquivo não permitido'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+    
+    # Buscar conversa
+    try:
+        conversation = Conversation.objects.get(
+            id=conversation_id,
+            tenant=request.user.tenant
+        )
+    except Conversation.DoesNotExist:
+        return Response(
+            {'error': 'Conversa não encontrada'},
+            status=status.HTTP_404_NOT_FOUND
+        )
+    
+    # Gerar caminho S3
+    attachment_id = uuid.uuid4()
+    file_ext = filename.split('.')[-1] if '.' in filename else ''
+    s3_key = f"chat/{request.user.tenant.id}/attachments/{attachment_id}.{file_ext}"
+    
+    # Gerar presigned URL
+    try:
+        s3_manager = S3Manager()
+        expires_upload = int(getattr(settings, 'S3_UPLOAD_URL_EXPIRES', 300))
+        upload_url = s3_manager.generate_presigned_url(
+            s3_key,
+            expiration=expires_upload,
+            http_method='PUT'
+        )
+        
+        logger.info(f"✅ [PRESIGNED] URL gerada: {s3_key}")
+        
+        return Response({
+            'upload_url': upload_url,
+            'attachment_id': str(attachment_id),
+            's3_key': s3_key,
+            'expires_in': expires_upload,
+            'instructions': {
+                'method': 'PUT',
+                'headers': {
+                    'Content-Type': content_type
+                }
+            }
+        })
+    
+    except Exception as e:
+        logger.error(f"❌ [PRESIGNED] Erro ao gerar URL: {e}", exc_info=True)
+        return Response(
+            {'error': f'Erro ao gerar URL de upload: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
 
 def chat_ping_evolution(request):
     """
