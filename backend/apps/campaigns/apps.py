@@ -260,12 +260,17 @@ class CampaignsConfig(AppConfig):
                                 task_ids_exact = list(tasks_exact_time)
                             
                             # Depois: buscar tarefas completas com select_related usando os IDs
+                            # ✅ CORREÇÃO: Excluir tarefas que já foram processadas no loop de lembrete
+                            # para evitar duplicação quando as janelas se sobrepõem
                             tasks_exact_time_list = []
                             if task_ids_exact:
-                                tasks_exact_time_list = list(
-                                    Task.objects.filter(id__in=task_ids_exact)
-                                    .select_related('assigned_to', 'created_by', 'tenant', 'department')
-                                )
+                                # Excluir IDs que já foram processados no loop de lembrete
+                                task_ids_exact_filtered = [tid for tid in task_ids_exact if tid not in task_ids_reminder]
+                                if task_ids_exact_filtered:
+                                    tasks_exact_time_list = list(
+                                        Task.objects.filter(id__in=task_ids_exact_filtered)
+                                        .select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                    )
                             
                             total_reminder = len(tasks_reminder_list)
                             total_exact = len(tasks_exact_time_list)
@@ -297,27 +302,34 @@ class CampaignsConfig(AppConfig):
                                     logger.info(f'   👤 Assigned to: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
                                     logger.info(f'   👤 Created by: {task.created_by.email if task.created_by else "Ninguém"}')
                                     logger.info(f'   📞 Contatos relacionados: {task.related_contacts.count()}')
+                                    logger.info(f'   🔍 notification_sent atual: {task.notification_sent}')
                                     
                                     notification_sent = False
                                     notifications_count = 0
+                                    users_notified = set()  # ✅ NOVO: Rastrear usuários já notificados para evitar duplicação
                                     
                                     # Notificar usuário atribuído
                                     if task.assigned_to:
-                                        logger.info(f'   📤 Notificando assigned_to: {task.assigned_to.email}')
+                                        logger.info(f'   📤 Notificando assigned_to: {task.assigned_to.email} (ID: {task.assigned_to.id})')
                                         success = _notify_task_user(task, task.assigned_to, is_reminder=True)
                                         if success:
                                             notifications_count += 1
+                                            users_notified.add(task.assigned_to.id)
                                         notification_sent = notification_sent or success
                                     
-                                    # Notificar criador (só se for diferente de assigned_to)
-                                    if task.created_by and task.created_by != task.assigned_to:
-                                        logger.info(f'   📤 Notificando created_by: {task.created_by.email}')
-                                        success = _notify_task_user(task, task.created_by, is_reminder=True)
-                                        if success:
-                                            notifications_count += 1
-                                        notification_sent = notification_sent or success
-                                    elif task.created_by and task.created_by == task.assigned_to:
-                                        logger.info(f'   ⏭️ Pulando created_by (mesmo usuário de assigned_to)')
+                                    # Notificar criador (só se for diferente de assigned_to E ainda não foi notificado)
+                                    if task.created_by and task.created_by.id not in users_notified:
+                                        if task.created_by != task.assigned_to:
+                                            logger.info(f'   📤 Notificando created_by: {task.created_by.email} (ID: {task.created_by.id})')
+                                            success = _notify_task_user(task, task.created_by, is_reminder=True)
+                                            if success:
+                                                notifications_count += 1
+                                                users_notified.add(task.created_by.id)
+                                            notification_sent = notification_sent or success
+                                        else:
+                                            logger.info(f'   ⏭️ Pulando created_by (mesmo usuário de assigned_to)')
+                                    elif task.created_by and task.created_by.id in users_notified:
+                                        logger.info(f'   ⏭️ Pulando created_by (já notificado como assigned_to)')
                                     
                                     # ✅ NOVO: Notificar contatos relacionados (se habilitado)
                                     # Verificar se notificação de contatos está habilitada no metadata
@@ -358,18 +370,36 @@ class CampaignsConfig(AppConfig):
                                         continue
                                     
                                     logger.info(f'⏰ [TASK NOTIFICATIONS] Compromisso chegando: {task.title} (ID: {task.id}) - {task.due_date.strftime("%d/%m/%Y %H:%M:%S")}')
+                                    logger.info(f'   👤 Assigned to: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
+                                    logger.info(f'   👤 Created by: {task.created_by.email if task.created_by else "Ninguém"}')
+                                    logger.info(f'   🔍 notification_sent atual: {task.notification_sent}')
                                     
                                     notification_sent = False
+                                    notifications_count = 0
+                                    users_notified = set()  # ✅ NOVO: Rastrear usuários já notificados para evitar duplicação
                                     
                                     # Notificar usuário atribuído
                                     if task.assigned_to:
+                                        logger.info(f'   📤 Notificando assigned_to: {task.assigned_to.email} (ID: {task.assigned_to.id})')
                                         success = _notify_task_user(task, task.assigned_to, is_reminder=False)
+                                        if success:
+                                            notifications_count += 1
+                                            users_notified.add(task.assigned_to.id)
                                         notification_sent = notification_sent or success
                                     
-                                    # Notificar criador
-                                    if task.created_by and task.created_by != task.assigned_to:
-                                        success = _notify_task_user(task, task.created_by, is_reminder=False)
-                                        notification_sent = notification_sent or success
+                                    # Notificar criador (só se for diferente de assigned_to E ainda não foi notificado)
+                                    if task.created_by and task.created_by.id not in users_notified:
+                                        if task.created_by != task.assigned_to:
+                                            logger.info(f'   📤 Notificando created_by: {task.created_by.email} (ID: {task.created_by.id})')
+                                            success = _notify_task_user(task, task.created_by, is_reminder=False)
+                                            if success:
+                                                notifications_count += 1
+                                                users_notified.add(task.created_by.id)
+                                            notification_sent = notification_sent or success
+                                        else:
+                                            logger.info(f'   ⏭️ Pulando created_by (mesmo usuário de assigned_to)')
+                                    elif task.created_by and task.created_by.id in users_notified:
+                                        logger.info(f'   ⏭️ Pulando created_by (já notificado como assigned_to)')
                                     
                                     # ✅ NOVO: Notificar contatos relacionados (se habilitado)
                                     # Verificar se notificação de contatos está habilitada no metadata
@@ -471,7 +501,7 @@ class CampaignsConfig(AppConfig):
                             'notification_type': notification_type,
                         }
                     )
-                    logger.info(f'✅ [TASK NOTIFICATIONS] Notificação no navegador ({notification_type}) enviada para {user.email}')
+                    logger.info(f'✅ [TASK NOTIFICATIONS] Notificação WebSocket ({notification_type}) enviada para {user.email} (ID: {user.id})')
                     notification_sent = True
             except Exception as e:
                 logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar notificação no navegador: {e}', exc_info=True)
@@ -610,7 +640,7 @@ class CampaignsConfig(AppConfig):
                             response = requests.post(url, json=payload, headers=headers, timeout=10)
                             
                             if response.status_code in [200, 201]:
-                                logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone_clean}')
+                                logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone_clean} (usuário: {user.email}, ID: {user.id})')
                                 notification_sent = True
                                 break
                             else:
