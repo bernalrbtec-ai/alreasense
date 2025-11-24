@@ -526,6 +526,9 @@ class CampaignsConfig(AppConfig):
                             # Verificar notificações diárias (resumo diário)
                             check_user_daily_summaries(current_time, current_date)
                             
+                            # Verificar notificações de departamento (resumo diário)
+                            check_department_daily_summaries(current_time, current_date)
+                            
                         except Exception as e:
                             logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao verificar notificações diárias: {e}', exc_info=True)
                         

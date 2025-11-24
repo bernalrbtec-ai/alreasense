@@ -20,6 +20,7 @@ from .serializers import (
     UserNotificationPreferencesSerializer,
     DepartmentNotificationPreferencesSerializer
 )
+from .permissions import CanManageDepartmentNotifications
 from apps.billing.decorators import require_product
 
 User = get_user_model()
@@ -578,42 +579,25 @@ class DepartmentNotificationPreferencesViewSet(viewsets.ModelViewSet):
     Apenas gestores podem configurar.
     """
     serializer_class = DepartmentNotificationPreferencesSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanManageDepartmentNotifications]
     
     def get_queryset(self):
+        from apps.authn.utils import get_user_managed_departments
         user = self.request.user
         
-        # Admin vê todos os departamentos do tenant
-        if user.role == 'admin':
-            return DepartmentNotificationPreferences.objects.filter(
-                tenant=user.tenant
-            ).select_related('department')
+        managed_departments = get_user_managed_departments(user)
         
-        # Gerente vê apenas departamentos que gerencia
-        if user.role == 'gerente':
-            managed_departments = user.departments.filter(tenant=user.tenant, is_active=True)
-            return DepartmentNotificationPreferences.objects.filter(
-                department__in=managed_departments,
-                tenant=user.tenant
-            ).select_related('department')
-        
-        # Agente não vê nenhum
-        return DepartmentNotificationPreferences.objects.none()
+        return DepartmentNotificationPreferences.objects.filter(
+            department__in=managed_departments,
+            tenant=user.tenant
+        ).select_related('department')
     
     @action(detail=False, methods=['get'])
     def my_departments(self, request):
         """Retorna preferências de todos os departamentos que o usuário gerencia."""
-        user = request.user
+        from apps.authn.utils import get_user_managed_departments
         
-        # Admin gerencia todos os departamentos do tenant
-        if user.role == 'admin':
-            from apps.authn.models import Department
-            managed_departments = Department.objects.filter(tenant=user.tenant, is_active=True)
-        # Gerente gerencia apenas departamentos onde está vinculado
-        elif user.role == 'gerente':
-            managed_departments = user.departments.filter(tenant=user.tenant, is_active=True)
-        else:
-            managed_departments = []
+        managed_departments = get_user_managed_departments(request.user)
         
         preferences = []
         for dept in managed_departments:

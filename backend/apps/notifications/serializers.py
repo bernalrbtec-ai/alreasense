@@ -295,32 +295,15 @@ class DepartmentNotificationPreferencesSerializer(serializers.ModelSerializer):
         request = self.context.get('request')
         if not request or not request.user:
             return False
-        # TODO: Implementar verificação de permissão quando criar utils
-        # from apps.authn.utils import can_manage_department_notifications
-        # return can_manage_department_notifications(request.user, obj.department)
-        # Por enquanto, verificar se é admin ou gerente
-        user = request.user
-        if user.role == 'admin':
-            return True
-        if user.role == 'gerente':
-            return user.departments.filter(id=obj.department.id).exists()
-        return False
+        from apps.authn.utils import can_manage_department_notifications
+        return can_manage_department_notifications(request.user, obj.department)
     
     def validate_department(self, value):
         request = self.context.get('request')
-        # TODO: Implementar validação de permissão quando criar utils
-        # from apps.authn.utils import can_manage_department_notifications
-        # if not can_manage_department_notifications(request.user, value):
-        #     raise serializers.ValidationError("Você não tem permissão para gerenciar notificações deste departamento.")
-        # Por enquanto, verificar se é admin ou gerente
-        user = request.user
-        if user.role == 'admin':
-            return value
-        if user.role == 'gerente':
-            if not user.departments.filter(id=value.id).exists():
-                raise serializers.ValidationError("Você não tem permissão para gerenciar notificações deste departamento.")
-            return value
-        raise serializers.ValidationError("Apenas administradores e gestores podem configurar notificações de departamento.")
+        from apps.authn.utils import can_manage_department_notifications
+        if not can_manage_department_notifications(request.user, value):
+            raise serializers.ValidationError("Você não tem permissão para gerenciar notificações deste departamento.")
+        return value
     
     def create(self, validated_data):
         request = self.context.get('request')
