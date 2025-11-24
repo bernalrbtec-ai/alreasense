@@ -356,6 +356,35 @@ async def handle_process_incoming_media(
     
     log = media_logger
 
+    def _extract_base64_field(payload: dict) -> Optional[str]:
+        """
+        Evolution API pode retornar o base64 em chaves diferentes dependendo da versão.
+        Essa função tenta localizar o campo correto de forma resiliente.
+        """
+        if not isinstance(payload, dict):
+            return None
+        
+        candidate_keys = [
+            'base64', 'data', 'result', 'file', 'fileData',
+            'fileEncoded', 'media', 'content', 'payload'
+        ]
+        
+        # 1️⃣ Procurar na raiz
+        for key in candidate_keys:
+            value = payload.get(key)
+            if isinstance(value, str) and value.strip():
+                return value
+        
+        # 2️⃣ Procurar dentro de payload['data'] se for dict
+        nested_data = payload.get('data')
+        if isinstance(nested_data, dict):
+            for key in candidate_keys:
+                value = nested_data.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value
+        
+        return None
+
     log.info("📦 [INCOMING MEDIA] Processando %s | message_id=%s tenant=%s retry=%s", media_type, message_id, tenant_id, retry_count)
     log.debug("   🔗 URL original: %s", (media_url or '')[:200])
     log.debug("   📌 instance_name=%s api_key=%s evolution_api_url=%s", instance_name, bool(api_key), evolution_api_url)
@@ -408,6 +437,13 @@ async def handle_process_incoming_media(
                         },
                         'convertToMp4': False  # Para áudio, usar MP3 ao invés de MP4
                     }
+                    # ✅ Incluir remoteJid/fromMe/participant quando disponíveis
+                    if message_key.get('remoteJid'):
+                        payload['message']['key']['remoteJid'] = message_key.get('remoteJid')
+                    if 'fromMe' in message_key:
+                        payload['message']['key']['fromMe'] = message_key.get('fromMe', False)
+                    if message_key.get('participant'):
+                        payload['message']['key']['participant'] = message_key.get('participant')
                     
                     try:
                         response_base64 = await client.post(
@@ -419,12 +455,18 @@ async def handle_process_incoming_media(
                         # ✅ CORREÇÃO: Aceitar 200 (OK) e 201 (Created) - ambos são válidos!
                         if response_base64.status_code in [200, 201]:
                             data_base64 = response_base64.json()
-                            base64_data = data_base64.get('base64')
+                            base64_data = _extract_base64_field(data_base64)
                             
                             if base64_data:
                                 # ✅ CRUCIAL: Decodificar base64 para bytes (já descriptografado)
                                 import base64
                                 try:
+                                    # Se vier como data URI, remover prefixo (ex: data:application/pdf;base64,...)
+                                    if base64_data.strip().startswith('data:'):
+                                        comma_index = base64_data.find(',')
+                                        if comma_index != -1:
+                                            base64_data = base64_data[comma_index + 1:]
+                                    base64_data = base64_data.strip()
                                     # ✅ IMPORTANTE: O base64 pode vir truncado no log, mas está completo no JSON
                                     decoded_bytes = base64.b64decode(base64_data)
                                     
@@ -451,7 +493,7 @@ async def handle_process_incoming_media(
                         logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao tentar /chat/getBase64FromMediaMessage: {e_base64}", exc_info=True)
                 
                 # ✅ PRIORIDADE 2: URL descriptografada se base64 não funcionou ou não tiver message_key
-                if not decrypted_data:
+                        if not decrypted_data:
                     logger.info(f"🔐 [INCOMING MEDIA] PRIORIDADE 2: Tentando /s3/getMediaUrl (URL descriptografada)...")
                     logger.info(f"   📌 [INCOMING MEDIA] Motivo: base64 não funcionou ou message_key não disponível")
                     endpoint_url = f"{base_url}/s3/getMediaUrl/{instance_name}"
@@ -487,6 +529,10 @@ async def handle_process_incoming_media(
                             },
                             'convertToMp4': False
                         }
+                        if message_key and message_key.get('remoteJid'):
+                            payload_fallback['message']['key']['remoteJid'] = message_key.get('remoteJid')
+                        if message_key and 'fromMe' in message_key:
+                            payload_fallback['message']['key']['fromMe'] = message_key.get('fromMe', False)
                         
                         try:
                             response_fallback = await client.post(
@@ -498,11 +544,16 @@ async def handle_process_incoming_media(
                             # ✅ CORREÇÃO: Aceitar 200 (OK) e 201 (Created) - ambos são válidos!
                             if response_fallback.status_code in [200, 201]:
                                 data_fallback = response_fallback.json()
-                                base64_fallback = data_fallback.get('base64')
+                                base64_fallback = _extract_base64_field(data_fallback)
                                 
                                 if base64_fallback:
                                     import base64
                                     try:
+                                        if base64_fallback.strip().startswith('data:'):
+                                            comma_index = base64_fallback.find(',')
+                                            if comma_index != -1:
+                                                base64_fallback = base64_fallback[comma_index + 1:]
+                                        base64_fallback = base64_fallback.strip()
                                         decoded_fallback = base64.b64decode(base64_fallback)
                                         logger.info(f"✅ [INCOMING MEDIA] Base64 obtido via fallback!")
                                         logger.info(f"   📏 [INCOMING MEDIA] Status: {response_fallback.status_code}")
