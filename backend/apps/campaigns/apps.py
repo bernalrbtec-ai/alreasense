@@ -5,6 +5,11 @@ import time
 
 logger = logging.getLogger(__name__)
 
+# ✅ PROTEÇÃO: Flag global para evitar múltiplas inicializações
+_scheduler_started = False
+_recovery_started = False
+_scheduler_lock = threading.Lock()
+
 
 class CampaignsConfig(AppConfig):
     default_auto_field = 'django.db.models.BigAutoField'
@@ -13,7 +18,15 @@ class CampaignsConfig(AppConfig):
     
     def ready(self):
         """App pronto - Recuperar campanhas ativas"""
-        logger.info("✅ [APPS] App campanhas inicializado")
+        global _scheduler_started, _recovery_started
+        
+        # ✅ PROTEÇÃO: Evitar múltiplas inicializações
+        with _scheduler_lock:
+            if _scheduler_started and _recovery_started:
+                logger.info("ℹ️ [APPS] Scheduler já foi inicializado, ignorando chamada duplicada")
+                return
+            
+            logger.info("✅ [APPS] App campanhas inicializado")
         
         # Recuperar campanhas ativas em thread separada para não bloquear startup
         def recover_active_campaigns():
@@ -527,11 +540,16 @@ class CampaignsConfig(AppConfig):
             
             return notification_sent
         
-        # Iniciar thread de recuperação
-        recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True)
-        recovery_thread.start()
+        # ✅ PROTEÇÃO: Iniciar threads apenas se ainda não foram iniciadas
+        if not _recovery_started:
+            recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True, name="CampaignRecovery")
+            recovery_thread.start()
+            _recovery_started = True
+            logger.info("✅ [APPS] Thread de recuperação de campanhas iniciada")
         
         # ✅ NOVO: Iniciar thread de verificação de campanhas agendadas
-        scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True)
-        scheduler_thread.start()
-        logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
+        if not _scheduler_started:
+            scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True, name="CampaignScheduler")
+            scheduler_thread.start()
+            _scheduler_started = True
+            logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
