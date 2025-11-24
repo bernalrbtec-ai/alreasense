@@ -422,7 +422,7 @@ class CampaignsConfig(AppConfig):
                                         
                                         # Verificar se já passou do horário (não notificar se passou mais de 1 minuto)
                                         if locked_task.due_date < now - timedelta(minutes=1):
-                                        continue
+                                            continue
                                         
                                         # ✅ CRÍTICO: Marcar como notificada IMEDIATAMENTE para evitar que outras instâncias processem
                                         locked_task.notification_sent = True
@@ -1228,6 +1228,353 @@ class CampaignsConfig(AppConfig):
                 message += "✨ *Bom dia!* Você tem um dia produtivo pela frente!"
             elif completed_count == total and total > 0:
                 message += "🌟 *Parabéns!* Você concluiu todas as suas tarefas de hoje!"
+            
+            return message
+        
+        
+        def check_department_daily_summaries(current_time, current_date):
+            """
+            Verifica e envia resumos diários para gestores de departamento.
+            
+            ⚠️ VALIDAÇÕES:
+            - Verifica apenas departamentos ativos
+            - Verifica apenas tenants ativos
+            - Considera timezone do tenant
+            - Janela de ±1 minuto para evitar perda de notificações
+            
+            Args:
+                current_time: time object no timezone local
+                current_date: date object no timezone local
+            """
+            from apps.notifications.models import DepartmentNotificationPreferences
+            from datetime import datetime, timedelta
+            
+            # Janela de ±1 minuto para evitar perda de notificações devido a delays
+            time_window_start = (datetime.combine(datetime.min, current_time) - timedelta(minutes=1)).time()
+            time_window_end = (datetime.combine(datetime.min, current_time) + timedelta(minutes=1)).time()
+            
+            preferences = DepartmentNotificationPreferences.objects.filter(
+                daily_summary_enabled=True,
+                daily_summary_time__isnull=False,
+                daily_summary_time__gte=time_window_start,
+                daily_summary_time__lte=time_window_end,
+                tenant__is_active=True,
+                department__is_active=True
+            ).select_related('department', 'tenant')
+            
+            count = 0
+            for pref in preferences:
+                try:
+                    # Buscar gestores do departamento
+                    managers = User.objects.filter(
+                        departments=pref.department,
+                        role__in=['gerente', 'admin'],
+                        tenant=pref.tenant,
+                        is_active=True
+                    )
+                    
+                    for manager in managers:
+                        # ✅ VALIDAÇÃO: Verificar se pelo menos um canal está habilitado
+                        has_whatsapp = pref.notify_via_whatsapp and manager.notify_whatsapp
+                        has_websocket = pref.notify_via_websocket
+                        has_email = pref.notify_via_email
+                        
+                        if not (has_whatsapp or has_websocket or has_email):
+                            logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Pulando {manager.email} - Nenhum canal habilitado')
+                            continue
+                        
+                        # ✅ VALIDAÇÃO: Verificar se horário está configurado
+                        if not pref.daily_summary_time:
+                            logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Departamento {pref.department.name} tem resumo habilitado mas sem horário configurado')
+                            continue
+                        
+                        send_department_daily_summary(manager, pref.department, pref, current_date)
+                        count += 1
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar resumo de departamento {pref.department.name}: {e}', exc_info=True)
+            
+            if count > 0:
+                logger.info(f'✅ [DAILY NOTIFICATIONS] {count} resumo(s) de departamento enviado(s)')
+        
+        
+        def send_department_daily_summary(manager, department, preferences, current_date):
+            """
+            Envia resumo diário do departamento para o gestor.
+            
+            ⚠️ VALIDAÇÕES:
+            - Aplica filtros baseados nas preferências do departamento
+            - Considera apenas tarefas do tenant do departamento
+            - Filtra tarefas do dia atual (no timezone local)
+            - Limita quantidade de tarefas por notificação
+            - Agrupa tarefas por status para facilitar leitura
+            
+            Args:
+                manager: Instância de User (gestor)
+                department: Instância de Department
+                preferences: Instância de DepartmentNotificationPreferences
+                current_date: date object no timezone local
+            """
+            from apps.authn.utils import get_department_tasks
+            from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
+            
+            # Buscar tarefas do departamento
+            filters = {}
+            if preferences.notify_only_critical:
+                filters['priority'] = ['high', 'urgent']
+            if preferences.notify_only_assigned:
+                filters['assigned_only'] = True
+            
+            tasks = get_department_tasks(department, filters, tenant=department.tenant)
+            
+            # ✅ VALIDAÇÃO: Verificar se pelo menos um tipo de notificação está habilitado
+            has_any_notification_type = (
+                preferences.notify_pending or 
+                preferences.notify_in_progress or 
+                preferences.notify_completed or 
+                preferences.notify_overdue
+            )
+            
+            if not has_any_notification_type:
+                logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Departamento {department.name} tem todos os tipos de notificação desabilitados')
+                return
+            
+            # Aplicar filtros baseados nas preferências
+            if not preferences.notify_pending:
+                tasks = tasks.exclude(status='pending')
+            if not preferences.notify_in_progress:
+                tasks = tasks.exclude(status='in_progress')
+            if not preferences.notify_completed:
+                tasks = tasks.exclude(status='completed')
+            
+            # Filtrar tarefas do dia (hoje no timezone local)
+            local_now = timezone.localtime(timezone.now())
+            
+            # ✅ VALIDAÇÃO: Verificar se current_date é válido
+            if current_date > local_now.date():
+                logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Data futura recebida: {current_date}')
+                return
+            
+            tasks_today = tasks.filter(due_date__date=current_date)
+            
+            # Tarefas atrasadas (independente da data, mas apenas se notify_overdue estiver habilitado)
+            overdue_tasks = Task.objects.none()  # Inicializar como QuerySet vazio
+            if preferences.notify_overdue:
+                overdue_tasks = tasks.filter(
+                    due_date__lt=local_now,
+                    status__in=['pending', 'in_progress']
+                )
+            
+            # Limitar quantidade de tarefas do dia
+            tasks_today = tasks_today[:preferences.max_tasks_per_notification]
+            
+            # Agrupar por status (converter para lista para evitar problemas com QuerySet)
+            tasks_by_status = {
+                'pending': list(tasks_today.filter(status='pending')[:10]),
+                'in_progress': list(tasks_today.filter(status='in_progress')[:10]),
+                'completed': list(tasks_today.filter(status='completed')[:10]),
+                'overdue': list(overdue_tasks[:10]),
+            }
+            
+            # ✅ VALIDAÇÃO: Verificar se há tarefas para notificar
+            total_tasks = sum(len(tasks) for tasks in tasks_by_status.values())
+            if total_tasks == 0:
+                logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Nenhuma tarefa para departamento {department.name} hoje')
+                return
+            
+            # Formatar mensagem
+            message = format_department_daily_summary_message(manager, department, tasks_by_status, current_date)
+            
+            # ✅ VALIDAÇÃO: Verificar se mensagem não está vazia
+            if not message or len(message.strip()) == 0:
+                logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Mensagem vazia para departamento {department.name}, pulando envio')
+                return
+            
+            # ✅ CONTROLE: Enviar notificações com tratamento de erros individual
+            notifications_sent = 0
+            notifications_failed = 0
+            
+            # WhatsApp
+            if preferences.notify_via_whatsapp and manager.notify_whatsapp:
+                try:
+                    success = send_whatsapp_notification(manager, message)
+                    if success:
+                        notifications_sent += 1
+                    else:
+                        notifications_failed += 1
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WhatsApp para {manager.email}: {e}', exc_info=True)
+                    notifications_failed += 1
+            
+            # WebSocket
+            if preferences.notify_via_websocket:
+                try:
+                    success = send_websocket_notification(manager, 'department_daily_summary', {
+                        'department_id': str(department.id),
+                        'department_name': department.name,
+                        'date': current_date.isoformat(),
+                        'tasks': {
+                            'pending': len(tasks_by_status['pending']),
+                            'in_progress': len(tasks_by_status['in_progress']),
+                            'completed': len(tasks_by_status['completed']),
+                            'overdue': len(tasks_by_status['overdue']),
+                        }
+                    })
+                    if success:
+                        notifications_sent += 1
+                    else:
+                        notifications_failed += 1
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WebSocket para {manager.email}: {e}', exc_info=True)
+                    notifications_failed += 1
+            
+            # Email (se implementado)
+            if preferences.notify_via_email:
+                try:
+                    # TODO: Implementar envio de email
+                    logger.debug(f'📧 [DAILY NOTIFICATIONS] Email não implementado ainda para {manager.email}')
+                except Exception as e:
+                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar Email para {manager.email}: {e}', exc_info=True)
+                    notifications_failed += 1
+            
+            # ✅ CONTROLE: Logar resultado final
+            if notifications_sent > 0:
+                logger.info(f'✅ [DAILY NOTIFICATIONS] Resumo de departamento enviado para {manager.email} ({notifications_sent} canal(is) enviado(s), {notifications_failed} falhou(aram))')
+            else:
+                logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Nenhuma notificação enviada para {manager.email} (todos os {notifications_failed} canal(is) falharam)')
+        
+        
+        def format_department_daily_summary_message(manager, department, tasks_by_status, current_date):
+            """
+            Formata mensagem de resumo diário do departamento para WhatsApp.
+            
+            ⚠️ FORMATO:
+            - Usa formatação Markdown do WhatsApp (*negrito*, _itálico_)
+            - Limita quantidade de tarefas por seção (máx 5)
+            - Inclui emojis para facilitar leitura
+            - Formata data e hora no timezone local
+            
+            Args:
+                manager: Instância de User (gestor)
+                department: Instância de Department
+                tasks_by_status: Dict com listas de tarefas agrupadas por status
+                current_date: date object no timezone local
+            
+            Returns:
+                str: Mensagem formatada para WhatsApp
+            """
+            date_str = current_date.strftime('%d/%m/%Y')
+            weekday = current_date.strftime('%A')  # Nome do dia da semana
+            
+            # Traduzir dia da semana (opcional)
+            weekdays_pt = {
+                'Monday': 'Segunda-feira',
+                'Tuesday': 'Terça-feira',
+                'Wednesday': 'Quarta-feira',
+                'Thursday': 'Quinta-feira',
+                'Friday': 'Sexta-feira',
+                'Saturday': 'Sábado',
+                'Sunday': 'Domingo',
+            }
+            weekday_pt = weekdays_pt.get(weekday, weekday)
+            
+            # ✅ UX: Saudação personalizada baseada no horário
+            current_hour = timezone.localtime(timezone.now()).hour
+            if 5 <= current_hour < 12:
+                greeting = "Bom dia"
+            elif 12 <= current_hour < 18:
+                greeting = "Boa tarde"
+            else:
+                greeting = "Boa noite"
+            
+            manager_name = manager.first_name or manager.email.split('@')[0]
+            
+            # ✅ UX: Mensagem mais amigável e motivacional
+            message = f"👋 *{greeting}, {manager_name}!*\n\n"
+            message += f"🏢 *Resumo do Departamento {department.name}*\n"
+            message += f"📋 *{weekday_pt}, {date_str}*\n\n"
+            
+            # Tarefas atrasadas (prioridade máxima)
+            overdue = tasks_by_status['overdue']
+            if overdue:
+                message += f"⚠️ *Tarefas Atrasadas: {len(overdue)}*\n"
+                for task in overdue[:5]:
+                    local_due = timezone.localtime(task.due_date)
+                    days_overdue = (timezone.now().date() - local_due.date()).days
+                    message += f"  • {task.title}"
+                    if days_overdue > 0:
+                        message += f" ({days_overdue} dia(s) atrasada)"
+                    if task.assigned_to:
+                        assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                        message += f" - {assigned_name}"
+                    message += "\n"
+                if len(overdue) > 5:
+                    message += f"  ... e mais {len(overdue) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # Tarefas pendentes
+            pending = tasks_by_status['pending']
+            if pending:
+                message += f"📝 *Tarefas para hoje: {len(pending)}*\n"
+                for task in pending[:5]:
+                    local_due = timezone.localtime(task.due_date)
+                    due_time = local_due.strftime('%H:%M')
+                    message += f"  • {task.title} às {due_time}"
+                    if task.assigned_to:
+                        assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                        message += f" - {assigned_name}"
+                    message += "\n"
+                if len(pending) > 5:
+                    message += f"  ... e mais {len(pending) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # Tarefas em progresso
+            in_progress = tasks_by_status['in_progress']
+            if in_progress:
+                message += f"🔄 *Em andamento: {len(in_progress)}*\n"
+                for task in in_progress[:5]:
+                    message += f"  • {task.title}"
+                    if task.assigned_to:
+                        assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                        message += f" - {assigned_name}"
+                    message += "\n"
+                if len(in_progress) > 5:
+                    message += f"  ... e mais {len(in_progress) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # Tarefas concluídas
+            completed = tasks_by_status['completed']
+            if completed:
+                message += f"✅ *Concluídas hoje: {len(completed)}*\n"
+                for task in completed[:5]:
+                    message += f"  • {task.title}"
+                    if task.assigned_to:
+                        assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                        message += f" - {assigned_name}"
+                    message += "\n"
+                if len(completed) > 5:
+                    message += f"  ... e mais {len(completed) - 5} tarefa(s)\n"
+                message += "\n"
+            
+            # ✅ UX: Mensagem motivacional baseada no progresso
+            total = len(overdue) + len(pending) + len(in_progress) + len(completed)
+            completed_count = len(completed)
+            
+            if completed_count > 0 and total > 0:
+                progress = (completed_count / total) * 100
+                if progress >= 50:
+                    message += f"🎉 *Ótimo trabalho! O departamento já concluiu {int(progress)}% das tarefas.*\n\n"
+                elif progress >= 25:
+                    message += f"💪 *Continue assim! O departamento já concluiu {int(progress)}% das tarefas.*\n\n"
+            
+            message += f"📊 *Total: {total} tarefa(s) no departamento hoje*\n\n"
+            
+            # ✅ UX: Call to action amigável
+            if overdue:
+                message += "💡 *Dica:* Priorize as tarefas atrasadas para manter tudo em dia!"
+            elif pending:
+                message += "✨ *Bom dia!* O departamento tem um dia produtivo pela frente!"
+            elif completed_count == total and total > 0:
+                message += "🌟 *Parabéns!* O departamento concluiu todas as tarefas de hoje!"
             
             return message
         
