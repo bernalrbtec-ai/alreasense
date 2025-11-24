@@ -384,7 +384,36 @@ export default function TaskModal({
               <input
                 type="checkbox"
                 checked={formData.has_due_date}
-                onChange={(e) => setFormData({ ...formData, has_due_date: e.target.checked })}
+                onChange={(e) => {
+                  const checked = e.target.checked
+                  if (checked) {
+                    // ✅ CORREÇÃO: Quando marca o checkbox, preencher automaticamente data e hora
+                    const now = new Date()
+                    const defaultDate = formatDateForInput(now)
+                    
+                    // ✅ Preencher hora com próxima hora (ou hora atual + 30 minutos se for muito cedo)
+                    let defaultTime = formatTimeForInput(now)
+                    const currentMinutes = now.getMinutes()
+                    if (currentMinutes < 30) {
+                      // Se ainda não passou 30 minutos da hora atual, usar hora atual
+                      defaultTime = formatTimeForInput(now)
+                    } else {
+                      // Se já passou 30 minutos, usar próxima hora
+                      const nextHour = new Date(now)
+                      nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0)
+                      defaultTime = formatTimeForInput(nextHour)
+                    }
+                    
+                    setFormData({ 
+                      ...formData, 
+                      has_due_date: checked,
+                      due_date: formData.due_date || defaultDate,
+                      due_time: formData.due_time || defaultTime
+                    })
+                  } else {
+                    setFormData({ ...formData, has_due_date: checked })
+                  }
+                }}
                 className="rounded border-gray-300"
               />
               <span>Agendar para data/hora específica</span>
@@ -433,11 +462,14 @@ export default function TaskModal({
                     value={formData.due_time}
                     min={formData.due_date === new Date().toISOString().split('T')[0] 
                       ? (() => {
-                          // ✅ CORREÇÃO: Calcular hora mínima considerando hora:minuto atual
+                          // ✅ CORREÇÃO: Calcular hora mínima considerando hora:minuto atual + margem de 5 minutos
+                          // Isso permite selecionar a hora atual mesmo que já tenha passado alguns segundos
                           const now = new Date()
-                          const currentHour = now.getHours().toString().padStart(2, '0')
-                          const currentMinute = now.getMinutes().toString().padStart(2, '0')
-                          return `${currentHour}:${currentMinute}`
+                          const marginMinutes = 5
+                          const minAllowedTime = new Date(now.getTime() + marginMinutes * 60 * 1000)
+                          const minHour = minAllowedTime.getHours().toString().padStart(2, '0')
+                          const minMinute = minAllowedTime.getMinutes().toString().padStart(2, '0')
+                          return `${minHour}:${minMinute}`
                         })()
                       : undefined}
                     onChange={(e) => {
@@ -451,9 +483,14 @@ export default function TaskModal({
                         const selectedDateTime = new Date()
                         selectedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
                         
-                        // ✅ CORREÇÃO: Comparar com hora:minuto atual, não apenas hora
-                        if (selectedDateTime <= now) {
-                          showWarningToast('Não é possível agendar no passado. Selecione uma hora futura.')
+                        // ✅ CORREÇÃO: Permitir hora atual + alguns minutos de margem (5 minutos)
+                        // Isso permite selecionar a hora atual mesmo que já tenha passado alguns segundos
+                        const marginMinutes = 5
+                        const minAllowedTime = new Date(now.getTime() + marginMinutes * 60 * 1000)
+                        
+                        if (selectedDateTime < minAllowedTime) {
+                          const minTimeStr = `${minAllowedTime.getHours().toString().padStart(2, '0')}:${minAllowedTime.getMinutes().toString().padStart(2, '0')}`
+                          showWarningToast(`Não é possível agendar no passado. Selecione uma hora a partir de ${minTimeStr}.`)
                           return
                         }
                       }
