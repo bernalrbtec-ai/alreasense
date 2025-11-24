@@ -221,7 +221,7 @@ export function VoiceRecorder({
       console.log('📤 [VOICE] Enviando áudio...', fileToUpload.size, 'bytes');
 
       // 1️⃣ Obter presigned URL
-      const { data: presignedData } = await api.post('/chat/messages/upload-presigned-url/', {
+      const { data: presignedData } = await api.post('/chat/upload-presigned-url/', {
         conversation_id: conversationId,
         filename: fileToUpload.name,
         content_type: fileToUpload.type,

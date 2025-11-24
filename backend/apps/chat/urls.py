@@ -24,9 +24,9 @@ router.register(r'attachments', MessageAttachmentViewSet, basename='attachment')
 router.register(r'reactions', MessageReactionViewSet, basename='reaction')
 
 urlpatterns = [
-    # ✅ FIX: Rota customizada para upload-presigned-url (DEVE VIR ANTES DO ROUTER!)
-    path('messages/upload-presigned-url/', upload_presigned_url_view, name='message-upload-presigned-url'),
-    path('messages/upload-presigned-url', upload_presigned_url_view, name='message-upload-presigned-url-no-slash'),
+    # ✅ FIX: Rota customizada para upload-presigned-url (URL diferente para evitar conflito)
+    path('upload-presigned-url/', upload_presigned_url_view, name='message-upload-presigned-url'),
+    path('upload-presigned-url', upload_presigned_url_view, name='message-upload-presigned-url-no-slash'),
     
     # REST API (router deve vir depois das rotas customizadas)
     path('', include(router.urls)),

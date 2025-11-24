@@ -169,7 +169,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       console.log('📤 [FILE] Iniciando upload...', file.name, file.size, 'bytes');
 
       // 1️⃣ Obter presigned URL
-      const { data: presignedData } = await api.post('/chat/messages/upload-presigned-url/', {
+      const { data: presignedData } = await api.post('/chat/upload-presigned-url/', {
         conversation_id: activeConversation.id,
         filename: file.name,
         content_type: file.type,
