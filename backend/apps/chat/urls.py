@@ -10,6 +10,7 @@ from apps.chat.api.views import (
     MessageReactionViewSet,
     chat_metrics_overview,
     chat_ping_evolution,
+    upload_presigned_url_view,
 )
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
@@ -25,6 +26,10 @@ router.register(r'reactions', MessageReactionViewSet, basename='reaction')
 urlpatterns = [
     # REST API
     path('', include(router.urls)),
+    
+    # ✅ FIX: Rota customizada para upload-presigned-url (compatibilidade)
+    path('messages/upload-presigned-url/', upload_presigned_url_view, name='message-upload-presigned-url'),
+    path('messages/upload-presigned-url', upload_presigned_url_view, name='message-upload-presigned-url-no-slash'),
     
     # 🔗 Serve mídia com cache Redis (7 dias) + S3 (30 dias)
     # URL curta para Evolution API: /media/{hash}

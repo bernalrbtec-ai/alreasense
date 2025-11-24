@@ -1896,6 +1896,18 @@ def chat_metrics_overview(request):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, CanAccessChat])
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, CanAccessChat])
+def upload_presigned_url_view(request):
+    """
+    View function para upload-presigned-url (rota customizada).
+    Chama o método do MessageViewSet.
+    """
+    viewset = MessageViewSet()
+    viewset.request = request
+    viewset.format_kwarg = None
+    return viewset.get_upload_presigned_url(request)
+
 def chat_ping_evolution(request):
     """
     Executa um ping simples na Evolution API para medir latência em tempo real.
