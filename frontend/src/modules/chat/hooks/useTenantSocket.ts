@@ -211,27 +211,48 @@ export function useTenantSocket() {
             delete updatedMetadata.processing;
             
             // ✅ MELHORIA: Atualizar todos os campos relevantes, incluindo size_bytes e original_filename
+            const sizeBytes = data.data.size_bytes || existingAttachment?.size_bytes || 0;
+            const originalFilename = data.data.original_filename || existingAttachment?.original_filename || 'arquivo';
+            
+            console.log('🔄 [TENANT WS] Atualizando attachment com:', {
+              attachmentId,
+              size_bytes: sizeBytes,
+              original_filename: originalFilename,
+              file_url: fileUrl?.substring(0, 80),
+              metadata: updatedMetadata
+            });
+            
             updateAttachment(attachmentId, {
               file_url: fileUrl,
               thumbnail_url: data.data.thumbnail_url,
               mime_type: data.data.mime_type,
-              size_bytes: data.data.size_bytes || existingAttachment?.size_bytes || 0,  // ✅ NOVO: Atualizar tamanho
-              original_filename: data.data.original_filename || existingAttachment?.original_filename || 'arquivo',  // ✅ NOVO: Atualizar nome original
+              size_bytes: sizeBytes,  // ✅ NOVO: Atualizar tamanho
+              original_filename: originalFilename,  // ✅ NOVO: Atualizar nome original
               metadata: updatedMetadata,  // ✅ Metadata sem flag processing
             } as any);
             
             // Forçar re-render da mensagem
+            // ✅ CORREÇÃO: Incluir size_bytes e original_filename para garantir atualização completa
             const updatedMessage = {
               ...messageWithAttachment,
               attachments: messageWithAttachment.attachments?.map(att => {
                 if (att.id === attachmentId) {
-                  return {
+                  const updatedAtt = {
                     ...att,
                     file_url: fileUrl,
                     thumbnail_url: data.data.thumbnail_url,
                     mime_type: data.data.mime_type,
+                    size_bytes: sizeBytes,  // ✅ CORREÇÃO: Usar mesmo valor do updateAttachment
+                    original_filename: originalFilename,  // ✅ CORREÇÃO: Usar mesmo valor do updateAttachment
                     metadata: updatedMetadata,  // ✅ Metadata sem flag processing
                   };
+                  console.log('🔄 [TENANT WS] Attachment na mensagem atualizado:', {
+                    attachmentId,
+                    size_bytes: updatedAtt.size_bytes,
+                    original_filename: updatedAtt.original_filename,
+                    file_url: updatedAtt.file_url?.substring(0, 80)
+                  });
+                  return updatedAtt;
                 }
                 return att;
               })
