@@ -572,6 +572,24 @@ export default function TaskModal({
                 ))}
               </div>
             )}
+            
+            {/* ✅ NOVO: Opção para notificar contatos relacionados */}
+            {formData.related_contact_ids.length > 0 && formData.has_due_date && (
+              <div className="mt-3">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={formData.notify_contacts}
+                    onChange={(e) => setFormData({ ...formData, notify_contacts: e.target.checked })}
+                    className="rounded border-gray-300"
+                  />
+                  <span>Notificar contatos relacionados via WhatsApp</span>
+                </label>
+                <p className="text-xs text-gray-500 mt-1 ml-6">
+                  Os {formData.related_contact_ids.length} contato(s) relacionado(s) receberão notificação 15 minutos antes e no momento do compromisso
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Botões */}
