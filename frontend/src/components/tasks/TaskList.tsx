@@ -336,6 +336,8 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                 className={`border rounded-lg p-4 ${
                   task.is_overdue && task.status !== 'completed'
                     ? 'border-red-300 bg-red-50'
+                    : task.status === 'completed'
+                    ? 'border-gray-200 bg-gray-50'  // ✅ CORREÇÃO: Fundo cinza para concluídas
                     : 'border-gray-200 bg-white'
                 }`}
               >
