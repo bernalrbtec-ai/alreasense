@@ -391,18 +391,9 @@ export default function TaskModal({
                     const now = new Date()
                     const defaultDate = formatDateForInput(now)
                     
-                    // ✅ Preencher hora com próxima hora (ou hora atual + 30 minutos se for muito cedo)
-                    let defaultTime = formatTimeForInput(now)
-                    const currentMinutes = now.getMinutes()
-                    if (currentMinutes < 30) {
-                      // Se ainda não passou 30 minutos da hora atual, usar hora atual
-                      defaultTime = formatTimeForInput(now)
-                    } else {
-                      // Se já passou 30 minutos, usar próxima hora
-                      const nextHour = new Date(now)
-                      nextHour.setHours(nextHour.getHours() + 1, 0, 0, 0)
-                      defaultTime = formatTimeForInput(nextHour)
-                    }
+                    // ✅ CORREÇÃO: Preencher hora com +20 minutos da hora atual
+                    const defaultTimeDate = new Date(now.getTime() + 20 * 60 * 1000) // +20 minutos
+                    const defaultTime = formatTimeForInput(defaultTimeDate)
                     
                     setFormData({ 
                       ...formData, 

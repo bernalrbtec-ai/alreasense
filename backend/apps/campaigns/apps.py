@@ -203,11 +203,13 @@ class CampaignsConfig(AppConfig):
                             
                             # 2. ✅ NOVO: Buscar tarefas que chegaram no momento exato (últimos 5 minutos)
                             # Envia notificação "Compromisso chegou" mesmo se já foi notificado 15min antes
-                            # ✅ IMPORTANTE: Não filtrar por notification_sent aqui, pois queremos notificar no momento exato sempre
+                            # ✅ CORREÇÃO: Filtrar por notification_sent=False para evitar duplicação
+                            # Só notificar no momento exato se NÃO foi notificado no lembrete (15min antes)
                             tasks_exact_time = Task.objects.filter(
                                 due_date__gte=exact_time_window_start,
                                 due_date__lte=exact_time_window_end,
-                                status__in=['pending', 'in_progress']
+                                status__in=['pending', 'in_progress'],
+                                notification_sent=False  # ✅ CORREÇÃO: Só notificar se não foi notificado antes
                             ).exclude(
                                 status__in=['completed', 'cancelled']
                             ).select_related('assigned_to', 'created_by', 'tenant', 'department')

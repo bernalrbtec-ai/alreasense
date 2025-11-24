@@ -355,9 +355,21 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                         </span>
                       )}
                     </div>
-                    <h4 className="font-medium text-gray-900 mb-1">{task.title}</h4>
+                    <h4 className={`font-medium mb-1 ${
+                      task.status === 'completed' 
+                        ? 'line-through text-gray-500' 
+                        : 'text-gray-900'
+                    }`}>
+                      {task.title}
+                    </h4>
                     {task.description && (
-                      <p className="text-sm text-gray-600 mb-2">{task.description}</p>
+                      <p className={`text-sm mb-2 ${
+                        task.status === 'completed' 
+                          ? 'line-through text-gray-400' 
+                          : 'text-gray-600'
+                      }`}>
+                        {task.description}
+                      </p>
                     )}
                     <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
                       {task.due_date && (
@@ -509,7 +521,9 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                             handleEdit(task)
                           }}
                         >
-                          {task.title}
+                          <span className={task.status === 'completed' ? 'line-through' : ''}>
+                            {task.title}
+                          </span>
                         </div>
                       ))}
                       {dayTasks.length > 3 && (
