@@ -10,7 +10,7 @@ from apps.chat.api.views import (
     MessageReactionViewSet,
     chat_metrics_overview,
     chat_ping_evolution,
-    upload_presigned_url_view,
+    UploadPresignedUrlView,
 )
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
@@ -25,8 +25,8 @@ router.register(r'reactions', MessageReactionViewSet, basename='reaction')
 
 urlpatterns = [
     # ✅ FIX: Rota customizada para upload-presigned-url (URL diferente para evitar conflito)
-    path('upload-presigned-url/', upload_presigned_url_view, name='message-upload-presigned-url'),
-    path('upload-presigned-url', upload_presigned_url_view, name='message-upload-presigned-url-no-slash'),
+    path('upload-presigned-url/', UploadPresignedUrlView.as_view(), name='message-upload-presigned-url'),
+    path('upload-presigned-url', UploadPresignedUrlView.as_view(), name='message-upload-presigned-url-no-slash'),
     
     # REST API (router deve vir depois das rotas customizadas)
     path('', include(router.urls)),
