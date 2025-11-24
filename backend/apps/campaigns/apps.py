@@ -26,7 +26,7 @@ class CampaignsConfig(AppConfig):
                 logger.info("ℹ️ [APPS] Scheduler já foi inicializado, ignorando chamada duplicada")
                 return
             
-            logger.info("✅ [APPS] App campanhas inicializado")
+        logger.info("✅ [APPS] App campanhas inicializado")
         
         # Recuperar campanhas ativas em thread separada para não bloquear startup
         def recover_active_campaigns():
@@ -192,27 +192,39 @@ class CampaignsConfig(AppConfig):
                             exact_time_window_end = now + timedelta(minutes=1)
                             
                             # 1. Buscar tarefas para lembrete (15 minutos antes)
-                            # ✅ CORREÇÃO: Usar select_for_update para evitar race condition
+                            # ✅ CORREÇÃO: select_for_update não pode ser usado com select_related em campos nullable
+                            # Solução: fazer select_for_update primeiro, depois select_related
                             from django.db import transaction
+                            task_ids_reminder = []
                             with transaction.atomic():
+                                # Primeiro: fazer select_for_update apenas na tabela Task (sem select_related)
                                 tasks_reminder = Task.objects.select_for_update(skip_locked=True).filter(
-                                    due_date__gte=notification_window_start,
-                                    due_date__lte=notification_window_end,
+                                due_date__gte=notification_window_start,
+                                due_date__lte=notification_window_end,
                                     status__in=['pending', 'in_progress'],
-                                    notification_sent=False
-                                ).exclude(
+                                notification_sent=False
+                            ).exclude(
                                     status__in=['completed', 'cancelled']
-                                ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                ).values_list('id', flat=True)
                                 
-                                # Converter para lista para processar fora do lock
-                                tasks_reminder_list = list(tasks_reminder)
+                                # Pegar IDs dentro da transação
+                                task_ids_reminder = list(tasks_reminder)
+                            
+                            # Depois: buscar tarefas completas com select_related usando os IDs
+                            tasks_reminder_list = []
+                            if task_ids_reminder:
+                                tasks_reminder_list = list(
+                                    Task.objects.filter(id__in=task_ids_reminder)
+                                    .select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                )
                             
                             # 2. ✅ NOVO: Buscar tarefas que chegaram no momento exato (últimos 5 minutos)
                             # Envia notificação "Compromisso chegou" mesmo se já foi notificado 15min antes
                             # ✅ CORREÇÃO: Filtrar por notification_sent=False para evitar duplicação
-                            # ✅ CORREÇÃO: Usar select_for_update para evitar race condition
-                            # Só notificar no momento exato se NÃO foi notificado no lembrete (15min antes)
+                            # ✅ CORREÇÃO: select_for_update não pode ser usado com select_related em campos nullable
+                            task_ids_exact = []
                             with transaction.atomic():
+                                # Primeiro: fazer select_for_update apenas na tabela Task (sem select_related)
                                 tasks_exact_time = Task.objects.select_for_update(skip_locked=True).filter(
                                     due_date__gte=exact_time_window_start,
                                     due_date__lte=exact_time_window_end,
@@ -220,16 +232,21 @@ class CampaignsConfig(AppConfig):
                                     notification_sent=False  # ✅ CORREÇÃO: Só notificar se não foi notificado antes
                                 ).exclude(
                                     status__in=['completed', 'cancelled']
-                                ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                ).values_list('id', flat=True)
                                 
-                                # Converter para lista para processar fora do lock
-                                tasks_exact_time_list = list(tasks_exact_time)
+                                # Pegar IDs dentro da transação
+                                task_ids_exact = list(tasks_exact_time)
+                            
+                            # Depois: buscar tarefas completas com select_related usando os IDs
+                            tasks_exact_time_list = []
+                            if task_ids_exact:
+                                tasks_exact_time_list = list(
+                                    Task.objects.filter(id__in=task_ids_exact)
+                                    .select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                )
                             
                             total_reminder = len(tasks_reminder_list)
                             total_exact = len(tasks_exact_time_list)
-                            
-                            total_reminder = tasks_reminder.count()
-                            total_exact = tasks_exact_time.count()
                             
                             # ✅ MELHORIA: Log sempre que houver tarefas OU a cada 1 minuto (para debug)
                             # Isso garante que vemos quando está verificando
@@ -295,8 +312,8 @@ class CampaignsConfig(AppConfig):
                                         with transaction.atomic():
                                             task.refresh_from_db()
                                             if not task.notification_sent:  # Double-check
-                                                task.notification_sent = True
-                                                task.save(update_fields=['notification_sent'])
+                                    task.notification_sent = True
+                                    task.save(update_fields=['notification_sent'])
                                                 count_reminder += 1
                                                 logger.info(f'✅ [TASK NOTIFICATIONS] Lembrete enviado ({notifications_count} notificação(ões)) e marcado como notificado')
                                             else:
@@ -414,7 +431,7 @@ class CampaignsConfig(AppConfig):
                     
                     # ✅ MELHORIA: Mensagem diferente para lembrete vs compromisso chegando
                     if is_reminder:
-                        message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+                    message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
                         notification_type = "lembrete"
                     else:
                         message = f"⏰ Compromisso chegando: {task.title}\n📅 {due_time}"
@@ -505,7 +522,7 @@ class CampaignsConfig(AppConfig):
                     due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
                     
                     if is_reminder:
-                        message_text = f"🔔 *Lembrete de Tarefa*\n\n"
+                    message_text = f"🔔 *Lembrete de Tarefa*\n\n"
                     else:
                         message_text = f"⏰ *Compromisso Agendado*\n\n"
                     
@@ -568,13 +585,13 @@ class CampaignsConfig(AppConfig):
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
-                            response = requests.post(url, json=payload, headers=headers, timeout=10)
+                    response = requests.post(url, json=payload, headers=headers, timeout=10)
                             
-                            if response.status_code in [200, 201]:
+                    if response.status_code in [200, 201]:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone_clean}')
                                 notification_sent = True
                                 break
-                            else:
+                    else:
                                 logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
                                 if attempt < max_retries - 1:
                                     time.sleep(2)  # Aguardar 2 segundos antes de tentar novamente
@@ -589,7 +606,7 @@ class CampaignsConfig(AppConfig):
                         
                 except Exception as e:
                     logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar WhatsApp: {e}', exc_info=True)
-            
+        
             return notification_sent
         
         # ✅ NOVO: Função para notificar contatos relacionados
@@ -761,13 +778,13 @@ class CampaignsConfig(AppConfig):
         # ✅ PROTEÇÃO: Iniciar threads apenas se ainda não foram iniciadas
         if not _recovery_started:
             recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True, name="CampaignRecovery")
-            recovery_thread.start()
+        recovery_thread.start()
             _recovery_started = True
             logger.info("✅ [APPS] Thread de recuperação de campanhas iniciada")
         
         # ✅ NOVO: Iniciar thread de verificação de campanhas agendadas
         if not _scheduler_started:
             scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True, name="CampaignScheduler")
-            scheduler_thread.start()
+        scheduler_thread.start()
             _scheduler_started = True
-            logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
+        logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
