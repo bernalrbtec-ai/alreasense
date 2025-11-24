@@ -456,7 +456,10 @@ async def handle_process_incoming_media(
                         # ✅ CORREÇÃO: Aceitar 200 (OK) e 201 (Created) - ambos são válidos!
                         if response_base64.status_code in [200, 201]:
                             data_base64 = response_base64.json()
+                            logger.info(f"🔍 [INCOMING MEDIA] Response JSON keys: {list(data_base64.keys()) if isinstance(data_base64, dict) else 'N/A'}")
+                            logger.info(f"🔍 [INCOMING MEDIA] Response JSON (primeiros 500 chars): {str(data_base64)[:500]}")
                             base64_data = _extract_base64_field(data_base64)
+                            logger.info(f"🔍 [INCOMING MEDIA] Base64 extraído: {'SIM' if base64_data else 'NÃO'} (tamanho: {len(base64_data) if base64_data else 0})")
                             
                             if base64_data:
                                 # ✅ CRUCIAL: Decodificar base64 para bytes (já descriptografado)
