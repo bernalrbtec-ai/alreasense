@@ -432,20 +432,27 @@ export default function TaskModal({
                     type="time"
                     value={formData.due_time}
                     min={formData.due_date === new Date().toISOString().split('T')[0] 
-                      ? new Date().toTimeString().slice(0, 5) 
+                      ? (() => {
+                          // ✅ CORREÇÃO: Calcular hora mínima considerando hora:minuto atual
+                          const now = new Date()
+                          const currentHour = now.getHours().toString().padStart(2, '0')
+                          const currentMinute = now.getMinutes().toString().padStart(2, '0')
+                          return `${currentHour}:${currentMinute}`
+                        })()
                       : undefined}
                     onChange={(e) => {
                       const selectedTime = e.target.value
                       const today = new Date().toISOString().split('T')[0]
                       
-                      // Se selecionou hoje, validar se hora não é no passado
+                      // ✅ CORREÇÃO: Validar considerando hora:minuto, não apenas hora
                       if (formData.due_date === today) {
                         const now = new Date()
                         const [hours, minutes] = selectedTime.split(':')
                         const selectedDateTime = new Date()
                         selectedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0)
                         
-                        if (selectedDateTime < now) {
+                        // ✅ CORREÇÃO: Comparar com hora:minuto atual, não apenas hora
+                        if (selectedDateTime <= now) {
                           showWarningToast('Não é possível agendar no passado. Selecione uma hora futura.')
                           return
                         }
