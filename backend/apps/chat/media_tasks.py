@@ -10,6 +10,7 @@ import logging
 import asyncio
 import httpx
 import base64
+from typing import Optional
 from asgiref.sync import sync_to_async
 from apps.chat.utils.s3 import (
     get_s3_manager,
@@ -493,7 +494,7 @@ async def handle_process_incoming_media(
                         logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao tentar /chat/getBase64FromMediaMessage: {e_base64}", exc_info=True)
                 
                 # ✅ PRIORIDADE 2: URL descriptografada se base64 não funcionou ou não tiver message_key
-                        if not decrypted_data:
+                if not decrypted_data:
                     logger.info(f"🔐 [INCOMING MEDIA] PRIORIDADE 2: Tentando /s3/getMediaUrl (URL descriptografada)...")
                     logger.info(f"   📌 [INCOMING MEDIA] Motivo: base64 não funcionou ou message_key não disponível")
                     endpoint_url = f"{base_url}/s3/getMediaUrl/{instance_name}"
