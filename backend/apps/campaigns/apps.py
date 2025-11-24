@@ -1,4 +1,5 @@
 from django.apps import AppConfig
+from django.utils import timezone
 import logging
 import threading
 import time
@@ -483,7 +484,9 @@ class CampaignsConfig(AppConfig):
             try:
                 channel_layer = get_channel_layer()
                 if channel_layer:
-                    due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+                    # ✅ CORREÇÃO: Converter para timezone local antes de formatar
+                    local_due_date = timezone.localtime(task.due_date)
+                    due_time = local_due_date.strftime('%d/%m/%Y às %H:%M')
                     
                     # ✅ MELHORIA: Mensagem diferente para lembrete vs compromisso chegando
                     if is_reminder:
@@ -575,7 +578,9 @@ class CampaignsConfig(AppConfig):
                         return notification_sent
                     
                     # ✅ MELHORIA: Formatar mensagem com mais contexto
-                    due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+                    # ✅ CORREÇÃO: Converter para timezone local antes de formatar
+                    local_due_date = timezone.localtime(task.due_date)
+                    due_time = local_due_date.strftime('%d/%m/%Y às %H:%M')
                     
                     if is_reminder:
                         message_text = f"🔔 *Lembrete de Tarefa*\n\n"
@@ -723,7 +728,10 @@ class CampaignsConfig(AppConfig):
                 return False
             
             # Formatar mensagem para contatos
-            due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+            # ✅ CORREÇÃO: Converter para timezone local antes de formatar
+            from django.utils import timezone
+            local_due_date = timezone.localtime(task.due_date)
+            due_time = local_due_date.strftime('%d/%m/%Y às %H:%M')
             
             if is_reminder:
                 message_text = f"🔔 *Lembrete de Compromisso*\n\n"
