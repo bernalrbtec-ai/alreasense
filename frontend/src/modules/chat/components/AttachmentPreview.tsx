@@ -640,7 +640,15 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
   const fileExt = filename.toLowerCase().split('.').pop() || '';
   const metadata = attachment.metadata || {};
   const fileUrl = (attachment.file_url || '').trim();
-  const isProcessing = !!metadata.processing || !fileUrl;
+  // ✅ CORREÇÃO: Verificar se URL é válida (proxy) antes de considerar como processando
+  // Se file_url é válido (proxy), não mostrar como processando
+  const hasValidUrl = fileUrl && 
+                     !fileUrl.includes('whatsapp.net') && 
+                     !fileUrl.includes('evo.') &&
+                     fileUrl.includes('/api/chat/media-proxy');
+  const isProcessing = !hasValidUrl && (!!metadata.processing || !fileUrl || 
+                       fileUrl.includes('whatsapp.net') || 
+                       fileUrl.includes('evo.'));
   const hasError = Boolean(metadata.error);
   const isPDF = attachment.mime_type === 'application/pdf' || fileExt === 'pdf';
   const isWord = fileExt === 'doc' || fileExt === 'docx' || 
@@ -935,7 +943,11 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         
         {/* Tamanho do arquivo */}
         <p className="text-xs text-gray-500 mb-3">
-          {attachment.size_bytes > 0 ? formatFileSize(attachment.size_bytes) : 'Processando...'}
+          {attachment.size_bytes > 0 
+            ? formatFileSize(attachment.size_bytes) 
+            : (hasValidUrl 
+                ? formatFileSize(0) // URL válida mas tamanho ainda não disponível
+                : 'Processando...')}
         </p>
         
         {/* Botões de ação */}

@@ -403,7 +403,13 @@ export function MessageList() {
             </p>
           )}
           <p className="text-xs text-gray-500">
-            {isDownloading ? 'Baixando...' : (attachment.size_bytes > 0 ? formatFileSize(attachment.size_bytes) : 'Processando...')}
+            {isDownloading ? 'Baixando...' : (
+              attachment.size_bytes > 0 
+                ? formatFileSize(attachment.size_bytes) 
+                : (attachment.file_url && !attachment.file_url.includes('whatsapp.net') && !attachment.file_url.includes('evo.') && attachment.file_url.includes('/api/chat/media-proxy'))
+                  ? formatFileSize(0) // URL válida mas tamanho ainda não disponível
+                  : 'Processando...'
+            )}
           </p>
         </div>
         {!isDownloading && (
