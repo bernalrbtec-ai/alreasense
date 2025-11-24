@@ -514,7 +514,7 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
                             task.is_overdue && task.status !== 'completed'
                               ? 'bg-red-100 text-red-700 border border-red-200'
                               : task.status === 'completed'
-                              ? 'bg-green-100 text-green-700 border border-green-200'
+                              ? 'bg-gray-100 text-gray-500 border border-gray-200'  // ✅ CORREÇÃO: Cinza para concluídas
                               : 'bg-blue-100 text-blue-700 border border-blue-200'
                           }`}
                           title={task.title}
