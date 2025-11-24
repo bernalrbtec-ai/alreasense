@@ -1170,6 +1170,11 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
             logger.warning(f"   Phone: {phone}")
             return  # ✅ Retornar silenciosamente - conversa não existe mais
         
+        # ✅ GARANTIA: Apenas processar contatos individuais (não grupos)
+        if conversation.conversation_type == 'group':
+            logger.info(f"⏭️ [PROFILE PIC] Pulando grupo (não processa grupos): {conversation_id}")
+            return
+        
         # Busca instância WhatsApp ativa
         from apps.notifications.models import WhatsAppInstance
         from apps.connections.models import EvolutionConnection
@@ -1303,25 +1308,47 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                     # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
                     if data_name and len(data_name) > 0:
                         contact_info = data_name[0]
-                        contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                        # ✅ CORREÇÃO: NÃO usar pushname - apenas name do contato cadastrado
+                        # Se não tiver name, buscar na lista de contatos ou usar telefone formatado
+                        api_name = contact_info.get('name', '').strip() if contact_info.get('name') else ''
+                        pushname = contact_info.get('pushname', '').strip() if contact_info.get('pushname') else ''
                         
-                        logger.info(f"🔍 [PROFILE PIC] Nome extraído: '{contact_name}' (exists: {contact_info.get('exists', False)})")
+                        logger.info(f"🔍 [PROFILE PIC] Nome da API: '{api_name}' | PushName: '{pushname}' (exists: {contact_info.get('exists', False)})")
                         
-                        if contact_name and contact_name.strip():
-                            # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
-                            old_name = conversation.contact_name
-                            conversation.contact_name = contact_name.strip()
-                            update_fields.append('contact_name')
-                            logger.info(f"✅ [PROFILE PIC] Nome atualizado: '{old_name}' → '{contact_name.strip()}'")
+                        # ✅ PRIORIDADE: 1) Nome do contato cadastrado na lista, 2) name da API (se exists=True), 3) Telefone formatado
+                        # NUNCA usar pushname para exibição - apenas como sugestão no cadastro
+                        from apps.contacts.models import Contact
+                        from django.db.models import Q
+                        from apps.contacts.signals import normalize_phone_for_search
+                        
+                        normalized_phone = normalize_phone_for_search(clean_phone)
+                        saved_contact = Contact.objects.filter(
+                            Q(tenant=conversation.tenant) &
+                            (Q(phone=normalized_phone) | Q(phone=clean_phone))
+                        ).first()
+                        
+                        if saved_contact:
+                            # ✅ Contato cadastrado - usar nome da lista
+                            contact_name = saved_contact.name
+                            logger.info(f"✅ [PROFILE PIC] Usando nome da lista de contatos: '{contact_name}'")
+                        elif api_name and contact_info.get('exists', False):
+                            # ✅ Contato existe no WhatsApp mas não está cadastrado - usar name da API
+                            contact_name = api_name
+                            logger.info(f"✅ [PROFILE PIC] Usando name da API (contato existe no WhatsApp): '{contact_name}'")
                         else:
-                            logger.warning(f"⚠️ [PROFILE PIC] Nome vazio ou não disponível na API")
-                            logger.warning(f"   Response: {contact_info}")
-                            # ✅ FALLBACK: Sempre usar telefone formatado se não tiver nome (como WhatsApp)
-                            formatted_phone = _format_phone_for_display(clean_phone)
-                            if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp' or conversation.contact_name == clean_phone:
-                                conversation.contact_name = formatted_phone
-                                update_fields.append('contact_name')
-                                logger.info(f"ℹ️ [PROFILE PIC] Usando telefone formatado como nome: {formatted_phone}")
+                            # ✅ Contato não cadastrado e não existe no WhatsApp - usar telefone formatado
+                            contact_name = _format_phone_for_display(clean_phone)
+                            logger.info(f"📞 [PROFILE PIC] Contato não cadastrado - usando telefone formatado: '{contact_name}'")
+                            logger.info(f"   ℹ️ PushName disponível como sugestão: '{pushname}' (não será salvo)")
+                        
+                        # Atualizar se mudou
+                        if contact_name and conversation.contact_name != contact_name:
+                            old_name = conversation.contact_name
+                            conversation.contact_name = contact_name
+                            update_fields.append('contact_name')
+                            logger.info(f"✅ [PROFILE PIC] Nome atualizado: '{old_name}' → '{contact_name}'")
+                        else:
+                            logger.info(f"ℹ️ [PROFILE PIC] Nome não mudou: '{conversation.contact_name}'")
                     else:
                         logger.warning(f"⚠️ [PROFILE PIC] Resposta vazia ou inválida da API de nomes")
                         logger.warning(f"   Response: {data_name}")
@@ -1435,6 +1462,11 @@ async def handle_fetch_contact_name(
             logger.warning(f"   Phone: {phone}")
             return  # ✅ Retornar silenciosamente - conversa não existe mais
         
+        # ✅ GARANTIA: Apenas processar contatos individuais (não grupos)
+        if conversation.conversation_type == 'group':
+            logger.info(f"⏭️ [CONTACT NAME] Pulando grupo (não processa grupos): {conversation_id}")
+            return
+        
         # Formatar telefone (sem + e sem @s.whatsapp.net)
         clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
         
@@ -1470,10 +1502,43 @@ async def handle_fetch_contact_name(
                         # Resposta: [{"jid": "...", "exists": true, "name": "..."}]
                         if data and len(data) > 0:
                             contact_info = data[0]
-                            contact_name = contact_info.get('name') or contact_info.get('pushname', '')
+                            # ✅ CORREÇÃO: NÃO usar pushname - apenas name do contato cadastrado
+                            # Se não tiver name, buscar na lista de contatos ou usar telefone formatado
+                            api_name = contact_info.get('name', '').strip() if contact_info.get('name') else ''
+                            pushname = contact_info.get('pushname', '').strip() if contact_info.get('pushname') else ''
                             
-                            if contact_name:
-                                # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)
+                            logger.info(f"🔍 [CONTACT NAME] Nome da API: '{api_name}' | PushName: '{pushname}' (exists: {contact_info.get('exists', False)})")
+                            
+                            # ✅ PRIORIDADE: 1) Nome do contato cadastrado na lista, 2) name da API (se exists=True), 3) Telefone formatado
+                            # NUNCA usar pushname para exibição - apenas como sugestão no cadastro
+                            from apps.contacts.models import Contact
+                            from django.db.models import Q
+                            from apps.contacts.signals import normalize_phone_for_search
+                            
+                            normalized_phone = normalize_phone_for_search(clean_phone)
+                            saved_contact = await sync_to_async(
+                                Contact.objects.filter(
+                                    Q(tenant=conversation.tenant) &
+                                    (Q(phone=normalized_phone) | Q(phone=clean_phone))
+                                ).first
+                            )()
+                            
+                            if saved_contact:
+                                # ✅ Contato cadastrado - usar nome da lista
+                                contact_name = saved_contact.name
+                                logger.info(f"✅ [CONTACT NAME] Usando nome da lista de contatos: '{contact_name}'")
+                            elif api_name and contact_info.get('exists', False):
+                                # ✅ Contato existe no WhatsApp mas não está cadastrado - usar name da API
+                                contact_name = api_name
+                                logger.info(f"✅ [CONTACT NAME] Usando name da API (contato existe no WhatsApp): '{contact_name}'")
+                            else:
+                                # ✅ Contato não cadastrado e não existe no WhatsApp - usar telefone formatado
+                                contact_name = _format_phone_for_display(clean_phone)
+                                logger.info(f"📞 [CONTACT NAME] Contato não cadastrado - usando telefone formatado: '{contact_name}'")
+                                logger.info(f"   ℹ️ PushName disponível como sugestão: '{pushname}' (não será salvo)")
+                            
+                            # Atualizar se mudou
+                            if contact_name and conversation.contact_name != contact_name:
                                 old_name = conversation.contact_name
                                 conversation.contact_name = contact_name
                                 await sync_to_async(conversation.save)(update_fields=['contact_name'])
@@ -1501,12 +1566,7 @@ async def handle_fetch_contact_name(
                                 except Exception as e:
                                     logger.error(f"❌ [CONTACT NAME] Erro no broadcast: {e}")
                             else:
-                                logger.warning(f"⚠️ [CONTACT NAME] Nome não disponível na API")
-                                # Fallback: usar telefone se não tiver nome
-                                if not conversation.contact_name or conversation.contact_name == 'Grupo WhatsApp':
-                                    conversation.contact_name = clean_phone
-                                    await sync_to_async(conversation.save)(update_fields=['contact_name'])
-                                    logger.info(f"ℹ️ [CONTACT NAME] Usando telefone como nome")
+                                logger.info(f"ℹ️ [CONTACT NAME] Nome não mudou: '{conversation.contact_name}'")
                         else:
                             logger.warning(f"⚠️ [CONTACT NAME] Response vazio ou inválido")
                         
