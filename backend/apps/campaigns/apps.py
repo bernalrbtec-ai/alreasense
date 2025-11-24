@@ -552,6 +552,172 @@ class CampaignsConfig(AppConfig):
             
             return notification_sent
         
+        # ✅ NOVO: Função para notificar contatos relacionados
+        def _notify_task_contacts(task, is_reminder=True):
+            """
+            Notifica contatos relacionados à tarefa via WhatsApp.
+            
+            Args:
+                task: Tarefa a ser notificada
+                is_reminder: Se True, é lembrete (15min antes). Se False, é notificação no momento exato.
+            
+            Returns:
+                bool: True se pelo menos um contato foi notificado com sucesso
+            """
+            from apps.notifications.models import WhatsAppInstance
+            from apps.connections.models import EvolutionConnection
+            import requests
+            import re
+            
+            if not task.related_contacts.exists():
+                return False
+            
+            contacts_notified = False
+            
+            # Buscar instância WhatsApp ativa do tenant
+            instance = WhatsAppInstance.objects.filter(
+                tenant=task.tenant,
+                is_active=True,
+                status='active'
+            ).first()
+            
+            if not instance:
+                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma instância WhatsApp ativa para notificar contatos do tenant {task.tenant_id}')
+                return False
+            
+            # Buscar servidor Evolution
+            base_url = instance.api_url
+            api_key = instance.api_key
+            
+            if not base_url or not api_key:
+                connection = EvolutionConnection.objects.filter(
+                    tenant=task.tenant,
+                    is_active=True
+                ).first()
+                
+                if connection:
+                    base_url = connection.base_url
+                    api_key = connection.api_key
+                else:
+                    logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma conexão Evolution configurada para notificar contatos do tenant {task.tenant_id}')
+                    return False
+            
+            if not base_url or not api_key:
+                logger.warning(f'⚠️ [TASK NOTIFICATIONS] API URL ou API Key não configurados para notificar contatos')
+                return False
+            
+            # Formatar mensagem para contatos
+            due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
+            
+            if is_reminder:
+                message_text = f"🔔 *Lembrete de Compromisso*\n\n"
+            else:
+                message_text = f"⏰ *Compromisso Agendado*\n\n"
+            
+            message_text += f"Olá! Temos um compromisso agendado:\n\n"
+            message_text += f"*{task.title}*\n\n"
+            
+            if task.description:
+                desc = task.description[:300].replace('\n', ' ')
+                message_text += f"{desc}\n\n"
+            
+            message_text += f"📅 *Data/Hora:* {due_time}\n"
+            
+            if task.department:
+                message_text += f"🏢 *Departamento:* {task.department.name}\n"
+            
+            priority_display = dict(task.PRIORITY_CHOICES).get(task.priority, task.priority)
+            priority_emoji = {
+                'low': '🟢',
+                'medium': '🟡',
+                'high': '🟠',
+                'urgent': '🔴'
+            }.get(task.priority, '⚪')
+            message_text += f"{priority_emoji} *Prioridade:* {priority_display}\n"
+            
+            if task.assigned_to:
+                assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                message_text += f"👤 *Responsável:* {assigned_name}\n"
+            
+            message_text += f"\nAguardamos você!"
+            
+            # Notificar cada contato relacionado
+            base_url = base_url.rstrip('/')
+            url = f"{base_url}/message/sendText/{instance.instance_name}"
+            headers = {
+                'apikey': api_key,
+                'Content-Type': 'application/json'
+            }
+            
+            for contact in task.related_contacts.all():
+                if not contact.phone:
+                    logger.warning(f'⚠️ [TASK NOTIFICATIONS] Contato {contact.name} não tem telefone, pulando')
+                    continue
+                
+                try:
+                    # Normalizar telefone do contato
+                    phone = contact.phone.strip()
+                    phone_clean = re.sub(r'[^\d+]', '', phone)
+                    
+                    if not phone_clean or len(phone_clean) < 10:
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Telefone inválido para contato {contact.name}: {phone}')
+                        continue
+                    
+                    # Garantir formato E.164
+                    if not phone_clean.startswith('+'):
+                        if phone_clean.startswith('55'):
+                            phone_clean = f'+{phone_clean}'
+                        else:
+                            phone_digits = ''.join(filter(str.isdigit, phone_clean))
+                            if phone_digits.startswith('0'):
+                                phone_digits = phone_digits[1:]
+                            phone_clean = f'+55{phone_digits}'
+                    
+                    # Validar formato final
+                    if len(phone_clean) < 13 or not phone_clean.startswith('+'):
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Telefone em formato inválido para contato {contact.name}: {phone_clean}')
+                        continue
+                    
+                    # Personalizar mensagem com nome do contato
+                    personalized_message = message_text.replace('Olá!', f'Olá, {contact.name}!')
+                    
+                    payload = {
+                        'number': phone_clean,
+                        'text': personalized_message
+                    }
+                    
+                    logger.info(f'📤 [TASK NOTIFICATIONS] Enviando WhatsApp para contato {contact.name} ({phone_clean})')
+                    
+                    # Retry em caso de falha
+                    max_retries = 2
+                    contact_notified = False
+                    for attempt in range(max_retries):
+                        try:
+                            response = requests.post(url, json=payload, headers=headers, timeout=10)
+                            
+                            if response.status_code in [200, 201]:
+                                logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado para contato {contact.name} ({phone_clean})')
+                                contact_notified = True
+                                contacts_notified = True
+                                break
+                            else:
+                                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
+                                if attempt < max_retries - 1:
+                                    time.sleep(2)
+                                
+                        except requests.exceptions.RequestException as e:
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Erro de conexão ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {e}')
+                            if attempt < max_retries - 1:
+                                time.sleep(2)
+                    
+                    if not contact_notified:
+                        logger.error(f'❌ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp para contato {contact.name} após {max_retries} tentativas')
+                        
+                except Exception as e:
+                    logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao notificar contato {contact.name}: {e}', exc_info=True)
+            
+            return contacts_notified
+        
         # ✅ PROTEÇÃO: Iniciar threads apenas se ainda não foram iniciadas
         if not _recovery_started:
             recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True, name="CampaignRecovery")
