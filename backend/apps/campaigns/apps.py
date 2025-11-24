@@ -178,12 +178,6 @@ class CampaignsConfig(AppConfig):
                             exact_time_window_start = now - timedelta(minutes=5)
                             exact_time_window_end = now + timedelta(minutes=1)
                             
-                            # ✅ DEBUG: Log a cada verificação (mesmo sem tarefas) - MUDADO PARA INFO para aparecer nos logs
-                            # Log apenas a cada 5 minutos para não poluir muito
-                            if int(time.time()) % 300 == 0:  # A cada 5 minutos
-                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando lembretes (15min antes) entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")}')
-                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando compromissos chegando (momento exato) entre {exact_time_window_start.strftime("%H:%M:%S")} e {exact_time_window_end.strftime("%H:%M:%S")}')
-                            
                             # 1. Buscar tarefas para lembrete (15 minutos antes)
                             tasks_reminder = Task.objects.filter(
                                 due_date__gte=notification_window_start,
@@ -196,6 +190,7 @@ class CampaignsConfig(AppConfig):
                             
                             # 2. ✅ NOVO: Buscar tarefas que chegaram no momento exato (últimos 5 minutos)
                             # Envia notificação "Compromisso chegou" mesmo se já foi notificado 15min antes
+                            # ✅ IMPORTANTE: Não filtrar por notification_sent aqui, pois queremos notificar no momento exato sempre
                             tasks_exact_time = Task.objects.filter(
                                 due_date__gte=exact_time_window_start,
                                 due_date__lte=exact_time_window_end,
@@ -206,6 +201,15 @@ class CampaignsConfig(AppConfig):
                             
                             total_reminder = tasks_reminder.count()
                             total_exact = tasks_exact_time.count()
+                            
+                            # ✅ MELHORIA: Log sempre que houver tarefas OU a cada 1 minuto (para debug)
+                            # Isso garante que vemos quando está verificando
+                            should_log = total_reminder > 0 or total_exact > 0 or (int(time.time()) % 60 == 0)  # A cada 1 minuto
+                            
+                            if should_log:
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando lembretes (15min antes) entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")}')
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando compromissos chegando (momento exato) entre {exact_time_window_start.strftime("%H:%M:%S")} e {exact_time_window_end.strftime("%H:%M:%S")}')
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Hora atual: {now.strftime("%H:%M:%S")}')
                             
                             if total_reminder > 0 or total_exact > 0:
                                 logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_reminder} tarefa(s) para lembrete (15min antes)')
@@ -282,8 +286,22 @@ class CampaignsConfig(AppConfig):
                             if count_reminder > 0 or count_exact > 0:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] {count_reminder} lembrete(s) e {count_exact} notificação(ões) de compromisso enviadas')
                             else:
-                                if int(time.time()) % 300 == 0:  # A cada 5 minutos
-                                    logger.info(f'🔔 [TASK NOTIFICATIONS] Nenhuma tarefa para notificar no momento')
+                                # ✅ MELHORIA: Log sempre que não há tarefas (para debug)
+                                if should_log:
+                                    logger.info(f'🔔 [TASK NOTIFICATIONS] Nenhuma tarefa para notificar no momento (verificando entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")})')
+                                    
+                                    # ✅ DEBUG: Listar próximas tarefas para ajudar no diagnóstico
+                                    from apps.contacts.models import Task
+                                    upcoming_tasks = Task.objects.filter(
+                                        due_date__gte=now,
+                                        due_date__lte=now + timedelta(hours=24),
+                                        status__in=['pending', 'in_progress']
+                                    ).select_related('assigned_to', 'tenant').order_by('due_date')[:5]
+                                    
+                                    if upcoming_tasks.exists():
+                                        logger.info(f'📅 [TASK NOTIFICATIONS] Próximas 5 tarefas nas próximas 24h:')
+                                        for task in upcoming_tasks:
+                                            logger.info(f'   - {task.title} (ID: {task.id}): {task.due_date.strftime("%d/%m/%Y %H:%M:%S")} | Notificada: {task.notification_sent} | Status: {task.status} | Tenant: {task.tenant.name if task.tenant else "N/A"}')
                                 
                         except Exception as e:
                             logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao verificar tarefas: {e}', exc_info=True)
