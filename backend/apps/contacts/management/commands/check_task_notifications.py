@@ -90,23 +90,45 @@ class Command(BaseCommand):
     def _check_and_notify(self, minutes_before):
         """Verifica e notifica tarefas"""
         now = timezone.now()
-        notification_window_start = now + timedelta(minutes=minutes_before - 1)
-        notification_window_end = now + timedelta(minutes=minutes_before + 1)
         
-        logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando tarefas entre {notification_window_start} e {notification_window_end}')
-        self.stdout.write(f'🔔 Verificando tarefas entre {notification_window_start} e {notification_window_end}')
+        # ✅ MELHORIA: Ampliar janela de notificação
+        notification_window_start = now + timedelta(minutes=minutes_before - 5)
+        notification_window_end = now + timedelta(minutes=minutes_before + 5)
         
-        # Buscar tarefas que estão no período de notificação
-        tasks_to_notify = Task.objects.filter(
+        # ✅ NOVO: Verificar também tarefas que chegaram no momento exato
+        exact_time_window_start = now - timedelta(minutes=5)
+        exact_time_window_end = now + timedelta(minutes=1)
+        
+        logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando lembretes (15min antes) entre {notification_window_start} e {notification_window_end}')
+        logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando compromissos chegando (momento exato) entre {exact_time_window_start} e {exact_time_window_end}')
+        self.stdout.write(f'🔔 Verificando lembretes entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")}')
+        self.stdout.write(f'⏰ Verificando compromissos chegando entre {exact_time_window_start.strftime("%H:%M:%S")} e {exact_time_window_end.strftime("%H:%M:%S")}')
+        
+        # 1. Buscar tarefas para lembrete (15 minutos antes)
+        tasks_reminder = Task.objects.filter(
             due_date__gte=notification_window_start,
             due_date__lte=notification_window_end,
             status__in=['pending', 'in_progress'],
             notification_sent=False
+        ).exclude(
+            status__in=['completed', 'cancelled']
         ).select_related('assigned_to', 'created_by', 'tenant', 'department')
         
-        total_tasks = tasks_to_notify.count()
-        logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_tasks} tarefa(s) para notificar')
-        self.stdout.write(f'📋 Encontradas {total_tasks} tarefa(s) para notificar')
+        # 2. ✅ NOVO: Buscar tarefas que chegaram no momento exato
+        tasks_exact_time = Task.objects.filter(
+            due_date__gte=exact_time_window_start,
+            due_date__lte=exact_time_window_end,
+            status__in=['pending', 'in_progress']
+        ).exclude(
+            status__in=['completed', 'cancelled']
+        ).select_related('assigned_to', 'created_by', 'tenant', 'department')
+        
+        total_reminder = tasks_reminder.count()
+        total_exact = tasks_exact_time.count()
+        
+        logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_reminder} tarefa(s) para lembrete (15min antes)')
+        logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_exact} tarefa(s) chegando agora (momento exato)')
+        self.stdout.write(f'📋 Encontradas {total_reminder} tarefa(s) para lembrete e {total_exact} chegando agora')
         
         # ✅ DEBUG: Listar todas as tarefas próximas (mesmo que já notificadas)
         all_upcoming = Task.objects.filter(
@@ -120,49 +142,114 @@ class Command(BaseCommand):
             for task in all_upcoming:
                 logger.info(f'   - {task.title} ({task.tenant.name}): {task.due_date} | Notificada: {task.notification_sent} | Status: {task.status}')
         
-        count = 0
-        for task in tasks_to_notify:
+        count_reminder = 0
+        count_exact = 0
+        
+        # Processar lembretes (15 minutos antes)
+        for task in tasks_reminder:
             try:
-                # Notificar usuário atribuído (se houver)
+                task.refresh_from_db()
+                if task.status in ['completed', 'cancelled']:
+                    continue
+                
+                notification_sent = False
+                
+                # Notificar usuário atribuído
                 if task.assigned_to:
-                    self._notify_user(task, task.assigned_to)
+                    success = self._notify_user(task, task.assigned_to, is_reminder=True)
+                    notification_sent = notification_sent or success
                 
-                # Notificar criador (se diferente do atribuído)
+                # Notificar criador
                 if task.created_by and task.created_by != task.assigned_to:
-                    self._notify_user(task, task.created_by)
+                    success = self._notify_user(task, task.created_by, is_reminder=True)
+                    notification_sent = notification_sent or success
                 
-                # Marcar como notificada
-                task.notification_sent = True
-                task.save(update_fields=['notification_sent'])
-                count += 1
+                # ✅ MELHORIA: Só marcar como notificada se pelo menos uma notificação foi enviada
+                if notification_sent:
+                    task.notification_sent = True
+                    task.save(update_fields=['notification_sent'])
+                    count_reminder += 1
+                else:
+                    logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma notificação foi enviada com sucesso para tarefa {task.id}, mantendo notification_sent=False para retry')
                 
             except Exception as e:
                 logger.error(f'❌ Erro ao notificar tarefa {task.id}: {e}', exc_info=True)
                 self.stdout.write(self.style.ERROR(f'Erro ao notificar tarefa {task.id}: {e}'))
         
-        if count > 0:
-            self.stdout.write(self.style.SUCCESS(f'✅ {count} tarefa(s) notificada(s)'))
+        # ✅ NOVO: Processar notificações no momento exato do compromisso
+        for task in tasks_exact_time:
+            try:
+                task.refresh_from_db()
+                if task.status in ['completed', 'cancelled']:
+                    continue
+                
+                # Verificar se já passou do horário
+                if task.due_date < now - timedelta(minutes=1):
+                    continue
+                
+                notification_sent = False
+                
+                # Notificar usuário atribuído
+                if task.assigned_to:
+                    success = self._notify_user(task, task.assigned_to, is_reminder=False)
+                    notification_sent = notification_sent or success
+                
+                # Notificar criador
+                if task.created_by and task.created_by != task.assigned_to:
+                    success = self._notify_user(task, task.created_by, is_reminder=False)
+                    notification_sent = notification_sent or success
+                
+                if notification_sent:
+                    count_exact += 1
+                
+            except Exception as e:
+                logger.error(f'❌ Erro ao notificar compromisso chegando para tarefa {task.id}: {e}', exc_info=True)
+                self.stdout.write(self.style.ERROR(f'Erro ao notificar compromisso chegando para tarefa {task.id}: {e}'))
+        
+        if count_reminder > 0 or count_exact > 0:
+            self.stdout.write(self.style.SUCCESS(f'✅ {count_reminder} lembrete(s) e {count_exact} notificação(ões) de compromisso enviadas'))
     
-    def _notify_user(self, task: Task, user: User):
-        """Notifica um usuário sobre uma tarefa"""
+    def _notify_user(self, task: Task, user: User, is_reminder=True):
+        """
+        Notifica um usuário sobre uma tarefa.
+        
+        Args:
+            task: Tarefa a ser notificada
+            user: Usuário a ser notificado
+            is_reminder: Se True, é lembrete (15min antes). Se False, é notificação no momento exato.
+        
+        Returns:
+            bool: True se pelo menos uma notificação foi enviada com sucesso
+        """
+        notification_sent = False
+        
         # 1. Notificação no navegador (via WebSocket)
-        self._send_browser_notification(task, user)
+        if self._send_browser_notification(task, user, is_reminder):
+            notification_sent = True
         
         # 2. Mensagem WhatsApp (se habilitado)
         if user.notify_whatsapp and user.phone:
-            self._send_whatsapp_notification(task, user)
+            if self._send_whatsapp_notification(task, user, is_reminder):
+                notification_sent = True
+        
+        return notification_sent
     
-    def _send_browser_notification(self, task: Task, user: User):
+    def _send_browser_notification(self, task: Task, user: User, is_reminder=True):
         """Envia notificação no navegador via WebSocket"""
         try:
             channel_layer = get_channel_layer()
             if not channel_layer:
                 logger.warning('⚠️ Channel layer não configurado, pulando notificação no navegador')
-                return
+                return False
             
-            # Formatar mensagem
+            # ✅ MELHORIA: Mensagem diferente para lembrete vs compromisso chegando
             due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
-            message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+            if is_reminder:
+                message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+                notification_type = "lembrete"
+            else:
+                message = f"⏰ Compromisso chegando: {task.title}\n📅 {due_time}"
+                notification_type = "compromisso"
             
             # Enviar via WebSocket para o grupo do tenant (usuários conectados receberão)
             async_to_sync(channel_layer.group_send)(
@@ -173,17 +260,22 @@ class Command(BaseCommand):
                     'title': task.title,
                     'message': message,
                     'due_date': task.due_date.isoformat(),
-                    'user_id': str(user.id),  # Filtrar no frontend para mostrar apenas para o usuário correto
+                    'user_id': str(user.id),
+                    'notification_type': notification_type,
                 }
             )
             
-            logger.info(f'✅ Notificação no navegador enviada para {user.email}')
+            logger.info(f'✅ Notificação no navegador ({notification_type}) enviada para {user.email}')
+            return True
             
         except Exception as e:
             logger.error(f'❌ Erro ao enviar notificação no navegador: {e}', exc_info=True)
+            return False
     
-    def _send_whatsapp_notification(self, task: Task, user: User):
+    def _send_whatsapp_notification(self, task: Task, user: User, is_reminder=True):
         """Envia notificação via WhatsApp"""
+        import re
+        
         try:
             # Buscar instância WhatsApp ativa do tenant
             instance = WhatsAppInstance.objects.filter(
@@ -194,52 +286,114 @@ class Command(BaseCommand):
             
             if not instance:
                 logger.warning(f'⚠️ Nenhuma instância WhatsApp ativa para tenant {task.tenant.name}')
-                return
+                return False
             
             # Buscar servidor Evolution
             evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
             
             if not evolution_server and not instance.api_url:
                 logger.error('❌ Configuração da Evolution API não encontrada')
-                return
+                return False
             
             # Preparar URL e credenciais
             base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
             api_key = instance.api_key or evolution_server.api_key
             
-            # Formatar mensagem
+            # ✅ MELHORIA: Normalizar telefone com validação
+            phone = user.phone.strip()
+            phone_clean = re.sub(r'[^\d+]', '', phone)
+            
+            if not phone_clean or len(phone_clean) < 10:
+                logger.warning(f'⚠️ Telefone inválido para {user.email}: {phone}')
+                return False
+            
+            # Garantir formato E.164
+            if not phone_clean.startswith('+'):
+                if phone_clean.startswith('55'):
+                    phone_clean = f'+{phone_clean}'
+                else:
+                    phone_digits = ''.join(filter(str.isdigit, phone_clean))
+                    if phone_digits.startswith('0'):
+                        phone_digits = phone_digits[1:]
+                    phone_clean = f'+55{phone_digits}'
+            
+            # Validar formato final
+            if len(phone_clean) < 13 or not phone_clean.startswith('+'):
+                logger.warning(f'⚠️ Telefone em formato inválido após normalização: {phone_clean}')
+                return False
+            
+            # ✅ MELHORIA: Formatar mensagem com mais contexto
             due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
-            message = f"🔔 *Lembrete de Tarefa*\n\n"
+            
+            if is_reminder:
+                message = f"🔔 *Lembrete de Tarefa*\n\n"
+            else:
+                message = f"⏰ *Compromisso Agendado*\n\n"
+            
             message += f"*{task.title}*\n\n"
+            
+            # Adicionar descrição se houver
             if task.description:
-                message += f"{task.description[:200]}\n\n"
-            message += f"📅 Data/Hora: {due_time}\n"
+                desc = task.description[:300].replace('\n', ' ')
+                message += f"{desc}\n\n"
+            
+            message += f"📅 *Data/Hora:* {due_time}\n"
+            
+            # Adicionar departamento
             if task.department:
-                message += f"🏢 Departamento: {task.department.name}\n"
+                message += f"🏢 *Departamento:* {task.department.name}\n"
+            
+            # Adicionar prioridade
+            priority_display = dict(task.PRIORITY_CHOICES).get(task.priority, task.priority)
+            priority_emoji = {
+                'low': '🟢',
+                'medium': '🟡',
+                'high': '🟠',
+                'urgent': '🔴'
+            }.get(task.priority, '⚪')
+            message += f"{priority_emoji} *Prioridade:* {priority_display}\n"
+            
+            # Adicionar contatos relacionados se houver
+            if task.related_contacts.exists():
+                contacts = task.related_contacts.all()[:3]
+                contact_names = ', '.join([c.name for c in contacts])
+                if task.related_contacts.count() > 3:
+                    contact_names += f" e mais {task.related_contacts.count() - 3}"
+                message += f"👤 *Contatos:* {contact_names}\n"
+            
             message += f"\nAcesse o sistema para mais detalhes."
             
-            # Normalizar telefone do usuário
-            phone = user.phone.replace(' ', '').replace('-', '').replace('(', '').replace(')', '')
-            if not phone.startswith('55'):
-                # Assumir Brasil se não tiver código do país
-                phone = f'55{phone}'
+            # ✅ MELHORIA: Retry em caso de falha
+            max_retries = 2
+            for attempt in range(max_retries):
+                try:
+                    response = requests.post(
+                        f"{base_url}/message/sendText/{instance.instance_name}",
+                        headers={'apikey': api_key, 'Content-Type': 'application/json'},
+                        json={
+                            'number': phone_clean,
+                            'text': message
+                        },
+                        timeout=10
+                    )
+                    
+                    if response.status_code in [200, 201]:
+                        logger.info(f'✅ WhatsApp enviado para {user.email} ({phone_clean})')
+                        return True
+                    else:
+                        logger.warning(f'⚠️ Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
+                        if attempt < max_retries - 1:
+                            time.sleep(2)
+                        
+                except requests.exceptions.RequestException as e:
+                    logger.warning(f'⚠️ Erro de conexão ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {e}')
+                    if attempt < max_retries - 1:
+                        time.sleep(2)
             
-            # Enviar mensagem
-            response = requests.post(
-                f"{base_url}/message/sendText/{instance.instance_name}",
-                headers={'apikey': api_key},
-                json={
-                    'number': phone,
-                    'text': message
-                },
-                timeout=10
-            )
-            
-            if response.status_code in [200, 201]:
-                logger.info(f'✅ WhatsApp enviado para {user.email} ({phone})')
-            else:
-                logger.error(f'❌ Erro ao enviar WhatsApp: {response.status_code} - {response.text}')
+            logger.error(f'❌ Falha ao enviar WhatsApp após {max_retries} tentativas')
+            return False
                 
         except Exception as e:
             logger.error(f'❌ Erro ao enviar WhatsApp para {user.email}: {e}', exc_info=True)
+            return False
 
