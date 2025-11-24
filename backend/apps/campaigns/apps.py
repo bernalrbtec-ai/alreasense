@@ -20,6 +20,28 @@ class CampaignsConfig(AppConfig):
         """App pronto - Recuperar campanhas ativas"""
         global _scheduler_started, _recovery_started
         
+        # ✅ PROTEÇÃO: Não iniciar threads durante scripts de migração/setup
+        import sys
+        import os
+        
+        # Verificar se estamos rodando um script de migração ou setup
+        is_migration_script = any(
+            'migrate' in arg or 
+            'fix_' in arg or 
+            'create_' in arg or
+            'ensure_' in arg or
+            'seed_' in arg or
+            'check_' in arg
+            for arg in sys.argv
+        )
+        
+        # Verificar variável de ambiente para desabilitar scheduler
+        disable_scheduler = os.environ.get('DISABLE_SCHEDULER', '0') == '1'
+        
+        if is_migration_script or disable_scheduler:
+            logger.info("⏭️ [APPS] Scheduler desabilitado (script de migração/setup)")
+            return
+        
         # ✅ PROTEÇÃO: Evitar múltiplas inicializações
         with _scheduler_lock:
             if _scheduler_started and _recovery_started:
@@ -312,8 +334,8 @@ class CampaignsConfig(AppConfig):
                                         with transaction.atomic():
                                             task.refresh_from_db()
                                             if not task.notification_sent:  # Double-check
-                                    task.notification_sent = True
-                                    task.save(update_fields=['notification_sent'])
+                                                task.notification_sent = True
+                                                task.save(update_fields=['notification_sent'])
                                                 count_reminder += 1
                                                 logger.info(f'✅ [TASK NOTIFICATIONS] Lembrete enviado ({notifications_count} notificação(ões)) e marcado como notificado')
                                             else:

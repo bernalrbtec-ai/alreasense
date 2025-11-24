@@ -12,6 +12,8 @@ from django.core.management import execute_from_command_line
 
 # Setup Django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'alrea_sense.settings')
+# ✅ Desabilitar scheduler durante scripts de migração
+os.environ['DISABLE_SCHEDULER'] = '1'
 django.setup()
 
 def check_and_fix_tenant_migration():
