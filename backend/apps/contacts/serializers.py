@@ -488,6 +488,11 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         metadata = validated_data.pop('metadata', None)  # ✅ NOVO: Extrair metadata
         request = self.context.get('request')
         
+        # ✅ CORREÇÃO: Se due_date foi alterado, resetar notification_sent para False
+        # Isso permite que a tarefa seja notificada novamente na nova data/hora
+        old_due_date = instance.due_date
+        due_date_changed = 'due_date' in validated_data and validated_data.get('due_date') != old_due_date
+        
         # ✅ NOVO: Atualizar metadata se fornecido
         if metadata is not None:
             if not isinstance(metadata, dict):
@@ -500,6 +505,13 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         # Atualizar campos
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
+        
+        # ✅ CORREÇÃO: Resetar notification_sent se due_date foi alterado
+        if due_date_changed:
+            instance.notification_sent = False
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.info(f'🔄 [TASK UPDATE] Data/hora alterada de {old_due_date} para {instance.due_date} - resetando notification_sent para False')
         
         # Atualizar contatos relacionados se fornecido
         if related_contact_ids is not None:
