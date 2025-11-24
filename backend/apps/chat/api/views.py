@@ -2066,6 +2066,9 @@ def chat_ping_evolution(request):
         
         logger = logging.getLogger(__name__)
         
+        # Log para debug
+        logger.info(f"📤 [PRESIGNED] Recebido request: method={request.method}, path={request.path}, data={request.data}")
+        
         # Validar dados
         conversation_id = request.data.get('conversation_id')
         filename = request.data.get('filename')
