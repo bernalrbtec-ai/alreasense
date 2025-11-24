@@ -348,7 +348,8 @@ class TaskSerializer(serializers.ModelSerializer):
             'assigned_to_name', 'related_contacts', 'department',
             'department_name', 'created_by', 'created_by_name',
             'created_at', 'updated_at', 'completed_at',
-            'is_overdue', 'has_contacts', 'can_edit', 'can_delete'
+            'is_overdue', 'has_contacts', 'can_edit', 'can_delete',
+            'metadata'  # ✅ NOVO: Incluir campo metadata
         ]
         read_only_fields = [
             'id', 'created_by', 'created_at', 'updated_at', 'completed_at'
@@ -404,7 +405,7 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         fields = [
             'title', 'description', 'status', 'priority',
             'due_date', 'assigned_to', 'department',
-            'related_contact_ids'
+            'related_contact_ids', 'metadata'  # ✅ NOVO: Incluir campo metadata
         ]
     
     def validate_department(self, value):
@@ -453,11 +454,20 @@ class TaskCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Cria tarefa com contatos relacionados"""
         related_contact_ids = validated_data.pop('related_contact_ids', [])
+        metadata = validated_data.pop('metadata', {})  # ✅ NOVO: Extrair metadata
         request = self.context.get('request')
         
         # Definir tenant e criador
         validated_data['tenant'] = request.user.tenant
         validated_data['created_by'] = request.user
+        
+        # ✅ NOVO: Garantir que metadata seja um dict válido
+        if metadata is None:
+            metadata = {}
+        if not isinstance(metadata, dict):
+            metadata = {}
+        
+        validated_data['metadata'] = metadata
         
         # Criar tarefa
         task = Task.objects.create(**validated_data)
@@ -475,7 +485,17 @@ class TaskCreateSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         """Atualiza tarefa com contatos relacionados"""
         related_contact_ids = validated_data.pop('related_contact_ids', None)
+        metadata = validated_data.pop('metadata', None)  # ✅ NOVO: Extrair metadata
         request = self.context.get('request')
+        
+        # ✅ NOVO: Atualizar metadata se fornecido
+        if metadata is not None:
+            if not isinstance(metadata, dict):
+                metadata = {}
+            # Mesclar com metadata existente (não sobrescrever completamente)
+            current_metadata = instance.metadata or {}
+            current_metadata.update(metadata)
+            instance.metadata = current_metadata
         
         # Atualizar campos
         for attr, value in validated_data.items():
