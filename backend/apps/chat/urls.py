@@ -24,12 +24,12 @@ router.register(r'attachments', MessageAttachmentViewSet, basename='attachment')
 router.register(r'reactions', MessageReactionViewSet, basename='reaction')
 
 urlpatterns = [
-    # REST API
-    path('', include(router.urls)),
-    
-    # ✅ FIX: Rota customizada para upload-presigned-url (compatibilidade)
+    # ✅ FIX: Rota customizada para upload-presigned-url (DEVE VIR ANTES DO ROUTER!)
     path('messages/upload-presigned-url/', upload_presigned_url_view, name='message-upload-presigned-url'),
     path('messages/upload-presigned-url', upload_presigned_url_view, name='message-upload-presigned-url-no-slash'),
+    
+    # REST API (router deve vir depois das rotas customizadas)
+    path('', include(router.urls)),
     
     # 🔗 Serve mídia com cache Redis (7 dias) + S3 (30 dias)
     # URL curta para Evolution API: /media/{hash}
