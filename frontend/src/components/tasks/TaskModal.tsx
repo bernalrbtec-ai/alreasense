@@ -67,7 +67,8 @@ export default function TaskModal({
     due_date: '',
     due_time: '',
     has_due_date: false,
-    related_contact_ids: [] as string[]
+    related_contact_ids: [] as string[],
+    notify_contacts: false  // ✅ NOVO: Opção para notificar contatos relacionados
   })
   
   const [contacts, setContacts] = useState<Contact[]>([])
@@ -90,7 +91,8 @@ export default function TaskModal({
           due_date: dueDate ? formatDateForInput(dueDate) : '',
           due_time: dueDate ? formatTimeForInput(dueDate) : '',
           has_due_date: !!task.due_date,
-          related_contact_ids: task.related_contacts?.map(c => c.id) || []
+          related_contact_ids: task.related_contacts?.map(c => c.id) || [],
+          notify_contacts: (task as any).metadata?.notify_contacts || false  // ✅ NOVO: Carregar preferência de notificação
         })
       } else {
         // Nova tarefa
@@ -118,7 +120,8 @@ export default function TaskModal({
           due_date: prefillDate ? formatDateForInput(prefillDate) : '',
           due_time: prefillDate ? formatTimeForInput(prefillDate) : '',
           has_due_date: !!prefillDate,
-          related_contact_ids: initialContactId ? [initialContactId] : []
+          related_contact_ids: initialContactId ? [initialContactId] : [],
+          notify_contacts: false  // ✅ NOVO: Padrão é não notificar
         })
       }
       if (initialContactId) {
@@ -194,7 +197,10 @@ export default function TaskModal({
         status: formData.status,
         priority: formData.priority,
         department: formData.department,
-        related_contact_ids: formData.related_contact_ids
+        related_contact_ids: formData.related_contact_ids,
+        metadata: {
+          notify_contacts: formData.notify_contacts  // ✅ NOVO: Salvar preferência de notificação
+        }
       }
 
       if (formData.assigned_to) {
@@ -447,7 +453,18 @@ export default function TaskModal({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-600 mb-1">Hora</label>
+                  <label className="block text-xs text-gray-600 mb-1">
+                    Hora
+                    {formData.due_date === new Date().toISOString().split('T')[0] && (() => {
+                      // ✅ NOVO: Mostrar hora mínima permitida
+                      const now = new Date()
+                      const marginMinutes = 5
+                      const minAllowedTime = new Date(now.getTime() + marginMinutes * 60 * 1000)
+                      const minHour = minAllowedTime.getHours().toString().padStart(2, '0')
+                      const minMinute = minAllowedTime.getMinutes().toString().padStart(2, '0')
+                      return ` (mín: ${minHour}:${minMinute})`
+                    })()}
+                  </label>
                   <input
                     type="time"
                     value={formData.due_time}

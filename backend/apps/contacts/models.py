@@ -1020,6 +1020,14 @@ class Task(models.Model):
         help_text='Indica se a notificação foi enviada para os usuários'
     )
     
+    # Metadados (JSON) - para armazenar configurações extras
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Metadados',
+        help_text='Dados extras da tarefa (ex: notify_contacts)'
+    )
+    
     class Meta:
         db_table = 'contacts_task'
         verbose_name = 'Tarefa'

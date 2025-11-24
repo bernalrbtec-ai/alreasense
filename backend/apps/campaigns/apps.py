@@ -254,8 +254,12 @@ class CampaignsConfig(AppConfig):
                                         success = _notify_task_user(task, task.created_by, is_reminder=True)
                                         notification_sent = notification_sent or success
                                     
-                                    # ✅ NOVO: Notificar contatos relacionados
-                                    if task.related_contacts.exists():
+                                    # ✅ NOVO: Notificar contatos relacionados (se habilitado)
+                                    # Verificar se notificação de contatos está habilitada no metadata
+                                    task_metadata = task.metadata or {}
+                                    notify_contacts = task_metadata.get('notify_contacts', False)
+                                    
+                                    if notify_contacts and task.related_contacts.exists():
                                         contacts_notified = _notify_task_contacts(task, is_reminder=True)
                                         notification_sent = notification_sent or contacts_notified
                                     
@@ -296,8 +300,12 @@ class CampaignsConfig(AppConfig):
                                         success = _notify_task_user(task, task.created_by, is_reminder=False)
                                         notification_sent = notification_sent or success
                                     
-                                    # ✅ NOVO: Notificar contatos relacionados
-                                    if task.related_contacts.exists():
+                                    # ✅ NOVO: Notificar contatos relacionados (se habilitado)
+                                    # Verificar se notificação de contatos está habilitada no metadata
+                                    task_metadata = task.metadata or {}
+                                    notify_contacts = task_metadata.get('notify_contacts', False)
+                                    
+                                    if notify_contacts and task.related_contacts.exists():
                                         contacts_notified = _notify_task_contacts(task, is_reminder=False)
                                         notification_sent = notification_sent or contacts_notified
                                     
