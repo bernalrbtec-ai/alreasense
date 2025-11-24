@@ -138,6 +138,7 @@ class MessageSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """
         Garante que conversation sempre seja serializado como UUID (string), não nome da conversa.
+        ✅ CORREÇÃO: Filtra attachments que ainda estão sendo processados (file_url vazio).
         """
         data = super().to_representation(instance)
 
@@ -146,6 +147,25 @@ class MessageSerializer(serializers.ModelSerializer):
                 data['conversation'] = str(instance.conversation.id)
             elif hasattr(instance, 'conversation_id') and instance.conversation_id:
                 data['conversation'] = str(instance.conversation_id)
+        
+        # ✅ CORREÇÃO CRÍTICA: Filtrar attachments que ainda estão sendo processados
+        # Attachments com file_url vazio ou metadata.processing=True não devem aparecer no chat
+        # até que o processamento seja concluído (via attachment_updated event)
+        if 'attachments' in data and isinstance(data['attachments'], list):
+            from apps.chat.utils.serialization import normalize_metadata
+            
+            filtered_attachments = []
+            for att in data['attachments']:
+                file_url = (att.get('file_url') or '').strip()
+                metadata = normalize_metadata(att.get('metadata', {}))
+                is_processing = metadata.get('processing', False)
+                
+                # ✅ Incluir apenas attachments que já têm file_url válido E não estão processando
+                if file_url and not is_processing:
+                    filtered_attachments.append(att)
+                # Se attachment está processando, não incluir (será enviado via attachment_updated quando pronto)
+            
+            data['attachments'] = filtered_attachments
 
         return data
 
