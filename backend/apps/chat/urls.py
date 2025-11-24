@@ -11,6 +11,7 @@ from apps.chat.api.views import (
     chat_metrics_overview,
     chat_ping_evolution,
     UploadPresignedUrlView,
+    ConfirmUploadView,
 )
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
