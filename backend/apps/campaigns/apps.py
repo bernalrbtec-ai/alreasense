@@ -305,16 +305,22 @@ class CampaignsConfig(AppConfig):
                                 try:
                                     # ✅ CRÍTICO: Adquirir lock ANTES de processar e marcar como notificada IMEDIATAMENTE
                                     # Isso garante que apenas uma instância processe, mesmo com múltiplas instâncias do scheduler
+                                    # ✅ CORREÇÃO: select_for_update não pode ser usado com select_related em campos nullable
+                                    # Solução: fazer select_for_update primeiro (sem select_related), depois buscar com select_related
                                     with transaction.atomic():
-                                        locked_task = Task.objects.select_for_update(skip_locked=True).filter(
+                                        # Primeiro: adquirir lock sem select_related (evita LEFT OUTER JOIN)
+                                        locked_task_id = Task.objects.select_for_update(skip_locked=True).filter(
                                             id=task.id,
                                             notification_sent=False  # Só processar se ainda não foi notificada
-                                        ).select_related('assigned_to', 'created_by', 'tenant', 'department').first()
+                                        ).values_list('id', flat=True).first()
                                         
-                                        if not locked_task:
+                                        if not locked_task_id:
                                             # Outra instância já está processando ou já foi notificada
                                             logger.info(f'⏭️ [TASK NOTIFICATIONS] Tarefa {task.id} está sendo processada por outra instância ou já foi notificada, pulando')
                                             continue
+                                        
+                                        # Segundo: buscar a tarefa com select_related (agora que já temos o lock)
+                                        locked_task = Task.objects.select_related('assigned_to', 'created_by', 'tenant', 'department').get(id=locked_task_id)
                                         
                                         # Verificar status (pode ter mudado)
                                         if locked_task.status in ['completed', 'cancelled']:
@@ -393,16 +399,22 @@ class CampaignsConfig(AppConfig):
                                 try:
                                     # ✅ CRÍTICO: Adquirir lock ANTES de processar e marcar como notificada IMEDIATAMENTE
                                     # Isso garante que apenas uma instância processe, mesmo com múltiplas instâncias do scheduler
+                                    # ✅ CORREÇÃO: select_for_update não pode ser usado com select_related em campos nullable
+                                    # Solução: fazer select_for_update primeiro (sem select_related), depois buscar com select_related
                                     with transaction.atomic():
-                                        locked_task = Task.objects.select_for_update(skip_locked=True).filter(
+                                        # Primeiro: adquirir lock sem select_related (evita LEFT OUTER JOIN)
+                                        locked_task_id = Task.objects.select_for_update(skip_locked=True).filter(
                                             id=task.id,
                                             notification_sent=False  # Só processar se ainda não foi notificada
-                                        ).select_related('assigned_to', 'created_by', 'tenant', 'department').first()
+                                        ).values_list('id', flat=True).first()
                                         
-                                        if not locked_task:
+                                        if not locked_task_id:
                                             # Outra instância já está processando ou já foi notificada
                                             logger.info(f'⏭️ [TASK NOTIFICATIONS] Tarefa {task.id} está sendo processada por outra instância ou já foi notificada, pulando')
                                             continue
+                                        
+                                        # Segundo: buscar a tarefa com select_related (agora que já temos o lock)
+                                        locked_task = Task.objects.select_related('assigned_to', 'created_by', 'tenant', 'department').get(id=locked_task_id)
                                         
                                         # Verificar status (pode ter mudado)
                                         if locked_task.status in ['completed', 'cancelled']:
