@@ -1,8 +1,14 @@
 # 📋 FLUXO COMPLETO DE NOTIFICAÇÕES DE TAREFAS
 
+## ⏰ QUANDO RODA
+
+O scheduler verifica tarefas **a cada 60 segundos** em loop contínuo.
+
+---
+
 ## 🔄 CICLO DE VERIFICAÇÃO
 
-O scheduler roda **a cada 60 segundos** e verifica duas janelas:
+O scheduler verifica **duas janelas** a cada ciclo:
 
 ### 1️⃣ JANELA DE LEMBRETE (15 minutos antes)
 - **Quando:** Entre 10-20 minutos antes do `due_date`
@@ -101,10 +107,100 @@ O scheduler roda **a cada 60 segundos** e verifica duas janelas:
 
 ---
 
-## ✅ CORREÇÕES NECESSÁRIAS
+---
 
-1. **Usar `select_for_update()` para evitar race condition**
-2. **Melhorar lógica de janelas para evitar sobreposição**
-3. **Adicionar log detalhado de cada notificação enviada**
-4. **Verificar se retry está duplicando notificações**
+## 📊 EXEMPLO PRÁTICO: TAREFA ÀS 11:30
+
+### Cenário:
+- **Tarefa:** "Reunião com cliente"
+- **Due Date:** 11:30:00
+- **Assigned To:** Você (paulo.bernal@rbtec.com.br)
+- **Created By:** Você (mesmo usuário)
+- **Contatos Relacionados:** 2 contatos
+- **Notify Contacts:** True
+
+### Timeline:
+
+#### 11:15:00 - Verificação do Scheduler
+- **Janela Lembrete:** 11:15:00 - 11:25:00 ✅ (tarefa às 11:30 está na janela)
+- **Encontra tarefa:** `notification_sent=False`
+- **Ações:**
+  1. Notifica `assigned_to` (você) → **1 notificação**
+     - WebSocket: 1x
+     - WhatsApp: 1x (se habilitado)
+  2. Pula `created_by` (mesmo usuário)
+  3. Notifica 2 contatos → **2 notificações**
+     - WhatsApp: 2x
+- **Marca:** `notification_sent=True`
+- **Total enviado:** 3 notificações (1 para você + 2 para contatos)
+
+#### 11:16:00 - Verificação do Scheduler
+- **Janela Lembrete:** 11:16:00 - 11:26:00 ✅ (ainda na janela)
+- **Encontra tarefa:** `notification_sent=True` ❌
+- **Ação:** Pula (já foi notificada)
+
+#### 11:30:00 - Verificação do Scheduler
+- **Janela Momento Exato:** 11:25:00 - 11:31:00 ✅ (tarefa às 11:30 está na janela)
+- **Encontra tarefa:** `notification_sent=True` ❌
+- **Ação:** Pula (já foi notificada no lembrete)
+
+---
+
+## 🐛 POR QUE RECEBEU 4 VEZES?
+
+### Possíveis causas:
+
+#### 1. **Race Condition (MAIS PROVÁVEL)**
+- **Problema:** Duas verificações simultâneas antes de salvar `notification_sent=True`
+- **Solução:** ✅ Implementado `select_for_update()` com `skip_locked=True`
+
+#### 2. **Tarefa Entra em Ambas as Janelas**
+- **Problema:** Se `due_date` está exatamente na borda, pode entrar nas duas janelas
+- **Exemplo:** Tarefa às 11:30, verificação às 11:25 → entra no lembrete E no momento exato
+- **Solução:** ✅ Filtro `notification_sent=False` em ambas as janelas
+
+#### 3. **Múltiplas Instâncias do Scheduler**
+- **Problema:** Várias threads rodando simultaneamente
+- **Solução:** ✅ Flags `_scheduler_started` e `_recovery_started` implementadas
+
+#### 4. **Retry do WhatsApp Duplicando**
+- **Problema:** Se WhatsApp falha e retry, pode estar contando como nova notificação
+- **Solução:** ✅ Retry não marca como nova notificação, apenas tenta novamente
+
+#### 5. **WebSocket + WhatsApp Contando Separadamente**
+- **Problema:** Se você recebe WebSocket E WhatsApp, pode parecer duplicado
+- **Realidade:** São 2 tipos diferentes de notificação (navegador + WhatsApp)
+
+---
+
+## ✅ CORREÇÕES IMPLEMENTADAS
+
+1. ✅ **`select_for_update()` com `skip_locked=True`** - Evita race condition
+2. ✅ **Double-check antes de marcar `notification_sent=True`** - Evita duplicação
+3. ✅ **Logs detalhados** - Mostra exatamente quem foi notificado
+4. ✅ **Verificação de usuários duplicados** - Pula `created_by` se for mesmo de `assigned_to`
+5. ✅ **Filtro `notification_sent=False` em ambas janelas** - Evita notificar duas vezes
+
+---
+
+## 📝 LOGS ESPERADOS (CORRETO)
+
+```
+📋 [TASK NOTIFICATIONS] Lembrete: Reunião com cliente (ID: xxx) - 24/11/2025 11:30:00
+   👤 Assigned to: paulo.bernal@rbtec.com.br
+   👤 Created by: paulo.bernal@rbtec.com.br
+   📞 Contatos relacionados: 2
+   📤 Notificando assigned_to: paulo.bernal@rbtec.com.br
+✅ [TASK NOTIFICATIONS] Notificação no navegador (lembrete) enviada para paulo.bernal@rbtec.com.br
+📤 [TASK NOTIFICATIONS] Enviando WhatsApp para +5517991253112 (usuário: paulo.bernal@rbtec.com.br)
+✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para +5517991253112
+   ⏭️ Pulando created_by (mesmo usuário de assigned_to)
+📤 [TASK NOTIFICATIONS] Enviando WhatsApp para contato João (xxx)
+✅ [TASK NOTIFICATIONS] WhatsApp enviado para contato João (xxx)
+📤 [TASK NOTIFICATIONS] Enviando WhatsApp para contato Maria (xxx)
+✅ [TASK NOTIFICATIONS] WhatsApp enviado para contato Maria (xxx)
+✅ [TASK NOTIFICATIONS] Lembrete enviado (3 notificação(ões)) e marcado como notificado
+```
+
+**Total:** 3 notificações (1 para você + 2 para contatos) ✅
 
