@@ -428,6 +428,9 @@ async def handle_process_incoming_media(
                 if message_key and message_key.get('id'):
                     logger.info(f"🔐 [INCOMING MEDIA] PRIORIDADE 1: Tentando /chat/getBase64FromMediaMessage (base64)...")
                     logger.info(f"   📌 [INCOMING MEDIA] message_key.id: {message_key.get('id')}")
+                    logger.info(f"   📌 [INCOMING MEDIA] message_key.remoteJid: {message_key.get('remoteJid')}")
+                    logger.info(f"   📌 [INCOMING MEDIA] message_key.fromMe: {message_key.get('fromMe')}")
+                    logger.info(f"   📌 [INCOMING MEDIA] message_key.participant: {message_key.get('participant')}")
                     
                     endpoint_base64 = f"{base_url}/chat/getBase64FromMediaMessage/{instance_name}"
                     payload = {
@@ -446,6 +449,8 @@ async def handle_process_incoming_media(
                     if message_key.get('participant'):
                         payload['message']['key']['participant'] = message_key.get('participant')
                     
+                    logger.info(f"📤 [INCOMING MEDIA] Payload enviado: {payload}")
+                    
                     try:
                         response_base64 = await client.post(
                                 endpoint_base64,
@@ -453,13 +458,20 @@ async def handle_process_incoming_media(
                                 headers={'apikey': api_key, 'Content-Type': 'application/json'}
                             )
                         
+                        logger.info(f"📥 [INCOMING MEDIA] Response recebida: status={response_base64.status_code}")
+                        
                         # ✅ CORREÇÃO: Aceitar 200 (OK) e 201 (Created) - ambos são válidos!
                         if response_base64.status_code in [200, 201]:
-                            data_base64 = response_base64.json()
-                            logger.info(f"🔍 [INCOMING MEDIA] Response JSON keys: {list(data_base64.keys()) if isinstance(data_base64, dict) else 'N/A'}")
-                            logger.info(f"🔍 [INCOMING MEDIA] Response JSON (primeiros 500 chars): {str(data_base64)[:500]}")
-                            base64_data = _extract_base64_field(data_base64)
-                            logger.info(f"🔍 [INCOMING MEDIA] Base64 extraído: {'SIM' if base64_data else 'NÃO'} (tamanho: {len(base64_data) if base64_data else 0})")
+                            try:
+                                data_base64 = response_base64.json()
+                                logger.info(f"🔍 [INCOMING MEDIA] Response JSON keys: {list(data_base64.keys()) if isinstance(data_base64, dict) else 'N/A'}")
+                                logger.info(f"🔍 [INCOMING MEDIA] Response JSON (primeiros 500 chars): {str(data_base64)[:500]}")
+                                base64_data = _extract_base64_field(data_base64)
+                                logger.info(f"🔍 [INCOMING MEDIA] Base64 extraído: {'SIM' if base64_data else 'NÃO'} (tamanho: {len(base64_data) if base64_data else 0})")
+                            except Exception as json_error:
+                                logger.error(f"❌ [INCOMING MEDIA] Erro ao parsear JSON da resposta: {json_error}", exc_info=True)
+                                logger.error(f"   📄 [INCOMING MEDIA] Response text (primeiros 500 chars): {response_base64.text[:500]}")
+                                raise
                             
                             if base64_data:
                                 # ✅ CRUCIAL: Decodificar base64 para bytes (já descriptografado)
