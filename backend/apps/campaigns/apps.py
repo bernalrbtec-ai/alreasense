@@ -155,6 +155,12 @@ class CampaignsConfig(AppConfig):
                     try:
                         now = timezone.now()
                         
+                        # ✅ DEBUG: Log a cada ciclo para garantir que está rodando
+                        # Log apenas a cada 30 segundos para não poluir muito
+                        current_second = int(time.time()) % 60
+                        if current_second == 0 or current_second == 30:
+                            logger.info(f'🔄 [SCHEDULER] Ciclo de verificação - Hora: {now.strftime("%H:%M:%S")} (UTC) / {timezone.localtime(now).strftime("%H:%M:%S")} (Local)')
+                        
                         # ========== VERIFICAR CAMPANHAS AGENDADAS ==========
                         # Buscar campanhas agendadas que chegaram na hora
                         scheduled_campaigns = Campaign.objects.filter(
@@ -276,18 +282,20 @@ class CampaignsConfig(AppConfig):
                             total_reminder = len(tasks_reminder_list)
                             total_exact = len(tasks_exact_time_list)
                             
-                            # ✅ MELHORIA: Log sempre que houver tarefas OU a cada 1 minuto (para debug)
+                            # ✅ MELHORIA: Log sempre que houver tarefas OU a cada 30 segundos (para debug mais frequente)
                             # Isso garante que vemos quando está verificando
-                            should_log = total_reminder > 0 or total_exact > 0 or (int(time.time()) % 60 == 0)  # A cada 1 minuto
+                            current_second = int(time.time()) % 60
+                            should_log = total_reminder > 0 or total_exact > 0 or (current_second == 0 or current_second == 30)  # A cada 30 segundos
                             
                             if should_log:
                                 logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando lembretes (15min antes) entre {notification_window_start.strftime("%H:%M:%S")} e {notification_window_end.strftime("%H:%M:%S")}')
                                 logger.info(f'🔔 [TASK NOTIFICATIONS] Verificando compromissos chegando (momento exato) entre {exact_time_window_start.strftime("%H:%M:%S")} e {exact_time_window_end.strftime("%H:%M:%S")}')
-                                logger.info(f'🔔 [TASK NOTIFICATIONS] Hora atual: {now.strftime("%H:%M:%S")}')
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Hora atual: {now.strftime("%H:%M:%S")} (UTC) / {timezone.localtime(now).strftime("%H:%M:%S")} (Local)')
+                                logger.info(f'🔔 [TASK NOTIFICATIONS] Total de tarefas encontradas: {total_reminder} lembrete(s) + {total_exact} exato(s)')
                             
                             if total_reminder > 0 or total_exact > 0:
-                                logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_reminder} tarefa(s) para lembrete (15min antes)')
-                                logger.info(f'📋 [TASK NOTIFICATIONS] Encontradas {total_exact} tarefa(s) chegando agora (momento exato)')
+                                logger.info(f'📋 [TASK NOTIFICATIONS] ⚠️ ATENÇÃO: Encontradas {total_reminder} tarefa(s) para lembrete (15min antes)')
+                                logger.info(f'📋 [TASK NOTIFICATIONS] ⚠️ ATENÇÃO: Encontradas {total_exact} tarefa(s) chegando agora (momento exato)')
                             
                             count_reminder = 0
                             count_exact = 0
@@ -862,4 +870,7 @@ class CampaignsConfig(AppConfig):
             scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True, name="CampaignScheduler")
             scheduler_thread.start()
             _scheduler_started = True
+            logger.info("=" * 60)
             logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
+            logger.info("✅ [APPS] Verificador de notificações de tarefas iniciado")
+            logger.info("=" * 60)
