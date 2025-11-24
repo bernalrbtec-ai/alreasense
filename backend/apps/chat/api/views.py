@@ -1913,6 +1913,9 @@ def upload_presigned_url_view(request):
     
     logger = logging.getLogger(__name__)
     
+    # Log CRÍTICO para debug - se isso aparecer, a função está sendo chamada
+    logger.error(f"🚨 [PRESIGNED VIEW] FUNÇÃO CHAMADA! method={request.method}, path={request.path}, user={request.user.email if hasattr(request, 'user') else 'None'}")
+    
     # Log para debug
     logger.info(f"📤 [PRESIGNED] Recebido request: method={request.method}, path={request.path}, data={request.data}")
     
