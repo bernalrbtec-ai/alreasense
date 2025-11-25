@@ -1251,14 +1251,31 @@ class CampaignsConfig(AppConfig):
             # ✅ OTIMIZAÇÃO: Usar função helper para calcular janela de tempo
             time_window_start, time_window_end = calculate_time_window(current_time, window_minutes=1)
             
-            # ✅ OTIMIZAÇÃO: Query otimizada com select_related
-            preferences = DepartmentNotificationPreferences.objects.filter(
-                daily_summary_enabled=True,
-                daily_summary_time__isnull=False,
-                daily_summary_time__gte=time_window_start,
-                daily_summary_time__lte=time_window_end,
-                tenant__status='active'
-            ).select_related('department', 'tenant', 'department__tenant')
+            # ✅ CORREÇÃO: Usar select_for_update para evitar duplicação entre workers
+            # Mesma lógica do lembrete de agenda e resumo de usuários
+            from django.db import transaction
+            
+            preference_ids = []
+            with transaction.atomic():
+                # Primeiro: fazer select_for_update apenas na tabela de preferências (sem select_related)
+                preferences_locked = DepartmentNotificationPreferences.objects.select_for_update(skip_locked=True).filter(
+                    daily_summary_enabled=True,
+                    daily_summary_time__isnull=False,
+                    daily_summary_time__gte=time_window_start,
+                    daily_summary_time__lte=time_window_end,
+                    tenant__status='active'
+                ).values_list('id', flat=True)
+                
+                # Pegar IDs dentro da transação
+                preference_ids = list(preferences_locked)
+            
+            # Depois: buscar preferências completas com select_related usando os IDs
+            preferences = []
+            if preference_ids:
+                preferences = list(
+                    DepartmentNotificationPreferences.objects.filter(id__in=preference_ids)
+                    .select_related('department', 'tenant', 'department__tenant')
+                )
             
             count = 0
             for pref in preferences:
