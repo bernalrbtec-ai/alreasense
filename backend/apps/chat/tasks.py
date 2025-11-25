@@ -1322,10 +1322,13 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                         from apps.contacts.signals import normalize_phone_for_search
                         
                         normalized_phone = normalize_phone_for_search(clean_phone)
-                        saved_contact = Contact.objects.filter(
-                            Q(tenant=conversation.tenant) &
-                            (Q(phone=normalized_phone) | Q(phone=clean_phone))
-                        ).first()
+                        # ✅ CORREÇÃO: Usar sync_to_async para query em contexto assíncrono
+                        saved_contact = await sync_to_async(
+                            Contact.objects.filter(
+                                Q(tenant=conversation.tenant) &
+                                (Q(phone=normalized_phone) | Q(phone=clean_phone))
+                            ).first
+                        )()
                         
                         if saved_contact:
                             # ✅ Contato cadastrado - usar nome da lista
