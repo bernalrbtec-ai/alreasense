@@ -161,7 +161,13 @@ export function ConversationList() {
         
         return matchesInbox;
       } else {
-        // Departamento específico: conversas do departamento (qualquer status)
+        // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
+        // ✅ CORREÇÃO: Excluir conversas fechadas - elas não devem aparecer na lista
+        if (conv.status === 'closed') {
+          console.log('  ❌ [FILTRO] Conversa fechada - FILTRADA:', conv.id);
+          return false;
+        }
+        
         // ✅ FIX CRÍTICO: Comparar IDs como strings para garantir match
         // Tratar department como string (ID) ou objeto { id, name }
         const departmentId = typeof conv.department === 'string' 
@@ -180,6 +186,7 @@ export function ConversationList() {
           activeDepartmentId: activeDeptId,
           activeDepartmentName: activeDepartment.name,
           matchesDepartment,
+          status: conv.status,
           departmentType: typeof conv.department,
           departmentObject: conv.department
         });
