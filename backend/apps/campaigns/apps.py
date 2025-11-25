@@ -577,7 +577,7 @@ class CampaignsConfig(AppConfig):
                     
                     # ✅ MELHORIA: Mensagem diferente para lembrete vs compromisso chegando
                     if is_reminder:
-                    message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
+                        message = f"🔔 Lembrete: {task.title}\n📅 {due_time}"
                         notification_type = "lembrete"
                     else:
                         message = f"⏰ Compromisso chegando: {task.title}\n📅 {due_time}"
@@ -671,7 +671,7 @@ class CampaignsConfig(AppConfig):
                     
                     if is_reminder:
                         message_text = f"🔔 *Lembrete de Tarefa*\n\n"
-                            else:
+                    else:
                         message_text = f"⏰ *Compromisso Agendado*\n\n"
                     
                     message_text += f"*{task.title}*\n\n"
@@ -733,13 +733,13 @@ class CampaignsConfig(AppConfig):
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
-                    response = requests.post(url, json=payload, headers=headers, timeout=10)
+                            response = requests.post(url, json=payload, headers=headers, timeout=10)
                             
-                    if response.status_code in [200, 201]:
+                            if response.status_code in [200, 201]:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone_clean} (usuário: {user.email}, ID: {user.id})')
                                 notification_sent = True
                                 break
-                    else:
+                            else:
                                 logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
                                 if attempt < max_retries - 1:
                                     time.sleep(2)  # Aguardar 2 segundos antes de tentar novamente
@@ -1584,16 +1584,16 @@ class CampaignsConfig(AppConfig):
         # ✅ PROTEÇÃO: Iniciar threads apenas se ainda não foram iniciadas
         if not _recovery_started:
             recovery_thread = threading.Thread(target=recover_active_campaigns, daemon=True, name="CampaignRecovery")
-        recovery_thread.start()
+            recovery_thread.start()
             _recovery_started = True
             logger.info("✅ [APPS] Thread de recuperação de campanhas iniciada")
         
         # ✅ NOVO: Iniciar thread de verificação de campanhas agendadas
         if not _scheduler_started:
             scheduler_thread = threading.Thread(target=check_scheduled_campaigns, daemon=True, name="CampaignScheduler")
-        scheduler_thread.start()
+            scheduler_thread.start()
             _scheduler_started = True
             logger.info("=" * 60)
-        logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
+            logger.info("✅ [APPS] Verificador de campanhas agendadas iniciado")
             logger.info("✅ [APPS] Verificador de notificações de tarefas iniciado")
             logger.info("=" * 60)
