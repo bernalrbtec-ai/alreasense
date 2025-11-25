@@ -148,10 +148,11 @@ export function MentionInput({
           filtered = participants;
           console.log('📋 [MENTIONS] Query vazia - mostrando todos os participantes:', filtered.length);
         } else {
-          // Filtrar participantes baseado na query
+          // ✅ CORREÇÃO: Filtrar participantes baseado na query (nome, pushname ou telefone)
           filtered = participants.filter(p => {
-            const nameMatch = p.name.toLowerCase().includes(query.toLowerCase());
-            const phoneMatch = p.phone.includes(query);
+            const displayName = (p.pushname || p.name).toLowerCase();
+            const nameMatch = displayName.includes(query.toLowerCase());
+            const phoneMatch = p.phone.replace(/\D/g, '').includes(query.replace(/\D/g, ''));
             return nameMatch || phoneMatch;
           });
           console.log('🔍 [MENTIONS] Query filtrada:', query, 'Resultados:', filtered.length);
@@ -182,38 +183,58 @@ export function MentionInput({
   const insertMention = useCallback((participant: Participant) => {
     if (mentionStart === null || !inputRef.current) return;
 
+    // ✅ CORREÇÃO: Usar pushname ou name para exibição no texto
+    const displayName = participant.pushname || participant.name;
+    
     const textBefore = value.substring(0, mentionStart);
     const textAfter = value.substring(inputRef.current.selectionStart);
-    const newValue = `${textBefore}@${participant.name} ${textAfter}`;
+    const newValue = `${textBefore}@${displayName} ${textAfter}`;
     
     onChange(newValue);
     setShowSuggestions(false);
     setMentionStart(null);
 
-    // Extrair todas as menções do texto final
+    // ✅ CORREÇÃO: Extrair todas as menções do texto final e mapear para telefones
     const mentions: string[] = [];
-    const mentionRegex = /@(\d+|\w[\w\s]*?)(?=\s|$|@|,|\.|!|\?)/g;
+    const mentionRegex = /@([^\s@,\.!?]+)/g;
     let match;
+    
+    // Primeiro, adicionar o participante selecionado diretamente
+    mentions.push(participant.phone);
+    
+    // Depois, processar outras menções que possam existir no texto
     while ((match = mentionRegex.exec(newValue)) !== null) {
       const mentionText = match[1];
-      // Buscar participante por nome ou número
-      const found = participants.find(p => 
-        p.name.toLowerCase() === mentionText.toLowerCase() || 
-        p.phone.includes(mentionText.replace(/\D/g, ''))
-      );
-      if (found) {
+      
+      // Buscar participante por nome (pushname ou name) ou número
+      const found = participants.find(p => {
+        const pName = (p.pushname || p.name).toLowerCase();
+        const pPhone = p.phone.replace(/\D/g, '');
+        const mentionLower = mentionText.toLowerCase();
+        const mentionPhone = mentionText.replace(/\D/g, '');
+        
+        return (
+          pName === mentionLower ||
+          pName.includes(mentionLower) ||
+          pPhone.includes(mentionPhone) ||
+          mentionPhone.includes(pPhone)
+        );
+      });
+      
+      if (found && !mentions.includes(found.phone)) {
         mentions.push(found.phone);
       }
     }
     
     if (onMentionsChange) {
       onMentionsChange([...new Set(mentions)]); // Remover duplicatas
+      console.log('✅ [MENTIONS] Menções atualizadas:', mentions);
     }
 
     // Focar no input novamente
     setTimeout(() => {
       inputRef.current?.focus();
-      const newCursorPos = textBefore.length + participant.name.length + 2; // +2 para @ e espaço
+      const newCursorPos = textBefore.length + displayName.length + 2; // +2 para @ e espaço
       inputRef.current?.setSelectionRange(newCursorPos, newCursorPos);
     }, 0);
   }, [value, mentionStart, onChange, participants, onMentionsChange]);
