@@ -383,6 +383,52 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         participants_count = group_info.get('size', 0)
                         group_desc = group_info.get('desc', '')
                         
+                        # ✅ NOVO: Buscar participantes do grupo para suporte a menções
+                        participants_list = []
+                        try:
+                            participants_endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                            participants_response = client.get(
+                                participants_endpoint,
+                                params={'groupJid': group_jid, 'getParticipants': 'true'},
+                                headers=headers,
+                                timeout=15.0  # Timeout maior para buscar participantes
+                            )
+                            
+                            if participants_response.status_code == 200:
+                                participants_data = participants_response.json()
+                                raw_participants = participants_data.get('participants', [])
+                                
+                                # Processar participantes
+                                for participant in raw_participants:
+                                    # Formato pode ser: {"id": "5517999999999@s.whatsapp.net"} ou {"jid": "..."}
+                                    participant_id = participant.get('id') or participant.get('jid') or ''
+                                    if participant_id:
+                                        # Extrair número (remover @s.whatsapp.net)
+                                        phone = participant_id.split('@')[0]
+                                        # Tentar buscar nome do contato na base
+                                        from apps.contacts.models import Contact
+                                        from apps.contacts.signals import normalize_phone_for_search
+                                        
+                                        normalized_phone = normalize_phone_for_search(phone)
+                                        contact = Contact.objects.filter(
+                                            tenant=conversation.tenant,
+                                            phone__in=[normalized_phone, phone, f"+{phone}"]
+                                        ).first()
+                                        
+                                        participant_info = {
+                                            'phone': phone,
+                                            'name': contact.name if contact else participant.get('name', '') or phone,
+                                            'jid': participant_id
+                                        }
+                                        participants_list.append(participant_info)
+                                
+                                logger.info(f"✅ [REFRESH GRUPO] {len(participants_list)} participantes carregados")
+                            else:
+                                logger.warning(f"⚠️ [REFRESH GRUPO] Erro ao buscar participantes: {participants_response.status_code}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ [REFRESH GRUPO] Erro ao buscar participantes: {e}")
+                            # Continuar sem participantes (não quebrar o refresh)
+                        
                         # Atualizar conversa
                         if group_name and group_name != conversation.contact_name:
                             conversation.contact_name = group_name
@@ -394,7 +440,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             update_fields.append('profile_pic_url')
                             logger.info(f"✅ [REFRESH GRUPO] Foto atualizada")
                         
-                        # Atualizar metadados
+                        # Atualizar metadados (incluindo participantes)
                         conversation.group_metadata = {
                             'group_id': group_jid,
                             'group_name': group_name,
@@ -402,6 +448,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             'participants_count': participants_count,
                             'description': group_desc,
                             'is_group': True,
+                            'participants': participants_list,  # ✅ NOVO: Lista de participantes para menções
                         }
                         update_fields.append('group_metadata')
                     elif response.status_code == 404:
@@ -630,6 +677,43 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             },
             status=status.HTTP_201_CREATED
         )
+    
+    @action(detail=True, methods=['get'], url_path='participants')
+    def get_participants(self, request, pk=None):
+        """
+        Lista participantes do grupo (para suporte a menções).
+        
+        Retorna lista de participantes com nome e telefone.
+        """
+        conversation = self.get_object()
+        
+        if conversation.conversation_type != 'group':
+            return Response(
+                {'error': 'Apenas grupos têm participantes'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar participantes do group_metadata
+        group_metadata = conversation.group_metadata or {}
+        participants = group_metadata.get('participants', [])
+        
+        # Se não tem participantes, tentar buscar da API
+        if not participants:
+            # Chamar refresh-info para atualizar participantes
+            try:
+                refresh_response = self.refresh_info(request, pk=pk)
+                if refresh_response.status_code == 200:
+                    conversation.refresh_from_db()
+                    group_metadata = conversation.group_metadata or {}
+                    participants = group_metadata.get('participants', [])
+            except Exception as e:
+                logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar participantes: {e}")
+        
+        return Response({
+            'participants': participants,
+            'count': len(participants),
+            'group_name': group_metadata.get('group_name', conversation.contact_name)
+        })
     
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):

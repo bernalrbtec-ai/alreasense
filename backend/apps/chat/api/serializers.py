@@ -210,6 +210,12 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         write_only=True,
         help_text='Lista de URLs de anexos para enviar'
     )
+    mentions = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        write_only=True,
+        help_text='Lista de números de telefone mencionados (ex: ["5517999999999"])'
+    )
     
     class Meta:
         model = Message
@@ -267,15 +273,47 @@ class MessageCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         """Cria mensagem outgoing."""
         attachment_urls = validated_data.pop('attachment_urls', [])
+        mentions = validated_data.pop('mentions', [])
         validated_data['direction'] = 'outgoing'
         validated_data['sender'] = self.context['request'].user
         validated_data['status'] = 'pending'
         
         message = Message.objects.create(**validated_data)
         
-        # attachment_urls será processado pela task RabbitMQ
+        # ✅ NOVO: Processar menções e salvar no metadata
+        metadata = {}
         if attachment_urls:
-            message.metadata = {'attachment_urls': attachment_urls}
+            metadata['attachment_urls'] = attachment_urls
+        
+        if mentions:
+            # Validar que é grupo (menções só funcionam em grupos)
+            conversation = message.conversation
+            if conversation.conversation_type != 'group':
+                # Ignorar menções em conversas individuais (não quebra, só não usa)
+                pass
+            else:
+                # Processar menções: validar números e buscar nomes
+                processed_mentions = []
+                group_metadata = conversation.group_metadata or {}
+                participants = group_metadata.get('participants', [])
+                
+                # Criar mapa de telefone -> nome para busca rápida
+                phone_to_name = {p.get('phone', ''): p.get('name', '') for p in participants}
+                
+                for phone in mentions:
+                    # Normalizar telefone (remover + e espaços)
+                    clean_phone = phone.replace('+', '').replace(' ', '').strip()
+                    name = phone_to_name.get(clean_phone, '')
+                    
+                    processed_mentions.append({
+                        'phone': clean_phone,
+                        'name': name or clean_phone
+                    })
+                
+                metadata['mentions'] = processed_mentions
+        
+        if metadata:
+            message.metadata = metadata
             message.save(update_fields=['metadata'])
         
         return message

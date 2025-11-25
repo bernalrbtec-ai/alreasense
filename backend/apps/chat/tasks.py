@@ -890,6 +890,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     'text': content.strip()
                 }
                 
+                # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
+                if conversation.conversation_type == 'group':
+                    metadata = message.metadata or {}
+                    mentions = metadata.get('mentions', [])
+                    if mentions:
+                        # Extrair apenas os números de telefone para o array mentions
+                        mention_phones = [m.get('phone', '') for m in mentions if m.get('phone')]
+                        if mention_phones:
+                            payload['mentions'] = mention_phones
+                            logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_phones)} menção(ões) à mensagem")
+                            logger.info(f"   Menções: {', '.join([_mask_remote_jid(p) for p in mention_phones])}")
+                
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   Tipo: {conversation.conversation_type}")
                 logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")

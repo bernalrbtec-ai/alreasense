@@ -218,6 +218,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         attachment_urls = data.get('attachment_urls', [])
         include_signature = data.get('include_signature', True)  # ✅ Por padrão inclui assinatura
         reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
+        mentions = data.get('mentions', [])  # ✅ NOVO: Lista de números mencionados
         
         if not content and not attachment_urls:
             await self.send(text_data=json.dumps({
@@ -233,7 +234,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             is_internal=is_internal,
             attachment_urls=attachment_urls,
             include_signature=include_signature,
-            reply_to=reply_to  # ✅ NOVO: Passar reply_to
+            reply_to=reply_to,  # ✅ NOVO: Passar reply_to
+            mentions=mentions  # ✅ NOVO: Passar mentions
         )
         
         if not message:
@@ -418,7 +420,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             return False
     
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None):
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None):
         """Cria mensagem no banco."""
         from apps.chat.models import Message, Conversation
         
@@ -435,6 +437,28 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             # ✅ NOVO: Adicionar reply_to no metadata se fornecido
             if reply_to:
                 metadata['reply_to'] = reply_to
+            
+            # ✅ NOVO: Processar menções se for grupo
+            if mentions and conversation.conversation_type == 'group':
+                # Validar números e buscar nomes dos participantes
+                processed_mentions = []
+                group_metadata = conversation.group_metadata or {}
+                participants = group_metadata.get('participants', [])
+                
+                # Criar mapa de telefone -> nome para busca rápida
+                phone_to_name = {p.get('phone', ''): p.get('name', '') for p in participants}
+                
+                for phone in mentions:
+                    # Normalizar telefone (remover + e espaços)
+                    clean_phone = phone.replace('+', '').replace(' ', '').strip()
+                    name = phone_to_name.get(clean_phone, '')
+                    
+                    processed_mentions.append({
+                        'phone': clean_phone,
+                        'name': name or clean_phone
+                    })
+                
+                metadata['mentions'] = processed_mentions
             
             message = Message.objects.create(
                 conversation=conversation,
