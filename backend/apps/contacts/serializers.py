@@ -514,8 +514,34 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         
         # ✅ CORREÇÃO: Se due_date foi alterado, resetar notification_sent para False
         # Isso permite que a tarefa seja notificada novamente na nova data/hora
+        import logging
+        logger = logging.getLogger(__name__)
+        
         old_due_date = instance.due_date
-        due_date_changed = 'due_date' in validated_data and validated_data.get('due_date') != old_due_date
+        new_due_date = validated_data.get('due_date')
+        
+        # ✅ MELHORIA: Comparação mais robusta de datetime
+        # Normalizar ambos para UTC para comparação correta
+        from django.utils import timezone
+        
+        due_date_changed = False
+        if 'due_date' in validated_data:
+            if old_due_date is None and new_due_date is not None:
+                # Mudou de None para uma data
+                due_date_changed = True
+            elif old_due_date is not None and new_due_date is None:
+                # Mudou de uma data para None
+                due_date_changed = True
+            elif old_due_date is not None and new_due_date is not None:
+                # Comparar normalizando para UTC
+                old_utc = timezone.localtime(old_due_date) if timezone.is_aware(old_due_date) else old_due_date
+                new_utc = timezone.localtime(new_due_date) if timezone.is_aware(new_due_date) else new_due_date
+                # Comparar apenas até o minuto (ignorar segundos/microssegundos)
+                old_minute = old_utc.replace(second=0, microsecond=0)
+                new_minute = new_utc.replace(second=0, microsecond=0)
+                due_date_changed = old_minute != new_minute
+        
+        logger.info(f'🔍 [TASK UPDATE] Verificando mudança de due_date: old={old_due_date}, new={new_due_date}, changed={due_date_changed}')
         
         # ✅ NOVO: Atualizar metadata se fornecido
         if metadata is not None:
@@ -533,9 +559,9 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         # ✅ CORREÇÃO: Resetar notification_sent se due_date foi alterado
         if due_date_changed:
             instance.notification_sent = False
-            import logging
-            logger = logging.getLogger(__name__)
             logger.info(f'🔄 [TASK UPDATE] Data/hora alterada de {old_due_date} para {instance.due_date} - resetando notification_sent para False')
+        else:
+            logger.debug(f'ℹ️ [TASK UPDATE] Data/hora não foi alterada (ou é a mesma) - mantendo notification_sent={instance.notification_sent}')
         
         # Atualizar contatos relacionados se fornecido
         if related_contact_ids is not None:
