@@ -702,7 +702,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         if not participants:
             logger.info(f"🔄 [PARTICIPANTS] Sem participantes no metadata, buscando da API...")
             
-            # Tentar refresh-info primeiro
+            # ✅ CORREÇÃO: Tentar refresh-info primeiro, mas sempre verificar se trouxe participantes
             try:
                 refresh_response = self.refresh_info(request, pk=pk)
                 if refresh_response.status_code == 200:
@@ -716,6 +716,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         conversation.refresh_from_db()
                         group_metadata = conversation.group_metadata or {}
                         participants = group_metadata.get('participants', [])
+                        
+                        # ✅ CORREÇÃO CRÍTICA: Se refresh-info não trouxe participantes, tentar busca direta
+                        if not participants:
+                            logger.warning(f"⚠️ [PARTICIPANTS] refresh-info não trouxe participantes, tentando busca direta...")
+                            participants = self._fetch_participants_direct(conversation)
                 else:
                     # Refresh-info falhou, tentar busca direta
                     logger.warning(f"⚠️ [PARTICIPANTS] refresh-info retornou status {refresh_response.status_code}, tentando busca direta...")
@@ -784,17 +789,24 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             headers = {'apikey': api_key}
             
             with httpx.Client(timeout=15.0) as client:
-                # Buscar participantes usando findGroupInfos com getParticipants=true
+                # ✅ TENTATIVA 1: Usar findGroupInfos com getParticipants=true
                 participants_endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint: {participants_endpoint}")
+                logger.info(f"   Params: groupJid={group_jid}, getParticipants=true")
+                
                 participants_response = client.get(
                     participants_endpoint,
                     params={'groupJid': group_jid, 'getParticipants': 'true'},
                     headers=headers
                 )
                 
+                logger.info(f"📥 [PARTICIPANTS] Resposta status: {participants_response.status_code}")
+                
                 if participants_response.status_code == 200:
                     participants_data = participants_response.json()
+                    logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {list(participants_data.keys())}")
                     raw_participants = participants_data.get('participants', [])
+                    logger.info(f"📥 [PARTICIPANTS] Raw participants: {len(raw_participants)} encontrados")
                     
                     participants_list = []
                     from apps.contacts.models import Contact
@@ -817,7 +829,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             }
                             participants_list.append(participant_info)
                     
-                    logger.info(f"✅ [PARTICIPANTS] {len(participants_list)} participantes encontrados via busca direta")
+                    logger.info(f"✅ [PARTICIPANTS] {len(participants_list)} participantes processados")
                     
                     # ✅ BONUS: Atualizar group_metadata com os participantes encontrados
                     if participants_list:
@@ -829,9 +841,59 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         logger.info(f"💾 [PARTICIPANTS] Metadata atualizado com participantes")
                     
                     return participants_list
-                else:
-                    logger.warning(f"⚠️ [PARTICIPANTS] API retornou {participants_response.status_code}")
-                    return []
+                elif participants_response.status_code == 404:
+                    # ✅ TENTATIVA 2: Tentar endpoint alternativo /group/getParticipants
+                    logger.warning(f"⚠️ [PARTICIPANTS] findGroupInfos retornou 404, tentando endpoint alternativo...")
+                    try:
+                        alt_endpoint = f"{base_url}/group/getParticipants/{instance_name}"
+                        logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint alternativo: {alt_endpoint}")
+                        alt_response = client.get(
+                            alt_endpoint,
+                            params={'groupJid': group_jid},
+                            headers=headers
+                        )
+                        
+                        if alt_response.status_code == 200:
+                            alt_data = alt_response.json()
+                            raw_participants = alt_data if isinstance(alt_data, list) else alt_data.get('participants', [])
+                            logger.info(f"✅ [PARTICIPANTS] Endpoint alternativo retornou {len(raw_participants)} participantes")
+                            
+                            # Processar da mesma forma
+                            participants_list = []
+                            from apps.contacts.models import Contact
+                            from apps.contacts.signals import normalize_phone_for_search
+                            
+                            for participant in raw_participants:
+                                participant_id = participant.get('id') or participant.get('jid') or ''
+                                if participant_id:
+                                    phone = participant_id.split('@')[0]
+                                    normalized_phone = normalize_phone_for_search(phone)
+                                    contact = Contact.objects.filter(
+                                        tenant=conversation.tenant,
+                                        phone__in=[normalized_phone, phone, f"+{phone}"]
+                                    ).first()
+                                    
+                                    participant_info = {
+                                        'phone': phone,
+                                        'name': contact.name if contact else participant.get('name', '') or phone,
+                                        'jid': participant_id
+                                    }
+                                    participants_list.append(participant_info)
+                            
+                            if participants_list:
+                                conversation.group_metadata = {
+                                    **group_metadata,
+                                    'participants': participants_list
+                                }
+                                conversation.save(update_fields=['group_metadata'])
+                            
+                            return participants_list
+                    except Exception as e:
+                        logger.warning(f"⚠️ [PARTICIPANTS] Erro no endpoint alternativo: {e}")
+                
+                logger.warning(f"⚠️ [PARTICIPANTS] API retornou {participants_response.status_code}")
+                logger.warning(f"   Response body: {participants_response.text[:200]}")
+                return []
                     
         except Exception as e:
             logger.error(f"❌ [PARTICIPANTS] Erro ao buscar participantes diretamente: {e}", exc_info=True)
