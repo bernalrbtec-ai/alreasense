@@ -192,18 +192,25 @@ class ChatWebSocketManager {
   /**
    * Envia uma mensagem de chat
    */
-  public sendChatMessage(content: string, includeSignature = true, isInternal = false): boolean {
+  public sendChatMessage(content: string, includeSignature = true, isInternal = false, mentions?: string[]): boolean {
     if (!this.currentConversationId) {
       console.error('❌ [MANAGER] Nenhuma conversa ativa');
       return false;
     }
 
-    return this.sendMessage({
+    const payload: any = {
       type: 'send_message',
       content,
       include_signature: includeSignature,
       is_internal: isInternal,
-    });
+    };
+    
+    // ✅ NOVO: Adicionar mentions se fornecido
+    if (mentions && mentions.length > 0) {
+      payload.mentions = mentions;
+    }
+
+    return this.sendMessage(payload);
   }
 
   /**

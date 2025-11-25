@@ -9,10 +9,11 @@ import { VoiceRecorder } from './VoiceRecorder';
 import { EmojiPicker } from './EmojiPicker';
 import { FileUploader } from './FileUploader';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
+import { MentionInput } from './MentionInput';
 import { api } from '@/lib/api';
 
 interface MessageInputProps {
-  sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string) => boolean;
+  sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[]) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
 }
@@ -20,6 +21,7 @@ interface MessageInputProps {
 export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply } = useChatStore();
   const [message, setMessage] = useState('');
+  const [mentions, setMentions] = useState<string[]>([]); // ✅ NOVO: Lista de números mencionados
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
@@ -105,10 +107,13 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       // 2️⃣ Se houver texto, enviar mensagem
       if (hasText) {
         const replyToId = replyToMessage?.id;
-        const success = sendMessage(message.trim(), includeSignature, false, replyToId);
+        // ✅ NOVO: Enviar mentions apenas se for grupo e tiver menções
+        const mentionsToSend = activeConversation?.conversation_type === 'group' && mentions.length > 0 ? mentions : undefined;
+        const success = sendMessage(message.trim(), includeSignature, false, replyToId, mentionsToSend);
         
         if (success) {
           setMessage('');
+          setMentions([]); // ✅ Limpar mentions após enviar
           // ✅ Limpar reply após enviar mensagem
           if (replyToMessage) {
             clearReply();
@@ -138,12 +143,18 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     // ✅ Permitir Enter para enviar se houver texto OU arquivo
+    // ✅ CORREÇÃO: Não processar se for textarea do MentionInput (ele já processa)
     const hasText = message.trim().length > 0;
     const hasFile = selectedFile !== null;
     
     if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFile)) {
-      e.preventDefault();
-      handleSend();
+      // Verificar se não está dentro de um MentionInput (sugestões abertas)
+      const target = e.target as HTMLElement;
+      const isMentionInput = target.closest('[data-mention-input]');
+      if (!isMentionInput) {
+        e.preventDefault();
+        handleSend();
+      }
     }
   };
 
@@ -321,20 +332,34 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
       {/* Input */}
       <div className="flex-1 bg-white rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg focus-within:shadow-lg focus-within:ring-2 focus-within:ring-[#00a884]/20">
-        <textarea
-          value={message}
-          onChange={(e) => handleMessageChange(e.target.value)}
-          onKeyPress={handleKeyPress}
-          placeholder="Digite uma mensagem"
-          rows={1}
-          className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
-          style={{
-            maxHeight: '120px',
-            minHeight: '44px',
-            transition: 'height 0.2s ease-out'
-          }}
-          disabled={sending}
-        />
+        {activeConversation?.conversation_type === 'group' ? (
+          <MentionInput
+            value={message}
+            onChange={handleMessageChange}
+            onMentionsChange={setMentions}
+            conversationId={activeConversation.id}
+            conversationType={activeConversation.conversation_type}
+            placeholder="Digite uma mensagem (use @ para mencionar)"
+            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
+            disabled={sending}
+            onKeyPress={handleKeyPress}
+          />
+        ) : (
+          <textarea
+            value={message}
+            onChange={(e) => handleMessageChange(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="Digite uma mensagem"
+            rows={1}
+            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
+            style={{
+              maxHeight: '120px',
+              minHeight: '44px',
+              transition: 'height 0.2s ease-out'
+            }}
+            disabled={sending}
+          />
+        )}
       </div>
 
       {/* Voice Recorder button - ao lado do Send */}

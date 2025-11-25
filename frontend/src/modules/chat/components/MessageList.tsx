@@ -16,6 +16,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { MessageContextMenu } from './MessageContextMenu';
 import type { Message } from '../types';
 import ContactModal from '@/components/contacts/ContactModal';
+import { MentionRenderer } from './MentionRenderer';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -673,13 +674,18 @@ export function MessageList() {
 
                 {/* Texto (se houver) - mostrar mesmo se só tiver anexos */}
                 {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
+                {/* ✅ NOVO: Renderizar menções se houver */}
                 {msg.content && msg.content.trim() && (
-                  <p 
-                    className="text-sm whitespace-pre-wrap break-words mb-1"
-                    dangerouslySetInnerHTML={{ 
-                      __html: linkifyText(msg.content)
-                    }}
-                  />
+                  <p className="text-sm whitespace-pre-wrap break-words mb-1">
+                    {msg.metadata?.mentions && msg.metadata.mentions.length > 0 ? (
+                      <MentionRenderer 
+                        content={msg.content} 
+                        mentions={msg.metadata.mentions}
+                      />
+                    ) : (
+                      <span dangerouslySetInnerHTML={{ __html: linkifyText(msg.content) }} />
+                    )}
+                  </p>
                 )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${msg.direction === 'outgoing' ? '' : 'opacity-60'}`}>

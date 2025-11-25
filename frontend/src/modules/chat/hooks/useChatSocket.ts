@@ -231,7 +231,7 @@ export function useChatSocket(conversationId?: string) {
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, notificationsEnabled, showNotification]);
 
   // API pública
-  const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false, replyToMessageId?: string): boolean => {
+  const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false, replyToMessageId?: string, mentions?: string[]): boolean => {
     if (!isConnected) {
       console.warn('⚠️ [HOOK] WebSocket não conectado (ignorando envio)');
       return false;
@@ -245,18 +245,22 @@ export function useChatSocket(conversationId?: string) {
     // ✅ NOVO: Suporte a reply_to via metadata
     if (replyToMessageId) {
       console.log('📤 [HOOK] Enviando mensagem com reply:', content.substring(0, 50), `| Reply to: ${replyToMessageId}`);
-      return chatWebSocketManager.sendMessage({
+      const payload: any = {
         type: 'send_message',
         conversation_id: conversationId,
         content,
         include_signature: includeSignature,
         is_internal: isInternal,
         reply_to: replyToMessageId
-      });
+      };
+      if (mentions && mentions.length > 0) {
+        payload.mentions = mentions;
+      }
+      return chatWebSocketManager.sendMessage(payload);
     }
 
-    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`);
-    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal);
+    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`, mentions ? `| Mentions: ${mentions.length}` : '');
+    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions);
   }, [isConnected, conversationId]);
 
   const sendTyping = useCallback((isTyping: boolean) => {
