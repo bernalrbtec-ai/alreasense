@@ -4,9 +4,41 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
 
+// Função para formatar telefone para exibição
+function formatPhoneForDisplay(phone: string): string {
+  if (!phone) return phone;
+  
+  // Remover tudo exceto números
+  const clean = phone.replace(/\D/g, '');
+  
+  // Remover código do país (55) se presente
+  let digits = clean;
+  if (clean.startsWith('55') && clean.length >= 12) {
+    digits = clean.substring(2);
+  }
+  
+  // Formatar baseado no tamanho
+  if (digits.length === 11) {
+    // (11) 99999-9999
+    return `(${digits.substring(0, 2)}) ${digits.substring(2, 7)}-${digits.substring(7)}`;
+  } else if (digits.length === 10) {
+    // (11) 9999-9999
+    return `(${digits.substring(0, 2)}) ${digits.substring(2, 6)}-${digits.substring(6)}`;
+  } else if (digits.length === 9) {
+    // 99999-9999
+    return `${digits.substring(0, 5)}-${digits.substring(5)}`;
+  } else if (digits.length === 8) {
+    // 9999-9999
+    return `${digits.substring(0, 4)}-${digits.substring(4)}`;
+  }
+  
+  return phone; // Retornar original se não conseguir formatar
+}
+
 interface Participant {
   phone: string;
   name: string;
+  pushname?: string;
   jid?: string;
 }
 
@@ -259,8 +291,12 @@ export function MentionInput({
                 insertMention(participant);
               }}
             >
-              <div className="font-medium text-gray-900">{participant.name}</div>
-              <div className="text-xs text-gray-500">{participant.phone}</div>
+              <div className="font-medium text-gray-900">
+                {participant.pushname || participant.name}
+              </div>
+              <div className="text-xs text-gray-500">
+                {formatPhoneForDisplay(participant.phone)}
+              </div>
             </div>
           ))}
         </div>

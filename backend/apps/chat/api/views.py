@@ -678,6 +678,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             status=status.HTTP_201_CREATED
         )
     
+    def _format_phone_for_display(self, phone: str) -> str:
+        """Formata telefone para exibição (como WhatsApp faz)."""
+        import re
+        clean = re.sub(r'\D', '', phone)
+        if clean.startswith('55') and len(clean) >= 12:
+            clean = clean[2:]  # Remover código do país
+        if len(clean) == 11:
+            return f"({clean[0:2]}) {clean[2:7]}-{clean[7:11]}"
+        elif len(clean) == 10:
+            return f"({clean[0:2]}) {clean[2:6]}-{clean[6:10]}"
+        elif len(clean) == 9:
+            return f"{clean[0:5]}-{clean[5:9]}"
+        elif len(clean) == 8:
+            return f"{clean[0:4]}-{clean[4:8]}"
+        return clean[:15] if clean else phone
+    
     @action(detail=True, methods=['get'], url_path='participants')
     def get_participants(self, request, pk=None):
         """
@@ -864,16 +880,43 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     for participant in raw_participants:
                         participant_id = participant.get('id') or participant.get('jid') or ''
                         if participant_id:
-                            phone = participant_id.split('@')[0]
-                            normalized_phone = normalize_phone_for_search(phone)
+                            # Extrair telefone do JID (formato: 5511999999999@s.whatsapp.net)
+                            phone_raw = participant_id.split('@')[0]
+                            
+                            # ✅ CORREÇÃO: Normalizar telefone para E.164 (+5511999999999)
+                            from apps.notifications.services import normalize_phone
+                            normalized_phone = normalize_phone(phone_raw)
+                            if not normalized_phone:
+                                normalized_phone = phone_raw  # Fallback se normalização falhar
+                            
+                            # Buscar contato na base de dados
+                            normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
                             contact = Contact.objects.filter(
                                 tenant=conversation.tenant,
-                                phone__in=[normalized_phone, phone, f"+{phone}"]
+                                phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
                             ).first()
                             
+                            # ✅ CORREÇÃO: Extrair pushname da resposta da API
+                            # A API pode retornar: name, pushName, notify, ou não ter nada
+                            pushname = (
+                                participant.get('pushName') or 
+                                participant.get('name') or 
+                                participant.get('notify') or 
+                                ''
+                            )
+                            
+                            # Prioridade: pushname > nome do contato > telefone formatado
+                            display_name = pushname
+                            if not display_name and contact:
+                                display_name = contact.name
+                            if not display_name:
+                                # Formatar telefone para exibição (ex: (11) 99999-9999)
+                                display_name = self._format_phone_for_display(normalized_phone)
+                            
                             participant_info = {
-                                'phone': phone,
-                                'name': contact.name if contact else participant.get('name', '') or phone,
+                                'phone': normalized_phone,  # Telefone normalizado E.164
+                                'name': display_name,  # Nome para exibição (pushname > contato > telefone)
+                                'pushname': pushname,  # Pushname original da API
                                 'jid': participant_id
                             }
                             participants_list.append(participant_info)
@@ -907,24 +950,48 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             raw_participants = alt_data.get('participants', [])
                             logger.info(f"✅ [PARTICIPANTS] Endpoint alternativo retornou {len(raw_participants)} participantes")
                             
-                            # Processar da mesma forma
+                            # ✅ CORREÇÃO: Processar da mesma forma com normalização e pushname
                             participants_list = []
                             from apps.contacts.models import Contact
                             from apps.contacts.signals import normalize_phone_for_search
+                            from apps.notifications.services import normalize_phone
                             
                             for participant in raw_participants:
                                 participant_id = participant.get('id') or participant.get('jid') or ''
                                 if participant_id:
-                                    phone = participant_id.split('@')[0]
-                                    normalized_phone = normalize_phone_for_search(phone)
+                                    phone_raw = participant_id.split('@')[0]
+                                    
+                                    # Normalizar telefone para E.164
+                                    normalized_phone = normalize_phone(phone_raw)
+                                    if not normalized_phone:
+                                        normalized_phone = phone_raw
+                                    
+                                    # Buscar contato
+                                    normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
                                     contact = Contact.objects.filter(
                                         tenant=conversation.tenant,
-                                        phone__in=[normalized_phone, phone, f"+{phone}"]
+                                        phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
                                     ).first()
                                     
+                                    # Extrair pushname
+                                    pushname = (
+                                        participant.get('pushName') or 
+                                        participant.get('name') or 
+                                        participant.get('notify') or 
+                                        ''
+                                    )
+                                    
+                                    # Prioridade: pushname > nome do contato > telefone formatado
+                                    display_name = pushname
+                                    if not display_name and contact:
+                                        display_name = contact.name
+                                    if not display_name:
+                                        display_name = self._format_phone_for_display(normalized_phone)
+                                    
                                     participant_info = {
-                                        'phone': phone,
-                                        'name': contact.name if contact else participant.get('name', '') or phone,
+                                        'phone': normalized_phone,
+                                        'name': display_name,
+                                        'pushname': pushname,
                                         'jid': participant_id
                                     }
                                     participants_list.append(participant_info)
