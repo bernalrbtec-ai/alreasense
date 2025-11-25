@@ -742,14 +742,108 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Conteúdo (para outros tipos de mensagem)
         contact_message_data = None
+        mentions_list = []  # ✅ NOVO: Lista de menções na mensagem recebida
+        
         if message_type == 'conversation':
             content = message_info.get('conversation', '')
         elif message_type == 'extendedTextMessage':
-            content = message_info.get('extendedTextMessage', {}).get('text', '')
+            extended_text = message_info.get('extendedTextMessage', {})
+            content = extended_text.get('text', '')
+            
+            # ✅ NOVO: Extrair menções do contextInfo (quando mensagem recebida tem menções)
+            context_info = extended_text.get('contextInfo', {})
+            mentioned_jids = context_info.get('mentionedJid', [])
+            
+            if mentioned_jids:
+                logger.info(f"🗣️ [WEBHOOK] Menções detectadas na mensagem recebida: {len(mentioned_jids)}")
+                from apps.notifications.services import normalize_phone
+                from apps.contacts.models import Contact
+                
+                for mentioned_jid in mentioned_jids:
+                    # Formato: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
+                    phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
+                    
+                    # Normalizar telefone
+                    normalized_phone = normalize_phone(phone_raw)
+                    if not normalized_phone:
+                        logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
+                        continue
+                    
+                    # Buscar nome do contato na lista de contatos do tenant
+                    contact = Contact.objects.filter(
+                        tenant=tenant,
+                        phone=normalized_phone
+                    ).first()
+                    
+                    mention_name = contact.name if contact else normalized_phone
+                    
+                    mentions_list.append({
+                        'phone': normalized_phone,
+                        'name': mention_name
+                    })
+                    
+                    logger.info(f"   👤 Menção: {mention_name} ({normalized_phone})")
+                
+                if mentions_list:
+                    logger.info(f"✅ [WEBHOOK] {len(mentions_list)} menções processadas e salvas")
         elif message_type == 'imageMessage':
-            content = message_info.get('imageMessage', {}).get('caption', '')
+            image_msg = message_info.get('imageMessage', {})
+            content = image_msg.get('caption', '')
+            
+            # ✅ NOVO: Menções também podem vir em imagens com legenda
+            context_info = image_msg.get('contextInfo', {})
+            mentioned_jids = context_info.get('mentionedJid', [])
+            
+            if mentioned_jids:
+                logger.info(f"🗣️ [WEBHOOK] Menções detectadas na imagem recebida: {len(mentioned_jids)}")
+                from apps.notifications.services import normalize_phone
+                from apps.contacts.models import Contact
+                
+                for mentioned_jid in mentioned_jids:
+                    phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
+                    normalized_phone = normalize_phone(phone_raw)
+                    if not normalized_phone:
+                        continue
+                    
+                    contact = Contact.objects.filter(
+                        tenant=tenant,
+                        phone=normalized_phone
+                    ).first()
+                    
+                    mention_name = contact.name if contact else normalized_phone
+                    mentions_list.append({
+                        'phone': normalized_phone,
+                        'name': mention_name
+                    })
         elif message_type == 'videoMessage':
-            content = message_info.get('videoMessage', {}).get('caption', '')
+            video_msg = message_info.get('videoMessage', {})
+            content = video_msg.get('caption', '')
+            
+            # ✅ NOVO: Menções também podem vir em vídeos com legenda
+            context_info = video_msg.get('contextInfo', {})
+            mentioned_jids = context_info.get('mentionedJid', [])
+            
+            if mentioned_jids:
+                logger.info(f"🗣️ [WEBHOOK] Menções detectadas no vídeo recebido: {len(mentioned_jids)}")
+                from apps.notifications.services import normalize_phone
+                from apps.contacts.models import Contact
+                
+                for mentioned_jid in mentioned_jids:
+                    phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
+                    normalized_phone = normalize_phone(phone_raw)
+                    if not normalized_phone:
+                        continue
+                    
+                    contact = Contact.objects.filter(
+                        tenant=tenant,
+                        phone=normalized_phone
+                    ).first()
+                    
+                    mention_name = contact.name if contact else normalized_phone
+                    mentions_list.append({
+                        'phone': normalized_phone,
+                        'name': mention_name
+                    })
         elif message_type == 'documentMessage':
             content = message_info.get('documentMessage', {}).get('caption', '')
         elif message_type == 'audioMessage':
@@ -1265,6 +1359,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ NOVO: Adicionar dados do contato compartilhado ao metadata
         if contact_message_data:
             message_defaults['metadata']['contact_message'] = contact_message_data
+        
+        # ✅ NOVO: Adicionar menções ao metadata (quando mensagem recebida tem menções)
+        if mentions_list:
+            message_defaults['metadata']['mentions'] = mentions_list
+            logger.info(f"✅ [WEBHOOK] Menções adicionadas ao metadata: {len(mentions_list)}")
         
         # Para grupos, adicionar quem enviou
         if is_group and sender_phone:

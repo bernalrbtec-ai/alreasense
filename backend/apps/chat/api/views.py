@@ -706,8 +706,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     conversation.refresh_from_db()
                     group_metadata = conversation.group_metadata or {}
                     participants = group_metadata.get('participants', [])
+                else:
+                    # ✅ CORREÇÃO: Se refresh-info retornou erro (ex: grupo não encontrado),
+                    # ainda retornar lista vazia para não quebrar o frontend
+                    logger.warning(f"⚠️ [PARTICIPANTS] refresh-info retornou status {refresh_response.status_code}")
+                    participants = []
             except Exception as e:
+                # ✅ CORREÇÃO: Sempre retornar lista vazia em caso de erro, não falhar
                 logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar participantes: {e}")
+                participants = []
+        
+        # ✅ GARANTIA: Sempre retornar lista (nunca None)
+        if not participants:
+            participants = []
         
         return Response({
             'participants': participants,

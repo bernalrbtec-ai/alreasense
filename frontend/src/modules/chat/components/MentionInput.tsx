@@ -52,9 +52,20 @@ export function MentionInput({
     try {
       const response = await api.get(`/chat/conversations/${conversationId}/participants/`);
       const data = response.data;
-      setParticipants(data.participants || []);
-    } catch (error) {
-      console.error('Erro ao carregar participantes:', error);
+      // ✅ CORREÇÃO: Verificar se data é array direto ou objeto com participants
+      if (Array.isArray(data)) {
+        setParticipants(data);
+      } else {
+        setParticipants(data.participants || []);
+      }
+    } catch (error: any) {
+      // ✅ CORREÇÃO: Não mostrar erro se grupo não foi encontrado (pode ser grupo antigo)
+      const errorMessage = error.response?.data?.error || error.message;
+      if (errorMessage?.includes('não encontrado') || errorMessage?.includes('not found')) {
+        console.warn('⚠️ [MENTIONS] Grupo não encontrado ou sem acesso - participantes não disponíveis');
+      } else {
+        console.error('❌ [MENTIONS] Erro ao carregar participantes:', errorMessage);
+      }
       setParticipants([]);
     }
   };
