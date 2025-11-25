@@ -1239,6 +1239,7 @@ class CampaignsConfig(AppConfig):
             """
             from apps.notifications.models import DepartmentNotificationPreferences
             from apps.notifications.services import calculate_time_window, check_channels_enabled
+            from apps.authn.models import User  # ✅ CORREÇÃO: Importar User
             
             # ✅ OTIMIZAÇÃO: Usar função helper para calcular janela de tempo
             time_window_start, time_window_end = calculate_time_window(current_time, window_minutes=1)
@@ -1304,6 +1305,7 @@ class CampaignsConfig(AppConfig):
             """
             from apps.authn.utils import get_department_tasks
             from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
+            from apps.contacts.models import Task  # ✅ CORREÇÃO: Importar Task
             
             # Buscar tarefas do departamento
             filters = {}
