@@ -27,9 +27,9 @@ ON CONFLICT (slug) DO UPDATE SET
     updated_at = NOW();
 
 -- 2. Adicionar Workflow a todos os planos ativos
-INSERT INTO billing_plan_product (id, plan_id, product_id, is_included, is_addon_available, limit_value, limit_unit, created_at)
+-- ✅ CORREÇÃO: id é BigAutoField (bigint), não UUID - deixar banco gerar automaticamente
+INSERT INTO billing_plan_product (plan_id, product_id, is_included, is_addon_available, limit_value, limit_unit, created_at)
 SELECT
-    gen_random_uuid(),
     p.id,
     (SELECT id FROM billing_product WHERE slug = 'workflow'),
     true,
@@ -41,8 +41,7 @@ FROM billing_plan p
 WHERE p.is_active = true
 ON CONFLICT (plan_id, product_id) DO UPDATE SET
     is_included = true,
-    is_addon_available = true,
-    updated_at = NOW();
+    is_addon_available = true;
 
 -- 3. Verificar resultado
 SELECT 
