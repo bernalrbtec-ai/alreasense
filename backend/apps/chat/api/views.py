@@ -754,8 +754,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.info(f"   Contact Phone: {conversation.contact_phone}")
             logger.info(f"   Instance Name: {conversation.instance_name}")
             
-            # Buscar instância WhatsApp
+            # ✅ CORREÇÃO: Buscar instância WhatsApp e EvolutionConnection separadamente (como no refresh-info)
             from apps.notifications.models import WhatsAppInstance
+            from apps.connections.models import EvolutionConnection
+            
             wa_instance = WhatsAppInstance.objects.filter(
                 tenant=conversation.tenant,
                 instance_name=conversation.instance_name
@@ -776,15 +778,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 else:
                     logger.info(f"✅ [PARTICIPANTS] Instância encontrada por friendly_name: {wa_instance.instance_name}")
             
-            # Buscar conexão Evolution
-            connection = wa_instance.connection
-            if not connection or not connection.is_active:
-                logger.warning(f"⚠️ [PARTICIPANTS] Conexão não ativa para instância {conversation.instance_name}")
+            # ✅ CORREÇÃO: Buscar EvolutionConnection separadamente (não tem atributo connection)
+            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+            if not evolution_server:
+                logger.error(f"❌ [PARTICIPANTS] Nenhum servidor Evolution configurado!")
                 return []
             
-            base_url = connection.base_url.rstrip('/')
-            api_key = connection.api_key
-            instance_name = wa_instance.instance_name
+            # Usar mesma lógica do refresh-info
+            base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+            api_key = wa_instance.api_key or evolution_server.api_key
+            instance_name = wa_instance.instance_name  # UUID da instância
             
             logger.info(f"✅ [PARTICIPANTS] Configuração encontrada:")
             logger.info(f"   Base URL: {base_url}")
@@ -828,14 +831,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             headers = {'apikey': api_key}
             
             with httpx.Client(timeout=15.0) as client:
-                # ✅ TENTATIVA 1: Usar findGroupInfos com getParticipants=true
-                participants_endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                # ✅ CORREÇÃO: Usar endpoint específico /group/getParticipants conforme documentação
+                # Referência: https://www.postman.com/agenciadgcode/evolution-api/request/owgz0gi/find-participants
+                participants_endpoint = f"{base_url}/group/getParticipants/{instance_name}"
                 logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint: {participants_endpoint}")
-                logger.info(f"   Params: groupJid={group_jid}, getParticipants=true")
+                logger.info(f"   Params: groupJid={group_jid}")
                 
                 participants_response = client.get(
                     participants_endpoint,
-                    params={'groupJid': group_jid, 'getParticipants': 'true'},
+                    params={'groupJid': group_jid},
                     headers=headers
                 )
                 
@@ -843,8 +847,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 
                 if participants_response.status_code == 200:
                     participants_data = participants_response.json()
-                    logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {list(participants_data.keys())}")
-                    raw_participants = participants_data.get('participants', [])
+                    logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {type(participants_data)}")
+                    
+                    # ✅ CORREÇÃO: A resposta pode ser array direto ou objeto com participants
+                    if isinstance(participants_data, list):
+                        raw_participants = participants_data
+                    else:
+                        raw_participants = participants_data.get('participants', [])
+                    
                     logger.info(f"📥 [PARTICIPANTS] Raw participants: {len(raw_participants)} encontrados")
                     
                     participants_list = []
@@ -881,20 +891,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     
                     return participants_list
                 elif participants_response.status_code == 404:
-                    # ✅ TENTATIVA 2: Tentar endpoint alternativo /group/getParticipants
-                    logger.warning(f"⚠️ [PARTICIPANTS] findGroupInfos retornou 404, tentando endpoint alternativo...")
+                    # ✅ TENTATIVA 2: Tentar findGroupInfos com getParticipants=true (fallback)
+                    logger.warning(f"⚠️ [PARTICIPANTS] getParticipants retornou 404, tentando findGroupInfos com getParticipants=true...")
                     try:
-                        alt_endpoint = f"{base_url}/group/getParticipants/{instance_name}"
+                        alt_endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
                         logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint alternativo: {alt_endpoint}")
                         alt_response = client.get(
                             alt_endpoint,
-                            params={'groupJid': group_jid},
+                            params={'groupJid': group_jid, 'getParticipants': 'true'},
                             headers=headers
                         )
                         
                         if alt_response.status_code == 200:
                             alt_data = alt_response.json()
-                            raw_participants = alt_data if isinstance(alt_data, list) else alt_data.get('participants', [])
+                            raw_participants = alt_data.get('participants', [])
                             logger.info(f"✅ [PARTICIPANTS] Endpoint alternativo retornou {len(raw_participants)} participantes")
                             
                             # Processar da mesma forma
