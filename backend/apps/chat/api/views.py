@@ -684,6 +684,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Lista participantes do grupo (para suporte a menções).
         
         Retorna lista de participantes com nome e telefone.
+        Tenta buscar do group_metadata primeiro, depois da API diretamente.
         """
         conversation = self.get_object()
         
@@ -697,34 +698,144 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         group_metadata = conversation.group_metadata or {}
         participants = group_metadata.get('participants', [])
         
-        # Se não tem participantes, tentar buscar da API
+        # Se não tem participantes, tentar buscar diretamente da API
         if not participants:
-            # Chamar refresh-info para atualizar participantes
+            logger.info(f"🔄 [PARTICIPANTS] Sem participantes no metadata, buscando da API...")
+            
+            # Tentar refresh-info primeiro
             try:
                 refresh_response = self.refresh_info(request, pk=pk)
                 if refresh_response.status_code == 200:
-                    conversation.refresh_from_db()
-                    group_metadata = conversation.group_metadata or {}
-                    participants = group_metadata.get('participants', [])
+                    # Verificar se refresh-info retornou warning (grupo não encontrado)
+                    refresh_data = refresh_response.data
+                    if refresh_data.get('warning') == 'group_not_found':
+                        logger.warning(f"⚠️ [PARTICIPANTS] refresh-info: grupo não encontrado, tentando busca direta...")
+                        participants = self._fetch_participants_direct(conversation)
+                    else:
+                        # Refresh-info funcionou, buscar do metadata atualizado
+                        conversation.refresh_from_db()
+                        group_metadata = conversation.group_metadata or {}
+                        participants = group_metadata.get('participants', [])
                 else:
-                    # ✅ CORREÇÃO: Se refresh-info retornou erro (ex: grupo não encontrado),
-                    # ainda retornar lista vazia para não quebrar o frontend
-                    logger.warning(f"⚠️ [PARTICIPANTS] refresh-info retornou status {refresh_response.status_code}")
-                    participants = []
+                    # Refresh-info falhou, tentar busca direta
+                    logger.warning(f"⚠️ [PARTICIPANTS] refresh-info retornou status {refresh_response.status_code}, tentando busca direta...")
+                    participants = self._fetch_participants_direct(conversation)
             except Exception as e:
-                # ✅ CORREÇÃO: Sempre retornar lista vazia em caso de erro, não falhar
-                logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar participantes: {e}")
-                participants = []
+                # Erro no refresh-info, tentar busca direta
+                logger.warning(f"⚠️ [PARTICIPANTS] Erro no refresh-info: {e}, tentando busca direta...")
+                participants = self._fetch_participants_direct(conversation)
         
         # ✅ GARANTIA: Sempre retornar lista (nunca None)
         if not participants:
             participants = []
+        
+        logger.info(f"✅ [PARTICIPANTS] Retornando {len(participants)} participantes")
         
         return Response({
             'participants': participants,
             'count': len(participants),
             'group_name': group_metadata.get('group_name', conversation.contact_name)
         })
+    
+    def _fetch_participants_direct(self, conversation):
+        """
+        Busca participantes diretamente da Evolution API, sem passar pelo refresh-info.
+        Útil quando o refresh-info falha mas ainda queremos os participantes.
+        """
+        try:
+            # Buscar instância WhatsApp
+            from apps.notifications.models import WhatsAppInstance
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant=conversation.tenant,
+                instance_name=conversation.instance_name
+            ).first()
+            
+            if not wa_instance:
+                logger.warning(f"⚠️ [PARTICIPANTS] Instância não encontrada: {conversation.instance_name}")
+                return []
+            
+            # Buscar conexão Evolution
+            connection = wa_instance.connection
+            if not connection or not connection.is_active:
+                logger.warning(f"⚠️ [PARTICIPANTS] Conexão não ativa para instância {conversation.instance_name}")
+                return []
+            
+            base_url = connection.base_url.rstrip('/')
+            api_key = connection.api_key
+            instance_name = wa_instance.instance_name
+            
+            # Obter group_jid do metadata ou contact_phone
+            group_metadata = conversation.group_metadata or {}
+            group_jid = group_metadata.get('group_id')
+            
+            if not group_jid:
+                # Tentar construir do contact_phone
+                raw_phone = conversation.contact_phone
+                if raw_phone:
+                    clean_id = raw_phone.replace('+', '').strip()
+                    group_jid = f"{clean_id}@g.us"
+                else:
+                    logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível determinar group_jid")
+                    return []
+            
+            logger.info(f"🔄 [PARTICIPANTS] Buscando participantes diretamente: {group_jid}")
+            
+            import httpx
+            headers = {'apikey': api_key}
+            
+            with httpx.Client(timeout=15.0) as client:
+                # Buscar participantes usando findGroupInfos com getParticipants=true
+                participants_endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                participants_response = client.get(
+                    participants_endpoint,
+                    params={'groupJid': group_jid, 'getParticipants': 'true'},
+                    headers=headers
+                )
+                
+                if participants_response.status_code == 200:
+                    participants_data = participants_response.json()
+                    raw_participants = participants_data.get('participants', [])
+                    
+                    participants_list = []
+                    from apps.contacts.models import Contact
+                    from apps.contacts.signals import normalize_phone_for_search
+                    
+                    for participant in raw_participants:
+                        participant_id = participant.get('id') or participant.get('jid') or ''
+                        if participant_id:
+                            phone = participant_id.split('@')[0]
+                            normalized_phone = normalize_phone_for_search(phone)
+                            contact = Contact.objects.filter(
+                                tenant=conversation.tenant,
+                                phone__in=[normalized_phone, phone, f"+{phone}"]
+                            ).first()
+                            
+                            participant_info = {
+                                'phone': phone,
+                                'name': contact.name if contact else participant.get('name', '') or phone,
+                                'jid': participant_id
+                            }
+                            participants_list.append(participant_info)
+                    
+                    logger.info(f"✅ [PARTICIPANTS] {len(participants_list)} participantes encontrados via busca direta")
+                    
+                    # ✅ BONUS: Atualizar group_metadata com os participantes encontrados
+                    if participants_list:
+                        conversation.group_metadata = {
+                            **group_metadata,
+                            'participants': participants_list
+                        }
+                        conversation.save(update_fields=['group_metadata'])
+                        logger.info(f"💾 [PARTICIPANTS] Metadata atualizado com participantes")
+                    
+                    return participants_list
+                else:
+                    logger.warning(f"⚠️ [PARTICIPANTS] API retornou {participants_response.status_code}")
+                    return []
+                    
+        except Exception as e:
+            logger.error(f"❌ [PARTICIPANTS] Erro ao buscar participantes diretamente: {e}", exc_info=True)
+            return []
     
     @action(detail=True, methods=['post'])
     def assign(self, request, pk=None):
