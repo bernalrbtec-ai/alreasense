@@ -14,7 +14,6 @@ import {
   Package,
   Activity,
   Server,
-  Bell,
   ChevronLeft,
   ChevronRight,
   Settings,
@@ -23,7 +22,6 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
 import { useUserAccess } from '../hooks/useUserAccess'
-import { useNotificationCount } from '../hooks/useNotifications'
 import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
@@ -37,7 +35,6 @@ const productMenuItems = {
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'flow' },
     { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
     { name: 'Chat', href: '/chat', icon: MessageSquare, requiredProduct: 'flow' },
-    { name: 'Notificações', href: '/admin/notifications', icon: Bell, requiredProduct: 'flow' },
   ],
   sense: [
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'sense' },
@@ -70,7 +67,6 @@ export default function Layout() {
   const { user, logout } = useAuthStore()
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
   const { hasProductAccess } = useUserAccess()
-  const { unreadCount } = useNotificationCount()
   
   // 🔔 WebSocket global do tenant - fica sempre conectado para receber notificações
   useTenantSocket()
@@ -233,7 +229,6 @@ export default function Layout() {
                 </div>
                 {adminNavigation.map((item) => {
                   const isActive = location.pathname === item.href
-                  const isNotificationItem = item.name === 'Notificações'
                   
                   return (
                     <Link
@@ -246,14 +241,7 @@ export default function Layout() {
                           : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
                       )}
                     >
-                      <div className="relative">
-                        <item.icon className="mr-3 h-5 w-5" />
-                        {isNotificationItem && unreadCount > 0 && (
-                          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center">
-                            {unreadCount > 99 ? '99+' : unreadCount}
-                          </span>
-                        )}
-                      </div>
+                      <item.icon className="mr-3 h-5 w-5" />
                       {item.name}
                     </Link>
                   )
