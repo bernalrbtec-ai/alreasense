@@ -323,11 +323,13 @@ export function MentionInput({
               }}
             >
               <div className="font-medium text-gray-900">
-                {participant.pushname || participant.name || 'Sem nome'}
+                {participant.pushname || participant.name || (participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem nome')}
               </div>
-              <div className="text-xs text-gray-500">
-                {participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem telefone'}
-              </div>
+              {participant.pushname || participant.name ? (
+                <div className="text-xs text-gray-500">
+                  {participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem telefone'}
+                </div>
+              ) : null}
             </div>
           ))}
         </div>

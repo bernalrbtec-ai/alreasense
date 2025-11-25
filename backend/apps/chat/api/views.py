@@ -908,15 +908,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             )
                             logger.info(f"   Pushname extraído: {pushname}")
                             
-                            # Prioridade: pushname > nome do contato > telefone formatado
+                            # ✅ CORREÇÃO: Prioridade: pushname > nome do contato
+                            # NÃO usar telefone como name - deixar vazio para frontend mostrar apenas telefone formatado
                             display_name = pushname
                             if not display_name and contact:
                                 display_name = contact.name
                                 logger.info(f"   Usando nome do contato: {display_name}")
+                            # ✅ CORREÇÃO: Se não tem pushname nem contato, deixar name vazio
+                            # O frontend vai mostrar apenas o telefone formatado na linha de baixo
                             if not display_name:
-                                # Formatar telefone para exibição (ex: (11) 99999-9999)
-                                display_name = self._format_phone_for_display(normalized_phone)
-                                logger.info(f"   Usando telefone formatado: {display_name}")
+                                display_name = ''  # Vazio - frontend mostrará apenas telefone formatado
+                                logger.info(f"   Sem pushname nem contato - name vazio (telefone será mostrado separadamente)")
                             
                             participant_info = {
                                 'phone': normalized_phone,  # Telefone normalizado E.164
@@ -987,12 +989,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                         ''
                                     )
                                     
-                                    # Prioridade: pushname > nome do contato > telefone formatado
+                                    # ✅ CORREÇÃO: Prioridade: pushname > nome do contato
+                                    # NÃO usar telefone como name - deixar vazio para frontend mostrar apenas telefone formatado
                                     display_name = pushname
                                     if not display_name and contact:
                                         display_name = contact.name
+                                    # ✅ CORREÇÃO: Se não tem pushname nem contato, deixar name vazio
+                                    # O frontend vai mostrar apenas o telefone formatado na linha de baixo
                                     if not display_name:
-                                        display_name = self._format_phone_for_display(normalized_phone)
+                                        display_name = ''  # Vazio - frontend mostrará apenas telefone formatado
                                     
                                     participant_info = {
                                         'phone': normalized_phone,
