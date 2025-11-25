@@ -83,11 +83,11 @@ def get_user_managed_departments(user):
     
     # Admin gerencia todos os departamentos do tenant
     if user.role == 'admin':
-        return Department.objects.filter(tenant=user.tenant, is_active=True)
+        return Department.objects.filter(tenant=user.tenant)
     
     # Gerente gerencia apenas departamentos onde está vinculado
     if user.role == 'gerente':
-        return user.departments.filter(tenant=user.tenant, is_active=True)
+        return user.departments.filter(tenant=user.tenant)
     
     # Agente não gerencia nenhum departamento
     return Department.objects.none()
