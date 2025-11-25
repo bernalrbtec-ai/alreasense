@@ -6,6 +6,7 @@ Reutiliza o sistema existente de WhatsApp e WebSocket.
 import logging
 import re
 import requests
+import time
 from django.utils import timezone
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -55,6 +56,44 @@ def normalize_phone(phone):
     return phone_clean
 
 
+def _get_whatsapp_config(user):
+    """
+    Helper para buscar configuração WhatsApp do tenant.
+    
+    Args:
+        user: Instância de User
+    
+    Returns:
+        tuple: (base_url, api_key, instance_name) ou (None, None, None) se não encontrado
+    """
+    # Buscar instância WhatsApp ativa do tenant
+    instance = WhatsAppInstance.objects.filter(
+        tenant=user.tenant,
+        is_active=True,
+        status='active'
+    ).select_related('tenant').first()
+    
+    if instance and instance.api_url and instance.api_key:
+        return instance.api_url.rstrip('/'), instance.api_key, instance.instance_name
+    
+    # Fallback: buscar EvolutionConnection
+    connection = EvolutionConnection.objects.filter(
+        tenant=user.tenant,
+        is_active=True
+    ).select_related('tenant').first()
+    
+    if connection and connection.base_url and connection.api_key:
+        # Buscar instância para pegar instance_name
+        instance = WhatsAppInstance.objects.filter(
+            tenant=user.tenant,
+            is_active=True
+        ).first()
+        instance_name = instance.instance_name if instance else 'default'
+        return connection.base_url.rstrip('/'), connection.api_key, instance_name
+    
+    return None, None, None
+
+
 def send_whatsapp_notification(user, message):
     """
     Envia notificação via WhatsApp.
@@ -73,62 +112,22 @@ def send_whatsapp_notification(user, message):
         ValueError: Se usuário não tem telefone ou telefone inválido
     """
     # ✅ VALIDAÇÃO: Verificar se usuário tem telefone
-    phone = user.phone
-    if not phone:
+    if not user.phone:
         raise ValueError(f"Usuário {user.email} não tem telefone cadastrado")
     
-    # ✅ VALIDAÇÃO: Verificar se telefone tem formato mínimo válido (pelo menos 10 dígitos)
-    phone_digits = ''.join(filter(str.isdigit, phone))
-    if len(phone_digits) < 10:
-        raise ValueError(f"Telefone do usuário {user.email} é inválido: {phone}")
-    
     # ✅ NORMALIZAÇÃO: Garantir formato E.164
-    phone_normalized = normalize_phone(phone)
+    phone_normalized = normalize_phone(user.phone)
     if not phone_normalized:
-        raise ValueError(f"Telefone do usuário {user.email} não pôde ser normalizado: {phone}")
+        raise ValueError(f"Telefone do usuário {user.email} não pôde ser normalizado: {user.phone}")
     
-    # Buscar instância WhatsApp ativa do tenant
-    instance = WhatsAppInstance.objects.filter(
-        tenant=user.tenant,
-        is_active=True,
-        status='active'
-    ).first()
-    
-    if not instance:
-        logger.warning(f'⚠️ [WHATSAPP NOTIFICATION] Nenhuma instância WhatsApp ativa para tenant {user.tenant_id}')
-        raise ValueError(f"Nenhuma instância WhatsApp ativa para tenant {user.tenant.name}")
-    
-    # ✅ MELHORIA: Usar api_url e api_key da instância diretamente
-    base_url = instance.api_url
-    api_key = instance.api_key
-    
-    if not base_url or not api_key:
-        # Fallback: buscar EvolutionConnection
-        connection = EvolutionConnection.objects.filter(
-            tenant=user.tenant,
-            is_active=True
-        ).first()
-        
-        if connection:
-            base_url = connection.base_url
-            api_key = connection.api_key
-        else:
-            # Buscar conexão global (sem tenant)
-            connection = EvolutionConnection.objects.filter(
-                is_active=True
-            ).first()
-            
-            if connection:
-                base_url = connection.base_url
-                api_key = connection.api_key
+    # Buscar configuração WhatsApp
+    base_url, api_key, instance_name = _get_whatsapp_config(user)
     
     if not base_url or not api_key:
         logger.warning(f'⚠️ [WHATSAPP NOTIFICATION] API URL ou API Key não configurados para tenant {user.tenant_id}')
         raise ValueError(f"API URL ou API Key não configurados para tenant {user.tenant.name}")
     
-    # ✅ MELHORIA: Usar instance_name da instância e base_url normalizado
-    base_url = base_url.rstrip('/')
-    url = f"{base_url}/message/sendText/{instance.instance_name}"
+    url = f"{base_url}/message/sendText/{instance_name}"
     headers = {
         'apikey': api_key,
         'Content-Type': 'application/json'
@@ -167,7 +166,6 @@ def send_whatsapp_notification(user, message):
                 if attempt < max_retries - 1:
                     delay = base_delay * (2 ** attempt)  # Exponential backoff
                     logger.info(f'⏳ [WHATSAPP NOTIFICATION] Aguardando {delay}s antes de tentar novamente...')
-                    import time
                     time.sleep(delay)
                 else:
                     raise Exception(f"Falha após {max_retries} tentativas: {error_msg}")
@@ -176,7 +174,6 @@ def send_whatsapp_notification(user, message):
             logger.warning(f'⏱️ [WHATSAPP NOTIFICATION] Timeout na tentativa {attempt + 1}/{max_retries}')
             if attempt < max_retries - 1:
                 delay = base_delay * (2 ** attempt)
-                import time
                 time.sleep(delay)
             else:
                 raise Exception("Timeout após múltiplas tentativas")
@@ -185,7 +182,6 @@ def send_whatsapp_notification(user, message):
             logger.warning(f'🔌 [WHATSAPP NOTIFICATION] Erro de conexão na tentativa {attempt + 1}/{max_retries}: {e}')
             if attempt < max_retries - 1:
                 delay = base_delay * (2 ** attempt)
-                import time
                 time.sleep(delay)
             else:
                 raise Exception(f"Erro de conexão após múltiplas tentativas: {e}")
@@ -194,7 +190,6 @@ def send_whatsapp_notification(user, message):
             logger.error(f'❌ [WHATSAPP NOTIFICATION] Erro inesperado na tentativa {attempt + 1}/{max_retries}: {e}', exc_info=True)
             if attempt < max_retries - 1:
                 delay = base_delay * (2 ** attempt)
-                import time
                 time.sleep(delay)
             else:
                 raise
@@ -243,3 +238,138 @@ def send_websocket_notification(user, notification_type, data):
         logger.error(f'❌ [WEBSOCKET NOTIFICATION] Erro ao enviar notificação WebSocket para {user.email}: {e}', exc_info=True)
         return False
 
+
+def check_channels_enabled(preferences, user):
+    """
+    Verifica se pelo menos um canal de notificação está habilitado.
+    
+    Args:
+        preferences: Instância de UserNotificationPreferences ou DepartmentNotificationPreferences
+        user: Instância de User
+    
+    Returns:
+        tuple: (has_whatsapp, has_websocket, has_email, has_any)
+    """
+    has_whatsapp = preferences.notify_via_whatsapp and user.notify_whatsapp
+    has_websocket = preferences.notify_via_websocket
+    has_email = preferences.notify_via_email
+    has_any = has_whatsapp or has_websocket or has_email
+    
+    return has_whatsapp, has_websocket, has_email, has_any
+
+
+def send_notifications(user, preferences, message, notification_type, data, context_name=''):
+    """
+    Envia notificações através de todos os canais habilitados.
+    
+    Args:
+        user: Instância de User
+        preferences: Instância de UserNotificationPreferences ou DepartmentNotificationPreferences
+        message: String com a mensagem formatada (para WhatsApp/Email)
+        notification_type: String com o tipo de notificação
+        data: Dict com os dados da notificação (para WebSocket)
+        context_name: String com contexto adicional para logs (ex: "departamento X")
+    
+    Returns:
+        tuple: (notifications_sent, notifications_failed)
+    """
+    notifications_sent = 0
+    notifications_failed = 0
+    
+    # Verificar canais habilitados
+    has_whatsapp, has_websocket, has_email, has_any = check_channels_enabled(preferences, user)
+    
+    if not has_any:
+        logger.debug(f'⏭️ [NOTIFICATIONS] Pulando {user.email} - Nenhum canal habilitado')
+        return 0, 0
+    
+    # WhatsApp
+    if has_whatsapp:
+        try:
+            success = send_whatsapp_notification(user, message)
+            if success:
+                notifications_sent += 1
+            else:
+                notifications_failed += 1
+        except Exception as e:
+            logger.error(f'❌ [NOTIFICATIONS] Erro ao enviar WhatsApp para {user.email} {context_name}: {e}', exc_info=True)
+            notifications_failed += 1
+    
+    # WebSocket
+    if has_websocket:
+        try:
+            success = send_websocket_notification(user, notification_type, data)
+            if success:
+                notifications_sent += 1
+            else:
+                notifications_failed += 1
+        except Exception as e:
+            logger.error(f'❌ [NOTIFICATIONS] Erro ao enviar WebSocket para {user.email} {context_name}: {e}', exc_info=True)
+            notifications_failed += 1
+    
+    # Email (se implementado)
+    if has_email:
+        try:
+            # TODO: Implementar envio de email
+            logger.debug(f'📧 [NOTIFICATIONS] Email não implementado ainda para {user.email}')
+        except Exception as e:
+            logger.error(f'❌ [NOTIFICATIONS] Erro ao enviar Email para {user.email} {context_name}: {e}', exc_info=True)
+            notifications_failed += 1
+    
+    return notifications_sent, notifications_failed
+
+
+def calculate_time_window(current_time, window_minutes=1):
+    """
+    Calcula janela de tempo para verificação de notificações.
+    
+    Args:
+        current_time: time object
+        window_minutes: int - minutos de margem (±)
+    
+    Returns:
+        tuple: (time_window_start, time_window_end)
+    """
+    from datetime import datetime, timedelta
+    time_window_start = (datetime.combine(datetime.min, current_time) - timedelta(minutes=window_minutes)).time()
+    time_window_end = (datetime.combine(datetime.min, current_time) + timedelta(minutes=window_minutes)).time()
+    return time_window_start, time_window_end
+
+
+def get_greeting():
+    """
+    Retorna saudação personalizada baseada no horário atual.
+    
+    Returns:
+        str: "Bom dia", "Boa tarde" ou "Boa noite"
+    """
+    current_hour = timezone.localtime(timezone.now()).hour
+    if 5 <= current_hour < 12:
+        return "Bom dia"
+    elif 12 <= current_hour < 18:
+        return "Boa tarde"
+    else:
+        return "Boa noite"
+
+
+def format_weekday_pt(date_obj):
+    """
+    Retorna nome do dia da semana em português.
+    
+    Args:
+        date_obj: date object
+    
+    Returns:
+        str: Nome do dia da semana em português
+    """
+    weekday = date_obj.strftime('%A')
+    weekdays_pt = {
+        'Monday': 'Segunda-feira',
+        'Tuesday': 'Terça-feira',
+        'Wednesday': 'Quarta-feira',
+        'Thursday': 'Quinta-feira',
+        'Friday': 'Sexta-feira',
+        'Saturday': 'Sábado',
+        'Sunday': 'Domingo',
+    }
+    return weekdays_pt.get(weekday, weekday)

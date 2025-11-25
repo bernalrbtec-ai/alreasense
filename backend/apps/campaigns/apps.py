@@ -954,13 +954,12 @@ class CampaignsConfig(AppConfig):
                 current_date: date object no timezone local
             """
             from apps.notifications.models import UserNotificationPreferences
-            from datetime import datetime, timedelta
+            from apps.notifications.services import calculate_time_window, check_channels_enabled
             
-            # Janela de ±1 minuto para evitar perda de notificações devido a delays
-            time_window_start = (datetime.combine(datetime.min, current_time) - timedelta(minutes=1)).time()
-            time_window_end = (datetime.combine(datetime.min, current_time) + timedelta(minutes=1)).time()
+            # ✅ OTIMIZAÇÃO: Usar função helper para calcular janela de tempo
+            time_window_start, time_window_end = calculate_time_window(current_time, window_minutes=1)
             
-            # Buscar preferências ativas no horário atual
+            # ✅ OTIMIZAÇÃO: Query otimizada com select_related
             preferences = UserNotificationPreferences.objects.filter(
                 daily_summary_enabled=True,
                 daily_summary_time__isnull=False,
@@ -973,12 +972,10 @@ class CampaignsConfig(AppConfig):
             count = 0
             for pref in preferences:
                 try:
-                    # ✅ VALIDAÇÃO: Verificar se pelo menos um canal está habilitado
-                    has_whatsapp = pref.notify_via_whatsapp and pref.user.notify_whatsapp
-                    has_websocket = pref.notify_via_websocket
-                    has_email = pref.notify_via_email
+                    # ✅ OTIMIZAÇÃO: Usar função helper para verificar canais
+                    _, _, _, has_any = check_channels_enabled(pref, pref.user)
                     
-                    if not (has_whatsapp or has_websocket or has_email):
+                    if not has_any:
                         logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Pulando {pref.user.email} - Nenhum canal habilitado')
                         continue
                     
@@ -1014,13 +1011,13 @@ class CampaignsConfig(AppConfig):
             from apps.contacts.models import Task
             from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
             
-            # Buscar tarefas do usuário (apenas do tenant)
+            # ✅ OTIMIZAÇÃO: Query otimizada com select_related e prefetch_related
             tasks = Task.objects.filter(
                 assigned_to=user,
                 tenant=user.tenant
             ).exclude(
                 status__in=['cancelled']  # Sempre excluir canceladas
-            ).select_related('department', 'created_by', 'tenant')
+            ).select_related('department', 'created_by', 'tenant', 'assigned_to').prefetch_related('related_contacts')
             
             # Aplicar filtros baseados nas preferências
             if not preferences.notify_pending:
@@ -1064,50 +1061,25 @@ class CampaignsConfig(AppConfig):
                 logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Mensagem vazia para {user.email}, pulando envio')
                 return
             
-            # ✅ CONTROLE: Enviar notificações com tratamento de erros individual
-            notifications_sent = 0
-            notifications_failed = 0
+            # ✅ OTIMIZAÇÃO: Usar função helper para enviar notificações
+            from apps.notifications.services import send_notifications
             
-            # WhatsApp
-            if preferences.notify_via_whatsapp and user.notify_whatsapp:
-                try:
-                    success = send_whatsapp_notification(user, message)
-                    if success:
-                        notifications_sent += 1
-                    else:
-                        notifications_failed += 1
-                except Exception as e:
-                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WhatsApp para {user.email}: {e}', exc_info=True)
-                    notifications_failed += 1
-            
-            # WebSocket
-            if preferences.notify_via_websocket:
-                try:
-                    success = send_websocket_notification(user, 'daily_summary', {
-                        'date': current_date.isoformat(),
-                        'tasks': {
-                            'pending': len(tasks_by_status['pending']),
-                            'in_progress': len(tasks_by_status['in_progress']),
-                            'completed': len(tasks_by_status['completed']),
-                            'overdue': len(tasks_by_status['overdue']),
-                        }
-                    })
-                    if success:
-                        notifications_sent += 1
-                    else:
-                        notifications_failed += 1
-                except Exception as e:
-                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WebSocket para {user.email}: {e}', exc_info=True)
-                    notifications_failed += 1
-            
-            # Email (se implementado)
-            if preferences.notify_via_email:
-                try:
-                    # TODO: Implementar envio de email
-                    logger.debug(f'📧 [DAILY NOTIFICATIONS] Email não implementado ainda para {user.email}')
-                except Exception as e:
-                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar Email para {user.email}: {e}', exc_info=True)
-                    notifications_failed += 1
+            notifications_sent, notifications_failed = send_notifications(
+                user=user,
+                preferences=preferences,
+                message=message,
+                notification_type='daily_summary',
+                data={
+                    'date': current_date.isoformat(),
+                    'tasks': {
+                        'pending': len(tasks_by_status['pending']),
+                        'in_progress': len(tasks_by_status['in_progress']),
+                        'completed': len(tasks_by_status['completed']),
+                        'overdue': len(tasks_by_status['overdue']),
+                    }
+                },
+                context_name=''
+            )
             
             # ✅ CONTROLE: Logar resultado final
             if notifications_sent > 0:
@@ -1134,30 +1106,12 @@ class CampaignsConfig(AppConfig):
             Returns:
                 str: Mensagem formatada para WhatsApp
             """
+            # ✅ OTIMIZAÇÃO: Usar funções helper para formatação
+            from apps.notifications.services import get_greeting, format_weekday_pt
+            
             date_str = current_date.strftime('%d/%m/%Y')
-            weekday = current_date.strftime('%A')  # Nome do dia da semana
-            
-            # Traduzir dia da semana (opcional)
-            weekdays_pt = {
-                'Monday': 'Segunda-feira',
-                'Tuesday': 'Terça-feira',
-                'Wednesday': 'Quarta-feira',
-                'Thursday': 'Quinta-feira',
-                'Friday': 'Sexta-feira',
-                'Saturday': 'Sábado',
-                'Sunday': 'Domingo',
-            }
-            weekday_pt = weekdays_pt.get(weekday, weekday)
-            
-            # ✅ UX: Saudação personalizada baseada no horário
-            current_hour = timezone.localtime(timezone.now()).hour
-            if 5 <= current_hour < 12:
-                greeting = "Bom dia"
-            elif 12 <= current_hour < 18:
-                greeting = "Boa tarde"
-            else:
-                greeting = "Boa noite"
-            
+            weekday_pt = format_weekday_pt(current_date)
+            greeting = get_greeting()
             user_name = user.first_name or user.email.split('@')[0]
             
             # ✅ UX: Mensagem mais amigável e motivacional
@@ -1250,12 +1204,12 @@ class CampaignsConfig(AppConfig):
                 current_date: date object no timezone local
             """
             from apps.notifications.models import DepartmentNotificationPreferences
-            from datetime import datetime, timedelta
+            from apps.notifications.services import calculate_time_window, check_channels_enabled
             
-            # Janela de ±1 minuto para evitar perda de notificações devido a delays
-            time_window_start = (datetime.combine(datetime.min, current_time) - timedelta(minutes=1)).time()
-            time_window_end = (datetime.combine(datetime.min, current_time) + timedelta(minutes=1)).time()
+            # ✅ OTIMIZAÇÃO: Usar função helper para calcular janela de tempo
+            time_window_start, time_window_end = calculate_time_window(current_time, window_minutes=1)
             
+            # ✅ OTIMIZAÇÃO: Query otimizada com select_related
             preferences = DepartmentNotificationPreferences.objects.filter(
                 daily_summary_enabled=True,
                 daily_summary_time__isnull=False,
@@ -1263,26 +1217,24 @@ class CampaignsConfig(AppConfig):
                 daily_summary_time__lte=time_window_end,
                 tenant__is_active=True,
                 department__is_active=True
-            ).select_related('department', 'tenant')
+            ).select_related('department', 'tenant', 'department__tenant')
             
             count = 0
             for pref in preferences:
                 try:
-                    # Buscar gestores do departamento
+                    # ✅ OTIMIZAÇÃO: Query otimizada com select_related para managers
                     managers = User.objects.filter(
                         departments=pref.department,
                         role__in=['gerente', 'admin'],
                         tenant=pref.tenant,
                         is_active=True
-                    )
+                    ).select_related('tenant').prefetch_related('departments')
                     
                     for manager in managers:
-                        # ✅ VALIDAÇÃO: Verificar se pelo menos um canal está habilitado
-                        has_whatsapp = pref.notify_via_whatsapp and manager.notify_whatsapp
-                        has_websocket = pref.notify_via_websocket
-                        has_email = pref.notify_via_email
+                        # ✅ OTIMIZAÇÃO: Usar função helper para verificar canais
+                        _, _, _, has_any = check_channels_enabled(pref, manager)
                         
-                        if not (has_whatsapp or has_websocket or has_email):
+                        if not has_any:
                             logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Pulando {manager.email} - Nenhum canal habilitado')
                             continue
                         
@@ -1392,52 +1344,27 @@ class CampaignsConfig(AppConfig):
                 logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Mensagem vazia para departamento {department.name}, pulando envio')
                 return
             
-            # ✅ CONTROLE: Enviar notificações com tratamento de erros individual
-            notifications_sent = 0
-            notifications_failed = 0
+            # ✅ OTIMIZAÇÃO: Usar função helper para enviar notificações
+            from apps.notifications.services import send_notifications
             
-            # WhatsApp
-            if preferences.notify_via_whatsapp and manager.notify_whatsapp:
-                try:
-                    success = send_whatsapp_notification(manager, message)
-                    if success:
-                        notifications_sent += 1
-                    else:
-                        notifications_failed += 1
-                except Exception as e:
-                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WhatsApp para {manager.email}: {e}', exc_info=True)
-                    notifications_failed += 1
-            
-            # WebSocket
-            if preferences.notify_via_websocket:
-                try:
-                    success = send_websocket_notification(manager, 'department_daily_summary', {
-                        'department_id': str(department.id),
-                        'department_name': department.name,
-                        'date': current_date.isoformat(),
-                        'tasks': {
-                            'pending': len(tasks_by_status['pending']),
-                            'in_progress': len(tasks_by_status['in_progress']),
-                            'completed': len(tasks_by_status['completed']),
-                            'overdue': len(tasks_by_status['overdue']),
-                        }
-                    })
-                    if success:
-                        notifications_sent += 1
-                    else:
-                        notifications_failed += 1
-                except Exception as e:
-                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar WebSocket para {manager.email}: {e}', exc_info=True)
-                    notifications_failed += 1
-            
-            # Email (se implementado)
-            if preferences.notify_via_email:
-                try:
-                    # TODO: Implementar envio de email
-                    logger.debug(f'📧 [DAILY NOTIFICATIONS] Email não implementado ainda para {manager.email}')
-                except Exception as e:
-                    logger.error(f'❌ [DAILY NOTIFICATIONS] Erro ao enviar Email para {manager.email}: {e}', exc_info=True)
-                    notifications_failed += 1
+            notifications_sent, notifications_failed = send_notifications(
+                user=manager,
+                preferences=preferences,
+                message=message,
+                notification_type='department_daily_summary',
+                data={
+                    'department_id': str(department.id),
+                    'department_name': department.name,
+                    'date': current_date.isoformat(),
+                    'tasks': {
+                        'pending': len(tasks_by_status['pending']),
+                        'in_progress': len(tasks_by_status['in_progress']),
+                        'completed': len(tasks_by_status['completed']),
+                        'overdue': len(tasks_by_status['overdue']),
+                    }
+                },
+                context_name=f'(departamento: {department.name})'
+            )
             
             # ✅ CONTROLE: Logar resultado final
             if notifications_sent > 0:
@@ -1465,30 +1392,12 @@ class CampaignsConfig(AppConfig):
             Returns:
                 str: Mensagem formatada para WhatsApp
             """
+            # ✅ OTIMIZAÇÃO: Usar funções helper para formatação
+            from apps.notifications.services import get_greeting, format_weekday_pt
+            
             date_str = current_date.strftime('%d/%m/%Y')
-            weekday = current_date.strftime('%A')  # Nome do dia da semana
-            
-            # Traduzir dia da semana (opcional)
-            weekdays_pt = {
-                'Monday': 'Segunda-feira',
-                'Tuesday': 'Terça-feira',
-                'Wednesday': 'Quarta-feira',
-                'Thursday': 'Quinta-feira',
-                'Friday': 'Sexta-feira',
-                'Saturday': 'Sábado',
-                'Sunday': 'Domingo',
-            }
-            weekday_pt = weekdays_pt.get(weekday, weekday)
-            
-            # ✅ UX: Saudação personalizada baseada no horário
-            current_hour = timezone.localtime(timezone.now()).hour
-            if 5 <= current_hour < 12:
-                greeting = "Bom dia"
-            elif 12 <= current_hour < 18:
-                greeting = "Boa tarde"
-            else:
-                greeting = "Boa noite"
-            
+            weekday_pt = format_weekday_pt(current_date)
+            greeting = get_greeting()
             manager_name = manager.first_name or manager.email.split('@')[0]
             
             # ✅ UX: Mensagem mais amigável e motivacional
