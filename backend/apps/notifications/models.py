@@ -41,6 +41,12 @@ class UserNotificationPreferences(models.Model):
         verbose_name='Horário do resumo diário',
         help_text='Ex: 07:00'
     )
+    last_daily_summary_sent_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data do último resumo enviado',
+        help_text='Usado para evitar duplicação entre workers'
+    )
     
     # Lembrete de agenda
     agenda_reminder_enabled = models.BooleanField(
@@ -138,6 +144,12 @@ class DepartmentNotificationPreferences(models.Model):
         blank=True,
         verbose_name='Horário do resumo diário',
         help_text='Ex: 07:00'
+    )
+    last_daily_summary_sent_date = models.DateField(
+        null=True,
+        blank=True,
+        verbose_name='Data do último resumo enviado',
+        help_text='Usado para evitar duplicação entre workers'
     )
     
     # Lembrete de agenda

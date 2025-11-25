@@ -993,6 +993,34 @@ class CampaignsConfig(AppConfig):
             count = 0
             for pref in preferences:
                 try:
+                    # ✅ CRÍTICO: Adquirir lock ANTES de processar e marcar como enviado IMEDIATAMENTE
+                    # Isso garante que apenas uma instância processe, mesmo com múltiplas instâncias do scheduler
+                    # Mesma lógica do lembrete de agenda
+                    with transaction.atomic():
+                        # Primeiro: adquirir lock sem select_related (evita LEFT OUTER JOIN)
+                        locked_pref_id = UserNotificationPreferences.objects.select_for_update(skip_locked=True).filter(
+                            id=pref.id,
+                            last_daily_summary_sent_date__lt=current_date  # Só processar se não foi enviado hoje
+                        ).values_list('id', flat=True).first()
+                        
+                        if not locked_pref_id:
+                            # Outra instância já está processando ou já foi enviado hoje
+                            logger.info(f'⏭️ [DAILY NOTIFICATIONS] Preferência {pref.id} está sendo processada por outra instância ou já foi enviada hoje, pulando')
+                            continue
+                        
+                        # Segundo: buscar a preferência com select_related (agora que já temos o lock)
+                        locked_pref = UserNotificationPreferences.objects.select_related('user', 'tenant', 'user__tenant').get(id=locked_pref_id)
+                        
+                        # ✅ CRÍTICO: Marcar como enviado IMEDIATAMENTE para evitar que outras instâncias processem
+                        # Isso garante que apenas esta instância processará, mesmo que as notificações falhem depois
+                        locked_pref.last_daily_summary_sent_date = current_date
+                        locked_pref.save(update_fields=['last_daily_summary_sent_date'])
+                        
+                        # Atualizar referência para usar a preferência com lock
+                        pref = locked_pref
+                        
+                        logger.info(f'🔒 [DAILY NOTIFICATIONS] Lock adquirido e last_daily_summary_sent_date={current_date} marcado para preferência {pref.id}')
+                    
                     # ✅ OTIMIZAÇÃO: Usar função helper para verificar canais
                     _, _, _, has_any = check_channels_enabled(pref, pref.user)
                     
@@ -1280,6 +1308,34 @@ class CampaignsConfig(AppConfig):
             count = 0
             for pref in preferences:
                 try:
+                    # ✅ CRÍTICO: Adquirir lock ANTES de processar e marcar como enviado IMEDIATAMENTE
+                    # Isso garante que apenas uma instância processe, mesmo com múltiplas instâncias do scheduler
+                    # Mesma lógica do lembrete de agenda e resumo de usuários
+                    with transaction.atomic():
+                        # Primeiro: adquirir lock sem select_related (evita LEFT OUTER JOIN)
+                        locked_pref_id = DepartmentNotificationPreferences.objects.select_for_update(skip_locked=True).filter(
+                            id=pref.id,
+                            last_daily_summary_sent_date__lt=current_date  # Só processar se não foi enviado hoje
+                        ).values_list('id', flat=True).first()
+                        
+                        if not locked_pref_id:
+                            # Outra instância já está processando ou já foi enviado hoje
+                            logger.info(f'⏭️ [DAILY NOTIFICATIONS] Preferência de departamento {pref.id} está sendo processada por outra instância ou já foi enviada hoje, pulando')
+                            continue
+                        
+                        # Segundo: buscar a preferência com select_related (agora que já temos o lock)
+                        locked_pref = DepartmentNotificationPreferences.objects.select_related('department', 'tenant', 'department__tenant').get(id=locked_pref_id)
+                        
+                        # ✅ CRÍTICO: Marcar como enviado IMEDIATAMENTE para evitar que outras instâncias processem
+                        # Isso garante que apenas esta instância processará, mesmo que as notificações falhem depois
+                        locked_pref.last_daily_summary_sent_date = current_date
+                        locked_pref.save(update_fields=['last_daily_summary_sent_date'])
+                        
+                        # Atualizar referência para usar a preferência com lock
+                        pref = locked_pref
+                        
+                        logger.info(f'🔒 [DAILY NOTIFICATIONS] Lock adquirido e last_daily_summary_sent_date={current_date} marcado para preferência de departamento {pref.id}')
+                    
                     # ✅ OTIMIZAÇÃO: Query otimizada com select_related para managers
                     managers = User.objects.filter(
                         departments=pref.department,
