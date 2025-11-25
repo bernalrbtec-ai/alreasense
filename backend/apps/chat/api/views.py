@@ -748,6 +748,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         Útil quando o refresh-info falha mas ainda queremos os participantes.
         """
         try:
+            logger.info(f"🔍 [PARTICIPANTS] Iniciando busca direta de participantes")
+            logger.info(f"   Conversation ID: {conversation.id}")
+            logger.info(f"   Conversation Type: {conversation.conversation_type}")
+            logger.info(f"   Contact Phone: {conversation.contact_phone}")
+            logger.info(f"   Instance Name: {conversation.instance_name}")
+            
             # Buscar instância WhatsApp
             from apps.notifications.models import WhatsAppInstance
             wa_instance = WhatsAppInstance.objects.filter(
@@ -757,7 +763,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             
             if not wa_instance:
                 logger.warning(f"⚠️ [PARTICIPANTS] Instância não encontrada: {conversation.instance_name}")
-                return []
+                logger.warning(f"   Tentando buscar por friendly_name...")
+                # Tentar buscar por friendly_name também
+                wa_instance = WhatsAppInstance.objects.filter(
+                    tenant=conversation.tenant,
+                    friendly_name=conversation.instance_name
+                ).first()
+                
+                if not wa_instance:
+                    logger.error(f"❌ [PARTICIPANTS] Instância não encontrada nem por instance_name nem por friendly_name")
+                    return []
+                else:
+                    logger.info(f"✅ [PARTICIPANTS] Instância encontrada por friendly_name: {wa_instance.instance_name}")
             
             # Buscar conexão Evolution
             connection = wa_instance.connection
@@ -769,19 +786,41 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             api_key = connection.api_key
             instance_name = wa_instance.instance_name
             
+            logger.info(f"✅ [PARTICIPANTS] Configuração encontrada:")
+            logger.info(f"   Base URL: {base_url}")
+            logger.info(f"   Instance Name: {instance_name}")
+            logger.info(f"   API Key: {'***' if api_key else 'NÃO ENCONTRADA'}")
+            
             # Obter group_jid do metadata ou contact_phone
             group_metadata = conversation.group_metadata or {}
             group_jid = group_metadata.get('group_id')
             
             if not group_jid:
-                # Tentar construir do contact_phone
+                # ✅ CORREÇÃO: Usar mesma lógica do refresh-info para construir group_jid
                 raw_phone = conversation.contact_phone
-                if raw_phone:
+                if not raw_phone:
+                    logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível determinar group_jid (contact_phone vazio)")
+                    return []
+                
+                # ✅ USAR JID COMPLETO - Evolution API aceita:
+                # - Grupos: xxx@g.us
+                # ⚠️ IMPORTANTE: @lid é formato de participante, NÃO de grupo!
+                if '@g.us' in raw_phone:
+                    # Já tem @g.us, usar como está
+                    group_jid = raw_phone
+                    logger.info(f"✅ [PARTICIPANTS] group_jid já tem @g.us: {group_jid}")
+                elif '@s.whatsapp.net' in raw_phone:
+                    # Formato errado (individual), corrigir para grupo
+                    group_jid = raw_phone.replace('@s.whatsapp.net', '@g.us')
+                    logger.info(f"🔄 [PARTICIPANTS] Corrigindo formato individual para grupo: {group_jid}")
+                else:
+                    # Adicionar @g.us se não tiver (padrão para grupos)
                     clean_id = raw_phone.replace('+', '').strip()
                     group_jid = f"{clean_id}@g.us"
-                else:
-                    logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível determinar group_jid")
-                    return []
+                    logger.info(f"➕ [PARTICIPANTS] Adicionando @g.us: {group_jid}")
+            
+            logger.info(f"🔄 [PARTICIPANTS] group_jid final: {group_jid}")
+            logger.info(f"   Raw contact_phone: {conversation.contact_phone}")
             
             logger.info(f"🔄 [PARTICIPANTS] Buscando participantes diretamente: {group_jid}")
             
