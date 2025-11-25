@@ -1215,8 +1215,7 @@ class CampaignsConfig(AppConfig):
                 daily_summary_time__isnull=False,
                 daily_summary_time__gte=time_window_start,
                 daily_summary_time__lte=time_window_end,
-                tenant__is_active=True,
-                department__is_active=True
+                tenant__status='active'
             ).select_related('department', 'tenant', 'department__tenant')
             
             count = 0
