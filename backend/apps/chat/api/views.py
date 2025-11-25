@@ -898,20 +898,25 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             
                             # ✅ CORREÇÃO: Extrair pushname da resposta da API
                             # A API pode retornar: name, pushName, notify, ou não ter nada
+                            # Log para debug
+                            logger.info(f"🔍 [PARTICIPANTS] Processando participante: {participant}")
                             pushname = (
                                 participant.get('pushName') or 
                                 participant.get('name') or 
                                 participant.get('notify') or 
                                 ''
                             )
+                            logger.info(f"   Pushname extraído: {pushname}")
                             
                             # Prioridade: pushname > nome do contato > telefone formatado
                             display_name = pushname
                             if not display_name and contact:
                                 display_name = contact.name
+                                logger.info(f"   Usando nome do contato: {display_name}")
                             if not display_name:
                                 # Formatar telefone para exibição (ex: (11) 99999-9999)
                                 display_name = self._format_phone_for_display(normalized_phone)
+                                logger.info(f"   Usando telefone formatado: {display_name}")
                             
                             participant_info = {
                                 'phone': normalized_phone,  # Telefone normalizado E.164
@@ -919,6 +924,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                 'pushname': pushname,  # Pushname original da API
                                 'jid': participant_id
                             }
+                            logger.info(f"   ✅ Participante processado: {participant_info}")
                             participants_list.append(participant_info)
                     
                     logger.info(f"✅ [PARTICIPANTS] {len(participants_list)} participantes processados")

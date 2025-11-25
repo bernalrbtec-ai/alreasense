@@ -101,6 +101,15 @@ export function MentionInput({
       }
       
       console.log(`✅ [MENTIONS] ${participantsList.length} participantes carregados:`, participantsList);
+      
+      // ✅ DEBUG: Verificar estrutura dos participantes
+      if (participantsList.length > 0) {
+        console.log('🔍 [MENTIONS] Primeiro participante:', participantsList[0]);
+        console.log('   - phone:', participantsList[0].phone);
+        console.log('   - name:', participantsList[0].name);
+        console.log('   - pushname:', participantsList[0].pushname);
+      }
+      
       setParticipants(participantsList);
     } catch (error: any) {
       // ✅ CORREÇÃO: Não mostrar erro se grupo não foi encontrado (pode ser grupo antigo)
@@ -309,14 +318,15 @@ export function MentionInput({
               }`}
               onMouseDown={(e) => {
                 e.preventDefault(); // Prevenir blur do textarea
+                console.log('🖱️ [MENTIONS] Participante selecionado:', participant);
                 insertMention(participant);
               }}
             >
               <div className="font-medium text-gray-900">
-                {participant.pushname || participant.name}
+                {participant.pushname || participant.name || 'Sem nome'}
               </div>
               <div className="text-xs text-gray-500">
-                {formatPhoneForDisplay(participant.phone)}
+                {participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem telefone'}
               </div>
             </div>
           ))}
