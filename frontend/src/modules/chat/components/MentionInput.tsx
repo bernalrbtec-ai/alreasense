@@ -44,20 +44,32 @@ export function MentionInput({
   // Carregar participantes quando for grupo
   useEffect(() => {
     if (conversationType === 'group' && conversationId) {
+      console.log('🔄 [MENTIONS] Carregando participantes para grupo:', conversationId);
       loadParticipants();
+    } else {
+      console.log('ℹ️ [MENTIONS] Não é grupo ou sem conversationId:', { conversationType, conversationId });
+      setParticipants([]); // Limpar participantes se não for grupo
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, conversationType]);
 
   const loadParticipants = async () => {
     try {
+      console.log('📡 [MENTIONS] Buscando participantes da API...');
       const response = await api.get(`/chat/conversations/${conversationId}/participants/`);
       const data = response.data;
+      console.log('📥 [MENTIONS] Resposta da API:', data);
+      
       // ✅ CORREÇÃO: Verificar se data é array direto ou objeto com participants
+      let participantsList: Participant[] = [];
       if (Array.isArray(data)) {
-        setParticipants(data);
+        participantsList = data;
       } else {
-        setParticipants(data.participants || []);
+        participantsList = data.participants || [];
       }
+      
+      console.log(`✅ [MENTIONS] ${participantsList.length} participantes carregados:`, participantsList);
+      setParticipants(participantsList);
     } catch (error: any) {
       // ✅ CORREÇÃO: Não mostrar erro se grupo não foi encontrado (pode ser grupo antigo)
       const errorMessage = error.response?.data?.error || error.message;
@@ -80,25 +92,52 @@ export function MentionInput({
     const textBeforeCursor = newValue.substring(0, cursorPos);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
+    console.log('🔍 [MENTIONS] handleInputChange:', {
+      newValue,
+      cursorPos,
+      textBeforeCursor,
+      lastAtIndex,
+      participantsCount: participants.length,
+      conversationType
+    });
+
     if (lastAtIndex !== -1) {
       // Verificar se @ não está dentro de uma palavra (deve ter espaço antes ou estar no início)
       const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
       if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
         const query = textBeforeCursor.substring(lastAtIndex + 1).trim();
+        console.log('✅ [MENTIONS] @ detectado! Query:', query, 'Participantes disponíveis:', participants.length);
         
-        // Filtrar participantes baseado na query
-        const filtered = participants.filter(p => {
-          const nameMatch = p.name.toLowerCase().includes(query.toLowerCase());
-          const phoneMatch = p.phone.includes(query);
-          return nameMatch || phoneMatch;
-        });
+        // ✅ CORREÇÃO: Se query está vazia (apenas @), mostrar TODOS os participantes
+        // Se tem query, filtrar baseado nela
+        let filtered: Participant[] = [];
+        if (query === '') {
+          // Mostrar todos os participantes quando apenas @ é digitado
+          filtered = participants;
+          console.log('📋 [MENTIONS] Query vazia - mostrando todos os participantes:', filtered.length);
+        } else {
+          // Filtrar participantes baseado na query
+          filtered = participants.filter(p => {
+            const nameMatch = p.name.toLowerCase().includes(query.toLowerCase());
+            const phoneMatch = p.phone.includes(query);
+            return nameMatch || phoneMatch;
+          });
+          console.log('🔍 [MENTIONS] Query filtrada:', query, 'Resultados:', filtered.length);
+        }
 
-        if (filtered.length > 0 && conversationType === 'group') {
+        // ✅ CORREÇÃO: Mostrar sugestões se for grupo E tiver participantes (mesmo que filtrados)
+        if (conversationType === 'group' && participants.length > 0) {
           setMentionStart(lastAtIndex);
           setSuggestions(filtered);
-          setShowSuggestions(true);
+          setShowSuggestions(filtered.length > 0); // Mostrar apenas se houver resultados
           setSelectedIndex(0);
+          console.log('✅ [MENTIONS] Sugestões ativadas:', filtered.length, 'participantes');
           return;
+        } else {
+          console.log('⚠️ [MENTIONS] Não mostrando sugestões:', {
+            isGroup: conversationType === 'group',
+            hasParticipants: participants.length > 0
+          });
         }
       }
     }
