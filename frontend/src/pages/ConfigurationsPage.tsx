@@ -22,7 +22,8 @@ import {
   Save,
   Crown,
   Users,
-  Building2
+  Building2,
+  Bell
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -33,6 +34,7 @@ import { useAuthStore } from '../stores/authStore'
 import { useTenantLimits } from '../hooks/useTenantLimits'
 import { DepartmentsManager } from '../components/team/DepartmentsManager'
 import { UsersManager } from '../components/team/UsersManager'
+import { NotificationSettings } from '../modules/notifications/components/NotificationSettings'
 
 interface WhatsAppInstance {
   id: string
@@ -90,7 +92,7 @@ interface EvolutionConfig {
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -534,6 +536,17 @@ export default function ConfigurationsPage() {
             <Users className="h-4 w-4 inline mr-2" />
             Equipe
           </button>
+          <button
+            onClick={() => setActiveTab('notifications')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'notifications'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Bell className="h-4 w-4 inline mr-2" />
+            Notificações
+          </button>
         </nav>
       </div>
 
@@ -815,6 +828,10 @@ export default function ConfigurationsPage() {
             <DepartmentsManager />
           </Card>
         </div>
+      )}
+
+      {activeTab === 'notifications' && (
+        <NotificationSettings />
       )}
 
       {/* Tab Content - Plano */}
