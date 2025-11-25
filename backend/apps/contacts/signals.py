@@ -575,3 +575,150 @@ def handle_task_contacts_changed(sender, instance, action, pk_set, **kwargs):
         
         except Exception as e:
             logger.error(f"❌ [TASK HISTORY] Erro ao criar histórico ao adicionar contatos: {e}", exc_info=True)
+
+
+# ========== SIGNALS PARA HISTÓRICO DE TAREFAS ==========
+
+@receiver(pre_save)
+def capture_task_old_values_for_history(sender, instance, **kwargs):
+    """
+    Captura valores antigos de Task antes de salvar para detectar mudanças.
+    Usado para criar histórico de mudanças de status, reagendamentos, etc.
+    """
+    def get_task_model():
+        from apps.contacts.models import Task
+        return Task
+    
+    Task = get_task_model()
+    if sender != Task:
+        return
+    
+    if instance.pk:
+        try:
+            old_instance = sender.objects.get(pk=instance.pk)
+            instance._old_status = old_instance.status
+            instance._old_due_date = old_instance.due_date
+            instance._old_assigned_to_id = old_instance.assigned_to_id
+            instance._old_priority = old_instance.priority
+            instance._old_started_at = old_instance.started_at
+            instance._old_completed_at = old_instance.completed_at
+            instance._old_cancelled_at = old_instance.cancelled_at
+        except sender.DoesNotExist:
+            instance._old_status = None
+            instance._old_due_date = None
+            instance._old_assigned_to_id = None
+            instance._old_priority = None
+            instance._old_started_at = None
+            instance._old_completed_at = None
+            instance._old_cancelled_at = None
+    else:
+        instance._old_status = None
+        instance._old_due_date = None
+        instance._old_assigned_to_id = None
+        instance._old_priority = None
+        instance._old_started_at = None
+        instance._old_completed_at = None
+        instance._old_cancelled_at = None
+
+
+@receiver(post_save)
+def create_task_status_history(sender, instance, created, **kwargs):
+    """
+    Cria registro no histórico quando há mudanças em Task:
+    - Mudança de status (com atualização de started_at, completed_at, cancelled_at)
+    - Reagendamento (mudança de due_date)
+    - Mudança de atribuição
+    - Mudança de prioridade
+    """
+    def get_task_model():
+        from apps.contacts.models import Task, TaskHistory
+        return Task, TaskHistory
+    
+    Task, TaskHistory = get_task_model()
+    if sender != Task:
+        return
+    
+    try:
+        from django.utils import timezone
+        from django.db import transaction
+        
+        # Capturar valores antigos
+        old_status = getattr(instance, '_old_status', None)
+        old_due_date = getattr(instance, '_old_due_date', None)
+        old_assigned_to_id = getattr(instance, '_old_assigned_to_id', None)
+        old_priority = getattr(instance, '_old_priority', None)
+        
+        # Obter usuário que fez a mudança (se disponível)
+        changed_by = getattr(instance, '_changed_by', None)
+        
+        with transaction.atomic():
+            # 1. Mudança de Status
+            if old_status and old_status != instance.status:
+                # Atualizar campos de data conforme status
+                update_fields = ['status']
+                
+                if instance.status == 'in_progress' and not instance.started_at:
+                    instance.started_at = timezone.now()
+                    update_fields.append('started_at')
+                
+                if instance.status == 'completed' and not instance.completed_at:
+                    instance.completed_at = timezone.now()
+                    update_fields.append('completed_at')
+                
+                if instance.status == 'cancelled' and not instance.cancelled_at:
+                    instance.cancelled_at = timezone.now()
+                    update_fields.append('cancelled_at')
+                
+                # Salvar atualizações de data se necessário
+                if len(update_fields) > 1:
+                    instance.save(update_fields=update_fields)
+                
+                # Criar registro no histórico
+                TaskHistory.objects.create(
+                    task=instance,
+                    change_type='status_change',
+                    old_status=old_status,
+                    new_status=instance.status,
+                    changed_by=changed_by,
+                    description=f"Status alterado de '{Task.STATUS_CHOICES[dict(Task.STATUS_CHOICES)[old_status]][1] if old_status in dict(Task.STATUS_CHOICES) else old_status}' para '{instance.get_status_display()}'"
+                )
+                logger.info(f"✅ [TASK HISTORY] Mudança de status registrada: {instance.title} - {old_status} → {instance.status}")
+            
+            # 2. Reagendamento (mudança de due_date)
+            if old_due_date != instance.due_date:
+                TaskHistory.objects.create(
+                    task=instance,
+                    change_type='reschedule',
+                    old_due_date=old_due_date,
+                    new_due_date=instance.due_date,
+                    changed_by=changed_by,
+                    description=f"Tarefa reagendada de {old_due_date.strftime('%d/%m/%Y %H:%M') if old_due_date else 'sem data'} para {instance.due_date.strftime('%d/%m/%Y %H:%M') if instance.due_date else 'sem data'}"
+                )
+                logger.info(f"✅ [TASK HISTORY] Reagendamento registrado: {instance.title}")
+            
+            # 3. Mudança de Atribuição
+            if old_assigned_to_id != (instance.assigned_to_id if instance.assigned_to_id else None):
+                TaskHistory.objects.create(
+                    task=instance,
+                    change_type='assignment',
+                    old_assigned_to_id=old_assigned_to_id,
+                    new_assigned_to=instance.assigned_to,
+                    changed_by=changed_by,
+                    description=f"Atribuição alterada{' de ' + str(old_assigned_to_id) if old_assigned_to_id else ''} para {instance.assigned_to.get_full_name() if instance.assigned_to else 'ninguém'}"
+                )
+                logger.info(f"✅ [TASK HISTORY] Mudança de atribuição registrada: {instance.title}")
+            
+            # 4. Mudança de Prioridade
+            if old_priority and old_priority != instance.priority:
+                TaskHistory.objects.create(
+                    task=instance,
+                    change_type='priority_change',
+                    old_priority=old_priority,
+                    new_priority=instance.priority,
+                    changed_by=changed_by,
+                    description=f"Prioridade alterada de '{Task.PRIORITY_CHOICES[dict(Task.PRIORITY_CHOICES)[old_priority]][1] if old_priority in dict(Task.PRIORITY_CHOICES) else old_priority}' para '{instance.get_priority_display()}'"
+                )
+                logger.info(f"✅ [TASK HISTORY] Mudança de prioridade registrada: {instance.title}")
+    
+    except Exception as e:
+        logger.error(f"❌ [TASK HISTORY] Erro ao criar histórico de tarefa: {e}", exc_info=True)

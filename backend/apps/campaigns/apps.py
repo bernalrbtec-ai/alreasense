@@ -959,15 +959,32 @@ class CampaignsConfig(AppConfig):
             # ✅ OTIMIZAÇÃO: Usar função helper para calcular janela de tempo
             time_window_start, time_window_end = calculate_time_window(current_time, window_minutes=1)
             
-            # ✅ OTIMIZAÇÃO: Query otimizada com select_related
-            preferences = UserNotificationPreferences.objects.filter(
-                daily_summary_enabled=True,
-                daily_summary_time__isnull=False,
-                daily_summary_time__gte=time_window_start,
-                daily_summary_time__lte=time_window_end,
-                tenant__status='active',
-                user__is_active=True
-            ).select_related('user', 'tenant', 'user__tenant')
+            # ✅ CORREÇÃO: Usar select_for_update para evitar duplicação entre workers
+            # Mesma lógica do lembrete de agenda
+            from django.db import transaction
+            
+            preference_ids = []
+            with transaction.atomic():
+                # Primeiro: fazer select_for_update apenas na tabela de preferências (sem select_related)
+                preferences_locked = UserNotificationPreferences.objects.select_for_update(skip_locked=True).filter(
+                    daily_summary_enabled=True,
+                    daily_summary_time__isnull=False,
+                    daily_summary_time__gte=time_window_start,
+                    daily_summary_time__lte=time_window_end,
+                    tenant__status='active',
+                    user__is_active=True
+                ).values_list('id', flat=True)
+                
+                # Pegar IDs dentro da transação
+                preference_ids = list(preferences_locked)
+            
+            # Depois: buscar preferências completas com select_related usando os IDs
+            preferences = []
+            if preference_ids:
+                preferences = list(
+                    UserNotificationPreferences.objects.filter(id__in=preference_ids)
+                    .select_related('user', 'tenant', 'user__tenant')
+                )
             
             count = 0
             for pref in preferences:
@@ -1123,11 +1140,14 @@ class CampaignsConfig(AppConfig):
             if overdue:
                 message += f"⚠️ *Tarefas Atrasadas: {len(overdue)}*\n"
                 for task in overdue[:5]:
-                    local_due = timezone.localtime(task.due_date)
-                    days_overdue = (timezone.now().date() - local_due.date()).days
+                    local_due = timezone.localtime(task.due_date) if task.due_date else None
+                    days_overdue = (timezone.now().date() - local_due.date()).days if local_due else 0
+                    dept_name = task.department.name if task.department else ''
                     message += f"  • {task.title}"
                     if days_overdue > 0:
                         message += f" ({days_overdue} dia(s) atrasada)"
+                    if dept_name:
+                        message += f" [{dept_name}]"
                     message += "\n"
                 if len(overdue) > 5:
                     message += f"  ... e mais {len(overdue) - 5} tarefa(s)\n"
@@ -1138,9 +1158,15 @@ class CampaignsConfig(AppConfig):
             if pending:
                 message += f"📝 *Tarefas para hoje: {len(pending)}*\n"
                 for task in pending[:5]:
-                    local_due = timezone.localtime(task.due_date)
-                    due_time = local_due.strftime('%H:%M')
-                    message += f"  • {task.title} às {due_time}\n"
+                    local_due = timezone.localtime(task.due_date) if task.due_date else None
+                    due_time = local_due.strftime('%H:%M') if local_due else ''
+                    dept_name = task.department.name if task.department else ''
+                    message += f"  • {task.title}"
+                    if due_time:
+                        message += f" às {due_time}"
+                    if dept_name:
+                        message += f" [{dept_name}]"
+                    message += "\n"
                 if len(pending) > 5:
                     message += f"  ... e mais {len(pending) - 5} tarefa(s)\n"
                 message += "\n"
@@ -1150,7 +1176,11 @@ class CampaignsConfig(AppConfig):
             if in_progress:
                 message += f"🔄 *Em andamento: {len(in_progress)}*\n"
                 for task in in_progress[:5]:
-                    message += f"  • {task.title}\n"
+                    dept_name = task.department.name if task.department else ''
+                    message += f"  • {task.title}"
+                    if dept_name:
+                        message += f" [{dept_name}]"
+                    message += "\n"
                 if len(in_progress) > 5:
                     message += f"  ... e mais {len(in_progress) - 5} tarefa(s)\n"
                 message += "\n"
@@ -1160,7 +1190,11 @@ class CampaignsConfig(AppConfig):
             if completed:
                 message += f"✅ *Concluídas hoje: {len(completed)}*\n"
                 for task in completed[:5]:
-                    message += f"  • {task.title}\n"
+                    dept_name = task.department.name if task.department else ''
+                    message += f"  • {task.title}"
+                    if dept_name:
+                        message += f" [{dept_name}]"
+                    message += "\n"
                 if len(completed) > 5:
                     message += f"  ... e mais {len(completed) - 5} tarefa(s)\n"
                 message += "\n"

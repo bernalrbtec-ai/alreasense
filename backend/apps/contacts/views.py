@@ -825,6 +825,26 @@ class TaskViewSet(viewsets.ModelViewSet):
             created_by=self.request.user
         )
     
+    def perform_update(self, serializer):
+        """Atualiza tarefa e passa usuário para o signal"""
+        # ✅ NOVO: Passar usuário que fez a mudança para o signal
+        task = serializer.instance
+        task._changed_by = self.request.user
+        serializer.save()
+    
+    @action(detail=True, methods=['get'])
+    def history(self, request, pk=None):
+        """Retorna histórico de mudanças da tarefa"""
+        task = self.get_object()
+        from apps.contacts.models import TaskHistory
+        from apps.contacts.serializers import TaskHistorySerializer
+        
+        history = TaskHistory.objects.filter(task=task).select_related(
+            'changed_by', 'old_assigned_to', 'new_assigned_to'
+        ).order_by('-created_at')
+        serializer = TaskHistorySerializer(history, many=True)
+        return Response(serializer.data)
+    
     @action(detail=True, methods=['post'])
     def complete(self, request, pk=None):
         """Marca tarefa como concluída"""

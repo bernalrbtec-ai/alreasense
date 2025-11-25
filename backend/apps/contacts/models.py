@@ -1012,6 +1012,20 @@ class Task(models.Model):
         help_text='Data/hora em que a tarefa foi concluída'
     )
     
+    started_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Iniciada Em',
+        help_text='Data/hora em que a tarefa foi iniciada (status mudou para "em andamento")'
+    )
+    
+    cancelled_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Cancelada Em',
+        help_text='Data/hora em que a tarefa foi cancelada'
+    )
+    
     # Notificações
     notification_sent = models.BooleanField(
         default=False,
@@ -1063,3 +1077,147 @@ class Task(models.Model):
         self.status = 'completed'
         self.completed_at = timezone.now()
         self.save(update_fields=['status', 'completed_at'])
+
+
+class TaskHistory(models.Model):
+    """
+    Histórico de mudanças de status e reagendamentos de tarefas.
+    Registra todas as alterações para auditoria e rastreabilidade.
+    """
+    
+    CHANGE_TYPE_CHOICES = [
+        ('status_change', 'Mudança de Status'),
+        ('reschedule', 'Reagendamento'),
+        ('assignment', 'Atribuição'),
+        ('priority_change', 'Mudança de Prioridade'),
+        ('description_update', 'Atualização de Descrição'),
+    ]
+    
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    
+    task = models.ForeignKey(
+        Task,
+        on_delete=models.CASCADE,
+        related_name='history',
+        verbose_name='Tarefa'
+    )
+    
+    change_type = models.CharField(
+        max_length=30,
+        choices=CHANGE_TYPE_CHOICES,
+        db_index=True,
+        verbose_name='Tipo de Mudança'
+    )
+    
+    # Status anterior e novo (para mudanças de status)
+    old_status = models.CharField(
+        max_length=20,
+        choices=Task.STATUS_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='Status Anterior'
+    )
+    
+    new_status = models.CharField(
+        max_length=20,
+        choices=Task.STATUS_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='Status Novo'
+    )
+    
+    # Data/hora anterior e nova (para reagendamentos)
+    old_due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data/Hora Anterior'
+    )
+    
+    new_due_date = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data/Hora Nova'
+    )
+    
+    # Outros campos que podem mudar
+    old_assigned_to = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='old_task_assignments',
+        verbose_name='Atribuído Anteriormente Para'
+    )
+    
+    new_assigned_to = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='new_task_assignments',
+        verbose_name='Atribuído Para'
+    )
+    
+    old_priority = models.CharField(
+        max_length=20,
+        choices=Task.PRIORITY_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='Prioridade Anterior'
+    )
+    
+    new_priority = models.CharField(
+        max_length=20,
+        choices=Task.PRIORITY_CHOICES,
+        null=True,
+        blank=True,
+        verbose_name='Prioridade Nova'
+    )
+    
+    # Usuário que fez a mudança
+    changed_by = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='task_changes',
+        verbose_name='Alterado Por'
+    )
+    
+    # Descrição da mudança
+    description = models.TextField(
+        blank=True,
+        null=True,
+        verbose_name='Descrição',
+        help_text='Descrição detalhada da mudança'
+    )
+    
+    # Timestamp
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_index=True,
+        verbose_name='Criado Em'
+    )
+    
+    class Meta:
+        db_table = 'contacts_task_history'
+        verbose_name = 'Histórico de Tarefa'
+        verbose_name_plural = 'Histórico de Tarefas'
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['task', 'created_at']),
+            models.Index(fields=['task', 'change_type']),
+            models.Index(fields=['changed_by', 'created_at']),
+        ]
+    
+    def __str__(self):
+        change_desc = self.get_change_type_display()
+        if self.old_status and self.new_status:
+            return f"{self.task.title} - {change_desc}: {self.get_old_status_display()} → {self.get_new_status_display()}"
+        elif self.old_due_date and self.new_due_date:
+            return f"{self.task.title} - {change_desc}: {self.old_due_date.strftime('%d/%m/%Y %H:%M')} → {self.new_due_date.strftime('%d/%m/%Y %H:%M')}"
+        return f"{self.task.title} - {change_desc}"

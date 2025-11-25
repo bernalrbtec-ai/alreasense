@@ -3,7 +3,7 @@ Serializers para o módulo de contatos
 """
 
 from rest_framework import serializers
-from .models import Contact, Tag, ContactList, ContactImport, ContactHistory, Task
+from .models import Contact, Tag, ContactList, ContactImport, ContactHistory, Task, TaskHistory
 from .utils import normalize_phone, get_state_from_ddd, extract_ddd_from_phone, get_state_from_phone
 
 
@@ -437,18 +437,12 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         return value
     
     def validate_due_date(self, value):
-        """Valida se a data agendada não é no passado"""
-        from django.utils import timezone
-        
-        if value:
-            # Comparar apenas data/hora, não timezone
-            now = timezone.now()
-            if value < now:
-                raise serializers.ValidationError(
-                    'Não é possível agendar tarefas no passado. '
-                    'A data/hora deve ser a partir de agora.'
-                )
-        
+        """
+        Permite reagendamento sem validação de data/hora.
+        A data/hora é considerada a partir do momento da mudança de status.
+        """
+        # ✅ REMOVIDO: Validação de data no passado
+        # Agora permite reagendamento livre e considera o início a partir da mudança de status
         return value
     
     def create(self, validated_data):
@@ -488,6 +482,10 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         metadata = validated_data.pop('metadata', None)  # ✅ NOVO: Extrair metadata
         request = self.context.get('request')
         
+        # ✅ NOVO: Passar usuário que fez a mudança para o signal
+        if request and request.user:
+            instance._changed_by = request.user
+        
         # ✅ CORREÇÃO: Se due_date foi alterado, resetar notification_sent para False
         # Isso permite que a tarefa seja notificada novamente na nova data/hora
         old_due_date = instance.due_date
@@ -523,3 +521,83 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         
         instance.save()
         return instance
+
+
+class TaskHistorySerializer(serializers.ModelSerializer):
+    """Serializer para histórico de mudanças de tarefas"""
+    
+    change_type_display = serializers.CharField(source='get_change_type_display', read_only=True)
+    old_status_display = serializers.SerializerMethodField()
+    new_status_display = serializers.SerializerMethodField()
+    old_priority_display = serializers.SerializerMethodField()
+    new_priority_display = serializers.SerializerMethodField()
+    changed_by_name = serializers.SerializerMethodField()
+    old_assigned_to_name = serializers.SerializerMethodField()
+    new_assigned_to_name = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = TaskHistory
+        fields = [
+            'id',
+            'task',
+            'change_type',
+            'change_type_display',
+            'old_status',
+            'old_status_display',
+            'new_status',
+            'new_status_display',
+            'old_due_date',
+            'new_due_date',
+            'old_assigned_to',
+            'old_assigned_to_name',
+            'new_assigned_to',
+            'new_assigned_to_name',
+            'old_priority',
+            'old_priority_display',
+            'new_priority',
+            'new_priority_display',
+            'changed_by',
+            'changed_by_name',
+            'description',
+            'created_at',
+        ]
+        read_only_fields = ['id', 'created_at']
+    
+    def get_old_status_display(self, obj):
+        if obj.old_status:
+            from apps.contacts.models import Task
+            return dict(Task.STATUS_CHOICES).get(obj.old_status, obj.old_status)
+        return None
+    
+    def get_new_status_display(self, obj):
+        if obj.new_status:
+            from apps.contacts.models import Task
+            return dict(Task.STATUS_CHOICES).get(obj.new_status, obj.new_status)
+        return None
+    
+    def get_old_priority_display(self, obj):
+        if obj.old_priority:
+            from apps.contacts.models import Task
+            return dict(Task.PRIORITY_CHOICES).get(obj.old_priority, obj.old_priority)
+        return None
+    
+    def get_new_priority_display(self, obj):
+        if obj.new_priority:
+            from apps.contacts.models import Task
+            return dict(Task.PRIORITY_CHOICES).get(obj.new_priority, obj.new_priority)
+        return None
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return obj.changed_by.get_full_name() or obj.changed_by.email
+        return None
+    
+    def get_old_assigned_to_name(self, obj):
+        if obj.old_assigned_to:
+            return obj.old_assigned_to.get_full_name() or obj.old_assigned_to.email
+        return None
+    
+    def get_new_assigned_to_name(self, obj):
+        if obj.new_assigned_to:
+            return obj.new_assigned_to.get_full_name() or obj.new_assigned_to.email
+        return None
