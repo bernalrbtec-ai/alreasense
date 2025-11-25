@@ -677,7 +677,7 @@ export function MessageList() {
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {msg.content && msg.content.trim() && (
                   <p className="text-sm whitespace-pre-wrap break-words mb-1">
-                    {msg.metadata?.mentions && msg.metadata.mentions.length > 0 ? (
+                    {msg.metadata?.mentions && Array.isArray(msg.metadata.mentions) && msg.metadata.mentions.length > 0 ? (
                       <MentionRenderer 
                         content={msg.content} 
                         mentions={msg.metadata.mentions}
