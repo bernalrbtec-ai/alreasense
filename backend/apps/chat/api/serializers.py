@@ -293,22 +293,88 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                 pass
             else:
                 # Processar menções: validar números e buscar nomes
+                import logging
+                logger = logging.getLogger(__name__)
+                
                 processed_mentions = []
                 group_metadata = conversation.group_metadata or {}
                 participants = group_metadata.get('participants', [])
                 
-                # Criar mapa de telefone -> nome para busca rápida
-                phone_to_name = {p.get('phone', ''): p.get('name', '') for p in participants}
+                logger.info(f'🔍 [MENTIONS] Processando {len(mentions)} menção(ões) para grupo {conversation.id}')
+                logger.info(f'   Participantes disponíveis: {len(participants)}')
                 
-                for phone in mentions:
-                    # Normalizar telefone (remover + e espaços)
-                    clean_phone = phone.replace('+', '').replace(' ', '').strip()
-                    name = phone_to_name.get(clean_phone, '')
+                # ✅ CORREÇÃO: Criar mapa de telefone -> nome para busca rápida
+                # Normalizar telefones dos participantes para comparação (sem + e espaços)
+                phone_to_name = {}
+                phone_to_jid = {}  # ✅ NOVO: Mapear telefone -> JID original
+                
+                for p in participants:
+                    participant_phone = p.get('phone', '')
+                    participant_jid = p.get('jid', '')
                     
-                    processed_mentions.append({
-                        'phone': clean_phone,
-                        'name': name or clean_phone
-                    })
+                    # Normalizar telefone para comparação (remover + e espaços)
+                    clean_participant_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                    phone_to_name[clean_participant_phone] = p.get('name', '')
+                    phone_to_jid[clean_participant_phone] = participant_jid
+                    
+                    # ✅ NOVO: Também mapear pelo JID (sem @lid/@s.whatsapp.net) para casos onde frontend envia JID
+                    if participant_jid:
+                        jid_clean = participant_jid.split('@')[0]
+                        phone_to_name[jid_clean] = p.get('name', '')
+                        phone_to_jid[jid_clean] = participant_jid
+                
+                for identifier in mentions:
+                    # ✅ CORREÇÃO: O frontend pode enviar JID ou phone
+                    # JID é mais confiável (ex: 52763740340435@lid ou 5517991253112@s.whatsapp.net)
+                    # Phone pode ser o número do grupo em alguns casos
+                    
+                    is_jid = '@' in identifier
+                    clean_identifier = identifier.replace('+', '').replace(' ', '').strip()
+                    
+                    if is_jid:
+                        # É um JID - usar diretamente (mais confiável)
+                        jid_full = clean_identifier
+                        jid_clean = clean_identifier.split('@')[0]
+                        
+                        # Buscar participante pelo JID
+                        name = ''
+                        for p in participants:
+                            p_jid = p.get('jid', '')
+                            if p_jid and (p_jid == jid_full or p_jid.split('@')[0] == jid_clean):
+                                name = p.get('name', '')
+                                break
+                        
+                        processed_mentions.append({
+                            'phone': jid_clean,  # Apenas dígitos do JID
+                            'jid': jid_full,  # JID completo (Evolution API precisa)
+                            'name': name or jid_clean
+                        })
+                        logger.info(f'✅ [MENTIONS] Processado JID: {jid_full} -> {jid_clean}')
+                    else:
+                        # É um phone - normalizar e buscar JID correspondente
+                        clean_phone = clean_identifier
+                        
+                        # Buscar nome e JID do participante
+                        name = phone_to_name.get(clean_phone, '')
+                        jid_to_use = phone_to_jid.get(clean_phone, clean_phone)
+                        
+                        # ✅ VALIDAÇÃO: Se o phone não foi encontrado nos participantes,
+                        # pode ser o número do grupo! Verificar se é o contact_phone da conversa
+                        if not name and not jid_to_use:
+                            group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
+                            if '@' in group_phone:
+                                group_phone = group_phone.split('@')[0]
+                            
+                            if clean_phone == group_phone:
+                                logger.warning(f'⚠️ [MENTIONS] Phone {clean_phone} parece ser o número do grupo, não do participante! Pulando...')
+                                continue  # Pular menção se for o número do grupo
+                        
+                        processed_mentions.append({
+                            'phone': clean_phone,  # Telefone limpo (sem +, sem @)
+                            'jid': jid_to_use,  # JID original se disponível
+                            'name': name or clean_phone
+                        })
+                        logger.info(f'✅ [MENTIONS] Processado phone: {clean_phone} -> JID: {jid_to_use}')
                 
                 metadata['mentions'] = processed_mentions
         

@@ -203,13 +203,23 @@ export function MentionInput({
     setShowSuggestions(false);
     setMentionStart(null);
 
-    // ✅ CORREÇÃO: Extrair todas as menções do texto final e mapear para telefones
+    // ✅ CORREÇÃO: Extrair todas as menções do texto final e mapear para JIDs/telefones
+    // ✅ IMPORTANTE: Usar JID quando disponível (mais confiável que phone, especialmente para @lid)
     const mentions: string[] = [];
     const mentionRegex = /@([^\s@,\.!?]+)/g;
     let match;
     
     // Primeiro, adicionar o participante selecionado diretamente
-    mentions.push(participant.phone);
+    // ✅ CORREÇÃO: Priorizar JID sobre phone (JID é o identificador único correto)
+    const participantIdentifier = participant.jid || participant.phone;
+    if (participantIdentifier) {
+      mentions.push(participantIdentifier);
+      console.log('✅ [MENTIONS] Participante selecionado:', {
+        jid: participant.jid,
+        phone: participant.phone,
+        identifier: participantIdentifier
+      });
+    }
     
     // Depois, processar outras menções que possam existir no texto
     while ((match = mentionRegex.exec(newValue)) !== null) {
@@ -230,8 +240,12 @@ export function MentionInput({
         );
       });
       
-      if (found && !mentions.includes(found.phone)) {
-        mentions.push(found.phone);
+      if (found) {
+        // ✅ CORREÇÃO: Priorizar JID sobre phone
+        const foundIdentifier = found.jid || found.phone;
+        if (foundIdentifier && !mentions.includes(foundIdentifier)) {
+          mentions.push(foundIdentifier);
+        }
       }
     }
     

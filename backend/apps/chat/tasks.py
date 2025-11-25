@@ -895,12 +895,39 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     metadata = message.metadata or {}
                     mentions = metadata.get('mentions', [])
                     if mentions:
-                        # Extrair apenas os números de telefone para o array mentions
-                        mention_phones = [m.get('phone', '') for m in mentions if m.get('phone')]
+                        # ✅ CORREÇÃO CRÍTICA: Evolution API espera apenas os DÍGITOS do JID do participante
+                        # NÃO o número do grupo! Usar JID quando disponível (mais confiável)
+                        mention_phones = []
+                        for m in mentions:
+                            # Priorizar JID (formato original do participante - mais confiável)
+                            jid = m.get('jid', '')
+                            phone = m.get('phone', '')
+                            
+                            if jid:
+                                # Extrair apenas os dígitos do JID (remover @lid, @s.whatsapp.net, etc)
+                                jid_clean = jid.split('@')[0]
+                                mention_phones.append(jid_clean)
+                                logger.debug(f"   📌 Menção via JID: {jid} -> {jid_clean}")
+                            elif phone:
+                                # ✅ VALIDAÇÃO: Verificar se phone não é o número do grupo
+                                group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
+                                if '@' in group_phone:
+                                    group_phone = group_phone.split('@')[0]
+                                
+                                if phone == group_phone:
+                                    logger.warning(f"⚠️ [CHAT ENVIO] Phone {phone} é o número do grupo, não do participante! Pulando menção...")
+                                    continue  # Pular se for número do grupo
+                                
+                                # Usar telefone limpo (já vem sem + do serializer)
+                                mention_phones.append(phone)
+                                logger.debug(f"   📌 Menção via phone: {phone}")
+                        
                         if mention_phones:
                             payload['mentions'] = mention_phones
                             logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_phones)} menção(ões) à mensagem")
                             logger.info(f"   Menções: {', '.join([_mask_remote_jid(p) for p in mention_phones])}")
+                        else:
+                            logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento (todas eram números de grupo?)")
                 
                 logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
                 logger.info(f"   Tipo: {conversation.conversation_type}")
