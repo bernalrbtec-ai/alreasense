@@ -69,17 +69,23 @@ class CampaignsConfig(AppConfig):
                 # Buscar campanhas que podem precisar de recuperação
                 # 'running' = estava rodando quando o sistema parou (recuperar)
                 # 'paused' = foi pausada pelo usuário (NÃO recuperar automaticamente, mas pode ter sido interrompida)
-                active_campaigns = Campaign.objects.filter(status__in=['running', 'paused'])
+                # ✅ PERFORMANCE: Annotate pending_contacts para evitar N+1 queries
+                from django.db.models import Count, Q
+                active_campaigns = Campaign.objects.filter(
+                    status__in=['running', 'paused']
+                ).annotate(
+                    pending_contacts_count=Count(
+                        'campaign_contacts',
+                        filter=Q(campaign_contacts__status__in=['pending', 'sending'])
+                    )
+                )
                 
                 from django.utils import timezone
                 from datetime import timedelta
                 
                 for campaign in active_campaigns:
-                    # Verificar se tem contatos pendentes (incluindo 'sending' que pode estar travado)
-                    pending_contacts = CampaignContact.objects.filter(
-                        campaign=campaign, 
-                        status__in=['pending', 'sending']
-                    ).count()
+                    # ✅ PERFORMANCE: Usar valor annotado em vez de query separada
+                    pending_contacts = campaign.pending_contacts_count
                     
                     if campaign.status == 'running':
                         if pending_contacts > 0:
@@ -163,14 +169,16 @@ class CampaignsConfig(AppConfig):
                         
                         # ========== VERIFICAR CAMPANHAS AGENDADAS ==========
                         # Buscar campanhas agendadas que chegaram na hora
+                        # ✅ PERFORMANCE: Usar count() direto em vez de exists() + count()
                         scheduled_campaigns = Campaign.objects.filter(
                             status='scheduled',
                             scheduled_at__isnull=False,
                             scheduled_at__lte=now
                         )
+                        scheduled_count = scheduled_campaigns.count()
                         
-                        if scheduled_campaigns.exists():
-                            logger.info(f"⏰ [SCHEDULER] Encontradas {scheduled_campaigns.count()} campanha(s) agendada(s) para iniciar")
+                        if scheduled_count > 0:
+                            logger.info(f"⏰ [SCHEDULER] Encontradas {scheduled_count} campanha(s) agendada(s) para iniciar")
                             
                             consumer = get_rabbitmq_consumer()
                             
@@ -242,11 +250,13 @@ class CampaignsConfig(AppConfig):
                                 task_ids_reminder = list(tasks_reminder)
                             
                             # Depois: buscar tarefas completas com select_related usando os IDs
+                            # ✅ PERFORMANCE: Prefetch related_contacts para evitar N+1 queries
                             tasks_reminder_list = []
                             if task_ids_reminder:
                                 tasks_reminder_list = list(
                                     Task.objects.filter(id__in=task_ids_reminder)
                                     .select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                    .prefetch_related('related_contacts')
                                 )
                             
                             # 2. ✅ NOVO: Buscar tarefas que chegaram no momento exato (últimos 5 minutos)
@@ -273,6 +283,7 @@ class CampaignsConfig(AppConfig):
                             # Depois: buscar tarefas completas com select_related usando os IDs
                             # ✅ CORREÇÃO: Excluir tarefas que já foram processadas no loop de lembrete
                             # para evitar duplicação quando as janelas se sobrepõem
+                            # ✅ PERFORMANCE: Prefetch related_contacts para evitar N+1 queries
                             tasks_exact_time_list = []
                             if task_ids_exact:
                                 # Excluir IDs que já foram processados no loop de lembrete
@@ -281,6 +292,7 @@ class CampaignsConfig(AppConfig):
                                     tasks_exact_time_list = list(
                                         Task.objects.filter(id__in=task_ids_exact_filtered)
                                         .select_related('assigned_to', 'created_by', 'tenant', 'department')
+                                        .prefetch_related('related_contacts')
                                     )
                             
                             total_reminder = len(tasks_reminder_list)
@@ -343,7 +355,8 @@ class CampaignsConfig(AppConfig):
                                     logger.info(f'📋 [TASK NOTIFICATIONS] Lembrete: {task.title} (ID: {task.id}) - {task.due_date.strftime("%d/%m/%Y %H:%M:%S")}')
                                     logger.info(f'   👤 Assigned to: {task.assigned_to.email if task.assigned_to else "Ninguém"}')
                                     logger.info(f'   👤 Created by: {task.created_by.email if task.created_by else "Ninguém"}')
-                                    logger.info(f'   📞 Contatos relacionados: {task.related_contacts.count()}')
+                                    # ✅ PERFORMANCE: Usar len() em vez de count() após prefetch_related
+                                    logger.info(f'   📞 Contatos relacionados: {len(task.related_contacts.all())}')
                                     logger.info(f'   🔍 notification_sent atual: {task.notification_sent}')
                                     
                                     notification_sent = False
@@ -379,8 +392,10 @@ class CampaignsConfig(AppConfig):
                                     task_metadata = task.metadata or {}
                                     notify_contacts = task_metadata.get('notify_contacts', False)
                                     
-                                    if notify_contacts and task.related_contacts.exists():
-                                        logger.info(f'   📞 Notificando {task.related_contacts.count()} contato(s) relacionado(s)')
+                                    # ✅ PERFORMANCE: Usar len() em vez de exists() + count() após prefetch_related
+                                    related_contacts_list = list(task.related_contacts.all())
+                                    if notify_contacts and related_contacts_list:
+                                        logger.info(f'   📞 Notificando {len(related_contacts_list)} contato(s) relacionado(s)')
                                         contacts_notified = _notify_task_contacts(task, is_reminder=True, contacts_notified_set=contacts_notified_set)
                                         notification_sent = notification_sent or contacts_notified
                                     
@@ -475,8 +490,10 @@ class CampaignsConfig(AppConfig):
                                     task_metadata = task.metadata or {}
                                     notify_contacts = task_metadata.get('notify_contacts', False)
                                     
-                                    if notify_contacts and task.related_contacts.exists():
-                                        logger.info(f'   📞 Notificando {task.related_contacts.count()} contato(s) relacionado(s)')
+                                    # ✅ PERFORMANCE: Usar len() em vez de exists() + count() após prefetch_related
+                                    related_contacts_list = list(task.related_contacts.all())
+                                    if notify_contacts and related_contacts_list:
+                                        logger.info(f'   📞 Notificando {len(related_contacts_list)} contato(s) relacionado(s)')
                                         contacts_notified = _notify_task_contacts(task, is_reminder=False, contacts_notified_set=contacts_notified_set)
                                         notification_sent = notification_sent or contacts_notified
                                     
@@ -503,13 +520,16 @@ class CampaignsConfig(AppConfig):
                                     
                                     # ✅ DEBUG: Listar próximas tarefas para ajudar no diagnóstico
                                     from apps.contacts.models import Task
-                                    upcoming_tasks = Task.objects.filter(
-                                        due_date__gte=now,
-                                        due_date__lte=now + timedelta(hours=24),
-                                        status__in=['pending', 'in_progress']
-                                    ).select_related('assigned_to', 'tenant').order_by('due_date')[:5]
+                                    # ✅ PERFORMANCE: Usar list() em vez de exists() para debug
+                                    upcoming_tasks = list(
+                                        Task.objects.filter(
+                                            due_date__gte=now,
+                                            due_date__lte=now + timedelta(hours=24),
+                                            status__in=['pending', 'in_progress']
+                                        ).select_related('assigned_to', 'tenant').order_by('due_date')[:5]
+                                    )
                                     
-                                    if upcoming_tasks.exists():
+                                    if upcoming_tasks:
                                         logger.info(f'📅 [TASK NOTIFICATIONS] Próximas 5 tarefas nas próximas 24h:')
                                         for task in upcoming_tasks:
                                             logger.info(f'   - {task.title} (ID: {task.id}): {task.due_date.strftime("%d/%m/%Y %H:%M:%S")} | Notificada: {task.notification_sent} | Status: {task.status} | Tenant: {task.tenant.name if task.tenant else "N/A"}')
@@ -702,11 +722,13 @@ class CampaignsConfig(AppConfig):
                     message_text += f"{priority_emoji} *Prioridade:* {priority_display}\n"
                     
                     # Adicionar contatos relacionados se houver
-                    if task.related_contacts.exists():
-                        contacts = task.related_contacts.all()[:3]  # Máximo 3 contatos
+                    # ✅ PERFORMANCE: Usar lista já carregada em vez de múltiplas queries
+                    related_contacts_list = list(task.related_contacts.all())
+                    if related_contacts_list:
+                        contacts = related_contacts_list[:3]  # Máximo 3 contatos
                         contact_names = ', '.join([c.name for c in contacts])
-                        if task.related_contacts.count() > 3:
-                            contact_names += f" e mais {task.related_contacts.count() - 3}"
+                        if len(related_contacts_list) > 3:
+                            contact_names += f" e mais {len(related_contacts_list) - 3}"
                         message_text += f"👤 *Contatos:* {contact_names}\n"
                     
                     # Adicionar descrição se houver
@@ -781,7 +803,9 @@ class CampaignsConfig(AppConfig):
             import requests
             import re
             
-            if not task.related_contacts.exists():
+            # ✅ PERFORMANCE: Verificar se há contatos usando prefetch_related
+            related_contacts_list = list(task.related_contacts.all())
+            if not related_contacts_list:
                 return False
             
             contacts_notified = False

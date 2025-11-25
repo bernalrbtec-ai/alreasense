@@ -134,25 +134,20 @@ class CampaignSerializer(serializers.ModelSerializer):
     def _recalculate_campaign_stats(self, instance):
         """Recalcula estatísticas da campanha baseado nos CampaignContacts"""
         try:
-            from django.db.models import Q
+            from django.db.models import Q, Count
             
-            # Contar enviadas (têm sent_at OU status sent/delivered/read)
-            sent_count = instance.campaign_contacts.filter(
-                Q(sent_at__isnull=False) | Q(status__in=['sent', 'delivered', 'read'])
-            ).distinct().count()
+            # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
+            stats = instance.campaign_contacts.aggregate(
+                sent_count=Count('id', filter=Q(sent_at__isnull=False) | Q(status__in=['sent', 'delivered', 'read'])),
+                delivered_count=Count('id', filter=Q(delivered_at__isnull=False) | Q(status__in=['delivered', 'read'])),
+                read_count=Count('id', filter=Q(read_at__isnull=False) | Q(status='read')),
+                failed_count=Count('id', filter=Q(status='failed'))
+            )
             
-            # Contar entregues (têm delivered_at OU status delivered/read)
-            delivered_count = instance.campaign_contacts.filter(
-                Q(delivered_at__isnull=False) | Q(status__in=['delivered', 'read'])
-            ).distinct().count()
-            
-            # Contar lidas (têm read_at OU status read)
-            read_count = instance.campaign_contacts.filter(
-                Q(read_at__isnull=False) | Q(status='read')
-            ).distinct().count()
-            
-            # Contar falhas
-            failed_count = instance.campaign_contacts.filter(status='failed').count()
+            sent_count = stats['sent_count']
+            delivered_count = stats['delivered_count']
+            read_count = stats['read_count']
+            failed_count = stats['failed_count']
             
             # Atualizar apenas se houver mudança
             if (instance.messages_sent != sent_count or 
@@ -203,9 +198,13 @@ class CampaignSerializer(serializers.ModelSerializer):
         # Adicionar instâncias
         campaign.instances.set(instances_data)
         
-        # Criar mensagens
-        for msg_data in messages_data:
-            CampaignMessage.objects.create(campaign=campaign, **msg_data)
+        # ✅ PERFORMANCE: Usar bulk_create em vez de loop com create()
+        if messages_data:
+            messages = [
+                CampaignMessage(campaign=campaign, **msg_data)
+                for msg_data in messages_data
+            ]
+            CampaignMessage.objects.bulk_create(messages, batch_size=1000)
         
         # Adicionar contatos
         contacts_to_add = []

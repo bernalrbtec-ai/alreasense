@@ -354,18 +354,23 @@ class ContactViewSet(viewsets.ModelViewSet):
         # Aplicar mesmos filtros do get_queryset
         contacts = self.filter_queryset(self.get_queryset())
         
-        # Contadores básicos
-        total = contacts.count()
-        opted_out = contacts.filter(opted_out=True).count()
-        active = contacts.filter(is_active=True).count()
+        # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
+        from django.db.models import Count, Q
+        stats = contacts.aggregate(
+            total=Count('id'),
+            opted_out=Count('id', filter=Q(opted_out=True)),
+            active=Count('id', filter=Q(is_active=True)),
+            leads=Count('id', filter=Q(total_purchases=0)),
+            customers=Count('id', filter=Q(total_purchases__gte=1)),
+            delivery_problems=Count('id', filter=Q(opted_out=True))  # Usando opted_out como proxy
+        )
         
-        # Segmentação por lifecycle
-        leads = contacts.filter(total_purchases=0).count()
-        customers = contacts.filter(total_purchases__gte=1).count()
-        
-        # Contatos com problemas de entrega (usando campos disponíveis)
-        # Por enquanto, usar opted_out como proxy para problemas de entrega
-        delivery_problems = contacts.filter(opted_out=True).count()
+        total = stats['total']
+        opted_out = stats['opted_out']
+        active = stats['active']
+        leads = stats['leads']
+        customers = stats['customers']
+        delivery_problems = stats['delivery_problems']
         
         return Response({
             'total': total,
@@ -398,13 +403,20 @@ class ContactViewSet(viewsets.ModelViewSet):
         else:
             contacts = Contact.objects.filter(tenant=user.tenant, is_active=True)
         
-        # Contadores básicos
-        total = contacts.count()
-        opted_out = contacts.filter(opted_out=True).count()
+        # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
+        from django.db.models import Count, Q, Avg
+        stats = contacts.aggregate(
+            total=Count('id'),
+            opted_out=Count('id', filter=Q(opted_out=True)),
+            leads=Count('id', filter=Q(total_purchases=0)),
+            customers=Count('id', filter=Q(total_purchases__gte=1)),
+            avg_ltv=Avg('lifetime_value')
+        )
         
-        # Segmentação por lifecycle (simplificada)
-        leads = contacts.filter(total_purchases=0).count()
-        customers = contacts.filter(total_purchases__gte=1).count()
+        total = stats['total']
+        opted_out = stats['opted_out']
+        leads = stats['leads']
+        customers = stats['customers']
         
         # Aniversariantes próximos (7 dias)
         upcoming_birthdays = []
@@ -424,8 +436,8 @@ class ContactViewSet(viewsets.ModelViewSet):
             total_purchases__gte=1
         ).count()
         
-        # LTV médio
-        avg_ltv = contacts.aggregate(avg_ltv=Avg('lifetime_value'))['avg_ltv'] or 0
+        # ✅ PERFORMANCE: avg_ltv já foi calculado no aggregate acima
+        avg_ltv = stats['avg_ltv'] or 0
         
         return Response({
             'total_contacts': total,
@@ -873,18 +885,31 @@ class TaskViewSet(viewsets.ModelViewSet):
             user_departments = user.departments.all()
             queryset = queryset.filter(department__in=user_departments)
         
+        # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
+        from django.db.models import Count, Q
+        from django.utils import timezone
+        now = timezone.now()
+        
+        stats_dict = queryset.aggregate(
+            total=Count('id'),
+            pending=Count('id', filter=Q(status='pending')),
+            in_progress=Count('id', filter=Q(status='in_progress')),
+            completed=Count('id', filter=Q(status='completed')),
+            cancelled=Count('id', filter=Q(status='cancelled')),
+            my_assigned=Count('id', filter=Q(assigned_to=user, status__in=['pending', 'in_progress'])),
+            overdue=Count('id', filter=Q(due_date__lt=now, status__in=['pending', 'in_progress'])),
+            with_due_date=Count('id', filter=~Q(due_date__isnull=True))
+        )
+        
         stats = {
-            'total': queryset.count(),
-            'pending': queryset.filter(status='pending').count(),
-            'in_progress': queryset.filter(status='in_progress').count(),
-            'completed': queryset.filter(status='completed').count(),
-            'cancelled': queryset.filter(status='cancelled').count(),
-            'my_assigned': queryset.filter(assigned_to=user, status__in=['pending', 'in_progress']).count(),
-            'overdue': queryset.filter(
-                due_date__lt=timezone.now(),
-                status__in=['pending', 'in_progress']
-            ).count(),
-            'with_due_date': queryset.exclude(due_date__isnull=True).count(),
+            'total': stats_dict['total'],
+            'pending': stats_dict['pending'],
+            'in_progress': stats_dict['in_progress'],
+            'completed': stats_dict['completed'],
+            'cancelled': stats_dict['cancelled'],
+            'my_assigned': stats_dict['my_assigned'],
+            'overdue': stats_dict['overdue'],
+            'with_due_date': stats_dict['with_due_date'],
         }
         
         return Response(stats)

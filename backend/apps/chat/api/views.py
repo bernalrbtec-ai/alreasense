@@ -1564,9 +1564,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         limit = int(request.query_params.get('limit', 15))  # Default 15 mensagens
         offset = int(request.query_params.get('offset', 0))
         
-        # Contar total de mensagens (para paginação)
-        total_count = Message.objects.filter(conversation=conversation).count()
-        
+        # ✅ PERFORMANCE: Usar annotate para contar total junto com a query principal
+        # ou fazer count() apenas uma vez antes de buscar mensagens
         # Buscar mensagens com paginação (ordenado por created_at DESC para pegar mais recentes)
         # ✅ CORREÇÃO: Prefetch de reações para incluir reactions e reactions_summary
         messages = Message.objects.filter(
@@ -1581,6 +1580,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Reverter ordem para exibir (mais antigas primeiro, como WhatsApp)
         messages_list = list(messages)
         messages_list.reverse()
+        
+        # ✅ PERFORMANCE: Contar total apenas se necessário (para paginação)
+        # Se não há offset, não precisa contar total
+        total_count = None
+        if offset > 0 or len(messages_list) == limit:
+            total_count = Message.objects.filter(conversation=conversation).count()
+        else:
+            total_count = offset + len(messages_list)
         
         serializer = MessageSerializer(messages_list, many=True)
         
