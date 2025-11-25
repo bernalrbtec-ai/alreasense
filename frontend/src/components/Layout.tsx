@@ -17,7 +17,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Settings,
-  Database
+  Database,
+  Calendar
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
@@ -34,7 +35,10 @@ const productMenuItems = {
   flow: [
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'flow' },
     { name: 'Campanhas', href: '/campaigns', icon: MessageSquare, requiredProduct: 'flow' },
-    { name: 'Chat', href: '/chat', icon: MessageSquare, requiredProduct: 'flow' },
+  ],
+  workflow: [
+    { name: 'Chat', href: '/chat', icon: MessageSquare, requiredProduct: 'workflow' },
+    { name: 'Agenda', href: '/agenda', icon: Calendar, requiredProduct: 'workflow' },
   ],
   sense: [
     { name: 'Contatos', href: '/contacts', icon: Users, requiredProduct: 'sense' },
@@ -76,11 +80,17 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    // ✅ Agente: Apenas Chat e Perfil (perfil via UserDropdown)
+    // ✅ Agente: Chat e Agenda (se tiver acesso ao workflow)
     if (isAgente) {
-      return [
-        { name: 'Chat', href: '/chat', icon: MessageSquare }
-      ]
+      const workflowAccess = hasProductAccess('workflow')
+      const items = []
+      if (workflowAccess.canAccess) {
+        items.push(
+          { name: 'Chat', href: '/chat', icon: MessageSquare },
+          { name: 'Agenda', href: '/agenda', icon: Calendar }
+        )
+      }
+      return items
     }
     
     const items = [...baseNavigation]

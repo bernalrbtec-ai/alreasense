@@ -38,7 +38,10 @@ REFRESH_INFO_CACHE_SECONDS = 300  # 5 minutos no cache curto
 
 logger = logging.getLogger(__name__)
 
+from apps.billing.decorators import require_product
 
+
+@require_product('workflow')
 class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     """
     ViewSet para conversas.

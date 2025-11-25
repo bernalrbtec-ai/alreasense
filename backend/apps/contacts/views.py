@@ -761,6 +761,10 @@ class ContactHistoryViewSet(viewsets.ModelViewSet):
         instance.delete()
 
 
+from apps.billing.decorators import require_product
+
+
+@require_product('workflow')
 class TaskViewSet(viewsets.ModelViewSet):
     """
     ViewSet para tarefas e agenda.

@@ -25,6 +25,7 @@ import CampaignsPage from './pages/CampaignsPage'
 import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
 import TestPresencePage from './pages/TestPresencePage'
 import DepartmentsPage from './pages/DepartmentsPage'
+import AgendaPage from './pages/AgendaPage'
 import { ChatPage } from './modules/chat'
 
 // Components
@@ -94,8 +95,13 @@ function App() {
           {isAgente ? (
             <>
               <Route path="chat" element={
-                <ProtectedRoute requiredProduct="flow">
+                <ProtectedRoute requiredProduct="workflow">
                   <ChatPage />
+                </ProtectedRoute>
+              } />
+              <Route path="agenda" element={
+                <ProtectedRoute requiredProduct="workflow">
+                  <AgendaPage />
                 </ProtectedRoute>
               } />
               <Route path="profile" element={<ProfilePage />} />
@@ -108,10 +114,15 @@ function App() {
               <Route path="profile" element={<ProfilePage />} />
               <Route path="configurations" element={<ConfigurationsPage />} />
               
-              {/* Chat - COM Layout mas tela cheia */}
+              {/* Workflow - Chat e Agenda */}
               <Route path="chat" element={
-                <ProtectedRoute requiredProduct="flow">
+                <ProtectedRoute requiredProduct="workflow">
                   <ChatPage />
+                </ProtectedRoute>
+              } />
+              <Route path="agenda" element={
+                <ProtectedRoute requiredProduct="workflow">
+                  <AgendaPage />
                 </ProtectedRoute>
               } />
               

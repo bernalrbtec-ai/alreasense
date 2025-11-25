@@ -61,6 +61,11 @@ export const useUserAccess = () => {
     return canAccessFlow()
   }
 
+  const canAccessWorkflow = (): ProductAccess => {
+    // Workflow inclui Chat + Agenda/Tarefas
+    return hasProductAccess('workflow')
+  }
+
   return {
     hasProductAccess,
     canAccessFlow,
@@ -68,6 +73,7 @@ export const useUserAccess = () => {
     canAccessContacts,
     canAccessApiPublic,
     canAccessCampaigns,
+    canAccessWorkflow,
     loading
   }
 }
