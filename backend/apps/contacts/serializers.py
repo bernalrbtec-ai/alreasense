@@ -438,11 +438,32 @@ class TaskCreateSerializer(serializers.ModelSerializer):
     
     def validate_due_date(self, value):
         """
-        Permite reagendamento sem validação de data/hora.
-        A data/hora é considerada a partir do momento da mudança de status.
+        Valida data/hora agendada:
+        - Na criação: não pode ser no passado
+        - Na atualização: não pode ser anterior à data de criação da tarefa
         """
-        # ✅ REMOVIDO: Validação de data no passado
-        # Agora permite reagendamento livre e considera o início a partir da mudança de status
+        from django.utils import timezone
+        
+        if not value:
+            return value
+        
+        # Verificar se é criação ou atualização
+        if self.instance is None:
+            # ✅ CRIAÇÃO: Não pode agendar no passado
+            now = timezone.now()
+            if value < now:
+                raise serializers.ValidationError(
+                    'Não é possível agendar tarefas no passado. '
+                    'A data/hora deve ser a partir de agora.'
+                )
+        else:
+            # ✅ ATUALIZAÇÃO: Não pode ser anterior à data de criação
+            if value < self.instance.created_at:
+                raise serializers.ValidationError(
+                    f'Não é possível reagendar para uma data anterior à criação da tarefa. '
+                    f'A data/hora deve ser a partir de {self.instance.created_at.strftime("%d/%m/%Y %H:%M")}.'
+                )
+        
         return value
     
     def create(self, validated_data):
