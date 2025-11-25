@@ -331,12 +331,15 @@ class TaskSerializer(serializers.ModelSerializer):
     
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     priority_display = serializers.CharField(source='get_priority_display', read_only=True)
+    task_type_display = serializers.CharField(source='get_task_type_display', read_only=True)
     assigned_to_name = serializers.SerializerMethodField()
     created_by_name = serializers.SerializerMethodField()
     department_name = serializers.CharField(source='department.name', read_only=True)
     related_contacts = serializers.SerializerMethodField()
     is_overdue = serializers.BooleanField(read_only=True)
     has_contacts = serializers.BooleanField(read_only=True)
+    is_task = serializers.BooleanField(read_only=True)
+    is_agenda = serializers.BooleanField(read_only=True)
     can_edit = serializers.SerializerMethodField()
     can_delete = serializers.SerializerMethodField()
     
@@ -344,12 +347,13 @@ class TaskSerializer(serializers.ModelSerializer):
         model = Task
         fields = [
             'id', 'title', 'description', 'status', 'status_display',
-            'priority', 'priority_display', 'due_date', 'assigned_to',
+            'priority', 'priority_display', 'task_type', 'task_type_display',
+            'include_in_notifications', 'due_date', 'assigned_to',
             'assigned_to_name', 'related_contacts', 'department',
             'department_name', 'created_by', 'created_by_name',
-            'created_at', 'updated_at', 'completed_at',
-            'is_overdue', 'has_contacts', 'can_edit', 'can_delete',
-            'metadata'  # ✅ NOVO: Incluir campo metadata
+            'created_at', 'updated_at', 'completed_at', 'started_at', 'cancelled_at',
+            'is_overdue', 'has_contacts', 'is_task', 'is_agenda',
+            'can_edit', 'can_delete', 'metadata'
         ]
         read_only_fields = [
             'id', 'created_by', 'created_at', 'updated_at', 'completed_at'
@@ -404,8 +408,9 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         model = Task
         fields = [
             'title', 'description', 'status', 'priority',
+            'task_type', 'include_in_notifications',
             'due_date', 'assigned_to', 'department',
-            'related_contact_ids', 'metadata'  # ✅ NOVO: Incluir campo metadata
+            'related_contact_ids', 'metadata'
         ]
     
     def validate_department(self, value):

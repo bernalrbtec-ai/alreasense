@@ -227,11 +227,13 @@ class CampaignsConfig(AppConfig):
                             task_ids_reminder = []
                             with transaction.atomic():
                                 # Primeiro: fazer select_for_update apenas na tabela Task (sem select_related)
+                                # ✅ CORREÇÃO: Filtrar apenas agenda (não tarefas) para lembretes
                                 tasks_reminder = Task.objects.select_for_update(skip_locked=True).filter(
                                 due_date__gte=notification_window_start,
                                 due_date__lte=notification_window_end,
                                     status__in=['pending', 'in_progress'],
-                                notification_sent=False
+                                notification_sent=False,
+                                task_type='agenda'  # Apenas agenda para lembretes
                             ).exclude(
                                     status__in=['completed', 'cancelled']
                                 ).values_list('id', flat=True)
@@ -254,11 +256,13 @@ class CampaignsConfig(AppConfig):
                             task_ids_exact = []
                             with transaction.atomic():
                                 # Primeiro: fazer select_for_update apenas na tabela Task (sem select_related)
+                                # ✅ CORREÇÃO: Filtrar apenas agenda (não tarefas) para lembretes
                                 tasks_exact_time = Task.objects.select_for_update(skip_locked=True).filter(
                                     due_date__gte=exact_time_window_start,
                                     due_date__lte=exact_time_window_end,
                                     status__in=['pending', 'in_progress'],
-                                    notification_sent=False  # ✅ CORREÇÃO: Só notificar se não foi notificado antes
+                                    notification_sent=False,  # ✅ CORREÇÃO: Só notificar se não foi notificado antes
+                                    task_type='agenda'  # Apenas agenda para lembretes
                                 ).exclude(
                                     status__in=['completed', 'cancelled']
                                 ).values_list('id', flat=True)
@@ -1029,9 +1033,12 @@ class CampaignsConfig(AppConfig):
             from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
             
             # ✅ OTIMIZAÇÃO: Query otimizada com select_related e prefetch_related
+            # ✅ CORREÇÃO: Filtrar apenas tarefas (não agenda) e que estão incluídas em notificações
             tasks = Task.objects.filter(
                 assigned_to=user,
-                tenant=user.tenant
+                tenant=user.tenant,
+                task_type='task',  # Apenas tarefas, não agenda
+                include_in_notifications=True  # Respeitar toggle de notificações
             ).exclude(
                 status__in=['cancelled']  # Sempre excluir canceladas
             ).select_related('department', 'created_by', 'tenant', 'assigned_to').prefetch_related('related_contacts')

@@ -186,9 +186,12 @@ def get_department_tasks(department, filters=None, tenant=None):
             return Task.objects.none()
     
     # Buscar tarefas do departamento
+    # ✅ CORREÇÃO: Filtrar apenas tarefas (não agenda) e que estão incluídas em notificações
     # Tarefas onde o departamento é o mesmo OU o usuário atribuído está no departamento
     tasks = Task.objects.filter(
-        tenant=tenant
+        tenant=tenant,
+        task_type='task',  # Apenas tarefas, não agenda
+        include_in_notifications=True  # Respeitar toggle de notificações
     ).filter(
         Q(department=department) |
         Q(assigned_to__departments=department)

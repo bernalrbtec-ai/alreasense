@@ -904,6 +904,11 @@ class Task(models.Model):
         ('urgent', 'Urgente'),
     ]
     
+    TASK_TYPE_CHOICES = [
+        ('task', 'Tarefa'),
+        ('agenda', 'Agenda'),
+    ]
+    
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -952,6 +957,24 @@ class Task(models.Model):
         default='medium',
         db_index=True,
         verbose_name='Prioridade'
+    )
+    
+    # Tipo: Tarefa ou Agenda
+    task_type = models.CharField(
+        max_length=10,
+        choices=TASK_TYPE_CHOICES,
+        default='task',
+        db_index=True,
+        verbose_name='Tipo',
+        help_text='Tarefa: pendências na tela inicial. Agenda: compromissos no calendário.'
+    )
+    
+    # Toggle para incluir/excluir das notificações
+    include_in_notifications = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name='Incluir em Notificações',
+        help_text='Se desabilitado, esta tarefa/agenda não será incluída nas notificações diárias'
     )
     
     # Data/hora opcional - se preenchido, aparece no calendário
@@ -1053,6 +1076,8 @@ class Task(models.Model):
             models.Index(fields=['assigned_to', 'status']),
             models.Index(fields=['created_by', 'status']),
             models.Index(fields=['tenant', 'status', 'due_date']),
+            models.Index(fields=['tenant', 'task_type', 'status']),
+            models.Index(fields=['tenant', 'task_type', 'include_in_notifications']),
         ]
     
     def __str__(self):
@@ -1071,6 +1096,16 @@ class Task(models.Model):
     def has_contacts(self):
         """Verifica se a tarefa tem contatos relacionados"""
         return self.related_contacts.exists()
+    
+    @property
+    def is_task(self):
+        """Verifica se é uma tarefa (não agenda)"""
+        return self.task_type == 'task'
+    
+    @property
+    def is_agenda(self):
+        """Verifica se é uma agenda (não tarefa)"""
+        return self.task_type == 'agenda'
     
     def mark_completed(self, user=None):
         """Marca a tarefa como concluída"""
