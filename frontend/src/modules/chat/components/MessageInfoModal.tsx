@@ -2,7 +2,7 @@
  * Modal com informações detalhadas da mensagem
  */
 import React from 'react';
-import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, Hash, Database, MessageSquare } from 'lucide-react';
+import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, Database, MessageSquare } from 'lucide-react';
 import type { Message } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -99,7 +99,14 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
               </div>
               <div className="flex-1">
                 <p className="text-sm font-medium text-gray-700">Status</p>
-                <p className={`text-sm ${statusInfo.color}`}>{statusInfo.label}</p>
+                <div className="flex flex-col">
+                  <p className={`text-sm ${statusInfo.color}`}>{statusInfo.label}</p>
+                  {(message.status === 'delivered' || message.status === 'seen') && (
+                    <p className="text-xs text-gray-500 mt-1">
+                      {formatDateTime(message.created_at)}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -228,18 +235,6 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
               </div>
             )}
 
-            {/* Status Evolution */}
-            {message.evolution_status && (
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <Database className="w-5 h-5 text-gray-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Status Evolution</p>
-                  <p className="text-sm text-gray-600">{message.evolution_status}</p>
-                </div>
-              </div>
-            )}
 
             {/* Reações */}
             {message.reactions && message.reactions.length > 0 && (
@@ -282,29 +277,6 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
               </div>
             )}
 
-            {/* ID da Evolution */}
-            {message.message_id && (
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <Hash className="w-5 h-5 text-gray-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">ID Evolution</p>
-                  <p className="text-xs text-gray-500 font-mono break-all">{message.message_id}</p>
-                </div>
-              </div>
-            )}
-
-            {/* ID da Mensagem */}
-            <div className="flex items-start gap-3">
-              <div className="p-2 bg-gray-100 rounded-lg">
-                <Hash className="w-5 h-5 text-gray-600" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">ID Interno</p>
-                <p className="text-xs text-gray-500 font-mono break-all">{message.id}</p>
-              </div>
-            </div>
           </div>
         </div>
 
