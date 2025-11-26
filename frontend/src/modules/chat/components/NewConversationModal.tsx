@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { X, Search, User, Phone, Loader2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
@@ -142,7 +142,7 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       onClose();
     } catch (error: any) {
       console.error('Erro ao iniciar conversa:', error);
-      showErrorToast(error.response?.data?.detail || 'Erro ao iniciar conversa');
+      showErrorToast('iniciar', 'Conversa', error);
     } finally {
       setIsCreating(false);
     }
@@ -186,7 +186,7 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       onClose();
     } catch (error: any) {
       console.error('Erro ao iniciar conversa:', error);
-      showErrorToast(error.response?.data?.detail || 'Erro ao iniciar conversa');
+      showErrorToast('iniciar', 'Conversa', error);
     } finally {
       setIsCreating(false);
     }
