@@ -51,7 +51,23 @@ export const useUserAccess = () => {
   }
 
   const canAccessContacts = (): ProductAccess => {
-    return hasProductAccess('contacts')
+    // Contatos podem ser acessados se:
+    // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
+    // 2. Tenant tem produto flow ativo
+    
+    // Verificar acesso ao chat primeiro - verificar role diretamente também
+    const userRole = user?.role
+    const userIsAdmin = user?.is_admin === true || userRole === 'admin' || user?.is_superuser === true
+    const userIsGerente = user?.is_gerente === true || userRole === 'gerente'
+    const userIsAgente = user?.is_agente === true || userRole === 'agente'
+    
+    // Admin/Gerente/Agente sempre têm acesso (contatos fazem parte do chat/agenda)
+    if (userIsAdmin || userIsGerente || userIsAgente) {
+      return { canAccess: true, isActive: true }
+    }
+    
+    // Se não tem acesso ao chat, verificar produto flow
+    return canAccessFlow()
   }
 
   const canAccessApiPublic = (): ProductAccess => {

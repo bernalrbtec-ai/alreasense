@@ -35,6 +35,7 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ProtectedAgendaRoute } from './components/ProtectedAgendaRoute'
 import { ProtectedChatRoute } from './components/ProtectedChatRoute'
+import { ProtectedContactsRoute } from './components/ProtectedContactsRoute'
 
 function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
@@ -93,7 +94,7 @@ function App() {
           {/* ✅ Agente: Redirecionar para /chat se tentar acessar outras rotas */}
           <Route index element={<Navigate to={isAgente ? "/chat" : "/dashboard"} replace />} />
           
-          {/* ✅ Agente: Apenas Chat e Perfil */}
+          {/* ✅ Agente: Chat, Agenda e Contatos */}
           {isAgente ? (
             <>
               <Route path="chat" element={
@@ -105,6 +106,11 @@ function App() {
                 <ProtectedAgendaRoute>
                   <AgendaPage />
                 </ProtectedAgendaRoute>
+              } />
+              <Route path="contacts" element={
+                <ProtectedContactsRoute>
+                  <ContactsPage />
+                </ProtectedContactsRoute>
               } />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="*" element={<Navigate to="/chat" replace />} />

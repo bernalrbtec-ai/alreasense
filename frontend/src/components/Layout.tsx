@@ -71,7 +71,7 @@ export default function Layout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
-  const { hasProductAccess, canAccessAgenda, canAccessChat } = useUserAccess()
+  const { hasProductAccess, canAccessAgenda, canAccessChat, canAccessContacts } = useUserAccess()
   
   // 🔔 WebSocket global do tenant - fica sempre conectado para receber notificações
   useTenantSocket()
@@ -81,12 +81,13 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    // ✅ Admin/Gerente/Agente: Chat e Agenda sempre visíveis
-    // (esses roles sempre têm acesso ao chat, então sempre têm acesso à agenda)
+    // ✅ Admin/Gerente/Agente: Chat, Agenda e Contatos sempre visíveis
+    // (esses roles sempre têm acesso ao chat, então sempre têm acesso à agenda e contatos)
     if (isAdmin || isGerente || isAgente) {
       const items = [
         { name: 'Chat', href: '/chat', icon: MessageSquare },
-        { name: 'Agenda', href: '/agenda', icon: Calendar }
+        { name: 'Agenda', href: '/agenda', icon: Calendar },
+        { name: 'Contatos', href: '/contacts', icon: Users }
       ]
       
       // Adicionar baseNavigation para admin/gerente (agente só vê chat/agenda)
@@ -101,13 +102,19 @@ export default function Layout() {
           if (productItems) {
             // Filtrar itens baseado no acesso do usuário
             const accessibleItems = productItems.filter(item => {
-              // Pular Chat e Agenda (já adicionados acima)
-              if (item.href === '/chat' || item.href === '/agenda') {
+              // Pular Chat, Agenda e Contatos (já adicionados acima para admin/gerente/agente)
+              if (item.href === '/chat' || item.href === '/agenda' || item.href === '/contacts') {
                 return false
               }
               
               if (!item.requiredProduct) {
                 return true
+              }
+              
+              // Para Contatos, usar canAccessContacts (verifica role OU flow)
+              if (item.href === '/contacts') {
+                const access = canAccessContacts()
+                return access.canAccess
               }
               
               const access = hasProductAccess(item.requiredProduct)
@@ -146,6 +153,12 @@ export default function Layout() {
             return access.canAccess
           }
           
+          // Para Contatos, usar canAccessContacts (verifica role OU flow)
+          if (item.href === '/contacts') {
+            const access = canAccessContacts()
+            return access.canAccess
+          }
+          
           // Para outros itens, usar verificação normal de produto
           const access = hasProductAccess(item.requiredProduct)
           return access.canAccess
@@ -155,7 +168,7 @@ export default function Layout() {
     })
     
     return items
-  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, canAccessChat, isAdmin, isGerente, isAgente, user])
+  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, canAccessChat, canAccessContacts, isAdmin, isGerente, isAgente, user])
 
   return (
     <div className="min-h-screen bg-gray-50">
