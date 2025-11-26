@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
@@ -564,6 +564,16 @@ export function MessageList() {
                   <p className="text-xs font-semibold text-green-600 mb-1">
                     {msg.sender_name || msg.sender_phone}
                   </p>
+                )}
+
+                {/* ✅ NOVO: Badge "Fora de Horário" para mensagens recebidas fora do horário de atendimento */}
+                {msg.direction === 'incoming' && msg.metadata?.is_after_hours_auto && (
+                  <div className="mb-2 flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    <span className="text-xs font-medium text-amber-700">
+                      Mensagem recebida fora do horário de atendimento
+                    </span>
+                  </div>
                 )}
 
                 {/* ✅ NOVO: Preview de mensagem respondida (reply_to) */}
