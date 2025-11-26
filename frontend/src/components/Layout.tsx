@@ -80,20 +80,12 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    // ✅ Agente: Chat e Agenda (se tiver acesso ao chat OU produto workflow)
+    // ✅ Agente: Chat e Agenda (agentes sempre têm acesso ao chat, então sempre têm acesso à agenda)
     if (isAgente) {
-      const chatAccess = hasProductAccess('workflow') // Chat faz parte do workflow
-      const agendaAccess = canAccessAgenda()
-      const items = []
-      
-      if (chatAccess.canAccess) {
-        items.push({ name: 'Chat', href: '/chat', icon: MessageSquare })
-      }
-      
-      if (agendaAccess.canAccess) {
-        items.push({ name: 'Agenda', href: '/agenda', icon: Calendar })
-      }
-      
+      const items = [
+        { name: 'Chat', href: '/chat', icon: MessageSquare },
+        { name: 'Agenda', href: '/agenda', icon: Calendar }
+      ]
       return items
     }
     
@@ -124,7 +116,7 @@ export default function Layout() {
     })
     
     return items
-  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, isAgente])
+  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, isAgente, user])
 
   return (
     <div className="min-h-screen bg-gray-50">
