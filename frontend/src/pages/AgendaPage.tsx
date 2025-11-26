@@ -3,6 +3,7 @@ import { Plus, Calendar, Clock, User, Filter, Search, CheckCircle, XCircle, Aler
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast } from '../lib/toastHelper'
 
@@ -54,6 +55,18 @@ interface TaskStats {
   with_due_date: number
 }
 
+interface Department {
+  id: string
+  name: string
+}
+
+interface User {
+  id: string
+  email: string
+  first_name?: string
+  last_name?: string
+}
+
 export default function AgendaPage() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -73,11 +86,33 @@ export default function AgendaPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
   const [myTasks, setMyTasks] = useState(false)
   const [overdue, setOverdue] = useState(false)
+  const [showTaskModal, setShowTaskModal] = useState(false)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [users, setUsers] = useState<User[]>([])
+  const [searchExpanded, setSearchExpanded] = useState(false)
 
   useEffect(() => {
     loadTasks()
     loadStats()
   }, [statusFilter, typeFilter, priorityFilter, myTasks, overdue])
+
+  // Carregar departamentos e usuários para o modal
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [deptsRes, usersRes] = await Promise.all([
+          api.get('/auth/departments/'),
+          api.get('/auth/users/')
+        ])
+        setDepartments(deptsRes.data.results || deptsRes.data || [])
+        setUsers(usersRes.data.results || usersRes.data || [])
+      } catch (error) {
+        console.error('Erro ao carregar dados:', error)
+      }
+    }
+    fetchData()
+  }, [])
 
   const loadTasks = async () => {
     try {
@@ -199,6 +234,18 @@ export default function AgendaPage() {
     return new Date(dueDate) < new Date() && statusFilter !== 'completed'
   }
 
+  const handleNewTask = () => {
+    setEditingTask(null)
+    setShowTaskModal(true)
+  }
+
+  const handleModalSuccess = () => {
+    setShowTaskModal(false)
+    setEditingTask(null)
+    loadTasks()
+    loadStats()
+  }
+
   const filteredTasks = tasks.filter(task => {
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
@@ -219,7 +266,7 @@ export default function AgendaPage() {
           <h1 className="text-2xl font-bold text-gray-900">Agenda e Tarefas</h1>
           <p className="text-sm text-gray-500 mt-1">Gerencie seus compromissos e pendências</p>
         </div>
-        <Button onClick={() => {/* TODO: Abrir modal de criação */}}>
+        <Button onClick={handleNewTask}>
           <Plus className="h-4 w-4 mr-2" />
           Nova Tarefa
         </Button>
@@ -264,18 +311,43 @@ export default function AgendaPage() {
       {/* Filtros */}
       <Card className="p-4">
         <div className="flex flex-wrap gap-4 items-center">
-          <div className="flex-1 min-w-[200px]">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Buscar tarefas..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-              />
+          {/* Ícone de lupa - quando não expandido */}
+          {!searchExpanded && (
+            <button
+              onClick={() => setSearchExpanded(true)}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              title="Buscar tarefas"
+            >
+              <Search className="h-5 w-5 text-gray-600" />
+            </button>
+          )}
+          
+          {/* Campo de busca - quando expandido */}
+          {searchExpanded && (
+            <div className="flex-1 min-w-[200px] flex items-center gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar tarefas..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+                  autoFocus
+                />
+              </div>
+              <button
+                onClick={() => {
+                  setSearchExpanded(false)
+                  setSearchTerm('')
+                }}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Fechar busca"
+              >
+                <XCircle className="h-5 w-5 text-gray-600" />
+              </button>
             </div>
-          </div>
+          )}
           
           <select
             value={statusFilter}
@@ -407,6 +479,21 @@ export default function AgendaPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Modal de Tarefa */}
+      {showTaskModal && (
+        <TaskModal
+          isOpen={showTaskModal}
+          onClose={() => {
+            setShowTaskModal(false)
+            setEditingTask(null)
+          }}
+          onSuccess={handleModalSuccess}
+          task={editingTask}
+          departments={departments}
+          users={users}
+        />
       )}
     </div>
   )
