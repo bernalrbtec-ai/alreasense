@@ -2,8 +2,8 @@
  * Lista de mensagens - Estilo WhatsApp Web com UX Moderna
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
-import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Smile, Reply, User, Phone, Plus } from 'lucide-react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { format } from 'date-fns';
@@ -11,12 +11,12 @@ import type { MessageAttachment, MessageReaction } from '../types';
 import { AttachmentPreview } from './AttachmentPreview';
 import { useUserAccess } from '@/hooks/useUserAccess';
 import { sortMessagesByTimestamp } from '../utils/messageUtils';
-import { EmojiPicker } from './EmojiPicker';
 import { useAuthStore } from '@/stores/authStore';
 import { MessageContextMenu } from './MessageContextMenu';
 import type { Message } from '../types';
 import ContactModal from '@/components/contacts/ContactModal';
 import { MentionRenderer } from './MentionRenderer';
+import { SharedContactCard } from './SharedContactCard';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -59,7 +59,8 @@ export function MessageList() {
   }));
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
-  const { canAccess: hasFlowAI } = useUserAccess('flow-ai');
+  const { hasProductAccess } = useUserAccess();
+  const hasFlowAI = hasProductAccess('flow-ai').canAccess;
   const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false); // ✅ NOVO: Paginação
@@ -589,102 +590,16 @@ export function MessageList() {
                 })()}
                 
                 {/* ✅ NOVO: Contato compartilhado */}
-                {(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (() => {
-                  const contactData = msg.metadata?.contact_message;
-                  
-                  // Se não tem metadata, tentar extrair do conteúdo
-                  let phone = contactData?.phone || '';
-                  let name = contactData?.name || contactData?.display_name || '';
-                  
-                  // Se não tem dados no metadata, tentar extrair do conteúdo
-                  if (!name && !phone && msg.content) {
-                    // Tentar extrair nome do conteúdo: "📇 Compartilhou contato: Nome"
-                    const match = msg.content.match(/Compartilhou contato:\s*(.+)/i);
-                    if (match) {
-                      name = match[1].trim();
-                    }
-                  }
-                  
-                  // Se ainda não tem nome, usar fallback
-                  if (!name) {
-                    name = 'Contato';
-                  }
-                  
-                  // Formatar telefone para exibição
-                  const formatPhone = (phone: string) => {
-                    if (!phone) return '';
-                    // Remover caracteres não numéricos exceto +
-                    let clean = phone.replace(/[^\d+]/g, '');
-                    
-                    // Se começa com +55, remover para formatar
-                    if (clean.startsWith('+55')) {
-                      clean = clean.substring(3);
-                    } else if (clean.startsWith('55') && clean.length >= 12) {
-                      clean = clean.substring(2);
-                    }
-                    
-                    // Formatar como telefone brasileiro
-                    if (clean.length === 11) {
-                      return `(${clean.substring(0, 2)}) ${clean.substring(2, 7)}-${clean.substring(7)}`;
-                    } else if (clean.length === 10) {
-                      return `(${clean.substring(0, 2)}) ${clean.substring(2, 6)}-${clean.substring(6)}`;
-                    }
-                    
-                    return phone;
-                  };
-                  
-                  const formattedPhone = phone ? formatPhone(phone) : '';
-                  
-                  // Criar link do WhatsApp (remover + e caracteres especiais)
-                  const cleanPhoneForLink = phone ? phone.replace(/[^\d]/g, '') : '';
-                  const whatsappLink = cleanPhoneForLink ? `https://wa.me/${cleanPhoneForLink}` : null;
-                  
-                  // ✅ Capturar setContactToAdd e setShowContactModal do escopo do componente
-                  const handleAddContact = () => {
-                    setContactToAdd({ name, phone: cleanPhoneForLink || phone });
-                    setShowContactModal(true);
-                  };
-                  
-                  return (
-                    <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition-shadow">
-                      <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center shadow-sm">
-                          <User className="w-6 h-6 text-blue-600" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-500 mb-2 font-medium">📇 Contato compartilhado</div>
-                          <div className="font-semibold text-gray-900 mb-1 text-base">{name}</div>
-                          {formattedPhone && (
-                            <div className="text-sm text-gray-600 mb-3 flex items-center gap-1">
-                              <Phone className="w-3.5 h-3.5" />
-                              <span>{formattedPhone}</span>
-                            </div>
-                          )}
-                          <div className="flex gap-2 flex-wrap">
-                            {whatsappLink && (
-                              <a
-                                href={whatsappLink}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm hover:shadow-md"
-                              >
-                                <Phone className="w-4 h-4" />
-                                Iniciar conversa
-                              </a>
-                            )}
-                            <button
-                              onClick={handleAddContact}
-                              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shadow-sm hover:shadow-md"
-                            >
-                              <Plus className="w-4 h-4" />
-                              Adicionar aos contatos
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
+                {(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
+                  <SharedContactCard
+                    contactData={msg.metadata?.contact_message || {}}
+                    content={msg.content}
+                    onAddContact={(contact) => {
+                      setContactToAdd(contact);
+                      setShowContactModal(true);
+                    }}
+                  />
+                )}
                 
                 {/* Anexos - renderizar ANTES do texto */}
                 {msg.attachments && msg.attachments.length > 0 && (
