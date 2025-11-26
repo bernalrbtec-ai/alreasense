@@ -679,6 +679,18 @@ export function MessageList() {
           message={contextMenu.message}
           position={contextMenu.position}
           onClose={() => setContextMenu(null)}
+          onShowInfo={(message) => {
+            setContextMenu(null);
+            setShowMessageInfo(message);
+          }}
+        />
+      )}
+
+      {/* Modal de Informações da Mensagem */}
+      {showMessageInfo && (
+        <MessageInfoModal
+          message={showMessageInfo}
+          onClose={() => setShowMessageInfo(null)}
         />
       )}
 
