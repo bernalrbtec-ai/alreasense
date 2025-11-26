@@ -3,6 +3,7 @@ Admin para Flow Chat.
 """
 from django.contrib import admin
 from apps.chat.models import Conversation, Message, MessageAttachment
+from apps.chat.models_business_hours import BusinessHours, AfterHoursMessage, AfterHoursTaskConfig
 
 
 @admin.register(Conversation)
