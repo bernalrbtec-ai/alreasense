@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical } from 'lucide-react'
+import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical, Edit } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { showErrorToast } from '../lib/toastHelper'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../components/ui/dropdown-menu'
 
 interface Task {
   id: string
@@ -472,9 +473,24 @@ export default function AgendaPage() {
                   </div>
                 </div>
 
-                <Button variant="ghost" size="icon">
-                  <MoreVertical className="h-5 w-5" />
-                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon">
+                      <MoreVertical className="h-5 w-5" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => {
+                        setEditingTask(task)
+                        setShowTaskModal(true)
+                      }}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Editar Tarefa
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </Card>
           ))}
