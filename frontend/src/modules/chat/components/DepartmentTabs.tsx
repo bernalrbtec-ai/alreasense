@@ -1,7 +1,7 @@
 /**
  * Tabs de departamentos - Estilo WhatsApp Web
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Inbox } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
@@ -12,6 +12,30 @@ import { NotificationToggle } from './NotificationToggle';
 export function DepartmentTabs() {
   const { departments, activeDepartment, setDepartments, setActiveDepartment, conversations } = useChatStore();
   const { can_access_all_departments, departmentIds } = usePermissions();
+  
+  // ✅ FIX: Filtrar departamentos sempre baseado nas permissões do usuário
+  // Isso garante que mesmo se departamentos forem adicionados via WebSocket ou outras fontes,
+  // apenas os permitidos serão exibidos
+  const filteredDepartments = useMemo(() => {
+    if (can_access_all_departments) {
+      return departments;
+    }
+    if (!departmentIds || departmentIds.length === 0) {
+      return [];
+    }
+    return departments.filter((dept) => departmentIds.includes(dept.id));
+  }, [departments, can_access_all_departments, departmentIds]);
+  
+  // ✅ FIX: Limpar activeDepartment se não estiver mais na lista de departamentos permitidos
+  useEffect(() => {
+    if (activeDepartment && activeDepartment.id !== 'inbox') {
+      const isAllowed = filteredDepartments.some(dept => dept.id === activeDepartment.id);
+      if (!isAllowed) {
+        console.log('🔒 [DEPARTMENTS] Departamento ativo não permitido, mudando para Inbox');
+        setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as Department);
+      }
+    }
+  }, [filteredDepartments, activeDepartment, setActiveDepartment]);
   
   // ✅ NOVO: Calcular contador de novas conversas (pendentes) para Inbox e departamentos
   const getPendingCount = (deptId: string | null) => {
@@ -24,7 +48,7 @@ export function DepartmentTabs() {
       return inboxCount;
     } else {
       // ✅ MELHORIA: Usar pending_count do backend se disponível, senão calcular do frontend
-      const dept = departments.find(d => d.id === deptId);
+      const dept = filteredDepartments.find(d => d.id === deptId);
       if (dept?.pending_count !== undefined && dept.pending_count !== null) {
         return dept.pending_count;
       }
@@ -105,7 +129,7 @@ export function DepartmentTabs() {
         </button>
 
         {/* Tabs Departamentos - Responsivo */}
-        {departments.map((dept) => {
+        {filteredDepartments.map((dept) => {
           const pendingCount = getPendingCount(dept.id);
           return (
             <button
