@@ -92,6 +92,7 @@ export default function AgendaPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [searchExpanded, setSearchExpanded] = useState(false)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   useEffect(() => {
     loadTasks()
@@ -473,24 +474,33 @@ export default function AgendaPage() {
                   </div>
                 </div>
 
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon">
-                      <MoreVertical className="h-5 w-5" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setEditingTask(task)
-                        setShowTaskModal(true)
-                      }}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Editar Tarefa
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                <div className="relative">
+                  <Button 
+                    variant="ghost" 
+                    size="icon"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setOpenMenuId(openMenuId === task.id ? null : task.id)
+                    }}
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </Button>
+                  {openMenuId === task.id && (
+                    <DropdownMenuContent align="end" className="absolute right-0 top-8 z-50">
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setEditingTask(task)
+                          setShowTaskModal(true)
+                          setOpenMenuId(null)
+                        }}
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        Editar Tarefa
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  )}
+                </div>
               </div>
             </Card>
           ))}
