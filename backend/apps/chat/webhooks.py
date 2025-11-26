@@ -851,7 +851,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         elif message_type == 'contactMessage':
             # ✅ NOVO: Extrair dados do contato compartilhado
             contact_data = message_info.get('contactMessage', {})
+            
+            # ✅ FIX: Suportar dois formatos:
+            # Formato 1: contactMessage.contactsArray[] (formato antigo)
+            # Formato 2: contactMessage.displayName e contactMessage.vcard (formato novo)
             contacts_array = contact_data.get('contactsArray', [])
+            
+            # Se não tem contactsArray, tentar formato direto
+            if not contacts_array or len(contacts_array) == 0:
+                # Formato novo: dados diretos em contactMessage
+                display_name = contact_data.get('displayName', '')
+                vcard = contact_data.get('vcard', '')
+                contact_id = contact_data.get('contactId', '')
+                
+                if display_name or vcard:
+                    # Processar como se fosse um contato único
+                    contacts_array = [{
+                        'displayName': display_name,
+                        'vcard': vcard,
+                        'contactId': contact_id
+                    }]
             
             if contacts_array and len(contacts_array) > 0:
                 # Pegar primeiro contato (geralmente só vem um)
@@ -871,10 +890,27 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Tentar extrair telefone do vCard se não tiver no contactId
                 if not phone_from_contact and vcard:
                     import re
-                    tel_match = re.search(r'TEL[;:]?([^\n\r]+)', vcard, re.IGNORECASE)
-                    if tel_match:
-                        phone_from_contact = tel_match.group(1).strip()
-                        # Normalizar telefone
+                    # ✅ FIX: Melhorar regex para pegar telefone do vCard
+                    # Formato: item1.TEL;waid=5517996555683:+55 17 99655-5683
+                    # Ou: TEL:+5517996555683
+                    # Ou: item1.TEL:+55 17 99655-5683
+                    # Tentar múltiplos padrões
+                    tel_patterns = [
+                        r'item\d+\.TEL[;:]?waid=\d+[:;]([+\d\s\-\(\)]+)',  # item1.TEL;waid=...:+55 17...
+                        r'item\d+\.TEL[;:]?([+\d\s\-\(\)]+)',  # item1.TEL:+55 17...
+                        r'TEL[;:]?waid=\d+[:;]([+\d\s\-\(\)]+)',  # TEL;waid=...:+55 17...
+                        r'TEL[;:]?([+\d\s\-\(\)]+)',  # TEL:+55 17...
+                    ]
+                    
+                    phone_from_contact = None
+                    for pattern in tel_patterns:
+                        tel_match = re.search(pattern, vcard, re.IGNORECASE)
+                        if tel_match:
+                            phone_from_contact = tel_match.group(1).strip()
+                            break
+                    
+                    if phone_from_contact:
+                        # Normalizar telefone - remover espaços, parênteses, hífens
                         phone_from_contact = ''.join(c for c in phone_from_contact if c.isdigit() or c == '+')
                         if phone_from_contact and not phone_from_contact.startswith('+'):
                             if phone_from_contact.startswith('55'):
@@ -900,7 +936,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 else:
                     content = "📇 Contato compartilhado"
                 
-                logger.info(f"📇 [CONTACT MESSAGE] Nome: {display_name}, Telefone: {phone_from_contact}")
+                logger.info(f"📇 [CONTACT MESSAGE] Nome: {display_name}, Telefone: {phone_from_contact}, vCard: {vcard[:100] if vcard else 'N/A'}")
             else:
                 content = "📇 Contato compartilhado"
         else:
