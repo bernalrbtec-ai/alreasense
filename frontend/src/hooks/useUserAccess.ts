@@ -73,10 +73,15 @@ export const useUserAccess = () => {
     // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
     // 2. Tenant tem produto workflow ativo
     
-    // Verificar acesso ao chat primeiro - verificar role diretamente também
+    // ✅ FIX: Verificar role primeiro (mais confiável)
     const userRole = user?.role
-    const hasChatAccess = can_access_chat || isAdmin || isGerente || isAgente || 
-                          userRole === 'admin' || userRole === 'gerente' || userRole === 'agente'
+    const userIsAdmin = user?.is_admin || userRole === 'admin' || user?.is_superuser
+    const userIsGerente = user?.is_gerente || userRole === 'gerente'
+    const userIsAgente = user?.is_agente || userRole === 'agente'
+    
+    // Verificar acesso ao chat - admin sempre tem acesso
+    const hasChatAccess = userIsAdmin || userIsGerente || userIsAgente || 
+                          can_access_chat || isAdmin || isGerente || isAgente
     
     if (hasChatAccess) {
       return { canAccess: true, isActive: true }
