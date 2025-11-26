@@ -759,11 +759,9 @@ export default function TaskModal({
                             </div>
                           )}
                           
-                          {historyItem.changed_by && (
+                          {historyItem.changed_by_name && (
                             <div className="text-xs text-gray-500 mt-1">
-                              Por: {historyItem.changed_by.first_name && historyItem.changed_by.last_name
-                                ? `${historyItem.changed_by.first_name} ${historyItem.changed_by.last_name}`
-                                : historyItem.changed_by.email}
+                              Por: {historyItem.changed_by_name}
                             </div>
                           )}
                         </div>
