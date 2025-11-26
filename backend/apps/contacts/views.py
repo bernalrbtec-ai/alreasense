@@ -355,22 +355,22 @@ class ContactViewSet(viewsets.ModelViewSet):
         contacts = self.filter_queryset(self.get_queryset())
         
         # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
-        from django.db.models import Count, Q
+        from django.db.models import Count, Q, Case, When, IntegerField
         stats = contacts.aggregate(
             total=Count('id'),
-            opted_out=Count('id', filter=Q(opted_out=True)),
-            active=Count('id', filter=Q(is_active=True)),
-            leads=Count('id', filter=Q(total_purchases=0)),
-            customers=Count('id', filter=Q(total_purchases__gte=1)),
-            delivery_problems=Count('id', filter=Q(opted_out=True))  # Usando opted_out como proxy
+            opted_out=Count(Case(When(opted_out=True, then=1), output_field=IntegerField())),
+            active=Count(Case(When(is_active=True, then=1), output_field=IntegerField())),
+            leads=Count(Case(When(total_purchases=0, then=1), output_field=IntegerField())),
+            customers=Count(Case(When(total_purchases__gte=1, then=1), output_field=IntegerField())),
+            delivery_problems=Count(Case(When(opted_out=True, then=1), output_field=IntegerField()))  # Usando opted_out como proxy
         )
         
-        total = stats['total']
-        opted_out = stats['opted_out']
-        active = stats['active']
-        leads = stats['leads']
-        customers = stats['customers']
-        delivery_problems = stats['delivery_problems']
+        total = stats['total'] or 0
+        opted_out = stats['opted_out'] or 0
+        active = stats['active'] or 0
+        leads = stats['leads'] or 0
+        customers = stats['customers'] or 0
+        delivery_problems = stats['delivery_problems'] or 0
         
         return Response({
             'total': total,
