@@ -508,7 +508,8 @@ export default function AgendaPage() {
           onSuccess={handleModalSuccess}
           task={editingTask ? {
             ...editingTask,
-            department: editingTask.department || ''
+            department: editingTask.department || '',
+            related_contacts: editingTask.related_contacts || []
           } : undefined}
           departments={departments}
           users={users}
