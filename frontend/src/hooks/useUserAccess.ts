@@ -16,7 +16,7 @@ export const useUserAccess = () => {
 
   const hasProductAccess = (productSlug: string): ProductAccess => {
     // Super admin tem acesso a tudo
-    if (user?.role === 'superadmin') {
+    if (user?.is_superuser || user?.is_staff) {
       return { canAccess: true, isActive: true }
     }
 
