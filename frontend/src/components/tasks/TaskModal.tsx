@@ -688,12 +688,10 @@ export default function TaskModal({
                       <span className="font-medium">Data:</span>{' '}
                       {task.created_at ? format(new Date(task.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
                     </div>
-                    {task.created_by_data && (
+                    {task.created_by_name && (
                       <div>
                         <span className="font-medium">Criado por:</span>{' '}
-                        {task.created_by_data.first_name && task.created_by_data.last_name
-                          ? `${task.created_by_data.first_name} ${task.created_by_data.last_name}`
-                          : task.created_by_data.email}
+                        {task.created_by_name}
                       </div>
                     )}
                   </div>
