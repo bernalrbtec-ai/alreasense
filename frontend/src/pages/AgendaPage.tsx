@@ -6,7 +6,7 @@ import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { showErrorToast } from '../lib/toastHelper'
-import { DropdownMenuContent, DropdownMenuItem } from '../components/ui/dropdown-menu'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../components/ui/dropdown-menu'
 
 interface Task {
   id: string
