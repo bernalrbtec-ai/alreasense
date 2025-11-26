@@ -17,6 +17,7 @@ import type { Message } from '../types';
 import ContactModal from '@/components/contacts/ContactModal';
 import { MentionRenderer } from './MentionRenderer';
 import { SharedContactCard } from './SharedContactCard';
+import { MessageInfoModal } from './MessageInfoModal';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -66,6 +67,7 @@ export function MessageList() {
   const [hasMoreMessages, setHasMoreMessages] = useState(false); // ✅ NOVO: Paginação
   const [loadingOlder, setLoadingOlder] = useState(false); // ✅ NOVO: Loading mensagens antigas
   const [contextMenu, setContextMenu] = useState<{ message: Message; position: { x: number; y: number } } | null>(null);
+  const [showMessageInfo, setShowMessageInfo] = useState<Message | null>(null);
 
   useEffect(() => {
     if (!activeConversation?.id) return;

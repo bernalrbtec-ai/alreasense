@@ -32,9 +32,10 @@ interface MessageContextMenuProps {
   message: Message;
   position: { x: number; y: number };
   onClose: () => void;
+  onShowInfo?: (message: Message) => void;
 }
 
-export function MessageContextMenu({ message, position, onClose }: MessageContextMenuProps) {
+export function MessageContextMenu({ message, position, onClose, onShowInfo }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
@@ -191,7 +192,13 @@ export function MessageContextMenu({ message, position, onClose }: MessageContex
 
   // Dados da mensagem
   const handleInfo = () => {
-    setShowInfoModal(true);
+    if (onShowInfo) {
+      // Se tem callback do pai, usar ele (preferido)
+      onShowInfo(message);
+    } else {
+      // Fallback: usar estado local
+      setShowInfoModal(true);
+    }
     onClose();
   };
 
