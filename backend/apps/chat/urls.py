@@ -13,6 +13,11 @@ from apps.chat.api.views import (
     UploadPresignedUrlView,
     ConfirmUploadView,
 )
+from apps.chat.api.views_business_hours import (
+    BusinessHoursViewSet,
+    AfterHoursMessageViewSet,
+    AfterHoursTaskConfigViewSet,
+)
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
 from apps.chat.api.media_views import serve_media
@@ -23,6 +28,9 @@ router.register(r'conversations', ConversationViewSet, basename='conversation')
 router.register(r'messages', MessageViewSet, basename='message')
 router.register(r'attachments', MessageAttachmentViewSet, basename='attachment')
 router.register(r'reactions', MessageReactionViewSet, basename='reaction')
+router.register(r'business-hours', BusinessHoursViewSet, basename='business-hours')
+router.register(r'after-hours-messages', AfterHoursMessageViewSet, basename='after-hours-message')
+router.register(r'after-hours-task-configs', AfterHoursTaskConfigViewSet, basename='after-hours-task-config')
 
 urlpatterns = [
     # ✅ FIX: Rotas customizadas (URLs diferentes para evitar conflito com router)
