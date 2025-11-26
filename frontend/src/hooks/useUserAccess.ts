@@ -68,6 +68,24 @@ export const useUserAccess = () => {
     return hasProductAccess('workflow')
   }
 
+  const canAccessChat = (): ProductAccess => {
+    // Chat pode ser acessado se:
+    // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
+    // 2. Tenant tem produto workflow ativo
+    
+    // Verificar acesso ao chat primeiro - verificar role diretamente também
+    const userRole = user?.role
+    const hasChatAccess = can_access_chat || isAdmin || isGerente || isAgente || 
+                          userRole === 'admin' || userRole === 'gerente' || userRole === 'agente'
+    
+    if (hasChatAccess) {
+      return { canAccess: true, isActive: true }
+    }
+    
+    // Se não tem acesso ao chat, verificar produto workflow
+    return canAccessWorkflow()
+  }
+
   const canAccessAgenda = (): ProductAccess => {
     // Agenda pode ser acessada se:
     // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
@@ -94,6 +112,7 @@ export const useUserAccess = () => {
     canAccessApiPublic,
     canAccessCampaigns,
     canAccessWorkflow,
+    canAccessChat,
     canAccessAgenda,
     loading
   }

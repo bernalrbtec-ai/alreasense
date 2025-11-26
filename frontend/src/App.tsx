@@ -34,6 +34,7 @@ import LoadingSpinner from './components/ui/LoadingSpinner'
 import ErrorBoundary from './components/ErrorBoundary'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ProtectedAgendaRoute } from './components/ProtectedAgendaRoute'
+import { ProtectedChatRoute } from './components/ProtectedChatRoute'
 
 function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
@@ -96,9 +97,9 @@ function App() {
           {isAgente ? (
             <>
               <Route path="chat" element={
-                <ProtectedRoute requiredProduct="workflow">
+                <ProtectedChatRoute>
                   <ChatPage />
-                </ProtectedRoute>
+                </ProtectedChatRoute>
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
@@ -117,9 +118,9 @@ function App() {
               
               {/* Workflow - Chat e Agenda */}
               <Route path="chat" element={
-                <ProtectedRoute requiredProduct="workflow">
+                <ProtectedChatRoute>
                   <ChatPage />
-                </ProtectedRoute>
+                </ProtectedChatRoute>
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
