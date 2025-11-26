@@ -1455,6 +1455,37 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   Direction: {direction}")
             logger.info(f"   Conversa: {conversation.id} | Phone: {conversation.contact_phone}")
             
+            # ✅ NOVO: Verificar horário de atendimento e criar tarefa/mensagem automática
+            if direction == 'incoming':
+                try:
+                    from apps.chat.services.business_hours_service import BusinessHoursService
+                    
+                    # Processa mensagem fora de horário (cria mensagem automática se configurado)
+                    was_after_hours, auto_message = BusinessHoursService.handle_after_hours_message(
+                        conversation=conversation,
+                        message=message,
+                        tenant=tenant,
+                        department=conversation.department
+                    )
+                    
+                    if was_after_hours:
+                        logger.info(f"⏰ [BUSINESS HOURS] Mensagem recebida fora de horário")
+                        if auto_message:
+                            logger.info(f"   📨 Mensagem automática criada: {auto_message.id}")
+                        
+                        # Cria tarefa automática se configurado
+                        task = BusinessHoursService.create_after_hours_task(
+                            conversation=conversation,
+                            message=message,
+                            tenant=tenant,
+                            department=conversation.department
+                        )
+                        
+                        if task:
+                            logger.info(f"   ✅ Tarefa automática criada: {task.id} - {task.title}")
+                except Exception as e:
+                    logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
+            
             # Se tiver anexo, processa
             attachment_url = None
             mime_type = None
