@@ -355,15 +355,17 @@ class ContactViewSet(viewsets.ModelViewSet):
         contacts = self.filter_queryset(self.get_queryset())
         
         # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
-        from django.db.models import Count, Q, Sum, Case, When, IntegerField
-        # ✅ FIX: Usar Sum com Case/When ao invés de Count com filter para evitar erro de aggregate
-        stats = contacts.aggregate(
-            total=Count('id'),
-            opted_out=Sum(Case(When(opted_out=True, then=1), default=0, output_field=IntegerField())),
-            active=Sum(Case(When(is_active=True, then=1), default=0, output_field=IntegerField())),
-            leads=Sum(Case(When(total_purchases=0, then=1), default=0, output_field=IntegerField())),
-            customers=Sum(Case(When(total_purchases__gte=1, then=1), default=0, output_field=IntegerField())),
-            delivery_problems=Sum(Case(When(opted_out=True, then=1), default=0, output_field=IntegerField()))  # Usando opted_out como proxy
+        from django.db.models import Count, Q
+        # ✅ FIX: Usar Count com pk ao invés de id para evitar conflitos
+        # Clonar queryset para evitar problemas com annotations existentes
+        stats_queryset = contacts.all()
+        stats = stats_queryset.aggregate(
+            total=Count('pk'),
+            opted_out=Count('pk', filter=Q(opted_out=True)),
+            active=Count('pk', filter=Q(is_active=True)),
+            leads=Count('pk', filter=Q(total_purchases=0)),
+            customers=Count('pk', filter=Q(total_purchases__gte=1)),
+            delivery_problems=Count('pk', filter=Q(opted_out=True))  # Usando opted_out como proxy
         )
         
         total = stats.get('total', 0) or 0
