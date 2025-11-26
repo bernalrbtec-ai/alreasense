@@ -378,6 +378,12 @@ export function ConversationList() {
           ))
         )}
       </div>
+
+      {/* Modal de Nova Conversa */}
+      <NewConversationModal
+        isOpen={showNewConversation}
+        onClose={() => setShowNewConversation(false)}
+      />
     </div>
   );
 }
