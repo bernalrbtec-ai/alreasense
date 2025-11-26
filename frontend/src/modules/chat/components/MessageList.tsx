@@ -589,69 +589,96 @@ export function MessageList() {
                 })()}
                 
                 {/* ✅ NOVO: Contato compartilhado */}
-                {msg.metadata?.contact_message && (() => {
-                  const contactData = msg.metadata.contact_message;
-                  const phone = contactData.phone || '';
-                  const name = contactData.name || contactData.display_name || 'Contato';
+                {(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (() => {
+                  const contactData = msg.metadata?.contact_message;
+                  
+                  // Se não tem metadata, tentar extrair do conteúdo
+                  let phone = contactData?.phone || '';
+                  let name = contactData?.name || contactData?.display_name || '';
+                  
+                  // Se não tem dados no metadata, tentar extrair do conteúdo
+                  if (!name && !phone && msg.content) {
+                    // Tentar extrair nome do conteúdo: "📇 Compartilhou contato: Nome"
+                    const match = msg.content.match(/Compartilhou contato:\s*(.+)/i);
+                    if (match) {
+                      name = match[1].trim();
+                    }
+                  }
+                  
+                  // Se ainda não tem nome, usar fallback
+                  if (!name) {
+                    name = 'Contato';
+                  }
                   
                   // Formatar telefone para exibição
                   const formatPhone = (phone: string) => {
                     if (!phone) return '';
-                    const clean = phone.replace(/\D/g, '');
-                    if (clean.startsWith('55') && clean.length >= 12) {
-                      const ddd = clean.substring(2, 4);
-                      const num = clean.substring(4);
-                      if (num.length === 9) {
-                        return `(${ddd}) ${num.substring(0, 5)}-${num.substring(5)}`;
-                      } else if (num.length === 8) {
-                        return `(${ddd}) ${num.substring(0, 4)}-${num.substring(4)}`;
-                      }
+                    // Remover caracteres não numéricos exceto +
+                    let clean = phone.replace(/[^\d+]/g, '');
+                    
+                    // Se começa com +55, remover para formatar
+                    if (clean.startsWith('+55')) {
+                      clean = clean.substring(3);
+                    } else if (clean.startsWith('55') && clean.length >= 12) {
+                      clean = clean.substring(2);
                     }
+                    
+                    // Formatar como telefone brasileiro
+                    if (clean.length === 11) {
+                      return `(${clean.substring(0, 2)}) ${clean.substring(2, 7)}-${clean.substring(7)}`;
+                    } else if (clean.length === 10) {
+                      return `(${clean.substring(0, 2)}) ${clean.substring(2, 6)}-${clean.substring(6)}`;
+                    }
+                    
                     return phone;
                   };
                   
-                  const formattedPhone = formatPhone(phone);
-                  const whatsappLink = phone ? `https://wa.me/${phone.replace(/\+/g, '')}` : null;
+                  const formattedPhone = phone ? formatPhone(phone) : '';
+                  
+                  // Criar link do WhatsApp (remover + e caracteres especiais)
+                  const cleanPhoneForLink = phone ? phone.replace(/[^\d]/g, '') : '';
+                  const whatsappLink = cleanPhoneForLink ? `https://wa.me/${cleanPhoneForLink}` : null;
                   
                   // ✅ Capturar setContactToAdd e setShowContactModal do escopo do componente
                   const handleAddContact = () => {
-                    setContactToAdd({ name, phone });
+                    setContactToAdd({ name, phone: cleanPhoneForLink || phone });
                     setShowContactModal(true);
                   };
                   
                   return (
-                    <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm">
+                    <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition-shadow">
                       <div className="flex items-start gap-3">
-                        <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                          <User className="w-5 h-5 text-blue-600" />
+                        <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center shadow-sm">
+                          <User className="w-6 h-6 text-blue-600" />
                         </div>
                         <div className="flex-1 min-w-0">
-                          <div className="text-xs text-gray-500 mb-1">📇 Contato compartilhado</div>
-                          <div className="font-medium text-gray-900 mb-1">{name}</div>
+                          <div className="text-xs text-gray-500 mb-2 font-medium">📇 Contato compartilhado</div>
+                          <div className="font-semibold text-gray-900 mb-1 text-base">{name}</div>
                           {formattedPhone && (
-                            <div className="text-sm text-gray-600 mb-2">{formattedPhone}</div>
+                            <div className="text-sm text-gray-600 mb-3 flex items-center gap-1">
+                              <Phone className="w-3.5 h-3.5" />
+                              <span>{formattedPhone}</span>
+                            </div>
                           )}
-                          <div className="flex gap-2">
+                          <div className="flex gap-2 flex-wrap">
                             {whatsappLink && (
                               <a
                                 href={whatsappLink}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded-md transition-colors"
+                                className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm hover:shadow-md"
                               >
-                                <Phone className="w-3 h-3" />
+                                <Phone className="w-4 h-4" />
                                 Iniciar conversa
                               </a>
                             )}
-                            {phone && (
-                              <button
-                                onClick={handleAddContact}
-                                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md transition-colors"
-                              >
-                                <Plus className="w-3 h-3" />
-                                Adicionar
-                              </button>
-                            )}
+                            <button
+                              onClick={handleAddContact}
+                              className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shadow-sm hover:shadow-md"
+                            >
+                              <Plus className="w-4 h-4" />
+                              Adicionar aos contatos
+                            </button>
                           </div>
                         </div>
                       </div>
@@ -673,9 +700,11 @@ export function MessageList() {
                 )}
 
                 {/* Texto (se houver) - mostrar mesmo se só tiver anexos */}
+                {/* ✅ FIX: Ocultar conteúdo se for contato compartilhado (já exibido no card acima) */}
                 {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
                 {/* ✅ NOVO: Renderizar menções se houver */}
-                {msg.content && msg.content.trim() && (
+                {msg.content && msg.content.trim() && 
+                 !(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
                   <p className="text-sm whitespace-pre-wrap break-words mb-1">
                     {msg.metadata?.mentions && Array.isArray(msg.metadata.mentions) && msg.metadata.mentions.length > 0 ? (
                       <MentionRenderer 
