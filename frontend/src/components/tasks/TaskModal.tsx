@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { X, User } from 'lucide-react'
+import { X, User, Clock, History } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showWarningToast } from '../../lib/toastHelper'
+import { format } from 'date-fns'
+import { ptBR } from 'date-fns/locale'
 
 interface Task {
   id: string
@@ -75,6 +77,17 @@ export default function TaskModal({
   const [searchContact, setSearchContact] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [loadingContacts, setLoadingContacts] = useState(false)
+  const [showHistory, setShowHistory] = useState(false)
+  const [taskHistory, setTaskHistory] = useState<any[]>([])
+  const [loadingHistory, setLoadingHistory] = useState(false)
+
+  useEffect(() => {
+    if (isOpen && task) {
+      fetchTaskHistory()
+    } else {
+      setTaskHistory([])
+    }
+  }, [isOpen, task])
 
   useEffect(() => {
     if (isOpen) {
@@ -261,22 +274,76 @@ export default function TaskModal({
     })
   }
 
+  const fetchTaskHistory = async () => {
+    if (!task?.id) return
+    
+    try {
+      setLoadingHistory(true)
+      const response = await api.get(`/contacts/tasks/${task.id}/history/`)
+      setTaskHistory(response.data || [])
+    } catch (error) {
+      console.error('Erro ao buscar histórico da tarefa:', error)
+      setTaskHistory([])
+    } finally {
+      setLoadingHistory(false)
+    }
+  }
+
+  const getStatusDisplay = (status: string) => {
+    const statusMap: Record<string, string> = {
+      'pending': 'Pendente',
+      'in_progress': 'Em Andamento',
+      'completed': 'Concluída',
+      'cancelled': 'Cancelada'
+    }
+    return statusMap[status] || status
+  }
+
+  const getChangeTypeDisplay = (changeType: string) => {
+    const typeMap: Record<string, string> = {
+      'status_change': 'Mudança de Status',
+      'reschedule': 'Reagendamento',
+      'assignment': 'Atribuição',
+      'priority_change': 'Mudança de Prioridade',
+      'description_update': 'Atualização de Descrição'
+    }
+    return typeMap[changeType] || changeType
+  }
+
   if (!isOpen) return null
 
   const selectedContacts = contacts.filter(c => formData.related_contact_ids.includes(c.id))
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+      <div className={`bg-white rounded-lg shadow-xl ${showHistory && task ? 'max-w-5xl' : 'max-w-2xl'} w-full max-h-[90vh] overflow-hidden flex flex-col`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white z-10">
-          <h2 className="text-xl font-bold">
-            {task ? 'Editar Tarefa' : 'Nova Tarefa'}
-          </h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-xl font-bold">
+              {task ? 'Editar Tarefa' : 'Nova Tarefa'}
+            </h2>
+            {task && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowHistory(!showHistory)}
+                className="flex items-center gap-2"
+              >
+                <History className="h-4 w-4" />
+                {showHistory ? 'Ocultar' : 'Ver'} Histórico
+              </Button>
+            )}
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X className="h-6 w-6" />
           </button>
         </div>
+
+        {/* Content Container */}
+        <div className="flex flex-1 overflow-hidden">
+          {/* Form Section */}
+          <div className={`${showHistory && task ? 'w-2/3 border-r' : 'w-full'} overflow-y-auto`}>
 
         {/* Form */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
@@ -602,6 +669,117 @@ export default function TaskModal({
             </Button>
           </div>
         </form>
+          </div>
+
+          {/* History Panel */}
+          {showHistory && task && (
+            <div className="w-1/3 bg-gray-50 overflow-y-auto border-l">
+              <div className="p-4 space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Clock className="h-5 w-5" />
+                  Histórico da Tarefa
+                </h3>
+
+                {/* Task Creation Info */}
+                <div className="bg-white rounded-lg p-3 border border-gray-200">
+                  <div className="text-sm font-medium text-gray-700 mb-2">Criação</div>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <div>
+                      <span className="font-medium">Data:</span>{' '}
+                      {task.created_at ? format(new Date(task.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR }) : 'N/A'}
+                    </div>
+                    {task.created_by_data && (
+                      <div>
+                        <span className="font-medium">Criado por:</span>{' '}
+                        {task.created_by_data.first_name && task.created_by_data.last_name
+                          ? `${task.created_by_data.first_name} ${task.created_by_data.last_name}`
+                          : task.created_by_data.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Task Completion Info */}
+                {task.status === 'completed' && task.completed_at && (
+                  <div className="bg-green-50 rounded-lg p-3 border border-green-200">
+                    <div className="text-sm font-medium text-green-700 mb-2">Encerramento</div>
+                    <div className="text-xs text-green-600">
+                      <span className="font-medium">Data:</span>{' '}
+                      {format(new Date(task.completed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Task History Timeline */}
+                {loadingHistory ? (
+                  <div className="text-center py-8 text-gray-500">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-gray-400 mx-auto"></div>
+                    <p className="mt-2 text-xs">Carregando histórico...</p>
+                  </div>
+                ) : taskHistory.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-gray-700">Alterações</div>
+                    <div className="space-y-2">
+                      {taskHistory.map((historyItem, index) => (
+                        <div key={historyItem.id} className="bg-white rounded-lg p-3 border border-gray-200">
+                          <div className="flex items-start justify-between mb-2">
+                            <div className="text-xs font-medium text-gray-700">
+                              {getChangeTypeDisplay(historyItem.change_type)}
+                            </div>
+                            <div className="text-xs text-gray-500">
+                              {format(new Date(historyItem.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                            </div>
+                          </div>
+                          
+                          {historyItem.old_status && historyItem.new_status && (
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Status:</span>{' '}
+                              {getStatusDisplay(historyItem.old_status)} → {getStatusDisplay(historyItem.new_status)}
+                            </div>
+                          )}
+                          
+                          {historyItem.old_due_date && historyItem.new_due_date && (
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Data:</span>{' '}
+                              {format(new Date(historyItem.old_due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })} →{' '}
+                              {format(new Date(historyItem.new_due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                            </div>
+                          )}
+                          
+                          {historyItem.old_priority && historyItem.new_priority && (
+                            <div className="text-xs text-gray-600">
+                              <span className="font-medium">Prioridade:</span>{' '}
+                              {historyItem.old_priority} → {historyItem.new_priority}
+                            </div>
+                          )}
+                          
+                          {historyItem.description && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              {historyItem.description}
+                            </div>
+                          )}
+                          
+                          {historyItem.changed_by && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Por: {historyItem.changed_by.first_name && historyItem.changed_by.last_name
+                                ? `${historyItem.changed_by.first_name} ${historyItem.changed_by.last_name}`
+                                : historyItem.changed_by.email}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-gray-500">
+                    <History className="h-8 w-8 mx-auto mb-2 text-gray-400" />
+                    <p className="text-xs">Nenhuma alteração registrada</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

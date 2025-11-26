@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Clock, Send, CheckCircle, XCircle, User, ArrowRight, FileText, Plus, Edit, Trash2, X, Calendar, AlertCircle } from 'lucide-react'
+import { Clock, Send, CheckCircle, XCircle, User, ArrowRight, FileText, Plus, Edit, Trash2, X, Calendar, AlertCircle, MoreVertical } from 'lucide-react'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast } from '../../lib/toastHelper'
 import { Button } from '../ui/Button'
@@ -7,6 +7,7 @@ import LoadingSpinner from '../ui/LoadingSpinner'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import TaskModal from '../tasks/TaskModal'
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../ui/dropdown-menu'
 
 interface ContactHistoryItem {
   id: string
@@ -62,6 +63,7 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
   const [loading, setLoading] = useState(true)
   const [showAddNote, setShowAddNote] = useState(false)
   const [showTaskModal, setShowTaskModal] = useState(false)
+  const [editingTask, setEditingTask] = useState<any | null>(null)
   const [editingNote, setEditingNote] = useState<ContactHistoryItem | null>(null)
   const [noteTitle, setNoteTitle] = useState('')
   const [noteDescription, setNoteDescription] = useState('')
@@ -328,24 +330,47 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
                       </p>
                     )}
                   </div>
-                  {task.status !== 'completed' && (
-                    <button
-                      onClick={async () => {
-                        try {
-                          await api.post(`/contacts/tasks/${task.id}/complete/`)
-                          showSuccessToast('Tarefa concluída')
-                          fetchTasks()
-                          fetchHistory()
-                        } catch (error) {
-                          console.error('Erro ao concluir tarefa:', error)
-                        }
-                      }}
-                      className="p-1 text-green-600 hover:bg-green-50 rounded"
-                      title="Concluir"
-                    >
-                      <CheckCircle className="h-4 w-4" />
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1">
+                    {task.status !== 'completed' && (
+                      <button
+                        onClick={async () => {
+                          try {
+                            await api.post(`/contacts/tasks/${task.id}/complete/`)
+                            showSuccessToast('Tarefa concluída')
+                            fetchTasks()
+                            fetchHistory()
+                          } catch (error) {
+                            console.error('Erro ao concluir tarefa:', error)
+                          }
+                        }}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                        title="Concluir"
+                      >
+                        <CheckCircle className="h-4 w-4" />
+                      </button>
+                    )}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-50 rounded"
+                          title="Mais opções"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => {
+                            setEditingTask(task)
+                            setShowTaskModal(true)
+                          }}
+                        >
+                          <Edit className="h-4 w-4 mr-2" />
+                          Editar Tarefa
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
                 </div>
               </div>
             ))}
@@ -452,13 +477,18 @@ export default function ContactHistory({ contactId, onClose }: ContactHistoryPro
           isOpen={showTaskModal}
           onClose={() => {
             setShowTaskModal(false)
+            setEditingTask(null)
           }}
           onSuccess={() => {
             setShowTaskModal(false)
+            setEditingTask(null)
             fetchTasks()
             fetchHistory()
           }}
-          task={null}
+          task={editingTask ? {
+            ...editingTask,
+            department: editingTask.department || ''
+          } : undefined}
           initialContactId={contactId}
           departments={departments}
           users={users}
