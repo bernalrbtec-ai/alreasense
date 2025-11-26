@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical, Edit } from 'lucide-react'
+import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { showErrorToast } from '../lib/toastHelper'
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '../components/ui/dropdown-menu'
 
 interface Task {
   id: string
