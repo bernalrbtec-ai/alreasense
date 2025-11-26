@@ -11,6 +11,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { upsertConversation } from '../store/conversationUpdater';
 import { getDisplayName } from '../utils/phoneFormatter';
+import { NewConversationModal } from './NewConversationModal';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
