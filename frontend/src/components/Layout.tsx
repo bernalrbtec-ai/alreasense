@@ -23,6 +23,7 @@ import {
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
 import { useUserAccess } from '../hooks/useUserAccess'
+import { usePermissions } from '../hooks/usePermissions'
 import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
@@ -70,25 +71,57 @@ export default function Layout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
-  const { hasProductAccess, canAccessAgenda } = useUserAccess()
+  const { hasProductAccess, canAccessAgenda, canAccessChat } = useUserAccess()
   
   // 🔔 WebSocket global do tenant - fica sempre conectado para receber notificações
   useTenantSocket()
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
-  const isAgente = user?.role === 'agente' || user?.is_agente
+  const { isAdmin, isGerente, isAgente } = usePermissions()
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    // ✅ Agente: Chat e Agenda (agentes sempre têm acesso ao chat, então sempre têm acesso à agenda)
-    if (isAgente) {
+    // ✅ Admin/Gerente/Agente: Chat e Agenda sempre visíveis
+    // (esses roles sempre têm acesso ao chat, então sempre têm acesso à agenda)
+    if (isAdmin || isGerente || isAgente) {
       const items = [
         { name: 'Chat', href: '/chat', icon: MessageSquare },
         { name: 'Agenda', href: '/agenda', icon: Calendar }
       ]
+      
+      // Adicionar baseNavigation para admin/gerente (agente só vê chat/agenda)
+      if (isAdmin || isGerente) {
+        items.unshift(...baseNavigation)
+      }
+      
+      // Adicionar itens de menu dos produtos ativos para admin/gerente
+      if (isAdmin || isGerente) {
+        activeProductSlugs.forEach((productSlug) => {
+          const productItems = productMenuItems[productSlug as keyof typeof productMenuItems]
+          if (productItems) {
+            // Filtrar itens baseado no acesso do usuário
+            const accessibleItems = productItems.filter(item => {
+              // Pular Chat e Agenda (já adicionados acima)
+              if (item.href === '/chat' || item.href === '/agenda') {
+                return false
+              }
+              
+              if (!item.requiredProduct) {
+                return true
+              }
+              
+              const access = hasProductAccess(item.requiredProduct)
+              return access.canAccess
+            })
+            items.push(...accessibleItems)
+          }
+        })
+      }
+      
       return items
     }
     
+    // Para outros usuários, usar lógica normal baseada em produtos
     const items = [...baseNavigation]
     
     // Adicionar itens de menu dos produtos ativos, mas filtrar por acesso
@@ -107,6 +140,12 @@ export default function Layout() {
             return access.canAccess
           }
           
+          // Para Chat, usar canAccessChat (verifica role OU workflow)
+          if (item.href === '/chat') {
+            const access = canAccessChat()
+            return access.canAccess
+          }
+          
           // Para outros itens, usar verificação normal de produto
           const access = hasProductAccess(item.requiredProduct)
           return access.canAccess
@@ -116,7 +155,7 @@ export default function Layout() {
     })
     
     return items
-  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, isAgente, user])
+  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, canAccessChat, isAdmin, isGerente, isAgente, user])
 
   return (
     <div className="min-h-screen bg-gray-50">
