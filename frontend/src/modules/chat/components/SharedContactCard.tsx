@@ -59,11 +59,14 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
   const formattedPhone = phone ? formatPhone(phone) : '';
   const cleanPhoneForSearch = phone ? phone.replace(/[^\d]/g, '') : '';
   
-  // Estado para verificar se contato já existe
-  const [contactExists, setContactExists] = useState<boolean | null>(null);
+  // Estado para contato cadastrado (quando existe)
+  const [savedContact, setSavedContact] = useState<{
+    name: string;
+    tags: Array<{ id: string; name: string; color: string }>;
+  } | null>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
   
-  // Verificar se contato já existe na agenda
+  // Verificar se contato já existe na agenda e buscar dados completos
   useEffect(() => {
     if (!cleanPhoneForSearch) return;
     
@@ -73,17 +76,27 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
         const response = await api.get(`/contacts/contacts/?search=${encodeURIComponent(cleanPhoneForSearch)}`);
         const contacts = response.data.results || response.data || [];
         
-        const exists = contacts.some((contact: any) => {
+        // Encontrar contato que corresponde ao telefone
+        const foundContact = contacts.find((contact: any) => {
           const contactPhone = contact.phone?.replace(/[^\d]/g, '') || '';
           return contactPhone === cleanPhoneForSearch || 
                  contactPhone === `55${cleanPhoneForSearch}` ||
                  contactPhone === `+55${cleanPhoneForSearch}`;
         });
         
-        setContactExists(exists);
+        if (foundContact) {
+          // Contato existe - salvar dados completos
+          setSavedContact({
+            name: foundContact.name,
+            tags: foundContact.tags || []
+          });
+        } else {
+          // Contato não existe
+          setSavedContact(null);
+        }
       } catch (error) {
         console.error('Erro ao verificar contato:', error);
-        setContactExists(false);
+        setSavedContact(null);
       } finally {
         setIsCheckingContact(false);
       }
@@ -143,6 +156,12 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
     onAddContact({ name, phone: cleanPhoneForSearch || phone });
   };
   
+  // Dados a exibir: se contato existe, usar dados salvos; senão, usar dados do card
+  const displayName = savedContact ? savedContact.name : name;
+  const displayPhone = formattedPhone;
+  const displayTags = savedContact?.tags || [];
+  const contactExists = savedContact !== null;
+  
   return (
     <div className="mb-2 border border-gray-200 rounded-lg p-3 bg-white shadow-sm hover:shadow-md transition-shadow">
       <div className="flex items-start gap-3">
@@ -151,15 +170,41 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
         </div>
         <div className="flex-1 min-w-0">
           <div className="text-xs text-gray-500 mb-2 font-medium">📇 Contato compartilhado</div>
-          <div className="font-semibold text-gray-900 mb-1 text-base">{name}</div>
-          {formattedPhone && (
+          <div className="font-semibold text-gray-900 mb-1 text-base">{displayName}</div>
+          
+          {/* Mostrar telefone apenas se contato não existir (dados do card) */}
+          {!contactExists && displayPhone && (
             <div className="text-sm text-gray-600 mb-3 flex items-center gap-1">
               <Phone className="w-3.5 h-3.5" />
-              <span>{formattedPhone}</span>
+              <span>{displayPhone}</span>
             </div>
           )}
+          
+          {/* Mostrar tags se contato existir */}
+          {contactExists && displayTags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {displayTags.map((tag) => (
+                <span
+                  key={tag.id}
+                  className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                  style={{
+                    backgroundColor: `${tag.color}20`,
+                    color: tag.color,
+                    border: `1px solid ${tag.color}40`
+                  }}
+                >
+                  {tag.name}
+                </span>
+              ))}
+            </div>
+          )}
+          
           <div className="flex gap-2 flex-wrap">
-            {cleanPhoneForSearch && (
+            {isCheckingContact && (
+              <span className="text-xs text-gray-500">Verificando...</span>
+            )}
+            
+            {!isCheckingContact && cleanPhoneForSearch && (
               <button
                 onClick={handleStartConversation}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg transition-colors shadow-sm hover:shadow-md"
@@ -168,8 +213,9 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
                 Iniciar conversa
               </button>
             )}
+            
             {/* Só mostrar "Adicionar" se contato não existir */}
-            {cleanPhoneForSearch && contactExists === false && !isCheckingContact && (
+            {!isCheckingContact && !contactExists && cleanPhoneForSearch && (
               <button
                 onClick={handleAddContact}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shadow-sm hover:shadow-md"
@@ -177,12 +223,6 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
                 <Plus className="w-4 h-4" />
                 Adicionar aos contatos
               </button>
-            )}
-            {isCheckingContact && (
-              <span className="text-xs text-gray-500">Verificando...</span>
-            )}
-            {contactExists === true && (
-              <span className="text-xs text-gray-500">✓ Contato já existe na agenda</span>
             )}
           </div>
         </div>
