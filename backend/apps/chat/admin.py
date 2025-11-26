@@ -108,3 +108,105 @@ class MessageAttachmentAdmin(admin.ModelAdmin):
         }),
     )
 
+
+@admin.register(BusinessHours)
+class BusinessHoursAdmin(admin.ModelAdmin):
+    """Admin para Horários de Atendimento."""
+    
+    list_display = ['tenant', 'department', 'timezone', 'is_active', 'created_at']
+    list_filter = ['is_active', 'tenant', 'created_at']
+    search_fields = ['tenant__name', 'department__name']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('id', 'tenant', 'department', 'timezone', 'is_active')
+        }),
+        ('Segunda-feira', {
+            'fields': ('monday_enabled', 'monday_start', 'monday_end')
+        }),
+        ('Terça-feira', {
+            'fields': ('tuesday_enabled', 'tuesday_start', 'tuesday_end')
+        }),
+        ('Quarta-feira', {
+            'fields': ('wednesday_enabled', 'wednesday_start', 'wednesday_end')
+        }),
+        ('Quinta-feira', {
+            'fields': ('thursday_enabled', 'thursday_start', 'thursday_end')
+        }),
+        ('Sexta-feira', {
+            'fields': ('friday_enabled', 'friday_start', 'friday_end')
+        }),
+        ('Sábado', {
+            'fields': ('saturday_enabled', 'saturday_start', 'saturday_end')
+        }),
+        ('Domingo', {
+            'fields': ('sunday_enabled', 'sunday_start', 'sunday_end')
+        }),
+        ('Feriados', {
+            'fields': ('holidays',),
+            'classes': ('collapse',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(AfterHoursMessage)
+class AfterHoursMessageAdmin(admin.ModelAdmin):
+    """Admin para Mensagens Fora de Horário."""
+    
+    list_display = ['tenant', 'department', 'is_active', 'created_at']
+    list_filter = ['is_active', 'tenant', 'created_at']
+    search_fields = ['tenant__name', 'department__name', 'message_template']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('id', 'tenant', 'department', 'is_active')
+        }),
+        ('Mensagem', {
+            'fields': ('message_template',)
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
+
+@admin.register(AfterHoursTaskConfig)
+class AfterHoursTaskConfigAdmin(admin.ModelAdmin):
+    """Admin para Configuração de Tarefas Fora de Horário."""
+    
+    list_display = ['tenant', 'department', 'create_task_enabled', 'task_priority', 'is_active']
+    list_filter = ['is_active', 'create_task_enabled', 'task_priority', 'tenant', 'created_at']
+    search_fields = ['tenant__name', 'department__name']
+    readonly_fields = ['id', 'created_at', 'updated_at']
+    
+    fieldsets = (
+        ('Informações Básicas', {
+            'fields': ('id', 'tenant', 'department', 'is_active')
+        }),
+        ('Configuração de Tarefa', {
+            'fields': (
+                'create_task_enabled',
+                'task_title_template',
+                'task_description_template',
+                'task_priority',
+                'task_due_date_offset_hours',
+                'task_type',
+                'include_message_preview'
+            )
+        }),
+        ('Atribuição', {
+            'fields': ('auto_assign_to_department', 'auto_assign_to_agent')
+        }),
+        ('Timestamps', {
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
+        }),
+    )
+
