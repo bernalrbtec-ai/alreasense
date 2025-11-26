@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react'
-import { Plus, Calendar, Clock, User, Filter, Search, CheckCircle, XCircle, AlertCircle, MoreVertical } from 'lucide-react'
+import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
-import { showSuccessToast, showErrorToast } from '../lib/toastHelper'
+import { showErrorToast } from '../lib/toastHelper'
 
 interface Task {
   id: string
@@ -142,7 +142,7 @@ export default function AgendaPage() {
       setTasks(response.data.results || response.data)
     } catch (error: any) {
       console.error('Erro ao carregar tarefas:', error)
-      showErrorToast('Erro ao carregar tarefas')
+      showErrorToast('carregar', 'Tarefas')
     } finally {
       setIsLoading(false)
     }
@@ -490,7 +490,10 @@ export default function AgendaPage() {
             setEditingTask(null)
           }}
           onSuccess={handleModalSuccess}
-          task={editingTask}
+          task={editingTask ? {
+            ...editingTask,
+            department: editingTask.department || ''
+          } : undefined}
           departments={departments}
           users={users}
         />
