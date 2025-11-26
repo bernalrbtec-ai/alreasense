@@ -70,7 +70,7 @@ export default function Layout() {
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
-  const { hasProductAccess } = useUserAccess()
+  const { hasProductAccess, canAccessAgenda } = useUserAccess()
   
   // 🔔 WebSocket global do tenant - fica sempre conectado para receber notificações
   useTenantSocket()
@@ -80,16 +80,20 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    // ✅ Agente: Chat e Agenda (se tiver acesso ao workflow)
+    // ✅ Agente: Chat e Agenda (se tiver acesso ao chat OU produto workflow)
     if (isAgente) {
-      const workflowAccess = hasProductAccess('workflow')
+      const chatAccess = hasProductAccess('workflow') // Chat faz parte do workflow
+      const agendaAccess = canAccessAgenda()
       const items = []
-      if (workflowAccess.canAccess) {
-        items.push(
-          { name: 'Chat', href: '/chat', icon: MessageSquare },
-          { name: 'Agenda', href: '/agenda', icon: Calendar }
-        )
+      
+      if (chatAccess.canAccess) {
+        items.push({ name: 'Chat', href: '/chat', icon: MessageSquare })
       }
+      
+      if (agendaAccess.canAccess) {
+        items.push({ name: 'Agenda', href: '/agenda', icon: Calendar })
+      }
+      
       return items
     }
     
@@ -104,6 +108,14 @@ export default function Layout() {
           if (!item.requiredProduct) {
             return true
           }
+          
+          // Para Agenda, usar canAccessAgenda (verifica chat OU workflow)
+          if (item.href === '/agenda') {
+            const access = canAccessAgenda()
+            return access.canAccess
+          }
+          
+          // Para outros itens, usar verificação normal de produto
           const access = hasProductAccess(item.requiredProduct)
           return access.canAccess
         })
@@ -112,7 +124,7 @@ export default function Layout() {
     })
     
     return items
-  }, [activeProductSlugs, hasProductAccess, isAgente])
+  }, [activeProductSlugs, hasProductAccess, canAccessAgenda, isAgente])
 
   return (
     <div className="min-h-screen bg-gray-50">

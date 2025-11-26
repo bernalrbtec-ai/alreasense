@@ -1,5 +1,6 @@
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from './useTenantProducts'
+import { usePermissions } from './usePermissions'
 
 export interface ProductAccess {
   canAccess: boolean
@@ -11,6 +12,7 @@ export interface ProductAccess {
 export const useUserAccess = () => {
   const { user } = useAuthStore()
   const { products, loading } = useTenantProducts()
+  const { can_access_chat, isAdmin, isGerente, isAgente } = usePermissions()
 
   const hasProductAccess = (productSlug: string): ProductAccess => {
     // Super admin tem acesso a tudo
@@ -66,6 +68,22 @@ export const useUserAccess = () => {
     return hasProductAccess('workflow')
   }
 
+  const canAccessAgenda = (): ProductAccess => {
+    // Agenda pode ser acessada se:
+    // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
+    // 2. Tenant tem produto workflow ativo
+    
+    // Verificar acesso ao chat primeiro
+    const hasChatAccess = can_access_chat || isAdmin || isGerente || isAgente
+    
+    if (hasChatAccess) {
+      return { canAccess: true, isActive: true }
+    }
+    
+    // Se não tem acesso ao chat, verificar produto workflow
+    return canAccessWorkflow()
+  }
+
   return {
     hasProductAccess,
     canAccessFlow,
@@ -74,6 +92,7 @@ export const useUserAccess = () => {
     canAccessApiPublic,
     canAccessCampaigns,
     canAccessWorkflow,
+    canAccessAgenda,
     loading
   }
 }

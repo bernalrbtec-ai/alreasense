@@ -130,3 +130,61 @@ class CanAccessChat(permissions.BasePermission):
         # Se não tem departamento definido, apenas admin pode acessar
         return False
 
+
+class CanAccessAgenda(permissions.BasePermission):
+    """
+    Verifica se o usuário pode acessar agenda/tarefas.
+    
+    Regras:
+    1. Se o usuário tem acesso ao chat (admin, gerente ou agente) → tem acesso à agenda
+    2. OU se o tenant tem o produto workflow ativo → tem acesso à agenda
+    
+    Isso permite que usuários com acesso ao chat também tenham acesso à agenda,
+    mesmo que o tenant não tenha o produto workflow explicitamente habilitado.
+    """
+    message = 'Você não tem permissão para acessar a agenda.'
+
+    def has_permission(self, request, view):
+        user = request.user
+        
+        if not user or not user.is_authenticated:
+            return False
+        
+        # Verificar se o usuário tem acesso ao chat
+        can_access_chat = user.is_admin or user.is_gerente or user.is_agente
+        if can_access_chat:
+            return True
+        
+        # Se não tem acesso ao chat, verificar se o tenant tem produto workflow
+        if hasattr(user, 'tenant') and user.tenant:
+            return user.tenant.can_access_product('workflow')
+        
+        return False
+
+    def has_object_permission(self, request, view, obj):
+        user = request.user
+        
+        # Admin tem acesso total
+        if user.is_admin:
+            return True
+        
+        # Verificar se o usuário tem acesso ao chat
+        can_access_chat = user.is_admin or user.is_gerente or user.is_agente
+        if can_access_chat:
+            # Se tem acesso ao chat, verificar se pode acessar o departamento da tarefa
+            department = getattr(obj, 'department', None)
+            if department:
+                return user.departments.filter(id=department.id).exists()
+            # Se não tem departamento, apenas admin pode acessar
+            return False
+        
+        # Se não tem acesso ao chat, verificar se o tenant tem produto workflow
+        if hasattr(user, 'tenant') and user.tenant:
+            if user.tenant.can_access_product('workflow'):
+                # Com workflow, verificar departamento também
+                department = getattr(obj, 'department', None)
+                if department:
+                    return user.departments.filter(id=department.id).exists()
+                return True
+        
+        return False

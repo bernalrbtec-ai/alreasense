@@ -762,12 +762,16 @@ class ContactHistoryViewSet(viewsets.ModelViewSet):
 
 
 from apps.billing.decorators import require_product
+from apps.authn.permissions import CanAccessAgenda
 
 
-@require_product('workflow')
 class TaskViewSet(viewsets.ModelViewSet):
     """
     ViewSet para tarefas e agenda.
+    
+    Acesso permitido se:
+    - Usuário tem acesso ao chat (admin, gerente ou agente) OU
+    - Tenant tem produto workflow ativo
     
     Filtros disponíveis:
     - ?status=pending
@@ -780,7 +784,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     - ?contact_id=<contact_id> (tarefas relacionadas a um contato)
     """
     
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, CanAccessAgenda]
     serializer_class = TaskSerializer
     filterset_fields = ['status', 'priority', 'department', 'assigned_to']
     search_fields = ['title', 'description']
