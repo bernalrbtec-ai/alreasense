@@ -2,7 +2,7 @@
  * Modal com informações detalhadas da mensagem
  */
 import React from 'react';
-import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File } from 'lucide-react';
+import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, Hash, Database, MessageSquare } from 'lucide-react';
 import type { Message } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -184,13 +184,124 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
               </div>
             )}
 
+            {/* Remetente (dados completos) */}
+            {message.sender_data && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <User className="w-5 h-5 text-gray-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Enviado por</p>
+                  <p className="text-sm text-gray-600">
+                    {message.sender_data.first_name && message.sender_data.last_name
+                      ? `${message.sender_data.first_name} ${message.sender_data.last_name}`
+                      : message.sender_data.email}
+                  </p>
+                  <p className="text-xs text-gray-500">{message.sender_data.email}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Nota Interna */}
+            {message.is_internal && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Info className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Nota Interna</p>
+                  <p className="text-sm text-gray-600">Esta mensagem não foi enviada ao WhatsApp</p>
+                </div>
+              </div>
+            )}
+
+            {/* Erro (se houver) */}
+            {message.error_message && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-red-100 rounded-lg">
+                  <AlertCircle className="w-5 h-5 text-red-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-red-700">Erro</p>
+                  <p className="text-sm text-red-600">{message.error_message}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Status Evolution */}
+            {message.evolution_status && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <Database className="w-5 h-5 text-gray-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Status Evolution</p>
+                  <p className="text-sm text-gray-600">{message.evolution_status}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Reações */}
+            {message.reactions && message.reactions.length > 0 && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <MessageSquare className="w-5 h-5 text-gray-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Reações</p>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {message.reactions.map((reaction) => (
+                      <div key={reaction.id} className="flex items-center gap-1 text-sm">
+                        <span>{reaction.emoji}</span>
+                        {reaction.user_data && (
+                          <span className="text-xs text-gray-500">
+                            {reaction.user_data.first_name || reaction.user_data.email}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Metadata (se houver dados relevantes) */}
+            {message.metadata && Object.keys(message.metadata).length > 0 && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <Database className="w-5 h-5 text-gray-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Metadados</p>
+                  <div className="mt-1 text-xs text-gray-500 font-mono bg-gray-50 p-2 rounded max-h-32 overflow-y-auto">
+                    <pre className="whitespace-pre-wrap break-words">
+                      {JSON.stringify(message.metadata, null, 2)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ID da Evolution */}
+            {message.message_id && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-gray-100 rounded-lg">
+                  <Hash className="w-5 h-5 text-gray-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">ID Evolution</p>
+                  <p className="text-xs text-gray-500 font-mono break-all">{message.message_id}</p>
+                </div>
+              </div>
+            )}
+
             {/* ID da Mensagem */}
             <div className="flex items-start gap-3">
               <div className="p-2 bg-gray-100 rounded-lg">
-                <FileText className="w-5 h-5 text-gray-600" />
+                <Hash className="w-5 h-5 text-gray-600" />
               </div>
               <div className="flex-1">
-                <p className="text-sm font-medium text-gray-700">ID</p>
+                <p className="text-sm font-medium text-gray-700">ID Interno</p>
                 <p className="text-xs text-gray-500 font-mono break-all">{message.id}</p>
               </div>
             </div>
