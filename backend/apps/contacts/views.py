@@ -354,26 +354,58 @@ class ContactViewSet(viewsets.ModelViewSet):
         # Aplicar mesmos filtros do get_queryset
         contacts = self.filter_queryset(self.get_queryset())
         
-        # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
-        from django.db.models import Count, Q
-        # ✅ FIX: Usar Count com pk ao invés de id para evitar conflitos
-        # Clonar queryset para evitar problemas com annotations existentes
-        stats_queryset = contacts.all()
-        stats = stats_queryset.aggregate(
-            total=Count('pk'),
-            opted_out=Count('pk', filter=Q(opted_out=True)),
-            active=Count('pk', filter=Q(is_active=True)),
-            leads=Count('pk', filter=Q(total_purchases=0)),
-            customers=Count('pk', filter=Q(total_purchases__gte=1)),
-            delivery_problems=Count('pk', filter=Q(opted_out=True))  # Usando opted_out como proxy
+        # ✅ FIX: Usar queries separadas para evitar conflitos com aggregates
+        # Isso evita o erro "opted_out is an aggregate" que pode ocorrer
+        # quando há annotations ou aggregates pré-existentes no queryset
+        from django.db.models import Q
+        
+        # Criar queryset base limpo (sem annotations)
+        base_queryset = Contact.objects.filter(
+            tenant=user.tenant
         )
         
-        total = stats.get('total', 0) or 0
-        opted_out = stats.get('opted_out', 0) or 0
-        active = stats.get('active', 0) or 0
-        leads = stats.get('leads', 0) or 0
-        customers = stats.get('customers', 0) or 0
-        delivery_problems = stats.get('delivery_problems', 0) or 0
+        # Aplicar mesmos filtros do get_queryset manualmente
+        tags = request.query_params.get('tags')
+        if tags:
+            tag_ids = tags.split(',')
+            base_queryset = base_queryset.filter(tags__id__in=tag_ids).distinct()
+        
+        lists = request.query_params.get('lists')
+        if lists:
+            list_ids = lists.split(',')
+            base_queryset = base_queryset.filter(lists__id__in=list_ids).distinct()
+        
+        search = request.query_params.get('search')
+        if search:
+            base_queryset = base_queryset.filter(
+                Q(name__icontains=search) |
+                Q(phone__icontains=search) |
+                Q(email__icontains=search)
+            )
+        
+        lifecycle_stage = request.query_params.get('lifecycle_stage')
+        if lifecycle_stage:
+            base_queryset = base_queryset.filter(lifecycle_stage=lifecycle_stage)
+        
+        state = request.query_params.get('state')
+        if state:
+            base_queryset = base_queryset.filter(state=state)
+        
+        opted_out_param = request.query_params.get('opted_out')
+        if opted_out_param is not None:
+            base_queryset = base_queryset.filter(opted_out=opted_out_param.lower() == 'true')
+        
+        is_active_param = request.query_params.get('is_active')
+        if is_active_param is not None:
+            base_queryset = base_queryset.filter(is_active=is_active_param.lower() == 'true')
+        
+        # ✅ PERFORMANCE: Calcular estatísticas com queryset limpo
+        total = base_queryset.count()
+        opted_out = base_queryset.filter(opted_out=True).count()
+        active = base_queryset.filter(is_active=True).count()
+        leads = base_queryset.filter(total_purchases=0).count()
+        customers = base_queryset.filter(total_purchases__gte=1).count()
+        delivery_problems = base_queryset.filter(opted_out=True).count()  # Usando opted_out como proxy
         
         return Response({
             'total': total,
