@@ -92,7 +92,7 @@ interface EvolutionConfig {
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -546,6 +546,20 @@ export default function ConfigurationsPage() {
           >
             <Bell className="h-4 w-4 inline mr-2" />
             Notificações
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab('business-hours')
+              window.location.href = '/business-hours'
+            }}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'business-hours'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <Clock className="h-4 w-4 inline mr-2" />
+            Horários de Atendimento
           </button>
         </nav>
       </div>

@@ -20,6 +20,7 @@ import EvolutionConfigPage from './pages/EvolutionConfigPage'
 import ProfilePage from './pages/ProfilePage'
 import NotificationsPage from './pages/NotificationsPage'
 import ConfigurationsPage from './pages/ConfigurationsPage'
+import BusinessHoursPage from './pages/BusinessHoursPage'
 import ContactsPage from './pages/ContactsPage'
 import CampaignsPage from './pages/CampaignsPage'
 import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
@@ -121,6 +122,7 @@ function App() {
               <Route path="billing" element={<BillingPage />} />
               <Route path="profile" element={<ProfilePage />} />
               <Route path="configurations" element={<ConfigurationsPage />} />
+              <Route path="business-hours" element={<BusinessHoursPage />} />
               
               {/* Workflow - Chat e Agenda */}
               <Route path="chat" element={
