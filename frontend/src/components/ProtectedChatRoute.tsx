@@ -30,7 +30,15 @@ export const ProtectedChatRoute: React.FC<ProtectedChatRouteProps> = ({
 
   const access = canAccessChat()
   
+  // ✅ DEBUG: Log para entender o problema
+  console.log('🔍 [ProtectedChatRoute] Verificando acesso ao chat:', {
+    canAccess: access.canAccess,
+    loading,
+    user: typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('auth-storage') || '{}')?.state?.user : null
+  })
+  
   if (!access.canAccess) {
+    console.error('❌ [ProtectedChatRoute] Acesso negado ao chat:', access)
     showErrorToast('Acesso negado: Você não tem acesso ao chat. É necessário ter acesso ao chat ou ao produto workflow.')
     return <Navigate to={fallbackPath} replace />
   }

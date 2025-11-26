@@ -79,16 +79,32 @@ export const useUserAccess = () => {
     const userIsGerente = user?.is_gerente || userRole === 'gerente'
     const userIsAgente = user?.is_agente || userRole === 'agente'
     
+    // ✅ DEBUG: Log para entender o problema
+    console.log('🔍 [canAccessChat] Verificando acesso:', {
+      userRole,
+      userIsAdmin,
+      userIsGerente,
+      userIsAgente,
+      can_access_chat,
+      isAdmin,
+      isGerente,
+      isAgente,
+      user: user ? { id: user.id, email: user.email, role: user.role, is_admin: user.is_admin } : null
+    })
+    
     // Verificar acesso ao chat - admin sempre tem acesso
     const hasChatAccess = userIsAdmin || userIsGerente || userIsAgente || 
                           can_access_chat || isAdmin || isGerente || isAgente
     
     if (hasChatAccess) {
+      console.log('✅ [canAccessChat] Acesso permitido via role/permissão')
       return { canAccess: true, isActive: true }
     }
     
     // Se não tem acesso ao chat, verificar produto workflow
-    return canAccessWorkflow()
+    const workflowAccess = canAccessWorkflow()
+    console.log('🔍 [canAccessChat] Verificando produto workflow:', workflowAccess)
+    return workflowAccess
   }
 
   const canAccessAgenda = (): ProductAccess => {

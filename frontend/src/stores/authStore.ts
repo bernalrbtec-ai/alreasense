@@ -75,11 +75,14 @@ export const useAuthStore = create<AuthState>()(
         
         // Desconectar WebSocket anterior se existir
         try {
-          const { ChatWebSocketManager } = await import('../modules/chat/services/ChatWebSocketManager')
-          ChatWebSocketManager.getInstance().disconnect()
-          console.log('✅ [AUTH] WebSocket anterior desconectado')
+          const { chatWebSocketManager } = await import('../modules/chat/services/ChatWebSocketManager')
+          if (chatWebSocketManager && typeof chatWebSocketManager.disconnect === 'function') {
+            chatWebSocketManager.disconnect()
+            console.log('✅ [AUTH] WebSocket anterior desconectado')
+          }
         } catch (error) {
-          console.error('❌ [AUTH] Erro ao desconectar WebSocket anterior:', error)
+          // Não é crítico se não conseguir desconectar - apenas log
+          console.warn('⚠️ [AUTH] Não foi possível desconectar WebSocket anterior (não crítico):', error)
         }
         
         // Limpar localStorage de caches relacionados ao chat
