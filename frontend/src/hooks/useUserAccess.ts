@@ -73,11 +73,11 @@ export const useUserAccess = () => {
     // 1. Usuário tem acesso ao chat (admin, gerente ou agente) OU
     // 2. Tenant tem produto workflow ativo
     
-    // ✅ FIX: Verificar role primeiro (mais confiável)
+    // ✅ FIX CRÍTICO: Admin sempre tem acesso, verificar PRIMEIRO
     const userRole = user?.role
-    const userIsAdmin = user?.is_admin || userRole === 'admin' || user?.is_superuser
-    const userIsGerente = user?.is_gerente || userRole === 'gerente'
-    const userIsAgente = user?.is_agente || userRole === 'agente'
+    const userIsAdmin = user?.is_admin === true || userRole === 'admin' || user?.is_superuser === true
+    const userIsGerente = user?.is_gerente === true || userRole === 'gerente'
+    const userIsAgente = user?.is_agente === true || userRole === 'agente'
     
     // ✅ DEBUG: Log para entender o problema
     console.log('🔍 [canAccessChat] Verificando acesso:', {
@@ -85,16 +85,24 @@ export const useUserAccess = () => {
       userIsAdmin,
       userIsGerente,
       userIsAgente,
+      user_is_admin: user?.is_admin,
+      user_is_superuser: user?.is_superuser,
       can_access_chat,
       isAdmin,
       isGerente,
       isAgente,
-      user: user ? { id: user.id, email: user.email, role: user.role, is_admin: user.is_admin } : null
+      user: user ? { id: user.id, email: user.email, role: user.role, is_admin: user.is_admin, is_superuser: user.is_superuser } : null
     })
     
-    // Verificar acesso ao chat - admin sempre tem acesso
-    const hasChatAccess = userIsAdmin || userIsGerente || userIsAgente || 
-                          can_access_chat || isAdmin || isGerente || isAgente
+    // ✅ CRÍTICO: Admin sempre tem acesso - verificar ANTES de tudo
+    if (userIsAdmin) {
+      console.log('✅ [canAccessChat] Admin detectado - acesso garantido')
+      return { canAccess: true, isActive: true }
+    }
+    
+    // Verificar outros roles
+    const hasChatAccess = userIsGerente || userIsAgente || 
+                          can_access_chat || isGerente || isAgente
     
     if (hasChatAccess) {
       console.log('✅ [canAccessChat] Acesso permitido via role/permissão')
