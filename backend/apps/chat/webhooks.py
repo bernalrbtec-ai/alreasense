@@ -864,6 +864,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 vcard = contact_data.get('vcard', '')
                 contact_id = contact_data.get('contactId', '')
                 
+                logger.info(f"📇 [CONTACT MESSAGE] Formato novo detectado - displayName: {display_name}, vcard: {vcard[:100] if vcard else 'N/A'}")
+                
                 if display_name or vcard:
                     # Processar como se fosse um contato único
                     contacts_array = [{
@@ -871,6 +873,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         'vcard': vcard,
                         'contactId': contact_id
                     }]
+                    logger.info(f"📇 [CONTACT MESSAGE] Array criado com {len(contacts_array)} contato(s)")
             
             if contacts_array and len(contacts_array) > 0:
                 # Pegar primeiro contato (geralmente só vem um)
