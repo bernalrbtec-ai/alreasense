@@ -623,18 +623,41 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         
         # ✅ NOVO: Buscar message_id da Evolution da mensagem original (se reply_to existe)
         quoted_message_id = None
+        quoted_remote_jid = None
+        original_message = None  # ✅ Definir no escopo externo para uso posterior
         if reply_to_uuid:
             try:
                 original_message = await sync_to_async(
-                    Message.objects.filter(id=reply_to_uuid, conversation=conversation).first
+                    Message.objects.select_related('conversation').prefetch_related('attachments').filter(
+                        id=reply_to_uuid, 
+                        conversation=conversation
+                    ).first
                 )()
                 if original_message and original_message.message_id:
                     quoted_message_id = original_message.message_id
-                    logger.info(f"💬 [CHAT ENVIO] Mensagem é resposta de: {reply_to_uuid} (Evolution ID: {quoted_message_id})")
+                    # ✅ NOVO: Incluir remoteJid da mensagem original (necessário para Evolution API)
+                    # O remoteJid é o contact_phone da conversa (formato: 5517999999999@s.whatsapp.net)
+                    if original_message.conversation:
+                        contact_phone = original_message.conversation.contact_phone
+                        # Se já tem @, usar direto; senão, adicionar @s.whatsapp.net
+                        if '@' in contact_phone:
+                            quoted_remote_jid = contact_phone
+                        else:
+                            # Adicionar @s.whatsapp.net se for contato individual
+                            if original_message.conversation.conversation_type == 'individual':
+                                quoted_remote_jid = f"{contact_phone}@s.whatsapp.net"
+                            else:
+                                # Para grupos, usar o JID do grupo diretamente
+                                quoted_remote_jid = contact_phone
+                        logger.info(f"💬 [CHAT ENVIO] Mensagem é resposta de: {reply_to_uuid}")
+                        logger.info(f"   Evolution ID: {quoted_message_id}")
+                        logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid) if quoted_remote_jid else 'N/A'}")
                 else:
                     logger.warning(f"⚠️ [CHAT ENVIO] Mensagem original não encontrada ou sem message_id: {reply_to_uuid}")
+                    original_message = None  # Limpar se não encontrada
             except Exception as e:
                 logger.error(f"❌ [CHAT ENVIO] Erro ao buscar mensagem original para reply: {e}", exc_info=True)
+                original_message = None  # Limpar em caso de erro
         
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
@@ -718,10 +741,29 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
                         }
                         
-                        # ✅ NOVO: Adicionar quotedMessageId se for resposta
-                        if quoted_message_id:
-                            payload['quotedMessageId'] = quoted_message_id
-                            logger.info(f"💬 [CHAT ENVIO] Adicionando quotedMessageId ao áudio: {quoted_message_id}")
+                        # ✅ NOVO: Adicionar options.quoted se for resposta (formato Evolution API)
+                        if quoted_message_id and quoted_remote_jid and original_message:
+                            original_content = original_message.content or ''
+                            if not original_content:
+                                attachments_list = list(original_message.attachments.all())
+                                if attachments_list:
+                                    original_content = '📎 Áudio'
+                            
+                            payload['options'] = {
+                                'quoted': {
+                                    'key': {
+                                        'remoteJid': quoted_remote_jid,
+                                        'fromMe': original_message.direction == 'outgoing',
+                                        'id': quoted_message_id
+                                    },
+                                    'message': {
+                                        'conversation': original_content[:100] if original_content else 'Áudio'
+                                    }
+                                }
+                            }
+                            logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted ao áudio")
+                            logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
+                            logger.info(f"   Message ID: {quoted_message_id}")
                         
                         logger.info("🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
                         logger.info("   Destinatário: %s", masked_recipient)
@@ -747,10 +789,40 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         if content:
                             payload['caption'] = content  # Caption direto no root também
                         
-                        # ✅ NOVO: Adicionar quotedMessageId se for resposta
-                        if quoted_message_id:
-                            payload['quotedMessageId'] = quoted_message_id
-                            logger.info(f"💬 [CHAT ENVIO] Adicionando quotedMessageId à mídia: {quoted_message_id}")
+                        # ✅ NOVO: Adicionar options.quoted se for resposta (formato Evolution API)
+                        if quoted_message_id and quoted_remote_jid and original_message:
+                            original_content = original_message.content or ''
+                            if not original_content:
+                                # Detectar tipo de anexo (já carregado via prefetch_related)
+                                attachments_list = list(original_message.attachments.all())
+                                if attachments_list:
+                                    attachment = attachments_list[0]
+                                    if attachment.is_image:
+                                        original_content = '📷 Imagem'
+                                    elif attachment.is_video:
+                                        original_content = '🎥 Vídeo'
+                                    elif attachment.is_audio:
+                                        original_content = '🎵 Áudio'
+                                    else:
+                                        original_content = '📎 Documento'
+                                else:
+                                    original_content = '📎 Anexo'
+                            
+                            payload['options'] = {
+                                'quoted': {
+                                    'key': {
+                                        'remoteJid': quoted_remote_jid,
+                                        'fromMe': original_message.direction == 'outgoing',
+                                        'id': quoted_message_id
+                                    },
+                                    'message': {
+                                        'conversation': original_content[:100] if original_content else 'Mensagem'
+                                    }
+                                }
+                            }
+                            logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted à mídia")
+                            logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
+                            logger.info(f"   Message ID: {quoted_message_id}")
                     
                     # Endpoint: sendWhatsAppAudio para PTT, sendMedia para outros
                     if is_audio:
@@ -911,15 +983,39 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     await sync_to_async(message.save)(update_fields=['status', 'error_message'])
                     return
                 
+                # ✅ CORREÇÃO: Evolution API v2 usa textMessage wrapper para texto
                 payload = {
                     'number': final_number,
-                    'text': content.strip()
+                    'textMessage': {
+                        'text': content.strip()
+                    }
                 }
                 
-                # ✅ NOVO: Adicionar quotedMessageId se for resposta
-                if quoted_message_id:
-                    payload['quotedMessageId'] = quoted_message_id
-                    logger.info(f"💬 [CHAT ENVIO] Adicionando quotedMessageId: {quoted_message_id}")
+                # ✅ NOVO: Adicionar options.quoted se for resposta (formato correto Evolution API)
+                if quoted_message_id and quoted_remote_jid and original_message:
+                    # Buscar conteúdo original da mensagem para incluir no quoted
+                    original_content = original_message.content or ''
+                    if not original_content:
+                        # Verificar se tem anexos (já carregado via prefetch_related)
+                        attachments_list = list(original_message.attachments.all())
+                        if attachments_list:
+                            original_content = '📎 Anexo'
+                    
+                    payload['options'] = {
+                        'quoted': {
+                            'key': {
+                                'remoteJid': quoted_remote_jid,
+                                'fromMe': original_message.direction == 'outgoing',
+                                'id': quoted_message_id
+                            },
+                            'message': {
+                                'conversation': original_content[:100] if original_content else 'Mensagem'  # Limitar tamanho
+                            }
+                        }
+                    }
+                    logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted ao texto")
+                    logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
+                    logger.info(f"   Message ID: {quoted_message_id}")
                 
                 # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
                 if conversation.conversation_type == 'group':
