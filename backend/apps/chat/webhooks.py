@@ -1482,6 +1482,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             logger.info(f"   ⚠️ Mensagem automática não foi criada (pode não estar configurada)")
                         
                         # Cria tarefa automática se configurado
+                        logger.info(f"🔍 [BUSINESS HOURS] Tentando criar tarefa automática...")
                         task = BusinessHoursService.create_after_hours_task(
                             conversation=conversation,
                             message=message,
@@ -1492,7 +1493,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         if task:
                             logger.info(f"   ✅ Tarefa automática criada: {task.id} - {task.title}")
                         else:
-                            logger.info(f"   ⚠️ Tarefa automática não foi criada (pode não estar configurada ou desabilitada)")
+                            logger.warning(f"   ⚠️ Tarefa automática não foi criada - verifique os logs acima para detalhes")
                     else:
                         logger.info(f"✅ [BUSINESS HOURS] Mensagem recebida dentro do horário de atendimento")
                 except Exception as e:

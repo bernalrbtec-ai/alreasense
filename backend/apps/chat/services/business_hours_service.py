@@ -196,6 +196,10 @@ class BusinessHoursService:
     @staticmethod
     def get_after_hours_task_config(tenant, department=None) -> Optional[AfterHoursTaskConfig]:
         """Busca configuração de tarefa automática."""
+        logger.info(f"🔍 [BUSINESS HOURS TASK] Buscando configuração de tarefa...")
+        logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
+        logger.info(f"   Department: {department.name if department else 'None'}")
+        
         if department:
             config = AfterHoursTaskConfig.objects.filter(
                 tenant=tenant,
@@ -203,7 +207,10 @@ class BusinessHoursService:
                 is_active=True
             ).first()
             if config:
+                logger.info(f"✅ [BUSINESS HOURS TASK] Configuração específica do departamento encontrada: ID={config.id}")
                 return config
+            else:
+                logger.info(f"ℹ️ [BUSINESS HOURS TASK] Nenhuma configuração específica do departamento encontrada")
         
         # Busca configuração geral do tenant
         config = AfterHoursTaskConfig.objects.filter(
@@ -211,6 +218,11 @@ class BusinessHoursService:
             department__isnull=True,
             is_active=True
         ).first()
+        
+        if config:
+            logger.info(f"✅ [BUSINESS HOURS TASK] Configuração geral do tenant encontrada: ID={config.id}")
+        else:
+            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Nenhuma configuração encontrada (nem específica nem geral)")
         
         return config
     
@@ -326,10 +338,23 @@ class BusinessHoursService:
         Returns:
             Optional[Task]: Tarefa criada ou None
         """
+        logger.info(f"🔍 [BUSINESS HOURS TASK] Iniciando criação de tarefa automática...")
+        logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
+        logger.info(f"   Department: {department.name if department else 'None'}")
+        logger.info(f"   Conversation: {conversation.id} | Phone: {conversation.contact_phone}")
+        logger.info(f"   Message: {message.id} | Created: {message.created_at}")
+        
         # Busca configuração
         task_config = BusinessHoursService.get_after_hours_task_config(tenant, department)
         
-        if not task_config or not task_config.create_task_enabled:
+        if not task_config:
+            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Configuração de tarefa não encontrada para tenant={tenant.name}, department={department.name if department else 'None'}")
+            return None
+        
+        logger.info(f"✅ [BUSINESS HOURS TASK] Configuração encontrada: ID={task_config.id}, create_task_enabled={task_config.create_task_enabled}")
+        
+        if not task_config.create_task_enabled:
+            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Criação de tarefa está desabilitada na configuração")
             return None
         
         # Verifica se está fora de horário
@@ -337,8 +362,11 @@ class BusinessHoursService:
             tenant, department, message.created_at
         )
         
+        logger.info(f"🔍 [BUSINESS HOURS TASK] Verificação de horário: is_open={is_open}, next_open_time={next_open_time}")
+        
         if is_open:
             # Dentro do horário = não cria tarefa
+            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Mensagem está dentro do horário de atendimento - não criando tarefa")
             return None
         
         # Busca ou cria contato
@@ -403,7 +431,12 @@ class BusinessHoursService:
         # Relaciona com contato
         task.related_contacts.add(contact)
         
-        logger.info(f"Tarefa automática criada para fora de horário: {task.id}")
+        logger.info(f"✅ [BUSINESS HOURS TASK] Tarefa automática criada com sucesso!")
+        logger.info(f"   Task ID: {task.id}")
+        logger.info(f"   Title: {task.title}")
+        logger.info(f"   Due Date: {task.due_date}")
+        logger.info(f"   Department: {task.department.name if task.department else 'None'}")
+        logger.info(f"   Assigned To: {task.assigned_to.email if task.assigned_to else 'None'}")
         
         return task
     
