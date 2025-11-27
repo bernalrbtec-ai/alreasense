@@ -6,18 +6,11 @@ WORKDIR /app
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies (including devDependencies for build)
+RUN npm ci
 
-# Copy source code (excluding node_modules)
+# Copy source code
 COPY . .
-RUN rm -rf node_modules
-
-# Debug: List files to verify lib directory exists
-RUN ls -la src/
-RUN ls -la src/lib/ || echo "lib directory not found!"
-
-RUN npm install
 
 # Build the application with environment variables
 ARG VITE_API_BASE_URL
@@ -28,7 +21,12 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_WS_BASE_URL=$VITE_WS_BASE_URL
 ENV VITE_APP_NAME=$VITE_APP_NAME
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
+
+# Build the application
 RUN npm run build
+
+# Remove devDependencies after build (optional, saves space)
+RUN npm prune --production
 
 # Expose port
 EXPOSE 80
