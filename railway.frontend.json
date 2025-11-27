@@ -3,7 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "context": ".",
-    "dockerfilePath": "frontend/Dockerfile"
+    "dockerfilePath": "Dockerfile.frontend"
   },
   "deploy": {
     "restartPolicyType": "ON_FAILURE",
