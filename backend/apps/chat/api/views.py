@@ -56,7 +56,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     filterset_fields = ['status', 'department', 'assigned_to']
     search_fields = ['contact_phone', 'contact_name']
     ordering_fields = ['last_message_at', 'created_at']
-    ordering = ['-last_message_at']
+    # ✅ FIX: Removido ordering padrão - será aplicado no get_queryset com tratamento de NULL
+    # ordering = ['-last_message_at']  # Removido para evitar erro com NULL
     
     def get_permissions(self):
         """
@@ -139,6 +140,29 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 to_attr='last_message_list'
             )
         )
+        
+        # ✅ FIX: Tratar valores NULL em last_message_at na ordenação
+        # PostgreSQL pode ter problemas ao ordenar por campos NULL quando há valores None
+        # Usar Coalesce para substituir NULL por created_at
+        from django.db.models.functions import Coalesce
+        
+        # Sempre aplicar tratamento de NULL para last_message_at
+        queryset = queryset.annotate(
+            last_message_at_safe=Coalesce('last_message_at', 'created_at')
+        )
+        
+        # Verificar se há ordenação customizada do usuário
+        ordering_param = self.request.query_params.get('ordering', '-last_message_at')
+        
+        # Se ordena por last_message_at (com ou sem -), usar a versão segura
+        if 'last_message_at' in ordering_param:
+            if ordering_param.startswith('-'):
+                queryset = queryset.order_by('-last_message_at_safe', '-created_at')
+            else:
+                queryset = queryset.order_by('last_message_at_safe', '-created_at')
+        else:
+            # Se não ordena por last_message_at, usar ordenação padrão
+            queryset = queryset.order_by('-last_message_at_safe', '-created_at')
         
         # 🔍 Verificar se está filtrando por status=pending (Inbox)
         status_filter = self.request.query_params.get('status')
