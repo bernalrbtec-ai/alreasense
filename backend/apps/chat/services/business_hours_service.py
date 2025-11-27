@@ -351,8 +351,10 @@ class BusinessHoursService:
             context
         )
         
-        # Calcula vencimento
-        due_date = message.created_at + timedelta(hours=task_config.task_due_date_offset_hours)
+        # Calcula vencimento: até 1h após o início do próximo dia de atendimento
+        due_date = BusinessHoursService._calculate_task_due_date(
+            tenant, department, message.created_at
+        )
         
         # Cria tarefa
         task = Task.objects.create(
@@ -379,4 +381,77 @@ class BusinessHoursService:
         logger.info(f"Tarefa automática criada para fora de horário: {task.id}")
         
         return task
+    
+    @staticmethod
+    def _calculate_task_due_date(tenant, department=None, message_datetime: datetime = None) -> datetime:
+        """
+        Calcula a data de vencimento da tarefa.
+        
+        Regra: até 1h após o início do próximo dia de atendimento.
+        
+        Exemplo:
+        - Mensagem: Sexta 22h
+        - Próximo atendimento: Segunda 09:00
+        - Vencimento: Segunda 10:00 (09:00 + 1h)
+        """
+        if message_datetime is None:
+            message_datetime = django_timezone.now()
+        
+        # Busca horários de atendimento
+        business_hours = BusinessHoursService.get_business_hours(tenant, department)
+        
+        if not business_hours:
+            # Sem horário configurado = vence em 24h
+            return message_datetime + timedelta(hours=24)
+        
+        # Converte para timezone configurado
+        tz = ZoneInfo(business_hours.timezone)
+        local_datetime = message_datetime.astimezone(tz)
+        
+        # Procura o próximo dia de atendimento (até 7 dias à frente)
+        for days_ahead in range(1, 8):
+            check_date = local_datetime.date() + timedelta(days=days_ahead)
+            check_weekday = check_date.weekday()
+            
+            # Verifica se é feriado
+            holidays = business_hours.holidays or []
+            date_str = check_date.strftime('%Y-%m-%d')
+            if date_str in holidays:
+                continue
+            
+            # Mapeia weekday para campos
+            day_configs = {
+                0: ('monday_enabled', 'monday_start', 'Segunda-feira'),
+                1: ('tuesday_enabled', 'tuesday_start', 'Terça-feira'),
+                2: ('wednesday_enabled', 'wednesday_start', 'Quarta-feira'),
+                3: ('thursday_enabled', 'thursday_start', 'Quinta-feira'),
+                4: ('friday_enabled', 'friday_start', 'Sexta-feira'),
+                5: ('saturday_enabled', 'saturday_start', 'Sábado'),
+                6: ('sunday_enabled', 'sunday_start', 'Domingo'),
+            }
+            
+            enabled_field, start_field, day_name = day_configs[check_weekday]
+            is_enabled = getattr(business_hours, enabled_field)
+            start_time = getattr(business_hours, start_field)
+            
+            if is_enabled:
+                # Encontrou próximo dia de atendimento
+                # Combina data + horário de início + 1 hora
+                due_datetime_local = datetime.combine(check_date, start_time) + timedelta(hours=1)
+                
+                # Converte para timezone aware e depois para UTC
+                due_datetime_aware = tz.localize(due_datetime_local)
+                due_datetime_utc = due_datetime_aware.astimezone(ZoneInfo('UTC'))
+                
+                logger.info(
+                    f"Vencimento calculado: {day_name} {start_time} + 1h = {due_datetime_local.strftime('%d/%m/%Y %H:%M')} "
+                    f"(UTC: {due_datetime_utc.strftime('%d/%m/%Y %H:%M')})"
+                )
+                
+                return due_datetime_utc.replace(tzinfo=None)  # Remove timezone para salvar no banco
+        
+        # Se não encontrou nenhum dia de atendimento nos próximos 7 dias, vence em 7 dias
+        fallback_date = local_datetime + timedelta(days=7)
+        logger.warning(f"Nenhum dia de atendimento encontrado nos próximos 7 dias, usando fallback: {fallback_date}")
+        return fallback_date.astimezone(ZoneInfo('UTC')).replace(tzinfo=None)
 

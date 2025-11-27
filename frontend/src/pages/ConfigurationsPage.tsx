@@ -1511,7 +1511,7 @@ export default function ConfigurationsPage() {
                 onChange={(e) => setSelectedBusinessHoursDept(e.target.value || null)}
                 className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               >
-                <option value="">Geral (Tenant)</option>
+                <option value="">Geral</option>
                 {businessHoursDepts.map((dept) => (
                   <option key={dept.id} value={dept.id}>
                     {dept.name}
@@ -1781,18 +1781,17 @@ export default function ConfigurationsPage() {
                         </select>
                       </div>
 
-                      <div>
-                        <Label htmlFor="task_due_date_offset_hours">Vencimento (horas após mensagem)</Label>
-                        <Input
-                          id="task_due_date_offset_hours"
-                          type="number"
-                          min="1"
-                          value={taskConfig.task_due_date_offset_hours}
-                          onChange={(e) => setTaskConfig({ ...taskConfig, task_due_date_offset_hours: parseInt(e.target.value) || 2 })}
-                          className="mt-1"
-                        />
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-start gap-2">
+                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-medium mb-1">Vencimento Automático:</p>
+                        <p>A tarefa vencerá automaticamente <strong>1 hora após o início</strong> do próximo dia de atendimento.</p>
+                        <p className="mt-1 text-xs">Exemplo: Mensagem recebida sexta 22h → Vence segunda 10h (se atendimento começa 9h)</p>
                       </div>
                     </div>
+                  </div>
+                </div>
 
                     <div className="flex items-center gap-2">
                       <input
