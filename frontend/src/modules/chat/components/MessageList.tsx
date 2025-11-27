@@ -6,6 +6,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
+import { toast } from 'sonner';
 import { format } from 'date-fns';
 import type { MessageAttachment, MessageReaction } from '../types';
 import { AttachmentPreview } from './AttachmentPreview';
@@ -19,6 +20,7 @@ import { MentionRenderer } from './MentionRenderer';
 import { SharedContactCard } from './SharedContactCard';
 import { MessageInfoModal } from './MessageInfoModal';
 import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
+import { EmojiPicker } from './EmojiPicker';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
@@ -69,6 +71,7 @@ export function MessageList() {
   const [loadingOlder, setLoadingOlder] = useState(false); // ✅ NOVO: Loading mensagens antigas
   const [contextMenu, setContextMenu] = useState<{ message: Message; position: { x: number; y: number } } | null>(null);
   const [showMessageInfo, setShowMessageInfo] = useState<Message | null>(null);
+  const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
 
   useEffect(() => {
     if (!activeConversation?.id) return;
@@ -662,7 +665,48 @@ export function MessageList() {
             setContextMenu(null);
             setShowMessageInfo(message);
           }}
+          onShowEmojiPicker={(message) => {
+            setContextMenu(null);
+            setEmojiPickerMessage(message);
+          }}
         />
+      )}
+
+      {/* Emoji Picker (renderizado no MessageList para não ser desmontado) */}
+      {emojiPickerMessage && (
+        <div 
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/20" 
+          onClick={() => setEmojiPickerMessage(null)}
+          style={{ zIndex: 10000 }}
+        >
+          <div 
+            className="bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '320px',
+              height: '280px',
+              maxWidth: '90vw',
+              maxHeight: '90vh',
+              zIndex: 10001
+            }}
+          >
+            <EmojiPicker
+              onSelect={async (emoji: string) => {
+                try {
+                  await api.post('/chat/reactions/add/', {
+                    message_id: emojiPickerMessage.id,
+                    emoji: emoji
+                  });
+                  setEmojiPickerMessage(null);
+                } catch (error) {
+                  console.error('❌ Erro ao adicionar reação:', error);
+                  toast.error('Erro ao adicionar reação');
+                }
+              }}
+              onClose={() => setEmojiPickerMessage(null)}
+            />
+          </div>
+        </div>
       )}
 
       {/* Modal de Informações da Mensagem */}
