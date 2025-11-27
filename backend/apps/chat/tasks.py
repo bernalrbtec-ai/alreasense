@@ -983,12 +983,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     await sync_to_async(message.save)(update_fields=['status', 'error_message'])
                     return
                 
-                # ✅ CORREÇÃO: Evolution API v2 usa textMessage wrapper para texto
+                # ✅ CORREÇÃO: Evolution API espera 'text' diretamente no root, não textMessage
                 payload = {
                     'number': final_number,
-                    'textMessage': {
-                        'text': content.strip()
-                    }
+                    'text': content.strip()
                 }
                 
                 # ✅ NOVO: Adicionar options.quoted se for resposta (formato correto Evolution API)
