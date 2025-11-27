@@ -81,7 +81,7 @@ export default function AgendaPage() {
     with_due_date: 0
   })
   const [searchTerm, setSearchTerm] = useState('')
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('active') // 'active' = exclui concluídas por padrão
   const [typeFilter, setTypeFilter] = useState<string>('all') // 'all', 'task', 'agenda'
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
   const [myTasks, setMyTasks] = useState(false)
@@ -95,7 +95,7 @@ export default function AgendaPage() {
   useEffect(() => {
     loadTasks()
     loadStats()
-  }, [statusFilter, typeFilter, priorityFilter, myTasks, overdue])
+  }, [statusFilter, typeFilter, priorityFilter, myTasks, overdue, searchTerm])
 
   // Carregar departamentos e usuários para o modal
   useEffect(() => {
@@ -119,9 +119,16 @@ export default function AgendaPage() {
       setIsLoading(true)
       const params = new URLSearchParams()
       
-      if (statusFilter !== 'all') {
+      // Se houver busca, incluir todas as tarefas (incluindo concluídas)
+      // Caso contrário, excluir concluídas por padrão (statusFilter='active')
+      if (statusFilter === 'active' && !searchTerm) {
+        // Quando statusFilter='active' e não há busca, excluir concluídas
+        // Não adicionar filtro de status - vamos buscar todas e filtrar no frontend
+      } else if (statusFilter !== 'all') {
         params.append('status', statusFilter)
       }
+      // Se houver busca, não filtrar por status (incluir todas, incluindo concluídas)
+      
       if (typeFilter !== 'all') {
         params.append('task_type', typeFilter)
       }
@@ -139,7 +146,14 @@ export default function AgendaPage() {
       }
 
       const response = await api.get(`/contacts/tasks/?${params.toString()}`)
-      setTasks(response.data.results || response.data)
+      let tasksData = response.data.results || response.data
+      
+      // Se não houver busca e statusFilter for 'active', excluir concluídas
+      if (statusFilter === 'active' && !searchTerm) {
+        tasksData = tasksData.filter((task: Task) => task.status !== 'completed')
+      }
+      
+      setTasks(tasksData)
     } catch (error: any) {
       console.error('Erro ao carregar tarefas:', error)
       showErrorToast('carregar', 'Tarefas')
@@ -247,6 +261,7 @@ export default function AgendaPage() {
   }
 
   const filteredTasks = tasks.filter(task => {
+    // Se houver busca, incluir todas as tarefas (incluindo concluídas)
     if (searchTerm) {
       const searchLower = searchTerm.toLowerCase()
       return (
@@ -254,6 +269,11 @@ export default function AgendaPage() {
         task.description?.toLowerCase().includes(searchLower) ||
         task.assigned_to_data?.email.toLowerCase().includes(searchLower)
       )
+    }
+    // Se não houver busca e statusFilter for 'active', já foi filtrado no loadTasks
+    // Mas vamos garantir aqui também para segurança
+    if (statusFilter === 'active' && task.status === 'completed') {
+      return false
     }
     return true
   })
@@ -354,6 +374,7 @@ export default function AgendaPage() {
             onChange={(e) => setStatusFilter(e.target.value)}
             className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-500"
           >
+            <option value="active">Ativas (sem concluídas)</option>
             <option value="all">Todos os Status</option>
             <option value="pending">Pendente</option>
             <option value="in_progress">Em Andamento</option>
