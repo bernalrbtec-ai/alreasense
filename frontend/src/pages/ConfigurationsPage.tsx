@@ -1765,33 +1765,31 @@ export default function ConfigurationsPage() {
                       </p>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="task_priority">Prioridade</Label>
-                        <select
-                          id="task_priority"
-                          value={taskConfig.task_priority}
-                          onChange={(e) => setTaskConfig({ ...taskConfig, task_priority: e.target.value as any })}
-                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="low">Baixa</option>
-                          <option value="medium">Média</option>
-                          <option value="high">Alta</option>
-                          <option value="urgent">Urgente</option>
-                        </select>
-                      </div>
+                    <div>
+                      <Label htmlFor="task_priority">Prioridade</Label>
+                      <select
+                        id="task_priority"
+                        value={taskConfig.task_priority}
+                        onChange={(e) => setTaskConfig({ ...taskConfig, task_priority: e.target.value as any })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="low">Baixa</option>
+                        <option value="medium">Média</option>
+                        <option value="high">Alta</option>
+                        <option value="urgent">Urgente</option>
+                      </select>
+                    </div>
 
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <div className="flex items-start gap-2">
-                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                      <div className="text-sm text-blue-800">
-                        <p className="font-medium mb-1">Vencimento Automático:</p>
-                        <p>A tarefa vencerá automaticamente <strong>1 hora após o início</strong> do próximo dia de atendimento.</p>
-                        <p className="mt-1 text-xs">Exemplo: Mensagem recebida sexta 22h → Vence segunda 10h (se atendimento começa 9h)</p>
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <div className="flex items-start gap-2">
+                        <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div className="text-sm text-blue-800">
+                          <p className="font-medium mb-1">Vencimento Automático:</p>
+                          <p>A tarefa vencerá automaticamente <strong>1 hora após o início</strong> do próximo dia de atendimento.</p>
+                          <p className="mt-1 text-xs">Exemplo: Mensagem recebida sexta 22h → Vence segunda 10h (se atendimento começa 9h)</p>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </div>
 
                     <div className="flex items-center gap-2">
                       <input
