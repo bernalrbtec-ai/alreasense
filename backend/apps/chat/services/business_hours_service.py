@@ -7,6 +7,7 @@ from typing import Optional, Tuple, Dict, Any
 from zoneinfo import ZoneInfo
 from django.utils import timezone as django_timezone
 from django.db import transaction
+from django.db.models import Q
 
 from apps.chat.models_business_hours import (
     BusinessHours,
@@ -223,6 +224,23 @@ class BusinessHoursService:
             logger.info(f"✅ [BUSINESS HOURS TASK] Configuração geral do tenant encontrada: ID={config.id}")
         else:
             logger.warning(f"⚠️ [BUSINESS HOURS TASK] Nenhuma configuração encontrada (nem específica nem geral)")
+            # Log adicional para debug: verificar se existe configuração inativa
+            if department:
+                inactive_dept = AfterHoursTaskConfig.objects.filter(
+                    tenant=tenant,
+                    department=department,
+                    is_active=False
+                ).count()
+                if inactive_dept > 0:
+                    logger.warning(f"⚠️ [BUSINESS HOURS TASK] Existe configuração do departamento '{department.name}' mas está INATIVA (is_active=False)")
+            
+            inactive_general = AfterHoursTaskConfig.objects.filter(
+                tenant=tenant,
+                department__isnull=True,
+                is_active=False
+            ).count()
+            if inactive_general > 0:
+                logger.warning(f"⚠️ [BUSINESS HOURS TASK] Existe configuração geral do tenant mas está INATIVA (is_active=False)")
         
         return config
     
