@@ -1,8 +1,9 @@
 /**
  * Componente para renderizar menções em mensagens
- * Também processa links (compatível com linkifyText)
+ * Também processa formatação WhatsApp (negrito, itálico, riscado, monoespaçado) e links
  */
 import React from 'react';
+import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
 
 interface Mention {
   phone: string;
@@ -17,9 +18,9 @@ interface MentionRendererProps {
 export function MentionRenderer({ content, mentions = [] }: MentionRendererProps) {
   if (!content) return null;
 
-  // Se não tem menções, apenas retornar conteúdo (links serão processados pelo linkifyText)
+  // Se não tem menções, apenas retornar conteúdo formatado (WhatsApp + links)
   if (!mentions || mentions.length === 0) {
-    return <span>{content}</span>;
+    return <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(content) }} />;
   }
 
   // Criar mapa de telefone -> nome para busca rápida
@@ -36,10 +37,15 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
   let match;
 
   while ((match = mentionRegex.exec(content)) !== null) {
-    // Texto antes da menção
+    // Texto antes da menção (com formatação WhatsApp)
     const beforeMatch = content.substring(lastIndex, match.index);
     if (beforeMatch) {
-      parts.push(<span key={`text-${lastIndex}`}>{beforeMatch}</span>);
+      parts.push(
+        <span 
+          key={`text-${lastIndex}`}
+          dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(beforeMatch) }}
+        />
+      );
     }
 
     const mentionText = match[1];
@@ -84,9 +90,15 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
     lastIndex = match.index + match[0].length;
   }
 
-  // Adicionar texto restante
+  // Adicionar texto restante (com formatação WhatsApp)
   if (lastIndex < content.length) {
-    parts.push(<span key={`text-${lastIndex}`}>{content.substring(lastIndex)}</span>);
+    const remainingText = content.substring(lastIndex);
+    parts.push(
+      <span 
+        key={`text-${lastIndex}`}
+        dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(remainingText) }}
+      />
+    );
   }
 
   return <>{parts}</>;
