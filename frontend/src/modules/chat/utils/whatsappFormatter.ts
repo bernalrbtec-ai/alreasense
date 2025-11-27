@@ -8,7 +8,7 @@
  */
 
 export function formatWhatsAppText(text: string): string {
-  if (!text) return '';
+  if (!text || typeof text !== 'string') return '';
 
   // Escapar HTML existente para segurança
   let formatted = text
@@ -45,7 +45,7 @@ export function formatWhatsAppText(text: string): string {
  * Versão que também processa URLs (combina formatação WhatsApp + links)
  */
 export function formatWhatsAppTextWithLinks(text: string): string {
-  if (!text) return '';
+  if (!text || typeof text !== 'string') return '';
 
   // Primeiro formatar texto do WhatsApp
   let formatted = formatWhatsAppText(text);
@@ -53,33 +53,54 @@ export function formatWhatsAppTextWithLinks(text: string): string {
   // Depois processar URLs
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+|www\.[^\s<>"{}|\\^`[\]]+|[a-zA-Z0-9][a-zA-Z0-9-]{1,61}[a-zA-Z0-9]\.[a-zA-Z]{2,}[^\s<>"{}|\\^`[\]]*)/gi;
 
-  // Converter URLs em links (mas não dentro de tags HTML já criadas)
-  formatted = formatted.replace(urlRegex, (url, offset, string) => {
+  // ✅ CORREÇÃO: Usar uma abordagem mais segura para processar URLs
+  // Processar todas as URLs encontradas e substituir uma por vez
+  let result = formatted;
+  let lastIndex = 0;
+  let match;
+  
+  // Resetar regex
+  urlRegex.lastIndex = 0;
+  
+  const replacements: Array<{ start: number; end: number; replacement: string }> = [];
+  
+  while ((match = urlRegex.exec(formatted)) !== null) {
+    const url = match[0];
+    const offset = match.index;
+    
     // Verificar se a URL não está dentro de uma tag HTML
-    const beforeUrl = string.substring(0, offset);
+    const beforeUrl = formatted.substring(0, offset);
     const openTags = (beforeUrl.match(/<[^>]*>/g) || []).length;
     const closeTags = (beforeUrl.match(/<\/[^>]*>/g) || []).length;
     
-    // Se está dentro de uma tag HTML, não converter
-    if (openTags > closeTags) {
-      return url;
-    }
+    // Se está dentro de uma tag HTML, pular
+    if (openTags <= closeTags) {
+      // Adicionar https:// se não tiver protocolo
+      let href = url;
+      if (!url.match(/^https?:\/\//i)) {
+        href = url.startsWith('www.') ? `https://${url}` : `https://${url}`;
+      }
 
-    // Adicionar https:// se não tiver protocolo
-    let href = url;
-    if (!url.match(/^https?:\/\//i)) {
-      href = url.startsWith('www.') ? `https://${url}` : `https://${url}`;
+      // Validar URL antes de criar link
+      try {
+        new URL(href);
+        replacements.push({
+          start: offset,
+          end: offset + url.length,
+          replacement: `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline break-all">${url}</a>`
+        });
+      } catch {
+        // URL inválida, não fazer nada
+      }
     }
+  }
+  
+  // Aplicar substituições de trás para frente (para não alterar índices)
+  for (let i = replacements.length - 1; i >= 0; i--) {
+    const { start, end, replacement } = replacements[i];
+    result = result.substring(0, start) + replacement + result.substring(end);
+  }
 
-    // Validar URL antes de criar link
-    try {
-      new URL(href);
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="text-blue-600 hover:text-blue-800 underline break-all">${url}</a>`;
-    } catch {
-      return url;
-    }
-  });
-
-  return formatted;
+  return result;
 }
 
