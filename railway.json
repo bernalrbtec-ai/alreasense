@@ -3,7 +3,7 @@
   "build": {
     "builder": "DOCKERFILE",
     "context": ".",
-    "dockerfilePath": "backend/Dockerfile"
+    "dockerfilePath": "Dockerfile"
   },
   "deploy": {
     "numReplicas": 1,
