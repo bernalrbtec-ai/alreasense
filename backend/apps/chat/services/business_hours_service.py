@@ -448,10 +448,12 @@ class BusinessHoursService:
                     f"(UTC: {due_datetime_utc.strftime('%d/%m/%Y %H:%M')})"
                 )
                 
-                return due_datetime_utc.replace(tzinfo=None)  # Remove timezone para salvar no banco
+                # Retorna timezone-aware (Django espera isso)
+                return due_datetime_utc
         
         # Se não encontrou nenhum dia de atendimento nos próximos 7 dias, vence em 7 dias
         fallback_date = local_datetime + timedelta(days=7)
-        logger.warning(f"Nenhum dia de atendimento encontrado nos próximos 7 dias, usando fallback: {fallback_date}")
-        return fallback_date.astimezone(ZoneInfo('UTC')).replace(tzinfo=None)
+        fallback_utc = fallback_date.astimezone(ZoneInfo('UTC'))
+        logger.warning(f"Nenhum dia de atendimento encontrado nos próximos 7 dias, usando fallback: {fallback_utc}")
+        return fallback_utc
 
