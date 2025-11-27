@@ -1,4 +1,4 @@
 Forçar deploy - Railway
 Gerado em: 2025-01-27
-Atualizado: 2025-01-27 - Formatação WhatsApp
+Atualizado: 2025-11-27 - Fix updated_at MessageSerializer
 
