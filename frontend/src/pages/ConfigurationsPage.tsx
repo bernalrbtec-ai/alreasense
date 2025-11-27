@@ -95,6 +95,94 @@ interface EvolutionConfig {
   instance_count?: number
 }
 
+interface Department {
+  id: string
+  name: string
+}
+
+interface User {
+  id: string
+  email: string
+  first_name?: string
+  last_name?: string
+}
+
+interface BusinessHours {
+  id?: string
+  tenant: string
+  department?: string | null
+  department_name?: string
+  timezone: string
+  monday_enabled: boolean
+  monday_start: string
+  monday_end: string
+  tuesday_enabled: boolean
+  tuesday_start: string
+  tuesday_end: string
+  wednesday_enabled: boolean
+  wednesday_start: string
+  wednesday_end: string
+  thursday_enabled: boolean
+  thursday_start: string
+  thursday_end: string
+  friday_enabled: boolean
+  friday_start: string
+  friday_end: string
+  saturday_enabled: boolean
+  saturday_start: string
+  saturday_end: string
+  sunday_enabled: boolean
+  sunday_start: string
+  sunday_end: string
+  holidays: string[]
+  is_active: boolean
+}
+
+interface AfterHoursMessage {
+  id?: string
+  tenant: string
+  department?: string | null
+  department_name?: string
+  message_template: string
+  is_active: boolean
+}
+
+interface AfterHoursTaskConfig {
+  id?: string
+  tenant: string
+  department?: string | null
+  department_name?: string
+  create_task_enabled: boolean
+  task_title_template: string
+  task_description_template: string
+  task_priority: 'low' | 'medium' | 'high' | 'urgent'
+  task_due_date_offset_hours: number
+  task_type: 'task' | 'agenda'
+  auto_assign_to_department: boolean
+  auto_assign_to_agent?: string | null
+  auto_assign_to_agent_name?: string
+  include_message_preview: boolean
+  is_active: boolean
+}
+
+const DAYS = [
+  { key: 'monday', label: 'Segunda-feira', short: 'Seg' },
+  { key: 'tuesday', label: 'Terça-feira', short: 'Ter' },
+  { key: 'wednesday', label: 'Quarta-feira', short: 'Qua' },
+  { key: 'thursday', label: 'Quinta-feira', short: 'Qui' },
+  { key: 'friday', label: 'Sexta-feira', short: 'Sex' },
+  { key: 'saturday', label: 'Sábado', short: 'Sáb' },
+  { key: 'sunday', label: 'Domingo', short: 'Dom' },
+]
+
+const TIMEZONES = [
+  { value: 'America/Sao_Paulo', label: 'Brasília (GMT-3)' },
+  { value: 'America/Manaus', label: 'Manaus (GMT-4)' },
+  { value: 'America/Rio_Branco', label: 'Rio Branco (GMT-5)' },
+  { value: 'America/New_York', label: 'Nova York (GMT-5/-4)' },
+  { value: 'America/Los_Angeles', label: 'Los Angeles (GMT-8/-7)' },
+]
+
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours'>('instances')
