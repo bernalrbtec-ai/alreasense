@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, Paperclip, PenTool, X, Reply } from 'lucide-react';
+import { Send, Smile, PenTool } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -27,7 +27,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadingFile, setUploadingFile] = useState(false);
-  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
 
   // Limpar timeout de digitando ao desmontar
@@ -53,6 +53,68 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   }, [showEmojiPicker]);
+
+  // ✅ NOVO: Handler para colar imagens do clipboard (Ctrl+V / Cmd+V)
+  const handlePaste = useCallback(async (e: React.ClipboardEvent) => {
+    // Verificar se há arquivos/imagens no clipboard
+    const items = e.clipboardData.items;
+    
+    if (!items || items.length === 0) {
+      return; // Não há nada no clipboard ou é texto puro
+    }
+
+    // Procurar por imagens no clipboard
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      
+      // Verificar se é uma imagem
+      if (item.type.indexOf('image') !== -1) {
+        e.preventDefault(); // Prevenir colar texto se houver imagem
+        
+        const file = item.getAsFile();
+        if (!file) {
+          console.warn('⚠️ [PASTE] Arquivo de imagem não pôde ser obtido do clipboard');
+          return;
+        }
+
+        // Validar tamanho e tipo
+        try {
+          const { validateFileSize, validateFileType } = await import('../utils/messageUtils');
+          const allowedTypes = ['image/*'];
+          
+          const sizeValidation = validateFileSize(file, 50);
+          if (!sizeValidation.valid) {
+            toast.error(sizeValidation.error || 'Imagem muito grande. Máximo: 50MB');
+            return;
+          }
+
+          const typeValidation = validateFileType(file, allowedTypes);
+          if (!typeValidation.valid) {
+            toast.error(typeValidation.error || 'Tipo de imagem não permitido');
+            return;
+          }
+
+          // Se já houver um arquivo selecionado, substituir
+          if (selectedFile) {
+            toast.info('Imagem anterior substituída', { duration: 2000 });
+          }
+
+          // Adicionar imagem como arquivo selecionado
+          setSelectedFile(file);
+          
+          toast.success('Imagem colada! Clique em enviar para anexar.', {
+            duration: 3000,
+            position: 'bottom-right'
+          });
+        } catch (error) {
+          console.error('❌ [PASTE] Erro ao processar imagem do clipboard:', error);
+          toast.error('Erro ao processar imagem colada');
+        }
+        
+        return; // Processar apenas a primeira imagem encontrada
+      }
+    }
+  }, [selectedFile]);
 
   const handleMessageChange = useCallback((value: string) => {
     setMessage(value);
@@ -220,7 +282,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       console.log('✅ [FILE] Upload S3 completo');
 
       // 3️⃣ Confirmar backend
-      const { data: confirmData } = await api.post('/chat/confirm-upload/', {
+      await api.post('/chat/confirm-upload/', {
         conversation_id: activeConversation.id,
         attachment_id: presignedData.attachment_id,
         s3_key: presignedData.s3_key,
@@ -343,12 +405,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
             disabled={sending}
             onKeyPress={handleKeyPress}
+            onPaste={handlePaste}
           />
         ) : (
           <textarea
             value={message}
             onChange={(e) => handleMessageChange(e.target.value)}
             onKeyPress={handleKeyPress}
+            onPaste={handlePaste}
             placeholder="Digite uma mensagem"
             rows={1}
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"

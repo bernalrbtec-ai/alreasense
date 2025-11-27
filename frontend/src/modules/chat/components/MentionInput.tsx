@@ -52,6 +52,7 @@ interface MentionInputProps {
   className?: string;
   disabled?: boolean;
   onKeyPress?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
 export function MentionInput({
@@ -64,6 +65,7 @@ export function MentionInput({
   className = '',
   disabled = false,
   onKeyPress,
+  onPaste,
 }: MentionInputProps) {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -304,6 +306,7 @@ export function MentionInput({
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
         onKeyPress={onKeyPress}
+        onPaste={onPaste}
         placeholder={placeholder}
         disabled={disabled}
         className={className}
