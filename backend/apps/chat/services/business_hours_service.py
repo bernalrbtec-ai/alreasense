@@ -281,7 +281,7 @@ class BusinessHoursService:
             context
         )
         
-        # Cria mensagem automática (não envia ainda - será enviada pelo sistema de envio)
+        # Cria mensagem automática
         auto_message = Message.objects.create(
             conversation=conversation,
             content=formatted_message,
@@ -295,7 +295,16 @@ class BusinessHoursService:
             }
         )
         
-        logger.info(f"Mensagem automática criada para fora de horário: {auto_message.id}")
+        logger.info(f"📨 [BUSINESS HOURS] Mensagem automática criada: {auto_message.id}")
+        
+        # ✅ CRÍTICO: Enfileira mensagem para envio
+        try:
+            from apps.chat.tasks import send_message_to_evolution
+            send_message_to_evolution.delay(str(auto_message.id))
+            logger.info(f"✅ [BUSINESS HOURS] Mensagem automática enfileirada para envio: {auto_message.id}")
+        except Exception as e:
+            logger.error(f"❌ [BUSINESS HOURS] Erro ao enfileirar mensagem automática: {e}", exc_info=True)
+            # Não re-raise - mensagem já foi criada, pode ser enviada manualmente depois
         
         return True, auto_message
     
