@@ -52,6 +52,7 @@ interface MentionInputProps {
   className?: string;
   disabled?: boolean;
   onKeyPress?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onPaste?: (e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
 }
 
@@ -65,6 +66,7 @@ export function MentionInput({
   className = '',
   disabled = false,
   onKeyPress,
+  onKeyDown,
   onPaste,
 }: MentionInputProps) {
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -284,9 +286,14 @@ export function MentionInput({
         setShowSuggestions(false);
         setMentionStart(null);
       }
+    } else {
+      // ✅ NOVO: Se não há sugestões, passar o evento para o onKeyDown do MessageInput
+      // Isso permite que Enter envie a mensagem e Shift+Enter pule linha
+      if (onKeyDown) {
+        onKeyDown(e);
+      }
     }
-    // ✅ IMPORTANTE: Não prevenir Enter se não houver sugestões (deixa passar para o MessageInput processar)
-  }, [showSuggestions, suggestions, selectedIndex, insertMention]);
+  }, [showSuggestions, suggestions, selectedIndex, insertMention, onKeyDown]);
 
   // Scroll para sugestão selecionada
   useEffect(() => {
@@ -305,7 +312,6 @@ export function MentionInput({
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleKeyDown}
-        onKeyPress={onKeyPress}
         onPaste={onPaste}
         placeholder={placeholder}
         disabled={disabled}

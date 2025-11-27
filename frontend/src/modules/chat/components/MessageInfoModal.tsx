@@ -2,7 +2,7 @@
  * Modal com informações detalhadas da mensagem
  */
 import React from 'react';
-import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, Database, MessageSquare } from 'lucide-react';
+import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, MessageSquare } from 'lucide-react';
 import type { Message } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -101,14 +101,35 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
                 <p className="text-sm font-medium text-gray-700">Status</p>
                 <div className="flex flex-col">
                   <p className={`text-sm ${statusInfo.color}`}>{statusInfo.label}</p>
-                  {(message.status === 'delivered' || message.status === 'seen') && (
-                    <p className="text-xs text-gray-500 mt-1">
-                      {formatDateTime(message.created_at)}
-                    </p>
-                  )}
                 </div>
               </div>
             </div>
+
+            {/* Entregue - aparece quando status é delivered ou seen */}
+            {(message.status === 'delivered' || message.status === 'seen') && message.updated_at && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-100 rounded-lg">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Entregue</p>
+                  <p className="text-sm text-gray-600">{formatDateTime(message.updated_at)}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Lida - aparece apenas quando status é seen */}
+            {message.status === 'seen' && message.updated_at && (
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 rounded-lg">
+                  <Eye className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-gray-700">Lida</p>
+                  <p className="text-sm text-gray-600">{formatDateTime(message.updated_at)}</p>
+                </div>
+              </div>
+            )}
 
             {/* Data/Hora de Envio */}
             <div className="flex items-start gap-3">
@@ -260,22 +281,6 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
               </div>
             )}
 
-            {/* Metadata (se houver dados relevantes) */}
-            {message.metadata && Object.keys(message.metadata).length > 0 && (
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-gray-100 rounded-lg">
-                  <Database className="w-5 h-5 text-gray-600" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-700">Metadados</p>
-                  <div className="mt-1 text-xs text-gray-500 font-mono bg-gray-50 p-2 rounded max-h-32 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap break-words">
-                      {JSON.stringify(message.metadata, null, 2)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
 
           </div>
         </div>

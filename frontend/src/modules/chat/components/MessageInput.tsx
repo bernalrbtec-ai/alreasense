@@ -203,21 +203,26 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
     }
   };
 
-  const handleKeyPress = (e: React.KeyboardEvent) => {
-    // ✅ Permitir Enter para enviar se houver texto OU arquivo
-    // ✅ CORREÇÃO: Não processar se for textarea do MentionInput (ele já processa)
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    // ✅ Enter = enviar mensagem
+    // ✅ Shift+Enter = nova linha
     const hasText = message.trim().length > 0;
     const hasFile = selectedFile !== null;
     
     if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFile)) {
-      // Verificar se não está dentro de um MentionInput (sugestões abertas)
+      // Verificar se não está dentro de um MentionInput com sugestões abertas
       const target = e.target as HTMLElement;
       const isMentionInput = target.closest('[data-mention-input]');
-      if (!isMentionInput) {
+      const hasSuggestions = target.closest('[data-mention-suggestions]');
+      
+      // Se não está em MentionInput ou não tem sugestões, enviar mensagem
+      if (!isMentionInput || !hasSuggestions) {
         e.preventDefault();
         handleSend();
       }
+      // Se está em MentionInput com sugestões, deixar o MentionInput processar
     }
+    // Shift+Enter não precisa de tratamento - comportamento padrão do textarea já faz nova linha
   };
 
   const handleEmojiSelect = (emoji: string) => {
@@ -404,16 +409,16 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
             placeholder="Digite uma mensagem (use @ para mencionar)"
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
             disabled={sending}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             onPaste={handlePaste}
           />
         ) : (
           <textarea
             value={message}
             onChange={(e) => handleMessageChange(e.target.value)}
-            onKeyPress={handleKeyPress}
+            onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Digite uma mensagem"
+            placeholder="Digite uma mensagem (Enter para enviar, Shift+Enter para nova linha)"
             rows={1}
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
             style={{
