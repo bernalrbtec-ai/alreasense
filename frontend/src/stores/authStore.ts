@@ -194,20 +194,30 @@ export const useAuthStore = create<AuthState>()(
       checkAuth: async () => {
         const { token, user } = get()
         
-        // If already have user, skip check
-        if (user) {
-          set({ isLoading: false })
-          return
-        }
-        
+        // ✅ FIX: Se não tem token, limpar estado e retornar
         if (!token) {
-          set({ isLoading: false })
+          // Se tinha user mas não tem token, limpar tudo (token expirou ou foi removido)
+          if (user) {
+            set({ user: null, token: null, isLoading: false })
+            delete api.defaults.headers.common['Authorization']
+          } else {
+            set({ isLoading: false })
+          }
           return
         }
 
-        set({ isLoading: true })
+        // ✅ FIX: Sempre configurar token no axios antes de verificar
+        // Isso garante que mesmo após F5, o token está configurado
+        api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+
+        // ✅ FIX: Se já tem user, ainda assim verificar se token é válido
+        // Mas não mostrar loading se já tem user (melhor UX)
+        const wasLoading = get().isLoading
+        if (!wasLoading) {
+          set({ isLoading: true })
+        }
+
         try {
-          api.defaults.headers.common['Authorization'] = `Bearer ${token}`
           // ✅ FIX: Adicionar timeout para evitar travamento
           const controller = new AbortController()
           const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 segundos
@@ -217,23 +227,32 @@ export const useAuthStore = create<AuthState>()(
           })
           
           clearTimeout(timeoutId)
+          
+          // ✅ FIX: Sempre atualizar user (pode ter mudado no backend)
           set({ user: response.data, isLoading: false })
+          console.log('✅ [AUTH] Token válido, usuário autenticado')
         } catch (error: any) {
           // ✅ FIX: Verificar se foi abortado ou erro de rede
           if (error.name === 'AbortError' || error.code === 'ECONNABORTED') {
-            console.error('Auth check timeout:', error)
+            console.error('❌ [AUTH] Auth check timeout:', error)
             set({ isLoading: false })
             return
           }
           
-          // Token is invalid, clear auth state
-          console.error('Auth check failed:', error)
-          delete api.defaults.headers.common['Authorization']
-          set({ user: null, token: null, isLoading: false })
-          
-          // Redirect to login if not already there
-          if (window.location.pathname !== '/login') {
-            window.location.href = '/login'
+          // ✅ FIX: Se erro 401, token inválido - limpar tudo
+          if (error.response?.status === 401) {
+            console.error('❌ [AUTH] Token inválido ou expirado:', error)
+            delete api.defaults.headers.common['Authorization']
+            set({ user: null, token: null, isLoading: false })
+            
+            // Redirect to login if not already there
+            if (window.location.pathname !== '/login') {
+              window.location.href = '/login'
+            }
+          } else {
+            // ✅ FIX: Outros erros (rede, etc) - manter estado atual mas parar loading
+            console.error('❌ [AUTH] Erro ao verificar autenticação:', error)
+            set({ isLoading: false })
           }
         }
       },

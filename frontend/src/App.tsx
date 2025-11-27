@@ -41,17 +41,23 @@ function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
 
   useEffect(() => {
-    // ✅ Set axios token if it exists (importante manter após mudança de página)
-    if (token) {
-      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
-    }
-    
-    // ✅ Check auth on mount and when token changes
-    // Importante verificar token em todas as navegações para evitar perda de autenticação
-    // ✅ FIX: Usar apenas token como dependência para evitar loop infinito
+    // ✅ FIX: Sempre verificar autenticação ao montar o componente
+    // Isso garante que após F5, o token seja verificado e restaurado
     checkAuth()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token])  // ✅ Apenas token como dependência (checkAuth é estável do Zustand)
+  }, [])  // ✅ Executar apenas uma vez ao montar (checkAuth já gerencia token)
+  
+  useEffect(() => {
+    // ✅ Set axios token if it exists (importante manter após mudança de página)
+    // Executar sempre que token mudar (após login, logout, etc)
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+      console.log('✅ [AUTH] Token configurado no axios')
+    } else {
+      delete api.defaults.headers.common['Authorization']
+      console.log('✅ [AUTH] Token removido do axios')
+    }
+  }, [token])
 
   if (isLoading) {
     return (
