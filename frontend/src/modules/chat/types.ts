@@ -84,6 +84,7 @@ export interface Message {
   reactions_summary?: Record<string, { count: number; users: Array<{ id: string; email: string; first_name?: string; last_name?: string }> }>;
   metadata?: Record<string, any>;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface MessageAttachment {

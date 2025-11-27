@@ -24,7 +24,6 @@ import {
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
-import { EmojiPicker } from './EmojiPicker';
 import { MessageInfoModal } from './MessageInfoModal';
 import type { Message } from '../types';
 
@@ -33,11 +32,11 @@ interface MessageContextMenuProps {
   position: { x: number; y: number };
   onClose: () => void;
   onShowInfo?: (message: Message) => void;
+  onShowEmojiPicker?: (message: Message) => void;
 }
 
-export function MessageContextMenu({ message, position, onClose, onShowInfo }: MessageContextMenuProps) {
+export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showForwardModal, setShowForwardModal] = useState(false);
   const { activeConversation, setMessages, messages, setReplyToMessage } = useChatStore();
@@ -117,26 +116,11 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo }: M
 
   // Reagir (mostrar emoji picker)
   const handleReact = () => {
-    onClose(); // ✅ Fechar menu primeiro
-    // ✅ Usar setTimeout para garantir que o menu feche antes de abrir o picker
-    setTimeout(() => {
-      setShowEmojiPicker(true);
-    }, 100);
-  };
-
-  // Adicionar reação
-  const handleAddReaction = async (emoji: string) => {
-    try {
-      await api.post('/chat/reactions/add/', {
-        message_id: message.id,
-        emoji: emoji
-      });
-      setShowEmojiPicker(false);
-      onClose();
-    } catch (error) {
-      console.error('❌ Erro ao adicionar reação:', error);
-      toast.error('Erro ao adicionar reação');
+    if (onShowEmojiPicker) {
+      // ✅ Usar callback do pai (MessageList) para renderizar picker fora do menu
+      onShowEmojiPicker(message);
     }
+    onClose();
   };
 
   // Baixar anexo
@@ -294,28 +278,6 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo }: M
         </button>
       </div>
 
-      {/* Emoji Picker (quando Reagir é clicado) */}
-      {showEmojiPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20" onClick={() => setShowEmojiPicker(false)}>
-          <div 
-            className="bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              position: 'fixed',
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              width: '320px',
-              height: '280px'
-            }}
-          >
-            <EmojiPicker
-              onSelect={handleAddReaction}
-              onClose={() => setShowEmojiPicker(false)}
-            />
-          </div>
-        </div>
-      )}
 
       {/* Modal de Informações da Mensagem */}
       {showInfoModal && (

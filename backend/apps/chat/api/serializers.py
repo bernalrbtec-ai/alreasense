@@ -131,7 +131,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'conversation', 'sender', 'sender_data', 'sender_name', 'sender_phone',
             'content', 'direction', 'message_id', 'evolution_status', 'error_message',
-            'status', 'is_internal', 'attachments', 'reactions', 'reactions_summary', 'metadata', 'created_at'
+            'status', 'is_internal', 'attachments', 'reactions', 'reactions_summary', 'metadata', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'conversation', 'sender', 'created_at', 'sender_data', 'attachments', 'reactions', 'reactions_summary']
     
