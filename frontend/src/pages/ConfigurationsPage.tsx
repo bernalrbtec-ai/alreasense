@@ -489,6 +489,178 @@ export default function ConfigurationsPage() {
     }
   }
 
+  // Funções para Horários de Atendimento
+  const fetchBusinessHoursData = async () => {
+    try {
+      // Buscar departamentos e usuários
+      const [deptResponse, usersResponse] = await Promise.all([
+        api.get('/auth/departments/'),
+        api.get('/auth/users/')
+      ])
+      const depts = Array.isArray(deptResponse.data) ? deptResponse.data : (deptResponse.data?.results || [])
+      const users = Array.isArray(usersResponse.data) ? usersResponse.data : (usersResponse.data?.results || [])
+      setBusinessHoursDepts(depts.map((d: any) => ({ id: d.id, name: d.name })))
+      setBusinessHoursUsers(users.map((u: any) => ({ id: u.id, email: u.email, first_name: u.first_name, last_name: u.last_name })))
+      
+      // Buscar configurações
+      await Promise.all([
+        fetchBusinessHours(),
+        fetchAfterHoursMessage(),
+        fetchTaskConfig(),
+      ])
+    } catch (error: any) {
+      console.error('❌ Error fetching business hours data:', error)
+    }
+  }
+
+  const fetchBusinessHours = async () => {
+    try {
+      const params = selectedBusinessHoursDept ? { department: selectedBusinessHoursDept } : {}
+      const response = await api.get('/chat/business-hours/current/', { params })
+      
+      if (response.data.has_config) {
+        setBusinessHours(response.data.business_hours)
+        setHolidaysInput((response.data.business_hours.holidays || []).join('\n'))
+      } else {
+        setBusinessHours({
+          tenant: user?.tenant_id || '',
+          department: selectedBusinessHoursDept || null,
+          timezone: 'America/Sao_Paulo',
+          monday_enabled: true,
+          monday_start: '09:00',
+          monday_end: '18:00',
+          tuesday_enabled: true,
+          tuesday_start: '09:00',
+          tuesday_end: '18:00',
+          wednesday_enabled: true,
+          wednesday_start: '09:00',
+          wednesday_end: '18:00',
+          thursday_enabled: true,
+          thursday_start: '09:00',
+          thursday_end: '18:00',
+          friday_enabled: true,
+          friday_start: '09:00',
+          friday_end: '18:00',
+          saturday_enabled: false,
+          saturday_start: '09:00',
+          saturday_end: '18:00',
+          sunday_enabled: false,
+          sunday_start: '09:00',
+          sunday_end: '18:00',
+          holidays: [],
+          is_active: true,
+        })
+        setHolidaysInput('')
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching business hours:', error)
+    }
+  }
+
+  const fetchAfterHoursMessage = async () => {
+    try {
+      const params = selectedBusinessHoursDept ? { department: selectedBusinessHoursDept } : {}
+      const response = await api.get('/chat/after-hours-messages/current/', { params })
+      
+      if (response.data.has_config) {
+        setAfterHoursMessage(response.data.after_hours_message)
+      } else {
+        setAfterHoursMessage({
+          tenant: user?.tenant_id || '',
+          department: selectedBusinessHoursDept || null,
+          message_template: 'Olá {contact_name}! Recebemos sua mensagem fora do horário de atendimento.\n\nNosso horário de funcionamento é:\n{next_open_time}\n\nRetornaremos em breve!',
+          is_active: true,
+        })
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching message:', error)
+    }
+  }
+
+  const fetchTaskConfig = async () => {
+    try {
+      const params = selectedBusinessHoursDept ? { department: selectedBusinessHoursDept } : {}
+      const response = await api.get('/chat/after-hours-task-configs/current/', { params })
+      
+      if (response.data.has_config) {
+        setTaskConfig(response.data.task_config)
+      } else {
+        setTaskConfig({
+          tenant: user?.tenant_id || '',
+          department: selectedBusinessHoursDept || null,
+          create_task_enabled: true,
+          task_title_template: 'Retornar contato de {contact_name}',
+          task_description_template: 'Cliente entrou em contato fora do horário de atendimento.\n\nHorário: {message_time}\nMensagem: {message_content}\n\nPróximo horário: {next_open_time}',
+          task_priority: 'high',
+          task_due_date_offset_hours: 2,
+          task_type: 'task',
+          auto_assign_to_department: true,
+          include_message_preview: true,
+          is_active: true,
+        })
+      }
+    } catch (error: any) {
+      console.error('❌ Error fetching task config:', error)
+    }
+  }
+
+  const handleSaveBusinessHours = async () => {
+    if (!businessHours) return
+    const toastId = showLoadingToast('salvar', 'Horários de Atendimento')
+    try {
+      const holidays = holidaysInput.split('\n').map(line => line.trim()).filter(line => line && /^\d{4}-\d{2}-\d{2}$/.test(line))
+      const data = { ...businessHours, department: selectedBusinessHoursDept || null, holidays }
+      if (businessHours.id) {
+        await api.patch(`/chat/business-hours/${businessHours.id}/`, data)
+      } else {
+        await api.post('/chat/business-hours/', data)
+      }
+      updateToastSuccess(toastId, 'salvar', 'Horários de Atendimento')
+      await fetchBusinessHours()
+    } catch (error: any) {
+      updateToastError(toastId, 'salvar', 'Horários de Atendimento', error)
+    }
+  }
+
+  const handleSaveMessage = async () => {
+    if (!afterHoursMessage) return
+    const toastId = showLoadingToast('salvar', 'Mensagem Automática')
+    try {
+      const data = { ...afterHoursMessage, department: selectedBusinessHoursDept || null }
+      if (afterHoursMessage.id) {
+        await api.patch(`/chat/after-hours-messages/${afterHoursMessage.id}/`, data)
+      } else {
+        await api.post('/chat/after-hours-messages/', data)
+      }
+      updateToastSuccess(toastId, 'salvar', 'Mensagem Automática')
+      await fetchAfterHoursMessage()
+    } catch (error: any) {
+      updateToastError(toastId, 'salvar', 'Mensagem Automática', error)
+    }
+  }
+
+  const handleSaveTaskConfig = async () => {
+    if (!taskConfig) return
+    const toastId = showLoadingToast('salvar', 'Configuração de Tarefas')
+    try {
+      const data = { ...taskConfig, department: selectedBusinessHoursDept || null }
+      if (taskConfig.id) {
+        await api.patch(`/chat/after-hours-task-configs/${taskConfig.id}/`, data)
+      } else {
+        await api.post('/chat/after-hours-task-configs/', data)
+      }
+      updateToastSuccess(toastId, 'salvar', 'Configuração de Tarefas')
+      await fetchTaskConfig()
+    } catch (error: any) {
+      updateToastError(toastId, 'salvar', 'Configuração de Tarefas', error)
+    }
+  }
+
+  const updateDayHours = (day: string, field: 'enabled' | 'start' | 'end', value: boolean | string) => {
+    if (!businessHours) return
+    setBusinessHours({ ...businessHours, [`${day}_${field}`]: value })
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
