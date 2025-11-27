@@ -23,10 +23,15 @@ import {
   Crown,
   Users,
   Building2,
-  Bell
+  Bell,
+  Clock,
+  MessageSquare,
+  Calendar
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
+import { Input } from '../components/ui/Input'
+import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../lib/toastHelper'
@@ -128,10 +133,23 @@ export default function ConfigurationsPage() {
   const [tenant, setTenant] = useState<Tenant | null>(null)
   const { limits, loading: limitsLoading } = useTenantLimits()
 
+  // Estados para Horários de Atendimento
+  const [businessHoursDepts, setBusinessHoursDepts] = useState<Department[]>([])
+  const [businessHoursUsers, setBusinessHoursUsers] = useState<User[]>([])
+  const [selectedBusinessHoursDept, setSelectedBusinessHoursDept] = useState<string | null>(null)
+  const [businessHoursSubTab, setBusinessHoursSubTab] = useState<'hours' | 'message' | 'tasks'>('hours')
+  const [businessHours, setBusinessHours] = useState<BusinessHours | null>(null)
+  const [holidaysInput, setHolidaysInput] = useState('')
+  const [afterHoursMessage, setAfterHoursMessage] = useState<AfterHoursMessage | null>(null)
+  const [taskConfig, setTaskConfig] = useState<AfterHoursTaskConfig | null>(null)
+
   useEffect(() => {
     fetchData()
     fetchDepartments()
-  }, [])
+    if (activeTab === 'business-hours') {
+      fetchBusinessHoursData()
+    }
+  }, [activeTab, selectedBusinessHoursDept])
   
   const fetchDepartments = async () => {
     try {
@@ -548,10 +566,7 @@ export default function ConfigurationsPage() {
             Notificações
           </button>
           <button
-            onClick={() => {
-              setActiveTab('business-hours')
-              window.location.href = '/business-hours'
-            }}
+            onClick={() => setActiveTab('business-hours')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'business-hours'
                 ? 'border-blue-500 text-blue-600'
@@ -1221,6 +1236,373 @@ export default function ConfigurationsPage() {
               </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Tab: Horários de Atendimento */}
+      {activeTab === 'business-hours' && (
+        <div className="space-y-6">
+          {/* Seletor de Departamento */}
+          <Card className="p-4">
+            <div className="flex items-center gap-4">
+              <Label className="font-medium">Departamento:</Label>
+              <select
+                value={selectedBusinessHoursDept || ''}
+                onChange={(e) => setSelectedBusinessHoursDept(e.target.value || null)}
+                className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="">Geral (Tenant)</option>
+                {businessHoursDepts.map((dept) => (
+                  <option key={dept.id} value={dept.id}>
+                    {dept.name}
+                  </option>
+                ))}
+              </select>
+              <div className="flex-1" />
+              <div className="text-sm text-gray-500">
+                {selectedBusinessHoursDept
+                  ? `Configurando para: ${businessHoursDepts.find(d => d.id === selectedBusinessHoursDept)?.name || 'Departamento'}`
+                  : 'Configurando para: Geral (todos os departamentos)'}
+              </div>
+            </div>
+          </Card>
+
+          {/* Sub-tabs */}
+          <div className="border-b border-gray-200">
+            <nav className="-mb-px flex space-x-8">
+              <button
+                onClick={() => setBusinessHoursSubTab('hours')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                  businessHoursSubTab === 'hours'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Clock className="h-4 w-4" />
+                Horários
+              </button>
+              <button
+                onClick={() => setBusinessHoursSubTab('message')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                  businessHoursSubTab === 'message'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <MessageSquare className="h-4 w-4" />
+                Mensagem Automática
+              </button>
+              <button
+                onClick={() => setBusinessHoursSubTab('tasks')}
+                className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                  businessHoursSubTab === 'tasks'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <Calendar className="h-4 w-4" />
+                Tarefas Automáticas
+              </button>
+            </nav>
+          </div>
+
+          {/* Sub-tab Content: Horários */}
+          {businessHoursSubTab === 'hours' && businessHours && (
+            <Card className="p-6">
+              <div className="space-y-6">
+                <div>
+                  <Label htmlFor="timezone">Fuso Horário</Label>
+                  <select
+                    id="timezone"
+                    value={businessHours.timezone}
+                    onChange={(e) => setBusinessHours({ ...businessHours, timezone: e.target.value })}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  >
+                    {TIMEZONES.map((tz) => (
+                      <option key={tz.value} value={tz.value}>
+                        {tz.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Horários por Dia da Semana</h3>
+                  {DAYS.map((day) => {
+                    const enabled = businessHours[`${day.key}_enabled` as keyof BusinessHours] as boolean
+                    const start = businessHours[`${day.key}_start` as keyof BusinessHours] as string
+                    const end = businessHours[`${day.key}_end` as keyof BusinessHours] as string
+
+                    return (
+                      <div key={day.key} className="flex items-center gap-4 p-4 border border-gray-200 rounded-lg">
+                        <div className="flex items-center gap-2 w-32">
+                          <input
+                            type="checkbox"
+                            id={`${day.key}_enabled`}
+                            checked={enabled}
+                            onChange={(e) => updateDayHours(day.key, 'enabled', e.target.checked)}
+                            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          <Label htmlFor={`${day.key}_enabled`} className="font-medium cursor-pointer">
+                            {day.label}
+                          </Label>
+                        </div>
+                        {enabled && (
+                          <div className="flex items-center gap-2 flex-1">
+                            <Input
+                              type="time"
+                              value={start}
+                              onChange={(e) => updateDayHours(day.key, 'start', e.target.value)}
+                              className="w-32"
+                            />
+                            <span className="text-gray-500">até</span>
+                            <Input
+                              type="time"
+                              value={end}
+                              onChange={(e) => updateDayHours(day.key, 'end', e.target.value)}
+                              className="w-32"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                <div>
+                  <Label htmlFor="holidays">Feriados (um por linha, formato: YYYY-MM-DD)</Label>
+                  <textarea
+                    id="holidays"
+                    value={holidaysInput}
+                    onChange={(e) => setHolidaysInput(e.target.value)}
+                    placeholder="2025-12-25&#10;2026-01-01"
+                    rows={4}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 font-mono text-sm"
+                  />
+                  <p className="mt-1 text-sm text-gray-500">
+                    Exemplo: 2025-12-25 (Natal), 2026-01-01 (Ano Novo)
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="is_active"
+                    checked={businessHours.is_active}
+                    onChange={(e) => setBusinessHours({ ...businessHours, is_active: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <Label htmlFor="is_active" className="cursor-pointer">
+                    Ativo
+                  </Label>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveBusinessHours} disabled={isLoading} className="flex items-center gap-2">
+                    <Save className="h-4 w-4" />
+                    {isLoading ? 'Salvando...' : 'Salvar Horários'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Sub-tab Content: Mensagem */}
+          {businessHoursSubTab === 'message' && afterHoursMessage && (
+            <Card className="p-6">
+              <div className="space-y-6">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <div className="text-sm text-blue-800">
+                      <p className="font-medium mb-1">Variáveis disponíveis:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li><code className="bg-blue-100 px-1 rounded">&#123;contact_name&#125;</code> - Nome do contato</li>
+                        <li><code className="bg-blue-100 px-1 rounded">&#123;department_name&#125;</code> - Nome do departamento</li>
+                        <li><code className="bg-blue-100 px-1 rounded">&#123;next_open_time&#125;</code> - Próximo horário de abertura</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="message_template">Mensagem Automática</Label>
+                  <textarea
+                    id="message_template"
+                    value={afterHoursMessage.message_template}
+                    onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, message_template: e.target.value })}
+                    rows={8}
+                    className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="Olá {contact_name}! Recebemos sua mensagem fora do horário..."
+                  />
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="message_is_active"
+                    checked={afterHoursMessage.is_active}
+                    onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, is_active: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <Label htmlFor="message_is_active" className="cursor-pointer">
+                    Ativo
+                  </Label>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveMessage} disabled={isLoading} className="flex items-center gap-2">
+                    <Save className="h-4 w-4" />
+                    {isLoading ? 'Salvando...' : 'Salvar Mensagem'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Sub-tab Content: Tarefas */}
+          {businessHoursSubTab === 'tasks' && taskConfig && (
+            <Card className="p-6">
+              <div className="space-y-6">
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="create_task_enabled"
+                    checked={taskConfig.create_task_enabled}
+                    onChange={(e) => setTaskConfig({ ...taskConfig, create_task_enabled: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <Label htmlFor="create_task_enabled" className="cursor-pointer font-medium">
+                    Criar Tarefa Automaticamente
+                  </Label>
+                </div>
+
+                {taskConfig.create_task_enabled && (
+                  <>
+                    <div>
+                      <Label htmlFor="task_title_template">Título da Tarefa</Label>
+                      <Input
+                        id="task_title_template"
+                        value={taskConfig.task_title_template}
+                        onChange={(e) => setTaskConfig({ ...taskConfig, task_title_template: e.target.value })}
+                        placeholder="Retornar contato de {contact_name}"
+                        className="mt-1"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="task_description_template">Descrição da Tarefa</Label>
+                      <textarea
+                        id="task_description_template"
+                        value={taskConfig.task_description_template}
+                        onChange={(e) => setTaskConfig({ ...taskConfig, task_description_template: e.target.value })}
+                        rows={6}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        placeholder="Cliente entrou em contato fora do horário..."
+                      />
+                      <p className="mt-1 text-sm text-gray-500">
+                        Variáveis: <code>&#123;contact_name&#125;</code>, <code>&#123;contact_phone&#125;</code>, <code>&#123;message_time&#125;</code>, <code>&#123;message_content&#125;</code>, <code>&#123;next_open_time&#125;</code>
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="task_priority">Prioridade</Label>
+                        <select
+                          id="task_priority"
+                          value={taskConfig.task_priority}
+                          onChange={(e) => setTaskConfig({ ...taskConfig, task_priority: e.target.value as any })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="low">Baixa</option>
+                          <option value="medium">Média</option>
+                          <option value="high">Alta</option>
+                          <option value="urgent">Urgente</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <Label htmlFor="task_due_date_offset_hours">Vencimento (horas após mensagem)</Label>
+                        <Input
+                          id="task_due_date_offset_hours"
+                          type="number"
+                          min="1"
+                          value={taskConfig.task_due_date_offset_hours}
+                          onChange={(e) => setTaskConfig({ ...taskConfig, task_due_date_offset_hours: parseInt(e.target.value) || 2 })}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="auto_assign_to_department"
+                        checked={taskConfig.auto_assign_to_department}
+                        onChange={(e) => setTaskConfig({ ...taskConfig, auto_assign_to_department: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <Label htmlFor="auto_assign_to_department" className="cursor-pointer">
+                        Atribuir ao Departamento
+                      </Label>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="auto_assign_to_agent">Atribuir a Agente Específico (opcional)</Label>
+                      <select
+                        id="auto_assign_to_agent"
+                        value={taskConfig.auto_assign_to_agent || ''}
+                        onChange={(e) => setTaskConfig({ ...taskConfig, auto_assign_to_agent: e.target.value || null })}
+                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      >
+                        <option value="">Nenhum (usar departamento)</option>
+                        {businessHoursUsers.map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.first_name && user.last_name
+                              ? `${user.first_name} ${user.last_name} (${user.email})`
+                              : user.email}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="include_message_preview"
+                        checked={taskConfig.include_message_preview}
+                        onChange={(e) => setTaskConfig({ ...taskConfig, include_message_preview: e.target.checked })}
+                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                      />
+                      <Label htmlFor="include_message_preview" className="cursor-pointer">
+                        Incluir Preview da Mensagem na Descrição
+                      </Label>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="task_is_active"
+                    checked={taskConfig.is_active}
+                    onChange={(e) => setTaskConfig({ ...taskConfig, is_active: e.target.checked })}
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  />
+                  <Label htmlFor="task_is_active" className="cursor-pointer">
+                    Ativo
+                  </Label>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveTaskConfig} disabled={isLoading} className="flex items-center gap-2">
+                    <Save className="h-4 w-4" />
+                    {isLoading ? 'Salvando...' : 'Salvar Configuração'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
         </div>
       )}
     </div>
