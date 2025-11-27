@@ -66,7 +66,10 @@ class BusinessHoursService:
         
         if not business_hours:
             # Sem horário configurado = sempre aberto
+            logger.info(f"⏰ [BUSINESS HOURS] Nenhum horário configurado para tenant={tenant.name}, department={department.name if department else 'None'} - considerando sempre aberto")
             return True, None
+        
+        logger.info(f"⏰ [BUSINESS HOURS] Verificando horário: tenant={tenant.name}, department={department.name if department else 'None'}, config_id={business_hours.id}")
         
         # Usa datetime fornecido ou agora
         if check_datetime is None:
@@ -79,40 +82,49 @@ class BusinessHoursService:
         local_time = local_datetime.time()
         weekday = local_datetime.weekday()  # 0=Monday, 6=Sunday
         
+        logger.info(f"⏰ [BUSINESS HOURS] Data/hora local: {local_datetime.strftime('%Y-%m-%d %H:%M:%S')} (timezone: {business_hours.timezone})")
+        logger.info(f"⏰ [BUSINESS HOURS] Dia da semana: {weekday} (0=Segunda, 6=Domingo)")
+        
         # Verifica se é feriado
         holidays = business_hours.holidays or []
         date_str = local_date.strftime('%Y-%m-%d')
         if date_str in holidays:
             # É feriado = fechado
+            logger.info(f"⏰ [BUSINESS HOURS] É feriado ({date_str}) - fechado")
             next_open = BusinessHoursService._get_next_open_time(business_hours, local_datetime)
             return False, next_open
         
         # Mapeia weekday para campos do modelo
         day_configs = {
-            0: ('monday_enabled', 'monday_start', 'monday_end'),    # Segunda
-            1: ('tuesday_enabled', 'tuesday_start', 'tuesday_end'),  # Terça
-            2: ('wednesday_enabled', 'wednesday_start', 'wednesday_end'),  # Quarta
-            3: ('thursday_enabled', 'thursday_start', 'thursday_end'),  # Quinta
-            4: ('friday_enabled', 'friday_start', 'friday_end'),    # Sexta
-            5: ('saturday_enabled', 'saturday_start', 'saturday_end'),  # Sábado
-            6: ('sunday_enabled', 'sunday_start', 'sunday_end'),   # Domingo
+            0: ('monday_enabled', 'monday_start', 'monday_end', 'Segunda-feira'),    # Segunda
+            1: ('tuesday_enabled', 'tuesday_start', 'tuesday_end', 'Terça-feira'),  # Terça
+            2: ('wednesday_enabled', 'wednesday_start', 'wednesday_end', 'Quarta-feira'),  # Quarta
+            3: ('thursday_enabled', 'thursday_start', 'thursday_end', 'Quinta-feira'),  # Quinta
+            4: ('friday_enabled', 'friday_start', 'friday_end', 'Sexta-feira'),    # Sexta
+            5: ('saturday_enabled', 'saturday_start', 'saturday_end', 'Sábado'),  # Sábado
+            6: ('sunday_enabled', 'sunday_start', 'sunday_end', 'Domingo'),   # Domingo
         }
         
-        enabled_field, start_field, end_field = day_configs[weekday]
+        enabled_field, start_field, end_field, day_name = day_configs[weekday]
         is_enabled = getattr(business_hours, enabled_field)
         start_time = getattr(business_hours, start_field)
         end_time = getattr(business_hours, end_field)
         
+        logger.info(f"⏰ [BUSINESS HOURS] {day_name}: enabled={is_enabled}, horário={start_time} - {end_time}, hora atual={local_time}")
+        
         if not is_enabled:
             # Dia desabilitado = fechado
+            logger.info(f"⏰ [BUSINESS HOURS] {day_name} está desabilitado - fechado")
             next_open = BusinessHoursService._get_next_open_time(business_hours, local_datetime)
             return False, next_open
         
         # Verifica se está dentro do horário
         if start_time <= local_time <= end_time:
+            logger.info(f"⏰ [BUSINESS HOURS] Dentro do horário de atendimento ({start_time} <= {local_time} <= {end_time})")
             return True, None
         
         # Fora do horário
+        logger.info(f"⏰ [BUSINESS HOURS] Fora do horário de atendimento ({local_time} não está entre {start_time} e {end_time})")
         next_open = BusinessHoursService._get_next_open_time(business_hours, local_datetime)
         return False, next_open
     
