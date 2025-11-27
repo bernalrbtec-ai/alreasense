@@ -21,9 +21,15 @@ ENV VITE_API_BASE_URL=$VITE_API_BASE_URL
 ENV VITE_WS_BASE_URL=$VITE_WS_BASE_URL
 ENV VITE_APP_NAME=$VITE_APP_NAME
 ENV VITE_APP_VERSION=$VITE_APP_VERSION
+
+# Build the application
 RUN npm run build
 
-# Expose port
+# Verify build output
+RUN ls -la dist/ || (echo "❌ Build failed - dist directory not created" && exit 1)
+RUN test -f dist/index.html || (echo "❌ Build failed - index.html not found" && exit 1)
+
+# Expose port (Railway will inject PORT env var at runtime)
 EXPOSE 80
 
 # Start the application
