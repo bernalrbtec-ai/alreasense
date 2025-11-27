@@ -8,6 +8,9 @@ from django.db.models import Q
 from django.utils import timezone
 from datetime import timedelta
 
+# Importar modelos de horários de atendimento
+from .models_business_hours import BusinessHours, AfterHoursMessage, AfterHoursTaskConfig
+
 
 class Conversation(models.Model):
     """

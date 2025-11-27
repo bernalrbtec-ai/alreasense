@@ -38,3 +38,4 @@ export const ProtectedAgendaRoute: React.FC<ProtectedAgendaRouteProps> = ({
   return <>{children}</>
 }
 
+
