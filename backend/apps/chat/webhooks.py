@@ -743,9 +743,28 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Conteúdo (para outros tipos de mensagem)
         contact_message_data = None
         mentions_list = []  # ✅ NOVO: Lista de menções na mensagem recebida
+        quoted_message_id_evolution = None  # ✅ NOVO: ID da Evolution da mensagem sendo respondida
+        
+        # ✅ NOVO: Função helper para extrair quotedMessage de qualquer tipo de mensagem
+        def extract_quoted_message(context_info):
+            """Extrai quotedMessage do contextInfo."""
+            if not context_info:
+                return None
+            quoted_message = context_info.get('quotedMessage', {})
+            if quoted_message:
+                quoted_key = quoted_message.get('key', {})
+                return quoted_key.get('id')
+            return None
         
         if message_type == 'conversation':
             content = message_info.get('conversation', '')
+            
+            # ✅ NOVO: Verificar contextInfo mesmo em mensagens simples (pode ter reply)
+            conversation_context = message_info.get('contextInfo', {})
+            quoted_id = extract_quoted_message(conversation_context)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem conversation é resposta de: {quoted_id}")
         elif message_type == 'extendedTextMessage':
             extended_text = message_info.get('extendedTextMessage', {})
             content = extended_text.get('text', '')
@@ -753,6 +772,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # ✅ NOVO: Extrair menções do contextInfo (quando mensagem recebida tem menções)
             context_info = extended_text.get('contextInfo', {})
             mentioned_jids = context_info.get('mentionedJid', [])
+            
+            # ✅ NOVO: Extrair quotedMessage (mensagem sendo respondida)
+            quoted_id = extract_quoted_message(context_info)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem extendedText é resposta de: {quoted_id}")
             
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas na mensagem recebida: {len(mentioned_jids)}")
@@ -794,6 +819,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             context_info = image_msg.get('contextInfo', {})
             mentioned_jids = context_info.get('mentionedJid', [])
             
+            # ✅ NOVO: Extrair quotedMessage (mensagem sendo respondida)
+            quoted_id = extract_quoted_message(context_info)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem de imagem é resposta de: {quoted_id}")
+            
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas na imagem recebida: {len(mentioned_jids)}")
                 from apps.notifications.services import normalize_phone
@@ -823,6 +854,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             context_info = video_msg.get('contextInfo', {})
             mentioned_jids = context_info.get('mentionedJid', [])
             
+            # ✅ NOVO: Extrair quotedMessage (mensagem sendo respondida)
+            quoted_id = extract_quoted_message(context_info)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem de vídeo é resposta de: {quoted_id}")
+            
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas no vídeo recebido: {len(mentioned_jids)}")
                 from apps.notifications.services import normalize_phone
@@ -845,9 +882,25 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         'name': mention_name
                     })
         elif message_type == 'documentMessage':
-            content = message_info.get('documentMessage', {}).get('caption', '')
+            document_msg = message_info.get('documentMessage', {})
+            content = document_msg.get('caption', '')
+            
+            # ✅ NOVO: Extrair quotedMessage (mensagem sendo respondida)
+            context_info = document_msg.get('contextInfo', {})
+            quoted_id = extract_quoted_message(context_info)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem de documento é resposta de: {quoted_id}")
         elif message_type == 'audioMessage':
+            audio_msg = message_info.get('audioMessage', {})
             content = ''  # Player de áudio já é auto-explicativo, não precisa de texto
+            
+            # ✅ NOVO: Extrair quotedMessage (mensagem sendo respondida)
+            context_info = audio_msg.get('contextInfo', {})
+            quoted_id = extract_quoted_message(context_info)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem de áudio é resposta de: {quoted_id}")
         elif message_type == 'contactMessage':
             # ✅ NOVO: Extrair dados do contato compartilhado
             contact_data = message_info.get('contactMessage', {})
@@ -1403,6 +1456,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if mentions_list:
             message_defaults['metadata']['mentions'] = mentions_list
             logger.info(f"✅ [WEBHOOK] Menções adicionadas ao metadata: {len(mentions_list)}")
+        
+        # ✅ NOVO: Processar quotedMessage (mensagem sendo respondida)
+        if quoted_message_id_evolution:
+            try:
+                # Buscar mensagem original pelo message_id da Evolution
+                original_message = Message.objects.filter(
+                    message_id=quoted_message_id_evolution,
+                    conversation__tenant=tenant
+                ).first()
+                
+                if original_message:
+                    # Salvar UUID interno da mensagem original no metadata
+                    message_defaults['metadata']['reply_to'] = str(original_message.id)
+                    logger.info(f"💬 [WEBHOOK] Mensagem é resposta de: {original_message.id} (Evolution ID: {quoted_message_id_evolution})")
+                else:
+                    logger.warning(f"⚠️ [WEBHOOK] Mensagem original não encontrada para reply: {quoted_message_id_evolution}")
+                    # Salvar o message_id da Evolution como fallback (pode ser útil para debug)
+                    message_defaults['metadata']['reply_to_evolution_id'] = quoted_message_id_evolution
+            except Exception as e:
+                logger.error(f"❌ [WEBHOOK] Erro ao processar quotedMessage: {e}", exc_info=True)
         
         # Para grupos, adicionar quem enviou
         if is_group and sender_phone:

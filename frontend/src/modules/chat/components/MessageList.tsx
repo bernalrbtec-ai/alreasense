@@ -507,6 +507,7 @@ export function MessageList() {
           {messages.map((msg) => (
             <div
               key={msg.id}
+              data-message-id={msg.id}
               className={`flex flex-col ${msg.direction === 'outgoing' ? 'items-end' : 'items-start'} ${
                 visibleMessages.has(msg.id) 
                   ? 'opacity-100 translate-y-0' 
@@ -553,23 +554,71 @@ export function MessageList() {
                   const repliedMessage = messages.find(m => m.id === replyToId);
                   
                   if (repliedMessage) {
+                    // ✅ MELHORIA: Função para scroll até mensagem original
+                    const scrollToOriginal = () => {
+                      const originalElement = document.querySelector(`[data-message-id="${replyToId}"]`);
+                      if (originalElement) {
+                        originalElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        // Destacar mensagem original brevemente
+                        originalElement.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-75');
+                        setTimeout(() => {
+                          originalElement.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-75');
+                        }, 2000);
+                      }
+                    };
+                    
+                  // ✅ MELHORIA: Detectar tipo de anexo
+                  const getAttachmentType = () => {
+                    if (!repliedMessage.attachments || repliedMessage.attachments.length === 0) return null;
+                    const attachment = repliedMessage.attachments[0];
+                    if (attachment.is_image) return '🖼️ Imagem';
+                    if (attachment.is_video) return '🎥 Vídeo';
+                    if (attachment.is_audio) return '🎵 Áudio';
+                    if (attachment.is_document) return '📄 Documento';
+                    return '📎 Anexo';
+                  };
+                  
+                  const attachmentType = getAttachmentType();
+                  const displayContent = repliedMessage.content 
+                    ? (repliedMessage.content.length > 80 
+                        ? repliedMessage.content.substring(0, 80) + '...' 
+                        : repliedMessage.content)
+                    : (attachmentType || 'Mensagem');
+                  
                     return (
-                      <div className="mb-2 pl-3 border-l-4 border-l-blue-500 bg-gray-50 rounded-r-lg py-1.5">
+                      <div 
+                        className="mb-2 pl-3 border-l-4 border-l-blue-500 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        onClick={scrollToOriginal}
+                        title="Clique para ver a mensagem original"
+                      >
                         <div className="flex items-center gap-1 mb-0.5">
-                          <Reply className="w-3 h-3 text-blue-500" />
-                          <p className="text-xs font-medium text-blue-600">
+                          <Reply className="w-3 h-3 text-blue-500 flex-shrink-0" />
+                          <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
                             {repliedMessage.direction === 'incoming' 
                               ? (repliedMessage.sender_name || repliedMessage.sender_phone || 'Contato')
                               : 'Você'}
                           </p>
                         </div>
-                        <p className="text-xs text-gray-600 line-clamp-1">
-                          {repliedMessage.content || (repliedMessage.attachments && repliedMessage.attachments.length > 0 ? '📎 Anexo' : 'Mensagem')}
+                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 break-words">
+                          {displayContent}
                         </p>
                       </div>
                     );
                   }
-                  return null;
+                  // ✅ FALLBACK: Se mensagem não encontrada, mostrar mensagem genérica
+                  return (
+                    <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <Reply className="w-3 h-3 text-gray-500" />
+                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+                          Mensagem não encontrada
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+                        A mensagem original pode ter sido removida
+                      </p>
+                    </div>
+                  );
                 })()}
                 
                 {/* ✅ NOVO: Contato compartilhado */}

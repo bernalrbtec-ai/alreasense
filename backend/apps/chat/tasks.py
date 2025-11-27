@@ -619,6 +619,22 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         content = message.content
         attachment_urls = message.metadata.get('attachment_urls', []) if message.metadata else []
         include_signature = message.metadata.get('include_signature', True) if message.metadata else True  # ✅ Por padrão inclui assinatura
+        reply_to_uuid = message.metadata.get('reply_to') if message.metadata else None  # ✅ UUID interno da mensagem sendo respondida
+        
+        # ✅ NOVO: Buscar message_id da Evolution da mensagem original (se reply_to existe)
+        quoted_message_id = None
+        if reply_to_uuid:
+            try:
+                original_message = await sync_to_async(
+                    Message.objects.filter(id=reply_to_uuid, conversation=conversation).first
+                )()
+                if original_message and original_message.message_id:
+                    quoted_message_id = original_message.message_id
+                    logger.info(f"💬 [CHAT ENVIO] Mensagem é resposta de: {reply_to_uuid} (Evolution ID: {quoted_message_id})")
+                else:
+                    logger.warning(f"⚠️ [CHAT ENVIO] Mensagem original não encontrada ou sem message_id: {reply_to_uuid}")
+            except Exception as e:
+                logger.error(f"❌ [CHAT ENVIO] Erro ao buscar mensagem original para reply: {e}", exc_info=True)
         
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
@@ -702,6 +718,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
                         }
                         
+                        # ✅ NOVO: Adicionar quotedMessageId se for resposta
+                        if quoted_message_id:
+                            payload['quotedMessageId'] = quoted_message_id
+                            logger.info(f"💬 [CHAT ENVIO] Adicionando quotedMessageId ao áudio: {quoted_message_id}")
+                        
                         logger.info("🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
                         logger.info("   Destinatário: %s", masked_recipient)
                         logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
@@ -725,6 +746,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         }
                         if content:
                             payload['caption'] = content  # Caption direto no root também
+                        
+                        # ✅ NOVO: Adicionar quotedMessageId se for resposta
+                        if quoted_message_id:
+                            payload['quotedMessageId'] = quoted_message_id
+                            logger.info(f"💬 [CHAT ENVIO] Adicionando quotedMessageId à mídia: {quoted_message_id}")
                     
                     # Endpoint: sendWhatsAppAudio para PTT, sendMedia para outros
                     if is_audio:
@@ -889,6 +915,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     'number': final_number,
                     'text': content.strip()
                 }
+                
+                # ✅ NOVO: Adicionar quotedMessageId se for resposta
+                if quoted_message_id:
+                    payload['quotedMessageId'] = quoted_message_id
+                    logger.info(f"💬 [CHAT ENVIO] Adicionando quotedMessageId: {quoted_message_id}")
                 
                 # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
                 if conversation.conversation_type == 'group':

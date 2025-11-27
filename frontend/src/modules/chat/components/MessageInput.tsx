@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, PenTool } from 'lucide-react';
+import { Send, Smile, PenTool, Reply, X } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -327,6 +327,40 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
 
   return (
     <div className="relative">
+      {/* ✅ NOVO: Preview de mensagem respondida */}
+      {replyToMessage && (
+        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] border-t border-gray-300">
+          <div className="bg-white rounded-lg border-l-4 border-l-blue-500 shadow-sm p-2.5 flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 mb-1">
+                <Reply className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
+                <span className="text-xs font-semibold text-blue-600">
+                  {replyToMessage.direction === 'incoming' 
+                    ? (replyToMessage.sender_name || replyToMessage.sender_phone || 'Contato')
+                    : 'Você'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-600 line-clamp-2 break-words">
+                {replyToMessage.content 
+                  ? (replyToMessage.content.length > 100 
+                      ? replyToMessage.content.substring(0, 100) + '...' 
+                      : replyToMessage.content)
+                  : (replyToMessage.attachments && replyToMessage.attachments.length > 0
+                      ? `📎 ${replyToMessage.attachments[0].original_filename || 'Anexo'}`
+                      : 'Mensagem')}
+              </p>
+            </div>
+            <button
+              onClick={clearReply}
+              className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+              title="Cancelar resposta"
+            >
+              <X className="w-4 h-4 text-gray-500" />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Thumbnail preview acima do input */}
       {selectedFile && (
         <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] border-t border-gray-300">
