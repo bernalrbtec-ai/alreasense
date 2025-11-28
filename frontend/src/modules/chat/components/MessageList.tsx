@@ -19,6 +19,7 @@ import ContactModal from '@/components/contacts/ContactModal';
 import { MentionRenderer } from './MentionRenderer';
 import { SharedContactCard } from './SharedContactCard';
 import { MessageInfoModal } from './MessageInfoModal';
+import { ForwardMessageModal } from './ForwardMessageModal';
 import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -777,6 +778,22 @@ export function MessageList() {
           onShowEmojiPicker={(message) => {
             setContextMenu(null);
             setEmojiPickerMessage(message);
+          }}
+          onShowForward={(message) => {
+            setContextMenu(null);
+            setForwardMessage(message);
+          }}
+        />
+      )}
+
+      {/* Modal de Encaminhar (renderizado no MessageList para não ser desmontado) */}
+      {forwardMessage && (
+        <ForwardMessageModal
+          message={forwardMessage}
+          onClose={() => setForwardMessage(null)}
+          onSuccess={() => {
+            setForwardMessage(null);
+            // Opcional: atualizar lista de mensagens
           }}
         />
       )}
