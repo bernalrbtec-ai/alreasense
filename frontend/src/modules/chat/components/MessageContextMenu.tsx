@@ -165,12 +165,19 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
     }
 
     try {
-      // TODO: Implementar endpoint de apagar mensagem
-      toast.info('Funcionalidade de apagar em desenvolvimento');
+      // ✅ IMPLEMENTADO: Endpoint de apagar mensagem
+      await api.post(`/chat/messages/${message.id}/delete/`);
+      toast.success('Mensagem apagada com sucesso');
+      
+      // Atualizar store para marcar como apagada
+      const { updateMessageDeleted } = useChatStore.getState();
+      updateMessageDeleted(message.id);
+      
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('❌ Erro ao apagar mensagem:', error);
-      toast.error('Erro ao apagar mensagem');
+      const errorMessage = error.response?.data?.error || error.response?.data?.detail || 'Erro ao apagar mensagem';
+      toast.error(errorMessage);
     }
   };
 

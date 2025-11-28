@@ -276,16 +276,28 @@ class EvolutionWebhookView(APIView):
             instance_name = data.get('instance')
             if instance_name:
                 from apps.notifications.models import WhatsAppInstance
+                from apps.connections.models import EvolutionConnection
                 from django.db.models import Q
                 
+                # Buscar instância WhatsApp
                 whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
                     Q(instance_name=instance_name) | Q(friendly_name=instance_name),
                     is_active=True
                 ).first()
                 
+                # Buscar conexão Evolution
+                connection = EvolutionConnection.objects.filter(is_active=True).first()
+                
                 if whatsapp_instance:
-                    # TODO: Implementar lógica de deleção de mensagem no chat
-                    logger.info(f"🗑️ [FLOW CHAT] Mensagem deletada para tenant {whatsapp_instance.tenant.name}")
+                    # ✅ CORREÇÃO: Chamar handler correto do chat/webhooks.py
+                    from apps.chat.webhooks import handle_message_delete
+                    handle_message_delete(
+                        data,
+                        tenant=whatsapp_instance.tenant,
+                        connection=connection,
+                        wa_instance=whatsapp_instance
+                    )
+                    logger.info(f"🗑️ [FLOW CHAT] Mensagem deletada processada para tenant {whatsapp_instance.tenant.name}")
                 else:
                     logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
         except Exception as e:
