@@ -1993,13 +1993,12 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         try:
             # Chamar Evolution API com método DELETE
-            # ✅ CORREÇÃO: httpx.delete() não aceita json=, usar request() ou content=
-            import json as json_lib
+            # ✅ CORREÇÃO: httpx.delete() não aceita json=, mas request() aceita
             with httpx.Client(timeout=10.0) as client:
                 response = client.request(
                     method='DELETE',
                     url=endpoint,
-                    content=json_lib.dumps(payload),
+                    json=payload,  # httpx.request() aceita json= diretamente
                     headers=headers
                 )
                 
