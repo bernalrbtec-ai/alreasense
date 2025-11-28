@@ -79,6 +79,8 @@ export interface Message {
   error_message?: string;
   status: 'pending' | 'sent' | 'delivered' | 'seen' | 'failed';
   is_internal: boolean;
+  is_deleted?: boolean;
+  deleted_at?: string;
   attachments: MessageAttachment[];
   reactions?: MessageReaction[];
   reactions_summary?: Record<string, { count: number; users: Array<{ id: string; email: string; first_name?: string; last_name?: string }> }>;

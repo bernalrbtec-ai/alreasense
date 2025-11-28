@@ -31,6 +31,7 @@ interface ChatState {
     reactions: Message['reactions'],
     summary: Message['reactions_summary']
   ) => void;
+  updateMessageDeleted: (messageId: string) => void;
   updateAttachment: (attachmentId: string, updates: Partial<Message['attachments'][number]>) => void;
 
   // Estado do chat
@@ -357,6 +358,31 @@ export const useChatStore = create<ChatState>((set) => ({
       messages: updatedMessages,
       conversations: updatedConversations,
       activeConversation: updatedActiveConversation,
+    };
+  }),
+  updateMessageDeleted: (messageId) => set((state) => {
+    // Atualizar na lista de mensagens
+    const updatedMessages = state.messages.map(m =>
+      m.id === messageId
+        ? { ...m, is_deleted: true, deleted_at: new Date().toISOString() }
+        : m
+    );
+    
+    // Atualizar activeConversation se for a mesma conversa
+    const updatedActiveConversation = state.activeConversation
+      ? {
+          ...state.activeConversation,
+          messages: state.activeConversation.messages?.map(m =>
+            m.id === messageId
+              ? { ...m, is_deleted: true, deleted_at: new Date().toISOString() }
+              : m
+          ) || []
+        }
+      : null;
+    
+    return {
+      messages: updatedMessages,
+      activeConversation: updatedActiveConversation
     };
   }),
   updateAttachment: (attachmentId, updates) => set((state) => ({

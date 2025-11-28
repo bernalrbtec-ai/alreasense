@@ -200,6 +200,14 @@ export function useChatSocket(conversationId?: string) {
       }
     };
 
+    const handleMessageDeleted = (data: WebSocketMessage) => {
+      if (data.message) {
+        const { updateMessageDeleted } = useChatStore.getState();
+        console.log('🗑️ [HOOK] Mensagem apagada:', data.message.id);
+        updateMessageDeleted(data.message.id);
+      }
+    };
+
     // ✅ REMOVIDO: handleAttachmentUpdated movido para useTenantSocket
     // O useTenantSocket já escuta o grupo tenant e processa attachment_updated
     // Remover daqui evita duplicação, já que o ChatWebSocketManager também está conectado ao grupo tenant
@@ -224,6 +232,7 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.on('typing', handleTyping);
     chatWebSocketManager.on('conversation_updated', handleConversationUpdate);
     chatWebSocketManager.on('message_reaction_update', handleReactionUpdate);
+    chatWebSocketManager.on('message_deleted', handleMessageDeleted);
     // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
     chatWebSocketManager.on('new_conversation', handleNewConversation);
 
@@ -234,6 +243,7 @@ export function useChatSocket(conversationId?: string) {
       chatWebSocketManager.off('typing', handleTyping);
       chatWebSocketManager.off('conversation_updated', handleConversationUpdate);
       chatWebSocketManager.off('message_reaction_update', handleReactionUpdate);
+      chatWebSocketManager.off('message_deleted', handleMessageDeleted);
       // ✅ REMOVIDO: attachment_updated - processado por useTenantSocket (evita duplicação)
       chatWebSocketManager.off('new_conversation', handleNewConversation);
     };

@@ -246,6 +246,48 @@ def broadcast_conversation_assigned(conversation, old_user, new_user) -> None:
     )
 
 
+def broadcast_message_deleted(message) -> None:
+    """
+    Broadcast quando uma mensagem é apagada no WhatsApp.
+    
+    Args:
+        message: Instância do modelo Message que foi apagada
+    """
+    from apps.chat.utils.serialization import serialize_message_for_ws
+    
+    conversation = message.conversation
+    tenant_id = str(conversation.tenant_id)
+    conversation_id = str(conversation.id)
+    
+    # Serializar mensagem
+    message_data = serialize_message_for_ws(message)
+    
+    # Broadcast para conversa específica
+    room_group_name = f"chat_tenant_{tenant_id}_conversation_{conversation_id}"
+    broadcast_to_tenant(
+        tenant_id=tenant_id,
+        event_type='message_deleted',
+        data={
+            'message': message_data,
+            'conversation_id': conversation_id
+        }
+    )
+    
+    # Também enviar para grupo da conversa específica
+    channel_layer = get_channel_layer()
+    try:
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'message_deleted',
+                'message': message_data
+            }
+        )
+        logger.info(f"🗑️ [WEBSOCKET] Broadcast de mensagem apagada enviado: {message.id}")
+    except Exception as e:
+        logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast de mensagem apagada: {e}", exc_info=True)
+
+
 def broadcast_message_reaction_update(message, reaction_data: Optional[Dict[str, Any]] = None) -> None:
     """
     Broadcast quando uma reação é adicionada ou removida de uma mensagem.

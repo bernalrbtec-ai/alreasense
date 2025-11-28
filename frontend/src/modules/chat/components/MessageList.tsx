@@ -3,7 +3,7 @@
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply, AlertCircle } from 'lucide-react';
+import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply, AlertCircle, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
@@ -672,6 +672,14 @@ export function MessageList() {
                   <ReplyPreview replyToId={msg.metadata.reply_to} messages={messages} />
                 )}
                 
+                {/* ✅ NOVO: Mensagem apagada */}
+                {msg.is_deleted && (
+                  <div className="mb-2 flex items-center gap-2 text-gray-400 italic text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                    <Trash2 className="w-4 h-4 flex-shrink-0" />
+                    <span>Esta mensagem foi apagada</span>
+                  </div>
+                )}
+                
                 {/* ✅ NOVO: Contato compartilhado */}
                 {(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
                   <SharedContactCard
@@ -684,8 +692,8 @@ export function MessageList() {
                   />
                 )}
                 
-                {/* Anexos - renderizar ANTES do texto */}
-                {msg.attachments && msg.attachments.length > 0 && (
+                {/* Anexos - renderizar ANTES do texto (apenas se não estiver apagada) */}
+                {!msg.is_deleted && msg.attachments && msg.attachments.length > 0 && (
                   <div className="message-attachments mb-2 space-y-2">
                     {msg.attachments.map((attachment) => (
                       <AttachmentPreview
@@ -697,12 +705,12 @@ export function MessageList() {
                   </div>
                 )}
 
-                {/* Texto (se houver) - mostrar mesmo se só tiver anexos */}
+                {/* Texto (se houver) - mostrar mesmo se só tiver anexos (apenas se não estiver apagada) */}
                 {/* ✅ FIX: Ocultar conteúdo se for contato compartilhado (já exibido no card acima) */}
                 {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {/* ✅ NOVO: Formatação WhatsApp (negrito, itálico, riscado, monoespaçado) */}
-                {msg.content && msg.content.trim() && 
+                {!msg.is_deleted && msg.content && msg.content.trim() && 
                  !(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
                   <p className="text-sm whitespace-pre-wrap break-words mb-1">
                     {msg.metadata?.mentions && Array.isArray(msg.metadata.mentions) && msg.metadata.mentions.length > 0 ? (

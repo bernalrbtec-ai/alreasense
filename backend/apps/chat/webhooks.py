@@ -272,6 +272,8 @@ def evolution_webhook(request):
             handle_message_upsert(data, tenant, connection=connection, wa_instance=wa_instance)
         elif event_type == 'messages.update':
             handle_message_update(data, tenant)
+        elif event_type == 'messages.delete':
+            handle_message_delete(data, tenant, connection=connection, wa_instance=wa_instance)
         else:
             logger.info(f"ℹ️ [WEBHOOK] Evento não tratado: {event_type}")
         
@@ -2187,6 +2189,92 @@ def send_delivery_receipt(conversation: Conversation, message: Message):
     
     except Exception as e:
         logger.error(f"❌ [DELIVERY ACK] Erro ao enviar ACK de entrega: {e}", exc_info=True)
+
+
+def handle_message_delete(data, tenant, connection=None, wa_instance=None):
+    """
+    Processa mensagem apagada recebida do WhatsApp.
+    
+    Evolution API envia:
+    {
+        "event": "messages.delete",
+        "instance": "instance_name",
+        "data": {
+            "key": {
+                "remoteJid": "5517999999999@s.whatsapp.net",
+                "fromMe": false,
+                "id": "message_id_evolution"
+            }
+        }
+    }
+    """
+    from django.utils import timezone
+    
+    try:
+        delete_data = data.get('data', {})
+        key = delete_data.get('key', {})
+        message_id_evolution = key.get('id')
+        remote_jid = key.get('remoteJid')
+        from_me = key.get('fromMe', False)
+        
+        logger.info(f"🗑️ [WEBHOOK DELETE] Processando mensagem apagada:")
+        logger.info(f"   Message ID Evolution: {_mask_digits(message_id_evolution) if message_id_evolution else 'N/A'}")
+        logger.info(f"   Remote JID: {_mask_remote_jid(remote_jid) if remote_jid else 'N/A'}")
+        logger.info(f"   From Me: {from_me}")
+        
+        if not message_id_evolution:
+            logger.warning("⚠️ [WEBHOOK DELETE] message_id não fornecido")
+            return
+        
+        # Buscar mensagem no banco
+        message = Message.objects.filter(
+            message_id=message_id_evolution,
+            conversation__tenant=tenant
+        ).select_related('conversation', 'conversation__tenant').first()
+        
+        if not message:
+            logger.warning(f"⚠️ [WEBHOOK DELETE] Mensagem não encontrada: {_mask_digits(message_id_evolution)}")
+            logger.warning(f"   Tentando buscar por remoteJid e outros campos...")
+            
+            # Tentar buscar por remoteJid se disponível
+            if remote_jid:
+                # Extrair telefone do remoteJid
+                phone_raw = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+                from apps.notifications.services import normalize_phone
+                normalized_phone = normalize_phone(phone_raw)
+                
+                if normalized_phone:
+                    # Buscar conversa e depois mensagem
+                    conversation = Conversation.objects.filter(
+                        tenant=tenant,
+                        contact_phone__icontains=normalized_phone.replace('+', '')
+                    ).first()
+                    
+                    if conversation:
+                        message = Message.objects.filter(
+                            conversation=conversation,
+                            message_id=message_id_evolution
+                        ).select_related('conversation', 'conversation__tenant').first()
+        
+        if not message:
+            logger.warning(f"⚠️ [WEBHOOK DELETE] Mensagem não encontrada após busca alternativa")
+            return
+        
+        # Marcar como apagada
+        message.is_deleted = True
+        message.deleted_at = timezone.now()
+        message.save(update_fields=['is_deleted', 'deleted_at'])
+        
+        logger.info(f"✅ [WEBHOOK DELETE] Mensagem marcada como apagada: {message.id}")
+        logger.info(f"   Conversa: {message.conversation.contact_phone}")
+        logger.info(f"   Direction: {message.direction}")
+        
+        # Broadcast via WebSocket
+        from apps.chat.utils.websocket import broadcast_message_deleted
+        broadcast_message_deleted(message)
+        
+    except Exception as e:
+        logger.error(f"❌ [WEBHOOK DELETE] Erro ao processar mensagem apagada: {e}", exc_info=True)
 
 
 def send_read_receipt(conversation: Conversation, message: Message, max_retries: int = 3):

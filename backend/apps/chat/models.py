@@ -271,6 +271,18 @@ class Message(models.Model):
         verbose_name='Nota Interna',
         help_text='Notas internas não são enviadas para WhatsApp'
     )
+    is_deleted = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Mensagem Apagada',
+        help_text='True se mensagem foi apagada no WhatsApp'
+    )
+    deleted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Data de Exclusão',
+        help_text='Timestamp quando mensagem foi apagada'
+    )
     metadata = models.JSONField(
         default=dict,
         blank=True,
