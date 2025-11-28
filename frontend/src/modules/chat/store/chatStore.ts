@@ -110,11 +110,15 @@ export const useChatStore = create<ChatState>((set) => ({
     // ✅ MELHORIA: Usar função unificada upsertConversation (mesma lógica de addConversation)
     const updatedConversations = upsertConversation(state.conversations, conversation);
     
-    // ✅ Atualizar conversa ativa também para garantir que unread_count seja atualizado
+    // ✅ CORREÇÃO CRÍTICA: SEMPRE atualizar activeConversation se for a mesma conversa
+    // Isso garante que nome, foto, last_message, etc. atualizem em tempo real
+    // PRESERVAR mensagens existentes (não sobrescrever)
     const updatedActiveConversation = state.activeConversation?.id === conversation.id 
       ? {
           ...state.activeConversation,
-          ...conversation
+          ...conversation,  // ✅ Merge completo (não apenas campos específicos)
+          // ✅ PRESERVAR mensagens existentes (não sobrescrever)
+          messages: state.activeConversation.messages || []
         }
       : state.activeConversation;
     

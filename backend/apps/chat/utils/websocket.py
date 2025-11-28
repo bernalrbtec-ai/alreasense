@@ -102,6 +102,22 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
     if hasattr(conversation_with_annotate, 'last_message_list'):
         conversation.last_message_list = conversation_with_annotate.last_message_list
     
+    # ✅ CORREÇÃO CRÍTICA: Garantir que last_message_list sempre tenha dados
+    # Se prefetch falhar ou não retornar nada, buscar última mensagem diretamente
+    if not hasattr(conversation, 'last_message_list') or not conversation.last_message_list:
+        # Fallback: buscar última mensagem diretamente
+        last_msg = Message.objects.filter(
+            conversation=conversation
+        ).select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at').first()
+        
+        if last_msg:
+            conversation.last_message_list = [last_msg]
+            logger.debug(f"📨 [WEBSOCKET] Fallback: última mensagem buscada diretamente para conversa {conversation.id}")
+        else:
+            # Se realmente não há mensagens, criar lista vazia
+            conversation.last_message_list = []
+            logger.debug(f"📭 [WEBSOCKET] Nenhuma mensagem encontrada para conversa {conversation.id}")
+    
     # ✅ FIX: Garantir que last_message_at está atualizado (vem do banco após refresh_from_db)
     # Não precisa fazer nada extra, refresh_from_db já atualiza last_message_at
     
