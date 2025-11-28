@@ -47,36 +47,17 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
     try {
       setSending(true);
 
-      // Criar nova mensagem na conversa selecionada via REST API
-      const payload: any = {
-        conversation: selectedConversation.id,
-        content: message.content,
-        direction: 'outgoing',
-        is_internal: false
-      };
-
-      // Se a mensagem original tinha anexos, encaminhar também
-      if (message.attachments && message.attachments.length > 0) {
-        payload.metadata = {
-          attachment_urls: message.attachments.map(att => att.file_url).filter(Boolean),
-          forwarded_from: message.id,
-          forwarded_at: new Date().toISOString()
-        };
-      } else {
-        payload.metadata = {
-          forwarded_from: message.id,
-          forwarded_at: new Date().toISOString()
-        };
-      }
-
-      await api.post('/chat/messages/', payload);
+      // ✅ CORREÇÃO: Usar endpoint específico de encaminhar que chama Evolution API
+      await api.post(`/chat/messages/${message.id}/forward/`, {
+        conversation_id: selectedConversation.id
+      });
 
       toast.success(`Mensagem encaminhada para ${selectedConversation.contact_name || selectedConversation.contact_phone}`);
       onSuccess?.();
       onClose();
     } catch (error: any) {
       console.error('❌ Erro ao encaminhar mensagem:', error);
-      const errorMsg = error.response?.data?.error || error.message || 'Erro ao encaminhar mensagem';
+      const errorMsg = error.response?.data?.error || error.response?.data?.detail || error.message || 'Erro ao encaminhar mensagem';
       toast.error(errorMsg);
     } finally {
       setSending(false);

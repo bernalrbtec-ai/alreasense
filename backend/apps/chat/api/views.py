@@ -2032,6 +2032,192 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['post'], url_path='forward')
+    def forward_message(self, request, pk=None):
+        """
+        Encaminha uma mensagem para outra conversa via Evolution API.
+        
+        Body:
+        {
+            "conversation_id": "uuid-da-conversa-destino"
+        }
+        
+        Documentação Evolution API:
+        POST /chat/forwardMessage/{instance}
+        {
+            "number": "5517999999999",
+            "messageId": "message_id_evolution"
+        }
+        """
+        message = self.get_object()
+        user = request.user
+        
+        # Verificar se mensagem pertence ao tenant do usuário
+        if message.conversation.tenant_id != user.tenant_id:
+            return Response(
+                {'error': 'Mensagem não pertence ao seu tenant'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Verificar se mensagem tem message_id (Evolution ID)
+        if not message.message_id:
+            return Response(
+                {'error': 'Mensagem não pode ser encaminhada (não tem ID da Evolution)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar conversa destino
+        destination_conversation_id = request.data.get('conversation_id')
+        if not destination_conversation_id:
+            return Response(
+                {'error': 'conversation_id é obrigatório'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            destination_conversation = Conversation.objects.get(
+                id=destination_conversation_id,
+                tenant=user.tenant
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {'error': 'Conversa destino não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Verificar se não está encaminhando para a mesma conversa
+        if destination_conversation.id == message.conversation.id:
+            return Response(
+                {'error': 'Não é possível encaminhar para a mesma conversa'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar instância WhatsApp ativa
+        from apps.notifications.models import WhatsAppInstance
+        from apps.connections.models import EvolutionConnection
+        import httpx
+        
+        instance = WhatsAppInstance.objects.filter(
+            tenant=message.conversation.tenant,
+            is_active=True,
+            status='active'
+        ).first()
+        
+        if not instance:
+            return Response(
+                {'error': 'Nenhuma instância WhatsApp ativa'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server and not instance.api_url:
+            return Response(
+                {'error': 'Configuração da Evolution API não encontrada'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Preparar URL e credenciais
+        base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = instance.api_key or evolution_server.api_key
+        instance_name = instance.instance_name
+        
+        # Endpoint da Evolution API para encaminhar mensagem
+        # Documentação: POST /chat/forwardMessage/{instance}
+        endpoint = f"{base_url}/chat/forwardMessage/{instance_name}"
+        
+        # Preparar número do destinatário
+        destination_phone = destination_conversation.contact_phone.replace('+', '').replace('@s.whatsapp.net', '').replace('@g.us', '')
+        
+        payload = {
+            'number': destination_phone,
+            'messageId': message.message_id
+        }
+        
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
+        
+        # Importar funções de mascaramento
+        from apps.chat.webhooks import _mask_digits, _mask_remote_jid
+        
+        logger.info(f"📤 [FORWARD MESSAGE] Encaminhando mensagem via Evolution API:")
+        logger.info(f"   Endpoint: {endpoint}")
+        logger.info(f"   Message ID: {_mask_digits(message.message_id)}")
+        logger.info(f"   Destination: {_mask_digits(destination_phone)}")
+        logger.info(f"   From conversation: {message.conversation.contact_phone}")
+        logger.info(f"   To conversation: {destination_conversation.contact_phone}")
+        
+        try:
+            # Chamar Evolution API
+            with httpx.Client(timeout=10.0) as client:
+                response = client.post(endpoint, json=payload, headers=headers)
+                
+                if response.status_code in (200, 201):
+                    # Evolution API encaminhou com sucesso
+                    # Criar mensagem na conversa destino para manter histórico
+                    forwarded_message = Message.objects.create(
+                        conversation=destination_conversation,
+                        sender=user,
+                        content=message.content or '',
+                        direction='outgoing',
+                        status='sent',
+                        is_internal=False,
+                        metadata={
+                            'forwarded_from': str(message.id),
+                            'forwarded_from_conversation': str(message.conversation.id),
+                            'forwarded_at': timezone.now().isoformat(),
+                            'original_message_id': message.message_id
+                        }
+                    )
+                    
+                    # Se a mensagem original tinha anexos, copiar referências
+                    if message.attachments.exists():
+                        from apps.chat.models import MessageAttachment
+                        for original_attachment in message.attachments.all():
+                            MessageAttachment.objects.create(
+                                message=forwarded_message,
+                                file_url=original_attachment.file_url,
+                                short_url=original_attachment.short_url,
+                                mime_type=original_attachment.mime_type,
+                                original_filename=original_attachment.original_filename,
+                                file_size=original_attachment.file_size
+                            )
+                        forwarded_message.metadata['attachment_urls'] = [
+                            att.short_url or att.file_url
+                            for att in forwarded_message.attachments.all()
+                        ]
+                        forwarded_message.save(update_fields=['metadata'])
+                    
+                    logger.info(f"✅ [FORWARD MESSAGE] Mensagem encaminhada com sucesso: {forwarded_message.id}")
+                    
+                    # Broadcast via WebSocket
+                    from apps.chat.utils.websocket import broadcast_pending_message
+                    broadcast_pending_message(forwarded_message)
+                    
+                    return Response(
+                        {
+                            'status': 'success',
+                            'message': 'Mensagem encaminhada com sucesso',
+                            'forwarded_message_id': str(forwarded_message.id)
+                        },
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    logger.error(f"❌ [FORWARD MESSAGE] Erro {response.status_code} ao encaminhar mensagem:")
+                    logger.error(f"   Response: {response.text[:200]}")
+                    return Response(
+                        {'error': f'Erro ao encaminhar mensagem: {response.status_code}', 'details': response.text[:200]},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+        except Exception as e:
+            logger.error(f"❌ [FORWARD MESSAGE] Erro ao encaminhar mensagem: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao encaminhar mensagem: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     def get_queryset(self):
         """
         Filtra mensagens por conversas acessíveis ao usuário.
