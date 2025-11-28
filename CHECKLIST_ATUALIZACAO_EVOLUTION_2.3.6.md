@@ -1,17 +1,19 @@
-# ✅ Checklist de Atualização Evolution API 2.3.3 → 2.3.5
+# ✅ Checklist de Atualização Evolution API 2.3.3 → 2.3.6
 
 ## 📋 Pré-Atualização
 
 - [ ] Fazer backup do banco de dados
-- [ ] Documentar versão atual (2.3.3)
+- [ ] Documentar versão atual (2.3.3 → 2.3.6)
 - [ ] Verificar logs atuais funcionando
+- [ ] Verificar se há breaking changes entre 2.3.5 e 2.3.6
 
 ## 🔄 Durante a Atualização
 
-- [ ] Atualizar imagem Docker: `atendai/evolution-api:latest` ou `evoapicloud/evolution-api:latest`
+- [ ] Atualizar imagem Docker: `atendai/evolution-api:latest` ou `evoapicloud/evolution-api:latest` (versão 2.3.6)
 - [ ] Reiniciar containers
 - [ ] **REAUTORIZAR WhatsApp** (gerar novo QR Code e escanear)
 - [ ] Verificar se instâncias estão conectadas
+- [ ] Verificar logs da Evolution API para erros de inicialização
 
 ## ✅ Testes Pós-Atualização
 
