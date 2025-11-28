@@ -1071,22 +1071,69 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         else:
                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento (todas eram números de grupo?)")
                 
-                logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
-                logger.info(f"   Tipo: {conversation.conversation_type}")
-                logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                logger.info(f"   Número original: {recipient_value}")
-                logger.info(f"   Número final: {final_number}")
-                logger.info("   Destinatário (mascado): %s", _mask_remote_jid(final_number))
-                logger.info(f"   Tamanho do texto: {len(content)} caracteres")
-                logger.info("   Text (primeiros 100 chars): %s", _truncate_text(content, 100))
-                logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
-                
-                request_start = time.perf_counter()
-                response = await client.post(
-                    f"{base_url}/message/sendText/{instance.instance_name}",
-                    headers=headers,
-                    json=payload
-                )
+                # ✅ NOVO: Usar endpoint /message/reply se for resposta (mais direto e específico)
+                if quoted_message_id and quoted_remote_jid:
+                    # Endpoint específico para respostas: POST /message/reply/{instance}
+                    # Formato: { "number": "...", "reply_to": "message_id_evolution", "text": "..." }
+                    endpoint = f"{base_url}/message/reply/{instance.instance_name}"
+                    reply_payload = {
+                        'number': final_number,
+                        'reply_to': quoted_message_id,
+                        'text': content.strip()
+                    }
+                    
+                    # Adicionar menções se for grupo
+                    if conversation.conversation_type == 'group':
+                        metadata = message.metadata or {}
+                        mentions = metadata.get('mentions', [])
+                        if mentions:
+                            mention_phones = []
+                            for m in mentions:
+                                jid = m.get('jid', '')
+                                phone = m.get('phone', '')
+                                if jid:
+                                    jid_clean = jid.split('@')[0]
+                                    mention_phones.append(jid_clean)
+                                elif phone:
+                                    group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
+                                    if '@' in group_phone:
+                                        group_phone = group_phone.split('@')[0]
+                                    if phone != group_phone:
+                                        mention_phones.append(phone)
+                            if mention_phones:
+                                reply_payload['mentions'] = mention_phones
+                    
+                    logger.info(f"💬 [CHAT ENVIO] Usando endpoint /message/reply (resposta)")
+                    logger.info(f"   Endpoint: {endpoint}")
+                    logger.info(f"   Reply to: {_mask_digits(quoted_message_id)}")
+                    logger.info(f"   Number: {_mask_remote_jid(final_number)}")
+                    logger.info(f"   Text: {_truncate_text(content, 100)}")
+                    logger.info("   Payload (mascado): %s", mask_sensitive_data(reply_payload))
+                    
+                    request_start = time.perf_counter()
+                    response = await client.post(
+                        endpoint,
+                        headers=headers,
+                        json=reply_payload
+                    )
+                else:
+                    # Endpoint normal para mensagens sem resposta
+                    logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
+                    logger.info(f"   Tipo: {conversation.conversation_type}")
+                    logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
+                    logger.info(f"   Número original: {recipient_value}")
+                    logger.info(f"   Número final: {final_number}")
+                    logger.info("   Destinatário (mascado): %s", _mask_remote_jid(final_number))
+                    logger.info(f"   Tamanho do texto: {len(content)} caracteres")
+                    logger.info("   Text (primeiros 100 chars): %s", _truncate_text(content, 100))
+                    logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
+                    
+                    request_start = time.perf_counter()
+                    response = await client.post(
+                        f"{base_url}/message/sendText/{instance.instance_name}",
+                        headers=headers,
+                        json=payload
+                    )
                 latency = time.perf_counter() - request_start
                 record_latency(
                     'send_message_text',
