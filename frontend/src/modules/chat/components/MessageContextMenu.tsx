@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { MessageInfoModal } from './MessageInfoModal';
+import { ForwardMessageModal } from './ForwardMessageModal';
 import type { Message } from '../types';
 
 interface MessageContextMenuProps {
