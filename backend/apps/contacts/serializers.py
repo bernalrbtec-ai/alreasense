@@ -446,8 +446,14 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         Valida data/hora agendada:
         - Na criação: não pode ser no passado
         - Na atualização: não pode ser anterior à data de criação da tarefa
+        - ✅ CORREÇÃO: Se status é 'completed', due_date não é obrigatório
         """
         from django.utils import timezone
+        
+        # ✅ CORREÇÃO: Se status é 'completed', não validar due_date
+        status = self.initial_data.get('status') if hasattr(self, 'initial_data') else None
+        if status == 'completed' and not value:
+            return value  # Permitir None quando concluindo
         
         if not value:
             return value

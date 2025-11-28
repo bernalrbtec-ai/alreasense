@@ -1108,9 +1108,18 @@ class Task(models.Model):
         return self.task_type == 'agenda'
     
     def mark_completed(self, user=None):
-        """Marca a tarefa como concluída"""
+        """
+        Marca a tarefa como concluída.
+        
+        ✅ CORREÇÃO: O signal create_task_status_history já cria o histórico
+        automaticamente quando status muda para 'completed', então não precisa
+        criar manualmente aqui. Apenas salvar a mudança de status.
+        """
+        old_status = self.status
         self.status = 'completed'
         self.completed_at = timezone.now()
+        # ✅ CORREÇÃO: Salvar apenas status e completed_at
+        # O signal vai detectar a mudança e criar o histórico automaticamente
         self.save(update_fields=['status', 'completed_at'])
 
 

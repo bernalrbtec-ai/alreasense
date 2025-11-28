@@ -220,8 +220,9 @@ export default function TaskModal({
         payload.assigned_to = formData.assigned_to
       }
 
-      // Se tem data agendada, combinar data + hora
-      if (formData.has_due_date && formData.due_date) {
+      // ✅ CORREÇÃO: Se status é 'completed', não exigir due_date
+      // Se tem data agendada, combinar data + hora (apenas se não estiver concluindo)
+      if (formData.status !== 'completed' && formData.has_due_date && formData.due_date) {
         const dateTime = formData.due_time
           ? `${formData.due_date}T${formData.due_time}:00`
           : `${formData.due_date}T00:00:00`
@@ -235,6 +236,10 @@ export default function TaskModal({
         }
         
         payload.due_date = scheduledDate.toISOString()
+      } else if (formData.status === 'completed') {
+        // ✅ CORREÇÃO: Ao concluir, não enviar due_date (não é necessário)
+        // O backend vai definir completed_at automaticamente
+        delete payload.due_date
       }
 
       if (task) {
