@@ -1495,10 +1495,32 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             existing_message = Message.objects.filter(message_id=message_id).first()
         
         if existing_message:
-            logger.info(f"⚠️ [WEBHOOK] Mensagem já existe no banco (message_id={message_id}), ignorando duplicata")
+            logger.info(f"⚠️ [WEBHOOK] Mensagem já existe no banco (message_id={message_id}), preservando metadata existente")
             logger.info(f"   ID interno: {existing_message.id}")
             logger.info(f"   Conversa: {existing_message.conversation.id}")
             logger.info(f"   Content: {existing_message.content[:100] if existing_message.content else 'Sem conteúdo'}...")
+            logger.info(f"   Metadata existente: {existing_message.metadata}")
+            
+            # ✅ FIX CRÍTICO: Preservar metadata existente (especialmente reply_to)
+            # Se a mensagem foi criada pelo backend com reply_to, preservar
+            existing_metadata = existing_message.metadata or {}
+            new_metadata = message_defaults.get('metadata', {})
+            
+            # Mesclar metadata: preservar existente, adicionar apenas campos novos do webhook
+            merged_metadata = {**existing_metadata, **new_metadata}
+            
+            # ✅ IMPORTANTE: Se metadata existente tem reply_to, preservar (não sobrescrever)
+            if 'reply_to' in existing_metadata and 'reply_to' not in new_metadata:
+                # Manter reply_to existente
+                logger.info(f"💬 [WEBHOOK] Preservando reply_to existente: {existing_metadata.get('reply_to')}")
+            elif 'reply_to' in new_metadata:
+                # Se webhook trouxe reply_to (mensagem recebida é reply), usar do webhook
+                logger.info(f"💬 [WEBHOOK] Usando reply_to do webhook: {new_metadata.get('reply_to')}")
+            
+            # Atualizar metadata preservando reply_to
+            existing_message.metadata = merged_metadata
+            existing_message.save(update_fields=['metadata'])
+            
             message = existing_message
             msg_created = False
         else:
