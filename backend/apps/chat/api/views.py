@@ -1931,9 +1931,9 @@ class MessageViewSet(viewsets.ModelViewSet):
         instance_name = instance.instance_name
         
         # Endpoint da Evolution API para apagar mensagem
-        # Formato: DELETE /message/deleteMessage/{instance_name}
+        # Formato: POST /message/delete/{instance_name}
         # Body: { "remoteJid": "5517999999999@s.whatsapp.net", "id": "message_id" }
-        endpoint = f"{base_url}/message/deleteMessage/{instance_name}"
+        endpoint = f"{base_url}/message/delete/{instance_name}"
         
         # Preparar remoteJid
         conversation = message.conversation
