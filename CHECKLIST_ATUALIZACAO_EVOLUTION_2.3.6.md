@@ -72,11 +72,17 @@
 - `GET /group/getParticipants/{instance}` - Buscar participantes
 - `GET /group/findGroupInfos/{instance}` - Info do grupo
 
-## ⚠️ Possíveis Problemas Conhecidos
+## ⚠️ Possíveis Problemas Conhecidos (2.3.6)
 
 1. **QR Code não gera**: Verificar se `CONFIG_SESSION_PHONE_VERSION` está comentada no `.env`
 2. **Reautorização necessária**: Sempre necessário após atualização
 3. **Endpoints podem mudar**: Verificar documentação oficial
+4. **Webhooks podem parar de funcionar**: Alguns usuários relataram que webhooks pararam de receber dados após atualização para 2.3.6
+   - **Solução**: Verificar configuração de webhooks na Evolution API
+   - **Verificar**: Logs de webhooks no backend (`apps.chat.webhooks`, `apps.connections.webhook_views`)
+5. **Endpoints 404**: Alguns endpoints como `/instance/connect` e `/instance/connectionState` podem retornar 404
+   - **Nota**: Não usamos esses endpoints diretamente, mas monitorar logs
+6. **Formato de payloads**: Verificar se `textMessage` com `options.quoted` continua funcionando (já implementado)
 
 ## 📝 Logs para Monitorar
 
