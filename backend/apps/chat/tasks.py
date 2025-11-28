@@ -1012,15 +1012,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     await sync_to_async(message.save)(update_fields=['status', 'error_message'])
                     return
                 
-                # ✅ CORREÇÃO: Evolution API aceita 'text' diretamente no root OU 'textMessage'
-                # Quando há options.quoted, usar textMessage pode ser mais compatível
-                # Mas vamos testar com 'text' primeiro (formato mais simples)
+                # ✅ FORMATO CORRETO: Evolution API usa 'text' no root e 'quoted' no root
+                # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/0nthjkr/send-text
                 payload = {
                     'number': final_number,
                     'text': content.strip()
                 }
                 
-                # ✅ NOVO: Adicionar options.quoted se for resposta (formato correto Evolution API)
+                # ✅ CORREÇÃO: Adicionar 'quoted' no root (não dentro de 'options') se for resposta
                 if quoted_message_id and quoted_remote_jid and original_message:
                     # Buscar conteúdo original da mensagem para incluir no quoted
                     original_content = original_message.content or ''
@@ -1046,34 +1045,33 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     # Limitar a 100 caracteres
                     clean_content = clean_content[:100] if clean_content else 'Mensagem'
                     
+                    # ✅ FORMATO CORRETO: quoted vai no root, key só precisa de 'id' (mais simples)
+                    # Documentação mostra que só 'id' pode ser suficiente
                     quoted_key = {
-                        'remoteJid': quoted_remote_jid,
-                        'fromMe': original_message.direction == 'outgoing',
                         'id': quoted_message_id
                     }
-                    # ✅ NOVO: Adicionar participant se disponível (necessário para reply funcionar)
+                    
+                    # ✅ Adicionar campos adicionais se necessário (pode ajudar em alguns casos)
+                    # Mas tentar primeiro só com 'id' conforme documentação
+                    if quoted_remote_jid:
+                        quoted_key['remoteJid'] = quoted_remote_jid
+                    if original_message.direction:
+                        quoted_key['fromMe'] = original_message.direction == 'outgoing'
+                    # ✅ Participant pode ser necessário para grupos
                     if quoted_participant:
                         quoted_key['participant'] = quoted_participant
                     
-                    # ✅ CORREÇÃO: Quando há options.quoted, usar textMessage ao invés de text
-                    # Baseado na documentação: https://www.postman.com/agenciadgcode/evolution-api/request/2219evv/send-reply-quote-text
-                    payload = {
-                        'number': final_number,
-                        'textMessage': {
-                            'text': content.strip()
-                        },
-                        'options': {
-                            'quoted': {
-                                'key': quoted_key,
-                                'message': {
-                                    'conversation': clean_content
-                                }
-                            }
+                    # ✅ FORMATO CORRETO: 'quoted' no root (não dentro de 'options')
+                    payload['quoted'] = {
+                        'key': quoted_key,
+                        'message': {
+                            'conversation': clean_content
                         }
                     }
-                    logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted ao texto")
+                    logger.info(f"💬 [CHAT ENVIO] Adicionando 'quoted' no root (formato correto Evolution API)")
+                    logger.info(f"   Message ID: {_mask_digits(quoted_message_id)}")
                     logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
-                    logger.info(f"   Message ID: {quoted_message_id}")
+                    logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
                     logger.info(f"   Original content (limpo): {clean_content[:50]}...")
                 
                 # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
@@ -1163,8 +1161,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         )
                         # Se retornar 404, o endpoint não existe - usar fallback
                         if response.status_code == 404:
-                            logger.warning(f"⚠️ [CHAT ENVIO] Endpoint /message/reply não encontrado (404). Usando fallback /message/sendText com options.quoted")
-                            # Fallback: usar /message/sendText com options.quoted (formato que já funcionava)
+                            logger.warning(f"⚠️ [CHAT ENVIO] Endpoint /message/reply não encontrado (404). Usando fallback /message/sendText com 'quoted' no root")
+                            # Fallback: usar /message/sendText com 'quoted' no root (formato correto)
                             original_content = original_message.content or ''
                             if not original_content:
                                 attachments_list = list(original_message.attachments.all())
@@ -1184,19 +1182,24 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             clean_content = original_content.replace('\n', ' ').replace('\r', ' ').strip()
                             clean_content = clean_content[:100] if clean_content else 'Mensagem'
                             
+                            # ✅ FORMATO CORRETO: 'quoted' no root (conforme documentação)
+                            quoted_key_fallback = {
+                                'id': quoted_message_id
+                            }
+                            if quoted_remote_jid:
+                                quoted_key_fallback['remoteJid'] = quoted_remote_jid
+                            if original_message.direction:
+                                quoted_key_fallback['fromMe'] = original_message.direction == 'outgoing'
+                            if quoted_participant:
+                                quoted_key_fallback['participant'] = quoted_participant
+                            
                             payload_with_quoted = {
                                 'number': final_number,
                                 'text': content.strip(),
-                                'options': {
-                                    'quoted': {
-                                        'key': {
-                                            'remoteJid': quoted_remote_jid,
-                                            'fromMe': original_message.direction == 'outgoing',
-                                            'id': quoted_message_id
-                                        },
-                                        'message': {
-                                            'conversation': clean_content
-                                        }
+                                'quoted': {
+                                    'key': quoted_key_fallback,
+                                    'message': {
+                                        'conversation': clean_content
                                     }
                                 }
                             }
@@ -1223,7 +1226,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         payload_with_quoted['mentions'] = mention_phones
                             
                             endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
-                            logger.info(f"📤 [CHAT ENVIO] Fallback: usando /message/sendText com options.quoted")
+                            logger.info(f"📤 [CHAT ENVIO] Fallback: usando /message/sendText com 'quoted' no root")
                             logger.info(f"   🔍 DEBUG REPLY - Valores usados no fallback:")
                             logger.info(f"      remoteJid: {_mask_remote_jid(quoted_remote_jid)}")
                             logger.info(f"      fromMe: {original_message.direction == 'outgoing'} (direction original: {original_message.direction})")
@@ -1243,8 +1246,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     except httpx.HTTPStatusError as e:
                         # Se for 404, fazer fallback
                         if e.response.status_code == 404:
-                            logger.warning(f"⚠️ [CHAT ENVIO] Endpoint /message/reply não encontrado (404). Usando fallback /message/sendText com options.quoted")
-                            # Fallback: usar /message/sendText com options.quoted
+                            logger.warning(f"⚠️ [CHAT ENVIO] Endpoint /message/reply não encontrado (404). Usando fallback /message/sendText com 'quoted' no root")
+                            # Fallback: usar /message/sendText com 'quoted' no root (formato correto)
                             original_content = original_message.content or ''
                             if not original_content:
                                 attachments_list = list(original_message.attachments.all())
@@ -1264,29 +1267,25 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             clean_content = original_content.replace('\n', ' ').replace('\r', ' ').strip()
                             clean_content = clean_content[:100] if clean_content else 'Mensagem'
                             
-                            # ✅ NOVO: Construir quoted_key com participant se disponível
+                            # ✅ FORMATO CORRETO: 'quoted' no root (conforme documentação)
                             quoted_key_exception = {
-                                'remoteJid': quoted_remote_jid,
-                                'fromMe': original_message.direction == 'outgoing',
                                 'id': quoted_message_id
                             }
-                            # Adicionar participant se disponível
+                            if quoted_remote_jid:
+                                quoted_key_exception['remoteJid'] = quoted_remote_jid
+                            if original_message.direction:
+                                quoted_key_exception['fromMe'] = original_message.direction == 'outgoing'
                             if quoted_participant:
                                 quoted_key_exception['participant'] = quoted_participant
                             
-                            # ✅ CORREÇÃO: Quando há options.quoted, usar textMessage pode ser mais compatível
-                            # Baseado na documentação: https://www.postman.com/agenciadgcode/evolution-api/request/2219evv/send-reply-quote-text
+                            # ✅ FORMATO CORRETO: 'text' e 'quoted' no root (não 'textMessage' nem 'options.quoted')
                             payload_with_quoted = {
                                 'number': final_number,
-                                'textMessage': {
-                                    'text': content.strip()
-                                },
-                                'options': {
-                                    'quoted': {
-                                        'key': quoted_key_exception,
-                                        'message': {
-                                            'conversation': clean_content
-                                        }
+                                'text': content.strip(),
+                                'quoted': {
+                                    'key': quoted_key_exception,
+                                    'message': {
+                                        'conversation': clean_content
                                     }
                                 }
                             }
@@ -1313,7 +1312,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         payload_with_quoted['mentions'] = mention_phones
                             
                             endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
-                            logger.info(f"📤 [CHAT ENVIO] Fallback: usando /message/sendText com options.quoted")
+                            logger.info(f"📤 [CHAT ENVIO] Fallback (Exception): usando /message/sendText com 'quoted' no root")
                             logger.info("   Payload (mascado): %s", mask_sensitive_data(payload_with_quoted))
                             response = await client.post(
                                 endpoint,
