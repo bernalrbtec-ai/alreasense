@@ -157,55 +157,13 @@ class ContactViewSet(viewsets.ModelViewSet):
         )
     
     def perform_update(self, serializer):
-        """Atualiza contato e faz broadcast para conversas relacionadas"""
-        import logging
-        logger = logging.getLogger(__name__)
-        
-        old_instance = serializer.instance
+        """Atualiza contato - signal faz broadcast automaticamente"""
+        # ✅ CORREÇÃO: Signal já faz broadcast, não precisa duplicar aqui
+        # O signal update_conversations_on_contact_change já:
+        # 1. Atualiza contact_name nas conversas
+        # 2. Faz broadcast via WebSocket
+        # 3. Invalida cache de tags
         instance = serializer.save()
-        
-        # ✅ CORREÇÃO CRÍTICA: Buscar conversas relacionadas e fazer broadcast
-        # Isso garante que nome atualize instantaneamente na lista E na conversa ativa
-        from apps.chat.models import Conversation
-        from apps.chat.utils.websocket import broadcast_conversation_updated
-        
-        # Buscar conversas que usam este telefone
-        conversations = Conversation.objects.filter(
-            tenant=instance.tenant,
-            contact_phone=instance.phone
-        )
-        
-        updated_count = 0
-        for conversation in conversations:
-            # Atualizar nome da conversa se mudou
-            if conversation.contact_name != instance.name:
-                old_name = conversation.contact_name
-                conversation.contact_name = instance.name
-                conversation.save(update_fields=['contact_name'])
-                
-                logger.info(
-                    f"🔄 [CONTACT UPDATE] Nome da conversa atualizado: "
-                    f"'{old_name}' → '{instance.name}' (conversa: {conversation.id})"
-                )
-                
-                # ✅ Broadcast para atualizar frontend em tempo real
-                try:
-                    broadcast_conversation_updated(conversation, request=self.request)
-                    updated_count += 1
-                    logger.info(
-                        f"📡 [CONTACT UPDATE] Broadcast enviado para conversa {conversation.id}"
-                    )
-                except Exception as e:
-                    logger.error(
-                        f"❌ [CONTACT UPDATE] Erro ao fazer broadcast para conversa {conversation.id}: {e}",
-                        exc_info=True
-                    )
-        
-        if updated_count > 0:
-            logger.info(
-                f"✅ [CONTACT UPDATE] {updated_count} conversa(s) atualizada(s) e broadcast enviado"
-            )
-        
         return instance
     
     @action(detail=False, methods=['post'])

@@ -118,10 +118,17 @@ def update_conversations_on_contact_change(sender, instance, created, **kwargs):
                 if needs_update:
                     conversation.save(update_fields=update_fields)
                     logger.info(f"✅ [CONTACT SIGNAL] Conversa {conversation.id} atualizada: {', '.join(update_fields)}")
+                else:
+                    # ✅ CORREÇÃO: Mesmo se não houver mudanças no nome/telefone, fazer broadcast
+                    # Isso garante que tags sejam atualizadas (cache foi invalidado acima)
+                    logger.debug(f"ℹ️ [CONTACT SIGNAL] Nenhuma mudança em nome/telefone, mas fazendo broadcast para atualizar tags")
                 
-                # Fazer broadcast da conversa atualizada (serializer vai buscar tags atualizadas)
+                # ✅ CORREÇÃO CRÍTICA: SEMPRE fazer broadcast, mesmo se não houve mudanças
+                # Isso garante que tags sejam atualizadas (cache foi invalidado) e frontend sincronize
+                # Recarregar conversa do banco para garantir dados atualizados antes do broadcast
+                conversation.refresh_from_db()
                 broadcast_conversation_updated(conversation)
-                logger.debug(f"✅ [CONTACT SIGNAL] Broadcast enviado para conversa {conversation.id}")
+                logger.info(f"📡 [CONTACT SIGNAL] Broadcast enviado para conversa {conversation.id} (nome: {conversation.contact_name})")
             except Exception as e:
                 logger.error(f"❌ [CONTACT SIGNAL] Erro ao fazer broadcast para conversa {conversation.id}: {e}", exc_info=True)
     else:

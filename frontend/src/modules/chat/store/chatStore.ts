@@ -128,7 +128,9 @@ export const useChatStore = create<ChatState>((set) => ({
           ...state.activeConversation,
           ...conversation,  // ✅ Merge completo (não apenas campos específicos)
           // ✅ PRESERVAR mensagens existentes (não sobrescrever)
-          messages: state.activeConversation.messages || []
+          messages: state.activeConversation.messages || [],
+          // ✅ FORÇAR nova referência para garantir re-render
+          _updatedAt: Date.now()
         }
       : state.activeConversation;
     
