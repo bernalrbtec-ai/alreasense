@@ -1073,6 +1073,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
                     logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
                     logger.info(f"   Original content (limpo): {clean_content[:50]}...")
+                    logger.info(f"   📋 Payload com quoted (mascado): %s", mask_sensitive_data(payload))
+                    logger.info(f"   📋 Payload com quoted (JSON formatado): %s", json.dumps(mask_sensitive_data(payload), indent=2, ensure_ascii=False))
                 
                 # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
                 if conversation.conversation_type == 'group':
@@ -1114,6 +1116,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento (todas eram números de grupo?)")
                 
                 # ✅ NOVO: Usar endpoint /message/reply se for resposta (mais direto e específico)
+                logger.info(f"🔍 [CHAT ENVIO] Verificando se é reply:")
+                logger.info(f"   quoted_message_id: {_mask_digits(quoted_message_id) if quoted_message_id else 'N/A'}")
+                logger.info(f"   quoted_remote_jid: {_mask_remote_jid(quoted_remote_jid) if quoted_remote_jid else 'N/A'}")
+                logger.info(f"   original_message: {'Sim' if original_message else 'N/A'}")
+                
                 if quoted_message_id and quoted_remote_jid:
                     # Endpoint específico para respostas: POST /message/reply/{instance}
                     # Formato: { "number": "...", "reply_to": "message_id_evolution", "text": "..." }
@@ -1231,15 +1238,21 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             logger.info(f"      remoteJid: {_mask_remote_jid(quoted_remote_jid)}")
                             logger.info(f"      fromMe: {original_message.direction == 'outgoing'} (direction original: {original_message.direction})")
                             logger.info(f"      message_id (id): {_mask_digits(quoted_message_id)}")
+                            logger.info(f"      participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
                             logger.info(f"      original_message.id (interno): {original_message.id}")
                             logger.info(f"      original_message.message_id (Evolution): {_mask_digits(original_message.message_id) if original_message.message_id else 'N/A'}")
                             logger.info(f"      clean_content: {clean_content[:50]}...")
-                            logger.info("   Payload completo (mascado): %s", mask_sensitive_data(payload_with_quoted))
+                            logger.info("   📋 Payload completo (mascado): %s", mask_sensitive_data(payload_with_quoted))
+                            logger.info("   📋 Payload completo (JSON formatado): %s", json.dumps(mask_sensitive_data(payload_with_quoted), indent=2, ensure_ascii=False))
                             response = await client.post(
                                 endpoint,
                                 headers=headers,
                                 json=payload_with_quoted
                             )
+                            
+                            logger.info(f"📥 [CHAT ENVIO] Resposta do fallback (404):")
+                            logger.info(f"   Status: {response.status_code}")
+                            logger.info(f"   Body: {response.text[:500]}")
                         else:
                             # Se não for 404, pode ser outro erro - deixar passar para tratamento normal
                             pass
@@ -1313,7 +1326,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             
                             endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
                             logger.info(f"📤 [CHAT ENVIO] Fallback (Exception): usando /message/sendText com 'quoted' no root")
-                            logger.info("   Payload (mascado): %s", mask_sensitive_data(payload_with_quoted))
+                            logger.info("   📋 Payload completo (mascado): %s", mask_sensitive_data(payload_with_quoted))
+                            logger.info("   📋 Payload completo (JSON formatado): %s", json.dumps(mask_sensitive_data(payload_with_quoted), indent=2, ensure_ascii=False))
                             response = await client.post(
                                 endpoint,
                                 headers=headers,
