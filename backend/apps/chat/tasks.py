@@ -655,16 +655,21 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         # Se a mensagem original foi recebida (incoming), o participant é o remetente
                         # Se foi enviada por nós (outgoing), o participant pode ser vazio ou nosso número
                         if original_message.direction == 'incoming':
-                            # Mensagem recebida: participant é quem enviou (sender_phone)
-                            if original_message.sender_phone:
-                                # Normalizar telefone para formato JID
-                                sender_phone = original_message.sender_phone
-                                if '@' in sender_phone:
-                                    quoted_participant = sender_phone
+                            # Mensagem recebida: participant é quem enviou
+                            if original_message.conversation.conversation_type == 'group':
+                                # Para grupos: usar sender_phone se disponível
+                                if original_message.sender_phone:
+                                    sender_phone = original_message.sender_phone
+                                    if '@' in sender_phone:
+                                        quoted_participant = sender_phone
+                                    else:
+                                        quoted_participant = f"{sender_phone}@s.whatsapp.net"
                                 else:
-                                    quoted_participant = f"{sender_phone}@s.whatsapp.net"
+                                    # Fallback: usar contact_phone da conversa (grupo)
+                                    quoted_participant = quoted_remote_jid
                             else:
-                                # Fallback: usar contact_phone da conversa
+                                # Para mensagens individuais recebidas: participant é o contato da conversa
+                                # O contact_phone já está no formato correto (com @s.whatsapp.net)
                                 quoted_participant = quoted_remote_jid
                         else:
                             # Mensagem enviada por nós: participant pode ser vazio ou nosso número
