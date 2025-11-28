@@ -2211,11 +2211,32 @@ def handle_message_delete(data, tenant, connection=None, wa_instance=None):
     from django.utils import timezone
     
     try:
+        # ✅ DEBUG: Log completo do webhook para verificar formato na 2.3.6
+        logger.info(f"🗑️ [WEBHOOK DELETE] ====== INICIANDO PROCESSAMENTO ======")
+        logger.info(f"🗑️ [WEBHOOK DELETE] Data completo recebido: {data}")
+        logger.info(f"🗑️ [WEBHOOK DELETE] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+        
         delete_data = data.get('data', {})
+        logger.info(f"🗑️ [WEBHOOK DELETE] delete_data: {delete_data}")
+        logger.info(f"🗑️ [WEBHOOK DELETE] delete_data keys: {list(delete_data.keys()) if isinstance(delete_data, dict) else 'not dict'}")
+        
+        # ✅ CORREÇÃO: Verificar se data é uma lista (pode ser formato diferente na 2.3.6)
+        if isinstance(delete_data, list) and len(delete_data) > 0:
+            logger.info(f"🗑️ [WEBHOOK DELETE] Data é lista, usando primeiro item")
+            delete_data = delete_data[0]
+        
         key = delete_data.get('key', {})
-        message_id_evolution = key.get('id')
-        remote_jid = key.get('remoteJid')
-        from_me = key.get('fromMe', False)
+        logger.info(f"🗑️ [WEBHOOK DELETE] key: {key}")
+        logger.info(f"🗑️ [WEBHOOK DELETE] key keys: {list(key.keys()) if isinstance(key, dict) else 'not dict'}")
+        
+        # ✅ CORREÇÃO: Tentar múltiplos formatos para message_id (pode estar em lugares diferentes)
+        message_id_evolution = key.get('id') or key.get('messageId') or key.get('message_id')
+        # Também verificar se está diretamente em delete_data
+        if not message_id_evolution:
+            message_id_evolution = delete_data.get('id') or delete_data.get('messageId') or delete_data.get('message_id')
+        
+        remote_jid = key.get('remoteJid') or delete_data.get('remoteJid')
+        from_me = key.get('fromMe', False) if isinstance(key, dict) else delete_data.get('fromMe', False)
         
         logger.info(f"🗑️ [WEBHOOK DELETE] Processando mensagem apagada:")
         logger.info(f"   Message ID Evolution: {_mask_digits(message_id_evolution) if message_id_evolution else 'N/A'}")
@@ -2223,7 +2244,8 @@ def handle_message_delete(data, tenant, connection=None, wa_instance=None):
         logger.info(f"   From Me: {from_me}")
         
         if not message_id_evolution:
-            logger.warning("⚠️ [WEBHOOK DELETE] message_id não fornecido")
+            logger.warning("⚠️ [WEBHOOK DELETE] message_id não fornecido após todas as tentativas")
+            logger.warning(f"   Estrutura completa do webhook: {data}")
             return
         
         # Buscar mensagem no banco
