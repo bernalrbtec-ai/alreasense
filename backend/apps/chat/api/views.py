@@ -1870,8 +1870,17 @@ class MessageViewSet(viewsets.ModelViewSet):
         message = self.get_object()
         user = request.user
         
+        logger.info(f"🗑️ [DELETE MESSAGE] Requisição recebida:")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   Message ID Evolution: {message.message_id}")
+        logger.info(f"   Direction: {message.direction}")
+        logger.info(f"   Is Deleted: {message.is_deleted}")
+        logger.info(f"   Tenant ID: {message.conversation.tenant_id}")
+        logger.info(f"   User Tenant ID: {user.tenant_id}")
+        
         # Verificar se mensagem pertence ao tenant do usuário
         if message.conversation.tenant_id != user.tenant_id:
+            logger.warning(f"⚠️ [DELETE MESSAGE] Mensagem não pertence ao tenant do usuário")
             return Response(
                 {'error': 'Mensagem não pertence ao seu tenant'},
                 status=status.HTTP_403_FORBIDDEN
@@ -1879,6 +1888,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         # Verificar se mensagem já está apagada
         if message.is_deleted:
+            logger.warning(f"⚠️ [DELETE MESSAGE] Mensagem já está apagada")
             return Response(
                 {'error': 'Mensagem já está apagada'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -1886,6 +1896,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         
         # Verificar se mensagem tem message_id (Evolution ID)
         if not message.message_id:
+            logger.warning(f"⚠️ [DELETE MESSAGE] Mensagem não tem message_id (Evolution ID)")
             return Response(
                 {'error': 'Mensagem não pode ser apagada (não tem ID da Evolution)'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -1894,6 +1905,7 @@ class MessageViewSet(viewsets.ModelViewSet):
         # ✅ CORREÇÃO: Apenas mensagens próprias (outgoing) podem ser apagadas
         # Mensagens incoming não podem ser apagadas pelo usuário
         if message.direction == 'incoming':
+            logger.warning(f"⚠️ [DELETE MESSAGE] Tentativa de apagar mensagem recebida (incoming)")
             return Response(
                 {'error': 'Não é possível apagar mensagens recebidas'},
                 status=status.HTTP_400_BAD_REQUEST
