@@ -1055,11 +1055,19 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     if quoted_participant:
                         quoted_key['participant'] = quoted_participant
                     
-                    payload['options'] = {
-                        'quoted': {
-                            'key': quoted_key,
-                            'message': {
-                                'conversation': clean_content
+                    # ✅ CORREÇÃO: Quando há options.quoted, usar textMessage ao invés de text
+                    # Baseado na documentação: https://www.postman.com/agenciadgcode/evolution-api/request/2219evv/send-reply-quote-text
+                    payload = {
+                        'number': final_number,
+                        'textMessage': {
+                            'text': content.strip()
+                        },
+                        'options': {
+                            'quoted': {
+                                'key': quoted_key,
+                                'message': {
+                                    'conversation': clean_content
+                                }
                             }
                         }
                     }
