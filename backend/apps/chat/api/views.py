@@ -1958,6 +1958,9 @@ class MessageViewSet(viewsets.ModelViewSet):
             'Content-Type': 'application/json'
         }
         
+        # Importar funções de mascaramento
+        from apps.chat.webhooks import _mask_digits, _mask_remote_jid
+        
         logger.info(f"🗑️ [DELETE MESSAGE] Apagando mensagem via Evolution API:")
         logger.info(f"   Endpoint: {endpoint}")
         logger.info(f"   Message ID: {_mask_digits(message.message_id)}")
