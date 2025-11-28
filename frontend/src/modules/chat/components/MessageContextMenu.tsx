@@ -154,7 +154,9 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
 
   // Encaminhar mensagem
   const handleForward = () => {
+    console.log('📤 [FORWARD] handleForward chamado');
     setShowForwardModal(true);
+    console.log('📤 [FORWARD] showForwardModal definido como true');
     onClose();
   };
 
@@ -297,10 +299,16 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
 
       {/* Modal de Encaminhar Mensagem */}
       {showForwardModal && (
-        <ForwardMessageModal
-          message={message}
-          onClose={() => setShowForwardModal(false)}
-        />
+        <>
+          {console.log('📤 [FORWARD] Renderizando ForwardMessageModal')}
+          <ForwardMessageModal
+            message={message}
+            onClose={() => {
+              console.log('📤 [FORWARD] Fechando modal');
+              setShowForwardModal(false);
+            }}
+          />
+        </>
       )}
     </>
   );

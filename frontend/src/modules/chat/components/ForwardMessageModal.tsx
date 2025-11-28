@@ -64,8 +64,10 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
     }
   };
 
+  console.log('📤 [FORWARD MODAL] Renderizando modal, conversations:', conversations.length);
+  
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
         className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
