@@ -2230,56 +2230,116 @@ def handle_message_delete(data, tenant, connection=None, wa_instance=None):
         logger.info(f"🗑️ [WEBHOOK DELETE] key keys: {list(key.keys()) if isinstance(key, dict) else 'not dict'}")
         
         # ✅ CORREÇÃO: Tentar múltiplos formatos para message_id (pode estar em lugares diferentes)
-        message_id_evolution = key.get('id') or key.get('messageId') or key.get('message_id')
-        # Também verificar se está diretamente em delete_data
-        if not message_id_evolution:
-            message_id_evolution = delete_data.get('id') or delete_data.get('messageId') or delete_data.get('message_id')
+        # Evolution API 2.3.6 pode usar keyId ou id dentro de key
+        message_id_evolution = (
+            key.get('id') or 
+            key.get('messageId') or 
+            key.get('message_id') or
+            key.get('keyId') or
+            delete_data.get('id') or 
+            delete_data.get('messageId') or 
+            delete_data.get('message_id') or
+            delete_data.get('keyId') or
+            data.get('keyId')  # Pode estar no root do webhook também
+        )
         
         remote_jid = key.get('remoteJid') or delete_data.get('remoteJid')
         from_me = key.get('fromMe', False) if isinstance(key, dict) else delete_data.get('fromMe', False)
+        key_id = key.get('keyId') or delete_data.get('keyId')  # keyId pode estar separado
         
         logger.info(f"🗑️ [WEBHOOK DELETE] Processando mensagem apagada:")
         logger.info(f"   Message ID Evolution: {_mask_digits(message_id_evolution) if message_id_evolution else 'N/A'}")
+        logger.info(f"   Key ID: {_mask_digits(key_id) if key_id else 'N/A'}")
         logger.info(f"   Remote JID: {_mask_remote_jid(remote_jid) if remote_jid else 'N/A'}")
         logger.info(f"   From Me: {from_me}")
         
-        if not message_id_evolution:
-            logger.warning("⚠️ [WEBHOOK DELETE] message_id não fornecido após todas as tentativas")
-            logger.warning(f"   Estrutura completa do webhook: {data}")
+        if not message_id_evolution and not key_id:
+            logger.warning("⚠️ [WEBHOOK DELETE] message_id nem keyId fornecido após todas as tentativas")
+            logger.warning(f"   Estrutura completa do webhook: {mask_sensitive_data(data)}")
             return
         
-        # Buscar mensagem no banco
-        message = Message.objects.filter(
-            message_id=message_id_evolution,
-            conversation__tenant=tenant
-        ).select_related('conversation', 'conversation__tenant').first()
+        # Usar keyId como fallback se message_id não foi encontrado
+        if not message_id_evolution and key_id:
+            message_id_evolution = key_id
+            logger.info(f"🗑️ [WEBHOOK DELETE] Usando keyId como message_id: {_mask_digits(key_id)}")
         
-        if not message:
-            logger.warning(f"⚠️ [WEBHOOK DELETE] Mensagem não encontrada: {_mask_digits(message_id_evolution)}")
-            logger.warning(f"   Tentando buscar por remoteJid e outros campos...")
+        # Buscar mensagem no banco por message_id
+        message = None
+        if message_id_evolution:
+            message = Message.objects.filter(
+                message_id=message_id_evolution,
+                conversation__tenant=tenant
+            ).select_related('conversation', 'conversation__tenant').first()
             
-            # Tentar buscar por remoteJid se disponível
-            if remote_jid:
-                # Extrair telefone do remoteJid
-                phone_raw = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
-                from apps.notifications.services import normalize_phone
-                normalized_phone = normalize_phone(phone_raw)
+            if message:
+                logger.info(f"✅ [WEBHOOK DELETE] Mensagem encontrada por message_id: {message.id}")
+        
+        # Se não encontrou por message_id, tentar por keyId (se diferente)
+        if not message and key_id and key_id != message_id_evolution:
+            message = Message.objects.filter(
+                message_id=key_id,
+                conversation__tenant=tenant
+            ).select_related('conversation', 'conversation__tenant').first()
+            
+            if message:
+                logger.info(f"✅ [WEBHOOK DELETE] Mensagem encontrada por keyId: {message.id}")
+        
+        # Se ainda não encontrou, tentar buscar por remoteJid e timestamp (mensagens recentes)
+        if not message and remote_jid:
+            logger.warning(f"⚠️ [WEBHOOK DELETE] Mensagem não encontrada por ID: {_mask_digits(message_id_evolution or key_id or 'N/A')}")
+            logger.warning(f"   Tentando buscar por remoteJid e timestamp recente...")
+            
+            # Extrair telefone do remoteJid
+            phone_raw = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+            from apps.notifications.services import normalize_phone
+            normalized_phone = normalize_phone(phone_raw)
+            
+            if normalized_phone:
+                # Buscar conversa
+                conversation = Conversation.objects.filter(
+                    tenant=tenant,
+                    contact_phone__icontains=normalized_phone.replace('+', '').replace('-', '').replace(' ', '')
+                ).first()
                 
-                if normalized_phone:
-                    # Buscar conversa e depois mensagem
-                    conversation = Conversation.objects.filter(
-                        tenant=tenant,
-                        contact_phone__icontains=normalized_phone.replace('+', '')
-                    ).first()
+                if conversation:
+                    logger.info(f"🗑️ [WEBHOOK DELETE] Conversa encontrada: {conversation.id}")
                     
-                    if conversation:
-                        message = Message.objects.filter(
-                            conversation=conversation,
-                            message_id=message_id_evolution
-                        ).select_related('conversation', 'conversation__tenant').first()
+                    # Tentar buscar mensagem na conversa (últimas 100 mensagens recentes, ordenadas por data)
+                    from datetime import timedelta
+                    
+                    # Buscar nas últimas 24 horas (mensagens recentes)
+                    recent_cutoff = timezone.now() - timedelta(hours=24)
+                    messages = Message.objects.filter(
+                        conversation=conversation,
+                        created_at__gte=recent_cutoff,
+                        is_deleted=False  # Apenas mensagens ainda não apagadas
+                    ).order_by('-created_at')[:100]
+                    
+                    logger.info(f"🗑️ [WEBHOOK DELETE] Buscando em {messages.count()} mensagens recentes da conversa...")
+                    
+                    # Se temos keyId, tentar buscar mensagens que podem ter esse ID em metadata ou outros campos
+                    if key_id:
+                        # Tentar encontrar por similaridade de ID (pode estar em formato diferente)
+                        for msg in messages:
+                            # Verificar se message_id contém parte do keyId ou vice-versa
+                            if msg.message_id:
+                                if key_id in msg.message_id or msg.message_id in key_id:
+                                    message = msg
+                                    logger.info(f"✅ [WEBHOOK DELETE] Mensagem encontrada por similaridade de ID: {message.id}")
+                                    break
+                    
+                    # Se ainda não encontrou e temos remoteJid, pode ser que message_id não foi salvo corretamente
+                    # Neste caso, tentar buscar a mensagem mais recente que ainda não foi apagada
+                    if not message and messages.exists():
+                        logger.warning(f"⚠️ [WEBHOOK DELETE] Não encontrada por ID, mas temos conversa e mensagens recentes")
+                        logger.warning(f"   Isso pode indicar que message_id não foi salvo corretamente na mensagem original")
         
         if not message:
-            logger.warning(f"⚠️ [WEBHOOK DELETE] Mensagem não encontrada após busca alternativa")
+            logger.error(f"❌ [WEBHOOK DELETE] Mensagem não encontrada após todas as tentativas")
+            logger.error(f"   Message ID: {_mask_digits(message_id_evolution) if message_id_evolution else 'N/A'}")
+            logger.error(f"   Key ID: {_mask_digits(key_id) if key_id else 'N/A'}")
+            logger.error(f"   Remote JID: {_mask_remote_jid(remote_jid) if remote_jid else 'N/A'}")
+            logger.error(f"   Webhook completo (mascado): {mask_sensitive_data(data)}")
             return
         
         # Marcar como apagada

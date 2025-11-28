@@ -280,7 +280,9 @@ def broadcast_message_deleted(message) -> None:
             room_group_name,
             {
                 'type': 'message_deleted',
-                'message': message_data
+                'message': message_data,
+                'message_id': str(message.id),
+                'conversation_id': conversation_id
             }
         )
         logger.info(f"🗑️ [WEBSOCKET] Broadcast de mensagem apagada enviado: {message.id}")

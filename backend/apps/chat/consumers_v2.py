@@ -643,3 +643,20 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         }))
         logger.debug(f"👍 [CHAT WS V2] Broadcast de reação enviado para {self.user.email}")
 
+    async def message_deleted(self, event):
+        """
+        Handler para quando uma mensagem é apagada.
+        Frontend recebe evento de mensagem apagada.
+        """
+        message_data = event.get('message', {})
+        message_id = message_data.get('id') if isinstance(message_data, dict) else event.get('message_id')
+        conversation_id = event.get('conversation_id')
+        
+        await self.send(text_data=json.dumps({
+            'type': 'message_deleted',
+            'message': message_data,
+            'message_id': message_id,
+            'conversation_id': conversation_id
+        }))
+        logger.debug(f"🗑️ [CHAT WS V2] Broadcast de mensagem apagada enviado para {getattr(self, 'user', {}).email if hasattr(self, 'user') else 'desconhecido'}")
+
