@@ -1012,7 +1012,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     await sync_to_async(message.save)(update_fields=['status', 'error_message'])
                     return
                 
-                # ✅ CORREÇÃO: Evolution API espera 'text' diretamente no root, não textMessage
+                # ✅ CORREÇÃO: Evolution API aceita 'text' diretamente no root OU 'textMessage'
+                # Quando há options.quoted, usar textMessage pode ser mais compatível
+                # Mas vamos testar com 'text' primeiro (formato mais simples)
                 payload = {
                     'number': final_number,
                     'text': content.strip()
@@ -1264,9 +1266,13 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             if quoted_participant:
                                 quoted_key_exception['participant'] = quoted_participant
                             
+                            # ✅ CORREÇÃO: Quando há options.quoted, usar textMessage pode ser mais compatível
+                            # Baseado na documentação: https://www.postman.com/agenciadgcode/evolution-api/request/2219evv/send-reply-quote-text
                             payload_with_quoted = {
                                 'number': final_number,
-                                'text': content.strip(),
+                                'textMessage': {
+                                    'text': content.strip()
+                                },
                                 'options': {
                                     'quoted': {
                                         'key': quoted_key_exception,
