@@ -32,6 +32,125 @@ const cloneReactions = (reactions?: MessageReaction[] | null): MessageReaction[]
       }))
     : [];
 
+/**
+ * ✅ NOVO: Componente para preview de mensagem respondida (reply)
+ * Busca automaticamente a mensagem original se não estiver na lista
+ */
+function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Message[] }) {
+  const [repliedMessage, setRepliedMessage] = useState<Message | null>(
+    () => messages.find(m => m.id === replyToId) || null
+  );
+  const [isLoadingOriginal, setIsLoadingOriginal] = useState(false);
+  const { addMessage } = useChatStore();
+  
+  // ✅ NOVO: Buscar mensagem original se não estiver na lista
+  useEffect(() => {
+    if (!repliedMessage && replyToId && !isLoadingOriginal) {
+      setIsLoadingOriginal(true);
+      api.get(`/chat/messages/${replyToId}/`)
+        .then(response => {
+          const originalMsg = response.data;
+          setRepliedMessage(originalMsg);
+          // ✅ Adicionar mensagem original à lista se não estiver presente
+          if (!messages.find(m => m.id === originalMsg.id)) {
+            addMessage(originalMsg);
+          }
+        })
+        .catch(error => {
+          console.error('❌ [REPLY] Erro ao buscar mensagem original:', error);
+          // Manter repliedMessage como null para mostrar fallback
+        })
+        .finally(() => {
+          setIsLoadingOriginal(false);
+        });
+    }
+  }, [replyToId, repliedMessage, isLoadingOriginal, messages, addMessage]);
+  
+  if (isLoadingOriginal) {
+    return (
+      <div className="mb-2 pl-3 border-l-4 border-l-gray-300 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
+        <div className="flex items-center gap-1 mb-0.5">
+          <Reply className="w-3 h-3 text-gray-400 animate-pulse" />
+          <p className="text-xs font-medium text-gray-500 dark:text-gray-400">
+            Carregando mensagem original...
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
+  if (!repliedMessage) {
+    // ✅ FALLBACK: Se mensagem não encontrada, mostrar mensagem genérica
+    return (
+      <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
+        <div className="flex items-center gap-1 mb-0.5">
+          <Reply className="w-3 h-3 text-gray-500" />
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            Mensagem não encontrada
+          </p>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+          A mensagem original pode ter sido removida
+        </p>
+      </div>
+    );
+  }
+  
+  // ✅ MELHORIA: Função para scroll até mensagem original
+  const scrollToOriginal = () => {
+    const originalElement = document.querySelector(`[data-message-id="${replyToId}"]`);
+    if (originalElement) {
+      originalElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // Destacar mensagem original brevemente
+      originalElement.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-75');
+      setTimeout(() => {
+        originalElement.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-75');
+      }, 2000);
+    } else {
+      // ✅ Se mensagem não está visível, tentar carregar mensagens antigas
+      console.log('📜 [REPLY] Mensagem original não visível, pode precisar carregar histórico');
+    }
+  };
+  
+  // ✅ MELHORIA: Detectar tipo de anexo
+  const getAttachmentType = () => {
+    if (!repliedMessage.attachments || repliedMessage.attachments.length === 0) return null;
+    const attachment = repliedMessage.attachments[0];
+    if (attachment.is_image) return '🖼️ Imagem';
+    if (attachment.is_video) return '🎥 Vídeo';
+    if (attachment.is_audio) return '🎵 Áudio';
+    if (attachment.is_document) return '📄 Documento';
+    return '📎 Anexo';
+  };
+  
+  const attachmentType = getAttachmentType();
+  const displayContent = repliedMessage.content 
+    ? (repliedMessage.content.length > 80 
+        ? repliedMessage.content.substring(0, 80) + '...' 
+        : repliedMessage.content)
+    : (attachmentType || 'Mensagem');
+  
+  return (
+    <div 
+      className="mb-2 pl-3 border-l-4 border-l-blue-500 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+      onClick={scrollToOriginal}
+      title="Clique para ver a mensagem original"
+    >
+      <div className="flex items-center gap-1 mb-0.5">
+        <Reply className="w-3 h-3 text-blue-500 flex-shrink-0" />
+        <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+          {repliedMessage.direction === 'incoming' 
+            ? (repliedMessage.sender_name || repliedMessage.sender_phone || 'Contato')
+            : 'Você'}
+        </p>
+      </div>
+      <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 break-words">
+        {displayContent}
+      </p>
+    </div>
+  );
+}
+
 const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSummary => {
   return reactions.reduce((acc, reaction) => {
     if (!acc[reaction.emoji]) {
@@ -549,77 +668,9 @@ export function MessageList() {
                 )}
 
                 {/* ✅ NOVO: Preview de mensagem respondida (reply_to) */}
-                {msg.metadata?.reply_to && (() => {
-                  const replyToId = msg.metadata.reply_to;
-                  const repliedMessage = messages.find(m => m.id === replyToId);
-                  
-                  if (repliedMessage) {
-                    // ✅ MELHORIA: Função para scroll até mensagem original
-                    const scrollToOriginal = () => {
-                      const originalElement = document.querySelector(`[data-message-id="${replyToId}"]`);
-                      if (originalElement) {
-                        originalElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        // Destacar mensagem original brevemente
-                        originalElement.classList.add('ring-2', 'ring-blue-400', 'ring-opacity-75');
-                        setTimeout(() => {
-                          originalElement.classList.remove('ring-2', 'ring-blue-400', 'ring-opacity-75');
-                        }, 2000);
-                      }
-                    };
-                    
-                  // ✅ MELHORIA: Detectar tipo de anexo
-                  const getAttachmentType = () => {
-                    if (!repliedMessage.attachments || repliedMessage.attachments.length === 0) return null;
-                    const attachment = repliedMessage.attachments[0];
-                    if (attachment.is_image) return '🖼️ Imagem';
-                    if (attachment.is_video) return '🎥 Vídeo';
-                    if (attachment.is_audio) return '🎵 Áudio';
-                    if (attachment.is_document) return '📄 Documento';
-                    return '📎 Anexo';
-                  };
-                  
-                  const attachmentType = getAttachmentType();
-                  const displayContent = repliedMessage.content 
-                    ? (repliedMessage.content.length > 80 
-                        ? repliedMessage.content.substring(0, 80) + '...' 
-                        : repliedMessage.content)
-                    : (attachmentType || 'Mensagem');
-                  
-                    return (
-                      <div 
-                        className="mb-2 pl-3 border-l-4 border-l-blue-500 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                        onClick={scrollToOriginal}
-                        title="Clique para ver a mensagem original"
-                      >
-                        <div className="flex items-center gap-1 mb-0.5">
-                          <Reply className="w-3 h-3 text-blue-500 flex-shrink-0" />
-                          <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                            {repliedMessage.direction === 'incoming' 
-                              ? (repliedMessage.sender_name || repliedMessage.sender_phone || 'Contato')
-                              : 'Você'}
-                          </p>
-                        </div>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 line-clamp-2 break-words">
-                          {displayContent}
-                        </p>
-                      </div>
-                    );
-                  }
-                  // ✅ FALLBACK: Se mensagem não encontrada, mostrar mensagem genérica
-                  return (
-                    <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
-                      <div className="flex items-center gap-1 mb-0.5">
-                        <Reply className="w-3 h-3 text-gray-500" />
-                        <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
-                          Mensagem não encontrada
-                        </p>
-                      </div>
-                      <p className="text-xs text-gray-500 dark:text-gray-500 italic">
-                        A mensagem original pode ter sido removida
-                      </p>
-                    </div>
-                  );
-                })()}
+                {msg.metadata?.reply_to && (
+                  <ReplyPreview replyToId={msg.metadata.reply_to} messages={messages} />
+                )}
                 
                 {/* ✅ NOVO: Contato compartilhado */}
                 {(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
