@@ -83,8 +83,10 @@
 Após atualização, monitorar logs para:
 - Erros 404 em endpoints
 - Erros de autenticação
-- Webhooks não chegando
+- **Webhooks não chegando** (⚠️ Problema conhecido na 2.3.6)
 - Mensagens não sendo enviadas
+- Erros relacionados a `textMessage` vs `text` em replies
+- Verificar se `participant` está sendo enviado corretamente
 
 ## 🔗 Documentação
 
