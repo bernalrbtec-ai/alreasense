@@ -251,8 +251,20 @@ class ChatWebSocketManager {
     }
 
     try {
+      // ✅ DEBUG: Log detalhado do payload sendo enviado
+      if (data.type === 'send_message') {
+        console.log('📤 [MANAGER] Enviando send_message:', {
+          type: data.type,
+          conversation_id: data.conversation_id,
+          content: data.content?.substring(0, 50),
+          reply_to: data.reply_to,
+          include_signature: data.include_signature,
+          is_internal: data.is_internal,
+          mentions: data.mentions
+        });
+      }
       this.ws.send(JSON.stringify(data));
-      console.log('📤 [MANAGER] Mensagem enviada:', data.type);
+      console.log('✅ [MANAGER] Mensagem enviada com sucesso:', data.type);
       return true;
     } catch (error) {
       console.error('❌ [MANAGER] Erro ao enviar mensagem:', error);

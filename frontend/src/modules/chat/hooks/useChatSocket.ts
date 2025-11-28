@@ -245,6 +245,15 @@ export function useChatSocket(conversationId?: string) {
     // ✅ NOVO: Suporte a reply_to via metadata
     if (replyToMessageId) {
       console.log('📤 [HOOK] Enviando mensagem com reply:', content.substring(0, 50), `| Reply to: ${replyToMessageId}`);
+      console.log('📤 [HOOK] Payload completo:', {
+        type: 'send_message',
+        conversation_id: conversationId,
+        content: content.substring(0, 50),
+        include_signature: includeSignature,
+        is_internal: isInternal,
+        reply_to: replyToMessageId,
+        mentions: mentions
+      });
       const payload: any = {
         type: 'send_message',
         conversation_id: conversationId,
@@ -256,7 +265,9 @@ export function useChatSocket(conversationId?: string) {
       if (mentions && mentions.length > 0) {
         payload.mentions = mentions;
       }
-      return chatWebSocketManager.sendMessage(payload);
+      const result = chatWebSocketManager.sendMessage(payload);
+      console.log('📤 [HOOK] Resultado do sendMessage:', result);
+      return result;
     }
 
     console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`, mentions ? `| Mentions: ${mentions.length}` : '');

@@ -220,6 +220,13 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
         mentions = data.get('mentions', [])  # ✅ NOVO: Lista de números mencionados
         
+        # ✅ DEBUG: Log detalhado do reply_to recebido
+        logger.info(f"📥 [CHAT WS V2] Recebido send_message:")
+        logger.info(f"   conversation_id: {conversation_id}")
+        logger.info(f"   content: {content[:50]}...")
+        logger.info(f"   reply_to: {reply_to}")
+        logger.info(f"   Data completo: {data}")
+        
         if not content and not attachment_urls:
             await self.send(text_data=json.dumps({
                 'type': 'error',
@@ -437,6 +444,9 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             # ✅ NOVO: Adicionar reply_to no metadata se fornecido
             if reply_to:
                 metadata['reply_to'] = reply_to
+                logger.info(f"💬 [CHAT WS V2] Reply_to adicionado ao metadata: {reply_to}")
+            else:
+                logger.debug(f"💬 [CHAT WS V2] Nenhum reply_to fornecido")
             
             # ✅ NOVO: Processar menções se for grupo
             if mentions and conversation.conversation_type == 'group':
