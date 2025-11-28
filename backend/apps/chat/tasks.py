@@ -1180,7 +1180,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             
                             endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
                             logger.info(f"📤 [CHAT ENVIO] Fallback: usando /message/sendText com options.quoted")
-                            logger.info("   Payload (mascado): %s", mask_sensitive_data(payload_with_quoted))
+                            logger.info(f"   🔍 DEBUG REPLY - Valores usados no fallback:")
+                            logger.info(f"      remoteJid: {_mask_remote_jid(quoted_remote_jid)}")
+                            logger.info(f"      fromMe: {original_message.direction == 'outgoing'} (direction original: {original_message.direction})")
+                            logger.info(f"      message_id (id): {_mask_digits(quoted_message_id)}")
+                            logger.info(f"      original_message.id (interno): {original_message.id}")
+                            logger.info(f"      original_message.message_id (Evolution): {_mask_digits(original_message.message_id) if original_message.message_id else 'N/A'}")
+                            logger.info(f"      clean_content: {clean_content[:50]}...")
+                            logger.info("   Payload completo (mascado): %s", mask_sensitive_data(payload_with_quoted))
                             response = await client.post(
                                 endpoint,
                                 headers=headers,
