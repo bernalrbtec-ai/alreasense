@@ -1249,16 +1249,22 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             clean_content = original_content.replace('\n', ' ').replace('\r', ' ').strip()
                             clean_content = clean_content[:100] if clean_content else 'Mensagem'
                             
+                            # ✅ NOVO: Construir quoted_key com participant se disponível
+                            quoted_key_exception = {
+                                'remoteJid': quoted_remote_jid,
+                                'fromMe': original_message.direction == 'outgoing',
+                                'id': quoted_message_id
+                            }
+                            # Adicionar participant se disponível
+                            if quoted_participant:
+                                quoted_key_exception['participant'] = quoted_participant
+                            
                             payload_with_quoted = {
                                 'number': final_number,
                                 'text': content.strip(),
                                 'options': {
                                     'quoted': {
-                                        'key': {
-                                            'remoteJid': quoted_remote_jid,
-                                            'fromMe': original_message.direction == 'outgoing',
-                                            'id': quoted_message_id
-                                        },
+                                        'key': quoted_key_exception,
                                         'message': {
                                             'conversation': clean_content
                                         }
