@@ -1942,40 +1942,89 @@ class MessageViewSet(viewsets.ModelViewSet):
         api_key = instance.api_key or evolution_server.api_key
         instance_name = instance.instance_name
         
-        # ⚠️ IMPORTANTE: WhatsApp não permite deletar mensagens via API
-        # A funcionalidade de "apagar para todos" é apenas do cliente WhatsApp
-        # Quando alguém apaga uma mensagem no WhatsApp, recebemos webhook messages.delete
-        # Mas não podemos apagar programaticamente via API
+        # ✅ CORREÇÃO: Endpoint correto da Evolution API
+        # Documentação: https://doc.evolution-api.com/v2/api-reference/chat-controller/delete-message-for-everyone
+        # Método: DELETE (não POST!)
+        # Path: /chat/deleteMessageForEveryone/{instance}
+        endpoint = f"{base_url}/chat/deleteMessageForEveryone/{instance_name}"
         
-        # ✅ SOLUÇÃO: Apenas marcar como apagada no nosso banco
-        # O usuário deve apagar manualmente no WhatsApp, e o webhook atualizará o status
+        # Preparar remoteJid
+        conversation = message.conversation
+        if conversation.conversation_type == 'group':
+            # Para grupos, usar o group_jid do group_metadata
+            group_metadata = conversation.group_metadata or {}
+            remote_jid = group_metadata.get('group_id') or conversation.contact_phone
+            if '@' not in remote_jid:
+                remote_jid = f"{remote_jid}@g.us"
+        else:
+            # Para individuais, usar contact_phone
+            phone = conversation.contact_phone.replace('+', '')
+            remote_jid = f"{phone}@s.whatsapp.net"
         
-        logger.info(f"🗑️ [DELETE MESSAGE] Marcando mensagem como apagada no banco:")
-        logger.info(f"   Message ID: {message.id}")
-        logger.info(f"   Message ID Evolution: {message.message_id}")
-        logger.info(f"   ⚠️ Nota: WhatsApp não permite deletar mensagens via API")
-        logger.info(f"   A mensagem deve ser apagada manualmente no WhatsApp")
-        logger.info(f"   O webhook messages.delete atualizará o status automaticamente")
+        # Payload conforme documentação da Evolution API
+        payload = {
+            'id': message.message_id,
+            'remoteJid': remote_jid,
+            'fromMe': message.direction == 'outgoing',
+        }
         
-        # Marcar como apagada no banco
-        message.is_deleted = True
-        message.deleted_at = timezone.now()
-        message.save(update_fields=['is_deleted', 'deleted_at'])
+        # Adicionar participant apenas para grupos
+        if conversation.conversation_type == 'group':
+            # Para grupos, participant é opcional mas pode ser necessário
+            # Usar o número da instância ou deixar vazio
+            participant = None  # Evolution API pode inferir do remoteJid
+            if participant:
+                payload['participant'] = participant
         
-        logger.info(f"✅ [DELETE MESSAGE] Mensagem marcada como apagada no banco: {message.id}")
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
         
-        # Broadcast via WebSocket
-        from apps.chat.utils.websocket import broadcast_message_deleted
-        broadcast_message_deleted(message)
+        # Importar funções de mascaramento
+        from apps.chat.webhooks import _mask_digits, _mask_remote_jid
         
-        return Response(
-            {
-                'status': 'success', 
-                'message': 'Mensagem marcada como apagada. Para apagar no WhatsApp, use a opção "Apagar para todos" no aplicativo.',
-                'note': 'WhatsApp não permite deletar mensagens via API. A mensagem foi marcada como apagada no sistema.'
-            },
-            status=status.HTTP_200_OK
-        )
+        logger.info(f"🗑️ [DELETE MESSAGE] Apagando mensagem via Evolution API:")
+        logger.info(f"   Endpoint: {endpoint}")
+        logger.info(f"   Método: DELETE")
+        logger.info(f"   Message ID: {_mask_digits(message.message_id)}")
+        logger.info(f"   Remote JID: {_mask_remote_jid(remote_jid)}")
+        logger.info(f"   From Me: {payload['fromMe']}")
+        
+        try:
+            # Chamar Evolution API com método DELETE
+            with httpx.Client(timeout=10.0) as client:
+                response = client.delete(endpoint, json=payload, headers=headers)
+                
+                if response.status_code in (200, 201):
+                    # Marcar como apagada no banco
+                    message.is_deleted = True
+                    message.deleted_at = timezone.now()
+                    message.save(update_fields=['is_deleted', 'deleted_at'])
+                    
+                    logger.info(f"✅ [DELETE MESSAGE] Mensagem apagada com sucesso: {message.id}")
+                    
+                    # Broadcast via WebSocket
+                    from apps.chat.utils.websocket import broadcast_message_deleted
+                    broadcast_message_deleted(message)
+                    
+                    return Response(
+                        {'status': 'success', 'message': 'Mensagem apagada com sucesso'},
+                        status=status.HTTP_200_OK
+                    )
+                else:
+                    logger.error(f"❌ [DELETE MESSAGE] Erro {response.status_code} ao apagar mensagem:")
+                    logger.error(f"   Response: {response.text[:200]}")
+                    return Response(
+                        {'error': f'Erro ao apagar mensagem: {response.status_code}', 'details': response.text[:200]},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+        except Exception as e:
+            logger.error(f"❌ [DELETE MESSAGE] Erro ao apagar mensagem: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao apagar mensagem: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
     
     def get_queryset(self):
         """
