@@ -147,6 +147,15 @@ class MessageSerializer(serializers.ModelSerializer):
             elif hasattr(instance, 'conversation_id') and instance.conversation_id:
                 data['conversation'] = str(instance.conversation_id)
 
+        # ✅ DEBUG: Normalizar metadata e logar reply_to se existir
+        if 'metadata' in data:
+            from apps.chat.utils.serialization import normalize_metadata
+            data['metadata'] = normalize_metadata(data.get('metadata'))
+            if data['metadata'].get('reply_to'):
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"💬 [SERIALIZER] Mensagem {instance.id} tem reply_to: {data['metadata'].get('reply_to')}")
+
         return data
 
     def get_reactions_summary(self, obj):

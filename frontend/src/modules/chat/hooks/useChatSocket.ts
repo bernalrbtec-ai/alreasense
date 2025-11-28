@@ -72,6 +72,15 @@ export function useChatSocket(conversationId?: string) {
         console.log('💬 [HOOK] Conversation ID:', data.message.conversation || data.message.conversation_id);
         console.log('💬 [HOOK] Active conversation ID:', conversationId);
         
+        // ✅ DEBUG: Verificar se mensagem tem reply_to
+        if (data.message.metadata?.reply_to) {
+          console.log('💬 [HOOK] ✅ Mensagem tem reply_to:', data.message.metadata.reply_to);
+          console.log('💬 [HOOK] Metadata completo:', data.message.metadata);
+        } else {
+          console.log('💬 [HOOK] ⚠️ Mensagem NÃO tem reply_to no metadata');
+          console.log('💬 [HOOK] Metadata:', data.message.metadata);
+        }
+        
         // ✅ CORREÇÃO: Verificar se mensagem pertence à conversa ativa (mesmo vindo do grupo específico)
         // Isso garante que mensagens não sejam adicionadas se a conversa mudou rapidamente
         const { activeConversation } = useChatStore.getState();

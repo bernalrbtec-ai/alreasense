@@ -501,6 +501,11 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     async def broadcast_pending_message(self, message):
         """Broadcast imediato para mostrar mensagem como pendente."""
         message_data = await self.serialize_message(message)
+        
+        # ✅ DEBUG: Logar metadata.reply_to se existir
+        if message_data.get('metadata', {}).get('reply_to'):
+            logger.info(f"💬 [CHAT WS V2] Broadcast mensagem com reply_to: {message_data['metadata']['reply_to']}")
+        
         conversation_data = await self.serialize_conversation(message.conversation)
 
         conversation_id = str(message.conversation_id)
