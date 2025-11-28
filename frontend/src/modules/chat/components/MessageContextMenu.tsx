@@ -33,6 +33,7 @@ interface MessageContextMenuProps {
   onClose: () => void;
   onShowInfo?: (message: Message) => void;
   onShowEmojiPicker?: (message: Message) => void;
+  onShowForward?: (message: Message) => void;
 }
 
 export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker, onShowForward }: MessageContextMenuProps) {
