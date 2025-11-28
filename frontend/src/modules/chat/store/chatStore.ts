@@ -113,7 +113,17 @@ export const useChatStore = create<ChatState>((set) => ({
     // ✅ CORREÇÃO CRÍTICA: SEMPRE atualizar activeConversation se for a mesma conversa
     // Isso garante que nome, foto, last_message, etc. atualizem em tempo real
     // PRESERVAR mensagens existentes (não sobrescrever)
-    const updatedActiveConversation = state.activeConversation?.id === conversation.id 
+    const isActiveConversation = state.activeConversation?.id === conversation.id;
+    
+    if (isActiveConversation) {
+      console.log('🔄 [STORE] Atualizando activeConversation:', {
+        oldName: state.activeConversation.contact_name,
+        newName: conversation.contact_name,
+        conversationId: conversation.id
+      });
+    }
+    
+    const updatedActiveConversation = isActiveConversation
       ? {
           ...state.activeConversation,
           ...conversation,  // ✅ Merge completo (não apenas campos específicos)

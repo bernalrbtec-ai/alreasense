@@ -22,8 +22,19 @@ const getMediaProxyUrl = (externalUrl: string) => {
 };
 
 export function ChatWindow() {
-  const { activeConversation, setActiveConversation, connectionStatus } = useChatStore();
+  const { activeConversation, setActiveConversation } = useChatStore();
   const { can_transfer_conversations } = usePermissions();
+  
+  // ✅ DEBUG: Log quando activeConversation muda (especialmente contact_name)
+  useEffect(() => {
+    if (activeConversation) {
+      console.log('🔄 [ChatWindow] activeConversation atualizado:', {
+        id: activeConversation.id,
+        contact_name: activeConversation.contact_name,
+        contact_phone: activeConversation.contact_phone
+      });
+    }
+  }, [activeConversation?.id, activeConversation?.contact_name]);
   const [showMenu, setShowMenu] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -293,27 +304,6 @@ export function ChatWindow() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          {/* ✅ MELHORIA UX: Indicador de sincronização (WebSocket status) */}
-          <div className="flex items-center gap-1.5 text-xs flex-shrink-0">
-            {connectionStatus === 'connected' && (
-              <div className="flex items-center gap-1 text-green-600" title="Conectado - Recebendo atualizações em tempo real">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                <span className="hidden sm:inline">Online</span>
-              </div>
-            )}
-            {connectionStatus === 'connecting' && (
-              <div className="flex items-center gap-1 text-yellow-600" title="Conectando...">
-                <div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse" />
-                <span className="hidden sm:inline">Conectando...</span>
-              </div>
-            )}
-            {connectionStatus === 'disconnected' && (
-              <div className="flex items-center gap-1 text-red-600" title="Desconectado - Atualizações podem estar atrasadas">
-                <div className="w-2 h-2 bg-red-500 rounded-full" />
-                <span className="hidden sm:inline">Offline</span>
-              </div>
-            )}
-          </div>
           {/* Botão Voltar (mobile) */}
           <button
             onClick={() => setActiveConversation(null)}
