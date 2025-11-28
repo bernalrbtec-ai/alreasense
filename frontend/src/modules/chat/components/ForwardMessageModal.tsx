@@ -7,7 +7,12 @@ import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import type { Message, Conversation } from '../types';
-import { getMediaProxyUrl } from '@/lib/mediaProxy';
+
+// Helper para gerar URL do media proxy
+const getMediaProxyUrl = (externalUrl: string) => {
+  const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+  return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
+};
 
 interface ForwardMessageModalProps {
   message: Message;
