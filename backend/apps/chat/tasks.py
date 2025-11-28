@@ -637,6 +637,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     quoted_message_id = original_message.message_id
                     # ✅ NOVO: Incluir remoteJid da mensagem original (necessário para Evolution API)
                     # O remoteJid é o contact_phone da conversa (formato: 5517999999999@s.whatsapp.net)
+                    quoted_participant = None  # ✅ NOVO: participant (quem enviou a mensagem original)
                     if original_message.conversation:
                         contact_phone = original_message.conversation.contact_phone
                         # Se já tem @, usar direto; senão, adicionar @s.whatsapp.net
@@ -649,9 +650,32 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             else:
                                 # Para grupos, usar o JID do grupo diretamente
                                 quoted_remote_jid = contact_phone
+                        
+                        # ✅ NOVO: Determinar participant baseado na direção da mensagem original
+                        # Se a mensagem original foi recebida (incoming), o participant é o remetente
+                        # Se foi enviada por nós (outgoing), o participant pode ser vazio ou nosso número
+                        if original_message.direction == 'incoming':
+                            # Mensagem recebida: participant é quem enviou (sender_phone)
+                            if original_message.sender_phone:
+                                # Normalizar telefone para formato JID
+                                sender_phone = original_message.sender_phone
+                                if '@' in sender_phone:
+                                    quoted_participant = sender_phone
+                                else:
+                                    quoted_participant = f"{sender_phone}@s.whatsapp.net"
+                            else:
+                                # Fallback: usar contact_phone da conversa
+                                quoted_participant = quoted_remote_jid
+                        else:
+                            # Mensagem enviada por nós: participant pode ser vazio ou nosso número
+                            # Para mensagens enviadas por nós, geralmente não precisa de participant
+                            quoted_participant = None
+                        
                         logger.info(f"💬 [CHAT ENVIO] Mensagem é resposta de: {reply_to_uuid}")
                         logger.info(f"   Evolution ID: {quoted_message_id}")
                         logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid) if quoted_remote_jid else 'N/A'}")
+                        logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A (mensagem enviada por nós)'}")
+                        logger.info(f"   Direction original: {original_message.direction}")
                 else:
                     logger.warning(f"⚠️ [CHAT ENVIO] Mensagem original não encontrada ou sem message_id: {reply_to_uuid}")
                     original_message = None  # Limpar se não encontrada
@@ -1015,13 +1039,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     # Limitar a 100 caracteres
                     clean_content = clean_content[:100] if clean_content else 'Mensagem'
                     
+                    quoted_key = {
+                        'remoteJid': quoted_remote_jid,
+                        'fromMe': original_message.direction == 'outgoing',
+                        'id': quoted_message_id
+                    }
+                    # ✅ NOVO: Adicionar participant se disponível (necessário para reply funcionar)
+                    if quoted_participant:
+                        quoted_key['participant'] = quoted_participant
+                    
                     payload['options'] = {
                         'quoted': {
-                            'key': {
-                                'remoteJid': quoted_remote_jid,
-                                'fromMe': original_message.direction == 'outgoing',
-                                'id': quoted_message_id
-                            },
+                            'key': quoted_key,
                             'message': {
                                 'conversation': clean_content
                             }
