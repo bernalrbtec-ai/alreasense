@@ -681,13 +681,18 @@ def create_task_status_history(sender, instance, created, **kwargs):
                     instance.save(update_fields=update_fields)
                 
                 # Criar registro no histórico
+                # ✅ CORREÇÃO: Usar dict para pegar display name do status
+                status_choices_dict = dict(Task.STATUS_CHOICES)
+                old_status_display = status_choices_dict.get(old_status, old_status)
+                new_status_display = instance.get_status_display()
+                
                 TaskHistory.objects.create(
                     task=instance,
                     change_type='status_change',
                     old_status=old_status,
                     new_status=instance.status,
                     changed_by=changed_by,
-                    description=f"Status alterado de '{Task.STATUS_CHOICES[dict(Task.STATUS_CHOICES)[old_status]][1] if old_status in dict(Task.STATUS_CHOICES) else old_status}' para '{instance.get_status_display()}'"
+                    description=f"Status alterado de '{old_status_display}' para '{new_status_display}'"
                 )
                 logger.info(f"✅ [TASK HISTORY] Mudança de status registrada: {instance.title} - {old_status} → {instance.status}")
             
