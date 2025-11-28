@@ -162,9 +162,9 @@ REST_FRAMEWORK = {
         'rest_framework_simplejwt.authentication.JWTAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.IsAuthenticated',
-    ],
+    # ✅ CRITICAL FIX: Removido DEFAULT_PERMISSION_CLASSES global
+    # Agora cada ViewSet deve definir permission_classes explicitamente
+    # Isso permite endpoints públicos (webhooks, health checks) sem workarounds
     # Exception for webhook endpoints
     'EXCEPTION_HANDLER': 'apps.common.exceptions.custom_exception_handler',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',

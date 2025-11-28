@@ -1,32 +1,35 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuthStore } from './stores/authStore'
-import { useEffect } from 'react'
+import { useEffect, lazy, Suspense } from 'react'
 import { api } from './lib/api'
 import { Toaster } from 'sonner'
 
-// Pages
+// ✅ CRITICAL FIX: Lazy loading de páginas para reduzir bundle inicial
+// Login page - sempre carregar (primeira página)
 import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import MessagesPage from './pages/MessagesPage'
-import CampaignLogsPage from './pages/CampaignLogsPage'
-import ConnectionsPage from './pages/ConnectionsPage'
-import ExperimentsPage from './pages/ExperimentsPage'
-import BillingPage from './pages/BillingPage'
-import TenantsPage from './pages/TenantsPage'
-import ProductsPage from './pages/ProductsPage'
-import PlansPage from './pages/PlansPage'
-import SystemStatusPage from './pages/SystemStatusPage'
-import EvolutionConfigPage from './pages/EvolutionConfigPage'
-import ProfilePage from './pages/ProfilePage'
-import NotificationsPage from './pages/NotificationsPage'
-import ConfigurationsPage from './pages/ConfigurationsPage'
-import ContactsPage from './pages/ContactsPage'
-import CampaignsPage from './pages/CampaignsPage'
-import WebhookMonitoringPage from './pages/WebhookMonitoringPage'
-import TestPresencePage from './pages/TestPresencePage'
-import DepartmentsPage from './pages/DepartmentsPage'
-import AgendaPage from './pages/AgendaPage'
-import { ChatPage } from './modules/chat'
+
+// Lazy load de todas as outras páginas
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const MessagesPage = lazy(() => import('./pages/MessagesPage'))
+const CampaignLogsPage = lazy(() => import('./pages/CampaignLogsPage'))
+const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'))
+const ExperimentsPage = lazy(() => import('./pages/ExperimentsPage'))
+const BillingPage = lazy(() => import('./pages/BillingPage'))
+const TenantsPage = lazy(() => import('./pages/TenantsPage'))
+const ProductsPage = lazy(() => import('./pages/ProductsPage'))
+const PlansPage = lazy(() => import('./pages/PlansPage'))
+const SystemStatusPage = lazy(() => import('./pages/SystemStatusPage'))
+const EvolutionConfigPage = lazy(() => import('./pages/EvolutionConfigPage'))
+const ProfilePage = lazy(() => import('./pages/ProfilePage'))
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
+const ConfigurationsPage = lazy(() => import('./pages/ConfigurationsPage'))
+const ContactsPage = lazy(() => import('./pages/ContactsPage'))
+const CampaignsPage = lazy(() => import('./pages/CampaignsPage'))
+const WebhookMonitoringPage = lazy(() => import('./pages/WebhookMonitoringPage'))
+const TestPresencePage = lazy(() => import('./pages/TestPresencePage'))
+const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage'))
+const AgendaPage = lazy(() => import('./pages/AgendaPage'))
+const ChatPage = lazy(() => import('./modules/chat').then(module => ({ default: module.ChatPage })))
 
 // Components
 import Layout from './components/Layout'
@@ -105,89 +108,157 @@ function App() {
             <>
               <Route path="chat" element={
                 <ProtectedChatRoute>
-                  <ChatPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <ChatPage />
+                  </Suspense>
                 </ProtectedChatRoute>
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
-                  <AgendaPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <AgendaPage />
+                  </Suspense>
                 </ProtectedAgendaRoute>
               } />
               <Route path="contacts" element={
                 <ProtectedContactsRoute>
-                  <ContactsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <ContactsPage />
+                  </Suspense>
                 </ProtectedContactsRoute>
               } />
-              <Route path="profile" element={<ProfilePage />} />
+              <Route path="profile" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <ProfilePage />
+                </Suspense>
+              } />
               <Route path="*" element={<Navigate to="/chat" replace />} />
             </>
           ) : (
             <>
-              <Route path="dashboard" element={<DashboardPage />} />
-              <Route path="billing" element={<BillingPage />} />
-              <Route path="profile" element={<ProfilePage />} />
-              <Route path="configurations" element={<ConfigurationsPage />} />
+              <Route path="dashboard" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <DashboardPage />
+                </Suspense>
+              } />
+              <Route path="billing" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <BillingPage />
+                </Suspense>
+              } />
+              <Route path="profile" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <ProfilePage />
+                </Suspense>
+              } />
+              <Route path="configurations" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <ConfigurationsPage />
+                </Suspense>
+              } />
               
               {/* Workflow - Chat e Agenda */}
               <Route path="chat" element={
                 <ProtectedChatRoute>
-                  <ChatPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <ChatPage />
+                  </Suspense>
                 </ProtectedChatRoute>
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
-                  <AgendaPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <AgendaPage />
+                  </Suspense>
                 </ProtectedAgendaRoute>
               } />
               
               {/* Rotas Protegidas por Produto */}
               <Route path="contacts" element={
                 <ProtectedRoute requiredProduct="flow">
-                  <ContactsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <ContactsPage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               <Route path="campaigns" element={
                 <ProtectedRoute requiredProduct="flow">
-                  <CampaignsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <CampaignsPage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               <Route path="campaigns/logs" element={
                 <ProtectedRoute requiredProduct="flow">
-                  <CampaignLogsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <CampaignLogsPage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               <Route path="campaigns/test-presence" element={
                 <ProtectedRoute requiredProduct="flow">
-                  <TestPresencePage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <TestPresencePage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               <Route path="connections" element={
                 <ProtectedRoute requiredProduct="flow">
-                  <ConnectionsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <ConnectionsPage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               <Route path="experiments" element={
                 <ProtectedRoute requiredProduct="sense">
-                  <ExperimentsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <ExperimentsPage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               
               {/* Notificações - Acesso para usuários com Flow */}
               <Route path="admin/notifications" element={
                 <ProtectedRoute requiredProduct="flow">
-                  <NotificationsPage />
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <NotificationsPage />
+                  </Suspense>
                 </ProtectedRoute>
               } />
               
               {/* Super Admin Routes */}
               {isSuperAdmin && (
                 <>
-                  <Route path="admin/tenants" element={<TenantsPage />} />
-                  <Route path="admin/products" element={<ProductsPage />} />
-                  <Route path="admin/plans" element={<PlansPage />} />
-                  <Route path="admin/system" element={<SystemStatusPage />} />
-                  <Route path="admin/evolution" element={<EvolutionConfigPage />} />
-                  <Route path="admin/webhook-monitoring" element={<WebhookMonitoringPage />} />
+                  <Route path="admin/tenants" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <TenantsPage />
+                    </Suspense>
+                  } />
+                  <Route path="admin/products" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <ProductsPage />
+                    </Suspense>
+                  } />
+                  <Route path="admin/plans" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <PlansPage />
+                    </Suspense>
+                  } />
+                  <Route path="admin/system" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <SystemStatusPage />
+                    </Suspense>
+                  } />
+                  <Route path="admin/evolution" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <EvolutionConfigPage />
+                    </Suspense>
+                  } />
+                  <Route path="admin/webhook-monitoring" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <WebhookMonitoringPage />
+                    </Suspense>
+                  } />
                 </>
               )}
               

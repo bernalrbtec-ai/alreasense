@@ -23,6 +23,7 @@ from .serializers import (
     TaskCreateSerializer
 )
 from .services import ContactImportService, ContactExportService
+from apps.common.rate_limiting import rate_limit_by_user
 
 
 class ContactViewSet(viewsets.ModelViewSet):
@@ -199,6 +200,7 @@ class ContactViewSet(viewsets.ModelViewSet):
         return Response(result)
     
     @action(detail=False, methods=['post'])
+    @rate_limit_by_user(rate='10/h', method='POST')  # ✅ CRITICAL: Rate limit - 10 importações por hora
     def import_csv(self, request):
         """
         Importação em massa via CSV

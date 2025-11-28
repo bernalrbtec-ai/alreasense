@@ -12,6 +12,7 @@ from .serializers import (
     CampaignLogSerializer, CampaignStatsSerializer,
     CampaignNotificationSerializer, NotificationMarkReadSerializer, NotificationReplySerializer
 )
+from apps.common.rate_limiting import rate_limit_by_user
 
 
 class CampaignViewSet(viewsets.ModelViewSet):
@@ -40,6 +41,7 @@ class CampaignViewSet(viewsets.ModelViewSet):
         
         return queryset
     
+    @rate_limit_by_user(rate='50/h', method='POST')  # ✅ CRITICAL: Rate limit - 50 criações por hora
     def perform_create(self, serializer):
         """Criar campanha associada ao tenant e usuário"""
         # Passar tag_id, state_ids e contact_ids para o serializer via context
