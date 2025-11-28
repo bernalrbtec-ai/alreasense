@@ -2172,8 +2172,8 @@ class MessageViewSet(viewsets.ModelViewSet):
             logger.info(f"✅ [FORWARD MESSAGE] Mensagem enfileirada para envio: {forwarded_message.id}")
             
             # Broadcast via WebSocket (mensagem pendente)
-            from apps.chat.utils.websocket import broadcast_pending_message
-            broadcast_pending_message(forwarded_message)
+            from apps.chat.utils.websocket import broadcast_message_received
+            broadcast_message_received(forwarded_message)
             
             return Response(
                 {
