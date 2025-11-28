@@ -25,7 +25,6 @@ import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { MessageInfoModal } from './MessageInfoModal';
-import { ForwardMessageModal } from './ForwardMessageModal';
 import type { Message } from '../types';
 
 interface MessageContextMenuProps {
@@ -36,10 +35,9 @@ interface MessageContextMenuProps {
   onShowEmojiPicker?: (message: Message) => void;
 }
 
-export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker }: MessageContextMenuProps) {
+export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker, onShowForward }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const [showForwardModal, setShowForwardModal] = useState(false);
   const { activeConversation, setMessages, messages, setReplyToMessage } = useChatStore();
 
   // Fechar menu ao clicar fora
@@ -155,8 +153,10 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
   // Encaminhar mensagem
   const handleForward = () => {
     console.log('📤 [FORWARD] handleForward chamado');
-    setShowForwardModal(true);
-    console.log('📤 [FORWARD] showForwardModal definido como true');
+    if (onShowForward) {
+      // ✅ CORREÇÃO: Usar callback do pai (MessageList) para renderizar modal fora do menu
+      onShowForward(message);
+    }
     onClose();
   };
 
@@ -297,19 +297,6 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
         />
       )}
 
-      {/* Modal de Encaminhar Mensagem */}
-      {showForwardModal && (
-        <>
-          {console.log('📤 [FORWARD] Renderizando ForwardMessageModal')}
-          <ForwardMessageModal
-            message={message}
-            onClose={() => {
-              console.log('📤 [FORWARD] Fechando modal');
-              setShowForwardModal(false);
-            }}
-          />
-        </>
-      )}
     </>
   );
 }

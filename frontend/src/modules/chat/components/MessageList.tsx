@@ -191,6 +191,7 @@ export function MessageList() {
   const [contextMenu, setContextMenu] = useState<{ message: Message; position: { x: number; y: number } } | null>(null);
   const [showMessageInfo, setShowMessageInfo] = useState<Message | null>(null);
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
 
   useEffect(() => {
     if (!activeConversation?.id) return;
