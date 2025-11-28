@@ -680,7 +680,8 @@ export function MessageList() {
               {/* ✅ MELHORIA UX: Reações posicionadas como WhatsApp (ao final da mensagem, fora do card, alinhadas) */}
               <MessageReactions message={msg} direction={msg.direction} />
             </div>
-          ))}
+            );
+          })}
           
           {/* Indicador de digitando - Melhorado */}
           {typing && (

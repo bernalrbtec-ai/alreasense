@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Edit } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
@@ -146,7 +146,16 @@ export default function ContactModal({
       if (contact?.id) {
         // Atualizar contato existente
         await api.patch(`/contacts/contacts/${contact.id}/`, formData)
+        // ✅ MELHORIA UX: Feedback visual melhorado ao atualizar nome
         updateToastSuccess(toastId, 'atualizar', 'Contato')
+        // ✅ Toast adicional com detalhes (se nome mudou)
+        if (formData.name !== contact.name) {
+          const { toast: toastFn } = await import('sonner')
+          toastFn.success('Nome atualizado! ✅', {
+            description: `O nome "${formData.name}" foi atualizado com sucesso e já está visível na conversa`,
+            duration: 4000,
+          })
+        }
       } else {
         // Criar novo contato
         await api.post('/contacts/contacts/', formData)
