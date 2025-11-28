@@ -2117,100 +2117,72 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
         
-        # Preparar URL e credenciais
-        base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
-        api_key = instance.api_key or evolution_server.api_key
-        instance_name = instance.instance_name
+        # ✅ CORREÇÃO: Evolution API não tem endpoint específico para encaminhar
+        # Solução: Criar nova mensagem e usar fluxo normal de envio (sendText/sendMedia)
+        # Isso é mais confiável e funciona para todos os tipos de mensagem
         
-        # Endpoint da Evolution API para encaminhar mensagem
-        # Documentação: POST /chat/forwardMessage/{instance}
-        endpoint = f"{base_url}/chat/forwardMessage/{instance_name}"
-        
-        # Preparar número do destinatário
-        destination_phone = destination_conversation.contact_phone.replace('+', '').replace('@s.whatsapp.net', '').replace('@g.us', '')
-        
-        payload = {
-            'number': destination_phone,
-            'messageId': message.message_id
-        }
-        
-        headers = {
-            'apikey': api_key,
-            'Content-Type': 'application/json'
-        }
-        
-        # Importar funções de mascaramento
-        from apps.chat.webhooks import _mask_digits, _mask_remote_jid
-        
-        logger.info(f"📤 [FORWARD MESSAGE] Encaminhando mensagem via Evolution API:")
-        logger.info(f"   Endpoint: {endpoint}")
-        logger.info(f"   Message ID: {_mask_digits(message.message_id)}")
-        logger.info(f"   Destination: {_mask_digits(destination_phone)}")
+        logger.info(f"📤 [FORWARD MESSAGE] Encaminhando mensagem:")
+        logger.info(f"   Message ID original: {message.id}")
         logger.info(f"   From conversation: {message.conversation.contact_phone}")
         logger.info(f"   To conversation: {destination_conversation.contact_phone}")
         
         try:
-            # Chamar Evolution API
-            with httpx.Client(timeout=10.0) as client:
-                response = client.post(endpoint, json=payload, headers=headers)
+            # Criar mensagem na conversa destino
+            forwarded_message = Message.objects.create(
+                conversation=destination_conversation,
+                sender=user,
+                content=message.content or '',
+                direction='outgoing',
+                status='pending',  # Será atualizado quando enviar
+                is_internal=False,
+                metadata={
+                    'forwarded_from': str(message.id),
+                    'forwarded_from_conversation': str(message.conversation.id),
+                    'forwarded_at': timezone.now().isoformat(),
+                    'original_message_id': message.message_id,
+                    'include_signature': True  # Incluir assinatura por padrão
+                }
+            )
+            
+            # Se a mensagem original tinha anexos, copiar referências
+            attachment_urls = []
+            if message.attachments.exists():
+                from apps.chat.models import MessageAttachment
+                for original_attachment in message.attachments.all():
+                    MessageAttachment.objects.create(
+                        message=forwarded_message,
+                        file_url=original_attachment.file_url,
+                        short_url=original_attachment.short_url,
+                        mime_type=original_attachment.mime_type,
+                        original_filename=original_attachment.original_filename,
+                        file_size=original_attachment.file_size
+                    )
+                    # Adicionar URL para envio
+                    attachment_urls.append(original_attachment.short_url or original_attachment.file_url)
                 
-                if response.status_code in (200, 201):
-                    # Evolution API encaminhou com sucesso
-                    # Criar mensagem na conversa destino para manter histórico
-                    forwarded_message = Message.objects.create(
-                        conversation=destination_conversation,
-                        sender=user,
-                        content=message.content or '',
-                        direction='outgoing',
-                        status='sent',
-                        is_internal=False,
-                        metadata={
-                            'forwarded_from': str(message.id),
-                            'forwarded_from_conversation': str(message.conversation.id),
-                            'forwarded_at': timezone.now().isoformat(),
-                            'original_message_id': message.message_id
-                        }
-                    )
-                    
-                    # Se a mensagem original tinha anexos, copiar referências
-                    if message.attachments.exists():
-                        from apps.chat.models import MessageAttachment
-                        for original_attachment in message.attachments.all():
-                            MessageAttachment.objects.create(
-                                message=forwarded_message,
-                                file_url=original_attachment.file_url,
-                                short_url=original_attachment.short_url,
-                                mime_type=original_attachment.mime_type,
-                                original_filename=original_attachment.original_filename,
-                                file_size=original_attachment.file_size
-                            )
-                        forwarded_message.metadata['attachment_urls'] = [
-                            att.short_url or att.file_url
-                            for att in forwarded_message.attachments.all()
-                        ]
-                        forwarded_message.save(update_fields=['metadata'])
-                    
-                    logger.info(f"✅ [FORWARD MESSAGE] Mensagem encaminhada com sucesso: {forwarded_message.id}")
-                    
-                    # Broadcast via WebSocket
-                    from apps.chat.utils.websocket import broadcast_pending_message
-                    broadcast_pending_message(forwarded_message)
-                    
-                    return Response(
-                        {
-                            'status': 'success',
-                            'message': 'Mensagem encaminhada com sucesso',
-                            'forwarded_message_id': str(forwarded_message.id)
-                        },
-                        status=status.HTTP_200_OK
-                    )
-                else:
-                    logger.error(f"❌ [FORWARD MESSAGE] Erro {response.status_code} ao encaminhar mensagem:")
-                    logger.error(f"   Response: {response.text[:200]}")
-                    return Response(
-                        {'error': f'Erro ao encaminhar mensagem: {response.status_code}', 'details': response.text[:200]},
-                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
-                    )
+                forwarded_message.metadata['attachment_urls'] = attachment_urls
+                forwarded_message.save(update_fields=['metadata'])
+            
+            logger.info(f"✅ [FORWARD MESSAGE] Mensagem criada: {forwarded_message.id}")
+            
+            # Enfileirar envio via fluxo normal (send_message_to_evolution)
+            from apps.chat.tasks import send_message_to_evolution
+            send_message_to_evolution.delay(str(forwarded_message.id))
+            
+            logger.info(f"✅ [FORWARD MESSAGE] Mensagem enfileirada para envio: {forwarded_message.id}")
+            
+            # Broadcast via WebSocket (mensagem pendente)
+            from apps.chat.utils.websocket import broadcast_pending_message
+            broadcast_pending_message(forwarded_message)
+            
+            return Response(
+                {
+                    'status': 'success',
+                    'message': 'Mensagem encaminhada com sucesso',
+                    'forwarded_message_id': str(forwarded_message.id)
+                },
+                status=status.HTTP_200_OK
+            )
         except Exception as e:
             logger.error(f"❌ [FORWARD MESSAGE] Erro ao encaminhar mensagem: {e}", exc_info=True)
             return Response(
