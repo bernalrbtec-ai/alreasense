@@ -997,7 +997,23 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         # Verificar se tem anexos (já carregado via prefetch_related)
                         attachments_list = list(original_message.attachments.all())
                         if attachments_list:
-                            original_content = '📎 Anexo'
+                            attachment = attachments_list[0]
+                            if attachment.is_image:
+                                original_content = '📷 Imagem'
+                            elif attachment.is_video:
+                                original_content = '🎥 Vídeo'
+                            elif attachment.is_audio:
+                                original_content = '🎵 Áudio'
+                            else:
+                                original_content = '📎 Documento'
+                        else:
+                            original_content = 'Mensagem'
+                    
+                    # ✅ FIX: Limitar e limpar conteúdo para evitar caracteres especiais problemáticos
+                    # Remover quebras de linha e caracteres de controle
+                    clean_content = original_content.replace('\n', ' ').replace('\r', ' ').strip()
+                    # Limitar a 100 caracteres
+                    clean_content = clean_content[:100] if clean_content else 'Mensagem'
                     
                     payload['options'] = {
                         'quoted': {
@@ -1007,13 +1023,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 'id': quoted_message_id
                             },
                             'message': {
-                                'conversation': original_content[:100] if original_content else 'Mensagem'  # Limitar tamanho
+                                'conversation': clean_content
                             }
                         }
                     }
                     logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted ao texto")
                     logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
                     logger.info(f"   Message ID: {quoted_message_id}")
+                    logger.info(f"   Original content (limpo): {clean_content[:50]}...")
                 
                 # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
                 if conversation.conversation_type == 'group':
@@ -1087,11 +1104,16 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 logger.info(f"   Body completo: {response.text}")
                 
                 # ✅ CORREÇÃO: Tratar erros específicos da Evolution API antes de fazer raise_for_status
-                if response.status_code != 200:
+                # ✅ FIX: 201 (Created) também é sucesso, não erro!
+                if response.status_code not in (200, 201):
                     logger.error(f"❌ [CHAT ENVIO] Erro {response.status_code} ao enviar mensagem:")
                     logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
                     logger.error(f"   Resposta completa: {response.text}")
                     logger.error(f"   Headers enviados: {dict(headers)}")
+                elif response.status_code == 201:
+                    logger.info(f"✅ [CHAT ENVIO] Mensagem criada com sucesso (201 Created)")
+                    logger.info(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
+                    logger.info(f"   Resposta completa: {response.text}")
                     
                     # ✅ CORREÇÃO CRÍTICA: Erros 500/503 são temporários - fazer retry
                     if response.status_code >= 500:
