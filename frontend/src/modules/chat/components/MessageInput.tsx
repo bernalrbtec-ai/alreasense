@@ -169,9 +169,17 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
       // 2️⃣ Se houver texto, enviar mensagem
       if (hasText) {
         const replyToId = replyToMessage?.id;
+        // ✅ LOG CRÍTICO: Verificar se reply_to está sendo passado
+        console.log('📤 [MESSAGE INPUT] Preparando envio de mensagem:');
+        console.log('   Content:', message.trim().substring(0, 50));
+        console.log('   replyToMessage:', replyToMessage);
+        console.log('   replyToId:', replyToId);
+        console.log('   includeSignature:', includeSignature);
         // ✅ NOVO: Enviar mentions apenas se for grupo e tiver menções
         const mentionsToSend = activeConversation?.conversation_type === 'group' && mentions.length > 0 ? mentions : undefined;
+        console.log('   mentionsToSend:', mentionsToSend);
         const success = sendMessage(message.trim(), includeSignature, false, replyToId, mentionsToSend);
+        console.log('📤 [MESSAGE INPUT] Resultado do sendMessage:', success);
         
         if (success) {
           setMessage('');

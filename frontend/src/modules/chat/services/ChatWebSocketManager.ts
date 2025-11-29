@@ -262,8 +262,12 @@ class ChatWebSocketManager {
           is_internal: data.is_internal,
           mentions: data.mentions
         });
+        console.log('📤 [MANAGER] Payload completo (JSON):', JSON.stringify(data, null, 2));
+        console.log('📤 [MANAGER] Reply_to existe?', !!data.reply_to, '| Valor:', data.reply_to);
       }
-      this.ws.send(JSON.stringify(data));
+      const jsonPayload = JSON.stringify(data);
+      console.log('📤 [MANAGER] Enviando JSON string:', jsonPayload.substring(0, 200));
+      this.ws.send(jsonPayload);
       console.log('✅ [MANAGER] Mensagem enviada com sucesso:', data.type);
       return true;
     } catch (error) {
