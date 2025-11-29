@@ -114,6 +114,11 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             data = json.loads(text_data)
             event_type = data.get('type')
             
+            # ✅ LOG CRÍTICO: Logar TODAS as mensagens recebidas
+            logger.info(f"📨 [CHAT WS V2] Mensagem recebida do cliente:")
+            logger.info(f"   Event type: {event_type}")
+            logger.info(f"   Data completo: {data}")
+            
             if event_type == 'subscribe':
                 await self.handle_subscribe(data)
             elif event_type == 'unsubscribe':
