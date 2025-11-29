@@ -1057,21 +1057,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     # Limitar a 100 caracteres
                     clean_content = clean_content[:100] if clean_content else 'Mensagem'
                     
-                    # ✅ FORMATO CORRETO: quoted vai no root, key só precisa de 'id' (mais simples)
-                    # Documentação mostra que só 'id' pode ser suficiente
+                    # ✅ FORMATO SIMPLIFICADO: Usar apenas 'id' no quoted.key (conforme sugestão)
+                    # O "pulo do gato" é usar o ID da mensagem original que vem no webhook
+                    # Esse ID é o message_id da Evolution API (salvo em original_message.message_id)
                     quoted_key = {
-                        'id': quoted_message_id
+                        'id': quoted_message_id  # ✅ Apenas o ID da Evolution API
                     }
-                    
-                    # ✅ Adicionar campos adicionais se necessário (pode ajudar em alguns casos)
-                    # Mas tentar primeiro só com 'id' conforme documentação
-                    if quoted_remote_jid:
-                        quoted_key['remoteJid'] = quoted_remote_jid
-                    if original_message.direction:
-                        quoted_key['fromMe'] = original_message.direction == 'outgoing'
-                    # ✅ Participant pode ser necessário para grupos
-                    if quoted_participant:
-                        quoted_key['participant'] = quoted_participant
                     
                     # ✅ FORMATO CORRETO: 'quoted' no root (não dentro de 'options')
                     payload['quoted'] = {
