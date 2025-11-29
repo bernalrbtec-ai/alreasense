@@ -621,6 +621,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         include_signature = message.metadata.get('include_signature', True) if message.metadata else True  # ✅ Por padrão inclui assinatura
         reply_to_uuid = message.metadata.get('reply_to') if message.metadata else None  # ✅ UUID interno da mensagem sendo respondida
         
+        # ✅ LOG CRÍTICO: Verificar se reply_to está no metadata
+        log.info(f"🔍 [CHAT ENVIO] Verificando reply_to na mensagem:")
+        log.info(f"   Message ID: {message.id}")
+        log.info(f"   Metadata completo: {message.metadata}")
+        log.info(f"   reply_to (UUID): {reply_to_uuid}")
+        
         # ✅ NOVO: Buscar message_id da Evolution da mensagem original (se reply_to existe)
         quoted_message_id = None
         quoted_remote_jid = None
@@ -1019,6 +1025,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     'text': content.strip()
                 }
                 
+                # ✅ LOG CRÍTICO: Verificar se reply foi detectado antes de adicionar quoted
+                log.info(f"🔍 [CHAT ENVIO] Verificando se deve adicionar 'quoted':")
+                log.info(f"   quoted_message_id: {quoted_message_id}")
+                log.info(f"   quoted_remote_jid: {quoted_remote_jid}")
+                log.info(f"   original_message: {original_message is not None}")
+                
                 # ✅ CORREÇÃO: Adicionar 'quoted' no root (não dentro de 'options') se for resposta
                 if quoted_message_id and quoted_remote_jid and original_message:
                     # Buscar conteúdo original da mensagem para incluir no quoted
@@ -1075,6 +1087,15 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.info(f"   Original content (limpo): {clean_content[:50]}...")
                     logger.info(f"   📋 Payload com quoted (mascado): %s", mask_sensitive_data(payload))
                     logger.info(f"   📋 Payload com quoted (JSON formatado): %s", json.dumps(mask_sensitive_data(payload), indent=2, ensure_ascii=False))
+                    
+                    # ✅ LOG CRÍTICO: Verificar estrutura do quoted antes de enviar
+                    if 'quoted' in payload:
+                        logger.info(f"✅ [CHAT ENVIO] 'quoted' confirmado no payload!")
+                        logger.info(f"   quoted.key.id: {_mask_digits(payload['quoted']['key'].get('id', 'N/A'))}")
+                        logger.info(f"   quoted.key.remoteJid: {_mask_remote_jid(payload['quoted']['key'].get('remoteJid', 'N/A'))}")
+                        logger.info(f"   quoted.key.participant: {_mask_remote_jid(payload['quoted']['key'].get('participant', 'N/A'))}")
+                    else:
+                        logger.error(f"❌ [CHAT ENVIO] 'quoted' NÃO está no payload! Isso é um erro!")
                 
                 # ✅ NOVO: Adicionar menções se for grupo e tiver mentions no metadata
                 if conversation.conversation_type == 'group':
@@ -1115,245 +1136,45 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         else:
                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento (todas eram números de grupo?)")
                 
-                # ✅ NOVO: Usar endpoint /message/reply se for resposta (mais direto e específico)
+                # ✅ SIMPLIFICAÇÃO: Sempre usar /message/sendText com 'quoted' no root quando for reply
+                # O endpoint /message/reply pode não existir, então vamos sempre usar o formato padrão
+                # O payload já tem 'quoted' adicionado quando é reply (feito acima)
+                is_reply = 'quoted' in payload
                 logger.info(f"🔍 [CHAT ENVIO] Verificando se é reply:")
+                logger.info(f"   É reply? {is_reply}")
                 logger.info(f"   quoted_message_id: {_mask_digits(quoted_message_id) if quoted_message_id else 'N/A'}")
                 logger.info(f"   quoted_remote_jid: {_mask_remote_jid(quoted_remote_jid) if quoted_remote_jid else 'N/A'}")
                 logger.info(f"   original_message: {'Sim' if original_message else 'N/A'}")
+                logger.info(f"   Payload tem 'quoted'? {'Sim' if is_reply else 'Não'}")
                 
-                if quoted_message_id and quoted_remote_jid:
-                    # Endpoint específico para respostas: POST /message/reply/{instance}
-                    # Formato: { "number": "...", "reply_to": "message_id_evolution", "text": "..." }
-                    endpoint = f"{base_url}/message/reply/{instance.instance_name}"
-                    reply_payload = {
-                        'number': final_number,
-                        'reply_to': quoted_message_id,
-                        'text': content.strip()
-                    }
-                    
-                    # Adicionar menções se for grupo
-                    if conversation.conversation_type == 'group':
-                        metadata = message.metadata or {}
-                        mentions = metadata.get('mentions', [])
-                        if mentions:
-                            mention_phones = []
-                            for m in mentions:
-                                jid = m.get('jid', '')
-                                phone = m.get('phone', '')
-                                if jid:
-                                    jid_clean = jid.split('@')[0]
-                                    mention_phones.append(jid_clean)
-                                elif phone:
-                                    group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
-                                    if '@' in group_phone:
-                                        group_phone = group_phone.split('@')[0]
-                                    if phone != group_phone:
-                                        mention_phones.append(phone)
-                            if mention_phones:
-                                reply_payload['mentions'] = mention_phones
-                    
-                    logger.info(f"💬 [CHAT ENVIO] Tentando endpoint /message/reply (resposta)")
+                # ✅ DECISÃO: Se for reply, usar sempre /message/sendText com payload que já tem 'quoted'
+                # Não tentar /message/reply primeiro (endpoint pode não existir)
+                # ✅ SIMPLIFICAÇÃO: Sempre usar /message/sendText (com ou sem 'quoted')
+                # O payload já está pronto (com 'quoted' se for reply, sem se for mensagem normal)
+                endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
+                
+                if is_reply:
+                    logger.info(f"💬 [CHAT ENVIO] Enviando mensagem COM REPLY para Evolution API...")
                     logger.info(f"   Endpoint: {endpoint}")
                     logger.info(f"   Reply to: {_mask_digits(quoted_message_id)}")
-                    logger.info(f"   Number: {_mask_remote_jid(final_number)}")
-                    logger.info(f"   Text: {_truncate_text(content, 100)}")
-                    logger.info("   Payload (mascado): %s", mask_sensitive_data(reply_payload))
-                    
-                    request_start = time.perf_counter()
-                    try:
-                        response = await client.post(
-                            endpoint,
-                            headers=headers,
-                            json=reply_payload
-                        )
-                        # Se retornar 404, o endpoint não existe - usar fallback
-                        if response.status_code == 404:
-                            logger.warning(f"⚠️ [CHAT ENVIO] Endpoint /message/reply não encontrado (404). Usando fallback /message/sendText com 'quoted' no root")
-                            # Fallback: usar /message/sendText com 'quoted' no root (formato correto)
-                            original_content = original_message.content or ''
-                            if not original_content:
-                                attachments_list = list(original_message.attachments.all())
-                                if attachments_list:
-                                    attachment = attachments_list[0]
-                                    if attachment.is_image:
-                                        original_content = '📷 Imagem'
-                                    elif attachment.is_video:
-                                        original_content = '🎥 Vídeo'
-                                    elif attachment.is_audio:
-                                        original_content = '🎵 Áudio'
-                                    else:
-                                        original_content = '📎 Documento'
-                                else:
-                                    original_content = 'Mensagem'
-                            
-                            clean_content = original_content.replace('\n', ' ').replace('\r', ' ').strip()
-                            clean_content = clean_content[:100] if clean_content else 'Mensagem'
-                            
-                            # ✅ FORMATO CORRETO: 'quoted' no root (conforme documentação)
-                            quoted_key_fallback = {
-                                'id': quoted_message_id
-                            }
-                            if quoted_remote_jid:
-                                quoted_key_fallback['remoteJid'] = quoted_remote_jid
-                            if original_message.direction:
-                                quoted_key_fallback['fromMe'] = original_message.direction == 'outgoing'
-                            if quoted_participant:
-                                quoted_key_fallback['participant'] = quoted_participant
-                            
-                            payload_with_quoted = {
-                                'number': final_number,
-                                'text': content.strip(),
-                                'quoted': {
-                                    'key': quoted_key_fallback,
-                                    'message': {
-                                        'conversation': clean_content
-                                    }
-                                }
-                            }
-                            
-                            # Adicionar menções se for grupo
-                            if conversation.conversation_type == 'group':
-                                metadata = message.metadata or {}
-                                mentions = metadata.get('mentions', [])
-                                if mentions:
-                                    mention_phones = []
-                                    for m in mentions:
-                                        jid = m.get('jid', '')
-                                        phone = m.get('phone', '')
-                                        if jid:
-                                            jid_clean = jid.split('@')[0]
-                                            mention_phones.append(jid_clean)
-                                        elif phone:
-                                            group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
-                                            if '@' in group_phone:
-                                                group_phone = group_phone.split('@')[0]
-                                            if phone != group_phone:
-                                                mention_phones.append(phone)
-                                    if mention_phones:
-                                        payload_with_quoted['mentions'] = mention_phones
-                            
-                            endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
-                            logger.info(f"📤 [CHAT ENVIO] Fallback: usando /message/sendText com 'quoted' no root")
-                            logger.info(f"   🔍 DEBUG REPLY - Valores usados no fallback:")
-                            logger.info(f"      remoteJid: {_mask_remote_jid(quoted_remote_jid)}")
-                            logger.info(f"      fromMe: {original_message.direction == 'outgoing'} (direction original: {original_message.direction})")
-                            logger.info(f"      message_id (id): {_mask_digits(quoted_message_id)}")
-                            logger.info(f"      participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
-                            logger.info(f"      original_message.id (interno): {original_message.id}")
-                            logger.info(f"      original_message.message_id (Evolution): {_mask_digits(original_message.message_id) if original_message.message_id else 'N/A'}")
-                            logger.info(f"      clean_content: {clean_content[:50]}...")
-                            logger.info("   📋 Payload completo (mascado): %s", mask_sensitive_data(payload_with_quoted))
-                            logger.info("   📋 Payload completo (JSON formatado): %s", json.dumps(mask_sensitive_data(payload_with_quoted), indent=2, ensure_ascii=False))
-                            response = await client.post(
-                                endpoint,
-                                headers=headers,
-                                json=payload_with_quoted
-                            )
-                            
-                            logger.info(f"📥 [CHAT ENVIO] Resposta do fallback (404):")
-                            logger.info(f"   Status: {response.status_code}")
-                            logger.info(f"   Body: {response.text[:500]}")
-                        else:
-                            # Se não for 404, pode ser outro erro - deixar passar para tratamento normal
-                            pass
-                    except httpx.HTTPStatusError as e:
-                        # Se for 404, fazer fallback
-                        if e.response.status_code == 404:
-                            logger.warning(f"⚠️ [CHAT ENVIO] Endpoint /message/reply não encontrado (404). Usando fallback /message/sendText com 'quoted' no root")
-                            # Fallback: usar /message/sendText com 'quoted' no root (formato correto)
-                            original_content = original_message.content or ''
-                            if not original_content:
-                                attachments_list = list(original_message.attachments.all())
-                                if attachments_list:
-                                    attachment = attachments_list[0]
-                                    if attachment.is_image:
-                                        original_content = '📷 Imagem'
-                                    elif attachment.is_video:
-                                        original_content = '🎥 Vídeo'
-                                    elif attachment.is_audio:
-                                        original_content = '🎵 Áudio'
-                                    else:
-                                        original_content = '📎 Documento'
-                                else:
-                                    original_content = 'Mensagem'
-                            
-                            clean_content = original_content.replace('\n', ' ').replace('\r', ' ').strip()
-                            clean_content = clean_content[:100] if clean_content else 'Mensagem'
-                            
-                            # ✅ FORMATO CORRETO: 'quoted' no root (conforme documentação)
-                            quoted_key_exception = {
-                                'id': quoted_message_id
-                            }
-                            if quoted_remote_jid:
-                                quoted_key_exception['remoteJid'] = quoted_remote_jid
-                            if original_message.direction:
-                                quoted_key_exception['fromMe'] = original_message.direction == 'outgoing'
-                            if quoted_participant:
-                                quoted_key_exception['participant'] = quoted_participant
-                            
-                            # ✅ FORMATO CORRETO: 'text' e 'quoted' no root (não 'textMessage' nem 'options.quoted')
-                            payload_with_quoted = {
-                                'number': final_number,
-                                'text': content.strip(),
-                                'quoted': {
-                                    'key': quoted_key_exception,
-                                    'message': {
-                                        'conversation': clean_content
-                                    }
-                                }
-                            }
-                            
-                            # Adicionar menções se for grupo
-                            if conversation.conversation_type == 'group':
-                                metadata = message.metadata or {}
-                                mentions = metadata.get('mentions', [])
-                                if mentions:
-                                    mention_phones = []
-                                    for m in mentions:
-                                        jid = m.get('jid', '')
-                                        phone = m.get('phone', '')
-                                        if jid:
-                                            jid_clean = jid.split('@')[0]
-                                            mention_phones.append(jid_clean)
-                                        elif phone:
-                                            group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
-                                            if '@' in group_phone:
-                                                group_phone = group_phone.split('@')[0]
-                                            if phone != group_phone:
-                                                mention_phones.append(phone)
-                                    if mention_phones:
-                                        payload_with_quoted['mentions'] = mention_phones
-                            
-                            endpoint = f"{base_url}/message/sendText/{instance.instance_name}"
-                            logger.info(f"📤 [CHAT ENVIO] Fallback (Exception): usando /message/sendText com 'quoted' no root")
-                            logger.info("   📋 Payload completo (mascado): %s", mask_sensitive_data(payload_with_quoted))
-                            logger.info("   📋 Payload completo (JSON formatado): %s", json.dumps(mask_sensitive_data(payload_with_quoted), indent=2, ensure_ascii=False))
-                            response = await client.post(
-                                endpoint,
-                                headers=headers,
-                                json=payload_with_quoted
-                            )
-                        else:
-                            # Re-raise se não for 404
-                            raise
+                    logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
+                    logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
                 else:
-                    # Endpoint normal para mensagens sem resposta
-                    logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto para Evolution API...")
-                    logger.info(f"   Tipo: {conversation.conversation_type}")
-                    logger.info(f"   URL: {base_url}/message/sendText/{instance.instance_name}")
-                    logger.info(f"   Número original: {recipient_value}")
-                    logger.info(f"   Número final: {final_number}")
-                    logger.info("   Destinatário (mascado): %s", _mask_remote_jid(final_number))
-                    logger.info(f"   Tamanho do texto: {len(content)} caracteres")
-                    logger.info("   Text (primeiros 100 chars): %s", _truncate_text(content, 100))
-                    logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
-                    
-                    request_start = time.perf_counter()
-                    response = await client.post(
-                        f"{base_url}/message/sendText/{instance.instance_name}",
-                        headers=headers,
-                        json=payload
-                    )
+                    logger.info(f"📤 [CHAT ENVIO] Enviando mensagem de texto normal para Evolution API...")
+                
+                logger.info(f"   Tipo: {conversation.conversation_type}")
+                logger.info(f"   Número final: {_mask_remote_jid(final_number)}")
+                logger.info(f"   Tamanho do texto: {len(content)} caracteres")
+                logger.info("   Text (primeiros 100 chars): %s", _truncate_text(content, 100))
+                logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
+                logger.info("   Payload (JSON formatado): %s", json.dumps(mask_sensitive_data(payload), indent=2, ensure_ascii=False))
+                
+                request_start = time.perf_counter()
+                response = await client.post(
+                    endpoint,
+                    headers=headers,
+                    json=payload
+                )
                 latency = time.perf_counter() - request_start
                 record_latency(
                     'send_message_text',
@@ -1378,11 +1199,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     if response.status_code == 404 and quoted_message_id:
                         logger.error(f"❌ [CHAT ENVIO] Erro 404 mesmo após fallback. Endpoint pode não existir.")
                     logger.error(f"❌ [CHAT ENVIO] Erro {response.status_code} ao enviar mensagem:")
-                    # Usar payload correto dependendo se é reply ou não
-                    if quoted_message_id and 'reply_to' in locals():
-                        logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(reply_payload if 'reply_payload' in locals() else payload)}")
-                    else:
-                        logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
+                    # Payload sempre é o mesmo (já tem 'quoted' se for reply)
+                    logger.error(f"   Payload enviado (mascado): {mask_sensitive_data(payload)}")
                     logger.error(f"   Resposta completa: {response.text}")
                     logger.error(f"   Headers enviados: {dict(headers)}")
                 elif response.status_code == 201:
