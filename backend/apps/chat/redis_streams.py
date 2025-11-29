@@ -169,7 +169,9 @@ def enqueue_send_message(message_id: str, retry: int = 0, extra: Optional[Dict[s
         maxlen=settings.CHAT_STREAM_MAXLEN,
         approximate=True,
     )
-    logger.debug("📥 [CHAT STREAM] Mensagem enfileirada (send): %s -> %s", message_id, entry_id)
+    logger.info("📥 [CHAT STREAM] Mensagem enfileirada (send): %s -> %s", message_id, entry_id)
+    logger.info("   Stream: %s", settings.CHAT_STREAM_SEND_NAME)
+    logger.info("   Payload: %s", fields)
     return entry_id
 
 

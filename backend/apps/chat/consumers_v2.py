@@ -558,7 +558,12 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     def enqueue_message_for_evolution(self, message):
         """Enfileira mensagem para envio via Evolution API."""
         from apps.chat.tasks import send_message_to_evolution
+        logger.info(f"📤 [CHAT WS V2] Enfileirando mensagem para envio: {message.id}")
+        logger.info(f"   Content: {message.content[:50] if message.content else 'N/A'}...")
+        logger.info(f"   Metadata: {message.metadata}")
+        logger.info(f"   Reply to: {message.metadata.get('reply_to') if message.metadata else None}")
         send_message_to_evolution.delay(str(message.id))
+        logger.info(f"✅ [CHAT WS V2] Mensagem {message.id} enfileirada com sucesso")
     
     # ========== HANDLERS PARA BROADCASTS ==========
     
