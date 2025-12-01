@@ -129,11 +129,19 @@ async def _process_send_entry(
     retry: int,
     worker_id: int,
 ) -> None:
+    # ✅ LOG CRÍTICO: Verificar se mensagem está chegando ao worker
+    logger.critical(f"📥 [CHAT STREAM WORKER] Mensagem recebida no worker {worker_id}:")
+    logger.critical(f"   Entry ID: {entry_id}")
+    logger.critical(f"   Payload: {payload}")
+    logger.critical(f"   Retry: {retry}")
+    
     message_id = payload.get('message_id')
     if not message_id:
         logger.error("❌ [CHAT STREAM] Payload inválido (send): %s", payload)
         await _ack(client, settings.CHAT_STREAM_SEND_NAME, settings.CHAT_STREAM_CONSUMER_GROUP, entry_id)
         return
+
+    logger.critical(f"📥 [CHAT STREAM WORKER] Processando mensagem: {message_id} (worker={worker_id}, retry={retry})")
 
     queue_wait = _queue_wait_seconds(payload.get('enqueued_at'))
     if queue_wait is not None:
@@ -148,6 +156,7 @@ async def _process_send_entry(
         )
 
     try:
+        logger.critical(f"📥 [CHAT STREAM WORKER] Chamando handle_send_message para: {message_id}")
         await handle_send_message(message_id, retry_count=retry)
         await _ack(client, settings.CHAT_STREAM_SEND_NAME, settings.CHAT_STREAM_CONSUMER_GROUP, entry_id)
         update_worker_heartbeat(SEND_QUEUE_KEY, worker_id)
@@ -364,6 +373,11 @@ async def _process_loop(
     heartbeat_key: str,
     consumer_name: str,
 ) -> None:
+    # ✅ LOG CRÍTICO: Confirmar que worker está iniciando
+    logger.critical(f"🚀 [CHAT STREAM WORKER] Iniciando worker {worker_id} para stream: {stream_name}")
+    logger.critical(f"   Consumer name: {consumer_name}")
+    logger.critical(f"   Heartbeat key: {heartbeat_key}")
+    
     await ensure_stream_setup_async()
     client = await get_stream_async_client()
     group = settings.CHAT_STREAM_CONSUMER_GROUP
@@ -372,6 +386,8 @@ async def _process_loop(
 
     update_worker_heartbeat(heartbeat_key, worker_id)
     last_heartbeat = time.monotonic()
+    
+    logger.critical(f"✅ [CHAT STREAM WORKER] Worker {worker_id} pronto e aguardando mensagens de: {stream_name}")
 
     while True:
         try:
