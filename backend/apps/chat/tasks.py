@@ -1118,12 +1118,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     # Limitar a 100 caracteres
                     clean_content = clean_content[:100] if clean_content else 'Mensagem'
                     
-                    # ✅ FORMATO SIMPLIFICADO: Usar apenas 'id' no quoted.key (conforme sugestão)
-                    # O "pulo do gato" é usar o ID da mensagem original que vem no webhook
-                    # Esse ID é o message_id da Evolution API (salvo em original_message.message_id)
+                    # ✅ FORMATO CORRETO: quoted.key precisa de id, remoteJid e fromMe
+                    # Documentação Evolution API: https://www.postman.com/agenciadgcode/evolution-api/request/0nthjkr/send-text
+                    # O formato completo ajuda a Evolution API a encontrar a mensagem original corretamente
                     quoted_key = {
-                        'id': quoted_message_id  # ✅ Apenas o ID da Evolution API
+                        'id': quoted_message_id,  # ID da mensagem original
+                        'remoteJid': quoted_remote_jid,  # JID do destinatário (necessário para Evolution encontrar a mensagem)
+                        'fromMe': original_message.direction == 'outgoing'  # Se mensagem original foi enviada por nós
                     }
+                    
+                    # ✅ Adicionar participant apenas se necessário (para grupos ou mensagens recebidas)
+                    if quoted_participant:
+                        quoted_key['participant'] = quoted_participant
                     
                     # ✅ FORMATO CORRETO: 'quoted' no root (não dentro de 'options')
                     payload['quoted'] = {
@@ -1132,6 +1138,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             'conversation': clean_content
                         }
                     }
+                    
+                    logger.critical(f"💬 [CHAT ENVIO] Payload quoted.key completo:")
+                    logger.critical(f"   id: {_mask_digits(quoted_key.get('id'))}")
+                    logger.critical(f"   remoteJid: {_mask_remote_jid(quoted_key.get('remoteJid'))}")
+                    logger.critical(f"   fromMe: {quoted_key.get('fromMe')}")
+                    logger.critical(f"   participant: {_mask_remote_jid(quoted_key.get('participant')) if quoted_key.get('participant') else 'N/A'}")
                     logger.info(f"💬 [CHAT ENVIO] Adicionando 'quoted' no root (formato correto Evolution API)")
                     logger.info(f"   Message ID: {_mask_digits(quoted_message_id)}")
                     logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
