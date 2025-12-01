@@ -1496,6 +1496,49 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"✅ [WEBHOOK] Menções adicionadas ao metadata: {len(mentions_list)}")
         
         # ✅ NOVO: Processar quotedMessage (mensagem sendo respondida)
+        # ✅ FALLBACK: Se quoted_message_id_evolution é None mas temos quotedMessage no contextInfo,
+        # tentar buscar pelo conteúdo da mensagem original
+        if not quoted_message_id_evolution:
+            # Verificar se temos quotedMessage no contextInfo mas sem key.id
+            conversation_context = message_info.get('contextInfo', {}) or message_data.get('contextInfo', {})
+            quoted_message = conversation_context.get('quotedMessage', {}) if conversation_context else {}
+            if quoted_message and not quoted_message.get('key', {}).get('id'):
+                quoted_conversation = quoted_message.get('conversation', '')
+                if quoted_conversation:
+                    logger.warning(f"⚠️ [WEBHOOK REPLY] quotedMessage sem key.id, tentando buscar pelo conteúdo:")
+                    logger.warning(f"   Conteúdo: {quoted_conversation[:100]}...")
+                    logger.warning(f"   RemoteJid: {remote_jid}")
+                    logger.warning(f"   Conversation ID: {conversation.id}")
+                    
+                    # Buscar mensagem recente com conteúdo similar na mesma conversa
+                    # Limpar conteúdo para busca (remover formatação)
+                    clean_quoted = quoted_conversation.replace('*', '').replace('_', '').replace('\n', ' ').strip()
+                    # Buscar mensagens recentes (últimas 50) com conteúdo similar
+                    recent_messages = Message.objects.filter(
+                        conversation=conversation,
+                        direction='outgoing',  # Geralmente respondemos mensagens que enviamos
+                        content__icontains=clean_quoted[:50] if len(clean_quoted) > 50 else clean_quoted
+                    ).order_by('-created_at')[:10]
+                    
+                    logger.warning(f"   Mensagens encontradas com conteúdo similar: {recent_messages.count()}")
+                    for msg in recent_messages:
+                        logger.warning(f"   - ID: {msg.id}, message_id: {msg.message_id}, content: {msg.content[:50] if msg.content else 'N/A'}...")
+                    
+                    # Se encontrou exatamente uma mensagem, usar ela
+                    if recent_messages.count() == 1:
+                        matched_message = recent_messages.first()
+                        if matched_message.message_id:
+                            quoted_message_id_evolution = matched_message.message_id
+                            logger.warning(f"✅ [WEBHOOK REPLY] Mensagem encontrada pelo conteúdo! message_id: {_mask_digits(quoted_message_id_evolution)}")
+                        else:
+                            logger.warning(f"⚠️ [WEBHOOK REPLY] Mensagem encontrada mas sem message_id (Evolution)")
+                    elif recent_messages.count() > 1:
+                        logger.warning(f"⚠️ [WEBHOOK REPLY] Múltiplas mensagens encontradas ({recent_messages.count()}), usando a mais recente")
+                        matched_message = recent_messages.first()
+                        if matched_message.message_id:
+                            quoted_message_id_evolution = matched_message.message_id
+                            logger.warning(f"✅ [WEBHOOK REPLY] Usando mensagem mais recente: {_mask_digits(quoted_message_id_evolution)}")
+        
         if quoted_message_id_evolution:
             logger.critical(f"💬 [WEBHOOK REPLY] ====== PROCESSANDO REPLY ======")
             logger.critical(f"   quoted_message_id_evolution: {_mask_digits(quoted_message_id_evolution)}")
