@@ -1524,7 +1524,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     # ✅ FIX: Remover padrão de assinatura: "Nome: " no início
                     # Pode ser "Paulo Bernal: " ou "Nome Sobrenome: " seguido do conteúdo
                     # Remover tudo até o primeiro ":" seguido de espaço
-                    clean_quoted = re.sub(r^[^:]+:\s+', '', clean_quoted, count=1)
+                    clean_quoted = re.sub(r'^[^:]+:\s+', '', clean_quoted, count=1)
                     clean_quoted = clean_quoted.strip()
                     
                     logger.warning(f"   Conteúdo limpo (sem assinatura): {clean_quoted[:100]}...")
