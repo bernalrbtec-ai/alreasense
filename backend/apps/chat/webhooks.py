@@ -750,12 +750,29 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ NOVO: Função helper para extrair quotedMessage de qualquer tipo de mensagem
         def extract_quoted_message(context_info):
             """Extrai quotedMessage do contextInfo."""
+            # ✅ LOG CRÍTICO: Verificar se contextInfo existe e tem quotedMessage
             if not context_info:
+                logger.debug(f"🔍 [WEBHOOK REPLY] contextInfo não existe")
                 return None
+            
+            logger.critical(f"🔍 [WEBHOOK REPLY] Verificando contextInfo para quotedMessage:")
+            logger.critical(f"   contextInfo keys: {list(context_info.keys()) if isinstance(context_info, dict) else 'not dict'}")
+            
             quoted_message = context_info.get('quotedMessage', {})
             if quoted_message:
+                logger.critical(f"✅ [WEBHOOK REPLY] quotedMessage encontrado!")
+                logger.critical(f"   quotedMessage keys: {list(quoted_message.keys()) if isinstance(quoted_message, dict) else 'not dict'}")
+                
                 quoted_key = quoted_message.get('key', {})
-                return quoted_key.get('id')
+                if quoted_key:
+                    quoted_id = quoted_key.get('id')
+                    logger.critical(f"✅ [WEBHOOK REPLY] quotedMessage.key.id encontrado: {_mask_digits(quoted_id) if quoted_id else 'N/A'}")
+                    logger.critical(f"   quoted_key completo: {mask_sensitive_data(quoted_key)}")
+                    return quoted_id
+                else:
+                    logger.warning(f"⚠️ [WEBHOOK REPLY] quotedMessage existe mas não tem 'key'")
+            else:
+                logger.debug(f"🔍 [WEBHOOK REPLY] quotedMessage não encontrado no contextInfo")
             return None
         
         if message_type == 'conversation':
@@ -1461,23 +1478,47 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # ✅ NOVO: Processar quotedMessage (mensagem sendo respondida)
         if quoted_message_id_evolution:
+            logger.critical(f"💬 [WEBHOOK REPLY] ====== PROCESSANDO REPLY ======")
+            logger.critical(f"   quoted_message_id_evolution: {_mask_digits(quoted_message_id_evolution)}")
+            logger.critical(f"   Tenant: {tenant.name}")
+            
             try:
                 # Buscar mensagem original pelo message_id da Evolution
+                logger.critical(f"🔍 [WEBHOOK REPLY] Buscando mensagem original com message_id: {_mask_digits(quoted_message_id_evolution)}")
                 original_message = Message.objects.filter(
                     message_id=quoted_message_id_evolution,
                     conversation__tenant=tenant
-                ).first()
+                ).select_related('conversation').first()
                 
                 if original_message:
                     # Salvar UUID interno da mensagem original no metadata
-                    message_defaults['metadata']['reply_to'] = str(original_message.id)
-                    logger.info(f"💬 [WEBHOOK] Mensagem é resposta de: {original_message.id} (Evolution ID: {quoted_message_id_evolution})")
+                    reply_to_uuid = str(original_message.id)
+                    message_defaults['metadata']['reply_to'] = reply_to_uuid
+                    logger.critical(f"✅ [WEBHOOK REPLY] Mensagem original encontrada!")
+                    logger.critical(f"   UUID interno: {reply_to_uuid}")
+                    logger.critical(f"   Evolution ID: {_mask_digits(quoted_message_id_evolution)}")
+                    logger.critical(f"   Conversa: {original_message.conversation.contact_phone}")
+                    logger.critical(f"   Conteúdo original: {original_message.content[:50] if original_message.content else 'Sem conteúdo'}...")
                 else:
-                    logger.warning(f"⚠️ [WEBHOOK] Mensagem original não encontrada para reply: {quoted_message_id_evolution}")
+                    logger.warning(f"⚠️ [WEBHOOK REPLY] Mensagem original NÃO encontrada para reply!")
+                    logger.warning(f"   Evolution ID procurado: {_mask_digits(quoted_message_id_evolution)}")
+                    logger.warning(f"   Tenant: {tenant.name}")
+                    
+                    # Tentar buscar em todas as conversas do tenant (pode estar em outra conversa?)
+                    all_messages = Message.objects.filter(
+                        message_id=quoted_message_id_evolution
+                    ).select_related('conversation', 'conversation__tenant')
+                    
+                    logger.warning(f"   Total de mensagens com esse message_id em TODOS os tenants: {all_messages.count()}")
+                    for msg in all_messages:
+                        logger.warning(f"   - Encontrada em tenant: {msg.conversation.tenant.name} (conversa: {msg.conversation.contact_phone})")
+                    
                     # Salvar o message_id da Evolution como fallback (pode ser útil para debug)
                     message_defaults['metadata']['reply_to_evolution_id'] = quoted_message_id_evolution
             except Exception as e:
-                logger.error(f"❌ [WEBHOOK] Erro ao processar quotedMessage: {e}", exc_info=True)
+                logger.error(f"❌ [WEBHOOK REPLY] Erro ao processar quotedMessage: {e}", exc_info=True)
+        else:
+            logger.debug(f"🔍 [WEBHOOK REPLY] Mensagem NÃO é reply (quoted_message_id_evolution é None)")
         
         # Para grupos, adicionar quem enviou
         if is_group and sender_phone:
