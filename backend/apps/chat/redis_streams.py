@@ -169,8 +169,14 @@ def enqueue_send_message(message_id: str, retry: int = 0, extra: Optional[Dict[s
         maxlen=settings.CHAT_STREAM_MAXLEN,
         approximate=True,
     )
-    logger.info("📥 [CHAT STREAM] Mensagem enfileirada (send): %s -> %s", message_id, entry_id)
-    logger.info("   Stream: %s", settings.CHAT_STREAM_SEND_NAME)
+    # ✅ LOG CRÍTICO: Confirmar que mensagem foi enfileirada
+    logger.critical(f"📥 [CHAT STREAM] ====== MENSAGEM ENFILEIRADA ======")
+    logger.critical(f"   Message ID: {message_id}")
+    logger.critical(f"   Entry ID: {entry_id}")
+    logger.critical(f"   Stream: {settings.CHAT_STREAM_SEND_NAME}")
+    logger.critical(f"   Retry: {retry}")
+    logger.critical(f"   Payload: {fields}")
+    return entry_id
     logger.info("   Payload: %s", fields)
     return entry_id
 

@@ -195,7 +195,10 @@ class send_message_to_evolution:
     @staticmethod
     def delay(message_id: str):
         """Enfileira mensagem para envio (Redis)."""
+        # ✅ LOG CRÍTICO: Confirmar que send_message_to_evolution.delay foi chamado
+        logger.critical(f"📤 [CHAT TASKS] send_message_to_evolution.delay chamado para: {message_id}")
         enqueue_send_stream_message(message_id)
+        logger.critical(f"📤 [CHAT TASKS] Mensagem {message_id} enfileirada com sucesso")
 
 
 # ❌ download_attachment e migrate_to_s3 REMOVIDOS
