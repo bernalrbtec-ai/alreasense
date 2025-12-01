@@ -1525,11 +1525,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             message_defaults['sender_name'] = sender_name
             message_defaults['sender_phone'] = sender_phone
         
-        logger.info(f"💾 [WEBHOOK] Tentando salvar mensagem no banco...")
-        logger.info(f"   message_id={message_id}")
-        logger.info(f"   direction={direction} (fromMe={from_me})")
-        logger.info(f"   conversation_id={conversation.id}")
-        logger.info(f"   content={content[:100] if content else '(vazio)'}...")
+        logger.critical(f"💾 [WEBHOOK] ====== SALVANDO MENSAGEM NO BANCO ======")
+        logger.critical(f"   message_id={_mask_digits(message_id) if message_id else 'N/A'}")
+        logger.critical(f"   direction={direction} (fromMe={from_me})")
+        logger.critical(f"   conversation_id={conversation.id}")
+        logger.critical(f"   content={content[:100] if content else '(vazio)'}...")
+        logger.critical(f"   metadata ANTES de salvar: {message_defaults.get('metadata', {})}")
+        logger.critical(f"   reply_to no metadata: {message_defaults.get('metadata', {}).get('reply_to', 'NÃO ENCONTRADO')}")
         
         # ✅ FIX: Verificar se mensagem já existe antes de criar
         # Isso evita duplicatas e garante que mensagens sejam encontradas
@@ -1538,16 +1540,24 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             existing_message = Message.objects.filter(message_id=message_id).first()
         
         if existing_message:
-            logger.info(f"⚠️ [WEBHOOK] Mensagem já existe no banco (message_id={message_id}), preservando metadata existente")
-            logger.info(f"   ID interno: {existing_message.id}")
-            logger.info(f"   Conversa: {existing_message.conversation.id}")
-            logger.info(f"   Content: {existing_message.content[:100] if existing_message.content else 'Sem conteúdo'}...")
-            logger.info(f"   Metadata existente: {existing_message.metadata}")
+            logger.critical(f"⚠️ [WEBHOOK] Mensagem já existe no banco (message_id={_mask_digits(message_id)}), preservando metadata existente")
+            logger.critical(f"   ID interno: {existing_message.id}")
+            logger.critical(f"   Conversa: {existing_message.conversation.id}")
+            logger.critical(f"   Direction: {existing_message.direction}")
+            logger.critical(f"   Content: {existing_message.content[:100] if existing_message.content else 'Sem conteúdo'}...")
+            logger.critical(f"   Metadata existente: {existing_message.metadata}")
+            logger.critical(f"   Metadata do webhook: {message_defaults.get('metadata', {})}")
             
             # ✅ FIX CRÍTICO: Preservar metadata existente (especialmente reply_to)
             # Se a mensagem foi criada pelo backend com reply_to, preservar
             existing_metadata = existing_message.metadata or {}
             new_metadata = message_defaults.get('metadata', {})
+            
+            # ✅ LOG CRÍTICO: Verificar reply_to antes de mesclar
+            if 'reply_to' in existing_metadata:
+                logger.critical(f"💬 [WEBHOOK REPLY] Mensagem existente TEM reply_to: {existing_metadata.get('reply_to')}")
+            if 'reply_to' in new_metadata:
+                logger.critical(f"💬 [WEBHOOK REPLY] Webhook trouxe reply_to: {new_metadata.get('reply_to')}")
             
             # Mesclar metadata: preservar existente, adicionar apenas campos novos do webhook
             merged_metadata = {**existing_metadata, **new_metadata}
@@ -1555,14 +1565,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # ✅ IMPORTANTE: Se metadata existente tem reply_to, preservar (não sobrescrever)
             if 'reply_to' in existing_metadata and 'reply_to' not in new_metadata:
                 # Manter reply_to existente
-                logger.info(f"💬 [WEBHOOK] Preservando reply_to existente: {existing_metadata.get('reply_to')}")
+                logger.critical(f"💬 [WEBHOOK REPLY] ✅ PRESERVANDO reply_to existente: {existing_metadata.get('reply_to')}")
             elif 'reply_to' in new_metadata:
                 # Se webhook trouxe reply_to (mensagem recebida é reply), usar do webhook
-                logger.info(f"💬 [WEBHOOK] Usando reply_to do webhook: {new_metadata.get('reply_to')}")
+                logger.critical(f"💬 [WEBHOOK REPLY] ✅ USANDO reply_to do webhook: {new_metadata.get('reply_to')}")
+            else:
+                logger.critical(f"💬 [WEBHOOK REPLY] ⚠️ Nenhum reply_to encontrado (nem existente nem do webhook)")
             
             # Atualizar metadata preservando reply_to
             existing_message.metadata = merged_metadata
             existing_message.save(update_fields=['metadata'])
+            
+            logger.critical(f"💬 [WEBHOOK REPLY] Metadata final após merge: {existing_message.metadata}")
             
             message = existing_message
             msg_created = False
