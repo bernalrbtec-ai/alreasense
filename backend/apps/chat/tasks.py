@@ -635,6 +635,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         quoted_remote_jid = None
         original_message = None  # ✅ Definir no escopo externo para uso posterior
         if reply_to_uuid:
+            logger.critical(f"🔍 [CHAT ENVIO] Buscando mensagem original para reply:")
+            logger.critical(f"   reply_to_uuid: {reply_to_uuid}")
+            logger.critical(f"   conversation_id: {conversation.id}")
+            logger.critical(f"   conversation_phone: {conversation.contact_phone}")
             try:
                 original_message = await sync_to_async(
                     Message.objects.select_related('conversation').prefetch_related('attachments').filter(
@@ -642,6 +646,37 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         conversation=conversation
                     ).first
                 )()
+                
+                if original_message:
+                    logger.critical(f"✅ [CHAT ENVIO] Mensagem original encontrada!")
+                    logger.critical(f"   ID interno: {original_message.id}")
+                    logger.critical(f"   message_id (Evolution): {original_message.message_id}")
+                    logger.critical(f"   direction: {original_message.direction}")
+                    logger.critical(f"   content: {original_message.content[:50] if original_message.content else 'Sem conteúdo'}...")
+                    
+                    if original_message.message_id:
+                        quoted_message_id = original_message.message_id
+                        logger.critical(f"✅ [CHAT ENVIO] message_id da Evolution encontrado: {_mask_digits(quoted_message_id)}")
+                    else:
+                        logger.error(f"❌ [CHAT ENVIO] Mensagem original encontrada mas SEM message_id (Evolution)!")
+                        logger.error(f"   Isso significa que a mensagem ainda não foi enviada ou não recebeu webhook de confirmação")
+                        logger.error(f"   Status da mensagem original: {original_message.status}")
+                        logger.error(f"   evolution_status: {original_message.evolution_status}")
+                else:
+                    logger.error(f"❌ [CHAT ENVIO] Mensagem original NÃO encontrada!")
+                    logger.error(f"   UUID procurado: {reply_to_uuid}")
+                    logger.error(f"   Conversation ID: {conversation.id}")
+                    
+                    # Tentar buscar em qualquer conversa do tenant (pode estar em outra conversa?)
+                    all_messages = await sync_to_async(list)(
+                        Message.objects.filter(
+                            id=reply_to_uuid
+                        ).select_related('conversation', 'conversation__tenant')
+                    )
+                    logger.error(f"   Total de mensagens com esse UUID em TODOS os tenants: {len(all_messages)}")
+                    for msg in all_messages:
+                        logger.error(f"   - Encontrada em tenant: {msg.conversation.tenant.name} (conversa: {msg.conversation.contact_phone})")
+                
                 if original_message and original_message.message_id:
                     quoted_message_id = original_message.message_id
                     # ✅ NOVO: Incluir remoteJid da mensagem original (necessário para Evolution API)
