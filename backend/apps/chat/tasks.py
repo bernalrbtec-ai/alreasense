@@ -683,21 +683,32 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 
                 if original_message and original_message.message_id:
                     quoted_message_id = original_message.message_id
+                    logger.critical(f"✅ [CHAT ENVIO] Mensagem original tem message_id: {_mask_digits(quoted_message_id)}")
+                    
                     # ✅ NOVO: Incluir remoteJid da mensagem original (necessário para Evolution API)
                     # O remoteJid é o contact_phone da conversa (formato: 5517999999999@s.whatsapp.net)
                     quoted_participant = None  # ✅ NOVO: participant (quem enviou a mensagem original)
                     if original_message.conversation:
                         contact_phone = original_message.conversation.contact_phone
+                        logger.critical(f"🔍 [CHAT ENVIO] Definindo quoted_remote_jid:")
+                        logger.critical(f"   contact_phone: {contact_phone}")
+                        logger.critical(f"   conversation_type: {original_message.conversation.conversation_type}")
+                        
                         # Se já tem @, usar direto; senão, adicionar @s.whatsapp.net
                         if '@' in contact_phone:
                             quoted_remote_jid = contact_phone
+                            logger.critical(f"✅ [CHAT ENVIO] quoted_remote_jid definido (já tinha @): {_mask_remote_jid(quoted_remote_jid)}")
                         else:
                             # Adicionar @s.whatsapp.net se for contato individual
                             if original_message.conversation.conversation_type == 'individual':
                                 quoted_remote_jid = f"{contact_phone}@s.whatsapp.net"
+                                logger.critical(f"✅ [CHAT ENVIO] quoted_remote_jid definido (individual): {_mask_remote_jid(quoted_remote_jid)}")
                             else:
                                 # Para grupos, usar o JID do grupo diretamente
                                 quoted_remote_jid = contact_phone
+                                logger.critical(f"✅ [CHAT ENVIO] quoted_remote_jid definido (grupo): {_mask_remote_jid(quoted_remote_jid)}")
+                    else:
+                        logger.error(f"❌ [CHAT ENVIO] original_message não tem conversation!")
                         
                         # ✅ NOVO: Determinar participant baseado na direção da mensagem original
                         # Se a mensagem original foi recebida (incoming), o participant é o remetente
