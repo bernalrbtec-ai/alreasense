@@ -430,6 +430,13 @@ async def start_stream_workers(
     Inicia workers para processar streams de envio/mark_as_read.
     queue_filters pode conter {"send", "mark"} para limitar.
     """
+    # ✅ LOG CRÍTICO: Confirmar que workers estão sendo iniciados
+    logger.critical(f"🚀 [CHAT STREAM WORKER] ====== INICIANDO WORKERS ======")
+    logger.critical(f"   Send workers: {send_workers}")
+    logger.critical(f"   Mark workers: {mark_workers}")
+    logger.critical(f"   Consumer prefix: {consumer_prefix}")
+    logger.critical(f"   Queue filters: {queue_filters}")
+    
     filters = {q.strip().lower() for q in queue_filters} if queue_filters else set()
     include_send = not filters or 'send' in filters
     include_mark = not filters or 'mark' in filters
