@@ -1512,22 +1512,35 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     
                     # Buscar mensagem recente com conteúdo similar na mesma conversa
                     # Limpar conteúdo para busca (remover formatação e assinatura)
-                    clean_quoted = quoted_conversation.replace('*', '').replace('_', '').replace('\n', ' ').strip()
-                    
-                    # ✅ FIX: Remover assinatura se presente (formato: *Nome:*\n\nconteúdo)
-                    # A assinatura pode estar no início do quotedMessage
                     import re
-                    # Remover padrão de assinatura: *Nome:* seguido de quebras de linha
-                    clean_quoted = re.sub(r'^\*[^*]+\*:\s*\n+\s*', '', clean_quoted, flags=re.MULTILINE)
+                    
+                    # ✅ FIX CRÍTICO: Remover assinatura completamente
+                    # Formato da assinatura: *Nome:*\n\nconteúdo ou *Nome:* conteúdo
+                    # Primeiro, remover asteriscos e normalizar espaços
+                    clean_quoted = quoted_conversation.replace('*', '').replace('_', '').replace('\n', ' ').replace('\r', ' ')
+                    # Remover múltiplos espaços
+                    clean_quoted = re.sub(r'\s+', ' ', clean_quoted).strip()
+                    
+                    # ✅ FIX: Remover padrão de assinatura: "Nome: " no início
+                    # Pode ser "Paulo Bernal: " ou "Nome Sobrenome: " seguido do conteúdo
+                    # Remover tudo até o primeiro ":" seguido de espaço
+                    clean_quoted = re.sub(r^[^:]+:\s+', '', clean_quoted, count=1)
                     clean_quoted = clean_quoted.strip()
                     
                     logger.warning(f"   Conteúdo limpo (sem assinatura): {clean_quoted[:100]}...")
                     
-                    # ✅ FIX: Buscar em AMBAS as direções (pode ser incoming ou outgoing)
-                    # E usar uma busca mais flexível (apenas parte do conteúdo)
-                    search_text = clean_quoted[:50] if len(clean_quoted) > 50 else clean_quoted
-                    if len(search_text) < 10:
-                        # Se muito curto, usar texto completo
+                    # ✅ FIX: Se ainda tiver muito pouco conteúdo, tentar buscar por palavras-chave
+                    # Extrair palavras significativas (mais de 3 caracteres)
+                    words = [w for w in clean_quoted.split() if len(w) > 3]
+                    if words:
+                        # Usar as primeiras palavras significativas
+                        search_text = ' '.join(words[:5])  # Primeiras 5 palavras
+                    else:
+                        # Se não tiver palavras significativas, usar texto completo
+                        search_text = clean_quoted[:50] if len(clean_quoted) > 50 else clean_quoted
+                    
+                    if len(search_text) < 5:
+                        # Se muito curto, usar texto completo mesmo que seja curto
                         search_text = clean_quoted
                     
                     logger.warning(f"   Texto de busca: {search_text[:100]}...")
