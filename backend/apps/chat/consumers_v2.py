@@ -225,12 +225,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
         mentions = data.get('mentions', [])  # ✅ NOVO: Lista de números mencionados
         
-        # ✅ DEBUG: Log detalhado do reply_to recebido
-        logger.info(f"📥 [CHAT WS V2] Recebido send_message:")
-        logger.info(f"   conversation_id: {conversation_id}")
-        logger.info(f"   content: {content[:50]}...")
-        logger.info(f"   reply_to: {reply_to}")
-        logger.info(f"   Data completo: {data}")
+        # ✅ LOG CRÍTICO: Verificar reply_to recebido do frontend
+        logger.critical(f"📥 [CHAT WS V2] ====== RECEBENDO send_message ======")
+        logger.critical(f"   conversation_id: {conversation_id}")
+        logger.critical(f"   content: {content[:50]}...")
+        logger.critical(f"   reply_to recebido: {reply_to}")
+        logger.critical(f"   reply_to tipo: {type(reply_to)}")
+        logger.critical(f"   reply_to existe? {bool(reply_to)}")
+        logger.critical(f"   Data completo: {json.dumps(data, indent=2, default=str)}")
         
         if not content and not attachment_urls:
             await self.send(text_data=json.dumps({
