@@ -763,15 +763,35 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.critical(f"✅ [WEBHOOK REPLY] quotedMessage encontrado!")
                 logger.critical(f"   quotedMessage keys: {list(quoted_message.keys()) if isinstance(quoted_message, dict) else 'not dict'}")
                 
+                # ✅ PRIORIDADE 1: Buscar key.id diretamente no quotedMessage
                 quoted_key = quoted_message.get('key', {})
                 if quoted_key:
                     quoted_id = quoted_key.get('id')
                     logger.critical(f"✅ [WEBHOOK REPLY] quotedMessage.key.id encontrado: {_mask_digits(quoted_id) if quoted_id else 'N/A'}")
                     logger.critical(f"   quoted_key completo: {mask_sensitive_data(quoted_key)}")
-                    return quoted_id
-                else:
-                    logger.warning(f"⚠️ [WEBHOOK REPLY] quotedMessage existe mas não tem 'key'")
-                    logger.warning(f"   quotedMessage keys: {list(quoted_message.keys()) if isinstance(quoted_message, dict) else 'not dict'}")
+                    if quoted_id:
+                        return quoted_id
+                
+                # ✅ PRIORIDADE 2: Verificar se key está no messageContextInfo
+                message_context_info = quoted_message.get('messageContextInfo', {})
+                if message_context_info:
+                    context_key = message_context_info.get('key', {})
+                    if context_key:
+                        quoted_id = context_key.get('id')
+                        logger.critical(f"✅ [WEBHOOK REPLY] quotedMessage.messageContextInfo.key.id encontrado: {_mask_digits(quoted_id) if quoted_id else 'N/A'}")
+                        if quoted_id:
+                            return quoted_id
+                
+                # ✅ PRIORIDADE 3: Verificar se há stanzaId que pode ser usado
+                stanza_id = context_info.get('stanzaId')
+                if stanza_id:
+                    logger.warning(f"⚠️ [WEBHOOK REPLY] quotedMessage não tem key.id, mas encontrou stanzaId: {_mask_digits(stanza_id)}")
+                    logger.warning(f"   Tentando usar stanzaId como message_id...")
+                    # stanzaId pode ser o message_id em alguns casos
+                    return stanza_id
+                
+                logger.warning(f"⚠️ [WEBHOOK REPLY] quotedMessage existe mas não tem 'key' em nenhum lugar")
+                logger.warning(f"   quotedMessage keys: {list(quoted_message.keys()) if isinstance(quoted_message, dict) else 'not dict'}")
                     # ✅ FALLBACK: Tentar buscar pelo conteúdo se não tiver key.id
                     # Algumas versões da Evolution API não enviam key.id, apenas o conteúdo
                     quoted_conversation = quoted_message.get('conversation', '')
