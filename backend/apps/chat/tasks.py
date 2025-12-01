@@ -1071,13 +1071,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 }
                 
                 # ✅ LOG CRÍTICO: Verificar se reply foi detectado antes de adicionar quoted
-                log.info(f"🔍 [CHAT ENVIO] Verificando se deve adicionar 'quoted':")
-                log.info(f"   quoted_message_id: {quoted_message_id}")
-                log.info(f"   quoted_remote_jid: {quoted_remote_jid}")
-                log.info(f"   original_message: {original_message is not None}")
+                logger.critical(f"🔍 [CHAT ENVIO] ====== VERIFICANDO SE DEVE ADICIONAR 'quoted' ======")
+                logger.critical(f"   quoted_message_id: {quoted_message_id}")
+                logger.critical(f"   quoted_message_id existe? {bool(quoted_message_id)}")
+                logger.critical(f"   quoted_remote_jid: {quoted_remote_jid}")
+                logger.critical(f"   quoted_remote_jid existe? {bool(quoted_remote_jid)}")
+                logger.critical(f"   original_message: {original_message is not None}")
+                logger.critical(f"   original_message existe? {bool(original_message)}")
+                logger.critical(f"   Condição completa (todos True?): {bool(quoted_message_id and quoted_remote_jid and original_message)}")
                 
                 # ✅ CORREÇÃO: Adicionar 'quoted' no root (não dentro de 'options') se for resposta
                 if quoted_message_id and quoted_remote_jid and original_message:
+                    logger.critical(f"✅ [CHAT ENVIO] TODAS AS CONDIÇÕES ATENDIDAS! Adicionando 'quoted' ao payload...")
                     # Buscar conteúdo original da mensagem para incluir no quoted
                     original_content = original_message.content or ''
                     if not original_content:
