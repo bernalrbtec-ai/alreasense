@@ -635,17 +635,21 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         quoted_remote_jid = None
         original_message = None  # ✅ Definir no escopo externo para uso posterior
         if reply_to_uuid:
-            logger.critical(f"🔍 [CHAT ENVIO] Buscando mensagem original para reply:")
+            logger.critical(f"🔍 [CHAT ENVIO] ====== BUSCANDO MENSAGEM ORIGINAL PARA REPLY ======")
             logger.critical(f"   reply_to_uuid: {reply_to_uuid}")
             logger.critical(f"   conversation_id: {conversation.id}")
             logger.critical(f"   conversation_phone: {conversation.contact_phone}")
+            logger.critical(f"   conversation_type: {conversation.conversation_type}")
+            
             try:
+                logger.critical(f"🔍 [CHAT ENVIO] Executando query no banco...")
                 original_message = await sync_to_async(
                     Message.objects.select_related('conversation').prefetch_related('attachments').filter(
                         id=reply_to_uuid, 
                         conversation=conversation
                     ).first
                 )()
+                logger.critical(f"✅ [CHAT ENVIO] Query executada! Resultado: {'Encontrada' if original_message else 'NÃO encontrada'}")
                 
                 if original_message:
                     logger.critical(f"✅ [CHAT ENVIO] Mensagem original encontrada!")
@@ -729,7 +733,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.warning(f"⚠️ [CHAT ENVIO] Mensagem original não encontrada ou sem message_id: {reply_to_uuid}")
                     original_message = None  # Limpar se não encontrada
             except Exception as e:
-                logger.error(f"❌ [CHAT ENVIO] Erro ao buscar mensagem original para reply: {e}", exc_info=True)
+                logger.critical(f"❌ [CHAT ENVIO] ====== ERRO AO BUSCAR MENSAGEM ORIGINAL ======")
+                logger.critical(f"   Erro: {e}")
+                logger.critical(f"   Tipo: {type(e).__name__}")
+                logger.critical(f"   Traceback completo:", exc_info=True)
                 original_message = None  # Limpar em caso de erro
         
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
