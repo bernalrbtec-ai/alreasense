@@ -792,15 +792,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 
                 logger.warning(f"⚠️ [WEBHOOK REPLY] quotedMessage existe mas não tem 'key' em nenhum lugar")
                 logger.warning(f"   quotedMessage keys: {list(quoted_message.keys()) if isinstance(quoted_message, dict) else 'not dict'}")
-                    # ✅ FALLBACK: Tentar buscar pelo conteúdo se não tiver key.id
-                    # Algumas versões da Evolution API não enviam key.id, apenas o conteúdo
-                    quoted_conversation = quoted_message.get('conversation', '')
-                    if quoted_conversation:
-                        logger.warning(f"⚠️ [WEBHOOK REPLY] Tentando fallback: buscar mensagem pelo conteúdo")
-                        logger.warning(f"   Conteúdo do quotedMessage: {quoted_conversation[:100]}...")
-                        # Retornar None por enquanto - vamos buscar depois pelo conteúdo
-                        # Mas marcar que temos quotedMessage para processar depois
-                        return None  # Vamos processar depois usando o conteúdo
+                # ✅ FALLBACK: Tentar buscar pelo conteúdo se não tiver key.id
+                # Algumas versões da Evolution API não enviam key.id, apenas o conteúdo
+                quoted_conversation = quoted_message.get('conversation', '')
+                if quoted_conversation:
+                    logger.warning(f"⚠️ [WEBHOOK REPLY] Tentando fallback: buscar mensagem pelo conteúdo")
+                    logger.warning(f"   Conteúdo do quotedMessage: {quoted_conversation[:100]}...")
+                    # Retornar None por enquanto - vamos buscar depois pelo conteúdo
+                    # Mas marcar que temos quotedMessage para processar depois
+                    return None  # Vamos processar depois usando o conteúdo
             else:
                 logger.debug(f"🔍 [WEBHOOK REPLY] quotedMessage não encontrado no contextInfo")
             return None
