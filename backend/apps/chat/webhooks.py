@@ -1529,27 +1529,68 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     
                     logger.warning(f"   Conteúdo limpo (sem assinatura): {clean_quoted[:100]}...")
                     
-                    # ✅ FIX: Se ainda tiver muito pouco conteúdo, tentar buscar por palavras-chave
-                    # Extrair palavras significativas (mais de 3 caracteres)
-                    words = [w for w in clean_quoted.split() if len(w) > 3]
-                    if words:
-                        # Usar as primeiras palavras significativas
-                        search_text = ' '.join(words[:5])  # Primeiras 5 palavras
-                    else:
-                        # Se não tiver palavras significativas, usar texto completo
-                        search_text = clean_quoted[:50] if len(clean_quoted) > 50 else clean_quoted
+                    # ✅ FIX: Extrair palavras-chave mais específicas para busca
+                    # Para mensagens longas, usar primeiras palavras únicas
+                    words = clean_quoted.split()
                     
-                    if len(search_text) < 5:
-                        # Se muito curto, usar texto completo mesmo que seja curto
+                    # Estratégia 1: Se tiver muitas palavras, usar primeiras palavras únicas
+                    if len(words) > 10:
+                        # Pegar primeiras 3-5 palavras que sejam únicas e significativas
+                        unique_words = []
+                        seen = set()
+                        for w in words[:10]:  # Primeiras 10 palavras
+                            w_clean = w.strip('.,;:!?@#$%&*()[]{}')
+                            if len(w_clean) > 3 and w_clean.lower() not in seen:
+                                unique_words.append(w_clean)
+                                seen.add(w_clean.lower())
+                                if len(unique_words) >= 5:
+                                    break
+                        search_text = ' '.join(unique_words) if unique_words else clean_quoted[:50]
+                    else:
+                        # Mensagem curta: usar texto completo
                         search_text = clean_quoted
                     
-                    logger.warning(f"   Texto de busca: {search_text[:100]}...")
+                    # Limitar tamanho da busca (máximo 100 caracteres)
+                    if len(search_text) > 100:
+                        search_text = search_text[:100]
                     
-                    # Buscar mensagens recentes (últimas 100) com conteúdo similar em AMBAS as direções
-                    recent_messages = Message.objects.filter(
-                        conversation=conversation,
-                        content__icontains=search_text
-                    ).order_by('-created_at')[:20]  # Aumentar para 20 mensagens
+                    logger.warning(f"   Texto de busca: {search_text[:100]}...")
+                    logger.warning(f"   Tamanho do texto de busca: {len(search_text)} caracteres")
+                    
+                    # ✅ FIX: Buscar em múltiplas tentativas com diferentes estratégias
+                    recent_messages = None
+                    
+                    # Tentativa 1: Busca exata com texto completo (limitado)
+                    if len(search_text) >= 10:
+                        recent_messages = Message.objects.filter(
+                            conversation=conversation,
+                            content__icontains=search_text
+                        ).order_by('-created_at')[:50]  # Aumentar para 50 mensagens
+                        logger.warning(f"   Tentativa 1 (busca completa): {recent_messages.count()} mensagens")
+                    
+                    # Tentativa 2: Se não encontrou, buscar por primeiras palavras
+                    if (not recent_messages or recent_messages.count() == 0) and len(words) > 0:
+                        first_words = ' '.join(words[:3])  # Primeiras 3 palavras
+                        if len(first_words) >= 5:
+                            recent_messages = Message.objects.filter(
+                                conversation=conversation,
+                                content__icontains=first_words
+                            ).order_by('-created_at')[:50]
+                            logger.warning(f"   Tentativa 2 (primeiras palavras): {recent_messages.count()} mensagens")
+                    
+                    # Tentativa 3: Se ainda não encontrou, buscar por qualquer palavra significativa
+                    if (not recent_messages or recent_messages.count() == 0) and len(words) > 0:
+                        # Buscar por qualquer palavra com mais de 5 caracteres
+                        significant_word = next((w for w in words if len(w.strip('.,;:!?@#$%&*()[]{}')) > 5), None)
+                        if significant_word:
+                            recent_messages = Message.objects.filter(
+                                conversation=conversation,
+                                content__icontains=significant_word.strip('.,;:!?@#$%&*()[]{}')
+                            ).order_by('-created_at')[:50]
+                            logger.warning(f"   Tentativa 3 (palavra significativa '{significant_word[:20]}...'): {recent_messages.count()} mensagens")
+                    
+                    if not recent_messages:
+                        recent_messages = Message.objects.none()
                     
                     logger.warning(f"   Mensagens encontradas com conteúdo similar: {recent_messages.count()}")
                     for msg in recent_messages:
