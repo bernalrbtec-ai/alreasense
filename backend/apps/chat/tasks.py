@@ -1239,9 +1239,28 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     }
                 )
                 
-                logger.info(f"📥 [CHAT ENVIO] Resposta da Evolution API:")
-                logger.info(f"   Status: {response.status_code}")
-                logger.info(f"   Body completo: {response.text}")
+                logger.critical(f"📥 [CHAT ENVIO] ====== RESPOSTA DA EVOLUTION API ======")
+                logger.critical(f"   Status: {response.status_code}")
+                logger.critical(f"   Body completo: {response.text}")
+                
+                # ✅ LOG CRÍTICO: Verificar se a resposta indica sucesso
+                if response.status_code in (200, 201):
+                    try:
+                        response_data = response.json() if response.text else {}
+                        logger.critical(f"✅ [CHAT ENVIO] Mensagem enviada com SUCESSO!")
+                        logger.critical(f"   Response data: {mask_sensitive_data(response_data)}")
+                        
+                        # Verificar se retornou message_id
+                        evolution_message_id = extract_evolution_message_id(response_data)
+                        if evolution_message_id:
+                            logger.critical(f"✅ [CHAT ENVIO] Evolution retornou message_id: {_mask_digits(evolution_message_id)}")
+                        else:
+                            logger.warning(f"⚠️ [CHAT ENVIO] Evolution não retornou message_id na resposta")
+                    except Exception as e:
+                        logger.warning(f"⚠️ [CHAT ENVIO] Erro ao parsear resposta JSON: {e}")
+                else:
+                    logger.error(f"❌ [CHAT ENVIO] Erro ao enviar mensagem! Status: {response.status_code}")
+                    logger.error(f"   Response: {response.text[:500]}")
                 
                 # ✅ CORREÇÃO: Tratar erros específicos da Evolution API antes de fazer raise_for_status
                 # ✅ FIX: 201 (Created) também é sucesso, não erro!
