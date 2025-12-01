@@ -1511,14 +1511,32 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.warning(f"   Conversation ID: {conversation.id}")
                     
                     # Buscar mensagem recente com conteúdo similar na mesma conversa
-                    # Limpar conteúdo para busca (remover formatação)
+                    # Limpar conteúdo para busca (remover formatação e assinatura)
                     clean_quoted = quoted_conversation.replace('*', '').replace('_', '').replace('\n', ' ').strip()
-                    # Buscar mensagens recentes (últimas 50) com conteúdo similar
+                    
+                    # ✅ FIX: Remover assinatura se presente (formato: *Nome:*\n\nconteúdo)
+                    # A assinatura pode estar no início do quotedMessage
+                    import re
+                    # Remover padrão de assinatura: *Nome:* seguido de quebras de linha
+                    clean_quoted = re.sub(r'^\*[^*]+\*:\s*\n+\s*', '', clean_quoted, flags=re.MULTILINE)
+                    clean_quoted = clean_quoted.strip()
+                    
+                    logger.warning(f"   Conteúdo limpo (sem assinatura): {clean_quoted[:100]}...")
+                    
+                    # ✅ FIX: Buscar em AMBAS as direções (pode ser incoming ou outgoing)
+                    # E usar uma busca mais flexível (apenas parte do conteúdo)
+                    search_text = clean_quoted[:50] if len(clean_quoted) > 50 else clean_quoted
+                    if len(search_text) < 10:
+                        # Se muito curto, usar texto completo
+                        search_text = clean_quoted
+                    
+                    logger.warning(f"   Texto de busca: {search_text[:100]}...")
+                    
+                    # Buscar mensagens recentes (últimas 100) com conteúdo similar em AMBAS as direções
                     recent_messages = Message.objects.filter(
                         conversation=conversation,
-                        direction='outgoing',  # Geralmente respondemos mensagens que enviamos
-                        content__icontains=clean_quoted[:50] if len(clean_quoted) > 50 else clean_quoted
-                    ).order_by('-created_at')[:10]
+                        content__icontains=search_text
+                    ).order_by('-created_at')[:20]  # Aumentar para 20 mensagens
                     
                     logger.warning(f"   Mensagens encontradas com conteúdo similar: {recent_messages.count()}")
                     for msg in recent_messages:
