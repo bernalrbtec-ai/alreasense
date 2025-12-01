@@ -779,11 +779,20 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             content = message_info.get('conversation', '')
             
             # ✅ NOVO: Verificar contextInfo mesmo em mensagens simples (pode ter reply)
-            conversation_context = message_info.get('contextInfo', {})
+            # ✅ FIX: Verificar contextInfo em message_info E em message_data (pode estar em qualquer lugar)
+            conversation_context = message_info.get('contextInfo', {}) or message_data.get('contextInfo', {})
+            logger.critical(f"🔍 [WEBHOOK REPLY] Verificando contextInfo para mensagem conversation:")
+            logger.critical(f"   contextInfo em message_info: {bool(message_info.get('contextInfo'))}")
+            logger.critical(f"   contextInfo em message_data: {bool(message_data.get('contextInfo'))}")
+            logger.critical(f"   contextInfo final: {bool(conversation_context)}")
+            if conversation_context:
+                logger.critical(f"   contextInfo keys: {list(conversation_context.keys()) if isinstance(conversation_context, dict) else 'not dict'}")
             quoted_id = extract_quoted_message(conversation_context)
             if quoted_id:
                 quoted_message_id_evolution = quoted_id
                 logger.info(f"💬 [WEBHOOK] Mensagem conversation é resposta de: {quoted_id}")
+            else:
+                logger.critical(f"⚠️ [WEBHOOK REPLY] quoted_id é None após extract_quoted_message")
         elif message_type == 'extendedTextMessage':
             extended_text = message_info.get('extendedTextMessage', {})
             content = extended_text.get('text', '')
