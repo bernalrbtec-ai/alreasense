@@ -41,6 +41,9 @@ export function ChatWindow() {
   const [existingContact, setExistingContact] = useState<any>(null);
   const [isCheckingContact, setIsCheckingContact] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [groupInfo, setGroupInfo] = useState<any>(null);
+  const [loadingGroupInfo, setLoadingGroupInfo] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   
   // 🔍 Debug: Log quando profile_pic_url muda
@@ -449,6 +452,31 @@ export function ChatWindow() {
 
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
+                {/* Informações do Grupo - apenas para grupos */}
+                {activeConversation?.conversation_type === 'group' && (
+                  <button
+                    onClick={async () => {
+                      setShowMenu(false);
+                      setShowGroupInfo(true);
+                      setLoadingGroupInfo(true);
+                      try {
+                        const response = await api.get(`/chat/conversations/${activeConversation.id}/group-info/`);
+                        setGroupInfo(response.data);
+                      } catch (error: any) {
+                        console.error('Erro ao buscar informações do grupo:', error);
+                        toast.error(error?.response?.data?.error || 'Erro ao buscar informações do grupo');
+                        setShowGroupInfo(false);
+                      } finally {
+                        setLoadingGroupInfo(false);
+                      }
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
+                  >
+                    <User className="w-4 h-4" />
+                    Informações do grupo
+                  </button>
+                )}
+
                 {can_transfer_conversations && (
                   <button
                     onClick={() => {
