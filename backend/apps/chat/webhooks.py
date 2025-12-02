@@ -143,9 +143,12 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     
     # ✅ MELHORIA 1: Buscar nomes dos participantes do grupo primeiro (se disponível)
     phone_to_name = {}  # Telefone normalizado -> nome
+    jid_to_name = {}  # ✅ NOVO: JID completo -> nome (para @lid e outros formatos)
     if conversation and conversation.conversation_type == 'group':
         group_metadata = conversation.group_metadata or {}
         participants = group_metadata.get('participants', [])
+        
+        logger.info(f"🔍 [MENTIONS] Buscando em {len(participants)} participantes do grupo")
         
         for p in participants:
             participant_phone = p.get('phone', '')
@@ -155,19 +158,21 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             if not participant_name:
                 continue
             
-            # Normalizar telefone para comparação
-            clean_participant_phone = participant_phone.replace('+', '').replace(' ', '').strip()
-            normalized_participant_phone = normalize_phone(clean_participant_phone)
-            
-            if normalized_participant_phone:
-                phone_to_name[normalized_participant_phone] = participant_name
-            
-            # Também mapear por JID limpo
+            # ✅ IMPORTANTE: Mapear JID completo -> nome (para @lid e outros formatos)
             if participant_jid:
+                jid_to_name[participant_jid] = participant_name
+                # Também mapear JID limpo (sem @) para busca por telefone
                 jid_clean = participant_jid.split('@')[0]
                 normalized_jid_phone = normalize_phone(jid_clean)
                 if normalized_jid_phone:
                     phone_to_name[normalized_jid_phone] = participant_name
+            
+            # Normalizar telefone para comparação
+            if participant_phone:
+                clean_participant_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                normalized_participant_phone = normalize_phone(clean_participant_phone)
+                if normalized_participant_phone:
+                    phone_to_name[normalized_participant_phone] = participant_name
     
     # ✅ MELHORIA 2: Buscar todos os contatos de uma vez (1 query ao invés de N)
     phone_to_contact = {}
@@ -190,11 +195,16 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
         if not normalized_phone:
             continue
         
-        # Buscar nome com prioridade: grupo > contatos > telefone formatado
+        # ✅ CORREÇÃO: Buscar nome com prioridade:
+        # 1. JID completo nos participantes (para @lid e outros formatos)
+        # 2. Telefone normalizado nos participantes
+        # 3. Contatos do banco
+        # 4. Telefone formatado (fallback)
         mention_name = (
-            phone_to_name.get(normalized_phone) or  # 1. Participante do grupo
-            phone_to_contact.get(normalized_phone) or  # 2. Contato do banco
-            format_phone_for_display(normalized_phone)  # 3. Telefone formatado (fallback)
+            jid_to_name.get(mentioned_jid) or  # 1. JID completo no grupo (ex: 52763740340435@lid)
+            phone_to_name.get(normalized_phone) or  # 2. Telefone normalizado no grupo
+            phone_to_contact.get(normalized_phone) or  # 3. Contato do banco
+            format_phone_for_display(normalized_phone)  # 4. Telefone formatado (fallback)
         )
         
         mentions_list.append({
@@ -202,7 +212,7 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             'name': mention_name
         })
         
-        logger.info(f"   👤 Menção: {mention_name} ({normalized_phone})")
+        logger.info(f"   👤 Menção: {mention_name} ({normalized_phone}) | JID original: {mentioned_jid}")
     
     return mentions_list
 

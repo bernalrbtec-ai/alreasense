@@ -161,6 +161,15 @@ class MessageSerializer(serializers.ModelSerializer):
             if 'mentions' in data['metadata'] and instance.conversation:
                 mentions_saved = data['metadata'].get('mentions', [])
                 if mentions_saved:
+                    # ✅ IMPORTANTE: Recarregar conversa do banco para ter dados atualizados
+                    # Isso garante que temos o group_metadata mais recente
+                    try:
+                        conversation = Conversation.objects.select_related('tenant').get(
+                            id=instance.conversation.id
+                        )
+                    except Conversation.DoesNotExist:
+                        conversation = instance.conversation
+                    
                     # Extrair JIDs/phones das menções salvas
                     mentioned_jids = []
                     for mention in mentions_saved:
@@ -176,14 +185,27 @@ class MessageSerializer(serializers.ModelSerializer):
                         # ✅ IMPORTANTE: Importação lazy para evitar circular
                         try:
                             from apps.chat.webhooks import process_mentions_optimized
+                            
+                            logger.info(f"🔄 [SERIALIZER] Reprocessando {len(mentioned_jids)} menções para mensagem {instance.id}")
+                            logger.info(f"   Conversa: {conversation.id} | Tipo: {conversation.conversation_type}")
+                            logger.info(f"   Group metadata tem participantes: {len(conversation.group_metadata.get('participants', [])) if conversation.group_metadata else 0}")
+                            
                             updated_mentions = process_mentions_optimized(
                                 mentioned_jids, 
-                                instance.conversation.tenant,
-                                instance.conversation
+                                conversation.tenant,
+                                conversation
                             )
+                            
+                            # Log das menções atualizadas
+                            for i, mention in enumerate(updated_mentions):
+                                old_name = mentions_saved[i].get('name', 'N/A') if i < len(mentions_saved) else 'N/A'
+                                new_name = mention.get('name', 'N/A')
+                                if old_name != new_name:
+                                    logger.info(f"   ✅ Menção {i+1} atualizada: '{old_name}' → '{new_name}'")
+                            
                             # Atualizar menções no metadata com nomes atualizados
                             data['metadata']['mentions'] = updated_mentions
-                            logger.debug(f"🔄 [SERIALIZER] Reprocessadas {len(updated_mentions)} menções para mensagem {instance.id}")
+                            logger.info(f"✅ [SERIALIZER] {len(updated_mentions)} menções reprocessadas para mensagem {instance.id}")
                         except ImportError as e:
                             logger.warning(f"⚠️ [SERIALIZER] Não foi possível importar process_mentions_optimized: {e}")
                             # Em caso de erro de importação, manter menções originais
