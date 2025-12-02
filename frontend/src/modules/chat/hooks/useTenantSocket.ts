@@ -160,7 +160,8 @@ export function useTenantSocket() {
         console.log('📎 [TENANT WS] Attachment atualizado:', data.data?.attachment_id);
         if (data.data?.attachment_id) {
           // Atualizar attachment via store (mesmo se conversa não estiver aberta)
-          const { updateAttachment, addMessage, messages } = useChatStore.getState();
+          const { updateAttachment, addMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+          const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
           const attachmentId = data.data.attachment_id;
           const messageId = data.data.message_id;
           

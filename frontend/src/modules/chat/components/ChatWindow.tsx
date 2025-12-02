@@ -11,6 +11,8 @@ import { usePermissions } from '@/hooks/usePermissions';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { useChatSocket } from '../hooks/useChatSocket';
+import { usePollingFallback } from '../hooks/usePollingFallback';
+import { usePollingFallback } from '../hooks/usePollingFallback';
 import { getDisplayName } from '../utils/phoneFormatter';
 import ContactModal from '@/components/contacts/ContactModal';
 import ContactHistory from '@/components/contacts/ContactHistory';
@@ -55,6 +57,8 @@ export function ChatWindow() {
 
   // 🔌 Conectar WebSocket para esta conversa (usa manager global)
   const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversation?.id);
+  // ✅ NOVO: Fallback de polling quando WebSocket falha
+  usePollingFallback(activeConversation?.id);
 
   // ✅ Verificar se contato existe quando conversa abre (apenas para contatos individuais)
   useEffect(() => {

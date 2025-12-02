@@ -42,9 +42,48 @@ class ChatWebSocketManager {
   private isConnected = false;
   private tenantId: string | null = null;
   private token: string | null = null;
+  // ✅ NOVO: Page Visibility API
+  private isPaused = false; // Pausado quando aba está em background
+  private lastConnectedAt: number | null = null; // Timestamp da última conexão bem-sucedida
+  private visibilityChangeHandler: (() => void) | null = null;
 
   private constructor() {
     console.log('🏗️ [MANAGER] ChatWebSocketManager criado (Singleton)');
+    // ✅ NOVO: Registrar Page Visibility API
+    this.setupPageVisibilityListener();
+  }
+  
+  /**
+   * ✅ NOVO: Configura listener para Page Visibility API
+   * Pausa reconexão quando aba está em background
+   */
+  private setupPageVisibilityListener(): void {
+    if (typeof document === 'undefined') return; // SSR
+    
+    this.visibilityChangeHandler = () => {
+      if (document.hidden) {
+        // Aba está em background - pausar reconexão
+        console.log('⏸️ [MANAGER] Aba em background - pausando reconexão');
+        this.isPaused = true;
+        // Cancelar reconexão pendente
+        if (this.reconnectTimeout) {
+          clearTimeout(this.reconnectTimeout);
+          this.reconnectTimeout = null;
+        }
+      } else {
+        // Aba voltou ao foreground - retomar
+        console.log('▶️ [MANAGER] Aba em foreground - retomando conexão');
+        this.isPaused = false;
+        // Se estava desconectado, tentar reconectar
+        if (!this.isConnected && !this.isConnecting && this.tenantId && this.token) {
+          console.log('🔄 [MANAGER] Tentando reconectar após voltar ao foreground...');
+          this.reconnectAttempts = 0; // Resetar tentativas
+          this.connect(this.tenantId, this.token);
+        }
+      }
+    };
+    
+    document.addEventListener('visibilitychange', this.visibilityChangeHandler);
   }
 
   public static getInstance(): ChatWebSocketManager {
@@ -78,6 +117,7 @@ class ChatWebSocketManager {
         this.isConnected = true;
         this.isConnecting = false;
         this.reconnectAttempts = 0;
+        this.lastConnectedAt = Date.now(); // ✅ NOVO: Registrar timestamp de conexão bem-sucedida
 
         // Processar fila de mensagens pendentes
         this.processMessageQueue();
@@ -111,12 +151,32 @@ class ChatWebSocketManager {
         this.isConnecting = false;
         this.ws = null;
 
-        // Reconectar automaticamente
+        // ✅ NOVO: Não reconectar se está pausado (aba em background)
+        if (this.isPaused) {
+          console.log('⏸️ [MANAGER] Reconexão pausada (aba em background)');
+          return;
+        }
+
+        // ✅ MELHORIA: Resetar tentativas após 5 minutos conectado
+        if (this.lastConnectedAt && Date.now() - this.lastConnectedAt > 5 * 60 * 1000) {
+          console.log('🔄 [MANAGER] Resetando tentativas após conexão prolongada');
+          this.reconnectAttempts = 0;
+        }
+
+        // Reconectar automaticamente com exponential backoff + jitter
         if (this.reconnectAttempts < this.maxReconnectAttempts) {
-          const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000);
-          console.log(`🔄 [MANAGER] Reconectando em ${delay}ms (tentativa ${this.reconnectAttempts + 1})...`);
+          const baseDelay = 1000 * Math.pow(2, this.reconnectAttempts);
+          const jitter = Math.random() * 1000; // ✅ NOVO: Jitter aleatório (0-1s)
+          const delay = Math.min(baseDelay + jitter, 30000);
+          console.log(`🔄 [MANAGER] Reconectando em ${Math.round(delay)}ms (tentativa ${this.reconnectAttempts + 1})...`);
 
           this.reconnectTimeout = setTimeout(() => {
+            // ✅ Verificar novamente se não está pausado antes de reconectar
+            if (this.isPaused) {
+              console.log('⏸️ [MANAGER] Reconexão cancelada (aba ainda em background)');
+              return;
+            }
+            
             this.reconnectAttempts++;
             if (this.tenantId && this.token) {
               this.connect(this.tenantId, this.token);
@@ -124,6 +184,8 @@ class ChatWebSocketManager {
           }, delay);
         } else {
           console.error('❌ [MANAGER] Máximo de tentativas de reconexão atingido');
+          // ✅ NOVO: Emitir evento para ativar fallback de polling
+          this.emit('connection_failed', { reason: 'max_attempts_reached' });
         }
       };
     } catch (error) {
@@ -137,6 +199,12 @@ class ChatWebSocketManager {
    */
   public disconnect(): void {
     console.log('🔌 [MANAGER] Desconectando WebSocket global...');
+
+    // ✅ NOVO: Remover listener de Page Visibility
+    if (this.visibilityChangeHandler && typeof document !== 'undefined') {
+      document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+      this.visibilityChangeHandler = null;
+    }
 
     if (this.reconnectTimeout) {
       clearTimeout(this.reconnectTimeout);
@@ -153,6 +221,33 @@ class ChatWebSocketManager {
     this.currentConversationId = null;
     this.messageQueue = [];
     this.reconnectAttempts = 0;
+    this.isPaused = false;
+    this.lastConnectedAt = null;
+  }
+  
+  /**
+   * ✅ NOVO: Pausar reconexão (chamado quando aba está em background)
+   */
+  public pause(): void {
+    console.log('⏸️ [MANAGER] Pausando WebSocket');
+    this.isPaused = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+  }
+  
+  /**
+   * ✅ NOVO: Retomar reconexão (chamado quando aba volta ao foreground)
+   */
+  public resume(): void {
+    console.log('▶️ [MANAGER] Retomando WebSocket');
+    this.isPaused = false;
+    // Se estava desconectado, tentar reconectar
+    if (!this.isConnected && !this.isConnecting && this.tenantId && this.token) {
+      this.reconnectAttempts = 0; // Resetar tentativas
+      this.connect(this.tenantId, this.token);
+    }
   }
 
   /**

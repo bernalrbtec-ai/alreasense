@@ -39,7 +39,8 @@ interface MessageContextMenuProps {
 export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker, onShowForward }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
-  const { activeConversation, setMessages, messages, setReplyToMessage } = useChatStore();
+  const { activeConversation, setMessages, getMessagesArray, setReplyToMessage } = useChatStore();
+  const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
 
   // Fechar menu ao clicar fora
   useEffect(() => {

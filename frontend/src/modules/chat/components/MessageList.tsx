@@ -174,13 +174,17 @@ export function MessageList() {
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactToAdd, setContactToAdd] = useState<{ name: string; phone: string } | null>(null);
   const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
-  const { activeConversation, messages, setMessages, typing, typingUser } = useChatStore((state) => ({
-    activeConversation: state.activeConversation,
-    messages: state.messages,
-    setMessages: state.setMessages,
-    typing: state.typing,
-    typingUser: state.typingUser,
-  }));
+  // ✅ MELHORIA: Seletores memoizados com shallow comparison
+  const activeConversation = useChatStore((state) => state.activeConversation);
+  const setMessages = useChatStore((state) => state.setMessages);
+  const typing = useChatStore((state) => state.typing);
+  const typingUser = useChatStore((state) => state.typingUser);
+  const getMessagesArray = useChatStore((state) => state.getMessagesArray);
+  
+  // ✅ MELHORIA: Memoizar mensagens da conversa ativa (só recalcula se conversationId mudar)
+  const messages = useMemo(() => {
+    return activeConversation ? getMessagesArray(activeConversation.id) : [];
+  }, [activeConversation?.id, getMessagesArray]);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const { hasProductAccess } = useUserAccess();
@@ -235,7 +239,8 @@ export function MessageList() {
         
         // ✅ MELHORIA: Ao invés de setMessages (sobrescreve), fazer merge inteligente
         // para preservar attachments que foram atualizados via WebSocket
-        const { messages: currentMessages } = useChatStore.getState();
+        const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+        const currentMessages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
         const mergedMessages = sortedMsgs.map(serverMsg => {
           const existingMsg = currentMessages.find(m => m.id === serverMsg.id);
           if (existingMsg && existingMsg.attachments && existingMsg.attachments.length > 0) {
@@ -273,7 +278,7 @@ export function MessageList() {
           return serverMsg; // Nova mensagem ou sem attachments, usar do servidor
         });
         
-        setMessages(mergedMessages);
+        setMessages(mergedMessages, activeConversation.id);
         
         // ✅ PERFORMANCE: Animar mensagens em batch (mais rápido)
         // Reduzido delay de 20ms para 10ms e limita animação a 15 mensagens
@@ -327,7 +332,7 @@ export function MessageList() {
                   
                   if (retryMsgs.length > 0) {
                     console.log(`✅ [MessageList] Re-fetch #${index + 1} encontrou ${retryMsgs.length} mensagem(ns)!`);
-                    setMessages(retryMsgs);
+                    setMessages(retryMsgs, activeConversation.id);
                     setHasMoreMessages(retryData.has_more || false);
                     
                     // Scroll to bottom
@@ -370,16 +375,13 @@ export function MessageList() {
         
         // ✅ CORREÇÃO: Se erro 404 e não é conversa nova, verificar se há mensagens no WebSocket
         if (error?.response?.status === 404) {
-          const { messages: wsMessages } = useChatStore.getState();
-          const messagesFromConversation = wsMessages.filter(m => 
-            (m.conversation === activeConversation.id) || 
-            (typeof m.conversation === 'object' && m.conversation?.id === activeConversation.id)
-          );
+          const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+          const wsMessages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
           
-          if (messagesFromConversation.length > 0) {
-            console.log(`✅ [MessageList] Usando ${messagesFromConversation.length} mensagem(ns) do WebSocket (conversa não encontrada na API)`);
-            const sortedMsgs = sortMessagesByTimestamp(messagesFromConversation);
-            setMessages(sortedMsgs);
+          if (wsMessages.length > 0) {
+            console.log(`✅ [MessageList] Usando ${wsMessages.length} mensagem(ns) do WebSocket (conversa não encontrada na API)`);
+            const sortedMsgs = sortMessagesByTimestamp(wsMessages);
+            setMessages(sortedMsgs, activeConversation.id);
             setHasMoreMessages(false);
             
             // Scroll to bottom
@@ -580,7 +582,7 @@ export function MessageList() {
                     
                     if (olderMsgs.length > 0) {
                       // Adicionar mensagens antigas no início
-                      setMessages([...olderMsgs.reverse(), ...messages]);
+                      setMessages([...olderMsgs.reverse(), ...messages], activeConversation.id);
                       setHasMoreMessages(data.has_more || false);
                       
                       // Manter scroll na posição atual (sem pular para o topo)
@@ -870,7 +872,8 @@ export function MessageList() {
 // ✅ CORREÇÃO: Memoização de componente de reações para evitar re-renders desnecessários
 const MessageReactions = React.memo(function MessageReactions({ message, direction }: { message: any; direction: 'incoming' | 'outgoing' }) {
   const { user } = useAuthStore();
-  const { messages, setMessages, updateMessageReactions } = useChatStore();
+  const { getMessagesArray, setMessages, updateMessageReactions, activeConversation } = useChatStore();
+  const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
 

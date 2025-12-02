@@ -1,9 +1,24 @@
 /**
  * Zustand Store para o Flow Chat
+ * ✅ MELHORIA: Estado normalizado para melhor performance
+ * ✅ MELHORIA: Seletores memoizados para reduzir re-renders
  */
 import { create } from 'zustand';
+import { shallow } from 'zustand/shallow';
 import { Conversation, Message, Department } from '../types';
 import { upsertConversation } from './conversationUpdater';
+import { sortMessagesByTimestamp, mergeAttachments } from '../utils/messageUtils';
+
+/**
+ * ✅ NOVO: Estrutura normalizada de mensagens
+ * - byId: Busca O(1) por ID
+ * - byConversationId: IDs ordenados por conversa (sem reordenar a cada add)
+ * - Ordenação apenas ao carregar, não a cada adição
+ */
+interface NormalizedMessages {
+  byId: Record<string, Message>;
+  byConversationId: Record<string, string[]>; // conversationId -> array de messageIds ordenados
+}
 
 interface ChatState {
   // Departamentos
@@ -21,9 +36,11 @@ interface ChatState {
   updateConversation: (conversation: Conversation) => void;
   removeConversation: (conversationId: string) => void;
 
-  // Mensagens
-  messages: Message[];
-  setMessages: (messages: Message[]) => void;
+  // ✅ MELHORIA: Mensagens normalizadas
+  messages: NormalizedMessages;
+  // ✅ COMPATIBILIDADE: Manter getter para array (para componentes existentes)
+  getMessagesArray: (conversationId?: string) => Message[];
+  setMessages: (messages: Message[], conversationId?: string) => void;
   addMessage: (message: Message) => void;
   updateMessageStatus: (messageId: string, status: string) => void;
   updateMessageReactions: (
@@ -51,13 +68,92 @@ interface ChatState {
   reset: () => void;
 }
 
-export const useChatStore = create<ChatState>((set) => ({
+/**
+ * ✅ HELPER: Normaliza array de mensagens para estrutura normalizada
+ */
+function normalizeMessages(messages: Message[]): NormalizedMessages {
+  const byId: Record<string, Message> = {};
+  const byConversationId: Record<string, string[]> = {};
+  
+  // Ordenar uma vez antes de normalizar
+  const sorted = sortMessagesByTimestamp(messages);
+  
+  sorted.forEach(message => {
+    byId[message.id] = message;
+    
+    // Extrair conversationId
+    const conversationId = message.conversation_id 
+      ? String(message.conversation_id)
+      : (typeof message.conversation === 'object' && message.conversation?.id)
+      ? String(message.conversation.id)
+      : (typeof message.conversation === 'string')
+      ? message.conversation
+      : null;
+    
+    if (conversationId) {
+      if (!byConversationId[conversationId]) {
+        byConversationId[conversationId] = [];
+      }
+      // ✅ Adicionar ID mantendo ordem (já está ordenado)
+      if (!byConversationId[conversationId].includes(message.id)) {
+        byConversationId[conversationId].push(message.id);
+      }
+    }
+  });
+  
+  return { byId, byConversationId };
+}
+
+/**
+ * ✅ HELPER: Insere mensagem na posição correta (mantém ordem sem reordenar tudo)
+ */
+function insertMessageInOrder(
+  messageIds: string[],
+  messageId: string,
+  message: Message,
+  byId: Record<string, Message>
+): string[] {
+  // Se já existe, não adicionar
+  if (messageIds.includes(messageId)) {
+    return messageIds;
+  }
+  
+  const messageTime = new Date(message.created_at).getTime();
+  
+  // ✅ Busca binária para encontrar posição correta (O(log n) ao invés de O(n))
+  let left = 0;
+  let right = messageIds.length;
+  
+  while (left < right) {
+    const mid = Math.floor((left + right) / 2);
+    const midMessage = byId[messageIds[mid]];
+    if (!midMessage) {
+      // Se mensagem não existe, pular
+      left = mid + 1;
+      continue;
+    }
+    const midTime = new Date(midMessage.created_at).getTime();
+    
+    if (messageTime < midTime) {
+      right = mid;
+    } else {
+      left = mid + 1;
+    }
+  }
+  
+  // Inserir na posição encontrada
+  const newIds = [...messageIds];
+  newIds.splice(left, 0, messageId);
+  return newIds;
+}
+
+export const useChatStore = create<ChatState>((set, get) => ({
   // State inicial
   departments: [],
   activeDepartment: null,
   conversations: [],
   activeConversation: null,
-  messages: [],
+  messages: { byId: {}, byConversationId: {} },
   typing: false,
   typingUser: null,
   connectionStatus: 'disconnected',
@@ -74,7 +170,7 @@ export const useChatStore = create<ChatState>((set) => ({
       console.log('🔕 [STORE] Limpando conversa ativa');
       return {
         activeConversation: null,
-        messages: []
+        messages: { byId: {}, byConversationId: {} }
       };
     }
     
@@ -85,9 +181,21 @@ export const useChatStore = create<ChatState>((set) => ({
     }
     
     console.log('✅ [STORE] Definindo conversa ativa:', conversation.id, '| Antiga:', state.activeConversation?.id || 'nenhuma');
+    
+    // ✅ MELHORIA: Manter mensagens de outras conversas no cache (byId)
+    // Mas limpar apenas as mensagens da conversa anterior (se houver)
+    // Isso permite cache entre conversas sem carregar tudo na memória
+    const updatedMessages = { ...state.messages };
+    
+    // Se tinha conversa ativa anterior, manter suas mensagens no cache (não limpar)
+    // Apenas garantir que a nova conversa tenha array vazio se não existir
+    if (conversation.id && !updatedMessages.byConversationId[conversation.id]) {
+      updatedMessages.byConversationId[conversation.id] = [];
+    }
+    
     return {
       activeConversation: conversation,
-      messages: [] // Limpa mensagens ao trocar conversa
+      messages: updatedMessages
     };
   }),
   addConversation: (conversation) => set((state) => {
@@ -113,7 +221,6 @@ export const useChatStore = create<ChatState>((set) => ({
     
     // ✅ CORREÇÃO CRÍTICA: SEMPRE atualizar activeConversation se for a mesma conversa
     // Isso garante que nome, foto, last_message, etc. atualizem em tempo real
-    // PRESERVAR mensagens existentes (não sobrescrever)
     const isActiveConversation = state.activeConversation?.id === conversation.id;
     
     if (isActiveConversation) {
@@ -128,8 +235,6 @@ export const useChatStore = create<ChatState>((set) => ({
       ? {
           ...state.activeConversation,
           ...conversation,  // ✅ Merge completo (não apenas campos específicos)
-          // ✅ PRESERVAR mensagens existentes (não sobrescrever)
-          messages: state.activeConversation.messages || [],
           // ✅ FORÇAR nova referência para garantir re-render
           _updatedAt: Date.now()
         }
@@ -140,45 +245,88 @@ export const useChatStore = create<ChatState>((set) => ({
       activeConversation: updatedActiveConversation
     };
   }),
-  removeConversation: (conversationId) => set((state) => ({
-    conversations: state.conversations.filter(c => c.id !== conversationId),
-    // Se a conversa removida era a ativa, limpar
-    activeConversation: state.activeConversation?.id === conversationId 
-      ? null 
-      : state.activeConversation
-  })),
+  removeConversation: (conversationId) => set((state) => {
+    const updatedMessages = { ...state.messages };
+    // ✅ Limpar mensagens da conversa removida
+    delete updatedMessages.byConversationId[conversationId];
+    // Remover mensagens do byId também (opcional - pode manter para cache)
+    
+    return {
+      conversations: state.conversations.filter(c => c.id !== conversationId),
+      // Se a conversa removida era a ativa, limpar
+      activeConversation: state.activeConversation?.id === conversationId 
+        ? null 
+        : state.activeConversation,
+      messages: updatedMessages
+    };
+  }),
 
-  // Mensagens
-  setMessages: (messages) => set({ messages }),
+  // ✅ MELHORIA: Getter para array (compatibilidade com código existente)
+  getMessagesArray: (conversationId) => {
+    const state = get();
+    if (!conversationId && state.activeConversation) {
+      conversationId = state.activeConversation.id;
+    }
+    
+    if (!conversationId) {
+      return [];
+    }
+    
+    const messageIds = state.messages.byConversationId[conversationId] || [];
+    return messageIds.map(id => state.messages.byId[id]).filter(Boolean);
+  },
+
+  // ✅ MELHORIA: setMessages agora normaliza e organiza por conversa
+  setMessages: (messages, conversationId) => set((state) => {
+    if (!conversationId && state.activeConversation) {
+      conversationId = state.activeConversation.id;
+    }
+    
+    if (!conversationId) {
+      console.warn('⚠️ [STORE] setMessages sem conversationId');
+      return state;
+    }
+    
+    // ✅ Normalizar novas mensagens
+    const normalized = normalizeMessages(messages);
+    
+    // ✅ Merge com mensagens existentes (preservar outras conversas)
+    const updatedById = { ...state.messages.byId, ...normalized.byId };
+    const updatedByConversationId = { 
+      ...state.messages.byConversationId,
+      [conversationId]: normalized.byConversationId[conversationId] || []
+    };
+    
+    return {
+      messages: {
+        byId: updatedById,
+        byConversationId: updatedByConversationId
+      }
+    };
+  }),
+
+  // ✅ MELHORIA: addMessage agora usa estrutura normalizada (sem reordenar tudo)
   addMessage: (message) => set((state) => {
     // ✅ FIX CRÍTICO: Verificar se mensagem pertence à conversa ativa
-    // Se não houver conversa ativa ou a mensagem não pertence à conversa ativa, NÃO adicionar
     if (!state.activeConversation) {
       console.log('⚠️ [STORE] Nenhuma conversa ativa, ignorando mensagem:', message.id);
       return state;
     }
     
     // ✅ FIX CRÍTICO: Comparar conversation_id da mensagem com a conversa ativa
-    // O campo pode ser 'conversation' (UUID objeto ou string) ou 'conversation_id' (string)
-    // Precisamos normalizar para string para comparação correta
     let messageConversationId: string | null = null;
     
-    // ✅ FIX: Verificar se conversation_id existe primeiro (mais confiável)
     if (message.conversation_id) {
       messageConversationId = String(message.conversation_id);
     } else if (message.conversation) {
-      // Se é objeto UUID, extrair o id ou converter para string
       if (typeof message.conversation === 'object' && message.conversation.id) {
         messageConversationId = String(message.conversation.id);
       } else if (typeof message.conversation === 'string') {
-        // ✅ FIX: Verificar se é UUID válido (não é nome da conversa)
-        // UUIDs têm formato: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
         const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
         if (uuidRegex.test(message.conversation)) {
           messageConversationId = message.conversation;
         } else {
-          // Se não é UUID, é provavelmente o nome da conversa - ignorar
-          console.warn('⚠️ [STORE] conversation é string mas não é UUID (provavelmente nome):', message.conversation);
+          console.warn('⚠️ [STORE] conversation é string mas não é UUID:', message.conversation);
           messageConversationId = null;
         }
       } else {
@@ -188,144 +336,101 @@ export const useChatStore = create<ChatState>((set) => ({
     
     const activeConversationId = state.activeConversation.id ? String(state.activeConversation.id) : null;
     
-    console.log('🔍 [STORE] Verificando se mensagem pertence à conversa ativa:', {
-      messageId: message.id,
-      messageConversationId,
-      activeConversationId,
-      messageConversation: message.conversation,
-      messageConversationType: typeof message.conversation,
-      messageConversationIdField: message.conversation_id,
-      activeConversationIdType: typeof state.activeConversation.id,
-      match: messageConversationId === activeConversationId,
-      messageContent: message.content?.substring(0, 50)
-    });
-    
-    // ✅ FIX CRÍTICO: NUNCA adicionar mensagens sem conversation_id válido
-    // Isso previne mensagens de outras conversas aparecerem na conversa ativa
     if (!messageConversationId) {
-      console.warn('⚠️ [STORE] Mensagem sem conversation_id válido, ignorando:', {
-        messageId: message.id,
-        direction: message.direction,
-        conversation: message.conversation,
-        conversation_id: message.conversation_id,
-        messageContent: message.content?.substring(0, 50)
-      });
-      return state; // Não adicionar mensagem sem conversation_id válido
+      console.warn('⚠️ [STORE] Mensagem sem conversation_id válido, ignorando:', message.id);
+      return state;
     }
     
-    // ✅ FIX CRÍTICO: NUNCA adicionar mensagens que não pertencem à conversa ativa
-    // Isso previne mensagens de outras conversas (incluindo WhatsApp Web) aparecerem na conversa errada
     if (messageConversationId !== activeConversationId) {
       console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
         messageId: message.id,
         messageConversationId,
-        activeConversationId,
-        direction: message.direction,
-        messageContent: message.content?.substring(0, 50),
-        typeMismatch: typeof messageConversationId !== typeof activeConversationId
+        activeConversationId
       });
-      return state; // Não adicionar mensagem se não for da conversa ativa
+      return state;
     }
     
     console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);
     
-    // Evitar duplicatas: verificar se mensagem já existe
-    const exists = state.messages.some(m => m.id === message.id);
-    if (exists) {
-      // ✅ MELHORIA: Merge inteligente de attachments - preservar attachments atualizados
+    // ✅ Verificar se mensagem já existe
+    const existingMessage = state.messages.byId[message.id];
+    const messageIds = state.messages.byConversationId[messageConversationId] || [];
+    
+    if (existingMessage) {
+      // ✅ Merge inteligente de attachments
+      let updatedMessage = message;
+      if (existingMessage.attachments && existingMessage.attachments.length > 0 && 
+          message.attachments && message.attachments.length > 0) {
+        const mergedAttachments = mergeAttachments(existingMessage.attachments, message.attachments);
+        updatedMessage = { ...message, attachments: mergedAttachments };
+      } else if (existingMessage.attachments && existingMessage.attachments.length > 0) {
+        // Preservar attachments existentes se nova mensagem não tem
+        updatedMessage = { ...message, attachments: existingMessage.attachments };
+      } else if (message.attachments && message.attachments.length > 0) {
+        // Usar novos attachments
+        updatedMessage = message;
+      }
+      
+      // ✅ Atualizar mensagem existente (sem reordenar)
       return {
-        messages: state.messages.map(m => {
-          if (m.id === message.id) {
-            // Fazer merge inteligente de attachments
-            if (m.attachments && m.attachments.length > 0 && message.attachments && message.attachments.length > 0) {
-              // ✅ MERGE: Preservar attachments existentes que estão atualizados (com file_url)
-              // e usar novos attachments apenas se não existirem ou estiverem desatualizados
-              const mergedAttachments = m.attachments.map(existingAtt => {
-                const newAtt = message.attachments.find(a => a.id === existingAtt.id);
-                if (newAtt) {
-                  // Se attachment existente tem file_url válido e novo não tem, manter o existente
-                  const existingHasUrl = existingAtt.file_url && existingAtt.file_url.trim() && 
-                                        !existingAtt.file_url.includes('whatsapp.net') &&
-                                        !existingAtt.file_url.includes('evo.');
-                  const newHasUrl = newAtt.file_url && newAtt.file_url.trim() &&
-                                   !newAtt.file_url.includes('whatsapp.net') &&
-                                   !newAtt.file_url.includes('evo.');
-                  
-                  // ✅ FIX: Priorizar attachment com URL válida OU mais recente (timestamp-based)
-                  if (existingHasUrl && !newHasUrl) {
-                    return existingAtt; // Manter attachment atualizado
-                  }
-                  if (newHasUrl && !existingHasUrl) {
-                    return newAtt; // Usar novo que tem URL válida
-                  }
-                  // Ambos têm ou não têm URL - usar o mais recente (timestamp-based merge)
-                  const existingTime = existingAtt.created_at ? new Date(existingAtt.created_at).getTime() : 0;
-                  const newTime = newAtt.created_at ? new Date(newAtt.created_at).getTime() : 0;
-                  return newTime > existingTime ? newAtt : existingAtt;
-                }
-                return existingAtt; // Manter attachment que não existe na nova mensagem
-              });
-              
-              // Adicionar novos attachments que não existem
-              const newAttachmentIds = new Set(mergedAttachments.map(a => a.id));
-              message.attachments.forEach(newAtt => {
-                if (!newAttachmentIds.has(newAtt.id)) {
-                  mergedAttachments.push(newAtt);
-                }
-              });
-              
-              return { ...message, attachments: mergedAttachments };
-            }
-            
-            // Se a mensagem nova tem attachments mas a antiga não, usar os novos
-            if (message.attachments && message.attachments.length > 0) {
-              return message;
-            }
-            // Se a mensagem nova não tem attachments mas a antiga tem, preservar os da antiga
-            if (m.attachments && m.attachments.length > 0) {
-              return { ...message, attachments: m.attachments };
-            }
-            // Caso contrário, usar a mensagem nova
-            return message;
-          }
-          return m;
-        })
-        // ✅ Ordenar após atualizar (garantir ordem correta - mais antigas primeiro)
-        .sort((a, b) => {
-          const timeA = new Date(a.created_at).getTime();
-          const timeB = new Date(b.created_at).getTime();
-          return timeA - timeB; // Mais antiga primeiro (timeA - timeB)
-        })
+        messages: {
+          byId: {
+            ...state.messages.byId,
+            [message.id]: updatedMessage
+          },
+          byConversationId: state.messages.byConversationId
+        }
       };
     }
-    // ✅ FIX: Ordenar mensagens por timestamp antes de adicionar
-    // Isso garante que mensagens fora de ordem via WebSocket sejam ordenadas corretamente
-    const newMessages = [...state.messages, message].sort((a, b) => {
-      const timeA = new Date(a.created_at).getTime();
-      const timeB = new Date(b.created_at).getTime();
-      return timeA - timeB; // Mais antiga primeiro (timeA - timeB)
-    });
+    
+    // ✅ NOVA MENSAGEM: Inserir na posição correta (O(log n) ao invés de O(n log n))
+    const updatedMessageIds = insertMessageInOrder(
+      messageIds,
+      message.id,
+      message,
+      state.messages.byId
+    );
     
     return {
-      messages: newMessages
+      messages: {
+        byId: {
+          ...state.messages.byId,
+          [message.id]: message
+        },
+        byConversationId: {
+          ...state.messages.byConversationId,
+          [messageConversationId]: updatedMessageIds
+        }
+      }
     };
   }),
-  updateMessageStatus: (messageId, status) => set((state) => ({
-    messages: state.messages.map(m =>
-      m.id === messageId ? { ...m, status: status as any } : m
-    )
-  })),
-  updateMessageReactions: (messageId, reactions, summary) => set((state) => {
-    const updatedMessages = state.messages.map((m) =>
-      m.id === messageId
-        ? {
-            ...m,
-            reactions: reactions ? [...reactions] : [],
-            reactions_summary: summary ? { ...summary } : {},
-          }
-        : m
-    );
 
+  updateMessageStatus: (messageId, status) => set((state) => {
+    const message = state.messages.byId[messageId];
+    if (!message) return state;
+    
+    return {
+      messages: {
+        ...state.messages,
+        byId: {
+          ...state.messages.byId,
+          [messageId]: { ...message, status: status as any }
+        }
+      }
+    };
+  }),
+
+  updateMessageReactions: (messageId, reactions, summary) => set((state) => {
+    const message = state.messages.byId[messageId];
+    if (!message) return state;
+    
+    const updatedMessage = {
+      ...message,
+      reactions: reactions ? [...reactions] : [],
+      reactions_summary: summary ? { ...summary } : {},
+    };
+    
+    // ✅ Atualizar também nas conversas se for last_message
     const updatedConversations = state.conversations.map((conversation) => {
       if (conversation.last_message?.id === messageId) {
         return {
@@ -355,46 +460,89 @@ export const useChatStore = create<ChatState>((set) => ({
         : state.activeConversation;
 
     return {
-      messages: updatedMessages,
+      messages: {
+        ...state.messages,
+        byId: {
+          ...state.messages.byId,
+          [messageId]: updatedMessage
+        }
+      },
       conversations: updatedConversations,
       activeConversation: updatedActiveConversation,
     };
   }),
+
   updateMessageDeleted: (messageId) => set((state) => {
-    // Atualizar na lista de mensagens
-    const updatedMessages = state.messages.map(m =>
-      m.id === messageId
-        ? { ...m, is_deleted: true, deleted_at: new Date().toISOString() }
-        : m
-    );
+    const message = state.messages.byId[messageId];
+    if (!message) return state;
     
-    // Atualizar activeConversation se for a mesma conversa
-    const updatedActiveConversation = state.activeConversation
-      ? {
-          ...state.activeConversation,
-          messages: state.activeConversation.messages?.map(m =>
-            m.id === messageId
-              ? { ...m, is_deleted: true, deleted_at: new Date().toISOString() }
-              : m
-          ) || []
-        }
+    const updatedMessage = {
+      ...message,
+      is_deleted: true,
+      deleted_at: new Date().toISOString()
+    };
+    
+    // ✅ Atualizar activeConversation se for a mesma conversa
+    const messageConversationId = message.conversation_id 
+      ? String(message.conversation_id)
+      : (typeof message.conversation === 'object' && message.conversation?.id)
+      ? String(message.conversation.id)
+      : (typeof message.conversation === 'string')
+      ? message.conversation
       : null;
     
+    const updatedActiveConversation = state.activeConversation && 
+      messageConversationId === state.activeConversation.id
+      ? {
+          ...state.activeConversation,
+          // Não precisa atualizar messages array aqui (já está normalizado)
+        }
+      : state.activeConversation;
+
     return {
-      messages: updatedMessages,
+      messages: {
+        ...state.messages,
+        byId: {
+          ...state.messages.byId,
+          [messageId]: updatedMessage
+        }
+      },
       activeConversation: updatedActiveConversation
     };
   }),
-  updateAttachment: (attachmentId, updates) => set((state) => ({
-    messages: state.messages.map(m => {
-      if (!m.attachments || m.attachments.length === 0) return m;
-      const idx = m.attachments.findIndex(a => a.id === attachmentId);
-      if (idx === -1) return m;
-      const updatedAttachments = [...m.attachments];
-      updatedAttachments[idx] = { ...updatedAttachments[idx], ...updates } as any;
-      return { ...m, attachments: updatedAttachments } as any;
-    })
-  })),
+
+  updateAttachment: (attachmentId, updates) => set((state) => {
+    // ✅ Buscar mensagem que contém o attachment
+    let foundMessage: Message | null = null;
+    let foundMessageId: string | null = null;
+    
+    for (const [messageId, message] of Object.entries(state.messages.byId)) {
+      if (message.attachments?.some(att => att.id === attachmentId)) {
+        foundMessage = message;
+        foundMessageId = messageId;
+        break;
+      }
+    }
+    
+    if (!foundMessage || !foundMessageId) return state;
+    
+    const updatedAttachments = foundMessage.attachments.map(att =>
+      att.id === attachmentId ? { ...att, ...updates } : att
+    );
+    
+    return {
+      messages: {
+        ...state.messages,
+        byId: {
+          ...state.messages.byId,
+          [foundMessageId]: {
+            ...foundMessage,
+            attachments: updatedAttachments
+          }
+        }
+      }
+    };
+  }),
 
   // Estado do chat
   setTyping: (typing, user) => set({ typing, typingUser: user || null }),
@@ -411,11 +559,10 @@ export const useChatStore = create<ChatState>((set) => ({
     activeDepartment: null,
     conversations: [],
     activeConversation: null,
-    messages: [],
+    messages: { byId: {}, byConversationId: {} },
     typing: false,
     typingUser: null,
     connectionStatus: 'disconnected',
     replyToMessage: null
   })
 }));
-

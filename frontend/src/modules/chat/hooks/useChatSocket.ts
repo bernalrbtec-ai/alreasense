@@ -107,7 +107,8 @@ export function useChatSocket(conversationId?: string) {
         }
         
         // ✅ Verificar se mensagem já existe e preservar attachments existentes
-        const { messages } = useChatStore.getState();
+        const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+        const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
         const existingMessage = messages.find(m => m.id === data.message.id);
         if (existingMessage && existingMessage.attachments && existingMessage.attachments.length > 0) {
           // Se a mensagem nova não tiver attachments mas a antiga tiver, preservar
