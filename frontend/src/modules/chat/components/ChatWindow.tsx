@@ -556,6 +556,120 @@ export function ChatWindow() {
         />
       )}
 
+      {/* Modal de Informações do Grupo */}
+      {showGroupInfo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900">Informações do Grupo</h2>
+              <button
+                onClick={() => {
+                  setShowGroupInfo(false);
+                  setGroupInfo(null);
+                }}
+                className="p-1 hover:bg-gray-200 rounded transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingGroupInfo ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+                </div>
+              ) : groupInfo ? (
+                <div className="space-y-6">
+                  {/* Informações Básicas */}
+                  <div>
+                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Informações Básicas</h3>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-24">Nome:</span>
+                        <span className="text-sm font-medium text-gray-900">{groupInfo.group_name || 'Sem nome'}</span>
+                      </div>
+                      {groupInfo.description && (
+                        <div className="flex items-start gap-2">
+                          <span className="text-sm text-gray-600 w-24">Descrição:</span>
+                          <span className="text-sm text-gray-900 flex-1">{groupInfo.description}</span>
+                        </div>
+                      )}
+                      {groupInfo.creation_date && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-600 w-24">Criado em:</span>
+                          <span className="text-sm text-gray-900">
+                            {new Date(groupInfo.creation_date).toLocaleString('pt-BR', {
+                              dateStyle: 'long',
+                              timeStyle: 'short'
+                            })}
+                          </span>
+                        </div>
+                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-600 w-24">Participantes:</span>
+                        <span className="text-sm font-medium text-gray-900">{groupInfo.participants_count || groupInfo.participants?.length || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Administradores */}
+                  {groupInfo.admins && groupInfo.admins.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Administradores ({groupInfo.admins.length})</h3>
+                      <div className="space-y-2">
+                        {groupInfo.admins.map((admin: any, index: number) => (
+                          <div key={index} className="flex items-center gap-2 p-2 bg-blue-50 rounded">
+                            <span className="text-sm font-medium text-gray-900">{admin.name || admin.phone}</span>
+                            {admin.phone && admin.name && (
+                              <span className="text-xs text-gray-500">({admin.phone})</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Participantes */}
+                  {groupInfo.participants && groupInfo.participants.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-semibold text-gray-700 mb-3">Participantes ({groupInfo.participants.length})</h3>
+                      <div className="space-y-1 max-h-64 overflow-y-auto">
+                        {groupInfo.participants.map((participant: any, index: number) => (
+                          <div 
+                            key={index} 
+                            className={`flex items-center gap-2 p-2 rounded ${participant.is_admin ? 'bg-blue-50' : 'bg-gray-50'}`}
+                          >
+                            <span className="text-sm text-gray-900 flex-1">
+                              {participant.name || participant.phone}
+                            </span>
+                            {participant.phone && participant.name && (
+                              <span className="text-xs text-gray-500">{participant.phone}</span>
+                            )}
+                            {participant.is_admin && (
+                              <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">Admin</span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {groupInfo.warning && (
+                    <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+                      ⚠️ {groupInfo.warning}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  Nenhuma informação disponível
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ✅ Modal de Contato */}
       {showContactModal && activeConversation && (
         <ContactModal
