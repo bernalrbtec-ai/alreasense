@@ -360,6 +360,21 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'message': event.get('message')
         }))
     
+    async def mention_notification(self, event):
+        """✅ MELHORIA: Handler para notificações de menção."""
+        message_data = event.get('message', {})
+        logger.info(f"📬 [CHAT WS V2] Notificação de menção recebida para usuário {self.user.email}")
+        await self.send(text_data=json.dumps({
+            'type': 'mention_notification',
+            'message': {
+                'id': message_data.get('id'),
+                'conversation_id': message_data.get('conversation_id'),
+                'content': message_data.get('content', ''),
+                'sender_name': message_data.get('sender_name', 'Usuário'),
+                'conversation_name': message_data.get('conversation_name', 'Conversa')
+            }
+        }))
+    
     async def conversation_updated(self, event):
         """Broadcast quando conversa é atualizada."""
         await self.send(text_data=json.dumps({

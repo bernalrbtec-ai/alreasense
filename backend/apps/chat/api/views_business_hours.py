@@ -52,8 +52,31 @@ class BusinessHoursViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        """Define tenant automaticamente."""
-        serializer.save(tenant=self.request.user.tenant)
+        """
+        ✅ CORREÇÃO: Faz upsert (update ou create) ao invés de sempre criar.
+        Evita erro de constraint única quando já existe registro para o tenant/department.
+        """
+        tenant = self.request.user.tenant
+        department = serializer.validated_data.get('department')
+        
+        # Buscar registro existente
+        existing = BusinessHours.objects.filter(
+            tenant=tenant,
+            department=department
+        ).first()
+        
+        if existing:
+            # ✅ Atualizar registro existente (não atualizar tenant/department)
+            logger.info(f"🔄 [BUSINESS HOURS] Atualizando registro existente (ID: {existing.id}) para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            serializer.instance = existing
+            # Remover tenant e department do validated_data para não atualizar (já estão corretos)
+            serializer.validated_data.pop('tenant', None)
+            serializer.validated_data.pop('department', None)
+            serializer.save()
+        else:
+            # ✅ Criar novo registro
+            logger.info(f"➕ [BUSINESS HOURS] Criando novo registro para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            serializer.save(tenant=tenant)
     
     @action(detail=False, methods=['get'])
     def current(self, request):
@@ -154,8 +177,31 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        """Define tenant automaticamente."""
-        serializer.save(tenant=self.request.user.tenant)
+        """
+        ✅ CORREÇÃO: Faz upsert (update ou create) ao invés de sempre criar.
+        Evita erro de constraint única quando já existe registro para o tenant/department.
+        """
+        tenant = self.request.user.tenant
+        department = serializer.validated_data.get('department')
+        
+        # Buscar registro existente
+        existing = AfterHoursMessage.objects.filter(
+            tenant=tenant,
+            department=department
+        ).first()
+        
+        if existing:
+            # ✅ Atualizar registro existente (não atualizar tenant/department)
+            logger.info(f"🔄 [AFTER HOURS MESSAGE] Atualizando registro existente (ID: {existing.id}) para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            serializer.instance = existing
+            # Remover tenant e department do validated_data para não atualizar (já estão corretos)
+            serializer.validated_data.pop('tenant', None)
+            serializer.validated_data.pop('department', None)
+            serializer.save()
+        else:
+            # ✅ Criar novo registro
+            logger.info(f"➕ [AFTER HOURS MESSAGE] Criando novo registro para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            serializer.save(tenant=tenant)
     
     @action(detail=False, methods=['get'])
     def current(self, request):
@@ -216,8 +262,31 @@ class AfterHoursTaskConfigViewSet(viewsets.ModelViewSet):
         return queryset
     
     def perform_create(self, serializer):
-        """Define tenant automaticamente."""
-        serializer.save(tenant=self.request.user.tenant)
+        """
+        ✅ CORREÇÃO: Faz upsert (update ou create) ao invés de sempre criar.
+        Evita erro de constraint única quando já existe registro para o tenant/department.
+        """
+        tenant = self.request.user.tenant
+        department = serializer.validated_data.get('department')
+        
+        # Buscar registro existente
+        existing = AfterHoursTaskConfig.objects.filter(
+            tenant=tenant,
+            department=department
+        ).first()
+        
+        if existing:
+            # ✅ Atualizar registro existente (não atualizar tenant/department)
+            logger.info(f"🔄 [AFTER HOURS TASK CONFIG] Atualizando registro existente (ID: {existing.id}) para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            serializer.instance = existing
+            # Remover tenant e department do validated_data para não atualizar (já estão corretos)
+            serializer.validated_data.pop('tenant', None)
+            serializer.validated_data.pop('department', None)
+            serializer.save()
+        else:
+            # ✅ Criar novo registro
+            logger.info(f"➕ [AFTER HOURS TASK CONFIG] Criando novo registro para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            serializer.save(tenant=tenant)
     
     @action(detail=False, methods=['get'])
     def current(self, request):

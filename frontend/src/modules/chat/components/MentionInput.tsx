@@ -89,7 +89,10 @@ export function MentionInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversationId, conversationType]);
 
-  const loadParticipants = async () => {
+  const loadParticipants = async (retryCount = 0) => {
+    const maxRetries = 2;
+    const retryDelay = 1000; // 1 segundo
+    
     try {
       console.log('📡 [MENTIONS] Buscando participantes da API...');
       const response = await api.get(`/chat/conversations/${conversationId}/participants/`);
@@ -116,13 +119,28 @@ export function MentionInput({
       
       setParticipants(participantsList);
     } catch (error: any) {
-      // ✅ CORREÇÃO: Não mostrar erro se grupo não foi encontrado (pode ser grupo antigo)
+      // ✅ MELHORIA: Tratamento de erros mais robusto com retry
       const errorMessage = error.response?.data?.error || error.message;
-      if (errorMessage?.includes('não encontrado') || errorMessage?.includes('not found')) {
-        console.warn('⚠️ [MENTIONS] Grupo não encontrado ou sem acesso - participantes não disponíveis');
-      } else {
-        console.error('❌ [MENTIONS] Erro ao carregar participantes:', errorMessage);
+      const statusCode = error.response?.status;
+      
+      // Retry automático para erros temporários (500, 502, 503, 504)
+      if (retryCount < maxRetries && statusCode >= 500 && statusCode < 600) {
+        console.warn(`⚠️ [MENTIONS] Erro temporário (${statusCode}), tentando novamente em ${retryDelay}ms... (tentativa ${retryCount + 1}/${maxRetries})`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay * (retryCount + 1))); // Backoff exponencial
+        return loadParticipants(retryCount + 1);
       }
+      
+      // Não mostrar erro se grupo não foi encontrado (pode ser grupo antigo)
+      if (errorMessage?.includes('não encontrado') || errorMessage?.includes('not found') || statusCode === 404) {
+        console.warn('⚠️ [MENTIONS] Grupo não encontrado ou sem acesso - participantes não disponíveis');
+      } else if (statusCode === 403) {
+        console.warn('⚠️ [MENTIONS] Sem permissão para acessar participantes deste grupo');
+      } else if (statusCode === 400) {
+        console.warn('⚠️ [MENTIONS] Requisição inválida - verifique se é um grupo');
+      } else {
+        console.error('❌ [MENTIONS] Erro ao carregar participantes:', errorMessage, `(Status: ${statusCode || 'N/A'})`);
+      }
+      
       setParticipants([]);
     }
   };
@@ -207,49 +225,74 @@ export function MentionInput({
     setShowSuggestions(false);
     setMentionStart(null);
 
-    // ✅ CORREÇÃO: Extrair todas as menções do texto final e mapear para JIDs/telefones
+    // ✅ MELHORIA: Extrair todas as menções do texto final e mapear para JIDs/telefones
     // ✅ IMPORTANTE: Usar JID quando disponível (mais confiável que phone, especialmente para @lid)
+    // ✅ MELHORIA: Validar que apenas participantes válidos sejam mencionados
     const mentions: string[] = [];
     const mentionRegex = /@([^\s@,\.!?]+)/g;
     let match;
     
-    // Primeiro, adicionar o participante selecionado diretamente
+    // ✅ MELHORIA: Criar mapa de participantes válidos para validação rápida
+    const validParticipantsMap = new Map<string, Participant>();
+    participants.forEach(p => {
+      const identifier = p.jid || p.phone;
+      if (identifier) {
+        validParticipantsMap.set(identifier, p);
+        // Também mapear por nome para busca rápida
+        const name = (p.pushname || p.name || '').toLowerCase();
+        if (name) {
+          validParticipantsMap.set(name, p);
+        }
+      }
+    });
+    
+    // Primeiro, adicionar o participante selecionado diretamente (sempre válido)
     // ✅ CORREÇÃO: Priorizar JID sobre phone (JID é o identificador único correto)
     const participantIdentifier = participant.jid || participant.phone;
-    if (participantIdentifier) {
+    if (participantIdentifier && validParticipantsMap.has(participantIdentifier)) {
       mentions.push(participantIdentifier);
       console.log('✅ [MENTIONS] Participante selecionado:', {
         jid: participant.jid,
         phone: participant.phone,
         identifier: participantIdentifier
       });
+    } else {
+      console.warn('⚠️ [MENTIONS] Participante selecionado não está na lista válida:', participantIdentifier);
     }
     
     // Depois, processar outras menções que possam existir no texto
     while ((match = mentionRegex.exec(newValue)) !== null) {
       const mentionText = match[1];
       
-      // Buscar participante por nome (pushname ou name) ou número
-      const found = participants.find(p => {
-        const pName = (p.pushname || p.name).toLowerCase();
-        const pPhone = p.phone.replace(/\D/g, '');
-        const mentionLower = mentionText.toLowerCase();
-        const mentionPhone = mentionText.replace(/\D/g, '');
-        
-        return (
-          pName === mentionLower ||
-          pName.includes(mentionLower) ||
-          pPhone.includes(mentionPhone) ||
-          mentionPhone.includes(pPhone)
-        );
-      });
+      // ✅ MELHORIA: Buscar participante de forma mais eficiente usando o mapa
+      let found: Participant | undefined;
       
+      // Tentar buscar por nome primeiro (case-insensitive)
+      const mentionLower = mentionText.toLowerCase();
+      found = validParticipantsMap.get(mentionLower);
+      
+      // Se não encontrou por nome, tentar por número
+      if (!found) {
+        const mentionPhone = mentionText.replace(/\D/g, '');
+        for (const [key, p] of validParticipantsMap.entries()) {
+          const pPhone = p.phone?.replace(/\D/g, '') || '';
+          if (pPhone && (pPhone === mentionPhone || pPhone.includes(mentionPhone) || mentionPhone.includes(pPhone))) {
+            found = p;
+            break;
+          }
+        }
+      }
+      
+      // ✅ MELHORIA: Só adicionar se encontrou participante válido
       if (found) {
         // ✅ CORREÇÃO: Priorizar JID sobre phone
         const foundIdentifier = found.jid || found.phone;
         if (foundIdentifier && !mentions.includes(foundIdentifier)) {
           mentions.push(foundIdentifier);
+          console.log('✅ [MENTIONS] Menção válida encontrada:', mentionText, '->', foundIdentifier);
         }
+      } else {
+        console.warn('⚠️ [MENTIONS] Menção inválida ignorada:', mentionText, '(não está na lista de participantes)');
       }
     }
     

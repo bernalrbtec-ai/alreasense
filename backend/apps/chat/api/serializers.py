@@ -312,24 +312,34 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                 logger.info(f'🔍 [MENTIONS] Processando {len(mentions)} menção(ões) para grupo {conversation.id}')
                 logger.info(f'   Participantes disponíveis: {len(participants)}')
                 
-                # ✅ CORREÇÃO: Criar mapa de telefone -> nome para busca rápida
+                # ✅ MELHORIA: Criar mapas otimizados para busca O(1) ao invés de O(n)
                 # Normalizar telefones dos participantes para comparação (sem + e espaços)
                 phone_to_name = {}
-                phone_to_jid = {}  # ✅ NOVO: Mapear telefone -> JID original
+                phone_to_jid = {}  # Telefone -> JID original
+                jid_to_name = {}  # ✅ NOVO: JID completo -> nome (para busca rápida)
+                jid_clean_to_info = {}  # ✅ NOVO: JID limpo (sem @) -> {name, jid_full}
                 
                 for p in participants:
                     participant_phone = p.get('phone', '')
                     participant_jid = p.get('jid', '')
+                    participant_name = p.get('name', '')
                     
                     # Normalizar telefone para comparação (remover + e espaços)
                     clean_participant_phone = participant_phone.replace('+', '').replace(' ', '').strip()
-                    phone_to_name[clean_participant_phone] = p.get('name', '')
+                    phone_to_name[clean_participant_phone] = participant_name
                     phone_to_jid[clean_participant_phone] = participant_jid
                     
-                    # ✅ NOVO: Também mapear pelo JID (sem @lid/@s.whatsapp.net) para casos onde frontend envia JID
+                    # ✅ MELHORIA: Mapear JID completo e limpo para busca O(1)
                     if participant_jid:
                         jid_clean = participant_jid.split('@')[0]
-                        phone_to_name[jid_clean] = p.get('name', '')
+                        jid_to_name[participant_jid] = participant_name  # JID completo -> nome
+                        jid_clean_to_info[jid_clean] = {  # JID limpo -> info completa
+                            'name': participant_name,
+                            'jid': participant_jid,
+                            'phone': clean_participant_phone
+                        }
+                        # Também mapear JID limpo no phone_to_name para compatibilidade
+                        phone_to_name[jid_clean] = participant_name
                         phone_to_jid[jid_clean] = participant_jid
                 
                 for identifier in mentions:
@@ -341,21 +351,25 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                     clean_identifier = identifier.replace('+', '').replace(' ', '').strip()
                     
                     if is_jid:
-                        # É um JID - usar diretamente (mais confiável)
+                        # ✅ MELHORIA: Busca O(1) usando mapas ao invés de loop O(n)
                         jid_full = clean_identifier
                         jid_clean = clean_identifier.split('@')[0]
                         
-                        # Buscar participante pelo JID
-                        name = ''
-                        for p in participants:
-                            p_jid = p.get('jid', '')
-                            if p_jid and (p_jid == jid_full or p_jid.split('@')[0] == jid_clean):
-                                name = p.get('name', '')
-                                break
+                        # Tentar buscar por JID completo primeiro, depois por JID limpo
+                        name = jid_to_name.get(jid_full, '')
+                        jid_info = jid_clean_to_info.get(jid_clean)
+                        
+                        if jid_info:
+                            # Encontrou pelo JID limpo
+                            name = jid_info['name']
+                            jid_to_use = jid_info['jid']
+                        else:
+                            # Fallback: usar JID fornecido
+                            jid_to_use = jid_full
                         
                         processed_mentions.append({
                             'phone': jid_clean,  # Apenas dígitos do JID
-                            'jid': jid_full,  # JID completo (Evolution API precisa)
+                            'jid': jid_to_use,  # JID completo (Evolution API precisa)
                             'name': name or jid_clean
                         })
                         logger.info(f'✅ [MENTIONS] Processado JID: {jid_full} -> {jid_clean}')

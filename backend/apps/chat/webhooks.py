@@ -79,6 +79,71 @@ def mask_sensitive_data(data, parent_key: str = ""):
     return data
 
 
+def process_mentions_optimized(mentioned_jids: list, tenant) -> list:
+    """
+    Processa menções de forma otimizada (1 query ao invés de N).
+    
+    Args:
+        mentioned_jids: Lista de JIDs mencionados (ex: ["5511999999999@s.whatsapp.net"])
+        tenant: Tenant para buscar contatos
+    
+    Returns:
+        Lista de menções processadas: [{'phone': '...', 'name': '...'}, ...]
+    """
+    if not mentioned_jids:
+        return []
+    
+    from apps.notifications.services import normalize_phone
+    from apps.contacts.models import Contact
+    
+    # Normalizar todos os telefones primeiro
+    normalized_phones = []
+    jid_to_phone = {}  # Mapear JID original -> telefone normalizado
+    
+    for mentioned_jid in mentioned_jids:
+        # Formato: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
+        phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
+        
+        # Normalizar telefone
+        normalized_phone = normalize_phone(phone_raw)
+        if normalized_phone:
+            normalized_phones.append(normalized_phone)
+            jid_to_phone[mentioned_jid] = normalized_phone
+        else:
+            logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
+    
+    # ✅ MELHORIA: Buscar todos os contatos de uma vez (1 query ao invés de N)
+    phone_to_contact = {}
+    if normalized_phones:
+        contacts = Contact.objects.filter(
+            tenant=tenant,
+            phone__in=normalized_phones
+        ).values('phone', 'name')
+        
+        # Criar mapa telefone -> nome
+        for contact in contacts:
+            phone_to_contact[contact['phone']] = contact['name']
+    
+    # Processar menções usando o mapa
+    mentions_list = []
+    for mentioned_jid in mentioned_jids:
+        normalized_phone = jid_to_phone.get(mentioned_jid)
+        if not normalized_phone:
+            continue
+        
+        # Buscar nome do contato no mapa (O(1))
+        mention_name = phone_to_contact.get(normalized_phone, normalized_phone)
+        
+        mentions_list.append({
+            'phone': normalized_phone,
+            'name': mention_name
+        })
+        
+        logger.info(f"   👤 Menção: {mention_name} ({normalized_phone})")
+    
+    return mentions_list
+
+
 def clean_filename(filename: str, message_id: str = None, mime_type: str = None) -> str:
     """
     Limpa e normaliza nome de arquivo recebido do WhatsApp.
@@ -842,23 +907,42 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 from apps.notifications.services import normalize_phone
                 from apps.contacts.models import Contact
                 
+                # ✅ MELHORIA: Normalizar todos os telefones primeiro
+                normalized_phones = []
+                jid_to_phone = {}  # Mapear JID original -> telefone normalizado
+                
                 for mentioned_jid in mentioned_jids:
                     # Formato: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
                     phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
                     
                     # Normalizar telefone
                     normalized_phone = normalize_phone(phone_raw)
-                    if not normalized_phone:
+                    if normalized_phone:
+                        normalized_phones.append(normalized_phone)
+                        jid_to_phone[mentioned_jid] = normalized_phone
+                    else:
                         logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
+                
+                # ✅ MELHORIA: Buscar todos os contatos de uma vez (1 query ao invés de N)
+                phone_to_contact = {}
+                if normalized_phones:
+                    contacts = Contact.objects.filter(
+                        tenant=tenant,
+                        phone__in=normalized_phones
+                    ).values('phone', 'name')
+                    
+                    # Criar mapa telefone -> nome
+                    for contact in contacts:
+                        phone_to_contact[contact['phone']] = contact['name']
+                
+                # Processar menções usando o mapa
+                for mentioned_jid in mentioned_jids:
+                    normalized_phone = jid_to_phone.get(mentioned_jid)
+                    if not normalized_phone:
                         continue
                     
-                    # Buscar nome do contato na lista de contatos do tenant
-                    contact = Contact.objects.filter(
-                        tenant=tenant,
-                        phone=normalized_phone
-                    ).first()
-                    
-                    mention_name = contact.name if contact else normalized_phone
+                    # Buscar nome do contato no mapa (O(1))
+                    mention_name = phone_to_contact.get(normalized_phone, normalized_phone)
                     
                     mentions_list.append({
                         'phone': normalized_phone,
@@ -885,25 +969,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas na imagem recebida: {len(mentioned_jids)}")
-                from apps.notifications.services import normalize_phone
-                from apps.contacts.models import Contact
-                
-                for mentioned_jid in mentioned_jids:
-                    phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
-                    normalized_phone = normalize_phone(phone_raw)
-                    if not normalized_phone:
-                        continue
-                    
-                    contact = Contact.objects.filter(
-                        tenant=tenant,
-                        phone=normalized_phone
-                    ).first()
-                    
-                    mention_name = contact.name if contact else normalized_phone
-                    mentions_list.append({
-                        'phone': normalized_phone,
-                        'name': mention_name
-                    })
+                # ✅ MELHORIA: Usar função otimizada
+                image_mentions = process_mentions_optimized(mentioned_jids, tenant)
+                mentions_list.extend(image_mentions)
         elif message_type == 'videoMessage':
             video_msg = message_info.get('videoMessage', {})
             content = video_msg.get('caption', '')
@@ -920,25 +988,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas no vídeo recebido: {len(mentioned_jids)}")
-                from apps.notifications.services import normalize_phone
-                from apps.contacts.models import Contact
-                
-                for mentioned_jid in mentioned_jids:
-                    phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
-                    normalized_phone = normalize_phone(phone_raw)
-                    if not normalized_phone:
-                        continue
-                    
-                    contact = Contact.objects.filter(
-                        tenant=tenant,
-                        phone=normalized_phone
-                    ).first()
-                    
-                    mention_name = contact.name if contact else normalized_phone
-                    mentions_list.append({
-                        'phone': normalized_phone,
-                        'name': mention_name
-                    })
+                # ✅ MELHORIA: Usar função otimizada
+                video_mentions = process_mentions_optimized(mentioned_jids, tenant)
+                mentions_list.extend(video_mentions)
         elif message_type == 'documentMessage':
             document_msg = message_info.get('documentMessage', {})
             content = document_msg.get('caption', '')
@@ -1514,6 +1566,56 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if mentions_list:
             message_defaults['metadata']['mentions'] = mentions_list
             logger.info(f"✅ [WEBHOOK] Menções adicionadas ao metadata: {len(mentions_list)}")
+            
+            # ✅ MELHORIA: Criar notificações para usuários mencionados
+            try:
+                from apps.authn.models import User
+                from apps.notifications.services import normalize_phone
+                
+                # Buscar todos os telefones mencionados
+                mentioned_phones = [m['phone'] for m in mentions_list]
+                
+                # Buscar usuários do tenant que têm esses telefones
+                # Normalizar telefones para busca
+                normalized_mentioned = []
+                for phone in mentioned_phones:
+                    normalized = normalize_phone(phone)
+                    if normalized:
+                        normalized_mentioned.append(normalized)
+                        # Também tentar sem + e com +
+                        normalized_mentioned.append(normalized.lstrip('+'))
+                        if not normalized.startswith('+'):
+                            normalized_mentioned.append(f"+{normalized}")
+                
+                if normalized_mentioned:
+                    mentioned_users = User.objects.filter(
+                        tenant=tenant,
+                        phone__in=normalized_mentioned
+                    ).select_related('tenant')
+                    
+                    for user in mentioned_users:
+                        # ✅ MELHORIA: Enviar notificação via WebSocket (real-time)
+                        try:
+                            channel_layer = get_channel_layer()
+                            if channel_layer:
+                                async_to_sync(channel_layer.group_send)(
+                                    f"user_{user.id}",
+                                    {
+                                        'type': 'mention_notification',
+                                        'message': {
+                                            'id': str(message_defaults.get('id', '')),
+                                            'conversation_id': str(conversation.id),
+                                            'content': message_defaults.get('content', '')[:100],
+                                            'sender_name': sender_name or 'Usuário',
+                                            'conversation_name': conversation.contact_name or 'Conversa'
+                                        }
+                                    }
+                                )
+                                logger.info(f"📬 [WEBHOOK] Notificação de menção enviada via WebSocket para usuário {user.email}")
+                        except Exception as e:
+                            logger.warning(f"⚠️ [WEBHOOK] Erro ao enviar notificação de menção via WebSocket: {e}")
+            except Exception as e:
+                logger.warning(f"⚠️ [WEBHOOK] Erro ao processar notificações de menção: {e}", exc_info=True)
         
         # ✅ NOVO: Processar quotedMessage (mensagem sendo respondida)
         # ✅ FALLBACK: Se quoted_message_id_evolution é None mas temos quotedMessage no contextInfo,

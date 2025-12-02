@@ -556,6 +556,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             conversation.save(update_fields=update_fields)
             logger.info(f"✅ [REFRESH] {len(update_fields)} campos atualizados (incluindo metadata)")
             
+            # ✅ MELHORIA: Invalidar cache de participantes se group_metadata foi atualizado
+            if 'group_metadata' in update_fields and conversation.conversation_type == 'group':
+                participants_cache_key = f"group_participants:{conversation.id}"
+                cache.delete(participants_cache_key)
+                logger.info(f"🗑️ [REFRESH] Cache de participantes invalidado para conversa {conversation.id}")
+            
             # Salvar no cache por 5min
             cache.set(cache_key, True, REFRESH_INFO_CACHE_SECONDS)
             
@@ -724,7 +730,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         Retorna lista de participantes com nome e telefone.
         Tenta buscar do group_metadata primeiro, depois da API diretamente.
+        Usa cache Redis com TTL de 5 minutos para melhor performance.
         """
+        from django.core.cache import cache
+        
         conversation = self.get_object()
         
         if conversation.conversation_type != 'group':
@@ -732,6 +741,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 {'error': 'Apenas grupos têm participantes'},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        
+        # ✅ MELHORIA: Cache de participantes (5 minutos)
+        cache_key = f"group_participants:{conversation.id}"
+        cached_participants = cache.get(cache_key)
+        
+        if cached_participants is not None:
+            logger.info(f"✅ [PARTICIPANTS] Retornando {len(cached_participants)} participantes do cache")
+            group_metadata = conversation.group_metadata or {}
+            return Response({
+                'participants': cached_participants,
+                'count': len(cached_participants),
+                'group_name': group_metadata.get('group_name', conversation.contact_name),
+                'cached': True
+            })
         
         # Buscar participantes do group_metadata
         group_metadata = conversation.group_metadata or {}
@@ -773,12 +796,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         if not participants:
             participants = []
         
+        # ✅ MELHORIA: Salvar no cache (5 minutos = 300 segundos)
+        cache.set(cache_key, participants, 300)
+        logger.info(f"✅ [PARTICIPANTS] {len(participants)} participantes salvos no cache (TTL: 5min)")
+        
         logger.info(f"✅ [PARTICIPANTS] Retornando {len(participants)} participantes")
         
         return Response({
             'participants': participants,
             'count': len(participants),
-            'group_name': group_metadata.get('group_name', conversation.contact_name)
+            'group_name': group_metadata.get('group_name', conversation.contact_name),
+            'cached': False
         })
     
     def _fetch_participants_direct(self, conversation):
@@ -962,6 +990,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         }
                         conversation.save(update_fields=['group_metadata'])
                         logger.info(f"💾 [PARTICIPANTS] Metadata atualizado com participantes")
+                        
+                        # ✅ MELHORIA: Invalidar cache de participantes
+                        from django.core.cache import cache
+                        cache_key = f"group_participants:{conversation.id}"
+                        cache.delete(cache_key)
+                        logger.info(f"🗑️ [PARTICIPANTS] Cache invalidado para conversa {conversation.id}")
                     
                     return participants_list
                 elif participants_response.status_code == 404:
@@ -1036,6 +1070,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                     'participants': participants_list
                                 }
                                 conversation.save(update_fields=['group_metadata'])
+                                
+                                # ✅ MELHORIA: Invalidar cache de participantes
+                                from django.core.cache import cache
+                                cache_key = f"group_participants:{conversation.id}"
+                                cache.delete(cache_key)
+                                logger.info(f"🗑️ [PARTICIPANTS] Cache invalidado para conversa {conversation.id}")
                             
                             return participants_list
                     except Exception as e:
@@ -1045,8 +1085,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 logger.warning(f"   Response body: {participants_response.text[:200]}")
                 return []
                     
+        except httpx.TimeoutException:
+            logger.error(f"⏱️ [PARTICIPANTS] Timeout ao buscar participantes da Evolution API")
+            return []
+        except httpx.RequestError as e:
+            logger.error(f"❌ [PARTICIPANTS] Erro de conexão ao buscar participantes: {e}")
+            return []
         except Exception as e:
-            logger.error(f"❌ [PARTICIPANTS] Erro ao buscar participantes diretamente: {e}", exc_info=True)
+            logger.error(f"❌ [PARTICIPANTS] Erro inesperado ao buscar participantes diretamente: {e}", exc_info=True)
             return []
     
     @action(detail=True, methods=['post'])

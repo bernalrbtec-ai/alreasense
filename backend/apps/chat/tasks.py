@@ -757,6 +757,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
         # ✅ Só adiciona se include_signature=True no metadata
+        # ✅ IMPORTANTE: Assinatura deve ser adicionada ANTES de montar o payload (incluindo replies)
+        logger.critical(f"✍️ [CHAT ENVIO] ====== VERIFICANDO ASSINATURA ======")
+        logger.critical(f"   include_signature: {include_signature}")
+        logger.critical(f"   content antes: {content[:50] if content else 'VAZIO'}...")
+        logger.critical(f"   É reply? {bool(reply_to_uuid)}")
+        
         if include_signature:
             sender = message.sender  # ✅ Já carregado via select_related
             if sender and content:
@@ -768,7 +774,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     full_name = f"{first_name} {last_name}".strip()
                     signature = f"*{full_name}:*\n\n"
                     content = signature + content
-                    logger.info(f"✍️ [CHAT ENVIO] Assinatura adicionada: {full_name}")
+                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada: {full_name}")
+                    logger.critical(f"   content depois: {content[:100] if content else 'VAZIO'}...")
+                else:
+                    logger.warning(f"⚠️ [CHAT ENVIO] Sender sem nome (first_name='{first_name}', last_name='{last_name}')")
+            else:
+                logger.warning(f"⚠️ [CHAT ENVIO] Sender ou content ausente (sender={bool(sender)}, content={bool(content)})")
         else:
             logger.info(f"✍️ [CHAT ENVIO] Assinatura desabilitada pelo usuário")
         
@@ -1080,10 +1091,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 
                 # ✅ FORMATO CORRETO: Evolution API usa 'text' no root e 'quoted' no root
                 # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/0nthjkr/send-text
+                # ✅ LOG CRÍTICO: Verificar se content ainda tem assinatura antes de criar payload
+                logger.critical(f"✍️ [CHAT ENVIO] ====== CRIANDO PAYLOAD DE TEXTO ======")
+                logger.critical(f"   content final (primeiros 150 chars): {content[:150] if content else 'VAZIO'}...")
+                logger.critical(f"   content tem assinatura? {'*' in content[:50] if content else False}")
+                logger.critical(f"   content length: {len(content) if content else 0}")
+                
                 payload = {
                     'number': final_number,
                     'text': content.strip()
                 }
+                
+                logger.critical(f"   payload['text'] (primeiros 150 chars): {payload['text'][:150] if payload.get('text') else 'VAZIO'}...")
                 
                 # ✅ LOG CRÍTICO: Verificar se reply foi detectado antes de adicionar quoted
                 logger.critical(f"🔍 [CHAT ENVIO] ====== VERIFICANDO SE DEVE ADICIONAR 'quoted' ======")
