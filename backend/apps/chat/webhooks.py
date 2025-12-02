@@ -1434,26 +1434,52 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Para grupos, adicionar metadados
         # ⚠️ pushName é de quem ENVIOU, não do grupo! Nome real virá da API
         if is_group:
-            # ✅ CORREÇÃO CRÍTICA: Se grupo usa LID, usar remoteJidAlt como group_id
+            # ✅ CORREÇÃO CRÍTICA: Quando grupo usa LID, tentar usar remoteJid como JID do grupo
             # Quando grupo usa LID: remoteJid = telefone individual, remoteJidAlt = LID do grupo
-            if is_group_by_lid and remote_jid_alt:
-                group_id = remote_jid_alt  # Usar LID do grupo como group_id
-                logger.info(f"✅ [GRUPO LID] Usando remoteJidAlt como group_id: {group_id}")
+            # A Evolution API não aceita LID como groupJid, então tentamos usar remoteJid convertido para @g.us
+            if is_group_by_lid:
+                # Grupo com LID: tentar usar remoteJid (telefone) convertido para @g.us
+                # Isso pode não funcionar, mas é a melhor tentativa
+                phone_part = remote_jid.split('@')[0] if '@' in remote_jid else remote_jid
+                group_id = f"{phone_part}@g.us"
+                logger.warning(f"⚠️ [GRUPO LID] Tentando usar remoteJid como group_id: {group_id}")
+                logger.warning(f"   remoteJid original: {remote_jid}")
+                logger.warning(f"   remoteJidAlt (LID): {remote_jid_alt}")
+                logger.warning(f"   ⚠️ A Evolution API pode não aceitar este formato!")
+                
+                # ✅ IMPORTANTE: Salvar também o LID no metadata para referência futura
+                defaults['group_metadata'] = {
+                    'group_id': group_id,  # Tentar usar telefone convertido para @g.us
+                    'group_id_lid': remote_jid_alt,  # ✅ Salvar LID também para referência
+                    'group_name': push_name or 'Grupo WhatsApp',
+                    'is_group': True,
+                    'uses_lid': True,  # ✅ Flag para indicar que grupo usa LID
+                }
             elif remote_jid.endswith('@g.us'):
                 group_id = remote_jid  # Usar remoteJid com @g.us
+                defaults['group_metadata'] = {
+                    'group_id': group_id,
+                    'group_name': push_name or 'Grupo WhatsApp',
+                    'is_group': True,
+                }
             elif remote_jid.endswith('@lid'):
                 group_id = remote_jid  # Usar remoteJid @lid como group_id
+                defaults['group_metadata'] = {
+                    'group_id': group_id,
+                    'group_name': push_name or 'Grupo WhatsApp',
+                    'is_group': True,
+                }
             else:
-                # Fallback: tentar construir @g.us a partir do telefone (não ideal)
+                # Fallback: tentar construir @g.us a partir do telefone
                 group_id = f"{remote_jid.split('@')[0]}@g.us"
                 logger.warning(f"⚠️ [GRUPO] Construindo group_id a partir de telefone: {group_id}")
+                defaults['group_metadata'] = {
+                    'group_id': group_id,
+                    'group_name': push_name or 'Grupo WhatsApp',
+                    'is_group': True,
+                }
             
             defaults['contact_name'] = push_name or 'Grupo WhatsApp'  # Usar pushName se disponível
-            defaults['group_metadata'] = {
-                'group_id': group_id,  # ✅ Usar group_id correto (LID ou @g.us)
-                'group_name': push_name or 'Grupo WhatsApp',  # Usar pushName se disponível
-                'is_group': True,
-            }
             logger.info(f"✅ [GRUPO] group_id salvo: {group_id}")
         
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone para busca consistente
