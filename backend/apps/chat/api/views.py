@@ -421,6 +421,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 # Montar group_jid corretamente
                 raw_phone = conversation.contact_phone
                 
+                # ✅ VALIDAÇÃO CRÍTICA: Verificar se contact_phone parece ser LID
+                phone_without_suffix = raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
+                if is_lid_number(phone_without_suffix):
+                    logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone parece ser LID: {raw_phone}, não é possível buscar via API")
+                    # Retornar dados do metadata se disponíveis
+                    group_metadata = conversation.group_metadata or {}
+                    return Response({
+                        'message': 'Grupo usa LID - retornando dados do cache',
+                        'conversation': ConversationSerializer(conversation).data,
+                        'warning': 'group_uses_lid',
+                        'from_cache': True
+                    })
+                
                 # ✅ USAR JID COMPLETO - Evolution API aceita:
                 # - Grupos: xxx@g.us
                 # ⚠️ IMPORTANTE: @lid é formato de participante, NÃO de grupo!
@@ -434,6 +447,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     # Adicionar @g.us se não tiver (padrão para grupos)
                     clean_id = raw_phone.replace('+', '').strip()
                     group_jid = f"{clean_id}@g.us"
+                
+                # ✅ VALIDAÇÃO FINAL: Verificar se group_jid final parece ser LID
+                group_jid_without_suffix = group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
+                if is_lid_number(group_jid_without_suffix):
+                    logger.warning(f"⚠️ [REFRESH GRUPO] group_jid final parece ser LID: {group_jid}, não é possível buscar via API")
+                    # Retornar dados do metadata se disponíveis
+                    group_metadata = conversation.group_metadata or {}
+                    return Response({
+                        'message': 'Grupo usa LID - retornando dados do cache',
+                        'conversation': ConversationSerializer(conversation).data,
+                        'warning': 'group_uses_lid',
+                        'from_cache': True
+                    })
                 
                 endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
                 
