@@ -424,15 +424,53 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 # ✅ VALIDAÇÃO CRÍTICA: Verificar se contact_phone parece ser LID
                 phone_without_suffix = raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
                 if is_lid_number(phone_without_suffix):
-                    logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone parece ser LID: {raw_phone}, não é possível buscar via API")
-                    # Retornar dados do metadata se disponíveis
-                    group_metadata = conversation.group_metadata or {}
-                    return Response({
-                        'message': 'Grupo usa LID - retornando dados do cache',
-                        'conversation': ConversationSerializer(conversation).data,
-                        'warning': 'group_uses_lid',
-                        'from_cache': True
-                    })
+                    logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone parece ser LID: {raw_phone}, tentando buscar JID real de mensagens recentes...")
+                    
+                    # ✅ MELHORIA: Tentar buscar JID real do grupo de mensagens recentes
+                    from apps.chat.models import Message
+                    recent_message = Message.objects.filter(
+                        conversation=conversation,
+                        direction='incoming'
+                    ).order_by('-created_at').first()
+                    
+                    if recent_message and recent_message.metadata:
+                        message_metadata = recent_message.metadata or {}
+                        remote_jid = message_metadata.get('remoteJid') or message_metadata.get('remote_jid')
+                        remote_jid_alt = message_metadata.get('remoteJidAlt') or message_metadata.get('remote_jid_alt')
+                        
+                        # ✅ CORREÇÃO: Se grupo usa LID, remoteJid pode ser telefone individual
+                        # Tentar usar remoteJid convertido para @g.us
+                        if remote_jid and '@s.whatsapp.net' in remote_jid:
+                            # Converter telefone individual para @g.us
+                            phone_part = remote_jid.split('@')[0]
+                            group_jid = f"{phone_part}@g.us"
+                            logger.info(f"✅ [REFRESH GRUPO] group_jid construído a partir de remoteJid: {group_jid}")
+                            # Usar este group_jid ao invés do LID
+                            raw_phone = group_jid  # Atualizar para usar o JID real
+                        elif remote_jid and '@g.us' in remote_jid:
+                            group_jid = remote_jid
+                            logger.info(f"✅ [REFRESH GRUPO] group_jid encontrado em mensagem recente: {group_jid}")
+                            raw_phone = group_jid  # Atualizar para usar o JID real
+                        else:
+                            # Não encontrou JID real, retornar dados do cache
+                            logger.warning(f"⚠️ [REFRESH GRUPO] Não foi possível extrair JID real de mensagens recentes")
+                            group_metadata = conversation.group_metadata or {}
+                            return Response({
+                                'message': 'Grupo usa LID - retornando dados do cache',
+                                'conversation': ConversationSerializer(conversation).data,
+                                'warning': 'group_uses_lid',
+                                'from_cache': True
+                            })
+                    else:
+                        # Não encontrou mensagens recentes, retornar dados do cache
+                        logger.warning(f"⚠️ [REFRESH GRUPO] Não há mensagens recentes para extrair JID real")
+                        group_metadata = conversation.group_metadata or {}
+                        return Response({
+                            'message': 'Grupo usa LID - retornando dados do cache',
+                            'conversation': ConversationSerializer(conversation).data,
+                            'warning': 'group_uses_lid',
+                            'from_cache': True
+                        })
                 
                 # ✅ USAR JID COMPLETO - Evolution API aceita:
                 # - Grupos: xxx@g.us
