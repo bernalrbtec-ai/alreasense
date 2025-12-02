@@ -934,14 +934,46 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.info(f"   API Key: {'***' if api_key else 'NÃO ENCONTRADA'}")
             
             # Obter group_jid do metadata ou contact_phone
+            conversation.refresh_from_db()  # ✅ IMPORTANTE: Recarregar do banco
             group_metadata = conversation.group_metadata or {}
             group_jid = group_metadata.get('group_id')
+            
+            # ✅ VALIDAÇÃO CRÍTICA: Se group_id não existe ou parece ser LID, tentar buscar de mensagens recentes
+            if not group_jid or is_lid_number(group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '')):
+                logger.warning(f"⚠️ [PARTICIPANTS] group_id não encontrado ou é LID, tentando buscar de mensagens recentes...")
+                # Buscar mensagem recente do grupo para extrair remoteJid real
+                from apps.chat.models import Message
+                recent_message = Message.objects.filter(
+                    conversation=conversation,
+                    direction='incoming'
+                ).order_by('-created_at').first()
+                
+                if recent_message and recent_message.metadata:
+                    # Tentar extrair remoteJid do metadata da mensagem
+                    message_metadata = recent_message.metadata or {}
+                    remote_jid = message_metadata.get('remoteJid') or message_metadata.get('remote_jid')
+                    if remote_jid and '@g.us' in remote_jid:
+                        group_jid = remote_jid
+                        logger.info(f"✅ [PARTICIPANTS] group_jid encontrado em mensagem recente: {group_jid}")
+                        # Salvar no group_metadata para próxima vez
+                        conversation.group_metadata = {
+                            **group_metadata,
+                            'group_id': group_jid
+                        }
+                        conversation.save(update_fields=['group_metadata'])
+                    else:
+                        logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível extrair group_jid de mensagens recentes")
             
             if not group_jid:
                 # ✅ CORREÇÃO: Usar mesma lógica do refresh-info para construir group_jid
                 raw_phone = conversation.contact_phone
                 if not raw_phone:
                     logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível determinar group_jid (contact_phone vazio)")
+                    return []
+                
+                # ✅ VALIDAÇÃO: Se contact_phone parece ser LID, não usar
+                if is_lid_number(raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '')):
+                    logger.error(f"❌ [PARTICIPANTS] contact_phone parece ser LID: {raw_phone}, não é possível buscar participantes")
                     return []
                 
                 # ✅ USAR JID COMPLETO - Evolution API aceita:
