@@ -138,6 +138,7 @@ class MessageSerializer(serializers.ModelSerializer):
     def to_representation(self, instance):
         """
         Garante que conversation sempre seja serializado como UUID (string), não nome da conversa.
+        Reprocessa menções para buscar nomes atualizados dos participantes.
         """
         data = super().to_representation(instance)
 
@@ -155,6 +156,40 @@ class MessageSerializer(serializers.ModelSerializer):
                 import logging
                 logger = logging.getLogger(__name__)
                 logger.info(f"💬 [SERIALIZER] Mensagem {instance.id} tem reply_to: {data['metadata'].get('reply_to')}")
+            
+            # ✅ CORREÇÃO: Reprocessar menções para buscar nomes atualizados
+            if 'mentions' in data['metadata'] and instance.conversation:
+                mentions_saved = data['metadata'].get('mentions', [])
+                if mentions_saved:
+                    # Extrair JIDs/phones das menções salvas
+                    mentioned_jids = []
+                    for mention in mentions_saved:
+                        # Priorizar JID completo (mais confiável), fallback para phone
+                        jid = mention.get('jid') or mention.get('phone')
+                        if jid:
+                            # Se é apenas phone (sem @), adicionar como está
+                            # Se é JID completo (com @), usar diretamente
+                            mentioned_jids.append(jid)
+                    
+                    if mentioned_jids:
+                        # Reprocessar com conversa atualizada
+                        # ✅ IMPORTANTE: Importação lazy para evitar circular
+                        try:
+                            from apps.chat.webhooks import process_mentions_optimized
+                            updated_mentions = process_mentions_optimized(
+                                mentioned_jids, 
+                                instance.conversation.tenant,
+                                instance.conversation
+                            )
+                            # Atualizar menções no metadata com nomes atualizados
+                            data['metadata']['mentions'] = updated_mentions
+                            logger.debug(f"🔄 [SERIALIZER] Reprocessadas {len(updated_mentions)} menções para mensagem {instance.id}")
+                        except ImportError as e:
+                            logger.warning(f"⚠️ [SERIALIZER] Não foi possível importar process_mentions_optimized: {e}")
+                            # Em caso de erro de importação, manter menções originais
+                        except Exception as e:
+                            logger.warning(f"⚠️ [SERIALIZER] Erro ao reprocessar menções: {e}", exc_info=True)
+                            # Em caso de erro, manter menções originais
 
         return data
 
