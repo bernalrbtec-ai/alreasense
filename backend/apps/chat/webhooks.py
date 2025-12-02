@@ -238,6 +238,7 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             if mention_name:
                 # Temos nome do grupo, mas não telefone válido para buscar contatos
                 mentions_list.append({
+                    'jid': mentioned_jid,  # ✅ IMPORTANTE: Salvar JID original
                     'phone': '',  # Sem telefone válido
                     'name': mention_name
                 })
@@ -278,6 +279,7 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
                     clean_phone = format_phone_for_display(normalized_phone) if normalized_phone else ''
         
         mentions_list.append({
+            'jid': mentioned_jid,  # ✅ IMPORTANTE: Salvar JID original para reprocessamento
             'phone': clean_phone,  # ✅ Garantir que phone nunca seja LID
             'name': mention_name  # ✅ Garantir que name nunca seja LID
         })

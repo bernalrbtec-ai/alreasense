@@ -173,12 +173,18 @@ class MessageSerializer(serializers.ModelSerializer):
                     # Extrair JIDs/phones das menções salvas
                     mentioned_jids = []
                     for mention in mentions_saved:
-                        # Priorizar JID completo (mais confiável), fallback para phone
-                        jid = mention.get('jid') or mention.get('phone')
+                        # ✅ CORREÇÃO CRÍTICA: Priorizar JID completo (mais confiável para @lid)
+                        # Se temos JID salvo, usar ele (especialmente importante para @lid)
+                        jid = mention.get('jid')
+                        if not jid:
+                            # Fallback para phone apenas se não temos JID
+                            jid = mention.get('phone')
+                        
                         if jid:
                             # Se é apenas phone (sem @), adicionar como está
                             # Se é JID completo (com @), usar diretamente
                             mentioned_jids.append(jid)
+                            logger.debug(f"   📝 [SERIALIZER] Extraído JID da menção: {jid}")
                     
                     if mentioned_jids:
                         # Reprocessar com conversa atualizada
