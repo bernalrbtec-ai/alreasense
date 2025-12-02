@@ -125,25 +125,11 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
         
         return phone  # Retornar original se não conseguir formatar
     
-    # Normalizar todos os telefones primeiro
-    normalized_phones = []
-    jid_to_phone = {}  # Mapear JID original -> telefone normalizado
+    # ✅ CORREÇÃO CRÍTICA: Mapear JID -> telefone real (não usar LID como telefone)
+    jid_to_real_phone = {}  # JID -> telefone real do participante
+    jid_to_name = {}  # JID completo -> nome
     
-    for mentioned_jid in mentioned_jids:
-        # Formato: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
-        phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
-        
-        # Normalizar telefone
-        normalized_phone = normalize_phone(phone_raw)
-        if normalized_phone:
-            normalized_phones.append(normalized_phone)
-            jid_to_phone[mentioned_jid] = normalized_phone
-        else:
-            logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
-    
-    # ✅ MELHORIA 1: Buscar nomes dos participantes do grupo primeiro (se disponível)
-    phone_to_name = {}  # Telefone normalizado -> nome
-    jid_to_name = {}  # ✅ NOVO: JID completo -> nome (para @lid e outros formatos)
+    # Primeiro, buscar telefones reais dos participantes do grupo (especialmente para @lid)
     if conversation and conversation.conversation_type == 'group':
         group_metadata = conversation.group_metadata or {}
         participants = group_metadata.get('participants', [])
@@ -153,19 +139,68 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
         for p in participants:
             participant_phone = p.get('phone', '')
             participant_jid = p.get('jid', '')
-            participant_name = p.get('name', '')
+            participant_name = p.get('name', '') or p.get('pushname', '')
+            
+            if participant_jid:
+                # ✅ CRÍTICO: Se JID é @lid, usar phone do participante (não o número do LID)
+                if participant_jid.endswith('@lid'):
+                    if participant_phone:
+                        # Normalizar telefone real do participante
+                        clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                        normalized_real_phone = normalize_phone(clean_phone)
+                        if normalized_real_phone:
+                            jid_to_real_phone[participant_jid] = normalized_real_phone
+                            logger.info(f"   ✅ [@LID] JID {participant_jid} -> telefone real: {normalized_real_phone}")
+                    else:
+                        logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não tem phone, não será possível buscar contatos")
+                
+                # Mapear JID -> nome
+                if participant_name:
+                    jid_to_name[participant_jid] = participant_name
+    
+    # Normalizar todos os telefones primeiro (usar telefone real quando disponível)
+    normalized_phones = []
+    jid_to_phone = {}  # Mapear JID original -> telefone normalizado
+    
+    for mentioned_jid in mentioned_jids:
+        # ✅ CORREÇÃO: Se temos telefone real do participante (@lid), usar ele
+        if mentioned_jid in jid_to_real_phone:
+            normalized_phone = jid_to_real_phone[mentioned_jid]
+            normalized_phones.append(normalized_phone)
+            jid_to_phone[mentioned_jid] = normalized_phone
+            logger.info(f"   ✅ [MENTIONS] Usando telefone real para @lid: {mentioned_jid} -> {normalized_phone}")
+        else:
+            # Formato normal: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
+            phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
+            
+            # ✅ VALIDAÇÃO: Se é @lid mas não temos telefone real, não tentar normalizar LID
+            if mentioned_jid.endswith('@lid'):
+                logger.warning(f"   ⚠️ [MENTIONS] JID @lid sem telefone real: {mentioned_jid}, pulando busca de contatos")
+                jid_to_phone[mentioned_jid] = None  # Marcar como sem telefone válido
+                continue
+            
+            # Normalizar telefone
+            normalized_phone = normalize_phone(phone_raw)
+            if normalized_phone:
+                normalized_phones.append(normalized_phone)
+                jid_to_phone[mentioned_jid] = normalized_phone
+            else:
+                logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
+    
+    # ✅ MELHORIA 1: Buscar nomes dos participantes do grupo
+    phone_to_name = {}  # Telefone normalizado -> nome
+    
+    if conversation and conversation.conversation_type == 'group':
+        group_metadata = conversation.group_metadata or {}
+        participants = group_metadata.get('participants', [])
+        
+        for p in participants:
+            participant_phone = p.get('phone', '')
+            participant_jid = p.get('jid', '')
+            participant_name = p.get('name', '') or p.get('pushname', '')
             
             if not participant_name:
                 continue
-            
-            # ✅ IMPORTANTE: Mapear JID completo -> nome (para @lid e outros formatos)
-            if participant_jid:
-                jid_to_name[participant_jid] = participant_name
-                # Também mapear JID limpo (sem @) para busca por telefone
-                jid_clean = participant_jid.split('@')[0]
-                normalized_jid_phone = normalize_phone(jid_clean)
-                if normalized_jid_phone:
-                    phone_to_name[normalized_jid_phone] = participant_name
             
             # Normalizar telefone para comparação
             if participant_phone:
@@ -195,7 +230,18 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     mentions_list = []
     for mentioned_jid in mentioned_jids:
         normalized_phone = jid_to_phone.get(mentioned_jid)
+        
+        # ✅ CORREÇÃO: Se não temos telefone válido (ex: @lid sem phone), usar apenas nome do grupo
         if not normalized_phone:
+            # Tentar buscar pelo JID completo no grupo
+            mention_name = jid_to_name.get(mentioned_jid)
+            if mention_name:
+                # Temos nome do grupo, mas não telefone válido para buscar contatos
+                mentions_list.append({
+                    'phone': '',  # Sem telefone válido
+                    'name': mention_name
+                })
+                logger.info(f"   👤 Menção (sem telefone válido): {mention_name} | JID: {mentioned_jid}")
             continue
         
         # ✅ CORREÇÃO CRÍTICA: Prioridade de busca:
@@ -219,15 +265,17 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
         # ✅ VALIDAÇÃO: Garantir que phone nunca contenha LID
         # Se normalized_phone parece ser LID (muito longo ou contém caracteres especiais), limpar
         clean_phone = normalized_phone
-        if len(normalized_phone) > 15 or not normalized_phone.replace('+', '').isdigit():
-            # Parece ser LID ou formato inválido, tentar extrair apenas números
-            import re
-            digits_only = re.sub(r'\D', '', normalized_phone)
-            if len(digits_only) >= 10:  # Telefone válido tem pelo menos 10 dígitos
-                clean_phone = digits_only
-            else:
-                logger.warning(f"⚠️ [MENTIONS] Phone inválido detectado: {normalized_phone}, usando telefone formatado")
-                clean_phone = format_phone_for_display(normalized_phone) if normalized_phone else ''
+        if normalized_phone:
+            # Se parece ser LID (muito longo ou não é formato de telefone válido)
+            if len(normalized_phone) > 15 or not normalized_phone.replace('+', '').isdigit():
+                # Parece ser LID ou formato inválido, tentar extrair apenas números
+                import re
+                digits_only = re.sub(r'\D', '', normalized_phone)
+                if len(digits_only) >= 10:  # Telefone válido tem pelo menos 10 dígitos
+                    clean_phone = digits_only
+                else:
+                    logger.warning(f"⚠️ [MENTIONS] Phone inválido detectado: {normalized_phone}, usando telefone formatado")
+                    clean_phone = format_phone_for_display(normalized_phone) if normalized_phone else ''
         
         mentions_list.append({
             'phone': clean_phone,  # ✅ Garantir que phone nunca seja LID
