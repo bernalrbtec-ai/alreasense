@@ -970,30 +970,64 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             headers = {'apikey': api_key}
             
             with httpx.Client(timeout=15.0) as client:
-                # ✅ CORREÇÃO: Usar endpoint específico /group/getParticipants conforme documentação
-                # Referência: https://www.postman.com/agenciadgcode/evolution-api/request/owgz0gi/find-participants
-                participants_endpoint = f"{base_url}/group/getParticipants/{instance_name}"
-                logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint: {participants_endpoint}")
+                # ✅ MELHORIA: Tentar primeiro find-group-by-jid (retorna grupo completo com participantes)
+                # Referência: https://www.postman.com/agenciadgcode/evolution-api/request/smqme9o/find-group-by-jid
+                logger.info(f"🔄 [PARTICIPANTS] Tentando find-group-by-jid primeiro...")
+                find_group_endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                logger.info(f"   Endpoint: {find_group_endpoint}")
                 logger.info(f"   Params: groupJid={group_jid}")
                 
-                participants_response = client.get(
-                    participants_endpoint,
+                find_group_response = client.get(
+                    find_group_endpoint,
                     params={'groupJid': group_jid},
                     headers=headers
                 )
                 
-                logger.info(f"📥 [PARTICIPANTS] Resposta status: {participants_response.status_code}")
-                
-                if participants_response.status_code == 200:
-                    participants_data = participants_response.json()
-                    logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {type(participants_data)}")
+                if find_group_response.status_code == 200:
+                    group_data = find_group_response.json()
+                    logger.info(f"✅ [PARTICIPANTS] find-group-by-jid retornou dados do grupo")
                     
-                    # ✅ CORREÇÃO: A resposta pode ser array direto ou objeto com participants
-                    if isinstance(participants_data, list):
-                        raw_participants = participants_data
+                    # Extrair participantes do grupo
+                    raw_participants = group_data.get('participants', [])
+                    if raw_participants:
+                        logger.info(f"✅ [PARTICIPANTS] {len(raw_participants)} participantes encontrados via find-group-by-jid")
+                        # Processar participantes (código abaixo)
                     else:
-                        raw_participants = participants_data.get('participants', [])
+                        logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid não retornou participantes, tentando find-participants...")
+                        raw_participants = None
+                else:
+                    logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid retornou {find_group_response.status_code}, tentando find-participants...")
+                    raw_participants = None
+                
+                # ✅ FALLBACK: Se find-group-by-jid não funcionou, tentar find-participants
+                # Referência: https://www.postman.com/agenciadgcode/evolution-api/request/iemz2nm/find-participants
+                if not raw_participants:
+                    participants_endpoint = f"{base_url}/group/getParticipants/{instance_name}"
+                    logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint find-participants: {participants_endpoint}")
+                    logger.info(f"   Params: groupJid={group_jid}")
                     
+                    participants_response = client.get(
+                        participants_endpoint,
+                        params={'groupJid': group_jid},
+                        headers=headers
+                    )
+                    
+                    logger.info(f"📥 [PARTICIPANTS] Resposta status: {participants_response.status_code}")
+                    
+                    if participants_response.status_code == 200:
+                        participants_data = participants_response.json()
+                        logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {type(participants_data)}")
+                        
+                        # ✅ CORREÇÃO: A resposta pode ser array direto ou objeto com participants
+                        if isinstance(participants_data, list):
+                            raw_participants = participants_data
+                        else:
+                            raw_participants = participants_data.get('participants', [])
+                    else:
+                        logger.error(f"❌ [PARTICIPANTS] find-participants retornou {participants_response.status_code}")
+                        raw_participants = []
+                
+                if raw_participants:
                     logger.info(f"📥 [PARTICIPANTS] Raw participants: {len(raw_participants)} encontrados")
                     
                     participants_list = []
