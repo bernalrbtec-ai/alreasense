@@ -667,6 +667,273 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['get'], url_path='group-info')
+    def group_info(self, request, pk=None):
+        """
+        Retorna informações detalhadas do grupo:
+        - Data de criação
+        - Lista de participantes (com nomes)
+        - Administradores do grupo
+        
+        Funciona apenas para conversas do tipo 'group'.
+        """
+        import httpx
+        from datetime import datetime
+        from apps.contacts.models import Contact
+        import re
+        
+        def format_phone_for_display(phone: str) -> str:
+            """Formata telefone para exibição: (11) 99999-9999"""
+            if not phone:
+                return phone
+            
+            # Remover tudo exceto números
+            clean = re.sub(r'\D', '', phone)
+            
+            # Remover código do país (55) se presente
+            digits = clean
+            if clean.startswith('55') and len(clean) >= 12:
+                digits = clean[2:]
+            
+            # Formatar baseado no tamanho
+            if len(digits) == 11:
+                return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+            elif len(digits) == 10:
+                return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+            
+            return phone  # Retornar original se não conseguir formatar
+        
+        conversation = self.get_object()
+        
+        # Validar que é um grupo
+        if conversation.conversation_type != 'group':
+            return Response(
+                {'error': 'Esta conversa não é um grupo'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Buscar instância WhatsApp ativa
+        wa_instance = WhatsAppInstance.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True,
+            status='active'
+        ).first()
+        
+        if not wa_instance:
+            return Response(
+                {'error': 'Nenhuma instância WhatsApp ativa encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # Buscar configuração do servidor Evolution
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        if not evolution_server:
+            return Response(
+                {'error': 'Servidor Evolution não configurado'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+        
+        # Preparar configuração
+        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = wa_instance.api_key or evolution_server.api_key
+        instance_name = wa_instance.instance_name
+        
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
+        
+        # Montar group_jid
+        raw_phone = conversation.contact_phone
+        if '@g.us' in raw_phone:
+            group_jid = raw_phone
+        elif '@s.whatsapp.net' in raw_phone:
+            group_jid = raw_phone.replace('@s.whatsapp.net', '@g.us')
+        else:
+            clean_id = raw_phone.replace('+', '').strip()
+            group_jid = f"{clean_id}@g.us"
+        
+        # ✅ VALIDAÇÃO: Se group_jid parece ser LID, não tentar buscar
+        group_jid_without_suffix = group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
+        if is_lid_number(group_jid_without_suffix):
+            logger.warning(f"⚠️ [GROUP INFO] group_jid parece ser LID: {group_jid}, retornando dados do metadata")
+            # Retornar dados do metadata se disponíveis
+            group_metadata = conversation.group_metadata or {}
+            participants_from_metadata = group_metadata.get('participants', [])
+            
+            return Response({
+                'group_id': group_jid,
+                'group_name': conversation.contact_name or group_metadata.get('group_name', 'Grupo WhatsApp'),
+                'group_pic_url': conversation.profile_pic_url or group_metadata.get('group_pic_url'),
+                'description': group_metadata.get('description', ''),
+                'participants_count': len(participants_from_metadata),
+                'creation_date': None,  # Não disponível para grupos com LID
+                'participants': clean_participants_for_metadata(participants_from_metadata),
+                'admins': [],  # Não disponível para grupos com LID
+                'uses_lid': True,
+                'warning': 'Grupo usa LID - algumas informações podem não estar disponíveis'
+            })
+        
+        try:
+            endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+            
+            logger.info(f"🔍 [GROUP INFO] Buscando informações detalhadas do grupo {group_jid}")
+            
+            with httpx.Client(timeout=15.0) as client:
+                # Buscar informações completas do grupo (com participantes e admins)
+                response = client.get(
+                    endpoint,
+                    params={'groupJid': group_jid, 'getParticipants': 'true'},
+                    headers=headers
+                )
+                
+                if response.status_code == 200:
+                    group_data = response.json()
+                    
+                    # Extrair informações básicas
+                    group_name = group_data.get('subject', conversation.contact_name or 'Grupo WhatsApp')
+                    group_pic_url = group_data.get('pictureUrl') or conversation.profile_pic_url
+                    description = group_data.get('desc', '')
+                    participants_count = group_data.get('size', 0)
+                    
+                    # ✅ Data de criação (se disponível)
+                    creation_timestamp = group_data.get('creation') or group_data.get('creationTime')
+                    creation_date = None
+                    if creation_timestamp:
+                        try:
+                            # Timestamp pode ser em segundos ou milissegundos
+                            if isinstance(creation_timestamp, (int, float)):
+                                if creation_timestamp > 1e10:  # Milissegundos
+                                    creation_timestamp = creation_timestamp / 1000
+                                creation_date = datetime.fromtimestamp(creation_timestamp, tz=timezone.utc).isoformat()
+                        except (ValueError, OSError) as e:
+                            logger.warning(f"⚠️ [GROUP INFO] Erro ao converter timestamp de criação: {e}")
+                    
+                    # ✅ Processar participantes
+                    raw_participants = group_data.get('participants', [])
+                    participants_list = []
+                    admins_list = []
+                    
+                    # Buscar todos os contatos do tenant de uma vez (otimização)
+                    all_phones = []
+                    for participant in raw_participants:
+                        participant_id = participant.get('id') or participant.get('jid') or ''
+                        if participant_id:
+                            phone = participant_id.split('@')[0]
+                            if phone and not is_lid_number(phone):
+                                all_phones.append(phone)
+                    
+                    # Buscar contatos em batch
+                    contacts_map = {}
+                    if all_phones:
+                        from apps.contacts.signals import normalize_phone_for_search
+                        normalized_phones = [normalize_phone_for_search(p) for p in all_phones]
+                        contacts = Contact.objects.filter(
+                            tenant=conversation.tenant,
+                            phone__in=normalized_phones + all_phones
+                        ).values('phone', 'name')
+                        
+                        for contact in contacts:
+                            normalized_contact_phone = normalize_phone_for_search(contact['phone'])
+                            contacts_map[normalized_contact_phone] = contact.get('name', '')
+                    
+                    # Processar cada participante
+                    for participant in raw_participants:
+                        participant_id = participant.get('id') or participant.get('jid') or ''
+                        if not participant_id:
+                            continue
+                        
+                        phone = participant_id.split('@')[0]
+                        
+                        # ✅ VALIDAÇÃO: Pular se phone é LID
+                        if is_lid_number(phone):
+                            logger.debug(f"   ⚠️ [GROUP INFO] Pulando participante com LID: {participant_id}")
+                            continue
+                        
+                        # Verificar se é admin
+                        is_admin = participant.get('isAdmin', False) or participant.get('admin', False)
+                        
+                        # Buscar nome (prioridade: contato cadastrado > pushname > name > telefone formatado)
+                        participant_name = participant.get('pushname') or participant.get('name') or ''
+                        
+                        # Tentar buscar do contato cadastrado
+                        from apps.contacts.signals import normalize_phone_for_search
+                        normalized_phone = normalize_phone_for_search(phone)
+                        contact_name = contacts_map.get(normalized_phone) or contacts_map.get(phone)
+                        
+                        if contact_name:
+                            participant_name = contact_name
+                        elif not participant_name:
+                            # Fallback: formatar telefone
+                            participant_name = format_phone_for_display(phone)
+                        
+                        participant_info = {
+                            'jid': participant_id,
+                            'phone': phone,
+                            'name': participant_name,
+                            'is_admin': is_admin
+                        }
+                        
+                        participants_list.append(participant_info)
+                        
+                        if is_admin:
+                            admins_list.append(participant_info)
+                    
+                    # Ordenar participantes: admins primeiro, depois por nome
+                    participants_list.sort(key=lambda p: (not p['is_admin'], p['name'].lower()))
+                    
+                    logger.info(f"✅ [GROUP INFO] {len(participants_list)} participantes processados ({len(admins_list)} admins)")
+                    
+                    return Response({
+                        'group_id': group_jid,
+                        'group_name': group_name,
+                        'group_pic_url': group_pic_url,
+                        'description': description,
+                        'participants_count': len(participants_list),
+                        'creation_date': creation_date,
+                        'participants': participants_list,
+                        'admins': admins_list,
+                        'uses_lid': False
+                    })
+                    
+                elif response.status_code == 404:
+                    logger.warning(f"⚠️ [GROUP INFO] Grupo não encontrado (404): {group_jid}")
+                    # Retornar dados do metadata se disponíveis
+                    group_metadata = conversation.group_metadata or {}
+                    participants_from_metadata = group_metadata.get('participants', [])
+                    
+                    return Response({
+                        'group_id': group_jid,
+                        'group_name': conversation.contact_name or group_metadata.get('group_name', 'Grupo WhatsApp'),
+                        'group_pic_url': conversation.profile_pic_url or group_metadata.get('group_pic_url'),
+                        'description': group_metadata.get('description', ''),
+                        'participants_count': len(participants_from_metadata),
+                        'creation_date': None,
+                        'participants': clean_participants_for_metadata(participants_from_metadata),
+                        'admins': [],
+                        'uses_lid': False,
+                        'warning': 'Grupo não encontrado na Evolution API - retornando dados do cache'
+                    })
+                else:
+                    logger.error(f"❌ [GROUP INFO] Erro API: {response.status_code}")
+                    return Response(
+                        {'error': f'Erro ao buscar informações do grupo: {response.status_code}'},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                    )
+        
+        except httpx.TimeoutException:
+            logger.error(f"⏱️ [GROUP INFO] Timeout ao buscar grupo {group_jid}")
+            return Response(
+                {'error': 'Timeout ao buscar informações do grupo'},
+                status=status.HTTP_504_GATEWAY_TIMEOUT
+            )
+        except Exception as e:
+            logger.error(f"❌ [GROUP INFO] Erro: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao buscar informações do grupo: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=False, methods=['post'])
     def start(self, request):
         """
