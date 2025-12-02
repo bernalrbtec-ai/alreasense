@@ -164,23 +164,31 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     
     # Primeiro, buscar telefones reais dos participantes do grupo (especialmente para @lid)
     if conversation and conversation.conversation_type == 'group':
+        # ✅ IMPORTANTE: Recarregar conversa do banco para ter dados atualizados
+        conversation.refresh_from_db()
         group_metadata = conversation.group_metadata or {}
         participants = group_metadata.get('participants', [])
         
         logger.info(f"🔍 [MENTIONS] Buscando em {len(participants)} participantes do grupo")
+        logger.info(f"   Conversa ID: {conversation.id}")
+        logger.info(f"   Group metadata keys: {list(group_metadata.keys())}")
         
-        for p in participants:
+        for i, p in enumerate(participants):
             participant_phone = p.get('phone', '')
             participant_jid = p.get('jid', '')
             participant_name = p.get('name', '') or p.get('pushname', '')
             
+            logger.debug(f"   Participante {i+1}: JID={participant_jid}, phone={participant_phone[:20] if participant_phone else 'N/A'}..., name={participant_name[:20] if participant_name else 'N/A'}...")
+            
             if participant_jid:
                 # ✅ CRÍTICO: Se JID é @lid, tentar usar phone do participante (mas validar se não é LID)
                 if participant_jid.endswith('@lid'):
+                    logger.info(f"   🔍 [@LID] Processando JID @lid: {participant_jid}")
                     if participant_phone:
                         # ✅ VALIDAÇÃO CRÍTICA: Verificar se o phone também é LID
                         if is_lid_number(participant_phone):
-                            logger.warning(f"   ⚠️ [@LID] JID {participant_jid} tem phone que também é LID: {participant_phone[:20]}...")
+                            logger.warning(f"   ⚠️ [@LID] JID {participant_jid} tem phone que também é LID: {participant_phone[:30]}...")
+                            logger.warning(f"   ⚠️ [@LID] Não será possível buscar contatos por telefone para este participante")
                             # Não usar como telefone real, mas salvar o LID para busca em contatos
                             jid_to_real_phone[participant_jid] = None  # Marcar como sem telefone válido
                         else:
@@ -199,6 +207,7 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
                 # Mapear JID -> nome
                 if participant_name:
                     jid_to_name[participant_jid] = participant_name
+                    logger.debug(f"   ✅ Mapeado JID -> nome: {participant_jid} -> {participant_name}")
     
     # Normalizar todos os telefones primeiro (usar telefone real quando disponível)
     normalized_phones = []
@@ -309,8 +318,17 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     
     # Processar menções usando os mapas (prioridade: CONTATOS CADASTRADOS > grupo > telefone formatado)
     mentions_list = []
+    logger.info(f"🔄 [MENTIONS] Processando {len(mentioned_jids)} menções mencionadas")
+    logger.info(f"   JIDs mencionados: {mentioned_jids}")
+    logger.info(f"   JIDs com telefone real mapeado: {list(jid_to_real_phone.keys())}")
+    logger.info(f"   JIDs com nome mapeado: {list(jid_to_name.keys())}")
+    logger.info(f"   Contatos encontrados por telefone: {list(phone_to_contact.keys())}")
+    logger.info(f"   Contatos encontrados por LID: {list(jid_to_contact.keys())}")
+    
     for mentioned_jid in mentioned_jids:
+        logger.info(f"   🔍 [MENTIONS] Processando menção: {mentioned_jid}")
         normalized_phone = jid_to_phone.get(mentioned_jid)
+        logger.debug(f"      Telefone normalizado: {normalized_phone}")
         
         # ✅ CORREÇÃO: Se não temos telefone válido (ex: @lid sem phone), usar apenas nome do grupo
         if not normalized_phone:
@@ -1988,8 +2006,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ CORREÇÃO: Reprocessar menções com a conversa disponível (para buscar nomes dos participantes)
         if mentioned_jids_raw and conversation:
             logger.info(f"🔄 [WEBHOOK] Reprocessando {len(mentioned_jids_raw)} menções com conversa disponível...")
+            logger.info(f"   JIDs mencionados: {mentioned_jids_raw}")
+            logger.info(f"   Conversa ID: {conversation.id}")
+            logger.info(f"   Tipo de conversa: {conversation.conversation_type}")
             mentions_list = process_mentions_optimized(mentioned_jids_raw, tenant, conversation)
             logger.info(f"✅ [WEBHOOK] {len(mentions_list)} menções reprocessadas com nomes dos participantes")
+            for i, mention in enumerate(mentions_list):
+                logger.info(f"   Menção {i+1}: jid={mention.get('jid', 'N/A')}, name={mention.get('name', 'N/A')}, phone={mention.get('phone', 'N/A')}")
         
         # Atualizar metadata com menções (reprocessadas ou não)
         if mentions_list:
