@@ -174,7 +174,7 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
                 if normalized_participant_phone:
                     phone_to_name[normalized_participant_phone] = participant_name
     
-    # ✅ MELHORIA 2: Buscar todos os contatos de uma vez (1 query ao invés de N)
+    # ✅ MELHORIA 2: Buscar todos os contatos CADASTRADOS primeiro (prioridade máxima)
     phone_to_contact = {}
     if normalized_phones:
         contacts = Contact.objects.filter(
@@ -182,37 +182,59 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             phone__in=normalized_phones
         ).values('phone', 'name')
         
-        # Criar mapa telefone -> nome (apenas se não encontrou no grupo)
+        # Criar mapa telefone -> nome dos contatos cadastrados
         for contact in contacts:
             normalized_contact_phone = normalize_phone(contact['phone'])
-            if normalized_contact_phone and normalized_contact_phone not in phone_to_name:
-                phone_to_contact[normalized_contact_phone] = contact['name']
+            if normalized_contact_phone:
+                # ✅ IMPORTANTE: Contatos cadastrados têm prioridade sobre participantes do grupo
+                contact_name = contact.get('name', '').strip()
+                if contact_name:
+                    phone_to_contact[normalized_contact_phone] = contact_name
     
-    # Processar menções usando os mapas (prioridade: grupo > contatos > telefone formatado)
+    # Processar menções usando os mapas (prioridade: CONTATOS CADASTRADOS > grupo > telefone formatado)
     mentions_list = []
     for mentioned_jid in mentioned_jids:
         normalized_phone = jid_to_phone.get(mentioned_jid)
         if not normalized_phone:
             continue
         
-        # ✅ CORREÇÃO: Buscar nome com prioridade:
-        # 1. JID completo nos participantes (para @lid e outros formatos)
-        # 2. Telefone normalizado nos participantes
-        # 3. Contatos do banco
-        # 4. Telefone formatado (fallback)
+        # ✅ CORREÇÃO CRÍTICA: Prioridade de busca:
+        # 1. CONTATOS CADASTRADOS (prioridade máxima - sempre buscar primeiro)
+        # 2. Participantes do grupo (telefone normalizado)
+        # 3. Participantes do grupo (JID completo - apenas se não encontrou por telefone)
+        # 4. Telefone formatado (fallback - nunca mostrar LID)
         mention_name = (
-            jid_to_name.get(mentioned_jid) or  # 1. JID completo no grupo (ex: 52763740340435@lid)
+            phone_to_contact.get(normalized_phone) or  # 1. Contato cadastrado (PRIORIDADE MÁXIMA)
             phone_to_name.get(normalized_phone) or  # 2. Telefone normalizado no grupo
-            phone_to_contact.get(normalized_phone) or  # 3. Contato do banco
-            format_phone_for_display(normalized_phone)  # 4. Telefone formatado (fallback)
+            jid_to_name.get(mentioned_jid) or  # 3. JID completo no grupo (apenas se não encontrou)
+            format_phone_for_display(normalized_phone)  # 4. Telefone formatado (fallback - nunca LID)
         )
         
+        # ✅ VALIDAÇÃO: Garantir que nunca retornamos LID ou JID como nome
+        # Se o nome contém @lid ou é muito longo (provavelmente LID), usar telefone formatado
+        if mention_name and ('@lid' in mention_name.lower() or '@s.whatsapp.net' in mention_name.lower() or len(mention_name) > 20):
+            logger.warning(f"⚠️ [MENTIONS] Nome inválido detectado (possível LID): {mention_name}, usando telefone formatado")
+            mention_name = format_phone_for_display(normalized_phone)
+        
+        # ✅ VALIDAÇÃO: Garantir que phone nunca contenha LID
+        # Se normalized_phone parece ser LID (muito longo ou contém caracteres especiais), limpar
+        clean_phone = normalized_phone
+        if len(normalized_phone) > 15 or not normalized_phone.replace('+', '').isdigit():
+            # Parece ser LID ou formato inválido, tentar extrair apenas números
+            import re
+            digits_only = re.sub(r'\D', '', normalized_phone)
+            if len(digits_only) >= 10:  # Telefone válido tem pelo menos 10 dígitos
+                clean_phone = digits_only
+            else:
+                logger.warning(f"⚠️ [MENTIONS] Phone inválido detectado: {normalized_phone}, usando telefone formatado")
+                clean_phone = format_phone_for_display(normalized_phone) if normalized_phone else ''
+        
         mentions_list.append({
-            'phone': normalized_phone,
-            'name': mention_name
+            'phone': clean_phone,  # ✅ Garantir que phone nunca seja LID
+            'name': mention_name  # ✅ Garantir que name nunca seja LID
         })
         
-        logger.info(f"   👤 Menção: {mention_name} ({normalized_phone}) | JID original: {mentioned_jid}")
+        logger.info(f"   👤 Menção: {mention_name} ({clean_phone}) | JID original: {mentioned_jid}")
     
     return mentions_list
 

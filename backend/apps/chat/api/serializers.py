@@ -383,6 +383,34 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                         return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
                     return phone
                 
+                # ✅ PRIORIDADE 1: Buscar CONTATOS CADASTRADOS primeiro (prioridade máxima)
+                from apps.notifications.services import normalize_phone
+                phone_to_contact = {}  # Telefone normalizado -> nome do contato cadastrado
+                all_phones_to_check = []
+                for identifier in mentions:
+                    if '@' in identifier:
+                        phone_raw = identifier.split('@')[0]
+                    else:
+                        phone_raw = identifier
+                    normalized = normalize_phone(phone_raw.replace('+', '').replace(' ', '').strip())
+                    if normalized:
+                        all_phones_to_check.append(normalized)
+                
+                if all_phones_to_check:
+                    contacts = Contact.objects.filter(
+                        tenant=conversation.tenant,
+                        phone__in=all_phones_to_check
+                    ).values('phone', 'name')
+                    
+                    for contact in contacts:
+                        normalized_contact_phone = normalize_phone(contact['phone'])
+                        if normalized_contact_phone:
+                            contact_name = contact.get('name', '').strip()
+                            if contact_name:
+                                phone_to_contact[normalized_contact_phone] = contact_name
+                
+                logger.info(f'   Contatos cadastrados encontrados: {len(phone_to_contact)}')
+                
                 # ✅ MELHORIA: Criar mapas otimizados para busca O(1) ao invés de O(n)
                 # Normalizar telefones dos participantes para comparação (sem + e espaços)
                 phone_to_name = {}
@@ -438,18 +466,44 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                             # Fallback: usar JID fornecido
                             jid_to_use = jid_full
                         
+                        # ✅ PRIORIDADE: Buscar nome com prioridade CONTATOS CADASTRADOS > grupo > telefone
+                        normalized_jid_phone = normalize_phone(jid_clean)
+                        final_name = (
+                            phone_to_contact.get(normalized_jid_phone) or  # 1. Contato cadastrado (PRIORIDADE)
+                            name or  # 2. Nome do participante do grupo
+                            format_phone_for_display(jid_clean)  # 3. Telefone formatado
+                        )
+                        
+                        # ✅ VALIDAÇÃO: Garantir que name nunca seja LID
+                        if final_name and ('@lid' in final_name.lower() or '@s.whatsapp.net' in final_name.lower() or len(final_name) > 20):
+                            final_name = format_phone_for_display(jid_clean)
+                        
+                        # ✅ VALIDAÇÃO: Garantir que phone nunca seja LID
+                        clean_phone = normalized_jid_phone or jid_clean
+                        if len(clean_phone) > 15 or not clean_phone.replace('+', '').isdigit():
+                            import re
+                            digits_only = re.sub(r'\D', '', clean_phone)
+                            if len(digits_only) >= 10:
+                                clean_phone = digits_only
+                            else:
+                                clean_phone = format_phone_for_display(jid_clean) if jid_clean else ''
+                        
                         processed_mentions.append({
-                            'phone': jid_clean,  # Apenas dígitos do JID
-                            'jid': jid_to_use,  # JID completo (Evolution API precisa)
-                            'name': name or format_phone_for_display(jid_clean)
+                            'phone': clean_phone,  # ✅ Garantir que nunca seja LID
+                            'jid': jid_to_use,  # JID completo (Evolution API precisa, mas não exibido)
+                            'name': final_name  # ✅ Garantir que nunca seja LID
                         })
                         logger.info(f'✅ [MENTIONS] Processado JID: {jid_full} -> {jid_clean}')
                     else:
                         # É um phone - normalizar e buscar JID correspondente
                         clean_phone = clean_identifier
                         
-                        # Buscar nome e JID do participante
-                        name = phone_to_name.get(clean_phone, '')
+                        # ✅ PRIORIDADE: Buscar nome com prioridade CONTATOS CADASTRADOS > grupo > telefone
+                        normalized_clean_phone = normalize_phone(clean_phone)
+                        name = (
+                            phone_to_contact.get(normalized_clean_phone) or  # 1. Contato cadastrado (PRIORIDADE)
+                            phone_to_name.get(clean_phone, '')  # 2. Nome do participante do grupo
+                        )
                         jid_to_use = phone_to_jid.get(clean_phone, clean_phone)
                         
                         # ✅ VALIDAÇÃO: Se o phone não foi encontrado nos participantes,
@@ -463,10 +517,25 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                                 logger.warning(f'⚠️ [MENTIONS] Phone {clean_phone} parece ser o número do grupo, não do participante! Pulando...')
                                 continue  # Pular menção se for o número do grupo
                         
+                        # ✅ VALIDAÇÃO: Garantir que name nunca seja LID
+                        final_name = name or format_phone_for_display(clean_phone)
+                        if final_name and ('@lid' in final_name.lower() or '@s.whatsapp.net' in final_name.lower() or len(final_name) > 20):
+                            final_name = format_phone_for_display(clean_phone)
+                        
+                        # ✅ VALIDAÇÃO: Garantir que phone nunca seja LID
+                        final_phone = normalized_clean_phone or clean_phone
+                        if len(final_phone) > 15 or not final_phone.replace('+', '').isdigit():
+                            import re
+                            digits_only = re.sub(r'\D', '', final_phone)
+                            if len(digits_only) >= 10:
+                                final_phone = digits_only
+                            else:
+                                final_phone = format_phone_for_display(clean_phone) if clean_phone else ''
+                        
                         processed_mentions.append({
-                            'phone': clean_phone,  # Telefone limpo (sem +, sem @)
-                            'jid': jid_to_use,  # JID original se disponível
-                            'name': name or format_phone_for_display(clean_phone)
+                            'phone': final_phone,  # ✅ Garantir que nunca seja LID
+                            'jid': jid_to_use,  # JID original se disponível (não exibido)
+                            'name': final_name  # ✅ Garantir que nunca seja LID
                         })
                         logger.info(f'✅ [MENTIONS] Processado phone: {clean_phone} -> JID: {jid_to_use}')
                 

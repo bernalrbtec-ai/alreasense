@@ -125,16 +125,43 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
     }
 
     if (mention) {
-      // ✅ MELHORIA: Mostrar telefone formatado quando nome não existe ou está vazio
-      const displayName = mention.name && mention.name.trim() 
+      // ✅ CORREÇÃO: Validar que nome não é LID ou JID inválido
+      let displayName = mention.name && mention.name.trim() 
         ? mention.name 
         : formatPhoneForDisplay(mention.phone);
+      
+      // ✅ VALIDAÇÃO: Se nome contém @lid ou é muito longo (provavelmente LID), usar telefone
+      if (displayName && (
+        displayName.toLowerCase().includes('@lid') || 
+        displayName.toLowerCase().includes('@s.whatsapp.net') ||
+        displayName.length > 20 ||
+        /^\d{15,}$/.test(displayName) // Números muito longos (provavelmente LID)
+      )) {
+        displayName = formatPhoneForDisplay(mention.phone);
+      }
+      
+      // ✅ VALIDAÇÃO: Garantir que phone não seja LID
+      let displayPhone = mention.phone;
+      if (displayPhone && (
+        displayPhone.includes('@lid') ||
+        displayPhone.includes('@s.whatsapp.net') ||
+        displayPhone.length > 15 ||
+        !/^\+?\d+$/.test(displayPhone.replace(/\s/g, ''))
+      )) {
+        // Extrair apenas números do phone
+        const digitsOnly = displayPhone.replace(/\D/g, '');
+        if (digitsOnly.length >= 10) {
+          displayPhone = digitsOnly;
+        } else {
+          displayPhone = formatPhoneForDisplay(displayPhone);
+        }
+      }
       
       parts.push(
         <span
           key={`mention-${match.index}`}
           className="text-blue-600 font-medium bg-blue-50 px-1 rounded"
-          title={`@${displayName} (${mention.phone})`}
+          title={`@${displayName} (${displayPhone})`}
         >
           @{displayName}
         </span>
