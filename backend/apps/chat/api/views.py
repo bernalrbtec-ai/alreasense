@@ -812,10 +812,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         if cached_participants is not None:
             logger.info(f"✅ [PARTICIPANTS] Retornando {len(cached_participants)} participantes do cache")
+            # ✅ CRÍTICO: Limpar participantes do cache também (pode ter LIDs antigos)
+            cleaned_cached_participants = clean_participants_for_metadata(cached_participants)
             group_metadata = conversation.group_metadata or {}
             return Response({
-                'participants': cached_participants,
-                'count': len(cached_participants),
+                'participants': cleaned_cached_participants,
+                'count': len(cleaned_cached_participants),
                 'group_name': group_metadata.get('group_name', conversation.contact_name),
                 'cached': True
             })
@@ -860,15 +862,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         if not participants:
             participants = []
         
-        # ✅ MELHORIA: Salvar no cache (5 minutos = 300 segundos)
-        cache.set(cache_key, participants, 300)
-        logger.info(f"✅ [PARTICIPANTS] {len(participants)} participantes salvos no cache (TTL: 5min)")
+        # ✅ CRÍTICO: Limpar participantes antes de salvar no cache (remover LIDs do phone)
+        cleaned_participants = clean_participants_for_metadata(participants)
         
-        logger.info(f"✅ [PARTICIPANTS] Retornando {len(participants)} participantes")
+        # ✅ MELHORIA: Salvar no cache (5 minutos = 300 segundos)
+        cache.set(cache_key, cleaned_participants, 300)
+        logger.info(f"✅ [PARTICIPANTS] {len(cleaned_participants)} participantes limpos salvos no cache (TTL: 5min)")
+        
+        logger.info(f"✅ [PARTICIPANTS] Retornando {len(cleaned_participants)} participantes")
         
         return Response({
-            'participants': participants,
-            'count': len(participants),
+            'participants': cleaned_participants,
+            'count': len(cleaned_participants),
             'group_name': group_metadata.get('group_name', conversation.contact_name),
             'cached': False
         })
