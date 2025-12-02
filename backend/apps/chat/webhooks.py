@@ -647,18 +647,36 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         message_id = key.get('id')
         participant = key.get('participant', '')  # Quem enviou no grupo (apenas em grupos)
         
+        # ✅ CORREÇÃO CRÍTICA: Detectar grupos quando remoteJidAlt é @lid
+        # Quando grupo usa LID, remoteJid vem como telefone individual e remoteJidAlt como LID do grupo
+        push_name = message_data.get('pushName', '')
+        is_group_by_lid = remote_jid_alt and remote_jid_alt.endswith('@lid') and (
+            'grupo' in push_name.lower() or 
+            'group' in push_name.lower() or
+            len(push_name) > 0  # Se tem pushName e remoteJidAlt é @lid, provavelmente é grupo
+        )
+        
         # ✅ CORREÇÃO CRÍTICA: Se remoteJid termina com @lid, usar remoteJidAlt (telefone real)
         # @lid é um ID longo que não é telefone, então precisamos do telefone real
+        # MAS: Se remoteJidAlt é @lid (grupo com LID), manter remoteJid original e usar remoteJidAlt como group_id
         if remote_jid.endswith('@lid') and remote_jid_alt:
-            logger.info(
-                f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
-            )
-            remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
+            if remote_jid_alt.endswith('@lid'):
+                # Ambos são @lid - usar remoteJid original como group_id
+                logger.info(
+                    f"🔄 [@LID GRUPO] Ambos são @lid: remoteJid={remote_jid}, remoteJidAlt={remote_jid_alt}"
+                )
+                # Manter remote_jid como está (será usado como group_id)
+            else:
+                # remoteJid é @lid mas remoteJidAlt é telefone real
+                logger.info(
+                    f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
+                )
+                remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
         
         # 🔍 Detectar tipo de conversa
-        # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE, não tipo de grupo!
-        # Apenas @g.us indica grupos normais do WhatsApp
-        is_group = remote_jid.endswith('@g.us')  # @g.us = grupos
+        # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE ou GRUPO!
+        # Grupos podem ter remoteJid como telefone individual e remoteJidAlt como @lid
+        is_group = remote_jid.endswith('@g.us') or is_group_by_lid  # @g.us = grupos OU grupo com LID
         is_broadcast = remote_jid.endswith('@broadcast')
         is_lid = remote_jid.endswith('@lid')  # ✅ Detectar se ainda é @lid (sem remoteJidAlt)
         
@@ -1416,12 +1434,27 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Para grupos, adicionar metadados
         # ⚠️ pushName é de quem ENVIOU, não do grupo! Nome real virá da API
         if is_group:
-            defaults['contact_name'] = 'Grupo WhatsApp'  # Placeholder até buscar da API
+            # ✅ CORREÇÃO CRÍTICA: Se grupo usa LID, usar remoteJidAlt como group_id
+            # Quando grupo usa LID: remoteJid = telefone individual, remoteJidAlt = LID do grupo
+            if is_group_by_lid and remote_jid_alt:
+                group_id = remote_jid_alt  # Usar LID do grupo como group_id
+                logger.info(f"✅ [GRUPO LID] Usando remoteJidAlt como group_id: {group_id}")
+            elif remote_jid.endswith('@g.us'):
+                group_id = remote_jid  # Usar remoteJid com @g.us
+            elif remote_jid.endswith('@lid'):
+                group_id = remote_jid  # Usar remoteJid @lid como group_id
+            else:
+                # Fallback: tentar construir @g.us a partir do telefone (não ideal)
+                group_id = f"{remote_jid.split('@')[0]}@g.us"
+                logger.warning(f"⚠️ [GRUPO] Construindo group_id a partir de telefone: {group_id}")
+            
+            defaults['contact_name'] = push_name or 'Grupo WhatsApp'  # Usar pushName se disponível
             defaults['group_metadata'] = {
-                'group_id': remote_jid,
-                'group_name': 'Grupo WhatsApp',  # Placeholder - será atualizado pela API
+                'group_id': group_id,  # ✅ Usar group_id correto (LID ou @g.us)
+                'group_name': push_name or 'Grupo WhatsApp',  # Usar pushName se disponível
                 'is_group': True,
             }
+            logger.info(f"✅ [GRUPO] group_id salvo: {group_id}")
         
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone para busca consistente
         # Isso previne criação de conversas duplicadas quando mensagens vêm do celular
