@@ -312,6 +312,20 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                 logger.info(f'🔍 [MENTIONS] Processando {len(mentions)} menção(ões) para grupo {conversation.id}')
                 logger.info(f'   Participantes disponíveis: {len(participants)}')
                 
+                # Função auxiliar para formatar telefone (definida uma vez)
+                def format_phone_for_display(phone: str) -> str:
+                    """Formata telefone para exibição: (11) 99999-9999"""
+                    import re
+                    if not phone:
+                        return phone
+                    clean = re.sub(r'\D', '', phone)
+                    digits = clean[2:] if clean.startswith('55') and len(clean) >= 12 else clean
+                    if len(digits) == 11:
+                        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+                    elif len(digits) == 10:
+                        return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+                    return phone
+                
                 # ✅ MELHORIA: Criar mapas otimizados para busca O(1) ao invés de O(n)
                 # Normalizar telefones dos participantes para comparação (sem + e espaços)
                 phone_to_name = {}
@@ -370,7 +384,7 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                         processed_mentions.append({
                             'phone': jid_clean,  # Apenas dígitos do JID
                             'jid': jid_to_use,  # JID completo (Evolution API precisa)
-                            'name': name or jid_clean
+                            'name': name or format_phone_for_display(jid_clean)
                         })
                         logger.info(f'✅ [MENTIONS] Processado JID: {jid_full} -> {jid_clean}')
                     else:
@@ -395,7 +409,7 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                         processed_mentions.append({
                             'phone': clean_phone,  # Telefone limpo (sem +, sem @)
                             'jid': jid_to_use,  # JID original se disponível
-                            'name': name or clean_phone
+                            'name': name or format_phone_for_display(clean_phone)
                         })
                         logger.info(f'✅ [MENTIONS] Processado phone: {clean_phone} -> JID: {jid_to_use}')
                 

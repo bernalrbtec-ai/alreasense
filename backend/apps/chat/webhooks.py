@@ -79,13 +79,19 @@ def mask_sensitive_data(data, parent_key: str = ""):
     return data
 
 
-def process_mentions_optimized(mentioned_jids: list, tenant) -> list:
+def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) -> list:
     """
     Processa menções de forma otimizada (1 query ao invés de N).
+    
+    Prioridade de busca de nomes:
+    1. Participantes do grupo (se conversation for grupo)
+    2. Contatos do banco de dados
+    3. Telefone formatado (fallback)
     
     Args:
         mentioned_jids: Lista de JIDs mencionados (ex: ["5511999999999@s.whatsapp.net"])
         tenant: Tenant para buscar contatos
+        conversation: Conversation opcional (para buscar participantes do grupo)
     
     Returns:
         Lista de menções processadas: [{'phone': '...', 'name': '...'}, ...]
@@ -95,6 +101,29 @@ def process_mentions_optimized(mentioned_jids: list, tenant) -> list:
     
     from apps.notifications.services import normalize_phone
     from apps.contacts.models import Contact
+    
+    # Função auxiliar para formatar telefone para exibição
+    def format_phone_for_display(phone: str) -> str:
+        """Formata telefone para exibição: (11) 99999-9999"""
+        if not phone:
+            return phone
+        
+        import re
+        # Remover tudo exceto números
+        clean = re.sub(r'\D', '', phone)
+        
+        # Remover código do país (55) se presente
+        digits = clean
+        if clean.startswith('55') and len(clean) >= 12:
+            digits = clean[2:]
+        
+        # Formatar baseado no tamanho
+        if len(digits) == 11:
+            return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+        elif len(digits) == 10:
+            return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+        
+        return phone  # Retornar original se não conseguir formatar
     
     # Normalizar todos os telefones primeiro
     normalized_phones = []
@@ -112,7 +141,35 @@ def process_mentions_optimized(mentioned_jids: list, tenant) -> list:
         else:
             logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
     
-    # ✅ MELHORIA: Buscar todos os contatos de uma vez (1 query ao invés de N)
+    # ✅ MELHORIA 1: Buscar nomes dos participantes do grupo primeiro (se disponível)
+    phone_to_name = {}  # Telefone normalizado -> nome
+    if conversation and conversation.conversation_type == 'group':
+        group_metadata = conversation.group_metadata or {}
+        participants = group_metadata.get('participants', [])
+        
+        for p in participants:
+            participant_phone = p.get('phone', '')
+            participant_jid = p.get('jid', '')
+            participant_name = p.get('name', '')
+            
+            if not participant_name:
+                continue
+            
+            # Normalizar telefone para comparação
+            clean_participant_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+            normalized_participant_phone = normalize_phone(clean_participant_phone)
+            
+            if normalized_participant_phone:
+                phone_to_name[normalized_participant_phone] = participant_name
+            
+            # Também mapear por JID limpo
+            if participant_jid:
+                jid_clean = participant_jid.split('@')[0]
+                normalized_jid_phone = normalize_phone(jid_clean)
+                if normalized_jid_phone:
+                    phone_to_name[normalized_jid_phone] = participant_name
+    
+    # ✅ MELHORIA 2: Buscar todos os contatos de uma vez (1 query ao invés de N)
     phone_to_contact = {}
     if normalized_phones:
         contacts = Contact.objects.filter(
@@ -120,19 +177,25 @@ def process_mentions_optimized(mentioned_jids: list, tenant) -> list:
             phone__in=normalized_phones
         ).values('phone', 'name')
         
-        # Criar mapa telefone -> nome
+        # Criar mapa telefone -> nome (apenas se não encontrou no grupo)
         for contact in contacts:
-            phone_to_contact[contact['phone']] = contact['name']
+            normalized_contact_phone = normalize_phone(contact['phone'])
+            if normalized_contact_phone and normalized_contact_phone not in phone_to_name:
+                phone_to_contact[normalized_contact_phone] = contact['name']
     
-    # Processar menções usando o mapa
+    # Processar menções usando os mapas (prioridade: grupo > contatos > telefone formatado)
     mentions_list = []
     for mentioned_jid in mentioned_jids:
         normalized_phone = jid_to_phone.get(mentioned_jid)
         if not normalized_phone:
             continue
         
-        # Buscar nome do contato no mapa (O(1))
-        mention_name = phone_to_contact.get(normalized_phone, normalized_phone)
+        # Buscar nome com prioridade: grupo > contatos > telefone formatado
+        mention_name = (
+            phone_to_name.get(normalized_phone) or  # 1. Participante do grupo
+            phone_to_contact.get(normalized_phone) or  # 2. Contato do banco
+            format_phone_for_display(normalized_phone)  # 3. Telefone formatado (fallback)
+        )
         
         mentions_list.append({
             'phone': normalized_phone,
@@ -810,6 +873,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Conteúdo (para outros tipos de mensagem)
         contact_message_data = None
         mentions_list = []  # ✅ NOVO: Lista de menções na mensagem recebida
+        mentioned_jids_raw = []  # ✅ NOVO: JIDs mencionados originais (para reprocessar depois)
         quoted_message_id_evolution = None  # ✅ NOVO: ID da Evolution da mensagem sendo respondida
         
         # ✅ NOVO: Função helper para extrair quotedMessage de qualquer tipo de mensagem
@@ -904,55 +968,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas na mensagem recebida: {len(mentioned_jids)}")
-                from apps.notifications.services import normalize_phone
-                from apps.contacts.models import Contact
-                
-                # ✅ MELHORIA: Normalizar todos os telefones primeiro
-                normalized_phones = []
-                jid_to_phone = {}  # Mapear JID original -> telefone normalizado
-                
-                for mentioned_jid in mentioned_jids:
-                    # Formato: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
-                    phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
-                    
-                    # Normalizar telefone
-                    normalized_phone = normalize_phone(phone_raw)
-                    if normalized_phone:
-                        normalized_phones.append(normalized_phone)
-                        jid_to_phone[mentioned_jid] = normalized_phone
-                    else:
-                        logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
-                
-                # ✅ MELHORIA: Buscar todos os contatos de uma vez (1 query ao invés de N)
-                phone_to_contact = {}
-                if normalized_phones:
-                    contacts = Contact.objects.filter(
-                        tenant=tenant,
-                        phone__in=normalized_phones
-                    ).values('phone', 'name')
-                    
-                    # Criar mapa telefone -> nome
-                    for contact in contacts:
-                        phone_to_contact[contact['phone']] = contact['name']
-                
-                # Processar menções usando o mapa
-                for mentioned_jid in mentioned_jids:
-                    normalized_phone = jid_to_phone.get(mentioned_jid)
-                    if not normalized_phone:
-                        continue
-                    
-                    # Buscar nome do contato no mapa (O(1))
-                    mention_name = phone_to_contact.get(normalized_phone, normalized_phone)
-                    
-                    mentions_list.append({
-                        'phone': normalized_phone,
-                        'name': mention_name
-                    })
-                    
-                    logger.info(f"   👤 Menção: {mention_name} ({normalized_phone})")
-                
-                if mentions_list:
-                    logger.info(f"✅ [WEBHOOK] {len(mentions_list)} menções processadas e salvas")
+                # ✅ MELHORIA: Armazenar JIDs para reprocessar depois com conversa disponível
+                mentioned_jids_raw.extend(mentioned_jids)
+                # Processar inicialmente (será reprocessado depois com conversa)
+                text_mentions = process_mentions_optimized(mentioned_jids, tenant, conversation=None)
+                mentions_list.extend(text_mentions)
+                if text_mentions:
+                    logger.info(f"✅ [WEBHOOK] {len(text_mentions)} menções de texto processadas")
         elif message_type == 'imageMessage':
             image_msg = message_info.get('imageMessage', {})
             content = image_msg.get('caption', '')
@@ -969,8 +991,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas na imagem recebida: {len(mentioned_jids)}")
-                # ✅ MELHORIA: Usar função otimizada
-                image_mentions = process_mentions_optimized(mentioned_jids, tenant)
+                # ✅ MELHORIA: Armazenar JIDs para reprocessar depois com conversa disponível
+                mentioned_jids_raw.extend(mentioned_jids)
+                # Processar inicialmente (será reprocessado depois com conversa)
+                image_mentions = process_mentions_optimized(mentioned_jids, tenant, conversation=None)
                 mentions_list.extend(image_mentions)
         elif message_type == 'videoMessage':
             video_msg = message_info.get('videoMessage', {})
@@ -988,8 +1012,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             if mentioned_jids:
                 logger.info(f"🗣️ [WEBHOOK] Menções detectadas no vídeo recebido: {len(mentioned_jids)}")
-                # ✅ MELHORIA: Usar função otimizada
-                video_mentions = process_mentions_optimized(mentioned_jids, tenant)
+                # ✅ MELHORIA: Armazenar JIDs para reprocessar depois com conversa disponível
+                mentioned_jids_raw.extend(mentioned_jids)
+                # Processar inicialmente (será reprocessado depois com conversa)
+                video_mentions = process_mentions_optimized(mentioned_jids, tenant, conversation=None)
                 mentions_list.extend(video_mentions)
         elif message_type == 'documentMessage':
             document_msg = message_info.get('documentMessage', {})
@@ -1780,6 +1806,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         if is_group and sender_phone:
             message_defaults['sender_name'] = sender_name
             message_defaults['sender_phone'] = sender_phone
+        
+        # ✅ CORREÇÃO: Reprocessar menções com a conversa disponível (para buscar nomes dos participantes)
+        if mentioned_jids_raw and conversation:
+            logger.info(f"🔄 [WEBHOOK] Reprocessando {len(mentioned_jids_raw)} menções com conversa disponível...")
+            mentions_list = process_mentions_optimized(mentioned_jids_raw, tenant, conversation)
+            logger.info(f"✅ [WEBHOOK] {len(mentions_list)} menções reprocessadas com nomes dos participantes")
+        
+        # Atualizar metadata com menções (reprocessadas ou não)
+        if mentions_list:
+            message_defaults.setdefault('metadata', {})['mentions'] = mentions_list
         
         logger.critical(f"💾 [WEBHOOK] ====== SALVANDO MENSAGEM NO BANCO ======")
         logger.critical(f"   message_id={_mask_digits(message_id) if message_id else 'N/A'}")
