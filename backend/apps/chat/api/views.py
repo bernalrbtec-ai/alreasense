@@ -38,6 +38,68 @@ REFRESH_INFO_CACHE_SECONDS = 300  # 5 minutos no cache curto
 
 logger = logging.getLogger(__name__)
 
+# Função auxiliar para detectar se um número é LID (não é telefone válido)
+def is_lid_number(phone: str) -> bool:
+    """
+    Detecta se um número é LID (Local ID do WhatsApp) ao invés de telefone real.
+    LIDs geralmente são números muito longos (>15 dígitos) ou não seguem formato E.164.
+    """
+    if not phone:
+        return False
+    
+    # Remover caracteres não numéricos
+    clean = phone.replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '').strip()
+    
+    # Se tem mais de 15 dígitos, provavelmente é LID
+    if len(clean) > 15:
+        return True
+    
+    # Se começa com 55 mas tem mais de 13 dígitos após o 55, provavelmente é LID
+    if clean.startswith('55') and len(clean) > 13:
+        return True
+    
+    # Se tem 16+ dígitos, definitivamente é LID
+    if len(clean) >= 16:
+        return True
+    
+    return False
+
+def clean_participants_for_metadata(participants_list: list) -> list:
+    """
+    Limpa lista de participantes removendo LIDs do campo 'phone'.
+    Se phone é LID, remove o campo phone (não salvar LID como telefone).
+    
+    Args:
+        participants_list: Lista de participantes com phone, jid, name, etc.
+    
+    Returns:
+        Lista limpa de participantes (sem LIDs no phone)
+    """
+    cleaned = []
+    for p in participants_list:
+        participant_phone = p.get('phone', '')
+        participant_jid = p.get('jid', '')
+        
+        # Criar cópia do participante
+        cleaned_p = p.copy()
+        
+        # ✅ CRÍTICO: Se phone é LID, remover do participante (não salvar LID como telefone)
+        if participant_phone and is_lid_number(participant_phone):
+            logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] Removendo phone LID do participante: {participant_jid}")
+            logger.warning(f"      Phone LID: {participant_phone[:30]}...")
+            # Remover phone se for LID (não salvar LID como telefone)
+            cleaned_p['phone'] = ''
+        elif participant_jid and participant_jid.endswith('@lid'):
+            # Se JID é @lid mas phone não é LID, manter phone
+            # Mas se phone também parece ser LID, remover
+            if participant_phone and is_lid_number(participant_phone):
+                logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] JID @lid com phone LID: {participant_jid}")
+                cleaned_p['phone'] = ''
+        
+        cleaned.append(cleaned_p)
+    
+    return cleaned
+
 class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     """
     ViewSet para conversas.
@@ -464,6 +526,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             logger.info(f"✅ [REFRESH GRUPO] Foto atualizada")
                         
                         # Atualizar metadados (incluindo participantes)
+                        # ✅ CRÍTICO: Limpar participantes antes de salvar (remover LIDs do phone)
+                        cleaned_participants = clean_participants_for_metadata(participants_list)
                         conversation.group_metadata = {
                             'group_id': group_jid,
                             'group_name': group_name,
@@ -471,7 +535,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             'participants_count': participants_count,
                             'description': group_desc,
                             'is_group': True,
-                            'participants': participants_list,  # ✅ NOVO: Lista de participantes para menções
+                            'participants': cleaned_participants,  # ✅ NOVO: Lista de participantes limpa (sem LIDs)
                         }
                         update_fields.append('group_metadata')
                     elif response.status_code == 404:
@@ -984,9 +1048,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     
                     # ✅ BONUS: Atualizar group_metadata com os participantes encontrados
                     if participants_list:
+                        # ✅ CRÍTICO: Limpar participantes antes de salvar (remover LIDs do phone)
+                        cleaned_participants = clean_participants_for_metadata(participants_list)
                         conversation.group_metadata = {
                             **group_metadata,
-                            'participants': participants_list
+                            'participants': cleaned_participants
                         }
                         conversation.save(update_fields=['group_metadata'])
                         logger.info(f"💾 [PARTICIPANTS] Metadata atualizado com participantes")
@@ -1065,9 +1131,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                     participants_list.append(participant_info)
                             
                             if participants_list:
+                                # ✅ CRÍTICO: Limpar participantes antes de salvar (remover LIDs do phone)
+                                cleaned_participants = clean_participants_for_metadata(participants_list)
                                 conversation.group_metadata = {
                                     **group_metadata,
-                                    'participants': participants_list
+                                    'participants': cleaned_participants
                                 }
                                 conversation.save(update_fields=['group_metadata'])
                                 
