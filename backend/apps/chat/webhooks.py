@@ -102,6 +102,39 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     from apps.notifications.services import normalize_phone
     from apps.contacts.models import Contact
     
+    # Função auxiliar para detectar se um número é LID (não é telefone válido)
+    def is_lid_number(phone: str) -> bool:
+        """
+        Detecta se um número é LID (Local ID do WhatsApp) ao invés de telefone real.
+        LIDs geralmente são números muito longos (>15 dígitos) ou não seguem formato E.164.
+        """
+        if not phone:
+            return False
+        
+        # Remover caracteres não numéricos
+        clean = phone.replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '').strip()
+        
+        # Se tem mais de 15 dígitos, provavelmente é LID
+        if len(clean) > 15:
+            return True
+        
+        # Se começa com 55 mas tem mais de 13 dígitos após o 55, provavelmente é LID
+        if clean.startswith('55') and len(clean) > 13:
+            return True
+        
+        # Se não passa na validação de telefone E.164 básico, pode ser LID
+        # Telefones válidos geralmente têm entre 10 e 15 dígitos
+        if len(clean) < 10:
+            return False
+        
+        # Telefones brasileiros válidos: 10 ou 11 dígitos (com DDD) ou 12-13 com código do país
+        # Se tem exatamente 15 dígitos e começa com 55, pode ser válido (55 + 11 dígitos)
+        # Mas se tem 16+ dígitos, definitivamente é LID
+        if len(clean) >= 16:
+            return True
+        
+        return False
+    
     # Função auxiliar para formatar telefone para exibição
     def format_phone_for_display(phone: str) -> str:
         """Formata telefone para exibição: (11) 99999-9999"""
@@ -142,15 +175,24 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             participant_name = p.get('name', '') or p.get('pushname', '')
             
             if participant_jid:
-                # ✅ CRÍTICO: Se JID é @lid, usar phone do participante (não o número do LID)
+                # ✅ CRÍTICO: Se JID é @lid, tentar usar phone do participante (mas validar se não é LID)
                 if participant_jid.endswith('@lid'):
                     if participant_phone:
-                        # Normalizar telefone real do participante
-                        clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
-                        normalized_real_phone = normalize_phone(clean_phone)
-                        if normalized_real_phone:
-                            jid_to_real_phone[participant_jid] = normalized_real_phone
-                            logger.info(f"   ✅ [@LID] JID {participant_jid} -> telefone real: {normalized_real_phone}")
+                        # ✅ VALIDAÇÃO CRÍTICA: Verificar se o phone também é LID
+                        if is_lid_number(participant_phone):
+                            logger.warning(f"   ⚠️ [@LID] JID {participant_jid} tem phone que também é LID: {participant_phone[:20]}...")
+                            # Não usar como telefone real, mas salvar o LID para busca em contatos
+                            jid_to_real_phone[participant_jid] = None  # Marcar como sem telefone válido
+                        else:
+                            # Normalizar telefone real do participante
+                            clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                            normalized_real_phone = normalize_phone(clean_phone)
+                            if normalized_real_phone:
+                                jid_to_real_phone[participant_jid] = normalized_real_phone
+                                logger.info(f"   ✅ [@LID] JID {participant_jid} -> telefone real: {normalized_real_phone}")
+                            else:
+                                logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não conseguiu normalizar phone: {participant_phone}")
+                                jid_to_real_phone[participant_jid] = None
                     else:
                         logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não tem phone, não será possível buscar contatos")
                 
@@ -211,11 +253,13 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     
     # ✅ MELHORIA 2: Buscar todos os contatos CADASTRADOS primeiro (prioridade máxima)
     phone_to_contact = {}
+    jid_to_contact = {}  # JID/LID -> nome do contato (para buscar por LID também)
+    
     if normalized_phones:
         contacts = Contact.objects.filter(
             tenant=tenant,
             phone__in=normalized_phones
-        ).values('phone', 'name')
+        ).values('phone', 'name', 'metadata')
         
         # Criar mapa telefone -> nome dos contatos cadastrados
         for contact in contacts:
@@ -225,6 +269,43 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
                 contact_name = contact.get('name', '').strip()
                 if contact_name:
                     phone_to_contact[normalized_contact_phone] = contact_name
+            
+            # ✅ NOVO: Buscar também por LID no metadata do contato
+            contact_metadata = contact.get('metadata') or {}
+            if isinstance(contact_metadata, dict):
+                # Verificar se tem LID salvo no metadata
+                contact_lid = contact_metadata.get('lid') or contact_metadata.get('jid')
+                if contact_lid:
+                    contact_name = contact.get('name', '').strip()
+                    if contact_name:
+                        jid_to_contact[contact_lid] = contact_name
+                        logger.debug(f"   📝 [CONTATOS] Contato encontrado por LID: {contact_lid} -> {contact_name}")
+    
+    # ✅ NOVO: Buscar contatos também pelos JIDs originais (para LIDs sem telefone válido)
+    lids_to_search = [jid for jid in mentioned_jids if jid.endswith('@lid')]
+    if lids_to_search:
+        # Buscar contatos que têm esses LIDs no metadata
+        # Usar Q objects para buscar em JSONField
+        from django.db.models import Q
+        lid_queries = Q()
+        for lid in lids_to_search:
+            # Buscar LID no metadata (pode estar em 'lid' ou 'jid')
+            lid_queries |= Q(metadata__lid=lid) | Q(metadata__jid=lid)
+        
+        if lid_queries:
+            contacts_by_lid = Contact.objects.filter(
+                tenant=tenant
+            ).filter(lid_queries).values('name', 'metadata')
+            
+            for contact in contacts_by_lid:
+                contact_name = contact.get('name', '').strip()
+                if contact_name:
+                    # Encontrar qual LID corresponde a este contato
+                    contact_metadata = contact.get('metadata') or {}
+                    contact_lid = contact_metadata.get('lid') or contact_metadata.get('jid')
+                    if contact_lid and contact_lid in lids_to_search:
+                        jid_to_contact[contact_lid] = contact_name
+                        logger.info(f"   ✅ [CONTATOS] Contato encontrado por LID no metadata: {contact_lid} -> {contact_name}")
     
     # Processar menções usando os mapas (prioridade: CONTATOS CADASTRADOS > grupo > telefone formatado)
     mentions_list = []
@@ -246,16 +327,28 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             continue
         
         # ✅ CORREÇÃO CRÍTICA: Prioridade de busca:
-        # 1. CONTATOS CADASTRADOS (prioridade máxima - sempre buscar primeiro)
-        # 2. Participantes do grupo (telefone normalizado)
-        # 3. Participantes do grupo (JID completo - apenas se não encontrou por telefone)
-        # 4. Telefone formatado (fallback - nunca mostrar LID)
+        # 1. CONTATOS CADASTRADOS por JID/LID (prioridade máxima - para LIDs)
+        # 2. CONTATOS CADASTRADOS por telefone (prioridade máxima)
+        # 3. Participantes do grupo (telefone normalizado)
+        # 4. Participantes do grupo (JID completo - apenas se não encontrou por telefone)
+        # 5. Telefone formatado (fallback - nunca mostrar LID)
         mention_name = (
-            phone_to_contact.get(normalized_phone) or  # 1. Contato cadastrado (PRIORIDADE MÁXIMA)
-            phone_to_name.get(normalized_phone) or  # 2. Telefone normalizado no grupo
-            jid_to_name.get(mentioned_jid) or  # 3. JID completo no grupo (apenas se não encontrou)
-            format_phone_for_display(normalized_phone)  # 4. Telefone formatado (fallback - nunca LID)
+            jid_to_contact.get(mentioned_jid) or  # 1. Contato cadastrado por LID/JID (PRIORIDADE MÁXIMA para LIDs)
+            phone_to_contact.get(normalized_phone) or  # 2. Contato cadastrado por telefone (PRIORIDADE MÁXIMA)
+            phone_to_name.get(normalized_phone) or  # 3. Telefone normalizado no grupo
+            jid_to_name.get(mentioned_jid) or  # 4. JID completo no grupo (apenas se não encontrou)
+            format_phone_for_display(normalized_phone) if normalized_phone and not is_lid_number(normalized_phone) else None  # 5. Telefone formatado (fallback - nunca LID)
         )
+        
+        # ✅ VALIDAÇÃO: Se não encontrou nome e o telefone é LID, usar apenas nome do grupo ou "Usuário"
+        if not mention_name:
+            if normalized_phone and is_lid_number(normalized_phone):
+                # Telefone é LID, usar nome do grupo ou fallback
+                mention_name = jid_to_name.get(mentioned_jid) or "Usuário"
+                logger.warning(f"⚠️ [MENTIONS] Telefone é LID e não encontrou nome, usando: {mention_name}")
+            else:
+                # Telefone válido mas não encontrou nome, formatar telefone
+                mention_name = format_phone_for_display(normalized_phone) if normalized_phone else "Usuário"
         
         # ✅ VALIDAÇÃO: Garantir que nunca retornamos LID ou JID como nome
         # Se o nome contém @lid ou é muito longo (provavelmente LID), usar telefone formatado
@@ -264,19 +357,22 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             mention_name = format_phone_for_display(normalized_phone)
         
         # ✅ VALIDAÇÃO: Garantir que phone nunca contenha LID
-        # Se normalized_phone parece ser LID (muito longo ou contém caracteres especiais), limpar
+        # Se normalized_phone é LID, não usar como phone
         clean_phone = normalized_phone
         if normalized_phone:
-            # Se parece ser LID (muito longo ou não é formato de telefone válido)
-            if len(normalized_phone) > 15 or not normalized_phone.replace('+', '').isdigit():
-                # Parece ser LID ou formato inválido, tentar extrair apenas números
+            if is_lid_number(normalized_phone):
+                # Phone é LID, não usar como telefone válido
+                logger.warning(f"⚠️ [MENTIONS] Phone é LID: {normalized_phone[:20]}..., não usando como telefone")
+                clean_phone = ''  # Não usar LID como phone
+            elif len(normalized_phone) > 15 or not normalized_phone.replace('+', '').isdigit():
+                # Parece ser formato inválido, tentar extrair apenas números
                 import re
                 digits_only = re.sub(r'\D', '', normalized_phone)
-                if len(digits_only) >= 10:  # Telefone válido tem pelo menos 10 dígitos
+                if len(digits_only) >= 10 and not is_lid_number(digits_only):  # Telefone válido tem pelo menos 10 dígitos e não é LID
                     clean_phone = digits_only
                 else:
-                    logger.warning(f"⚠️ [MENTIONS] Phone inválido detectado: {normalized_phone}, usando telefone formatado")
-                    clean_phone = format_phone_for_display(normalized_phone) if normalized_phone else ''
+                    logger.warning(f"⚠️ [MENTIONS] Phone inválido ou LID detectado: {normalized_phone[:20]}..., não usando como telefone")
+                    clean_phone = ''  # Não usar como telefone
         
         mentions_list.append({
             'jid': mentioned_jid,  # ✅ IMPORTANTE: Salvar JID original para reprocessamento
