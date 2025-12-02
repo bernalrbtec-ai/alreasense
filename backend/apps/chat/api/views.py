@@ -988,9 +988,28 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível determinar group_jid (contact_phone vazio)")
                     return []
                 
-                # ✅ VALIDAÇÃO: Se contact_phone parece ser LID, não usar
-                if is_lid_number(raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '')):
+                # ✅ VALIDAÇÃO CRÍTICA: Se contact_phone parece ser LID, não usar
+                phone_without_suffix = raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
+                if is_lid_number(phone_without_suffix):
                     logger.error(f"❌ [PARTICIPANTS] contact_phone parece ser LID: {raw_phone}, não é possível buscar participantes")
+                    # ✅ CORREÇÃO: Se grupo usa LID, retornar participantes do group_metadata (se existirem)
+                    if group_metadata and group_metadata.get('uses_lid'):
+                        participants_from_metadata = group_metadata.get('participants', [])
+                        if participants_from_metadata:
+                            logger.info(f"✅ [PARTICIPANTS] Grupo usa LID, retornando {len(participants_from_metadata)} participantes do metadata")
+                            cleaned_participants = clean_participants_for_metadata(participants_from_metadata)
+                            return cleaned_participants
+                    return []
+                
+                # ✅ VALIDAÇÃO: Se group_metadata indica que grupo usa LID, não tentar buscar via API
+                if group_metadata and group_metadata.get('uses_lid'):
+                    logger.warning(f"⚠️ [PARTICIPANTS] Grupo usa LID, não é possível buscar via API")
+                    # Retornar participantes do metadata se existirem
+                    participants_from_metadata = group_metadata.get('participants', [])
+                    if participants_from_metadata:
+                        logger.info(f"✅ [PARTICIPANTS] Retornando {len(participants_from_metadata)} participantes do metadata")
+                        cleaned_participants = clean_participants_for_metadata(participants_from_metadata)
+                        return cleaned_participants
                     return []
                 
                 # ✅ USAR JID COMPLETO - Evolution API aceita:
