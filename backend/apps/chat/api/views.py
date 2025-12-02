@@ -1032,6 +1032,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.info(f"🔄 [PARTICIPANTS] group_jid final: {group_jid}")
             logger.info(f"   Raw contact_phone: {conversation.contact_phone}")
             
+            # ✅ VALIDAÇÃO FINAL: Se group_jid ainda parece ser LID, não tentar buscar
+            group_jid_without_suffix = group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
+            if is_lid_number(group_jid_without_suffix):
+                logger.error(f"❌ [PARTICIPANTS] group_jid final parece ser LID: {group_jid}, não é possível buscar participantes")
+                # ✅ CORREÇÃO: Se grupo usa LID, retornar participantes do group_metadata (se existirem)
+                if group_metadata and group_metadata.get('uses_lid'):
+                    participants_from_metadata = group_metadata.get('participants', [])
+                    if participants_from_metadata:
+                        logger.info(f"✅ [PARTICIPANTS] Grupo usa LID, retornando {len(participants_from_metadata)} participantes do metadata")
+                        cleaned_participants = clean_participants_for_metadata(participants_from_metadata)
+                        return cleaned_participants
+                return []
+            
             logger.info(f"🔄 [PARTICIPANTS] Buscando participantes diretamente: {group_jid}")
             
             import httpx
