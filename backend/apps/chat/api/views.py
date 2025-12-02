@@ -823,8 +823,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             })
         
         # Buscar participantes do group_metadata
+        conversation.refresh_from_db()  # ✅ IMPORTANTE: Recarregar do banco para ter dados atualizados
         group_metadata = conversation.group_metadata or {}
-        participants = group_metadata.get('participants', [])
+        participants_raw = group_metadata.get('participants', [])
+        # ✅ CRÍTICO: Limpar participantes do metadata também (pode ter LIDs antigos)
+        participants = clean_participants_for_metadata(participants_raw)
         
         # Se não tem participantes, tentar buscar diretamente da API
         if not participants:
