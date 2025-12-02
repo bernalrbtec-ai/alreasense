@@ -952,7 +952,24 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     # Tentar extrair remoteJid do metadata da mensagem
                     message_metadata = recent_message.metadata or {}
                     remote_jid = message_metadata.get('remoteJid') or message_metadata.get('remote_jid')
-                    if remote_jid and '@g.us' in remote_jid:
+                    remote_jid_alt = message_metadata.get('remoteJidAlt') or message_metadata.get('remote_jid_alt')
+                    
+                    # ✅ CORREÇÃO: Se grupo usa LID, remoteJid pode ser telefone individual
+                    # Tentar usar remoteJid convertido para @g.us
+                    if remote_jid and '@s.whatsapp.net' in remote_jid:
+                        # Converter telefone individual para @g.us
+                        phone_part = remote_jid.split('@')[0]
+                        group_jid = f"{phone_part}@g.us"
+                        logger.info(f"✅ [PARTICIPANTS] group_jid construído a partir de remoteJid: {group_jid}")
+                        # Salvar no group_metadata para próxima vez
+                        conversation.group_metadata = {
+                            **group_metadata,
+                            'group_id': group_jid,
+                            'group_id_lid': remote_jid_alt if remote_jid_alt and remote_jid_alt.endswith('@lid') else None,
+                            'uses_lid': bool(remote_jid_alt and remote_jid_alt.endswith('@lid'))
+                        }
+                        conversation.save(update_fields=['group_metadata'])
+                    elif remote_jid and '@g.us' in remote_jid:
                         group_jid = remote_jid
                         logger.info(f"✅ [PARTICIPANTS] group_jid encontrado em mensagem recente: {group_jid}")
                         # Salvar no group_metadata para próxima vez
