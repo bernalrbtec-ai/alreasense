@@ -695,10 +695,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Manter remote_jid como está (será usado como group_id)
             else:
                 # remoteJid é @lid mas remoteJidAlt é telefone real
-                logger.info(
-                    f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
-                )
-                remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
+            logger.info(
+                f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
+            )
+            remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
         
         # 🔍 Detectar tipo de conversa
         # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE ou GRUPO!
@@ -770,10 +770,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 if remote_jid.endswith('@g.us'):
                     return remote_jid
                 elif remote_jid.endswith('@s.whatsapp.net'):
-                    # Converter individual para grupo (caso raro)
+                        # Converter individual para grupo (caso raro)
                     return remote_jid.replace('@s.whatsapp.net', '@g.us')
-                else:
-                    # Adicionar @g.us se não tiver sufixo
+                    else:
+                        # Adicionar @g.us se não tiver sufixo
                     return f"{remote_jid}@g.us"
             else:
                 # 👤 INDIVIDUAIS: Remover @s.whatsapp.net e normalizar com +
