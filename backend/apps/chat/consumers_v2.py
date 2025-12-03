@@ -507,9 +507,10 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         
         try:
             # ✅ VALIDAÇÃO CRÍTICA: Buscar conversa e garantir que pertence ao tenant do usuário
+            # Usar self.user.tenant_id ao invés de self.tenant (que não existe)
             conversation = Conversation.objects.select_related('tenant').get(
                 id=conversation_id,
-                tenant=self.tenant  # ✅ CRÍTICO: Garantir que conversa pertence ao tenant do usuário
+                tenant_id=self.user.tenant_id  # ✅ CRÍTICO: Garantir que conversa pertence ao tenant do usuário
             )
             
             # ✅ LOG CRÍTICO: Confirmar conversa encontrada
