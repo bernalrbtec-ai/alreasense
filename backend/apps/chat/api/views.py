@@ -70,35 +70,58 @@ def is_lid_number(phone: str) -> bool:
 
 def clean_participants_for_metadata(participants_list: list) -> list:
     """
-    Limpa lista de participantes removendo LIDs do campo 'phone'.
-    Se phone é LID, remove o campo phone (não salvar LID como telefone).
+    Limpa lista de participantes garantindo que phone sempre tenha telefone real.
+    Se phone é LID ou vazio, tenta usar phoneNumber para obter telefone real.
     
     Args:
-        participants_list: Lista de participantes com phone, jid, name, etc.
+        participants_list: Lista de participantes com phone, jid, name, phoneNumber, etc.
     
     Returns:
-        Lista limpa de participantes (sem LIDs no phone)
+        Lista limpa de participantes (phone sempre com telefone real, nunca LID)
     """
     cleaned = []
+    from apps.notifications.services import normalize_phone
+    
     for p in participants_list:
         participant_phone = p.get('phone', '')
         participant_jid = p.get('jid', '')
+        participant_phone_number = p.get('phoneNumber', '') or p.get('phone_number', '')
         
         # Criar cópia do participante
         cleaned_p = p.copy()
         
-        # ✅ CRÍTICO: Se phone é LID, remover do participante (não salvar LID como telefone)
-        if participant_phone and is_lid_number(participant_phone):
-            logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] Removendo phone LID do participante: {participant_jid}")
-            logger.warning(f"      Phone LID: {participant_phone[:30]}...")
-            # Remover phone se for LID (não salvar LID como telefone)
-            cleaned_p['phone'] = ''
-        elif participant_jid and participant_jid.endswith('@lid'):
-            # Se JID é @lid mas phone não é LID, manter phone
-            # Mas se phone também parece ser LID, remover
-            if participant_phone and is_lid_number(participant_phone):
-                logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] JID @lid com phone LID: {participant_jid}")
+        # ✅ CORREÇÃO CRÍTICA: Se phone é LID ou vazio, tentar usar phoneNumber
+        if not participant_phone or is_lid_number(participant_phone):
+            if participant_phone_number:
+                # Extrair telefone do phoneNumber (JID real @s.whatsapp.net)
+                phone_raw = participant_phone_number.split('@')[0]
+                normalized_phone = normalize_phone(phone_raw)
+                if normalized_phone:
+                    cleaned_p['phone'] = normalized_phone
+                    logger.info(f"   ✅ [CLEAN PARTICIPANTS] Usando phoneNumber para preencher phone: {participant_jid} -> {normalized_phone}")
+                else:
+                    # Se não conseguiu normalizar, remover phone
+                    cleaned_p['phone'] = ''
+                    logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] Não conseguiu normalizar phoneNumber: {participant_phone_number}")
+            else:
+                # Se não tem phoneNumber, remover phone (não salvar LID)
                 cleaned_p['phone'] = ''
+                logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] Participante sem phoneNumber válido: {participant_jid}")
+        elif participant_jid and participant_jid.endswith('@lid'):
+            # Se JID é @lid, garantir que phone não é LID
+            if participant_phone and is_lid_number(participant_phone):
+                # Tentar usar phoneNumber se disponível
+                if participant_phone_number:
+                    phone_raw = participant_phone_number.split('@')[0]
+                    normalized_phone = normalize_phone(phone_raw)
+                    if normalized_phone:
+                        cleaned_p['phone'] = normalized_phone
+                        logger.info(f"   ✅ [CLEAN PARTICIPANTS] JID @lid: usando phoneNumber: {normalized_phone}")
+                    else:
+                        cleaned_p['phone'] = ''
+                else:
+                    cleaned_p['phone'] = ''
+                    logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] JID @lid sem phoneNumber: {participant_jid}")
         
         cleaned.append(cleaned_p)
     
@@ -1537,12 +1560,23 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             display_name = ''  # Vazio - frontend mostrará apenas telefone formatado
                             logger.info(f"   Sem pushname nem contato - name vazio (telefone será mostrado separadamente)")
                         
+                        # ✅ CORREÇÃO CRÍTICA: Garantir que phone sempre tenha telefone real
+                        # Se normalized_phone veio de phoneNumber, usar ele
+                        # Se não, tentar extrair de phoneNumber novamente
+                        final_phone = normalized_phone
+                        if participant_phone:
+                            # Extrair telefone do phoneNumber (JID real)
+                            phone_from_number = participant_phone.split('@')[0]
+                            normalized_from_number = normalize_phone(phone_from_number)
+                            if normalized_from_number:
+                                final_phone = normalized_from_number
+                        
                         participant_info = {
-                            'phone': normalized_phone,  # Telefone normalizado E.164
+                            'phone': final_phone,  # Telefone real normalizado E.164 (NUNCA LID)
                             'name': display_name,  # Nome para exibição (pushname > contato > telefone)
                             'pushname': pushname,  # Pushname original da API
                             'jid': participant_id,  # LID ou JID original
-                            'phoneNumber': participant_phone  # JID real do telefone
+                            'phoneNumber': participant_phone  # JID real do telefone (@s.whatsapp.net)
                         }
                         logger.info(f"   ✅ Participante processado: {participant_info}")
                         participants_list.append(participant_info)

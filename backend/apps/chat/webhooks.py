@@ -170,15 +170,27 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
         for i, p in enumerate(participants):
             participant_phone = p.get('phone', '')
             participant_jid = p.get('jid', '')
+            participant_phone_number = p.get('phoneNumber', '') or p.get('phone_number', '')
             participant_name = p.get('name', '') or p.get('pushname', '')
             
-            logger.debug(f"   Participante {i+1}: JID={participant_jid}, phone={participant_phone[:20] if participant_phone else 'N/A'}..., name={participant_name[:20] if participant_name else 'N/A'}...")
+            logger.debug(f"   Participante {i+1}: JID={participant_jid}, phone={participant_phone[:20] if participant_phone else 'N/A'}..., phoneNumber={participant_phone_number[:30] if participant_phone_number else 'N/A'}..., name={participant_name[:20] if participant_name else 'N/A'}...")
             
             if participant_jid:
-                # ✅ CRÍTICO: Se JID é @lid, tentar usar phone do participante (mas validar se não é LID)
+                # ✅ CORREÇÃO CRÍTICA: Se JID é @lid, usar phoneNumber se disponível
                 if participant_jid.endswith('@lid'):
                     logger.info(f"   🔍 [@LID] Processando JID @lid: {participant_jid}")
-                    if participant_phone:
+                    
+                    # ✅ PRIORIDADE: Tentar usar phoneNumber primeiro (JID real)
+                    if participant_phone_number:
+                        phone_raw = participant_phone_number.split('@')[0]
+                        normalized_real_phone = normalize_phone(phone_raw)
+                        if normalized_real_phone:
+                            jid_to_real_phone[participant_jid] = normalized_real_phone
+                            logger.info(f"   ✅ [@LID] JID {participant_jid} -> telefone real via phoneNumber: {normalized_real_phone}")
+                        else:
+                            logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não conseguiu normalizar phoneNumber: {participant_phone_number}")
+                            jid_to_real_phone[participant_jid] = None
+                    elif participant_phone:
                         # ✅ VALIDAÇÃO CRÍTICA: Verificar se o phone também é LID
                         if is_lid_number(participant_phone):
                             logger.warning(f"   ⚠️ [@LID] JID {participant_jid} tem phone que também é LID: {participant_phone[:30]}...")
@@ -196,7 +208,14 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
                                 logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não conseguiu normalizar phone: {participant_phone}")
                                 jid_to_real_phone[participant_jid] = None
                     else:
-                        logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não tem phone, não será possível buscar contatos")
+                        logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não tem phone nem phoneNumber, não será possível buscar contatos")
+                else:
+                    # JID não é @lid, usar phone normalmente
+                    if participant_phone:
+                        clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                        normalized_phone = normalize_phone(clean_phone)
+                        if normalized_phone:
+                            jid_to_real_phone[participant_jid] = normalized_phone
                 
                 # Mapear JID -> nome
                 if participant_name:
