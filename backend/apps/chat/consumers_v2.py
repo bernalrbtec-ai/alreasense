@@ -519,6 +519,38 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             logger.critical(f"   contact_phone: {_mask_remote_jid(conversation.contact_phone) if conversation.contact_phone else 'N/A'}")
             logger.critical(f"   conversation_type: {conversation.conversation_type}")
             logger.critical(f"   contact_name: {conversation.contact_name or 'N/A'}")
+            logger.critical(f"   status: {conversation.status}")
+            logger.critical(f"   department: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
+            
+            # ✅ CORREÇÃO CRÍTICA: Se conversa estava fechada, reabrir automaticamente
+            # Isso garante que conversas fechadas sejam reabertas quando usuário envia mensagem
+            needs_status_update = False
+            update_fields_list = []
+            
+            if conversation.status == 'closed':
+                old_status = conversation.status
+                old_department = conversation.department.name if conversation.department else 'Nenhum'
+                
+                # ✅ CORREÇÃO: Quando reabrir, manter o department atual (não remover)
+                # Se tem department, manter e mudar status para 'open'
+                # Se não tem department, mudar status para 'pending' (Inbox)
+                if conversation.department:
+                    conversation.status = 'open'
+                    logger.info(f"🔄 [CHAT WS V2] Conversa {conversation.id} reaberta com department: {conversation.department.name}")
+                else:
+                    conversation.status = 'pending'
+                    logger.info(f"🔄 [CHAT WS V2] Conversa {conversation.id} reaberta sem departamento (Inbox)")
+                
+                update_fields_list.append('status')
+                needs_status_update = True
+                
+                status_str = conversation.department.name if conversation.department else "Inbox"
+                logger.critical(f"🔄 [CHAT WS V2] Conversa reaberta automaticamente: {old_status} → {conversation.status}")
+                logger.critical(f"   📋 Departamento: {old_department} → {status_str}")
+            
+            if needs_status_update:
+                conversation.save(update_fields=update_fields_list)
+                logger.critical(f"✅ [CHAT WS V2] Status da conversa atualizado: {conversation.status}")
             
             # Preparar metadata
             metadata = {
