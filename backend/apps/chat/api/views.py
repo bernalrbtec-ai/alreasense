@@ -2863,6 +2863,9 @@ class MessageReactionViewSet(viewsets.ViewSet):
             "emoji": "👍"
         }
         """
+        # ✅ CORREÇÃO: Importar threading no início da função para evitar problemas de escopo
+        import threading as threading_module
+        
         from apps.chat.models import MessageReaction, Message
         from apps.chat.api.serializers import MessageReactionSerializer
         
@@ -2974,7 +2977,6 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 
                 # ✅ CORREÇÃO CRÍTICA: Enviar remoção para Evolution API (WhatsApp)
                 # Enviar reação vazia remove a reação no WhatsApp
-                import asyncio
                 from apps.chat.tasks import send_reaction_to_evolution
                 
                 def remove_reaction_async():
@@ -2988,8 +2990,8 @@ class MessageReactionViewSet(viewsets.ViewSet):
                     except Exception as e:
                         logger.error(f"⚠️ [REACTION] Erro ao enviar remoção para Evolution API: {e}", exc_info=True)
                 
-                import threading
-                thread = threading.Thread(target=remove_reaction_async, daemon=True)
+                # ✅ CORREÇÃO: threading_module já importado no início da função
+                thread = threading_module.Thread(target=remove_reaction_async, daemon=True)
                 thread.start()
                 
                 # Broadcast atualização após remover
@@ -3005,7 +3007,6 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 logger.info(f"✅ [REACTION] Reação antiga removida para substituir: {instance_phone} {old_emoji} → {emoji}")
                 
                 # ✅ CORREÇÃO CRÍTICA: Remover reação antiga no WhatsApp antes de enviar nova
-                import asyncio
                 from apps.chat.tasks import send_reaction_to_evolution
                 
                 def remove_old_reaction_async():
@@ -3019,8 +3020,8 @@ class MessageReactionViewSet(viewsets.ViewSet):
                     except Exception as e:
                         logger.error(f"⚠️ [REACTION] Erro ao remover reação antiga no WhatsApp: {e}", exc_info=True)
                 
-                import threading
-                thread = threading.Thread(target=remove_old_reaction_async, daemon=True)
+                # ✅ CORREÇÃO: threading_module já importado no início da função
+                thread = threading_module.Thread(target=remove_old_reaction_async, daemon=True)
                 thread.start()
         
         # ✅ CORREÇÃO CRÍTICA: Criar reação com external_sender = número da instância (NÃO com user=request.user)
@@ -3035,7 +3036,6 @@ class MessageReactionViewSet(viewsets.ViewSet):
         # ✅ CORREÇÃO CRÍTICA: Enviar reação para Evolution API (WhatsApp)
         # Isso garante que a reação aparece no WhatsApp do destinatário
         # ✅ CORREÇÃO: Executar de forma assíncrona em thread separada para não bloquear resposta
-        import asyncio
         from apps.chat.tasks import send_reaction_to_evolution
         
         # ✅ CORREÇÃO: Executar envio de reação em thread separada com melhor tratamento de erros
@@ -3075,7 +3075,8 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 logger.error(f"   Tipo de erro: {type(e).__name__}")
         
         # Executar em thread separada para não bloquear resposta HTTP
-        thread = threading.Thread(target=send_reaction_async, daemon=True, name=f"ReactionSender-{message.id}")
+        # ✅ CORREÇÃO: threading_module já importado no início da função
+        thread = threading_module.Thread(target=send_reaction_async, daemon=True, name=f"ReactionSender-{message.id}")
         thread.start()
         logger.info(f"🚀 [REACTION] Thread iniciada para envio de reação: {emoji} em {message.id}")
         
@@ -3114,6 +3115,9 @@ class MessageReactionViewSet(viewsets.ViewSet):
             "emoji": "👍"
         }
         """
+        # ✅ CORREÇÃO: Importar threading no início da função para evitar problemas de escopo
+        import threading as threading_module
+        
         from apps.chat.models import MessageReaction, Message
         from apps.chat.utils.websocket import broadcast_message_reaction_update
         
@@ -3191,7 +3195,7 @@ class MessageReactionViewSet(viewsets.ViewSet):
             
             # ✅ CORREÇÃO CRÍTICA: Enviar remoção para Evolution API (WhatsApp)
             # Enviar reação vazia remove a reação no WhatsApp
-            import asyncio
+            # ✅ CORREÇÃO: asyncio já está importado no topo do arquivo
             from apps.chat.tasks import send_reaction_to_evolution
             
             def remove_reaction_async():
@@ -3205,8 +3209,8 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 except Exception as e:
                     logger.error(f"⚠️ [REACTION] Erro ao enviar remoção para Evolution API: {e}", exc_info=True)
             
-            import threading
-            thread = threading.Thread(target=remove_reaction_async, daemon=True)
+            # ✅ CORREÇÃO: threading_module já importado no início da função
+            thread = threading_module.Thread(target=remove_reaction_async, daemon=True)
             thread.start()
             
             # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket após remover reação

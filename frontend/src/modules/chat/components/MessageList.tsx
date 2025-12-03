@@ -937,9 +937,9 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
-    const currentStoreMessage = useChatStore
-      .getState()
-      .messages.find((m) => m.id === message.id);
+    // ✅ CORREÇÃO: Usar estrutura normalizada ao invés de messages.find()
+    const { messages: normalizedMessages } = useChatStore.getState();
+    const currentStoreMessage = normalizedMessages.byId[message.id];
     const previousReactions = cloneReactions(currentStoreMessage?.reactions);
     
     // ✅ CORREÇÃO CRÍTICA: Verificar se usuário já reagiu com este emoji
@@ -1068,9 +1068,9 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
-    const currentStoreMessage = useChatStore
-      .getState()
-      .messages.find((m) => m.id === message.id);
+    // ✅ CORREÇÃO: Usar estrutura normalizada ao invés de messages.find()
+    const { messages: normalizedMessages } = useChatStore.getState();
+    const currentStoreMessage = normalizedMessages.byId[message.id];
     const previousReactions = cloneReactions(currentStoreMessage?.reactions);
 
     const optimisticReactions = previousReactions.filter(
