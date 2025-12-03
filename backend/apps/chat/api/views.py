@@ -1344,6 +1344,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 existing.save(update_fields=update_fields_list)
                 logger.info(f"✅ [CONVERSATION START] Conversa existente atualizada: {existing.id}")
             
+            # ✅ CORREÇÃO CRÍTICA: Atualizar last_message_at para conversa aparecer no topo da lista
+            # Isso garante que conversas reabertas apareçam no topo, igual ao comportamento do webhook
+            existing.update_last_message()
+            logger.info(f"✅ [CONVERSATION START] last_message_at atualizado para conversa aparecer no topo")
+            
             # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated mesmo para conversas existentes
             # Isso garante que a conversa apareça na lista se estava fechada
             try:
@@ -1391,6 +1396,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # Adicionar usuário como participante
         conversation.participants.add(request.user)
+        
+        # ✅ CORREÇÃO CRÍTICA: Atualizar last_message_at para conversa aparecer no topo da lista
+        # Isso garante que novas conversas apareçam no topo, igual ao comportamento do webhook
+        conversation.update_last_message()
+        logger.info(f"✅ [CONVERSATION START] last_message_at atualizado para nova conversa aparecer no topo")
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated para aparecer na lista de conversas
         # IMPORTANTE: Usar transaction.on_commit() para garantir que broadcast acontece APÓS commit
