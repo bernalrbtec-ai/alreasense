@@ -1679,16 +1679,42 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             if normalized_from_number:
                                 final_phone = normalized_from_number
                         
+                        # ✅ VALIDAÇÃO CRÍTICA: Se final_phone ainda é LID, tentar usar phoneNumber novamente
+                        if is_lid_number(final_phone):
+                            logger.warning(f"   ⚠️ [PARTICIPANTS] final_phone é LID: {final_phone}, tentando usar phoneNumber...")
+                            if participant_phone_number:
+                                phone_from_number = participant_phone_number.split('@')[0] if '@' in participant_phone_number else participant_phone_number
+                                normalized_from_number = normalize_phone(phone_from_number)
+                                if normalized_from_number and not is_lid_number(normalized_from_number):
+                                    final_phone = normalized_from_number
+                                    logger.info(f"   ✅ [PARTICIPANTS] Telefone real obtido de phoneNumber: {final_phone}")
+                                else:
+                                    logger.warning(f"   ⚠️ [PARTICIPANTS] Não foi possível obter telefone real, deixando vazio")
+                                    final_phone = ''  # Não salvar LID como telefone
+                            else:
+                                logger.warning(f"   ⚠️ [PARTICIPANTS] Sem phoneNumber, não é possível obter telefone real")
+                                final_phone = ''  # Não salvar LID como telefone
+                        
+                        # ✅ VALIDAÇÃO CRÍTICA: Se display_name é LID, deixar vazio
+                        if display_name and is_lid_number(display_name):
+                            logger.warning(f"   ⚠️ [PARTICIPANTS] display_name é LID: {display_name}, deixando vazio")
+                            display_name = ''
+                        
                         # ✅ CORREÇÃO: Garantir que phoneNumber seja salvo (pode vir de diferentes campos)
                         saved_phone_number = participant_phone_number
-                        if not saved_phone_number and phone_raw:
-                            # Se não tem phoneNumber mas tem phone_raw, construir JID
+                        if not saved_phone_number and phone_raw and not is_lid_number(phone_raw):
+                            # Se não tem phoneNumber mas tem phone_raw válido, construir JID
                             saved_phone_number = f"{phone_raw}@s.whatsapp.net"
+                        
+                        # ✅ VALIDAÇÃO FINAL: Se não temos telefone real nem phoneNumber, não salvar o participante
+                        if not final_phone and not saved_phone_number:
+                            logger.warning(f"⚠️ [PARTICIPANTS] Participante sem telefone real nem phoneNumber, pulando: jid={participant_id}")
+                            continue
                         
                         participant_info = {
                             'phone': final_phone,  # Telefone real normalizado E.164 (NUNCA LID)
-                            'name': display_name,  # Nome para exibição (pushname > contato > telefone)
-                            'pushname': pushname,  # Pushname original da API
+                            'name': display_name,  # Nome para exibição (pushname > contato) - NUNCA LID
+                            'pushname': pushname,  # Pushname original da API (pode ser vazio se era LID)
                             'jid': participant_id,  # LID ou JID original
                             'phoneNumber': saved_phone_number  # JID real do telefone (@s.whatsapp.net)
                         }
