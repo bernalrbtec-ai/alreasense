@@ -992,20 +992,32 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     participants_list = []
                     admins_list = []
                     
-                    # Buscar todos os contatos do tenant de uma vez (otimização)
+                    # ✅ CORREÇÃO CRÍTICA: Processar participantes usando phoneNumber (telefone real)
+                    # Formato da resposta: {"id": "@lid", "phoneNumber": "@s.whatsapp.net", "admin": "..."}
+                    participants_list = []
+                    admins_list = []
+                    
+                    # Primeiro, coletar todos os telefones reais para busca em batch
                     all_phones = []
                     for participant in raw_participants:
-                        participant_id = participant.get('id') or participant.get('jid') or ''
-                        if participant_id:
-                            phone = participant_id.split('@')[0]
-                            if phone and not is_lid_number(phone):
-                                all_phones.append(phone)
+                        participant_phone_number = participant.get('phoneNumber') or participant.get('phone_number') or ''
+                        if participant_phone_number:
+                            phone_raw = participant_phone_number.split('@')[0]
+                            if phone_raw and not is_lid_number(phone_raw):
+                                all_phones.append(phone_raw)
                     
-                    # Buscar contatos em batch
+                    # Buscar contatos em batch usando telefones reais
                     contacts_map = {}
                     if all_phones:
                         from apps.contacts.signals import normalize_phone_for_search
-                        normalized_phones = [normalize_phone_for_search(p) for p in all_phones]
+                        from apps.notifications.services import normalize_phone
+                        normalized_phones = []
+                        for p in all_phones:
+                            normalized = normalize_phone(p)
+                            if normalized:
+                                normalized_phones.append(normalized)
+                                normalized_phones.append(normalize_phone_for_search(normalized))
+                        
                         contacts = Contact.objects.filter(
                             tenant=conversation.tenant,
                             phone__in=normalized_phones + all_phones
@@ -1014,53 +1026,67 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         for contact in contacts:
                             normalized_contact_phone = normalize_phone_for_search(contact['phone'])
                             contacts_map[normalized_contact_phone] = contact.get('name', '')
+                            # Também mapear telefone normalizado
+                            from apps.notifications.services import normalize_phone
+                            phone_normalized = normalize_phone(contact['phone'])
+                            if phone_normalized:
+                                contacts_map[normalize_phone_for_search(phone_normalized)] = contact.get('name', '')
                     
-                    # Processar cada participante
+                    # Processar cada participante usando phoneNumber
                     for participant in raw_participants:
                         participant_id = participant.get('id') or participant.get('jid') or ''
-                        if not participant_id:
+                        participant_phone_number = participant.get('phoneNumber') or participant.get('phone_number') or ''
+                        
+                        logger.info(f"   🔍 [GROUP INFO] Processando participante: id={participant_id}, phoneNumber={participant_phone_number}")
+                        
+                        # ✅ PRIORIDADE: Usar phoneNumber (telefone real) primeiro
+                        phone_raw = None
+                        if participant_phone_number:
+                            # Extrair telefone do phoneNumber (formato: 5517996196795@s.whatsapp.net)
+                            phone_raw = participant_phone_number.split('@')[0]
+                            logger.info(f"   ✅ [GROUP INFO] Telefone extraído de phoneNumber: {phone_raw}")
+                        elif participant_id and not participant_id.endswith('@lid'):
+                            # Fallback: usar id apenas se não for LID
+                            if '@' in participant_id and participant_id.endswith('@s.whatsapp.net'):
+                                phone_raw = participant_id.split('@')[0]
+                                logger.info(f"   ✅ [GROUP INFO] Telefone extraído de id: {phone_raw}")
+                        
+                        # Se não encontrou telefone válido, pular
+                        if not phone_raw:
+                            logger.warning(f"   ⚠️ [GROUP INFO] Participante sem phoneNumber válido: id={participant_id}")
                             continue
                         
-                        phone = participant_id.split('@')[0]
-                        
-                        # ✅ VALIDAÇÃO CRÍTICA: Pular se phone é LID
-                        if is_lid_number(phone) or participant_id.endswith('@lid'):
-                            logger.debug(f"   ⚠️ [GROUP INFO] Pulando participante com LID: {participant_id}")
-                            continue
+                        # Normalizar telefone para E.164
+                        from apps.notifications.services import normalize_phone
+                        normalized_phone = normalize_phone(phone_raw)
+                        if not normalized_phone:
+                            normalized_phone = phone_raw
                         
                         # Verificar se é admin
                         is_admin = participant.get('isAdmin', False) or participant.get('admin', False)
                         
-                        # ✅ CORREÇÃO: Buscar nome (prioridade: contato cadastrado > pushname válido > name válido)
-                        # ⚠️ CRÍTICO: Validar se não é LID antes de usar
-                        raw_pushname = participant.get('pushname') or ''
-                        raw_name = participant.get('name') or ''
-                        
-                        # Validar se não são LIDs
-                        participant_name = ''
-                        if raw_pushname and not is_lid_number(raw_pushname) and raw_pushname != phone:
-                            participant_name = raw_pushname
-                        elif raw_name and not is_lid_number(raw_name) and raw_name != phone:
-                            participant_name = raw_name
-                        
-                        # Tentar buscar do contato cadastrado
+                        # Buscar nome do contato usando telefone real
                         from apps.contacts.signals import normalize_phone_for_search
-                        normalized_phone = normalize_phone_for_search(phone)
-                        contact_name = contacts_map.get(normalized_phone) or contacts_map.get(phone)
+                        normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
+                        contact_name = contacts_map.get(normalized_phone_for_search) or contacts_map.get(normalized_phone) or contacts_map.get(phone_raw)
                         
+                        # ✅ CORREÇÃO: Prioridade: nome do contato > telefone formatado
+                        # Se não tem contato, deixar name vazio (frontend mostrará apenas telefone formatado)
+                        participant_name = ''
                         if contact_name:
                             participant_name = contact_name
-                        # ✅ CORREÇÃO: Não usar telefone como fallback (pode ser LID)
-                        # Se não tem nome válido, deixar vazio - frontend mostrará apenas telefone formatado
-                        if not participant_name:
-                            participant_name = ''  # Vazio - frontend mostrará apenas telefone formatado
+                            logger.info(f"   ✅ [GROUP INFO] Nome do contato encontrado: {participant_name}")
+                        else:
+                            logger.info(f"   ℹ️ [GROUP INFO] Contato não encontrado, name vazio (telefone será mostrado)")
                         
                         participant_info = {
-                            'jid': participant_id,
-                            'phone': phone,
-                            'name': participant_name,
+                            'jid': participant_id,  # LID original
+                            'phone': normalized_phone,  # Telefone real normalizado E.164
+                            'name': participant_name,  # Nome do contato ou vazio
+                            'phoneNumber': participant_phone_number,  # JID real do telefone
                             'is_admin': is_admin
                         }
+                        logger.info(f"   ✅ [GROUP INFO] Participante processado: phone={normalized_phone}, name={participant_name}, phoneNumber={participant_phone_number}")
                         
                         participants_list.append(participant_info)
                         
