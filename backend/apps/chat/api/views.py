@@ -1303,14 +1303,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             )
         
         # Criar nova conversa com telefone normalizado
+        # ✅ CORREÇÃO: Se sem departamento (Inbox), status deve ser 'pending'
+        # Se com departamento, status pode ser 'open'
+        initial_status = 'pending' if not department else 'open'
+        
         conversation = Conversation.objects.create(
             tenant=request.user.tenant,
             department=department,
             contact_phone=normalized_phone,  # ✅ Usar telefone normalizado
             contact_name=contact_name,
             assigned_to=request.user,
-            status='open'
+            status=initial_status
         )
+        
+        logger.info(f"✅ [CONVERSATION START] Conversa criada: ID={conversation.id}, Status={initial_status}, Department={department.name if department else 'Inbox'}")
         
         # Adicionar usuário como participante
         conversation.participants.add(request.user)
