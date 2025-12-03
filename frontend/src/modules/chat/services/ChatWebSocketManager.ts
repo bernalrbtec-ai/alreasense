@@ -286,15 +286,29 @@ class ChatWebSocketManager {
 
   /**
    * Envia uma mensagem de chat
+   * ✅ CORREÇÃO: Aceita conversationId opcional para garantir que usa a conversa correta
    */
-  public sendChatMessage(content: string, includeSignature = true, isInternal = false, mentions?: string[]): boolean {
-    if (!this.currentConversationId) {
+  public sendChatMessage(content: string, includeSignature = true, isInternal = false, mentions?: string[], conversationId?: string): boolean {
+    // ✅ CORREÇÃO CRÍTICA: Usar conversationId passado como parâmetro se fornecido
+    // Isso garante que sempre usamos a conversa ativa atual, não a do closure
+    const targetConversationId = conversationId || this.currentConversationId;
+    
+    if (!targetConversationId) {
       console.error('❌ [MANAGER] Nenhuma conversa ativa');
       return false;
+    }
+    
+    // ✅ LOG CRÍTICO: Verificar se conversationId mudou
+    if (conversationId && conversationId !== this.currentConversationId) {
+      console.warn('⚠️ [MANAGER] ATENÇÃO: conversationId mudou!', {
+        oldId: this.currentConversationId,
+        newId: conversationId
+      });
     }
 
     const payload: any = {
       type: 'send_message',
+      conversation_id: targetConversationId, // ✅ CORREÇÃO CRÍTICA: Sempre incluir conversation_id explícito
       content,
       include_signature: includeSignature,
       is_internal: isInternal,

@@ -276,15 +276,33 @@ export function useChatSocket(conversationId?: string) {
   }, [addMessage, updateMessageStatus, setTyping, updateConversation, updateMessageReactions, notificationsEnabled, showNotification]);
 
   // API pública
+  // ✅ CORREÇÃO CRÍTICA: Buscar conversationId do store diretamente ao invés de usar do closure
+  // Isso garante que sempre usamos a conversa ativa atual, mesmo se mudou rapidamente
   const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false, replyToMessageId?: string, mentions?: string[]): boolean => {
     if (!isConnected) {
       console.warn('⚠️ [HOOK] WebSocket não conectado (ignorando envio)');
       return false;
     }
 
-    if (!conversationId) {
+    // ✅ CORREÇÃO CRÍTICA: Buscar activeConversation do store diretamente (não usar closure)
+    const { activeConversation: currentActiveConversation } = useChatStore.getState();
+    const currentConversationId = currentActiveConversation?.id;
+    
+    if (!currentConversationId) {
       console.error('❌ [HOOK] Nenhuma conversa ativa para enviar mensagem');
       return false;
+    }
+    
+    // ✅ LOG CRÍTICO: Verificar se conversationId mudou
+    if (conversationId !== currentConversationId) {
+      console.warn('⚠️ [HOOK] ATENÇÃO: conversationId mudou!', {
+        oldId: conversationId,
+        newId: currentConversationId,
+        oldName: conversationId ? 'N/A' : 'N/A',
+        newName: currentActiveConversation?.contact_name || 'N/A',
+        newPhone: currentActiveConversation?.contact_phone || 'N/A',
+        newType: currentActiveConversation?.conversation_type || 'N/A'
+      });
     }
 
     // ✅ NOVO: Suporte a reply_to via metadata
@@ -292,7 +310,7 @@ export function useChatSocket(conversationId?: string) {
       console.log('📤 [HOOK] Enviando mensagem com reply:', content.substring(0, 50), `| Reply to: ${replyToMessageId}`);
       console.log('📤 [HOOK] Payload completo:', {
         type: 'send_message',
-        conversation_id: conversationId,
+        conversation_id: currentConversationId,
         content: content.substring(0, 50),
         include_signature: includeSignature,
         is_internal: isInternal,
@@ -301,7 +319,7 @@ export function useChatSocket(conversationId?: string) {
       });
       const payload: any = {
         type: 'send_message',
-        conversation_id: conversationId,
+        conversation_id: currentConversationId, // ✅ Usar ID atual do store
         content,
         include_signature: includeSignature,
         is_internal: isInternal,
@@ -316,8 +334,9 @@ export function useChatSocket(conversationId?: string) {
     }
 
     console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`, mentions ? `| Mentions: ${mentions.length}` : '');
-    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions);
-  }, [isConnected, conversationId]);
+    // ✅ CORREÇÃO: Passar conversationId atual para sendChatMessage
+    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId);
+  }, [isConnected, conversationId]); // ✅ Manter conversationId na dependência para detectar mudanças
 
   const sendTyping = useCallback((isTyping: boolean) => {
     if (!isConnected) return;

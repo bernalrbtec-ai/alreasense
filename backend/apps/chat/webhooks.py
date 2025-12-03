@@ -2452,10 +2452,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             try:
                 from apps.chat.utils.serialization import serialize_message_for_ws
                 from apps.chat.utils.websocket import broadcast_conversation_updated
+                from django.db import transaction
                 
-                # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
-                # Isso garante que last_message seja incluído no broadcast
-                broadcast_conversation_updated(conversation)
+                # ✅ CORREÇÃO CRÍTICA: Garantir que broadcast acontece após commit da mensagem
+                # Passar message.id para garantir que a mensagem seja incluída no last_message
+                def do_broadcast():
+                    try:
+                        # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+                        # Passar message_id para garantir que a mensagem recém-criada seja incluída
+                        broadcast_conversation_updated(conversation, message_id=str(message.id))
+                    except Exception as e:
+                        logger.error(f"❌ [WEBSOCKET] Erro no broadcast após commit: {e}", exc_info=True)
+                
+                # ✅ CORREÇÃO CRÍTICA: Executar broadcast após commit da transação
+                # Isso garante que a mensagem está disponível no banco quando buscamos last_message
+                # Se não estamos em uma transação ativa, executar imediatamente
+                if transaction.get_connection().in_atomic_block:
+                    transaction.on_commit(do_broadcast)
+                else:
+                    # Não estamos em transação, executar imediatamente
+                    do_broadcast()
                 
                 # ✅ FIX: Também enviar message_received para adicionar mensagem na conversa ativa
                 msg_data_serializable = serialize_message_for_ws(message)

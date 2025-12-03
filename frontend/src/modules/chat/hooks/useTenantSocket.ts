@@ -407,18 +407,23 @@ export function useTenantSocket() {
         break;
 
       case 'conversation_updated':
-        console.log('🔄 [TENANT WS] Conversa atualizada:', data.conversation);
-        console.log('🖼️ [DEBUG] profile_pic_url:', data.conversation?.profile_pic_url);
-        console.log('🖼️ [DEBUG] contact_name:', data.conversation?.contact_name);
-        console.log('📊 [DEBUG] unread_count:', data.conversation?.unread_count);
-        console.log('📊 [DEBUG] status:', data.conversation?.status);
-        console.log('📊 [DEBUG] department:', data.conversation?.department);
-        
-        // Atualizar conversa na lista
+        // ✅ PERFORMANCE: Reduzir logs excessivos, manter apenas logs importantes
         const { updateConversation, addConversation, conversations, activeConversation, setMessages, setDepartments } = useChatStore.getState();
         if (data.conversation) {
-          // ✅ Detectar se status mudou de 'closed' para 'pending' (conversa reaberta)
+          // ✅ CORREÇÃO CRÍTICA: Verificar se last_message foi atualizado
           const existingConversation = conversations.find(c => c.id === data.conversation.id);
+          const lastMessageUpdated = existingConversation && 
+            JSON.stringify(existingConversation.last_message) !== JSON.stringify(data.conversation.last_message);
+          
+          if (lastMessageUpdated) {
+            console.log('📨 [TENANT WS] Última mensagem atualizada:', {
+              conversationId: data.conversation.id,
+              oldLastMessage: existingConversation.last_message?.content?.substring(0, 50),
+              newLastMessage: data.conversation.last_message?.content?.substring(0, 50)
+            });
+          }
+          
+          // ✅ Detectar se status mudou de 'closed' para 'pending' (conversa reaberta)
           const wasClosed = existingConversation?.status === 'closed';
           const isNowPending = data.conversation.status === 'pending';
           const statusReopened = wasClosed && isNowPending;
@@ -431,10 +436,10 @@ export function useTenantSocket() {
             console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...');
             addConversation(data.conversation);
           } else {
-            console.log('✅ [TENANT WS] Chamando updateConversation...');
+            // ✅ CORREÇÃO CRÍTICA: Sempre atualizar, mesmo que pareça igual
+            // Isso garante que last_message seja atualizado mesmo se outros campos não mudaram
             updateConversation(data.conversation);
           }
-          console.log('✅ [TENANT WS] Store atualizada!');
           
           // ✅ FIX CRÍTICO: SEMPRE refetch departamentos quando conversation_updated é recebido
           // Isso garante que pending_count seja atualizado em tempo real, mesmo se não houver mudanças aparentes

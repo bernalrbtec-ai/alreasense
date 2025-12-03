@@ -6,7 +6,7 @@
 import { create } from 'zustand';
 import { shallow } from 'zustand/shallow';
 import { Conversation, Message, Department } from '../types';
-import { upsertConversation } from './conversationUpdater';
+import { upsertConversation, mergeConversations } from './conversationUpdater';
 import { sortMessagesByTimestamp, mergeAttachments } from '../utils/messageUtils';
 
 /**
@@ -227,14 +227,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       console.log('🔄 [STORE] Atualizando activeConversation:', {
         oldName: state.activeConversation.contact_name,
         newName: conversation.contact_name,
+        oldPhone: state.activeConversation.contact_phone,
+        newPhone: conversation.contact_phone,
+        oldType: state.activeConversation.conversation_type,
+        newType: conversation.conversation_type,
         conversationId: conversation.id
       });
     }
     
-    const updatedActiveConversation = isActiveConversation
+    // ✅ CORREÇÃO CRÍTICA: Usar mergeConversations para garantir merge correto
+    // Isso garante que campos importantes sejam atualizados corretamente (nome, foto, telefone, tipo, last_message)
+    const updatedActiveConversation = isActiveConversation && state.activeConversation
       ? {
-          ...state.activeConversation,
-          ...conversation,  // ✅ Merge completo (não apenas campos específicos)
+          ...mergeConversations(state.activeConversation, conversation),  // ✅ Usar função de merge unificada
           // ✅ FORÇAR nova referência para garantir re-render
           _updatedAt: Date.now()
         }

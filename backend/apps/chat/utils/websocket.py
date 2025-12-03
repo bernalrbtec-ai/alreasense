@@ -48,7 +48,7 @@ def broadcast_to_tenant(tenant_id: str, event_type: str, data: Dict[str, Any]) -
         logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast: {e}", exc_info=True)
 
 
-def broadcast_conversation_updated(conversation, request=None) -> None:
+def broadcast_conversation_updated(conversation, request=None, message_id=None) -> None:
     """
     Broadcast específico para quando uma conversa é atualizada.
     
@@ -61,15 +61,50 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
     Args:
         conversation: Instância do modelo Conversation
         request: Objeto request (opcional, para contexto do serializer)
+        message_id: ID da mensagem recém-criada (opcional, para garantir que seja incluída no last_message)
     """
     from apps.chat.api.serializers import ConversationSerializer
     from django.db.models import Count, Q
     from apps.chat.models import Message
+    from django.db import transaction
+    
+    # ✅ CORREÇÃO CRÍTICA: Garantir que estamos dentro de uma transação commitada
+    # Se message_id foi fornecido, garantir que a mensagem está commitada antes de buscar
+    if message_id:
+        # Forçar commit da transação atual se houver
+        transaction.on_commit(lambda: None)
     
     # ✅ FIX CRÍTICO: SEMPRE recalcular unread_count para garantir que está atualizado
     # Isso garante que o unread_count sempre esteja correto mesmo quando a conversa vem direto do modelo
     # Recarregar do banco para garantir dados atualizados
     conversation.refresh_from_db()
+    
+    # ✅ CORREÇÃO CRÍTICA: Buscar última mensagem de forma mais robusta
+    # Se message_id foi fornecido, garantir que essa mensagem seja incluída
+    last_message_queryset = Message.objects.select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at')
+    
+    # Se temos message_id, garantir que essa mensagem seja incluída (pode ser a mais recente)
+    if message_id:
+        # Buscar a mensagem específica primeiro para garantir que está disponível
+        try:
+            specific_message = Message.objects.select_related('sender', 'conversation').prefetch_related('attachments').get(id=message_id)
+            # Usar essa mensagem como última se for a mais recente
+            last_msg = last_message_queryset.filter(conversation=conversation).first()
+            if last_msg and str(last_msg.id) == str(message_id):
+                # A mensagem específica é realmente a última, usar ela
+                conversation.last_message_list = [specific_message]
+                logger.debug(f"📨 [WEBSOCKET] Usando mensagem específica {message_id} como last_message")
+            else:
+                # Buscar normalmente, mas garantir que a mensagem específica está incluída se for mais recente
+                conversation.last_message_list = [last_msg] if last_msg else []
+        except Message.DoesNotExist:
+            # Mensagem ainda não está disponível, buscar normalmente
+            last_msg = last_message_queryset.filter(conversation=conversation).first()
+            conversation.last_message_list = [last_msg] if last_msg else []
+    else:
+        # Buscar normalmente sem message_id específico
+        last_msg = last_message_queryset.filter(conversation=conversation).first()
+        conversation.last_message_list = [last_msg] if last_msg else []
     
     # Buscar conversa com annotate para garantir unread_count correto
     from apps.chat.models import Conversation
@@ -83,27 +118,13 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
             ),
             distinct=True
         )
-    ).prefetch_related(
-        Prefetch(
-            'messages',
-            queryset=Message.objects.select_related('sender', 'conversation')
-                .prefetch_related('attachments')
-                .order_by('-created_at')[:1],
-            to_attr='last_message_list'
-        )
     ).get(id=conversation.id)
     
-    # ✅ FIX CRÍTICO: Transferir annotate E prefetch para o objeto original
-    # Isso garante que o serializer tenha acesso ao last_message_list
+    # ✅ FIX CRÍTICO: Transferir annotate para o objeto original
     conversation.unread_count_annotated = conversation_with_annotate.unread_count_annotated
     
-    # ✅ FIX CRÍTICO: Transferir last_message_list do prefetch para o objeto original
-    # O serializer precisa deste atributo para retornar last_message corretamente
-    if hasattr(conversation_with_annotate, 'last_message_list'):
-        conversation.last_message_list = conversation_with_annotate.last_message_list
-    
-    # ✅ CORREÇÃO CRÍTICA: Garantir que last_message_list sempre tenha dados
-    # Se prefetch falhar ou não retornar nada, buscar última mensagem diretamente
+    # ✅ CORREÇÃO CRÍTICA: Se não temos last_message_list ainda, buscar do prefetch
+    # Mas priorizar a mensagem que já buscamos acima (pode ser mais recente)
     if not hasattr(conversation, 'last_message_list') or not conversation.last_message_list:
         # Fallback: buscar última mensagem diretamente
         last_msg = Message.objects.filter(
@@ -122,17 +143,23 @@ def broadcast_conversation_updated(conversation, request=None) -> None:
     # Não precisa fazer nada extra, refresh_from_db já atualiza last_message_at
     
     # Serializar com contexto se disponível
-    # ✅ IMPORTANTE: Usar conversation (que agora tem last_message_list) ao invés de conversation_with_annotate
     serializer_context = {'request': request} if request else {}
     conv_data = ConversationSerializer(conversation, context=serializer_context).data
+    
+    # ✅ LOG CRÍTICO: Verificar se last_message está incluído
+    last_message_in_data = conv_data.get('last_message')
+    logger.info(f"📡 [WEBSOCKET] Conversa {conversation.id} atualizada via broadcast")
+    logger.info(f"   unread_count: {conv_data.get('unread_count', 'N/A')}")
+    logger.info(f"   last_message_at: {conv_data.get('last_message_at', 'N/A')}")
+    logger.info(f"   last_message presente: {last_message_in_data is not None}")
+    if last_message_in_data:
+        logger.info(f"   last_message content: {last_message_in_data.get('content', 'N/A')[:50]}...")
     
     broadcast_to_tenant(
         tenant_id=str(conversation.tenant_id),
         event_type='conversation_updated',
         data={'conversation': conv_data}
     )
-    
-    logger.info(f"📡 [WEBSOCKET] Conversa {conversation.id} atualizada via broadcast (unread_count: {conv_data.get('unread_count', 'N/A')}, last_message_at: {conv_data.get('last_message_at', 'N/A')})")
 
 
 def broadcast_message_received(message) -> None:

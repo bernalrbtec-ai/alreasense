@@ -55,8 +55,11 @@ function mergeConversations(
     // - Tags do contato (preservar se não vierem novas)
     contact_tags: incoming.contact_tags || existing.contact_tags,
     
-    // - Última mensagem (preservar se não vier nova)
-    last_message: incoming.last_message || existing.last_message,
+    // ✅ CORREÇÃO CRÍTICA: last_message deve SEMPRE usar incoming se presente (mesmo que seja null)
+    // Se incoming.last_message é undefined, preservar existing. Mas se for null, usar null.
+    // Isso garante que quando uma nova mensagem chega, ela atualiza corretamente
+    last_message: incoming.last_message !== undefined ? incoming.last_message : existing.last_message,
+    last_message_at: incoming.last_message_at !== undefined ? incoming.last_message_at : existing.last_message_at,
     
     // ✅ CORREÇÃO CRÍTICA: Garantir que nome, foto, telefone e tipo sempre sejam atualizados se vierem novos dados
     // Se incoming tem nome/foto/telefone/tipo, usar (mesmo que seja diferente de existing)
@@ -222,4 +225,10 @@ export function clearUpdateCache(): void {
   lastSortedConversations = [];
   lastSortTimestamp = 0;
 }
+
+/**
+ * ✅ EXPORTAR mergeConversations para uso no chatStore
+ * Permite que chatStore use a mesma lógica de merge para activeConversation
+ */
+export { mergeConversations };
 

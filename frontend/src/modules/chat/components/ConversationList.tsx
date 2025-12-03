@@ -6,6 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Search, Plus, User } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
+import { shallow } from 'zustand/shallow';
 import { Conversation } from '../types';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -20,42 +21,45 @@ const getMediaProxyUrl = (externalUrl: string) => {
 };
 
 export function ConversationList() {
-  const { conversations, setConversations, activeConversation, setActiveConversation, activeDepartment } = useChatStore();
+  // ✅ PERFORMANCE: Usar seletores específicos com shallow comparison para evitar re-renders desnecessários
+  const { 
+    conversations, 
+    setConversations, 
+    activeConversation, 
+    setActiveConversation, 
+    activeDepartment 
+  } = useChatStore(
+    (state) => ({
+      conversations: state.conversations,
+      setConversations: state.setConversations,
+      activeConversation: state.activeConversation,
+      setActiveConversation: state.setActiveConversation,
+      activeDepartment: state.activeDepartment,
+    }),
+    shallow // ✅ Comparação shallow para evitar re-renders quando objetos não mudaram
+  );
   const [loading, setLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
   const [showNewConversation, setShowNewConversation] = useState(false);
   
-  // 🔍 Debug: Log quando conversations mudam
+  // ✅ PERFORMANCE: Debounce na busca para evitar filtros excessivos
   useEffect(() => {
-    console.log('📋 [ConversationList] Conversas no store:', conversations.length);
-    if (activeDepartment) {
-      const filtered = conversations.filter(conv => {
-        if (activeDepartment.id === 'inbox') {
-          // Inbox: conversas pendentes SEM departamento
-          // ✅ IMPORTANTE: Incluir conversas que foram criadas recentemente mesmo se ainda não têm status definido
-          const departmentId = typeof conv.department === 'string' 
-            ? conv.department 
-            : conv.department?.id || null;
-          return (conv.status === 'pending' || !conv.status) && !departmentId;
-        } else {
-          // Departamento específico: conversas do departamento (qualquer status)
-          const departmentId = typeof conv.department === 'string' 
-            ? conv.department 
-            : conv.department?.id || null;
-          return departmentId === activeDepartment.id;
-        }
-      });
-      console.log(`   📂 Filtradas para ${activeDepartment.name}:`, filtered.length);
-    } else {
-      // ✅ SEM departamento ativo: mostrar todas
-      console.log(`   📂 Sem filtro (mostrando todas):`, conversations.length);
-    }
-  }, [conversations, activeDepartment]);
+    const timer = setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 300); // 300ms de debounce
+    
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
 
   // 🔄 MELHORIA: Buscar conversas apenas na primeira carga (evita sobrescrever WebSocket)
   // WebSocket adicionará novas conversas automaticamente ao Zustand Store via useTenantSocket
   // Filtro por departamento é feito localmente (mais rápido e mantém conversas do WebSocket)
   const [hasLoaded, setHasLoaded] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<number>(0);
+  
+  // ✅ PERFORMANCE: Refresh inteligente - apenas se necessário (não muito frequente)
+  const REFRESH_INTERVAL_MS = 30000; // 30 segundos
   
   useEffect(() => {
     // ✅ MELHORIA: Só buscar uma vez (primeira carga)
@@ -67,7 +71,6 @@ export function ConversationList() {
     const fetchConversations = async () => {
       try {
         setLoading(true);
-        console.log('🔄 [ConversationList] Carregando conversas iniciais...');
         
         // Buscar TODAS as conversas (sem filtro de departamento)
         const response = await api.get('/chat/conversations/', {
@@ -75,13 +78,11 @@ export function ConversationList() {
         });
         
         const convs = response.data.results || response.data;
-        console.log(`✅ [ConversationList] ${convs.length} conversas carregadas do backend`);
         
         // ✅ CORREÇÃO CRÍTICA: Limpar cache do conversationUpdater antes de fazer merge
         // Isso garante que atualizações importantes não sejam ignoradas por debounce
-        import('../store/conversationUpdater').then(({ clearUpdateCache }) => {
-          clearUpdateCache();
-        });
+        const { clearUpdateCache } = await import('../store/conversationUpdater');
+        clearUpdateCache();
         
         // ✅ MELHORIA: Usar upsertConversation para cada conversa (evita sobrescrever WebSocket)
         // Isso garante que se WebSocket adicionou conversas enquanto estava carregando, não serão perdidas
@@ -94,7 +95,7 @@ export function ConversationList() {
         
         setConversations(updatedConvs);
         setHasLoaded(true);
-        console.log(`✅ [ConversationList] Total após merge: ${updatedConvs.length} conversas (${currentConvs.length} já existiam do WebSocket)`);
+        setLastRefresh(Date.now());
       } catch (error) {
         console.error('❌ [ConversationList] Erro ao carregar conversas:', error);
         setHasLoaded(true); // Marcar como carregado mesmo em erro para não tentar novamente
@@ -105,110 +106,102 @@ export function ConversationList() {
 
     // Buscar conversas apenas na primeira carga
     fetchConversations();
+  }, [hasLoaded, setConversations]);
+  
+  // ✅ NOVO: Refresh inteligente periódico (apenas se necessário)
+  // Não muito frequente para não sobrecarregar o servidor
+  useEffect(() => {
+    if (!hasLoaded) return;
     
-    // Limpar ao desmontar (boa prática)
-    return () => {
-      console.log('🧹 [ConversationList] Desmontando componente');
+    // Verificar se precisa fazer refresh (último refresh foi há mais de 30s)
+    const timeSinceLastRefresh = Date.now() - lastRefresh;
+    if (timeSinceLastRefresh < REFRESH_INTERVAL_MS) {
+      return; // Ainda não precisa refresh
+    }
+    
+    // ✅ Refresh silencioso em background (não mostrar loading)
+    const refreshConversations = async () => {
+      try {
+        const response = await api.get('/chat/conversations/', {
+          params: { ordering: '-last_message_at' }
+        });
+        
+        const convs = response.data.results || response.data;
+        const { conversations: currentConvs } = useChatStore.getState();
+        let updatedConvs = currentConvs;
+        
+        // ✅ Usar upsert para não perder conversas do WebSocket
+        for (const conv of convs) {
+          updatedConvs = upsertConversation(updatedConvs, conv);
+        }
+        
+        setConversations(updatedConvs);
+        setLastRefresh(Date.now());
+      } catch (error) {
+        // Silencioso: não logar erro de refresh periódico
+      }
     };
-  }, []); // Array vazio = executa apenas uma vez no mount
+    
+    // Refresh a cada 30 segundos se necessário
+    const interval = setInterval(() => {
+      refreshConversations();
+    }, REFRESH_INTERVAL_MS);
+    
+    return () => clearInterval(interval);
+  }, [hasLoaded, lastRefresh, setConversations]);
 
   // ✅ PERFORMANCE: Memoizar filtro de conversas para evitar recalcular a cada render
+  // ✅ OTIMIZAÇÃO: Usar debouncedSearchTerm ao invés de searchTerm direto
   const filteredConversations = useMemo(() => {
+    if (!conversations.length) return [];
+    
+    const searchLower = debouncedSearchTerm.toLowerCase().trim();
+    
     return conversations.filter((conv) => {
-      // ✅ DEBUG: Log detalhado para cada conversa
-      console.log('🔍 [FILTRO] Verificando conversa:', {
-        id: conv.id,
-        contact_name: conv.contact_name,
-        status: conv.status,
-        department: conv.department,
-        activeDepartment: activeDepartment?.id || 'null',
-        searchTerm: searchTerm || 'vazio'
-      });
-      
-      // 1. Filtro de busca (nome ou telefone)
-      const matchesSearch = 
-        conv.contact_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        conv.contact_phone.includes(searchTerm);
-      
-      if (!matchesSearch) {
-        console.log('  ❌ [FILTRO] Não passa busca:', conv.id);
-        return false;
+      // 1. Filtro de busca (nome ou telefone) - apenas se houver termo de busca
+      if (searchLower) {
+        const matchesSearch = 
+          conv.contact_name?.toLowerCase().includes(searchLower) ||
+          conv.contact_phone.includes(debouncedSearchTerm) ||
+          (conv.group_metadata?.group_name || '').toLowerCase().includes(searchLower);
+        
+        if (!matchesSearch) {
+          return false;
+        }
       }
       
       // 2. Filtro de departamento (se houver departamento ativo)
       if (!activeDepartment) {
         // ✅ SEM departamento ativo: mostrar TODAS as conversas (inclui novas)
-        console.log('  ✅ [FILTRO] Sem departamento ativo - MOSTRAR:', conv.id);
         return true;
       }
       
       if (activeDepartment.id === 'inbox') {
         // Inbox: conversas pendentes SEM departamento
-        // ✅ FIX CRÍTICO: Inbox deve mostrar APENAS conversas SEM departamento E status='pending'
-        // Conversas com departamento NUNCA aparecem no Inbox (mesmo se status='pending')
-        // Tratar department como string (ID) ou objeto ou null
         const departmentId = typeof conv.department === 'string' 
           ? conv.department 
           : conv.department?.id || null;
         const convStatus = conv.status || 'pending';
         
         // ✅ CORREÇÃO: Inbox só mostra conversas SEM departamento E com status='pending'
-        // Removido `!convStatus` para ser mais estrito
-        const matchesInbox = !departmentId && convStatus === 'pending';
-        
-        console.log('  🔍 [FILTRO] Inbox check:', {
-          convId: conv.id,
-          status: convStatus,
-          departmentId,
-          departmentName: conv.department_name || 'null',
-          matchesInbox,
-          reason: !departmentId ? 'sem departamento' : 'tem departamento (FILTRADO)',
-          statusReason: convStatus === 'pending' ? 'pending' : 'outro status (FILTRADO)'
-        });
-        
-        return matchesInbox;
+        return !departmentId && convStatus === 'pending';
       } else {
         // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
-        // ✅ CORREÇÃO: Excluir conversas fechadas - elas não devem aparecer na lista
         if (conv.status === 'closed') {
-          console.log('  ❌ [FILTRO] Conversa fechada - FILTRADA:', conv.id);
           return false;
         }
         
-        // ✅ FIX CRÍTICO: Comparar IDs como strings para garantir match
-        // Tratar department como string (ID) ou objeto { id, name }
         const departmentId = typeof conv.department === 'string' 
           ? conv.department 
           : conv.department?.id || null;
         
-        // ✅ CORREÇÃO: Comparar IDs como strings (ambos podem ser UUIDs)
         const activeDeptId = String(activeDepartment.id);
         const convDeptId = departmentId ? String(departmentId) : null;
-        const matchesDepartment = convDeptId === activeDeptId;
         
-        console.log('  🔍 [FILTRO] Departamento check:', {
-          convId: conv.id,
-          convDepartmentId: convDeptId,
-          convDepartmentName: conv.department_name || 'null',
-          activeDepartmentId: activeDeptId,
-          activeDepartmentName: activeDepartment.name,
-          matchesDepartment,
-          status: conv.status,
-          departmentType: typeof conv.department,
-          departmentObject: conv.department
-        });
-        
-        return matchesDepartment;
+        return convDeptId === activeDeptId;
       }
     });
-  }, [conversations, searchTerm, activeDepartment]); // ✅ Dependências do useMemo
-  
-  // ✅ DEBUG: Log final do filtro
-  console.log('📊 [FILTRO] Resultado:', {
-    total: conversations.length,
-    filtradas: filteredConversations.length,
-    activeDepartment: activeDepartment?.id || 'null'
-  });
+  }, [conversations, debouncedSearchTerm, activeDepartment]); // ✅ Usar debouncedSearchTerm
 
   // ✅ PERFORMANCE: Memoizar função de formatação
   const formatTime = useCallback((dateString: string | undefined) => {
@@ -230,7 +223,10 @@ export function ConversationList() {
             type="text"
             placeholder="Buscar ou iniciar conversa"
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              // ✅ PERFORMANCE: Debounce é feito no useEffect acima
+            }}
             className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white transition-colors"
           />
         </div>
