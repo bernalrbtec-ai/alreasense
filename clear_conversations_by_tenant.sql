@@ -12,7 +12,7 @@
 SELECT 
     'Anexos' as tipo,
     COUNT(*) as quantidade
-FROM chat_messageattachment ma
+FROM chat_attachment ma
 INNER JOIN chat_message m ON ma.message_id = m.id
 INNER JOIN chat_conversation c ON m.conversation_id = c.id
 WHERE c.tenant_id = :'tenant_id'
@@ -31,7 +31,7 @@ FROM chat_conversation
 WHERE tenant_id = :'tenant_id';
 
 -- 1️⃣ Deletar anexos do tenant
-DELETE FROM chat_messageattachment
+DELETE FROM chat_attachment
 WHERE message_id IN (
     SELECT m.id
     FROM chat_message m

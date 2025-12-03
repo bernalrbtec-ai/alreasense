@@ -6,7 +6,7 @@
 -- ============================================================
 
 -- 1️⃣ Deletar anexos primeiro (FK para mensagens)
-DELETE FROM chat_messageattachment;
+DELETE FROM chat_attachment;
 
 -- 2️⃣ Deletar mensagens (FK para conversas)
 DELETE FROM chat_message;
@@ -18,7 +18,7 @@ DELETE FROM chat_conversation;
 SELECT 
     'Anexos restantes' as tipo,
     COUNT(*) as quantidade
-FROM chat_messageattachment
+FROM chat_attachment
 UNION ALL
 SELECT 
     'Mensagens restantes' as tipo,
