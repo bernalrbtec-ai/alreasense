@@ -1359,7 +1359,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         conversation = self.get_object()
         
+        logger.critical(f"🔍 [PARTICIPANTS] ====== INICIANDO get_participants ======")
+        logger.critical(f"   Conversation ID: {conversation.id}")
+        logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+        logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+        logger.critical(f"   Instance Name: {conversation.instance_name}")
+        
         if conversation.conversation_type != 'group':
+            logger.warning(f"⚠️ [PARTICIPANTS] Não é grupo, retornando erro")
             return Response(
                 {'error': 'Apenas grupos têm participantes'},
                 status=status.HTTP_400_BAD_REQUEST
@@ -1370,10 +1377,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         cached_participants = cache.get(cache_key)
         
         if cached_participants is not None:
-            logger.info(f"✅ [PARTICIPANTS] Retornando {len(cached_participants)} participantes do cache")
+            logger.critical(f"✅ [PARTICIPANTS] Cache encontrado: {len(cached_participants)} participantes")
             # ✅ CRÍTICO: Limpar participantes do cache também (pode ter LIDs antigos)
             cleaned_cached_participants = clean_participants_for_metadata(cached_participants)
             group_metadata = conversation.group_metadata or {}
+            logger.critical(f"✅ [PARTICIPANTS] Retornando {len(cleaned_cached_participants)} participantes do cache")
             return Response({
                 'participants': cleaned_cached_participants,
                 'count': len(cleaned_cached_participants),
@@ -1381,10 +1389,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 'cached': True
             })
         
+        logger.critical(f"🔄 [PARTICIPANTS] Cache não encontrado, buscando do metadata...")
+        
         # Buscar participantes do group_metadata
         conversation.refresh_from_db()  # ✅ IMPORTANTE: Recarregar do banco para ter dados atualizados
         group_metadata = conversation.group_metadata or {}
         participants_raw = group_metadata.get('participants', [])
+        
+        logger.critical(f"📋 [PARTICIPANTS] Metadata: {len(participants_raw)} participantes encontrados")
+        if participants_raw:
+            logger.critical(f"   Primeiro participante: {participants_raw[0] if participants_raw else 'N/A'}")
         
         # ✅ CORREÇÃO CRÍTICA: Verificar se participantes têm apenas LIDs sem phoneNumber
         # Se sim, forçar busca da API para obter telefones reais
@@ -1414,48 +1428,53 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # Se não tem participantes, tentar buscar diretamente da API
         if not participants:
-            logger.info(f"🔄 [PARTICIPANTS] Sem participantes no metadata, buscando da API...")
+            logger.critical(f"🔄 [PARTICIPANTS] Sem participantes no metadata, buscando da API...")
             
-            # ✅ CORREÇÃO: Tentar refresh-info primeiro, mas sempre verificar se trouxe participantes
+            # ✅ CORREÇÃO: Tentar busca direta primeiro (mais rápido e confiável)
             try:
-                refresh_response = self.refresh_info(request, pk=pk)
-                if refresh_response.status_code == 200:
-                    # Verificar se refresh-info retornou warning (grupo não encontrado)
-                    refresh_data = refresh_response.data
-                    if refresh_data.get('warning') == 'group_not_found':
-                        logger.warning(f"⚠️ [PARTICIPANTS] refresh-info: grupo não encontrado, tentando busca direta...")
-                        participants = self._fetch_participants_direct(conversation)
-                    else:
-                        # Refresh-info funcionou, buscar do metadata atualizado
-                        conversation.refresh_from_db()
-                        group_metadata = conversation.group_metadata or {}
-                        participants = group_metadata.get('participants', [])
-                        
-                        # ✅ CORREÇÃO CRÍTICA: Se refresh-info não trouxe participantes, tentar busca direta
-                        if not participants:
-                            logger.warning(f"⚠️ [PARTICIPANTS] refresh-info não trouxe participantes, tentando busca direta...")
-                            participants = self._fetch_participants_direct(conversation)
-                else:
-                    # Refresh-info falhou, tentar busca direta
-                    logger.warning(f"⚠️ [PARTICIPANTS] refresh-info retornou status {refresh_response.status_code}, tentando busca direta...")
-                    participants = self._fetch_participants_direct(conversation)
-            except Exception as e:
-                # Erro no refresh-info, tentar busca direta
-                logger.warning(f"⚠️ [PARTICIPANTS] Erro no refresh-info: {e}, tentando busca direta...")
+                logger.critical(f"🔄 [PARTICIPANTS] Tentando busca direta da API...")
                 participants = self._fetch_participants_direct(conversation)
+                logger.critical(f"📥 [PARTICIPANTS] Busca direta retornou: {len(participants) if participants else 0} participantes")
+                
+                # Se busca direta não trouxe participantes, tentar refresh-info como fallback
+                if not participants:
+                    logger.critical(f"🔄 [PARTICIPANTS] Busca direta não trouxe participantes, tentando refresh-info...")
+                    refresh_response = self.refresh_info(request, pk=pk)
+                    if refresh_response.status_code == 200:
+                        # Verificar se refresh-info retornou warning (grupo não encontrado)
+                        refresh_data = refresh_response.data
+                        if refresh_data.get('warning') == 'group_not_found':
+                            logger.warning(f"⚠️ [PARTICIPANTS] refresh-info: grupo não encontrado")
+                        else:
+                            # Refresh-info funcionou, buscar do metadata atualizado
+                            conversation.refresh_from_db()
+                            group_metadata = conversation.group_metadata or {}
+                            participants = group_metadata.get('participants', [])
+                            logger.critical(f"📥 [PARTICIPANTS] Refresh-info trouxe: {len(participants) if participants else 0} participantes")
+            except Exception as e:
+                # Erro na busca, logar e continuar
+                logger.error(f"❌ [PARTICIPANTS] Erro ao buscar participantes: {e}", exc_info=True)
+                participants = []
         
         # ✅ GARANTIA: Sempre retornar lista (nunca None)
         if not participants:
             participants = []
         
+        logger.critical(f"📋 [PARTICIPANTS] Antes de limpar: {len(participants)} participantes")
+        
         # ✅ CRÍTICO: Limpar participantes antes de salvar no cache (remover LIDs do phone)
         cleaned_participants = clean_participants_for_metadata(participants)
         
+        logger.critical(f"📋 [PARTICIPANTS] Depois de limpar: {len(cleaned_participants)} participantes")
+        if cleaned_participants:
+            logger.critical(f"   Primeiro participante limpo: {cleaned_participants[0]}")
+        
         # ✅ MELHORIA: Salvar no cache (5 minutos = 300 segundos)
         cache.set(cache_key, cleaned_participants, 300)
-        logger.info(f"✅ [PARTICIPANTS] {len(cleaned_participants)} participantes limpos salvos no cache (TTL: 5min)")
+        logger.critical(f"✅ [PARTICIPANTS] {len(cleaned_participants)} participantes limpos salvos no cache (TTL: 5min)")
         
-        logger.info(f"✅ [PARTICIPANTS] Retornando {len(cleaned_participants)} participantes")
+        logger.critical(f"✅ [PARTICIPANTS] Retornando {len(cleaned_participants)} participantes")
+        logger.critical(f"   Response: participants={len(cleaned_participants)}, count={len(cleaned_participants)}, cached=False")
         
         return Response({
             'participants': cleaned_participants,
