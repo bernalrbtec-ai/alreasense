@@ -231,7 +231,11 @@ export function ConversationList() {
           />
         </div>
         <button
-          onClick={() => setShowNewConversation(true)}
+          onClick={() => {
+            console.log('🆕 [CONVERSATION LIST] Botão Nova Conversa clicado');
+            setShowNewConversation(true);
+            console.log('🆕 [CONVERSATION LIST] showNewConversation setado para true');
+          }}
           className="flex-shrink-0 p-2 hover:bg-gray-100 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
           title="Nova conversa"
         >

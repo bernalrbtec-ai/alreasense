@@ -25,6 +25,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const [phoneInput, setPhoneInput] = useState('');
   const [isValidPhone, setIsValidPhone] = useState(false);
 
+  // ✅ DEBUG: Log quando isOpen muda
+  useEffect(() => {
+    console.log('🔄 [NEW CONVERSATION MODAL] isOpen mudou:', isOpen);
+  }, [isOpen]);
+
   // Detectar se query é telefone ou nome
   const isPhoneQuery = useCallback((query: string): boolean => {
     // Remove espaços, parênteses, hífens e outros caracteres
