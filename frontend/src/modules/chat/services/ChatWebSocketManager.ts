@@ -389,11 +389,21 @@ class ChatWebSocketManager {
    * Trata mensagens recebidas do WebSocket
    */
   private handleMessage(data: WebSocketMessage): void {
+    // ✅ DEBUG: Logar TODOS os eventos recebidos
+    console.log('📨 [MANAGER] handleMessage chamado:', {
+      type: data.type,
+      hasMessage: !!data.message,
+      messageId: data.message?.id,
+      conversationId: data.message?.conversation || data.message?.conversation_id,
+    });
+    
     // Emitir evento específico
     this.emit(data.type, data);
 
     // Emitir evento genérico 'message'
     this.emit('message', data);
+    
+    console.log('✅ [MANAGER] Eventos emitidos para listeners');
   }
 
   /**

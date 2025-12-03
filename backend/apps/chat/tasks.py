@@ -418,7 +418,8 @@ async def send_reaction_to_evolution(message, emoji: str):
         logger.info(f"   Payload (mascado): {mask_sensitive_data(payload)}")
         
         # Enviar reação
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        # ✅ CORREÇÃO: Aumentar timeout para 30s (reação pode demorar mais)
+        async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 endpoint,
                 json=payload,

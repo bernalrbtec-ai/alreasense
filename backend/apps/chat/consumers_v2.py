@@ -313,10 +313,18 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     
     async def message_received(self, event):
         """Broadcast nova mensagem."""
+        # ✅ DEBUG: Logar recebimento de evento
+        logger.info(f"📨 [CHAT WS V2] message_received recebido do grupo")
+        logger.info(f"   Event keys: {list(event.keys())}")
+        logger.info(f"   Message ID: {event.get('message', {}).get('id', 'N/A')}")
+        logger.info(f"   Conversation ID: {event.get('conversation_id', 'N/A')}")
+        
         await self.send(text_data=json.dumps({
             'type': 'message_received',
             'message': event['message']
         }))
+        
+        logger.info(f"✅ [CHAT WS V2] message_received enviado para frontend")
     
     async def message_status_update(self, event):
         """Broadcast atualização de status."""

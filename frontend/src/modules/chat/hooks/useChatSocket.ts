@@ -67,6 +67,14 @@ export function useChatSocket(conversationId?: string) {
   // Registrar listeners de eventos
   useEffect(() => {
     const handleMessageReceived = (data: WebSocketMessage) => {
+      console.log('🔔 [HOOK] handleMessageReceived chamado!', {
+        hasMessage: !!data.message,
+        messageId: data.message?.id,
+        messageConversationId: data.message?.conversation || data.message?.conversation_id,
+        activeConversationId: conversationId,
+        fullData: data
+      });
+      
       if (data.message) {
         console.log('💬 [HOOK] Nova mensagem recebida via useChatSocket:', data.message);
         console.log('💬 [HOOK] Conversation ID:', data.message.conversation || data.message.conversation_id);

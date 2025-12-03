@@ -2436,6 +2436,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 tenant_group = f"chat_tenant_{tenant.id}"
                 
                 # Broadcast message_received (para adicionar mensagem na conversa ativa)
+                logger.info(f"📡 [WEBSOCKET] Enviando message_received para grupo do tenant: {tenant_group}")
+                logger.info(f"   Message ID: {message.id}")
+                logger.info(f"   Conversation ID: {conversation.id}")
+                logger.info(f"   Message content (primeiros 50 chars): {message.content[:50] if message.content else 'N/A'}...")
+                
                 async_to_sync(channel_layer.group_send)(
                     tenant_group,
                     {
@@ -2445,7 +2450,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     }
                 )
                 
-                logger.info(f"📡 [WEBSOCKET] Mensagem e conversa atualizada broadcast para grupo do tenant")
+                logger.info(f"✅ [WEBSOCKET] message_received enviado para grupo do tenant: {tenant_group}")
             except Exception as e:
                 logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
             
@@ -2702,6 +2707,11 @@ def broadcast_message_to_websocket(message, conversation):
         from apps.chat.utils.serialization import serialize_message_for_ws
         message_data_serializable = serialize_message_for_ws(message)
         
+        logger.info(f"📡 [WEBSOCKET] Enviando message_received para room: {room_group_name}")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   Conversation ID: {conversation.id}")
+        logger.info(f"   Message content (primeiros 50 chars): {message.content[:50] if message.content else 'N/A'}...")
+        
         async_to_sync(channel_layer.group_send)(
             room_group_name,
             {
@@ -2710,7 +2720,19 @@ def broadcast_message_to_websocket(message, conversation):
             }
         )
         
-        logger.info(f"✅ [WEBSOCKET] Mensagem broadcast com sucesso!")
+        # ✅ NOVO: Também enviar para grupo do tenant (para garantir que chegue)
+        tenant_group = f"chat_tenant_{conversation.tenant_id}"
+        logger.info(f"📡 [WEBSOCKET] Enviando message_received para grupo do tenant: {tenant_group}")
+        async_to_sync(channel_layer.group_send)(
+            tenant_group,
+            {
+                'type': 'message_received',
+                'message': message_data_serializable,
+                'conversation_id': str(conversation.id)
+            }
+        )
+        
+        logger.info(f"✅ [WEBSOCKET] Mensagem broadcast com sucesso para room E tenant!")
         logger.info(f"   Message ID: {message.id} | Content: {message.content[:30]}...")
     
     except Exception as e:
