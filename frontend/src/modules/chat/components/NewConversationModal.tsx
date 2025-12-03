@@ -129,17 +129,31 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       // Se não encontrou, criar nova conversa
       if (!conversation) {
         // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
+        console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/...', {
+          contact_phone: normalizedPhone,
+          contact_name: contact.name
+        });
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: contact.name
         });
         conversation = createResponse.data.conversation || createResponse.data;
+        console.log('✅ [NEW CONVERSATION] Conversa criada:', {
+          id: conversation.id,
+          name: conversation.contact_name,
+          phone: conversation.contact_phone,
+          department: conversation.department?.name || 'Nenhum (Inbox)',
+          status: conversation.status
+        });
         // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
+        // NOTA: O broadcast conversation_updated também adicionará/atualizará via WebSocket
         addConversation(conversation);
+        console.log('✅ [NEW CONVERSATION] Conversa adicionada ao store');
       }
       
       // ✅ CORREÇÃO CRÍTICA: Selecionar conversa como ativa
       // Isso garante que a conversa apareça no chat e seja setada como ativa
+      console.log('✅ [NEW CONVERSATION] Setando conversa como ativa:', conversation.id);
       setActiveConversation(conversation);
       onClose();
     } catch (error: any) {
@@ -175,17 +189,30 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       // Se não encontrou, criar nova conversa
       if (!conversation) {
         // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
+        console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/ (telefone direto)...', {
+          contact_phone: normalizedPhone
+        });
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: normalizedPhone // Usar telefone como nome se não tiver contato
         });
         conversation = createResponse.data.conversation || createResponse.data;
+        console.log('✅ [NEW CONVERSATION] Conversa criada:', {
+          id: conversation.id,
+          name: conversation.contact_name,
+          phone: conversation.contact_phone,
+          department: conversation.department?.name || 'Nenhum (Inbox)',
+          status: conversation.status
+        });
         // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
+        // NOTA: O broadcast conversation_updated também adicionará/atualizará via WebSocket
         addConversation(conversation);
+        console.log('✅ [NEW CONVERSATION] Conversa adicionada ao store');
       }
       
       // ✅ CORREÇÃO CRÍTICA: Selecionar conversa como ativa
       // Isso garante que a conversa apareça no chat e seja setada como ativa
+      console.log('✅ [NEW CONVERSATION] Setando conversa como ativa:', conversation.id);
       setActiveConversation(conversation);
       onClose();
     } catch (error: any) {

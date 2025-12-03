@@ -407,6 +407,15 @@ export function useTenantSocket() {
         break;
 
       case 'conversation_updated':
+        // ✅ DEBUG: Log detalhado para debug de conversas criadas via aplicação
+        console.log('📨 [TENANT WS] conversation_updated recebido:', {
+          conversationId: data.conversation?.id,
+          conversationName: data.conversation?.contact_name,
+          conversationPhone: data.conversation?.contact_phone,
+          department: data.conversation?.department?.name || 'Nenhum (Inbox)',
+          status: data.conversation?.status
+        });
+        
         // ✅ PERFORMANCE: Reduzir logs excessivos, manter apenas logs importantes
         const { updateConversation, addConversation, conversations, activeConversation, setMessages, setDepartments } = useChatStore.getState();
         if (data.conversation) {
@@ -433,11 +442,22 @@ export function useTenantSocket() {
           // ✅ IMPORTANTE: Se conversa não existe no store, adicionar (pode acontecer em race conditions)
           const isNewConversation = !existingConversation;
           if (isNewConversation) {
-            console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...');
+            console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...', {
+              id: data.conversation.id,
+              name: data.conversation.contact_name,
+              phone: data.conversation.contact_phone,
+              department: data.conversation.department?.name || 'Nenhum (Inbox)',
+              status: data.conversation.status
+            });
             addConversation(data.conversation);
+            console.log('✅ [TENANT WS] Conversa adicionada ao store via conversation_updated');
           } else {
             // ✅ CORREÇÃO CRÍTICA: Sempre atualizar, mesmo que pareça igual
             // Isso garante que last_message seja atualizado mesmo se outros campos não mudaram
+            console.log('🔄 [TENANT WS] Atualizando conversa existente no store:', {
+              id: data.conversation.id,
+              name: data.conversation.contact_name
+            });
             updateConversation(data.conversation);
           }
           
