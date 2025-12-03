@@ -1678,18 +1678,30 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     
                     # 👤 Para INDIVIDUAIS: enfileirar busca de foto E nome (assíncrona, não bloqueia webhook)
                     else:
-                        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
-                        logger.info(f"👤 [INDIVIDUAL] Enfileirando busca de informações do contato: {clean_phone}")
-                        
-                        # ✅ OTIMIZAÇÃO: fetch_profile_pic já busca nome E foto juntos (mais rápido que duas tasks separadas)
-                        # Similar ao comportamento de grupos que usa uma única task
-                        from apps.chat.tasks import fetch_profile_pic
-                        
-                        fetch_profile_pic.delay(
-                            conversation_id=str(conversation.id),
-                            phone=clean_phone
-                        )
-                        logger.info(f"✅ [INDIVIDUAL] Task de foto+nome enfileirada - informações serão buscadas em background")
+                        # ✅ VALIDAÇÃO CRÍTICA: Garantir que é realmente individual antes de buscar
+                        if conversation.conversation_type != 'individual':
+                            logger.critical(f"❌ [WEBHOOK] ERRO CRÍTICO: Tentativa de buscar foto de não-individual como individual!")
+                            logger.critical(f"   Conversation ID: {conversation.id}")
+                            logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                            logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+                            logger.critical(f"   is_group: {is_group}")
+                            logger.critical(f"   ⚠️ NÃO ENFILEIRANDO fetch_profile_pic para evitar confusão!")
+                        else:
+                            clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                            logger.critical(f"👤 [INDIVIDUAL] Enfileirando busca de informações do contato: {clean_phone}")
+                            logger.critical(f"   Conversation ID: {conversation.id}")
+                            logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                            logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+                            
+                            # ✅ OTIMIZAÇÃO: fetch_profile_pic já busca nome E foto juntos (mais rápido que duas tasks separadas)
+                            # Similar ao comportamento de grupos que usa uma única task
+                            from apps.chat.tasks import fetch_profile_pic
+                            
+                            fetch_profile_pic.delay(
+                                conversation_id=str(conversation.id),
+                                phone=clean_phone
+                            )
+                            logger.critical(f"✅ [INDIVIDUAL] Task de foto+nome enfileirada - informações serão buscadas em background")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:

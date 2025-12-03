@@ -1850,9 +1850,9 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     from asgiref.sync import sync_to_async
     import httpx
     
-    logger.info(f"📸 [PROFILE PIC] Buscando foto de perfil...")
-    logger.info(f"   Conversation ID: {conversation_id}")
-    logger.info(f"   Phone: {phone}")
+    logger.critical(f"📸 [PROFILE PIC] Buscando foto de perfil...")
+    logger.critical(f"   Conversation ID: {conversation_id}")
+    logger.critical(f"   Phone recebido: {phone}")
     
     try:
         # ✅ CORREÇÃO: Tratar caso de conversa não existir (pode ter sido deletada)
@@ -1861,14 +1861,38 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                 Conversation.objects.select_related('tenant').get
             )(id=conversation_id)
         except Conversation.DoesNotExist:
-            logger.warning(f"⚠️ [PROFILE PIC] Conversa não encontrada (pode ter sido deletada): {conversation_id}")
-            logger.warning(f"   Phone: {phone}")
+            logger.critical(f"⚠️ [PROFILE PIC] Conversa não encontrada (pode ter sido deletada): {conversation_id}")
+            logger.critical(f"   Phone: {phone}")
             return  # ✅ Retornar silenciosamente - conversa não existe mais
+        
+        # ✅ VALIDAÇÃO CRÍTICA: Verificar conversation_type ANTES de processar
+        logger.critical(f"🔍 [PROFILE PIC] Validação crítica da conversa:")
+        logger.critical(f"   Conversation ID: {conversation.id}")
+        logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+        logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+        logger.critical(f"   Contact Name: {conversation.contact_name}")
+        logger.critical(f"   Phone recebido: {phone}")
         
         # ✅ GARANTIA: Apenas processar contatos individuais (não grupos)
         if conversation.conversation_type == 'group':
-            logger.info(f"⏭️ [PROFILE PIC] Pulando grupo (não processa grupos): {conversation_id}")
+            logger.critical(f"❌ [PROFILE PIC] ERRO CRÍTICO: Tentativa de buscar foto de grupo como individual!")
+            logger.critical(f"   Conversation ID: {conversation_id}")
+            logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+            logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+            logger.critical(f"   Phone recebido: {phone}")
+            logger.critical(f"   ⚠️ ISSO PODE CAUSAR CONFUSÃO ENTRE CONTATO E GRUPO!")
             return
+        
+        # ✅ VALIDAÇÃO ADICIONAL: Verificar se contact_phone corresponde ao phone recebido
+        # Se não corresponder, pode ser que a conversa foi atualizada incorretamente
+        contact_phone_clean = conversation.contact_phone.replace('+', '').replace('@s.whatsapp.net', '').replace('@g.us', '')
+        phone_clean = phone.replace('+', '').replace('@s.whatsapp.net', '').replace('@g.us', '')
+        
+        if contact_phone_clean != phone_clean:
+            logger.critical(f"⚠️ [PROFILE PIC] AVISO: Phone recebido não corresponde ao contact_phone da conversa!")
+            logger.critical(f"   Contact Phone (clean): {contact_phone_clean}")
+            logger.critical(f"   Phone recebido (clean): {phone_clean}")
+            logger.critical(f"   ⚠️ Continuando mesmo assim, mas pode haver confusão...")
         
         # Busca instância WhatsApp ativa
         from apps.notifications.models import WhatsAppInstance
