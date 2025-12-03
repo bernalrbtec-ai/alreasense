@@ -17,7 +17,7 @@ interface NewConversationModalProps {
 }
 
 export function NewConversationModal({ isOpen, onClose }: NewConversationModalProps) {
-  const { setActiveConversation, addConversation } = useChatStore();
+  const { setActiveConversation, addConversation, activeDepartment } = useChatStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -134,13 +134,20 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       // Se não encontrou, criar nova conversa
       if (!conversation) {
         // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
+        // ✅ NOVO: Enviar departamento selecionado (se não for inbox)
+        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' 
+          ? activeDepartment.id 
+          : undefined;
+        
         console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/...', {
           contact_phone: normalizedPhone,
-          contact_name: contact.name
+          contact_name: contact.name,
+          department: departmentId || 'Nenhum (Inbox)'
         });
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
-          contact_name: contact.name
+          contact_name: contact.name,
+          ...(departmentId && { department: departmentId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
         console.log('✅ [NEW CONVERSATION] Conversa criada:', {
@@ -194,12 +201,19 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       // Se não encontrou, criar nova conversa
       if (!conversation) {
         // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
+        // ✅ NOVO: Enviar departamento selecionado (se não for inbox)
+        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' 
+          ? activeDepartment.id 
+          : undefined;
+        
         console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/ (telefone direto)...', {
-          contact_phone: normalizedPhone
+          contact_phone: normalizedPhone,
+          department: departmentId || 'Nenhum (Inbox)'
         });
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
-          contact_name: normalizedPhone // Usar telefone como nome se não tiver contato
+          contact_name: normalizedPhone, // Usar telefone como nome se não tiver contato
+          ...(departmentId && { department: departmentId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
         console.log('✅ [NEW CONVERSATION] Conversa criada:', {
