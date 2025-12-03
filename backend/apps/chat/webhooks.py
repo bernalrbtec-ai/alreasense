@@ -1836,7 +1836,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         api_key=api_key,
                         base_url=base_url
                     )
-                        logger.critical("✅ [GRUPO EXISTENTE] Task enfileirada - informações serão buscadas em background")
+                    logger.critical("✅ [GRUPO EXISTENTE] Task enfileirada - informações serão buscadas em background")
                 else:
                     logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
             except Exception as e:
