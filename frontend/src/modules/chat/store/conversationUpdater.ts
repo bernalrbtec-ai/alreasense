@@ -74,7 +74,18 @@ function mergeConversations(
     department_name: incoming.department_name !== undefined ? incoming.department_name : existing.department_name,
     
     // ✅ GARANTIR campos obrigatórios:
-    status: incoming.status || existing.status || 'pending',
+    // ✅ CORREÇÃO CRÍTICA: Se incoming tem status, usar (mesmo que seja diferente de existing)
+    // Mas se incoming.status é undefined, preservar existing.status
+    // Se incoming.status é null, usar 'pending' como fallback
+    status: incoming.status !== undefined ? (incoming.status || 'pending') : existing.status || 'pending',
+    
+    // ✅ VALIDAÇÃO CRÍTICA: Se conversa tem last_message_at recente, não deve estar fechada
+    // Se incoming tem last_message_at mas status é closed, pode ser um erro
+    // Logar warning para identificar problemas
+    ...(incoming.last_message_at && incoming.status === 'closed' && {
+      // Logar warning mas não corrigir automaticamente (pode ser intencional)
+      _warning: 'Conversa com last_message_at recente mas status=closed'
+    }),
   };
 }
 
