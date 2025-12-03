@@ -422,42 +422,87 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             
             # 👥 GRUPOS: Endpoint /group/findGroupInfos
             if conversation.conversation_type == 'group':
-                # Montar group_jid corretamente
+                # ✅ CORREÇÃO CRÍTICA: Buscar JID correto usando fetchAllGroups
+                # O contact_phone pode estar incorreto (ex: 55120363404279692186@g.us)
+                # Mas o JID real é diferente (ex: 120363404279692186@g.us)
                 raw_phone = conversation.contact_phone
+                group_jid = None
                 
-                # ✅ VALIDAÇÃO CRÍTICA: Verificar se contact_phone termina com @lid (grupo usa LID)
-                # ✅ CORREÇÃO: @g.us = grupo válido, não é LID. Apenas @lid é LID.
-                if raw_phone.endswith('@lid'):
-                    logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone é LID: {raw_phone}, tentando buscar JID real de mensagens recentes...")
+                # ✅ NOVO: Tentar buscar JID correto usando fetchAllGroups
+                try:
+                    fetch_all_endpoint = f"{base_url}/group/fetchAllGroups/{instance_name}"
+                    logger.info(f"🔍 [REFRESH GRUPO] Buscando JID correto via fetchAllGroups...")
                     
-                    # ✅ MELHORIA: Tentar buscar JID real do grupo de mensagens recentes
-                    from apps.chat.models import Message
-                    recent_message = Message.objects.filter(
-                        conversation=conversation,
-                        direction='incoming'
-                    ).order_by('-created_at').first()
-                    
-                    if recent_message and recent_message.metadata:
-                        message_metadata = recent_message.metadata or {}
-                        remote_jid = message_metadata.get('remoteJid') or message_metadata.get('remote_jid')
-                        remote_jid_alt = message_metadata.get('remoteJidAlt') or message_metadata.get('remote_jid_alt')
+                    with httpx.Client(timeout=10.0) as client:
+                        fetch_response = client.get(
+                            fetch_all_endpoint,
+                            params={'getParticipants': 'false'},
+                            headers=headers
+                        )
                         
-                        # ✅ CORREÇÃO: Se grupo usa LID, remoteJid pode ser telefone individual
-                        # Tentar usar remoteJid convertido para @g.us
-                        if remote_jid and '@s.whatsapp.net' in remote_jid:
-                            # Converter telefone individual para @g.us
-                            phone_part = remote_jid.split('@')[0]
-                            group_jid = f"{phone_part}@g.us"
-                            logger.info(f"✅ [REFRESH GRUPO] group_jid construído a partir de remoteJid: {group_jid}")
-                            # Usar este group_jid ao invés do LID
-                            raw_phone = group_jid  # Atualizar para usar o JID real
-                        elif remote_jid and '@g.us' in remote_jid:
-                            group_jid = remote_jid
-                            logger.info(f"✅ [REFRESH GRUPO] group_jid encontrado em mensagem recente: {group_jid}")
-                            raw_phone = group_jid  # Atualizar para usar o JID real
+                        if fetch_response.status_code == 200:
+                            all_groups = fetch_response.json()
+                            if isinstance(all_groups, list):
+                                # Buscar grupo pelo nome (contact_name) ou tentar encontrar correspondente
+                                group_name = conversation.contact_name or ''
+                                for group in all_groups:
+                                    group_id_from_api = group.get('id', '')
+                                    group_subject = group.get('subject', '')
+                                    
+                                    # Se encontrou grupo com mesmo nome ou JID similar
+                                    if group_id_from_api.endswith('@g.us'):
+                                        # Se o nome corresponde ou se é o único grupo com tamanho similar
+                                        if group_subject == group_name or (not group_name and group.get('size', 0) == conversation.group_metadata.get('size', 0) if conversation.group_metadata else False):
+                                            group_jid = group_id_from_api
+                                            logger.info(f"✅ [REFRESH GRUPO] JID correto encontrado via fetchAllGroups: {group_jid}")
+                                            # Atualizar contact_phone com JID correto
+                                            conversation.contact_phone = group_jid
+                                            conversation.save(update_fields=['contact_phone'])
+                                            break
+                                
+                                # Se não encontrou por nome, tentar usar o primeiro grupo (fallback)
+                                if not group_jid and all_groups:
+                                    first_group = all_groups[0]
+                                    potential_jid = first_group.get('id', '')
+                                    if potential_jid.endswith('@g.us'):
+                                        logger.warning(f"⚠️ [REFRESH GRUPO] Usando primeiro grupo da lista como fallback: {potential_jid}")
+                                        group_jid = potential_jid
+                except Exception as e:
+                    logger.warning(f"⚠️ [REFRESH GRUPO] Erro ao buscar via fetchAllGroups: {e}")
+                
+                # Se não encontrou via fetchAllGroups, tentar usar contact_phone ou mensagens recentes
+                if not group_jid:
+                    # ✅ VALIDAÇÃO CRÍTICA: Verificar se contact_phone termina com @lid (grupo usa LID)
+                    if raw_phone.endswith('@lid'):
+                        logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone é LID: {raw_phone}, tentando buscar JID real de mensagens recentes...")
+                        
+                        # ✅ MELHORIA: Tentar buscar JID real do grupo de mensagens recentes
+                        from apps.chat.models import Message
+                        recent_message = Message.objects.filter(
+                            conversation=conversation,
+                            direction='incoming'
+                        ).order_by('-created_at').first()
+                        
+                        if recent_message and recent_message.metadata:
+                            message_metadata = recent_message.metadata or {}
+                            remote_jid = message_metadata.get('remoteJid') or message_metadata.get('remote_jid')
+                            
+                            if remote_jid and '@g.us' in remote_jid:
+                                group_jid = remote_jid
+                                logger.info(f"✅ [REFRESH GRUPO] group_jid encontrado em mensagem recente: {group_jid}")
+                            else:
+                                # Não encontrou JID real, retornar dados do cache
+                                logger.warning(f"⚠️ [REFRESH GRUPO] Não foi possível extrair JID real")
+                                group_metadata = conversation.group_metadata or {}
+                                return Response({
+                                    'message': 'Grupo usa LID - retornando dados do cache',
+                                    'conversation': ConversationSerializer(conversation).data,
+                                    'warning': 'group_uses_lid',
+                                    'from_cache': True
+                                })
                         else:
-                            # Não encontrou JID real, retornar dados do cache
-                            logger.warning(f"⚠️ [REFRESH GRUPO] Não foi possível extrair JID real de mensagens recentes")
+                            # Não encontrou mensagens recentes, retornar dados do cache
+                            logger.warning(f"⚠️ [REFRESH GRUPO] Não há mensagens recentes para extrair JID real")
                             group_metadata = conversation.group_metadata or {}
                             return Response({
                                 'message': 'Grupo usa LID - retornando dados do cache',
@@ -466,35 +511,19 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                 'from_cache': True
                             })
                     else:
-                        # Não encontrou mensagens recentes, retornar dados do cache
-                        logger.warning(f"⚠️ [REFRESH GRUPO] Não há mensagens recentes para extrair JID real")
-                        group_metadata = conversation.group_metadata or {}
-                        return Response({
-                            'message': 'Grupo usa LID - retornando dados do cache',
-                            'conversation': ConversationSerializer(conversation).data,
-                            'warning': 'group_uses_lid',
-                            'from_cache': True
-                        })
+                        # ✅ USAR JID COMPLETO - Evolution API aceita:
+                        # - Grupos: xxx@g.us
+                        if '@g.us' in raw_phone:
+                            group_jid = raw_phone
+                        elif '@s.whatsapp.net' in raw_phone:
+                            group_jid = raw_phone.replace('@s.whatsapp.net', '@g.us')
+                        else:
+                            clean_id = raw_phone.replace('+', '').strip()
+                            group_jid = f"{clean_id}@g.us"
                 
-                # ✅ USAR JID COMPLETO - Evolution API aceita:
-                # - Grupos: xxx@g.us
-                # ⚠️ IMPORTANTE: @lid é formato de participante, NÃO de grupo!
-                if '@g.us' in raw_phone:
-                    # Já tem @g.us, usar como está
-                    group_jid = raw_phone
-                elif '@s.whatsapp.net' in raw_phone:
-                    # Formato errado (individual), corrigir para grupo
-                    group_jid = raw_phone.replace('@s.whatsapp.net', '@g.us')
-                else:
-                    # Adicionar @g.us se não tiver (padrão para grupos)
-                    clean_id = raw_phone.replace('+', '').strip()
-                    group_jid = f"{clean_id}@g.us"
-                
-                # ✅ VALIDAÇÃO FINAL: Verificar se group_jid final parece ser LID
-                group_jid_without_suffix = group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
-                if is_lid_number(group_jid_without_suffix):
-                    logger.warning(f"⚠️ [REFRESH GRUPO] group_jid final parece ser LID: {group_jid}, não é possível buscar via API")
-                    # Retornar dados do metadata se disponíveis
+                # ✅ VALIDAÇÃO FINAL: Verificar se group_jid termina com @lid (não é válido para API)
+                if group_jid and group_jid.endswith('@lid'):
+                    logger.warning(f"⚠️ [REFRESH GRUPO] group_jid é LID: {group_jid}, retornando dados do cache")
                     group_metadata = conversation.group_metadata or {}
                     return Response({
                         'message': 'Grupo usa LID - retornando dados do cache',
@@ -1415,11 +1444,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid retornou {find_group_response.status_code}, tentando find-participants...")
                     raw_participants = None
                 
-                # ✅ FALLBACK: Se find-group-by-jid não funcionou, tentar find-participants
-                # Referência: https://www.postman.com/agenciadgcode/evolution-api/request/iemz2nm/find-participants
+                # ✅ FALLBACK: Se find-group-by-jid não funcionou, tentar /group/participants
+                # Referência: https://evo.rbtec.com.br/group/participants/{instance}?groupJid={groupJid}
+                # Retorna: {"participants": [{"id": "@lid", "phoneNumber": "@s.whatsapp.net", "admin": "...", "name": "", "imgUrl": "..."}]}
                 if not raw_participants:
-                    participants_endpoint = f"{base_url}/group/getParticipants/{instance_name}"
-                    logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint find-participants: {participants_endpoint}")
+                    participants_endpoint = f"{base_url}/group/participants/{instance_name}"
+                    logger.info(f"🔄 [PARTICIPANTS] Tentando endpoint /group/participants: {participants_endpoint}")
                     logger.info(f"   Params: groupJid={group_jid}")
                     
                     participants_response = client.get(
@@ -1434,13 +1464,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         participants_data = participants_response.json()
                         logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {type(participants_data)}")
                         
-                        # ✅ CORREÇÃO: A resposta pode ser array direto ou objeto com participants
-                        if isinstance(participants_data, list):
+                        # ✅ CORREÇÃO: A resposta é objeto com "participants" array
+                        # Cada participante tem: id (@lid), phoneNumber (@s.whatsapp.net), admin, name, imgUrl
+                        if isinstance(participants_data, dict):
+                            raw_participants = participants_data.get('participants', [])
+                        elif isinstance(participants_data, list):
                             raw_participants = participants_data
                         else:
-                            raw_participants = participants_data.get('participants', [])
+                            raw_participants = []
                     else:
-                        logger.error(f"❌ [PARTICIPANTS] find-participants retornou {participants_response.status_code}")
+                        logger.error(f"❌ [PARTICIPANTS] /group/participants retornou {participants_response.status_code}")
                         raw_participants = []
                 
                 if raw_participants:
@@ -1451,56 +1484,68 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     from apps.contacts.signals import normalize_phone_for_search
                     
                     for participant in raw_participants:
+                        # ✅ CORREÇÃO CRÍTICA: Usar phoneNumber ao invés de id
+                        # id = LID (@lid), phoneNumber = JID real (@s.whatsapp.net)
+                        participant_phone = participant.get('phoneNumber') or participant.get('phone_number') or ''
                         participant_id = participant.get('id') or participant.get('jid') or ''
-                        if participant_id:
+                        
+                        # ✅ PRIORIDADE: Usar phoneNumber (JID real) se disponível
+                        if participant_phone:
                             # Extrair telefone do JID (formato: 5511999999999@s.whatsapp.net)
+                            phone_raw = participant_phone.split('@')[0]
+                        elif participant_id and not participant_id.endswith('@lid'):
+                            # Se id não é LID, usar ele
                             phone_raw = participant_id.split('@')[0]
-                            
-                            # ✅ CORREÇÃO: Normalizar telefone para E.164 (+5511999999999)
-                            from apps.notifications.services import normalize_phone
-                            normalized_phone = normalize_phone(phone_raw)
-                            if not normalized_phone:
-                                normalized_phone = phone_raw  # Fallback se normalização falhar
-                            
-                            # Buscar contato na base de dados
-                            normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
-                            contact = Contact.objects.filter(
-                                tenant=conversation.tenant,
-                                phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
-                            ).first()
-                            
-                            # ✅ CORREÇÃO: Extrair pushname da resposta da API
-                            # A API pode retornar: name, pushName, notify, ou não ter nada
-                            # Log para debug
-                            logger.info(f"🔍 [PARTICIPANTS] Processando participante: {participant}")
-                            pushname = (
-                                participant.get('pushName') or 
-                                participant.get('name') or 
-                                participant.get('notify') or 
-                                ''
-                            )
-                            logger.info(f"   Pushname extraído: {pushname}")
-                            
-                            # ✅ CORREÇÃO: Prioridade: pushname > nome do contato
-                            # NÃO usar telefone como name - deixar vazio para frontend mostrar apenas telefone formatado
-                            display_name = pushname
-                            if not display_name and contact:
-                                display_name = contact.name
-                                logger.info(f"   Usando nome do contato: {display_name}")
-                            # ✅ CORREÇÃO: Se não tem pushname nem contato, deixar name vazio
-                            # O frontend vai mostrar apenas o telefone formatado na linha de baixo
-                            if not display_name:
-                                display_name = ''  # Vazio - frontend mostrará apenas telefone formatado
-                                logger.info(f"   Sem pushname nem contato - name vazio (telefone será mostrado separadamente)")
-                            
-                            participant_info = {
-                                'phone': normalized_phone,  # Telefone normalizado E.164
-                                'name': display_name,  # Nome para exibição (pushname > contato > telefone)
-                                'pushname': pushname,  # Pushname original da API
-                                'jid': participant_id
-                            }
-                            logger.info(f"   ✅ Participante processado: {participant_info}")
-                            participants_list.append(participant_info)
+                        else:
+                            # Se só tem LID, não usar como telefone
+                            logger.warning(f"⚠️ [PARTICIPANTS] Participante sem phoneNumber válido: {participant_id}")
+                            continue
+                        
+                        # ✅ CORREÇÃO: Normalizar telefone para E.164 (+5511999999999)
+                        from apps.notifications.services import normalize_phone
+                        normalized_phone = normalize_phone(phone_raw)
+                        if not normalized_phone:
+                            normalized_phone = phone_raw  # Fallback se normalização falhar
+                        
+                        # Buscar contato na base de dados
+                        normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
+                        contact = Contact.objects.filter(
+                            tenant=conversation.tenant,
+                            phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
+                        ).first()
+                        
+                        # ✅ CORREÇÃO: Extrair pushname da resposta da API
+                        # A API pode retornar: name, pushName, notify, ou não ter nada
+                        logger.info(f"🔍 [PARTICIPANTS] Processando participante: id={participant_id}, phoneNumber={participant_phone}")
+                        pushname = (
+                            participant.get('pushName') or 
+                            participant.get('name') or 
+                            participant.get('notify') or 
+                            ''
+                        )
+                        logger.info(f"   Pushname extraído: {pushname}")
+                        
+                        # ✅ CORREÇÃO: Prioridade: pushname > nome do contato
+                        # NÃO usar telefone como name - deixar vazio para frontend mostrar apenas telefone formatado
+                        display_name = pushname
+                        if not display_name and contact:
+                            display_name = contact.name
+                            logger.info(f"   Usando nome do contato: {display_name}")
+                        # ✅ CORREÇÃO: Se não tem pushname nem contato, deixar name vazio
+                        # O frontend vai mostrar apenas o telefone formatado na linha de baixo
+                        if not display_name:
+                            display_name = ''  # Vazio - frontend mostrará apenas telefone formatado
+                            logger.info(f"   Sem pushname nem contato - name vazio (telefone será mostrado separadamente)")
+                        
+                        participant_info = {
+                            'phone': normalized_phone,  # Telefone normalizado E.164
+                            'name': display_name,  # Nome para exibição (pushname > contato > telefone)
+                            'pushname': pushname,  # Pushname original da API
+                            'jid': participant_id,  # LID ou JID original
+                            'phoneNumber': participant_phone  # JID real do telefone
+                        }
+                        logger.info(f"   ✅ Participante processado: {participant_info}")
+                        participants_list.append(participant_info)
                     
                     logger.info(f"✅ [PARTICIPANTS] {len(participants_list)} participantes processados")
                     
