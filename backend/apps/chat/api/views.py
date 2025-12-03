@@ -3035,22 +3035,48 @@ class MessageReactionViewSet(viewsets.ViewSet):
         import asyncio
         from apps.chat.tasks import send_reaction_to_evolution
         
-        # Executar envio em background (não bloquear resposta HTTP)
+        # ✅ CORREÇÃO: Executar envio de reação em thread separada com melhor tratamento de erros
+        # Usar threading com tratamento robusto de erros e logs detalhados
+        import threading
+        
         def send_reaction_async():
+            """Executa envio de reação de forma assíncrona em thread separada."""
             try:
+                logger.info(f"🔄 [REACTION THREAD] Iniciando envio de reação: {emoji} em {message.id}")
+                
+                # Criar novo event loop para esta thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                loop.run_until_complete(send_reaction_to_evolution(message, emoji))
-                loop.close()
-                logger.info(f"✅ [REACTION] Reação enviada para Evolution API: {request.user.email} {emoji} em {message.id}")
+                
+                try:
+                    # Executar função assíncrona
+                    result = loop.run_until_complete(send_reaction_to_evolution(message, emoji))
+                    
+                    if result:
+                        logger.info(f"✅ [REACTION THREAD] Reação enviada com SUCESSO para Evolution API: {request.user.email} {emoji} em {message.id}")
+                    else:
+                        logger.warning(f"⚠️ [REACTION THREAD] Reação NÃO foi enviada (retornou False): {emoji} em {message.id}")
+                finally:
+                    # Sempre fechar o loop
+                    loop.close()
+                    logger.debug(f"🔌 [REACTION THREAD] Event loop fechado")
+                    
+            except httpx.TimeoutException as e:
+                logger.error(f"❌ [REACTION THREAD] Timeout ao enviar reação: {e}")
+                logger.error(f"   Message ID: {message.id}, Emoji: {emoji}")
+            except httpx.ReadTimeout as e:
+                logger.error(f"❌ [REACTION THREAD] ReadTimeout ao enviar reação: {e}")
+                logger.error(f"   Message ID: {message.id}, Emoji: {emoji}")
             except Exception as e:
-                # Não bloquear se falhar envio (reação já foi salva no banco)
-                logger.error(f"⚠️ [REACTION] Erro ao enviar reação para Evolution API (reação salva no banco): {e}", exc_info=True)
+                # Logar TODOS os erros com traceback completo para debug
+                logger.error(f"❌ [REACTION THREAD] Erro inesperado ao enviar reação para Evolution API: {e}", exc_info=True)
+                logger.error(f"   Message ID: {message.id}, Emoji: {emoji}")
+                logger.error(f"   Tipo de erro: {type(e).__name__}")
         
         # Executar em thread separada para não bloquear resposta HTTP
-        import threading
-        thread = threading.Thread(target=send_reaction_async, daemon=True)
+        thread = threading.Thread(target=send_reaction_async, daemon=True, name=f"ReactionSender-{message.id}")
         thread.start()
+        logger.info(f"🚀 [REACTION] Thread iniciada para envio de reação: {emoji} em {message.id}")
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)
         # Usar função helper que faz broadcast para tenant inteiro
