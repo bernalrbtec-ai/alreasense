@@ -440,6 +440,13 @@ class ChatWebSocketManager {
   public getCurrentConversationId(): string | null {
     return this.currentConversationId;
   }
+  
+  /**
+   * ✅ NOVO: Verifica se deve usar fallback de polling
+   */
+  public shouldUsePollingFallback(): boolean {
+    return this.reconnectAttempts >= this.maxReconnectAttempts && !this.isConnected;
+  }
 }
 
 // Export singleton instance
