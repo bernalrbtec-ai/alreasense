@@ -253,13 +253,50 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           ...(departmentId && { department: departmentId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
+        
+        // ✅ DEBUG: Log detalhado da conversa criada
+        const convDepartmentId = typeof conversation.department === 'string' 
+          ? conversation.department 
+          : conversation.department?.id || null;
+        const convDepartmentName = conversation.department?.name || 'Nenhum (Inbox)';
+        
         console.log('✅ [NEW CONVERSATION] Conversa criada:', {
           id: conversation.id,
           name: conversation.contact_name,
           phone: conversation.contact_phone,
-          department: conversation.department?.name || 'Nenhum (Inbox)',
-          status: conversation.status
+          department: convDepartmentName,
+          departmentId: convDepartmentId,
+          status: conversation.status,
+          activeDepartmentId: activeDepartment?.id,
+          activeDepartmentName: activeDepartment?.name || 'Nenhum'
         });
+        
+        // ✅ CORREÇÃO CRÍTICA: Garantir que activeDepartment corresponda ao department da conversa
+        // Isso garante que a conversa apareça no filtro correto
+        const { setActiveDepartment } = useChatStore.getState();
+        if (convDepartmentId && activeDepartment?.id !== convDepartmentId) {
+          // Conversa foi criada com um departamento diferente do ativo
+          // Buscar o departamento correto e atualizar
+          console.log('🔄 [NEW CONVERSATION] Ajustando activeDepartment para corresponder à conversa criada');
+          console.log(`   Departamento da conversa: ${convDepartmentId} (${convDepartmentName})`);
+          console.log(`   Departamento ativo atual: ${activeDepartment?.id} (${activeDepartment?.name || 'Nenhum'})`);
+          
+          // Buscar departamento no store
+          const { departments } = useChatStore.getState();
+          const matchingDept = departments.find(d => d.id === convDepartmentId);
+          if (matchingDept) {
+            setActiveDepartment(matchingDept);
+            console.log(`✅ [NEW CONVERSATION] activeDepartment atualizado para: ${matchingDept.name}`);
+          } else {
+            console.warn(`⚠️ [NEW CONVERSATION] Departamento ${convDepartmentId} não encontrado no store`);
+          }
+        } else if (!convDepartmentId && activeDepartment?.id !== 'inbox') {
+          // Conversa foi criada sem departamento (Inbox), mas activeDepartment não é inbox
+          console.log('🔄 [NEW CONVERSATION] Conversa criada no Inbox, ajustando activeDepartment');
+          setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as any);
+          console.log('✅ [NEW CONVERSATION] activeDepartment atualizado para Inbox');
+        }
+        
         // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
         // NOTA: O broadcast conversation_updated também adicionará/atualizará via WebSocket
         addConversation(conversation);
