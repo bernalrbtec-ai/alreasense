@@ -170,13 +170,16 @@ export function ChatWindow() {
   }, [activeConversation?.id]);
 
   // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
-  // ✅ MELHORIA: Só chamar refresh-info se não tiver foto/nome (WebSocket já atualiza automaticamente)
+  // ✅ MELHORIA ULTRA-REFINADA: Verificação inteligente com debounce e fallback
   useEffect(() => {
     if (!activeConversation) return;
     
     // ✅ CORREÇÃO CRÍTICA: Cancelar refresh-info anterior quando muda de conversa
     let isCancelled = false;
     const currentConversationId = activeConversation.id;
+    
+    // ✅ NOVO: Debounce para evitar múltiplas chamadas simultâneas
+    const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     
     const refreshInfo = async () => {
       try {
@@ -194,16 +197,57 @@ export function ChatWindow() {
         
         const type = activeConversation.conversation_type === 'group' ? 'GRUPO' : 'CONTATO';
         
-        // ✅ OTIMIZAÇÃO: Se já tem foto e nome, não precisa chamar refresh-info
-        // O WebSocket já atualiza automaticamente quando mensagens chegam
-        const hasPhoto = activeConversation.profile_pic_url;
-        const hasName = activeConversation.contact_name && 
-                       activeConversation.contact_name !== 'Grupo WhatsApp' &&
-                       !activeConversation.contact_name.match(/^\d+$/); // Não é só número
-        
-        if (hasPhoto && hasName) {
-          console.log(`✅ [${type}] Informações já disponíveis (foto + nome), pulando refresh-info`);
-          return; // WebSocket já atualizou, não precisa chamar API
+        // ✅ VERIFICAÇÃO ULTRA-REFINADA: Para grupos, verificar qualidade dos participantes
+        if (activeConversation.conversation_type === 'group') {
+          const groupMetadata = activeConversation.group_metadata || {};
+          const participants = groupMetadata.participants || [];
+          const participantsCount = groupMetadata.participants_count || 0;
+          const participantsUpdatedAt = groupMetadata.participants_updated_at;
+          
+          // ✅ Verificação 1: Inconsistência
+          const hasInconsistency = participantsCount > 0 && participants.length === 0;
+          
+          // ✅ Verificação 2: Qualidade (pelo menos 50% válidos)
+          const hasPoorQuality = participants.length > 0 && 
+            participants.filter(p => p.phone && p.phone.length >= 10).length < participants.length * 0.5;
+          
+          // ✅ Verificação 3: Timestamp (se disponível, verificar se > 1 hora)
+          let isStale = false;
+          if (participantsUpdatedAt && participants.length === 0) {
+            const updatedTime = new Date(participantsUpdatedAt).getTime();
+            const now = Date.now();
+            const oneHourAgo = now - (60 * 60 * 1000);
+            isStale = updatedTime < oneHourAgo;
+          }
+          
+          const needsParticipants = hasInconsistency || hasPoorQuality || isStale;
+          
+          // ✅ Verificação padrão: foto e nome
+          const hasPhoto = activeConversation.profile_pic_url;
+          const hasName = activeConversation.contact_name && 
+                         activeConversation.contact_name !== 'Grupo WhatsApp' &&
+                         !activeConversation.contact_name.match(/^\d+$/);
+          
+          // ✅ Decisão: só pular se tem foto + nome + participantes OK
+          if (hasPhoto && hasName && !needsParticipants && participants.length > 0) {
+            console.log(`✅ [${type}] Informações completas (foto + nome + participantes), pulando refresh-info`);
+            return;
+          }
+          
+          if (needsParticipants) {
+            console.log(`🔄 [${type}] Forçando refresh-info para atualizar participantes`);
+          }
+        } else {
+          // ✅ Contatos individuais: verificação padrão (foto + nome)
+          const hasPhoto = activeConversation.profile_pic_url;
+          const hasName = activeConversation.contact_name && 
+                         activeConversation.contact_name !== 'Grupo WhatsApp' &&
+                         !activeConversation.contact_name.match(/^\d+$/);
+          
+          if (hasPhoto && hasName) {
+            console.log(`✅ [${type}] Informações já disponíveis, pulando refresh-info`);
+            return;
+          }
         }
         
         console.log(`🔄 [${type}] Atualizando informações...`);
@@ -220,6 +264,37 @@ export function ChatWindow() {
         if (currentAfterRequest?.id !== currentConversationId) {
           console.log(`⏸️ [REFRESH] Cancelado - conversa diferente após request`);
           return;
+        }
+        
+        // ✅ NOVO: Verificar se refresh-info trouxe participantes (para grupos)
+        if (response.data.conversation && activeConversation.conversation_type === 'group') {
+          const updatedConversation = response.data.conversation;
+          const updatedGroupMetadata = updatedConversation.group_metadata || {};
+          const updatedParticipants = updatedGroupMetadata.participants || [];
+          
+          // ✅ FALLBACK: Se refresh-info não trouxe participantes, tentar get_participants
+          if (updatedParticipants.length === 0) {
+            console.log(`🔄 [GRUPO] refresh-info não trouxe participantes, tentando get_participants...`);
+            try {
+              const participantsResponse = await api.get(
+                `/chat/conversations/${currentConversationId}/participants/`
+              );
+              if (participantsResponse.data.participants?.length > 0) {
+                console.log(`✅ [GRUPO] get_participants trouxe ${participantsResponse.data.participants.length} participantes`);
+                // Atualizar conversation com participantes do get_participants
+                const { updateConversation } = useChatStore.getState();
+                updateConversation({
+                  ...updatedConversation,
+                  group_metadata: {
+                    ...updatedGroupMetadata,
+                    participants: participantsResponse.data.participants
+                  }
+                });
+              }
+            } catch (error) {
+              console.warn('⚠️ Erro ao buscar participantes via get_participants:', error);
+            }
+          }
         }
         
         // ✅ CORREÇÃO CRÍTICA: Atualizar activeConversation diretamente se refresh-info trouxe dados novos
@@ -261,15 +336,24 @@ export function ChatWindow() {
       }
     };
     
-    // Executar imediatamente
-    refreshInfo();
+    // ✅ NOVO: Debounce - aguardar 300ms antes de executar (evita múltiplas chamadas)
+    if (refreshTimeoutRef.current) {
+      clearTimeout(refreshTimeoutRef.current);
+    }
+    
+    refreshTimeoutRef.current = setTimeout(() => {
+      refreshInfo();
+    }, 300);
     
     // ✅ Cleanup: cancelar se conversa mudar
     return () => {
       isCancelled = true;
+      if (refreshTimeoutRef.current) {
+        clearTimeout(refreshTimeoutRef.current);
+      }
       console.log(`🔌 [REFRESH] Cleanup - cancelando refresh-info para conversa ${currentConversationId}`);
     };
-  }, [activeConversation?.id]);
+  }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.group_metadata]);
 
   // Fechar menu ao clicar fora
   useEffect(() => {

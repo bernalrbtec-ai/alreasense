@@ -474,16 +474,68 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         'cooldown_seconds': max(0, remaining)
                     })
         
-        # Verificar cache (5min)
+        # ✅ NOVO: Verificação ultra-refinada para grupos (antes de verificar cache)
+        # Verifica se participantes precisam ser atualizados mesmo com cache válido
+        needs_participants_refresh = False
+        if conversation.conversation_type == 'group':
+            group_metadata = conversation.group_metadata or {}
+            participants = group_metadata.get('participants', [])
+            participants_count = group_metadata.get('participants_count', 0)
+            participants_updated_at = group_metadata.get('participants_updated_at')
+            
+            # ✅ Verificação 1: Timestamp de atualização (participantes > 1 hora = desatualizados)
+            participants_stale = False
+            if participants_updated_at:
+                try:
+                    from dateutil.parser import parse as parse_dt
+                    updated_dt = parse_dt(participants_updated_at)
+                    if timezone.is_naive(updated_dt):
+                        updated_dt = timezone.make_aware(updated_dt, timezone.utc)
+                    elapsed_hours = (timezone.now() - updated_dt).total_seconds() / 3600
+                    if elapsed_hours > 1.0:  # Mais de 1 hora = desatualizado
+                        participants_stale = True
+                        logger.info(f"🔄 [REFRESH] Participantes desatualizados ({elapsed_hours:.1f}h atrás)")
+                except Exception as e:
+                    logger.warning(f"⚠️ [REFRESH] Erro ao verificar timestamp: {e}")
+            
+            # ✅ Verificação 2: Inconsistência (participants_count > 0 mas participants vazio)
+            has_inconsistency = participants_count > 0 and len(participants) == 0
+            if has_inconsistency:
+                logger.info(f"🔄 [REFRESH] Inconsistência: participants_count={participants_count} mas participants vazio")
+            
+            # ✅ Verificação 3: Qualidade dos dados (menos de 50% válidos)
+            has_poor_quality = False
+            if len(participants) > 0:
+                valid_count = sum(1 for p in participants 
+                                 if p.get('phone') and not is_lid_number(p.get('phone', '')))
+                # Se menos de 50% são válidos, considerar qualidade ruim
+                if valid_count < len(participants) * 0.5:
+                    has_poor_quality = True
+                    logger.info(f"🔄 [REFRESH] Qualidade ruim: {valid_count}/{len(participants)} válidos")
+            
+            # ✅ Decisão: Ignorar cache apenas se realmente necessário
+            needs_participants_refresh = (
+                has_inconsistency or 
+                has_poor_quality or 
+                (participants_stale and len(participants) == 0)
+            )
+            
+            if needs_participants_refresh:
+                logger.info(f"🔄 [REFRESH] Ignorando cache Redis para atualizar participantes")
+            else:
+                logger.debug(f"✅ [REFRESH] Participantes OK, respeitando cache normalmente")
+        
+        # Verificar cache (5min) - mas ignorar se precisa atualizar participantes
         cache_key = f"conversation_info_{conversation.id}"
-        cached = cache.get(cache_key)
-        if cached:
-            logger.info(f"✅ [REFRESH] Cache hit para {conversation.id}")
-            return Response({
-                'message': 'Informações em cache (atualizadas recentemente)',
-                'conversation': ConversationSerializer(conversation).data,
-                'from_cache': True
-            })
+        if not needs_participants_refresh:
+            cached = cache.get(cache_key)
+            if cached:
+                logger.info(f"✅ [REFRESH] Cache hit para {conversation.id}")
+                return Response({
+                    'message': 'Informações em cache (atualizadas recentemente)',
+                    'conversation': ConversationSerializer(conversation).data,
+                    'from_cache': True
+                })
         
         # Buscar instância WhatsApp ativa (NÃO Evolution Connection)
         wa_instance = WhatsAppInstance.objects.filter(
@@ -781,6 +833,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             'description': group_desc,
                             'is_group': True,
                             'participants': cleaned_participants,  # ✅ NOVO: Lista de participantes limpa (sem LIDs)
+                            'participants_updated_at': timezone.now().isoformat(),  # ✅ NOVO: Timestamp de atualização
                         }
                         update_fields.append('group_metadata')
                     elif response.status_code == 404:
@@ -1510,6 +1563,32 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.refresh_from_db()  # ✅ IMPORTANTE: Recarregar do banco para ter dados atualizados
         group_metadata = conversation.group_metadata or {}
         participants_raw = group_metadata.get('participants', [])
+        participants_updated_at = group_metadata.get('participants_updated_at')
+        
+        # ✅ NOVO: Verificar timestamp antes de buscar da API
+        # Se participantes foram atualizados recentemente (< 5 min), usar do metadata e cachear
+        if participants_updated_at and participants_raw:
+            try:
+                from dateutil.parser import parse as parse_dt
+                updated_dt = parse_dt(participants_updated_at)
+                if timezone.is_naive(updated_dt):
+                    updated_dt = timezone.make_aware(updated_dt, timezone.utc)
+                elapsed_minutes = (timezone.now() - updated_dt).total_seconds() / 60
+                
+                if elapsed_minutes < 5:  # Atualizado há menos de 5 minutos
+                    logger.info(f"✅ [PARTICIPANTS] Usando participantes recentes ({elapsed_minutes:.1f}min atrás)")
+                    participants = clean_participants_for_metadata(participants_raw)
+                    # Salvar no cache
+                    cache.set(cache_key, participants, 300)  # 5 minutos
+                    return Response({
+                        'participants': participants,
+                        'count': len(participants),
+                        'group_name': group_metadata.get('group_name', conversation.contact_name),
+                        'cached': False,  # Não é cache Redis, mas é recente
+                        'from_metadata': True
+                    })
+            except Exception as e:
+                logger.warning(f"⚠️ [PARTICIPANTS] Erro ao verificar timestamp: {e}")
         
         logger.critical(f"📋 [PARTICIPANTS] Metadata: {len(participants_raw)} participantes encontrados")
         if participants_raw:
