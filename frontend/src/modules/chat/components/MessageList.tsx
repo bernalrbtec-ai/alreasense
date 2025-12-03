@@ -199,7 +199,22 @@ export function MessageList() {
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
 
   useEffect(() => {
-    if (!activeConversation?.id) return;
+    if (!activeConversation?.id) {
+      // ✅ CORREÇÃO: Limpar mensagens quando não há conversa ativa
+      setMessages([], '');
+      return;
+    }
+
+    // ✅ CORREÇÃO CRÍTICA: Verificar se já temos mensagens no store antes de fazer fetch
+    // Isso evita fetch desnecessário se mensagens já foram carregadas via WebSocket
+    const { getMessagesArray } = useChatStore.getState();
+    const existingMessages = getMessagesArray(activeConversation.id);
+    
+    // Se já temos mensagens no store, usar elas (mas ainda fazer fetch para garantir sincronização)
+    if (existingMessages.length > 0) {
+      console.log(`✅ [MessageList] Já temos ${existingMessages.length} mensagem(ns) no store, usando elas enquanto busca atualizações...`);
+      setMessages(existingMessages, activeConversation.id);
+    }
 
     const fetchMessages = async (retryCount = 0) => {
       try {

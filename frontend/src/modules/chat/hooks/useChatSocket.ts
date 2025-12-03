@@ -67,18 +67,24 @@ export function useChatSocket(conversationId?: string) {
   // Registrar listeners de eventos
   useEffect(() => {
     const handleMessageReceived = (data: WebSocketMessage) => {
+      // ✅ CORREÇÃO CRÍTICA: Usar activeConversation do store ao invés de conversationId do closure
+      // Isso garante que sempre temos o valor atualizado, mesmo se a conversa mudou rapidamente
+      const { activeConversation: currentActiveConversation } = useChatStore.getState();
+      const currentConversationId = currentActiveConversation?.id;
+      
       console.log('🔔 [HOOK] handleMessageReceived chamado!', {
         hasMessage: !!data.message,
         messageId: data.message?.id,
         messageConversationId: data.message?.conversation || data.message?.conversation_id,
-        activeConversationId: conversationId,
+        subscribedConversationId: conversationId,
+        activeConversationId: currentConversationId,
         fullData: data
       });
       
       if (data.message) {
         console.log('💬 [HOOK] Nova mensagem recebida via useChatSocket:', data.message);
         console.log('💬 [HOOK] Conversation ID:', data.message.conversation || data.message.conversation_id);
-        console.log('💬 [HOOK] Active conversation ID:', conversationId);
+        console.log('💬 [HOOK] Active conversation ID:', currentConversationId);
         
         // ✅ DEBUG: Verificar se mensagem tem reply_to
         if (data.message.metadata?.reply_to) {
@@ -89,22 +95,26 @@ export function useChatSocket(conversationId?: string) {
           console.log('💬 [HOOK] Metadata:', data.message.metadata);
         }
         
-        // ✅ CORREÇÃO: Verificar se mensagem pertence à conversa ativa (mesmo vindo do grupo específico)
-        // Isso garante que mensagens não sejam adicionadas se a conversa mudou rapidamente
-        const { activeConversation } = useChatStore.getState();
+        // ✅ CORREÇÃO CRÍTICA: Usar activeConversation do store ao invés de conversationId do closure
+        // Isso garante que sempre temos o valor atualizado, mesmo se a conversa mudou rapidamente
+        const { activeConversation: currentActiveConversation } = useChatStore.getState();
         const messageConversationId = data.message.conversation 
           ? String(data.message.conversation) 
           : (data.message.conversation_id ? String(data.message.conversation_id) : null);
-        const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
+        const activeConversationId = currentActiveConversation?.id ? String(currentActiveConversation.id) : null;
         const subscribedConversationId = conversationId ? String(conversationId) : null;
         
         // ✅ CORREÇÃO: Verificar se mensagem pertence à conversa subscrita OU à conversa ativa
         // Isso trata o caso onde a conversa mudou rapidamente mas a mensagem ainda chegou
+        // ✅ CORREÇÃO CRÍTICA: Se não há conversationId subscrito mas há conversa ativa, aceitar mensagem
+        // Isso resolve o problema onde mensagens chegam antes do subscribe ser processado
         const belongsToSubscribed = subscribedConversationId && messageConversationId && 
           messageConversationId === subscribedConversationId;
         const belongsToActive = activeConversationId && messageConversationId && 
           messageConversationId === activeConversationId;
         
+        // ✅ CORREÇÃO: Aceitar mensagem se pertence à conversa ativa OU se não há subscribe ainda mas há conversa ativa
+        // Isso garante que mensagens sejam adicionadas mesmo se o subscribe ainda não foi processado
         if (!belongsToSubscribed && !belongsToActive) {
           console.log('⚠️ [HOOK] Mensagem não pertence à conversa subscrita/ativa, ignorando:', {
             messageConversationId,
@@ -114,8 +124,15 @@ export function useChatSocket(conversationId?: string) {
           return; // Não adicionar mensagem se não pertence à conversa correta
         }
         
+        console.log('✅ [HOOK] Mensagem aceita para adicionar:', {
+          belongsToSubscribed,
+          belongsToActive,
+          messageConversationId
+        });
+        
         // ✅ Verificar se mensagem já existe e preservar attachments existentes
-        const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+        // ✅ CORREÇÃO: Usar currentActiveConversation já obtido acima (evita múltiplas chamadas)
+        const { getMessagesArray } = useChatStore.getState();
         const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
         const existingMessage = messages.find(m => m.id === data.message.id);
         if (existingMessage && existingMessage.attachments && existingMessage.attachments.length > 0) {
