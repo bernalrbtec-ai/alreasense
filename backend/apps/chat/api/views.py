@@ -4,6 +4,9 @@ Integra com permissões multi-tenant e departamentos.
 """
 import logging
 import os
+import asyncio
+import threading
+import httpx
 from datetime import datetime
 from rest_framework import viewsets, status, filters
 from rest_framework.decorators import action, api_view, permission_classes
@@ -3037,8 +3040,6 @@ class MessageReactionViewSet(viewsets.ViewSet):
         
         # ✅ CORREÇÃO: Executar envio de reação em thread separada com melhor tratamento de erros
         # Usar threading com tratamento robusto de erros e logs detalhados
-        import threading
-        
         def send_reaction_async():
             """Executa envio de reação de forma assíncrona em thread separada."""
             try:
