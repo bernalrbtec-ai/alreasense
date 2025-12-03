@@ -610,6 +610,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                     if participant_id:
                                         # Extrair número (remover @s.whatsapp.net)
                                         phone = participant_id.split('@')[0]
+                                        
+                                        # ✅ VALIDAÇÃO CRÍTICA: Pular se phone é LID
+                                        if is_lid_number(phone) or participant_id.endswith('@lid'):
+                                            logger.warning(f"   ⚠️ [REFRESH GRUPO] Pulando participante com LID: {participant_id}")
+                                            continue
+                                        
                                         # Tentar buscar nome do contato na base
                                         from apps.contacts.models import Contact
                                         from apps.contacts.signals import normalize_phone_for_search
@@ -626,8 +632,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                             raw_name = ''  # Não usar LID como nome
                                         
                                         participant_info = {
-                                            'phone': phone,
-                                            'name': contact.name if contact else raw_name,  # Não usar phone como fallback (pode ser LID)
+                                            'phone': phone,  # Já validado que não é LID acima
+                                            'name': contact.name if contact else raw_name,  # Não usar phone como fallback
                                             'jid': participant_id
                                         }
                                         participants_list.append(participant_info)
@@ -970,8 +976,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         
                         phone = participant_id.split('@')[0]
                         
-                        # ✅ VALIDAÇÃO: Pular se phone é LID
-                        if is_lid_number(phone):
+                        # ✅ VALIDAÇÃO CRÍTICA: Pular se phone é LID
+                        if is_lid_number(phone) or participant_id.endswith('@lid'):
                             logger.debug(f"   ⚠️ [GROUP INFO] Pulando participante com LID: {participant_id}")
                             continue
                         
