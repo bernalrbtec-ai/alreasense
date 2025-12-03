@@ -1611,12 +1611,30 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated para aparecer na lista de conversas
             # Isso garante que conversas criadas via WhatsApp apareçam imediatamente na lista
+            # IMPORTANTE: Usar transaction.on_commit() para garantir que broadcast acontece APÓS commit
+            # Isso garante que a conversa esteja visível no banco quando o broadcast ler
             try:
                 from apps.chat.utils.websocket import broadcast_conversation_updated
-                broadcast_conversation_updated(conversation)
-                logger.info(f"📡 [WEBHOOK] conversation_updated enviado para nova conversa aparecer na lista")
+                from django.db import transaction
+                
+                def do_broadcast():
+                    try:
+                        # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+                        broadcast_conversation_updated(conversation)
+                        logger.info(f"📡 [WEBHOOK] conversation_updated enviado para nova conversa aparecer na lista")
+                    except Exception as e:
+                        logger.error(f"❌ [WEBHOOK] Erro no broadcast após commit: {e}", exc_info=True)
+                
+                # ✅ CORREÇÃO CRÍTICA: Executar broadcast após commit da transação
+                # handle_message_upsert está decorado com @transaction.atomic, então precisamos esperar commit
+                # Isso garante que a conversa esteja disponível no banco quando buscamos
+                if transaction.get_connection().in_atomic_block:
+                    transaction.on_commit(do_broadcast)
+                else:
+                    # Não estamos em transação, executar imediatamente
+                    do_broadcast()
             except Exception as e:
-                logger.error(f"❌ [WEBHOOK] Erro ao broadcast conversation_updated para nova conversa: {e}", exc_info=True)
+                logger.error(f"❌ [WEBHOOK] Erro ao configurar broadcast conversation_updated para nova conversa: {e}", exc_info=True)
             
             # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
             logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")

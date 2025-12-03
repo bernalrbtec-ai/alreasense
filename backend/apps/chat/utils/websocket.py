@@ -66,13 +66,10 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
     from apps.chat.api.serializers import ConversationSerializer
     from django.db.models import Count, Q
     from apps.chat.models import Message
-    from django.db import transaction
     
-    # ✅ CORREÇÃO CRÍTICA: Garantir que estamos dentro de uma transação commitada
-    # Se message_id foi fornecido, garantir que a mensagem está commitada antes de buscar
-    if message_id:
-        # Forçar commit da transação atual se houver
-        transaction.on_commit(lambda: None)
+    # ✅ NOTA: Esta função assume que já está sendo chamada APÓS commit da transação
+    # (via transaction.on_commit() nos chamadores). Não tenta gerenciar transações aqui.
+    # Se message_id foi fornecido, a mensagem já deve estar commitada quando esta função é chamada.
     
     # ✅ FIX CRÍTICO: SEMPRE recalcular unread_count para garantir que está atualizado
     # Isso garante que o unread_count sempre esteja correto mesmo quando a conversa vem direto do modelo
