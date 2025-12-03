@@ -106,30 +106,24 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     def is_lid_number(phone: str) -> bool:
         """
         Detecta se um número é LID (Local ID do WhatsApp) ao invés de telefone real.
-        LIDs geralmente são números muito longos (>15 dígitos) ou não seguem formato E.164.
+        LIDs sempre terminam com @lid. Números com @g.us são grupos válidos, não LIDs.
         """
         if not phone:
             return False
         
-        # Remover caracteres não numéricos
-        clean = phone.replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '').strip()
-        
-        # Se tem mais de 15 dígitos, provavelmente é LID
-        if len(clean) > 15:
+        # ✅ CORREÇÃO CRÍTICA: Verificar sufixo primeiro
+        # @g.us = grupo válido (NÃO é LID)
+        # @lid = LID de usuário (É LID)
+        # @s.whatsapp.net = JID de usuário (NÃO é LID)
+        if phone.endswith('@lid'):
             return True
-        
-        # Se começa com 55 mas tem mais de 13 dígitos após o 55, provavelmente é LID
-        if clean.startswith('55') and len(clean) > 13:
-            return True
-        
-        # Se não passa na validação de telefone E.164 básico, pode ser LID
-        # Telefones válidos geralmente têm entre 10 e 15 dígitos
-        if len(clean) < 10:
+        if phone.endswith('@g.us') or phone.endswith('@s.whatsapp.net'):
             return False
         
-        # Telefones brasileiros válidos: 10 ou 11 dígitos (com DDD) ou 12-13 com código do país
-        # Se tem exatamente 15 dígitos e começa com 55, pode ser válido (55 + 11 dígitos)
-        # Mas se tem 16+ dígitos, definitivamente é LID
+        # Se não tem sufixo, verificar se número é muito longo (provavelmente LID)
+        clean = phone.replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '').strip()
+        
+        # Se tem 16+ dígitos sem sufixo, provavelmente é LID
         if len(clean) >= 16:
             return True
         
@@ -699,28 +693,43 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone/ID de forma consistente
         # Isso previne criação de conversas duplicadas para o mesmo contato
-        def normalize_contact_phone(remote_jid: str, is_group: bool) -> str:
+        def normalize_contact_phone(remote_jid: str, is_group: bool, remote_jid_alt: str = None) -> str:
             """
             Normaliza contact_phone para formato consistente usado no banco.
             
-            Para grupos: mantém formato completo com @g.us
+            Para grupos: mantém formato completo com @g.us (ou usa remoteJidAlt se for LID)
             Para individuais: remove @s.whatsapp.net e adiciona + se necessário
+            
+            Args:
+                remote_jid: JID principal (pode ser telefone individual se grupo usa LID)
+                is_group: Se é grupo
+                remote_jid_alt: JID alternativo (pode conter LID do grupo)
             
             Returns:
                 Telefone normalizado no formato usado no banco de dados
             """
             if is_group:
                 # 👥 GRUPOS: Usar ID completo com @g.us
-                # Evolution API retorna: 5517991106338-1396034900@g.us ou 120363295648424210@g.us
-                # Precisamos manter o formato completo (@g.us) para usar na API depois
-                if not remote_jid.endswith('@g.us'):
-                    if remote_jid.endswith('@s.whatsapp.net'):
-                        # Converter individual para grupo (caso raro)
-                        remote_jid = remote_jid.replace('@s.whatsapp.net', '@g.us')
-                    else:
-                        # Adicionar @g.us se não tiver sufixo
-                        remote_jid = f"{remote_jid}@g.us"
-                return remote_jid
+                # ✅ CORREÇÃO: Se remoteJidAlt existe e termina com @lid, grupo usa LID
+                # Nesse caso, remoteJid pode ser telefone individual e remoteJidAlt é o LID do grupo
+                if remote_jid_alt and remote_jid_alt.endswith('@lid'):
+                    # Grupo usa LID: tentar usar remoteJid convertido para @g.us
+                    # Se remoteJid já tem @g.us, usar ele
+                    if remote_jid.endswith('@g.us'):
+                        return remote_jid
+                    # Se remoteJid é telefone individual, converter para @g.us
+                    phone_part = remote_jid.split('@')[0]
+                    return f"{phone_part}@g.us"
+                
+                # Grupo normal: usar remoteJid com @g.us
+                if remote_jid.endswith('@g.us'):
+                    return remote_jid
+                elif remote_jid.endswith('@s.whatsapp.net'):
+                    # Converter individual para grupo (caso raro)
+                    return remote_jid.replace('@s.whatsapp.net', '@g.us')
+                else:
+                    # Adicionar @g.us se não tiver sufixo
+                    return f"{remote_jid}@g.us"
             else:
                 # 👤 INDIVIDUAIS: Remover @s.whatsapp.net e normalizar com +
                 phone = remote_jid.split('@')[0]  # Remove @s.whatsapp.net ou @g.us
@@ -731,7 +740,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     phone = '+' + phone.lstrip('+')
                 return phone
         
-        phone = normalize_contact_phone(remote_jid, is_group)
+        phone = normalize_contact_phone(remote_jid, is_group, remote_jid_alt)
         
         # Para grupos, extrair quem enviou
         sender_phone = ''
@@ -832,7 +841,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         # Buscar conversa primeiro
                         conversation = Conversation.objects.filter(
                             tenant=tenant,
-                            contact_phone=normalize_contact_phone(remote_jid, is_group)
+                            contact_phone=normalize_contact_phone(remote_jid, is_group, remote_jid_alt)
                         ).first()
                         
                         if conversation:

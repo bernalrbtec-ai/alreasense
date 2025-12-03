@@ -45,23 +45,24 @@ logger = logging.getLogger(__name__)
 def is_lid_number(phone: str) -> bool:
     """
     Detecta se um número é LID (Local ID do WhatsApp) ao invés de telefone real.
-    LIDs geralmente são números muito longos (>15 dígitos) ou não seguem formato E.164.
+    LIDs sempre terminam com @lid. Números com @g.us são grupos válidos, não LIDs.
     """
     if not phone:
         return False
     
-    # Remover caracteres não numéricos
+    # ✅ CORREÇÃO CRÍTICA: Verificar sufixo primeiro
+    # @g.us = grupo válido (NÃO é LID)
+    # @lid = LID de usuário (É LID)
+    # @s.whatsapp.net = JID de usuário (NÃO é LID)
+    if phone.endswith('@lid'):
+        return True
+    if phone.endswith('@g.us') or phone.endswith('@s.whatsapp.net'):
+        return False
+    
+    # Se não tem sufixo, verificar se número é muito longo (provavelmente LID)
     clean = phone.replace('+', '').replace(' ', '').replace('-', '').replace('(', '').replace(')', '').strip()
     
-    # Se tem mais de 15 dígitos, provavelmente é LID
-    if len(clean) > 15:
-        return True
-    
-    # Se começa com 55 mas tem mais de 13 dígitos após o 55, provavelmente é LID
-    if clean.startswith('55') and len(clean) > 13:
-        return True
-    
-    # Se tem 16+ dígitos, definitivamente é LID
+    # Se tem 16+ dígitos sem sufixo, provavelmente é LID
     if len(clean) >= 16:
         return True
     
@@ -424,10 +425,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 # Montar group_jid corretamente
                 raw_phone = conversation.contact_phone
                 
-                # ✅ VALIDAÇÃO CRÍTICA: Verificar se contact_phone parece ser LID
-                phone_without_suffix = raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
-                if is_lid_number(phone_without_suffix):
-                    logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone parece ser LID: {raw_phone}, tentando buscar JID real de mensagens recentes...")
+                # ✅ VALIDAÇÃO CRÍTICA: Verificar se contact_phone termina com @lid (grupo usa LID)
+                # ✅ CORREÇÃO: @g.us = grupo válido, não é LID. Apenas @lid é LID.
+                if raw_phone.endswith('@lid'):
+                    logger.warning(f"⚠️ [REFRESH GRUPO] contact_phone é LID: {raw_phone}, tentando buscar JID real de mensagens recentes...")
                     
                     # ✅ MELHORIA: Tentar buscar JID real do grupo de mensagens recentes
                     from apps.chat.models import Message
@@ -820,10 +821,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             clean_id = raw_phone.replace('+', '').strip()
             group_jid = f"{clean_id}@g.us"
         
-        # ✅ VALIDAÇÃO: Se group_jid parece ser LID, não tentar buscar
-        group_jid_without_suffix = group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
-        if is_lid_number(group_jid_without_suffix):
-            logger.warning(f"⚠️ [GROUP INFO] group_jid parece ser LID: {group_jid}, retornando dados do metadata")
+        # ✅ VALIDAÇÃO: Se group_jid termina com @lid, não tentar buscar (grupo usa LID)
+        # ✅ CORREÇÃO: @g.us = grupo válido, não é LID. Apenas @lid é LID.
+        if group_jid.endswith('@lid'):
+            logger.warning(f"⚠️ [GROUP INFO] group_jid é LID: {group_jid}, retornando dados do metadata")
             # Retornar dados do metadata se disponíveis
             group_metadata = conversation.group_metadata or {}
             participants_from_metadata = group_metadata.get('participants', [])
@@ -1322,10 +1323,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     logger.warning(f"⚠️ [PARTICIPANTS] Não foi possível determinar group_jid (contact_phone vazio)")
                     return []
                 
-                # ✅ VALIDAÇÃO CRÍTICA: Se contact_phone parece ser LID, não usar
-                phone_without_suffix = raw_phone.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
-                if is_lid_number(phone_without_suffix):
-                    logger.error(f"❌ [PARTICIPANTS] contact_phone parece ser LID: {raw_phone}, não é possível buscar participantes")
+                # ✅ VALIDAÇÃO CRÍTICA: Se contact_phone termina com @lid, não usar (grupo usa LID)
+                # ✅ CORREÇÃO: @g.us = grupo válido, não é LID. Apenas @lid é LID.
+                if raw_phone.endswith('@lid'):
+                    logger.error(f"❌ [PARTICIPANTS] contact_phone é LID: {raw_phone}, não é possível buscar participantes")
                     # ✅ CORREÇÃO: Se grupo usa LID, retornar participantes do group_metadata (se existirem)
                     if group_metadata and group_metadata.get('uses_lid'):
                         participants_from_metadata = group_metadata.get('participants', [])
