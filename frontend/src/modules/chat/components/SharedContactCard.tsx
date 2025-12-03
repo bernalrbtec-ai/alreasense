@@ -130,13 +130,29 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
-        const createResponse = await api.post('/chat/conversations/', {
+        // ✅ CORREÇÃO CRÍTICA: Usar endpoint /start/ que verifica se conversa já existe
+        // Isso evita erro de duplicate key e garante que conversas existentes sejam reabertas
+        const { activeDepartment } = useChatStore.getState();
+        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' 
+          ? activeDepartment.id 
+          : undefined;
+        
+        console.log('🆕 [SHARED CONTACT] Criando nova conversa via /start/...', {
           contact_phone: normalizedPhone,
           contact_name: name,
-          status: 'open'
+          department: departmentId || 'Nenhum (Inbox)'
         });
-        conversation = createResponse.data;
+        
+        const createResponse = await api.post('/chat/conversations/start/', {
+          contact_phone: normalizedPhone,
+          contact_name: name,
+          ...(departmentId && { department: departmentId })
+        });
+        conversation = createResponse.data.conversation || createResponse.data;
+        
+        // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
         addConversation(conversation);
+        console.log('✅ [SHARED CONTACT] Conversa criada/atualizada:', conversation.id);
       }
       
       // Navegar para o chat e selecionar a conversa
