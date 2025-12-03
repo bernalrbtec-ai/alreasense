@@ -15,6 +15,22 @@ from django.contrib.auth.models import AnonymousUser
 logger = logging.getLogger(__name__)
 
 
+def _mask_remote_jid(jid: str) -> str:
+    """Mascara JID para logs (segurança)."""
+    if not jid:
+        return 'N/A'
+    if '@' in jid:
+        parts = jid.split('@')
+        phone = parts[0]
+        domain = parts[1]
+        if len(phone) > 4:
+            return f"{phone[:2]}***{phone[-2:]}@{domain}"
+        return f"***@{domain}"
+    if len(jid) > 4:
+        return f"{jid[:2]}***{jid[-2:]}"
+    return "***"
+
+
 class ChatConsumerV2(AsyncWebsocketConsumer):
     """
     Consumer WebSocket V2 - Modelo Global (1 conexão por usuário).
@@ -203,20 +219,47 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     async def handle_send_message(self, data):
         """
         Processa envio de mensagem do cliente.
+        
+        ✅ SEGURANÇA CRÍTICA: conversation_id é OBRIGATÓRIO
+        NUNCA usar fallback para última conversa subscrita - isso pode enviar mensagem para destinatário errado!
         """
-        # Precisa saber qual conversa está ativa (última subscrita)
-        # Podemos pegar do data ou assumir que só há 1 ativa por vez
+        # ✅ CORREÇÃO CRÍTICA: conversation_id é OBRIGATÓRIO - NUNCA usar fallback
         conversation_id = data.get('conversation_id')
+        
+        # ✅ LOG CRÍTICO: Verificar se conversation_id foi fornecido
+        logger.critical(f"📥 [CHAT WS V2] ====== RECEBENDO send_message ======")
+        logger.critical(f"   conversation_id recebido: {conversation_id}")
+        logger.critical(f"   conversation_id tipo: {type(conversation_id)}")
+        logger.critical(f"   conversation_id existe? {bool(conversation_id)}")
+        logger.critical(f"   subscribed_conversations: {list(self.subscribed_conversations)}")
+        logger.critical(f"   Data completo: {json.dumps(data, indent=2, default=str)}")
+        
+        # ✅ VALIDAÇÃO CRÍTICA: conversation_id é OBRIGATÓRIO
         if not conversation_id:
-            # Se não especificado, usar última subscrita
-            if not self.subscribed_conversations:
-                await self.send(text_data=json.dumps({
-                    'type': 'error',
-                    'message': 'Nenhuma conversa ativa'
-                }))
-                return
-            # Pega a última (Python 3.7+ sets mantêm ordem de inserção)
-            conversation_id = list(self.subscribed_conversations)[-1]
+            error_msg = '❌ [SEGURANÇA] conversation_id é OBRIGATÓRIO! Mensagem rejeitada para prevenir envio para destinatário errado.'
+            logger.critical(error_msg)
+            logger.critical(f"   subscribed_conversations disponíveis: {list(self.subscribed_conversations)}")
+            logger.critical(f"   Data recebido: {json.dumps(data, indent=2, default=str)}")
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'conversation_id é obrigatório',
+                'error_code': 'MISSING_CONVERSATION_ID'
+            }))
+            return
+        
+        # ✅ VALIDAÇÃO CRÍTICA: Verificar se conversation_id é válido (UUID)
+        try:
+            from uuid import UUID
+            UUID(str(conversation_id))  # Valida formato UUID
+        except (ValueError, TypeError):
+            error_msg = f'❌ [SEGURANÇA] conversation_id inválido: {conversation_id}'
+            logger.critical(error_msg)
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'message': 'conversation_id inválido',
+                'error_code': 'INVALID_CONVERSATION_ID'
+            }))
+            return
         
         content = data.get('content', '').strip()
         is_internal = data.get('is_internal', False)
@@ -225,14 +268,11 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
         mentions = data.get('mentions', [])  # ✅ NOVO: Lista de números mencionados
         
-        # ✅ LOG CRÍTICO: Verificar reply_to recebido do frontend
-        logger.critical(f"📥 [CHAT WS V2] ====== RECEBENDO send_message ======")
-        logger.critical(f"   conversation_id: {conversation_id}")
+        # ✅ LOG CRÍTICO: Confirmar conversation_id que será usado
+        logger.critical(f"✅ [CHAT WS V2] conversation_id validado: {conversation_id}")
         logger.critical(f"   content: {content[:50]}...")
         logger.critical(f"   reply_to recebido: {reply_to}")
-        logger.critical(f"   reply_to tipo: {type(reply_to)}")
-        logger.critical(f"   reply_to existe? {bool(reply_to)}")
-        logger.critical(f"   Data completo: {json.dumps(data, indent=2, default=str)}")
+        logger.critical(f"   mentions: {mentions}")
         
         if not content and not attachment_urls:
             await self.send(text_data=json.dumps({
@@ -458,11 +498,26 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     
     @database_sync_to_async
     def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None):
-        """Cria mensagem no banco."""
+        """
+        Cria mensagem no banco.
+        
+        ✅ SEGURANÇA CRÍTICA: Valida que conversation existe e pertence ao tenant do usuário
+        """
         from apps.chat.models import Message, Conversation
         
         try:
-            conversation = Conversation.objects.get(id=conversation_id)
+            # ✅ VALIDAÇÃO CRÍTICA: Buscar conversa e garantir que pertence ao tenant do usuário
+            conversation = Conversation.objects.select_related('tenant').get(
+                id=conversation_id,
+                tenant=self.tenant  # ✅ CRÍTICO: Garantir que conversa pertence ao tenant do usuário
+            )
+            
+            # ✅ LOG CRÍTICO: Confirmar conversa encontrada
+            logger.critical(f"✅ [CHAT WS V2] Conversa validada: {conversation.id}")
+            logger.critical(f"   tenant: {conversation.tenant.name if conversation.tenant else 'N/A'}")
+            logger.critical(f"   contact_phone: {_mask_remote_jid(conversation.contact_phone) if conversation.contact_phone else 'N/A'}")
+            logger.critical(f"   conversation_type: {conversation.conversation_type}")
+            logger.critical(f"   contact_name: {conversation.contact_name or 'N/A'}")
             
             # Preparar metadata
             metadata = {

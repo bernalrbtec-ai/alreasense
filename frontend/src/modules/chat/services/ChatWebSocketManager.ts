@@ -348,12 +348,37 @@ class ChatWebSocketManager {
 
   /**
    * Envia mensagem ao WebSocket (ou enfileira se desconectado)
+   * ✅ SEGURANÇA CRÍTICA: Valida que conversation_id está presente em send_message
    */
   private sendMessage(data: any): boolean {
+    // ✅ VALIDAÇÃO CRÍTICA: conversation_id é OBRIGATÓRIO para send_message
+    if (data.type === 'send_message') {
+      if (!data.conversation_id) {
+        console.error('❌ [MANAGER] ERRO CRÍTICO: conversation_id não fornecido em send_message!');
+        console.error('   Payload recebido:', JSON.stringify(data, null, 2));
+        console.error('   currentConversationId:', this.currentConversationId);
+        // ❌ NÃO enviar mensagem sem conversation_id - isso causaria envio para destinatário errado!
+        return false;
+      }
+      
+      // ✅ LOG CRÍTICO: Confirmar conversation_id antes de enviar
+      console.log('📤 [MANAGER] ====== ENVIANDO send_message ======');
+      console.log('   conversation_id:', data.conversation_id);
+      console.log('   content:', data.content?.substring(0, 50));
+      console.log('   reply_to:', data.reply_to);
+      console.log('   mentions:', data.mentions);
+      console.log('   include_signature:', data.include_signature);
+    }
+    
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       // Se não está conectado, enfileirar
       if (data.type === 'send_message') {
         console.log('📦 [MANAGER] Enfileirando mensagem (WebSocket desconectado)');
+        // ✅ VALIDAÇÃO: Garantir que conversation_id está no payload antes de enfileirar
+        if (!data.conversation_id) {
+          console.error('❌ [MANAGER] ERRO: Tentando enfileirar mensagem sem conversation_id!');
+          return false;
+        }
         this.messageQueue.push({ type: data.type, data });
       }
       return false;
@@ -362,17 +387,7 @@ class ChatWebSocketManager {
     try {
       // ✅ DEBUG: Log detalhado do payload sendo enviado
       if (data.type === 'send_message') {
-        console.log('📤 [MANAGER] Enviando send_message:', {
-          type: data.type,
-          conversation_id: data.conversation_id,
-          content: data.content?.substring(0, 50),
-          reply_to: data.reply_to,
-          include_signature: data.include_signature,
-          is_internal: data.is_internal,
-          mentions: data.mentions
-        });
         console.log('📤 [MANAGER] Payload completo (JSON):', JSON.stringify(data, null, 2));
-        console.log('📤 [MANAGER] Reply_to existe?', !!data.reply_to, '| Valor:', data.reply_to);
       }
       const jsonPayload = JSON.stringify(data);
       console.log('📤 [MANAGER] Enviando JSON string:', jsonPayload.substring(0, 200));
@@ -387,6 +402,7 @@ class ChatWebSocketManager {
 
   /**
    * Processa fila de mensagens pendentes
+   * ✅ SEGURANÇA: Valida conversation_id antes de processar
    */
   private processMessageQueue(): void {
     if (this.messageQueue.length === 0) return;
@@ -395,6 +411,15 @@ class ChatWebSocketManager {
 
     while (this.messageQueue.length > 0) {
       const { data } = this.messageQueue.shift()!;
+      
+      // ✅ VALIDAÇÃO CRÍTICA: Verificar conversation_id antes de processar
+      if (data.type === 'send_message' && !data.conversation_id) {
+        console.error('❌ [MANAGER] ERRO CRÍTICO: Mensagem na fila sem conversation_id!');
+        console.error('   Data:', JSON.stringify(data, null, 2));
+        // ❌ NÃO processar mensagem sem conversation_id - descartar para prevenir envio errado
+        continue;
+      }
+      
       this.sendMessage(data);
     }
   }
