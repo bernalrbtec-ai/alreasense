@@ -1751,7 +1751,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             api_key=api_key,
                             base_url=base_url
                         )
-                            logger.critical(f"✅ [GRUPO NOVO] Task enfileirada - informações serão buscadas em background")
+                        logger.critical(f"✅ [GRUPO NOVO] Task enfileirada - informações serão buscadas em background")
                     
                     # 👤 Para INDIVIDUAIS: enfileirar busca de foto E nome (assíncrona, não bloqueia webhook)
                     else:
