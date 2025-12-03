@@ -47,6 +47,8 @@ export function ChatWindow() {
   const [groupInfo, setGroupInfo] = useState<any>(null);
   const [loadingGroupInfo, setLoadingGroupInfo] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
+  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   // 🔍 Debug: Log quando profile_pic_url muda
   useEffect(() => {
@@ -177,9 +179,6 @@ export function ChatWindow() {
     // ✅ CORREÇÃO CRÍTICA: Cancelar refresh-info anterior quando muda de conversa
     let isCancelled = false;
     const currentConversationId = activeConversation.id;
-    
-    // ✅ NOVO: Debounce para evitar múltiplas chamadas simultâneas
-    const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
     
     const refreshInfo = async () => {
       try {
