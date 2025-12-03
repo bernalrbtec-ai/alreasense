@@ -3,6 +3,7 @@ import { useAuthStore } from './stores/authStore'
 import { useEffect, lazy, Suspense } from 'react'
 import { api } from './lib/api'
 import { Toaster } from 'sonner'
+import { lazyLoadWithRetry } from './utils/lazyLoadWithRetry'
 
 // ✅ CRITICAL FIX: Lazy loading de páginas para reduzir bundle inicial
 // Login page - sempre carregar (primeira página)
@@ -28,13 +29,15 @@ const CampaignsPage = lazy(() => import('./pages/CampaignsPage'))
 const WebhookMonitoringPage = lazy(() => import('./pages/WebhookMonitoringPage'))
 const TestPresencePage = lazy(() => import('./pages/TestPresencePage'))
 const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage'))
-const AgendaPage = lazy(() => import('./pages/AgendaPage'))
+// AgendaPage com retry para resolver problemas de carregamento em produção
+const AgendaPage = lazyLoadWithRetry(() => import('./pages/AgendaPage'), 3, 1000)
 const ChatPage = lazy(() => import('./modules/chat').then(module => ({ default: module.ChatPage })))
 
 // Components
 import Layout from './components/Layout'
 import LoadingSpinner from './components/ui/LoadingSpinner'
 import ErrorBoundary from './components/ErrorBoundary'
+import LazyRoute from './components/LazyRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ProtectedAgendaRoute } from './components/ProtectedAgendaRoute'
 import { ProtectedChatRoute } from './components/ProtectedChatRoute'
@@ -115,9 +118,9 @@ function App() {
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
-                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <LazyRoute>
                     <AgendaPage />
-                  </Suspense>
+                  </LazyRoute>
                 </ProtectedAgendaRoute>
               } />
               <Route path="contacts" element={
@@ -167,9 +170,9 @@ function App() {
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
-                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <LazyRoute>
                     <AgendaPage />
-                  </Suspense>
+                  </LazyRoute>
                 </ProtectedAgendaRoute>
               } />
               
