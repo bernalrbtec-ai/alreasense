@@ -1778,7 +1778,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             conversation_id=str(conversation.id),
                             phone=clean_phone
                         )
-                            logger.critical(f"✅ [INDIVIDUAL] Task de foto+nome enfileirada - informações serão buscadas em background")
+                        logger.critical(f"✅ [INDIVIDUAL] Task de foto+nome enfileirada - informações serão buscadas em background")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
             except Exception as e:
