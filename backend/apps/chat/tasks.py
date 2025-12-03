@@ -453,7 +453,6 @@ async def send_reaction_to_evolution(message, emoji: str):
                             return False
                         
                         # Aguardar antes de tentar novamente
-                        import asyncio
                         await asyncio.sleep(retry_delays[attempt])
                         continue
                         
@@ -466,7 +465,6 @@ async def send_reaction_to_evolution(message, emoji: str):
                     return False
                 
                 # Aguardar antes de tentar novamente
-                import asyncio
                 await asyncio.sleep(retry_delays[attempt])
                 continue
                 
