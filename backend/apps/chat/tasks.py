@@ -646,9 +646,23 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # Prepara dados
         # ✅ CRÍTICO: Recarregar conversa do banco para garantir dados atualizados
         from apps.chat.models import Conversation
+        
+        # ✅ VALIDAÇÃO CRÍTICA: Garantir que message.conversation_id corresponde à conversa carregada
+        original_conversation_id = message.conversation_id
+        logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO DE CONVERSA ======")
+        logger.critical(f"   Message ID: {message.id}")
+        logger.critical(f"   Message Conversation ID (original): {original_conversation_id}")
+        
         conversation = await sync_to_async(
             Conversation.objects.select_related('tenant').get
-        )(id=message.conversation.id)
+        )(id=original_conversation_id)
+        
+        # ✅ VALIDAÇÃO CRÍTICA: Verificar se conversation_id da mensagem corresponde à conversa carregada
+        if str(conversation.id) != str(original_conversation_id):
+            logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation ID não corresponde!")
+            logger.critical(f"   Message Conversation ID: {original_conversation_id}")
+            logger.critical(f"   Conversation Carregada ID: {conversation.id}")
+            raise ValueError(f"Conversa carregada não corresponde à conversa da mensagem: {original_conversation_id} != {conversation.id}")
         
         # ✅ LOG CRÍTICO DE SEGURANÇA: Validar destinatário antes de enviar
         logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO DE DESTINATÁRIO ======")
@@ -656,6 +670,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         logger.critical(f"   Conversation ID: {conversation.id}")
         logger.critical(f"   Conversation Type (DB): {conversation.conversation_type}")
         logger.critical(f"   Contact Phone: {_mask_remote_jid(conversation.contact_phone)}")
+        logger.critical(f"   Message Conversation ID (validado): {message.conversation_id}")
         
         def get_recipient():
             """Retorna número formatado (E.164 ou group jid) e versão mascarada."""
@@ -973,6 +988,30 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         else:
                             mediatype = 'document'
                         
+                        # ✅ VALIDAÇÃO CRÍTICA: Verificar se recipient_value corresponde ao conversation_type
+                        logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO DE DESTINATÁRIO (MÍDIA) ======")
+                        logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                        logger.critical(f"   Recipient Value: {_mask_remote_jid(recipient_value)}")
+                        logger.critical(f"   Message ID: {message.id}")
+                        logger.critical(f"   Conversation ID: {conversation.id}")
+                        
+                        # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type é grupo, recipient_value DEVE terminar com @g.us
+                        if conversation.conversation_type == 'group':
+                            if not recipient_value.endswith('@g.us'):
+                                logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation é grupo mas recipient_value não termina com @g.us!")
+                                logger.critical(f"   Recipient Value: {_mask_remote_jid(recipient_value)}")
+                                logger.critical(f"   Isso causaria envio para destinatário ERRADO!")
+                                raise ValueError(f"Conversa é grupo mas destinatário não é grupo: {_mask_remote_jid(recipient_value)}")
+                            logger.critical(f"✅ [SEGURANÇA] Destinatário GRUPO validado (mídia): {_mask_remote_jid(recipient_value)}")
+                        else:
+                            # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type é individual, recipient_value NÃO deve terminar com @g.us
+                            if recipient_value.endswith('@g.us'):
+                                logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation é individual mas recipient_value termina com @g.us!")
+                                logger.critical(f"   Recipient Value: {_mask_remote_jid(recipient_value)}")
+                                logger.critical(f"   Isso causaria envio para grupo ao invés de individual!")
+                                raise ValueError(f"Conversa é individual mas destinatário é grupo: {_mask_remote_jid(recipient_value)}")
+                            logger.critical(f"✅ [SEGURANÇA] Destinatário INDIVIDUAL validado (mídia): {_mask_remote_jid(recipient_value)}")
+                        
                         # ✅ Evolution API NÃO usa mediaMessage wrapper!
                         # Estrutura correta: direto no root
                         # ✅ USAR SHORT_URL (já configurado acima)
@@ -982,6 +1021,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             'mediatype': mediatype,  # lowercase!
                             'fileName': filename     # Nome do arquivo
                         }
+                        
+                        logger.critical(f"✅ [SEGURANÇA] Payload de mídia criado com destinatário validado:")
+                        logger.critical(f"   number: {_mask_remote_jid(payload['number'])}")
+                        logger.critical(f"   conversation_type: {conversation.conversation_type}")
+                        logger.critical(f"   message_id: {message.id}")
+                        logger.critical(f"   conversation_id: {conversation.id}")
                         if content:
                             payload['caption'] = content  # Caption direto no root também
                         
@@ -1187,10 +1232,40 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 logger.critical(f"   content tem assinatura? {'*' in content[:50] if content else False}")
                 logger.critical(f"   content length: {len(content) if content else 0}")
                 
+                # ✅ VALIDAÇÃO CRÍTICA FINAL: Verificar se final_number corresponde ao conversation_type
+                logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO FINAL DO DESTINATÁRIO ======")
+                logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                logger.critical(f"   Final Number: {_mask_remote_jid(final_number)}")
+                logger.critical(f"   Message ID: {message.id}")
+                logger.critical(f"   Conversation ID: {conversation.id}")
+                
+                # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type é grupo, final_number DEVE terminar com @g.us
+                if conversation.conversation_type == 'group':
+                    if not final_number.endswith('@g.us'):
+                        logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation é grupo mas final_number não termina com @g.us!")
+                        logger.critical(f"   Final Number: {_mask_remote_jid(final_number)}")
+                        logger.critical(f"   Isso causaria envio para destinatário ERRADO!")
+                        raise ValueError(f"Conversa é grupo mas destinatário não é grupo: {_mask_remote_jid(final_number)}")
+                    logger.critical(f"✅ [SEGURANÇA] Destinatário GRUPO validado: {_mask_remote_jid(final_number)}")
+                else:
+                    # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type é individual, final_number NÃO deve terminar com @g.us
+                    if final_number.endswith('@g.us'):
+                        logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation é individual mas final_number termina com @g.us!")
+                        logger.critical(f"   Final Number: {_mask_remote_jid(final_number)}")
+                        logger.critical(f"   Isso causaria envio para grupo ao invés de individual!")
+                        raise ValueError(f"Conversa é individual mas destinatário é grupo: {_mask_remote_jid(final_number)}")
+                    logger.critical(f"✅ [SEGURANÇA] Destinatário INDIVIDUAL validado: {_mask_remote_jid(final_number)}")
+                
                 payload = {
                     'number': final_number,
                     'text': content.strip()
                 }
+                
+                logger.critical(f"✅ [SEGURANÇA] Payload criado com destinatário validado:")
+                logger.critical(f"   number: {_mask_remote_jid(payload['number'])}")
+                logger.critical(f"   conversation_type: {conversation.conversation_type}")
+                logger.critical(f"   message_id: {message.id}")
+                logger.critical(f"   conversation_id: {conversation.id}")
                 
                 logger.critical(f"   payload['text'] (primeiros 150 chars): {payload['text'][:150] if payload.get('text') else 'VAZIO'}...")
                 

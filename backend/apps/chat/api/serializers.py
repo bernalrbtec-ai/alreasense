@@ -344,6 +344,51 @@ class MessageCreateSerializer(serializers.ModelSerializer):
     
     def create(self, validated_data):
         """Cria mensagem outgoing."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        # ✅ VALIDAÇÃO CRÍTICA DE SEGURANÇA: Validar conversation antes de criar mensagem
+        conversation = validated_data.get('conversation')
+        request = self.context.get('request')
+        user = request.user if request else None
+        
+        logger.critical(f"🔒 [MESSAGE CREATE] ====== VALIDAÇÃO DE CONVERSA ======")
+        logger.critical(f"   User: {user.email if user else 'N/A'}")
+        logger.critical(f"   User Tenant: {user.tenant_id if user and user.tenant else 'N/A'}")
+        logger.critical(f"   Conversation ID: {conversation.id if conversation else 'N/A'}")
+        logger.critical(f"   Conversation Type: {conversation.conversation_type if conversation else 'N/A'}")
+        logger.critical(f"   Conversation Phone: {conversation.contact_phone if conversation else 'N/A'}")
+        logger.critical(f"   Conversation Tenant: {conversation.tenant_id if conversation else 'N/A'}")
+        
+        # ✅ VALIDAÇÃO CRÍTICA: Recarregar conversation do banco para garantir dados atualizados
+        if conversation:
+            conversation.refresh_from_db()
+            logger.critical(f"   Conversation Type (após refresh): {conversation.conversation_type}")
+            logger.critical(f"   Conversation Phone (após refresh): {conversation.contact_phone}")
+            
+            # ✅ VALIDAÇÃO CRÍTICA: Verificar tenant
+            if user and user.tenant and conversation.tenant_id != user.tenant_id:
+                logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation pertence a outro tenant!")
+                logger.critical(f"   User Tenant: {user.tenant_id}")
+                logger.critical(f"   Conversation Tenant: {conversation.tenant_id}")
+                raise serializers.ValidationError({
+                    'conversation': 'Conversa não pertence ao seu tenant.'
+                })
+            
+            # ✅ VALIDAÇÃO CRÍTICA: Verificar se conversation_type corresponde ao formato do contact_phone
+            contact_phone = (conversation.contact_phone or '').strip()
+            if conversation.conversation_type == 'group' and not contact_phone.endswith('@g.us'):
+                logger.critical(f"⚠️ [SEGURANÇA] AVISO: Conversation marcada como grupo mas contact_phone não termina com @g.us")
+                logger.critical(f"   Contact Phone: {contact_phone}")
+                logger.critical(f"   Isso pode causar envio para destinatário errado!")
+            elif conversation.conversation_type == 'individual' and contact_phone.endswith('@g.us'):
+                logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation marcada como individual mas contact_phone termina com @g.us!")
+                logger.critical(f"   Contact Phone: {contact_phone}")
+                logger.critical(f"   Isso causaria envio para grupo ao invés de individual!")
+                raise serializers.ValidationError({
+                    'conversation': 'Conversa marcada como individual mas contact_phone indica grupo. Contate o suporte.'
+                })
+        
         attachment_urls = validated_data.pop('attachment_urls', [])
         mentions = validated_data.pop('mentions', [])
         validated_data['direction'] = 'outgoing'
@@ -351,6 +396,12 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         validated_data['status'] = 'pending'
         
         message = Message.objects.create(**validated_data)
+        
+        logger.critical(f"✅ [MESSAGE CREATE] Mensagem criada:")
+        logger.critical(f"   Message ID: {message.id}")
+        logger.critical(f"   Conversation ID: {message.conversation_id}")
+        logger.critical(f"   Conversation Type: {message.conversation.conversation_type}")
+        logger.critical(f"   Conversation Phone: {message.conversation.contact_phone}")
         
         # ✅ NOVO: Processar menções e salvar no metadata
         metadata = {}
