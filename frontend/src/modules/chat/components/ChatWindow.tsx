@@ -172,46 +172,103 @@ export function ChatWindow() {
   // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
   // ✅ MELHORIA: Só chamar refresh-info se não tiver foto/nome (WebSocket já atualiza automaticamente)
   useEffect(() => {
-    if (activeConversation) {
-      const refreshInfo = async () => {
-        try {
-          const type = activeConversation.conversation_type === 'group' ? 'GRUPO' : 'CONTATO';
-          
-          // ✅ OTIMIZAÇÃO: Se já tem foto e nome, não precisa chamar refresh-info
-          // O WebSocket já atualiza automaticamente quando mensagens chegam
-          const hasPhoto = activeConversation.profile_pic_url;
-          const hasName = activeConversation.contact_name && 
-                         activeConversation.contact_name !== 'Grupo WhatsApp' &&
-                         !activeConversation.contact_name.match(/^\d+$/); // Não é só número
-          
-          if (hasPhoto && hasName) {
-            console.log(`✅ [${type}] Informações já disponíveis (foto + nome), pulando refresh-info`);
-            return; // WebSocket já atualizou, não precisa chamar API
-          }
-          
-          console.log(`🔄 [${type}] Atualizando informações...`);
-          
-          const response = await api.post(`/chat/conversations/${activeConversation.id}/refresh-info/`);
-          
-          if (response.data.from_cache) {
-            console.log(`✅ [${type}] Informações em cache (atualizadas recentemente)`);
-          } else if (response.data.warning === 'group_not_found') {
-            console.warn(`⚠️ [${type}] ${response.data.message}`);
-            // Grupo não encontrado - pode ter sido deletado ou instância saiu
-            // Não mostrar erro para não alarmar usuário
-          } else {
-            console.log(`✅ [${type}] Informações atualizadas:`, response.data.updated_fields);
-            // Store será atualizado via WebSocket broadcast
-          }
-        } catch (error: any) {
-          // Silencioso: não mostrar toast se falhar (não crítico)
-          console.warn('⚠️ Erro ao atualizar:', error.response?.data?.error || error.message);
+    if (!activeConversation) return;
+    
+    // ✅ CORREÇÃO CRÍTICA: Cancelar refresh-info anterior quando muda de conversa
+    let isCancelled = false;
+    const currentConversationId = activeConversation.id;
+    
+    const refreshInfo = async () => {
+      try {
+        // ✅ Verificar se ainda é a mesma conversa (pode ter mudado durante o request)
+        if (isCancelled) {
+          console.log(`⏸️ [REFRESH] Cancelado - conversa mudou durante request`);
+          return;
         }
-      };
-      
-      // Executar imediatamente
-      refreshInfo();
-    }
+        
+        const { activeConversation: current } = useChatStore.getState();
+        if (current?.id !== currentConversationId) {
+          console.log(`⏸️ [REFRESH] Cancelado - conversa diferente da que iniciou refresh`);
+          return;
+        }
+        
+        const type = activeConversation.conversation_type === 'group' ? 'GRUPO' : 'CONTATO';
+        
+        // ✅ OTIMIZAÇÃO: Se já tem foto e nome, não precisa chamar refresh-info
+        // O WebSocket já atualiza automaticamente quando mensagens chegam
+        const hasPhoto = activeConversation.profile_pic_url;
+        const hasName = activeConversation.contact_name && 
+                       activeConversation.contact_name !== 'Grupo WhatsApp' &&
+                       !activeConversation.contact_name.match(/^\d+$/); // Não é só número
+        
+        if (hasPhoto && hasName) {
+          console.log(`✅ [${type}] Informações já disponíveis (foto + nome), pulando refresh-info`);
+          return; // WebSocket já atualizou, não precisa chamar API
+        }
+        
+        console.log(`🔄 [${type}] Atualizando informações...`);
+        
+        const response = await api.post(`/chat/conversations/${currentConversationId}/refresh-info/`);
+        
+        // ✅ Verificar novamente se ainda é a mesma conversa após request
+        if (isCancelled) {
+          console.log(`⏸️ [REFRESH] Cancelado - conversa mudou após request`);
+          return;
+        }
+        
+        const { activeConversation: currentAfterRequest } = useChatStore.getState();
+        if (currentAfterRequest?.id !== currentConversationId) {
+          console.log(`⏸️ [REFRESH] Cancelado - conversa diferente após request`);
+          return;
+        }
+        
+        // ✅ CORREÇÃO CRÍTICA: Atualizar activeConversation diretamente se refresh-info trouxe dados novos
+        // Isso garante que nome e foto sejam atualizados imediatamente quando muda de conversa
+        if (response.data.conversation) {
+          const updatedConversation = response.data.conversation;
+          const { updateConversation } = useChatStore.getState();
+          
+          console.log(`🔄 [${type}] Atualizando activeConversation com dados do refresh-info:`, {
+            oldName: activeConversation.contact_name,
+            newName: updatedConversation.contact_name,
+            oldPhoto: activeConversation.profile_pic_url,
+            newPhoto: updatedConversation.profile_pic_url,
+            conversationId: currentConversationId
+          });
+          
+          // ✅ Atualizar tanto a lista quanto a activeConversation
+          updateConversation(updatedConversation);
+        }
+        
+        if (response.data.from_cache) {
+          console.log(`✅ [${type}] Informações em cache (atualizadas recentemente)`);
+        } else if (response.data.warning === 'group_not_found') {
+          console.warn(`⚠️ [${type}] ${response.data.message}`);
+          // Grupo não encontrado - pode ter sido deletado ou instância saiu
+          // Não mostrar erro para não alarmar usuário
+        } else {
+          console.log(`✅ [${type}] Informações atualizadas:`, response.data.updated_fields);
+          // Store será atualizado via WebSocket broadcast
+        }
+      } catch (error: any) {
+        // ✅ Verificar se foi cancelado antes de logar erro
+        if (isCancelled) {
+          console.log(`⏸️ [REFRESH] Erro ignorado - conversa mudou durante request`);
+          return;
+        }
+        // Silencioso: não mostrar toast se falhar (não crítico)
+        console.warn('⚠️ Erro ao atualizar:', error.response?.data?.error || error.message);
+      }
+    };
+    
+    // Executar imediatamente
+    refreshInfo();
+    
+    // ✅ Cleanup: cancelar se conversa mudar
+    return () => {
+      isCancelled = true;
+      console.log(`🔌 [REFRESH] Cleanup - cancelando refresh-info para conversa ${currentConversationId}`);
+    };
   }, [activeConversation?.id]);
 
   // Fechar menu ao clicar fora
