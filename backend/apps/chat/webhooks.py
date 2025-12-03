@@ -1502,7 +1502,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.warning(f"   ⚠️ A Evolution API pode não aceitar este formato!")
                 
                 # ✅ IMPORTANTE: Salvar também o LID no metadata para referência futura
-            defaults['group_metadata'] = {
+                defaults['group_metadata'] = {
                     'group_id': group_id,  # Tentar usar telefone convertido para @g.us
                     'group_id_lid': remote_jid_alt,  # ✅ Salvar LID também para referência
                     'group_name': push_name or 'Grupo WhatsApp',
