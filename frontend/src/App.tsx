@@ -37,7 +37,6 @@ const ChatPage = lazy(() => import('./modules/chat').then(module => ({ default: 
 import Layout from './components/Layout'
 import LoadingSpinner from './components/ui/LoadingSpinner'
 import ErrorBoundary from './components/ErrorBoundary'
-import LazyRoute from './components/LazyRoute'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ProtectedAgendaRoute } from './components/ProtectedAgendaRoute'
 import { ProtectedChatRoute } from './components/ProtectedChatRoute'
@@ -118,9 +117,9 @@ function App() {
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
-                  <LazyRoute>
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
                     <AgendaPage />
-                  </LazyRoute>
+                  </Suspense>
                 </ProtectedAgendaRoute>
               } />
               <Route path="contacts" element={
@@ -170,9 +169,9 @@ function App() {
               } />
               <Route path="agenda" element={
                 <ProtectedAgendaRoute>
-                  <LazyRoute>
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
                     <AgendaPage />
-                  </LazyRoute>
+                  </Suspense>
                 </ProtectedAgendaRoute>
               } />
               
