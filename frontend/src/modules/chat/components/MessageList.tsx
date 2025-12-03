@@ -2,7 +2,7 @@
  * Lista de mensagens - Estilo WhatsApp Web com UX Moderna
  * ✅ PERFORMANCE: Componente memoizado para evitar re-renders desnecessários
  */
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { Check, CheckCheck, Clock, Download, FileText, Image as ImageIcon, Video, Music, Reply, AlertCircle, Trash2 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
