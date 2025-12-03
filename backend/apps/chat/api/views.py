@@ -123,6 +123,18 @@ def clean_participants_for_metadata(participants_list: list) -> list:
                     cleaned_p['phone'] = ''
                     logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] JID @lid sem phoneNumber: {participant_jid}")
         
+        # ✅ VALIDAÇÃO CRÍTICA: Garantir que name não seja LID
+        participant_name = cleaned_p.get('name', '')
+        if participant_name and is_lid_number(participant_name):
+            logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] name é LID, removendo: {participant_name[:30]}...")
+            cleaned_p['name'] = ''  # Não usar LID como nome
+        
+        # ✅ VALIDAÇÃO CRÍTICA: Garantir que pushname não seja LID
+        participant_pushname = cleaned_p.get('pushname', '')
+        if participant_pushname and is_lid_number(participant_pushname):
+            logger.warning(f"   ⚠️ [CLEAN PARTICIPANTS] pushname é LID, removendo: {participant_pushname[:30]}...")
+            cleaned_p['pushname'] = ''  # Não usar LID como pushname
+        
         cleaned.append(cleaned_p)
     
     return cleaned
