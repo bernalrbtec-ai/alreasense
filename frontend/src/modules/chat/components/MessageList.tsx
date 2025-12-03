@@ -181,10 +181,15 @@ export function MessageList() {
   const typingUser = useChatStore((state) => state.typingUser);
   const getMessagesArray = useChatStore((state) => state.getMessagesArray);
   
-  // ✅ MELHORIA: Memoizar mensagens da conversa ativa (só recalcula se conversationId mudar)
-  const messages = useMemo(() => {
-    return activeConversation ? getMessagesArray(activeConversation.id) : [];
-  }, [activeConversation?.id, getMessagesArray]);
+  // ✅ CORREÇÃO CRÍTICA: Usar selector do Zustand que reage às mudanças no store
+  // Observar diretamente messages.byId e messages.byConversationId para a conversa ativa
+  // Isso garante que o componente re-renderize quando novas mensagens são adicionadas
+  const messages = useChatStore((state) => {
+    if (!activeConversation?.id) return [];
+    const conversationId = activeConversation.id;
+    const messageIds = state.messages.byConversationId[conversationId] || [];
+    return messageIds.map(id => state.messages.byId[id]).filter(Boolean);
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const { hasProductAccess } = useUserAccess();
