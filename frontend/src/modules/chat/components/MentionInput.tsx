@@ -89,28 +89,118 @@ export function MentionInput({
       console.log('ℹ️ [MENTIONS] Não é grupo ou sem conversationId:', { conversationType, conversationId });
       setParticipants([]); // Limpar participantes se não for grupo
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conversationId, conversationType]);
+  }, [conversationId, conversationType, loadParticipants]);
 
-  const loadParticipants = async (retryCount = 0) => {
+  // ✅ NOVO: Quando participantes são carregados e há um @ ativo, mostrar sugestões
+  useEffect(() => {
+    if (mentionStart !== null && participants.length > 0 && conversationType === 'group') {
+      const inputValue = value;
+      const textBeforeCursor = inputValue.substring(0, mentionStart);
+      const textAfterAt = inputValue.substring(mentionStart + 1);
+      const query = textAfterAt.split(/\s/)[0]; // Pegar apenas a primeira palavra após @
+      
+      // Filtrar participantes baseado na query
+      let filtered: Participant[] = [];
+      if (query === '') {
+        filtered = participants;
+      } else {
+        filtered = participants.filter(p => {
+          const displayName = (p.contact_name || p.pushname || p.name || '').toLowerCase();
+          const nameMatch = displayName.includes(query.toLowerCase());
+          const phoneMatch = p.phone.replace(/\D/g, '').includes(query.replace(/\D/g, ''));
+          return nameMatch || phoneMatch;
+        });
+      }
+      
+      if (filtered.length > 0) {
+        console.log('✅ [MENTIONS] Participantes carregados, mostrando sugestões:', filtered.length);
+        setSuggestions(filtered);
+        setShowSuggestions(true);
+        setSelectedIndex(0);
+      }
+    }
+  }, [participants, mentionStart, value, conversationType]);
+
+  // ✅ NOVO: Ref para evitar múltiplas chamadas simultâneas
+  const loadingRef = useRef(false);
+  
+  // ✅ NOVO: Função para tentar recarregar participantes se necessário
+  const ensureParticipantsLoaded = useCallback(async () => {
+    if (conversationType === 'group' && conversationId && !loadingRef.current) {
+      // Usar estado atual do store para verificar se realmente está vazio
+      if (participants.length === 0) {
+        console.log('🔄 [MENTIONS] Participantes vazios, tentando recarregar...', {
+          conversationId,
+          conversationType
+        });
+        loadingRef.current = true;
+        try {
+          await loadParticipants();
+        } finally {
+          loadingRef.current = false;
+        }
+      } else {
+        console.log('✅ [MENTIONS] Participantes já carregados:', participants.length);
+      }
+    }
+  }, [conversationType, conversationId, participants.length]);
+
+  const loadParticipants = useCallback(async (retryCount = 0) => {
     const maxRetries = 2;
     const retryDelay = 1000; // 1 segundo
     
+    // ✅ NOVO: Validação antes de fazer a requisição
+    if (!conversationId) {
+      console.error('❌ [MENTIONS] conversationId não definido, não é possível carregar participantes');
+      setParticipants([]);
+      loadingRef.current = false;
+      return;
+    }
+    
+    if (conversationType !== 'group') {
+      console.warn('⚠️ [MENTIONS] Não é grupo, não é necessário carregar participantes');
+      setParticipants([]);
+      loadingRef.current = false;
+      return;
+    }
+    
+    // ✅ NOVO: Marcar como carregando
+    if (retryCount === 0) {
+      loadingRef.current = true;
+    }
+    
     try {
-      console.log('📡 [MENTIONS] Buscando participantes da API...');
+      console.log('📡 [MENTIONS] Buscando participantes da API...', {
+        conversationId,
+        conversationType,
+        url: `/chat/conversations/${conversationId}/participants/`
+      });
+      
       const response = await api.get(`/chat/conversations/${conversationId}/participants/`);
       const data = response.data;
-      console.log('📥 [MENTIONS] Resposta da API:', data);
+      
+      console.log('📥 [MENTIONS] Resposta completa da API:', {
+        status: response.status,
+        dataType: typeof data,
+        isArray: Array.isArray(data),
+        hasParticipants: !!(data?.participants),
+        participantsCount: Array.isArray(data) ? data.length : (data?.participants?.length || 0),
+        fullData: data
+      });
       
       // ✅ CORREÇÃO: Verificar se data é array direto ou objeto com participants
       let participantsList: Participant[] = [];
       if (Array.isArray(data)) {
         participantsList = data;
-      } else {
+        console.log('✅ [MENTIONS] Data é array direto, usando como participantes');
+      } else if (data && typeof data === 'object') {
         participantsList = data.participants || [];
+        console.log('✅ [MENTIONS] Data é objeto, extraindo participants:', participantsList.length);
+      } else {
+        console.warn('⚠️ [MENTIONS] Formato de resposta inesperado:', typeof data);
       }
       
-      console.log(`✅ [MENTIONS] ${participantsList.length} participantes carregados:`, participantsList);
+      console.log(`✅ [MENTIONS] ${participantsList.length} participantes carregados`);
       
       // ✅ DEBUG: Verificar estrutura dos participantes
       if (participantsList.length > 0) {
@@ -118,13 +208,27 @@ export function MentionInput({
         console.log('   - phone:', participantsList[0].phone);
         console.log('   - name:', participantsList[0].name);
         console.log('   - pushname:', participantsList[0].pushname);
+        console.log('   - contact_name:', participantsList[0].contact_name);
+        console.log('   - is_contact:', participantsList[0].is_contact);
+      } else {
+        console.warn('⚠️ [MENTIONS] Lista de participantes está vazia após processamento');
       }
       
       setParticipants(participantsList);
+      loadingRef.current = false; // ✅ Marcar como concluído
     } catch (error: any) {
       // ✅ MELHORIA: Tratamento de erros mais robusto com retry
       const errorMessage = error.response?.data?.error || error.message;
       const statusCode = error.response?.status;
+      
+      console.error('❌ [MENTIONS] Erro ao carregar participantes:', {
+        errorMessage,
+        statusCode,
+        retryCount,
+        conversationId,
+        conversationType,
+        error: error
+      });
       
       // Retry automático para erros temporários (500, 502, 503, 504)
       if (retryCount < maxRetries && statusCode >= 500 && statusCode < 600) {
@@ -145,8 +249,9 @@ export function MentionInput({
       }
       
       setParticipants([]);
+      loadingRef.current = false; // ✅ Marcar como concluído mesmo em caso de erro
     }
-  };
+  }, [conversationId, conversationType]);
 
   // Detectar menções enquanto digita
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -174,6 +279,16 @@ export function MentionInput({
         const query = textBeforeCursor.substring(lastAtIndex + 1).trim();
         console.log('✅ [MENTIONS] @ detectado! Query:', query, 'Participantes disponíveis:', participants.length);
         
+        // ✅ NOVO: Se for grupo e não tem participantes, tentar recarregar
+        if (conversationType === 'group' && participants.length === 0 && conversationId && !loadingRef.current) {
+          console.log('🔄 [MENTIONS] @ digitado mas sem participantes, tentando recarregar...');
+          // Chamar de forma assíncrona e aguardar
+          ensureParticipantsLoaded().then(() => {
+            // Após carregar, verificar novamente e mostrar sugestões se houver participantes
+            // Isso será tratado no próximo handleInputChange quando o estado atualizar
+          });
+        }
+        
         // ✅ CORREÇÃO: Se query está vazia (apenas @), mostrar TODOS os participantes
         // Se tem query, filtrar baseado nela
         let filtered: Participant[] = [];
@@ -194,18 +309,27 @@ export function MentionInput({
         }
 
         // ✅ CORREÇÃO: Mostrar sugestões se for grupo E tiver participantes (mesmo que filtrados)
-        if (conversationType === 'group' && participants.length > 0) {
-          setMentionStart(lastAtIndex);
-          setSuggestions(filtered);
-          setShowSuggestions(filtered.length > 0); // Mostrar apenas se houver resultados
-          setSelectedIndex(0);
-          console.log('✅ [MENTIONS] Sugestões ativadas:', filtered.length, 'participantes');
-          return;
-        } else {
-          console.log('⚠️ [MENTIONS] Não mostrando sugestões:', {
-            isGroup: conversationType === 'group',
-            hasParticipants: participants.length > 0
-          });
+        // ✅ NOVO: Se está carregando, não mostrar ainda (aguardar carregamento)
+        if (conversationType === 'group') {
+          if (participants.length > 0) {
+            setMentionStart(lastAtIndex);
+            setSuggestions(filtered);
+            setShowSuggestions(filtered.length > 0); // Mostrar apenas se houver resultados
+            setSelectedIndex(0);
+            console.log('✅ [MENTIONS] Sugestões ativadas:', filtered.length, 'participantes');
+            return;
+          } else if (loadingRef.current) {
+            console.log('⏳ [MENTIONS] Aguardando carregamento de participantes...');
+            // Não mostrar sugestões ainda, mas manter mentionStart para quando carregar
+            setMentionStart(lastAtIndex);
+            return;
+          } else {
+            console.log('⚠️ [MENTIONS] Não mostrando sugestões - sem participantes e não está carregando:', {
+              isGroup: conversationType === 'group',
+              hasParticipants: participants.length > 0,
+              isLoading: loadingRef.current
+            });
+          }
         }
       }
     }
