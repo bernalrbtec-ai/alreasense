@@ -183,19 +183,39 @@ export function ConversationList() {
       const activeDeptId = String(activeDepartment.id);
       const convDeptId = departmentId ? String(departmentId) : null;
       
+      // ✅ DEBUG CRÍTICO: Log detalhado para TODAS as conversas sendo filtradas
+      // Isso ajuda a identificar por que conversas não aparecem
+      const isActiveConversation = activeConversation?.id === conv.id;
+      if (isActiveConversation || convStatus === 'pending' || convStatus === 'open') {
+        console.log('🔍 [FILTER] Verificando conversa:', {
+          conversationId: conv.id,
+          conversationName: conv.contact_name,
+          conversationPhone: conv.contact_phone,
+          conversationDepartmentId: convDeptId,
+          conversationDepartmentName: conv.department_name || 'N/A',
+          conversationStatus: convStatus,
+          activeDepartmentId: activeDeptId,
+          activeDepartmentName: activeDepartment.name,
+          isActiveConversation,
+          departmentMatch: convDeptId === activeDeptId,
+          statusMatch: convStatus === 'pending' || (convStatus === 'open' && activeDepartment.id !== 'inbox')
+        });
+      }
+      
       if (activeDepartment.id === 'inbox') {
         // Inbox: conversas pendentes SEM departamento
         // ✅ CORREÇÃO: Inbox só mostra conversas SEM departamento E com status='pending'
         const passes = !departmentId && convStatus === 'pending';
         
         // ✅ DEBUG: Log quando conversa não passa no filtro do Inbox
-        if (!passes && convStatus === 'pending') {
+        if (!passes) {
           console.log('🔍 [FILTER] Conversa não passou no filtro do Inbox:', {
             conversationId: conv.id,
             conversationName: conv.contact_name,
             departmentId: convDeptId,
             status: convStatus,
-            reason: departmentId ? 'Tem departamento' : 'Status não é pending'
+            reason: departmentId ? 'Tem departamento' : 'Status não é pending',
+            expected: 'Sem departamento E status=pending'
           });
         }
         
@@ -203,6 +223,11 @@ export function ConversationList() {
       } else {
         // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
         if (conv.status === 'closed') {
+          console.log('🔍 [FILTER] Conversa fechada, excluindo:', {
+            conversationId: conv.id,
+            conversationName: conv.contact_name,
+            status: conv.status
+          });
           return false;
         }
         
@@ -216,8 +241,17 @@ export function ConversationList() {
             activeDepartmentId: activeDeptId,
             activeDepartmentName: activeDepartment.name,
             conversationDepartmentId: convDeptId,
+            conversationDepartmentName: conv.department_name || 'N/A',
             conversationStatus: convStatus,
-            reason: convDeptId !== activeDeptId ? 'Departamento diferente' : 'Status closed'
+            reason: convDeptId !== activeDeptId ? 'Departamento diferente' : 'Status closed',
+            expected: `departmentId === ${activeDeptId}`
+          });
+        } else {
+          console.log('✅ [FILTER] Conversa passou no filtro do departamento:', {
+            conversationId: conv.id,
+            conversationName: conv.contact_name,
+            departmentId: convDeptId,
+            status: convStatus
           });
         }
         
