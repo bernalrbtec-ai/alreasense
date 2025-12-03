@@ -1142,14 +1142,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
                         contact_name = contacts_map.get(normalized_phone_for_search) or contacts_map.get(normalized_phone) or contacts_map.get(phone_raw)
                         
-                        # ✅ CORREÇÃO: Prioridade: nome do contato > telefone formatado
-                        # Se não tem contato, deixar name vazio (frontend mostrará apenas telefone formatado)
+                        # ✅ CORREÇÃO: Prioridade: nome do contato > pushname da Evolution API > telefone formatado
                         participant_name = ''
                         if contact_name:
                             participant_name = contact_name
                             logger.info(f"   ✅ [GROUP INFO] Nome do contato encontrado: {participant_name}")
                         else:
-                            logger.info(f"   ℹ️ [GROUP INFO] Contato não encontrado, name vazio (telefone será mostrado)")
+                            # Se não encontrou contato cadastrado, buscar pushname da Evolution API
+                            logger.info(f"   🔍 [GROUP INFO] Contato não encontrado, buscando pushname na Evolution API...")
+                            pushname = fetch_pushname_from_evolution(wa_instance, normalized_phone)
+                            if pushname:
+                                participant_name = pushname
+                                logger.info(f"   ✅ [GROUP INFO] Pushname encontrado via Evolution API: {participant_name}")
+                            else:
+                                logger.info(f"   ℹ️ [GROUP INFO] Pushname não encontrado, name vazio (telefone será mostrado)")
                         
                         participant_info = {
                             'jid': participant_id,  # LID original
