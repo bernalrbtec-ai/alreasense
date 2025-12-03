@@ -1609,6 +1609,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   📊 Status: {conversation.status}")
             logger.info(f"   🆔 ID: {conversation.id}")
             
+            # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated para aparecer na lista de conversas
+            # Isso garante que conversas criadas via WhatsApp apareçam imediatamente na lista
+            try:
+                from apps.chat.utils.websocket import broadcast_conversation_updated
+                broadcast_conversation_updated(conversation)
+                logger.info(f"📡 [WEBHOOK] conversation_updated enviado para nova conversa aparecer na lista")
+            except Exception as e:
+                logger.error(f"❌ [WEBHOOK] Erro ao broadcast conversation_updated para nova conversa: {e}", exc_info=True)
+            
             # 📸 Buscar foto de perfil SÍNCRONAMENTE (é rápida)
             logger.info(f"📸 [FOTO] Iniciando busca... | Tipo: {conversation_type} | É grupo: {is_group}")
             try:
@@ -1751,16 +1760,25 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 old_status = conversation.status
                 old_department = conversation.department.name if conversation.department else 'Nenhum'
                 
-                # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, remover departamento
-                # para que ela volte para o Inbox (comportamento esperado)
-                conversation.status = 'pending' if not from_me else 'open'
-                conversation.department = None  # ✅ Remover departamento para voltar ao Inbox
+                # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, respeitar default_department
+                # Se instância tem default_department, usar ele. Senão, remover para voltar ao Inbox
+                if default_department:
+                    # ✅ CORREÇÃO: Se tem default_department, usar ele ao invés de remover
+                    conversation.department = default_department
+                    conversation.status = 'open'
+                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta com default_department: {default_department.name}")
+                else:
+                    # Sem default_department, remover departamento para voltar ao Inbox
+                    conversation.status = 'pending' if not from_me else 'open'
+                    conversation.department = None
+                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta sem departamento (Inbox)")
+                
                 conversation.save(update_fields=['status', 'department'])
                 
-                status_str = "Inbox" if not from_me else "Aberta"
+                status_str = conversation.department.name if conversation.department else "Inbox"
                 status_changed = True
-                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status} ({status_str})")
-                logger.info(f"   📋 Departamento removido: {old_department} → Inbox (sem departamento)")
+                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status}")
+                logger.info(f"   📋 Departamento: {old_department} → {status_str}")
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista

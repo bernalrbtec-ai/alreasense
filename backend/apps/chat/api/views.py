@@ -1322,6 +1322,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Adicionar usuário como participante
         conversation.participants.add(request.user)
         
+        # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated para aparecer na lista de conversas
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.chat.utils.websocket import broadcast_conversation_updated
+            
+            # Broadcast para todo o tenant (atualiza lista de conversas)
+            broadcast_conversation_updated(conversation, request=request)
+            logger.info(f"📡 [CONVERSATION START] conversation_updated enviado para aparecer na lista")
+        except Exception as e:
+            logger.error(f"❌ [CONVERSATION START] Erro ao broadcast conversation_updated: {e}", exc_info=True)
+        
         return Response(
             {
                 'message': 'Conversa criada com sucesso!',
