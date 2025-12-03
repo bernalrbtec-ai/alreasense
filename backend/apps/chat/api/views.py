@@ -1252,32 +1252,25 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             contact_phone = f'+{contact_phone}'
         
         # Selecionar departamento
+        # ✅ CORREÇÃO: Se department_id não for fornecido, criar conversa sem departamento (Inbox)
+        # Não usar departamento padrão para respeitar a seleção do usuário
         from apps.authn.models import Department
+        department = None
         if department_id:
             try:
                 department = Department.objects.get(
                     id=department_id,
                     tenant=request.user.tenant
                 )
+                logger.info(f"📋 [CONVERSATION START] Departamento selecionado: {department.name} (ID: {department.id})")
             except Department.DoesNotExist:
                 return Response(
                     {'error': 'Departamento não encontrado'},
                     status=status.HTTP_404_NOT_FOUND
                 )
         else:
-            # Usar primeiro departamento do tenant ou do usuário
-            if request.user.is_admin:
-                department = Department.objects.filter(
-                    tenant=request.user.tenant
-                ).first()
-            else:
-                department = request.user.departments.first()
-            
-            if not department:
-                return Response(
-                    {'error': 'Nenhum departamento disponível'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            # ✅ CORREÇÃO: Se não especificado, criar sem departamento (Inbox)
+            logger.info(f"📋 [CONVERSATION START] Nenhum departamento especificado - criando no Inbox")
         
         # ✅ CORREÇÃO: Normalizar telefone antes de buscar/criar para evitar duplicatas
         from apps.contacts.signals import normalize_phone_for_search
