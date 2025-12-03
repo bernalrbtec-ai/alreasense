@@ -662,12 +662,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # ✅ CORREÇÃO CRÍTICA: Detectar grupos quando remoteJidAlt é @lid
         # Quando grupo usa LID, remoteJid vem como telefone individual e remoteJidAlt como LID do grupo
+        # ⚠️ IMPORTANTE: NÃO confiar apenas em pushName - pode ser nome de quem enviou, não do grupo!
         push_name = message_data.get('pushName', '')
-        is_group_by_lid = remote_jid_alt and remote_jid_alt.endswith('@lid') and (
-            'grupo' in push_name.lower() or 
-            'group' in push_name.lower() or
-            len(push_name) > 0  # Se tem pushName e remoteJidAlt é @lid, provavelmente é grupo
-        )
+        
+        # ✅ VALIDAÇÃO MAIS RIGOROSA: Apenas considerar grupo se:
+        # 1. remoteJidAlt termina com @lid E
+        # 2. pushName contém explicitamente "grupo" ou "group" (case insensitive)
+        # NÃO usar len(push_name) > 0 pois pushName pode ser de quem enviou, não do grupo!
+        is_group_by_lid = False
+        if remote_jid_alt and remote_jid_alt.endswith('@lid'):
+            push_name_lower = push_name.lower() if push_name else ''
+            # ✅ Apenas considerar grupo se pushName menciona explicitamente "grupo" ou "group"
+            # Isso evita falsos positivos quando pushName é apenas nome de quem enviou
+            if 'grupo' in push_name_lower or 'group' in push_name_lower:
+                is_group_by_lid = True
+                logger.critical(f"✅ [GRUPO LID] Detectado grupo por LID: remoteJid={remote_jid}, remoteJidAlt={remote_jid_alt}, pushName={push_name}")
+            else:
+                logger.critical(f"⚠️ [INDIVIDUAL LID] remoteJidAlt é @lid mas pushName não menciona grupo: pushName='{push_name}'")
+                logger.critical(f"   remoteJid: {remote_jid}")
+                logger.critical(f"   remoteJidAlt: {remote_jid_alt}")
+                logger.critical(f"   ⚠️ Tratando como INDIVIDUAL para evitar confusão!")
         
         # ✅ CORREÇÃO CRÍTICA: Se remoteJid termina com @lid, usar remoteJidAlt (telefone real)
         # @lid é um ID longo que não é telefone, então precisamos do telefone real
