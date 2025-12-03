@@ -21,6 +21,7 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from django.db import transaction
+from django.core.cache import cache
 from apps.tenancy.models import Tenant
 from apps.chat.models import Conversation, Message, MessageAttachment
 
@@ -151,6 +152,15 @@ def reset_conversations(tenant=None, dry_run=False):
                 # Deletar conversas
                 deleted_conversations = conversations_qs.delete()[0]
                 print(f"✅ Deletadas {deleted_conversations} conversas")
+                
+                # ✅ NOVO: Limpar cache do Redis relacionado a conversas
+                print("\n4️⃣  Limpando cache do Redis...")
+                try:
+                    # Limpar cache de conversas (padrão Django cache)
+                    cache.clear()
+                    print("   ✅ Cache do Redis limpo")
+                except Exception as e:
+                    print(f"   ⚠️  Erro ao limpar cache (não crítico): {e}")
         
         print("\n" + "="*70)
         if dry_run:
