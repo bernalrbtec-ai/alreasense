@@ -1236,39 +1236,136 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     metadata = message.metadata or {}
                     mentions = metadata.get('mentions', [])
                     if mentions:
-                        # ✅ CORREÇÃO CRÍTICA: Evolution API espera apenas os DÍGITOS do JID do participante
-                        # NÃO o número do grupo! Usar JID quando disponível (mais confiável)
+                        # ✅ CORREÇÃO CRÍTICA: Usar informações do grupo para fazer match correto
+                        # Buscar participantes do grupo em group_metadata
+                        conversation.refresh_from_db()  # Garantir dados atualizados
+                        group_metadata = conversation.group_metadata or {}
+                        group_participants = group_metadata.get('participants', [])
+                        
+                        logger.info(f"🔍 [CHAT ENVIO] Processando {len(mentions)} menção(ões) usando {len(group_participants)} participantes do grupo")
+                        
+                        # Criar mapas para busca rápida: nome -> participante, phone -> participante, jid -> participante
+                        participants_by_name = {}  # nome normalizado -> participante
+                        participants_by_phone = {}  # phone normalizado -> participante
+                        participants_by_jid = {}  # jid -> participante
+                        
+                        from apps.notifications.services import normalize_phone
+                        from apps.contacts.signals import normalize_phone_for_search
+                        
+                        for p in group_participants:
+                            participant_name = (p.get('name') or '').strip().lower()
+                            participant_phone = p.get('phone', '')
+                            participant_jid = p.get('jid', '')
+                            participant_phone_number = p.get('phoneNumber', '') or p.get('phone_number', '')
+                            
+                            # Mapear por nome
+                            if participant_name:
+                                participants_by_name[participant_name] = p
+                            
+                            # Mapear por telefone (normalizado)
+                            if participant_phone:
+                                normalized = normalize_phone(participant_phone)
+                                if normalized:
+                                    participants_by_phone[normalized] = p
+                                    participants_by_phone[normalize_phone_for_search(normalized)] = p
+                                # Também mapear sem normalização
+                                phone_clean = participant_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
+                                if phone_clean:
+                                    participants_by_phone[phone_clean] = p
+                            
+                            # Mapear por phoneNumber (JID real do telefone)
+                            if participant_phone_number:
+                                phone_raw = participant_phone_number.split('@')[0]
+                                if phone_raw:
+                                    normalized = normalize_phone(phone_raw)
+                                    if normalized:
+                                        participants_by_phone[normalized] = p
+                                        participants_by_phone[normalize_phone_for_search(normalized)] = p
+                                    phone_clean = phone_raw.replace('+', '').replace(' ', '').replace('-', '').strip()
+                                    if phone_clean:
+                                        participants_by_phone[phone_clean] = p
+                            
+                            # Mapear por JID
+                            if participant_jid:
+                                participants_by_jid[participant_jid] = p
+                        
+                        # Processar cada menção e fazer match com participantes do grupo
                         mention_phones = []
                         for m in mentions:
-                            # Priorizar JID (formato original do participante - mais confiável)
-                            jid = m.get('jid', '')
-                            phone = m.get('phone', '')
+                            mention_name = (m.get('name') or '').strip().lower()
+                            mention_phone = m.get('phone', '')
+                            mention_jid = m.get('jid', '')
                             
-                            if jid:
-                                # Extrair apenas os dígitos do JID (remover @lid, @s.whatsapp.net, etc)
-                                jid_clean = jid.split('@')[0]
-                                mention_phones.append(jid_clean)
-                                logger.debug(f"   📌 Menção via JID: {jid} -> {jid_clean}")
-                            elif phone:
-                                # ✅ VALIDAÇÃO: Verificar se phone não é o número do grupo
-                                group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
-                                if '@' in group_phone:
-                                    group_phone = group_phone.split('@')[0]
+                            matched_participant = None
+                            
+                            # ✅ PRIORIDADE 1: Buscar por JID (mais confiável)
+                            if mention_jid and mention_jid in participants_by_jid:
+                                matched_participant = participants_by_jid[mention_jid]
+                                logger.debug(f"   📌 Menção encontrada por JID: {mention_jid}")
+                            
+                            # ✅ PRIORIDADE 2: Buscar por nome (quando usuário digita @contato)
+                            elif mention_name and mention_name in participants_by_name:
+                                matched_participant = participants_by_name[mention_name]
+                                logger.debug(f"   📌 Menção encontrada por nome: {mention_name}")
+                            
+                            # ✅ PRIORIDADE 3: Buscar por telefone
+                            elif mention_phone:
+                                phone_clean = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
+                                normalized = normalize_phone(mention_phone)
                                 
-                                if phone == group_phone:
-                                    logger.warning(f"⚠️ [CHAT ENVIO] Phone {phone} é o número do grupo, não do participante! Pulando menção...")
-                                    continue  # Pular se for número do grupo
+                                if normalized and normalized in participants_by_phone:
+                                    matched_participant = participants_by_phone[normalized]
+                                    logger.debug(f"   📌 Menção encontrada por telefone normalizado: {normalized}")
+                                elif phone_clean and phone_clean in participants_by_phone:
+                                    matched_participant = participants_by_phone[phone_clean]
+                                    logger.debug(f"   📌 Menção encontrada por telefone limpo: {phone_clean}")
+                            
+                            # Se encontrou participante, usar phoneNumber ou jid para menção
+                            if matched_participant:
+                                participant_phone_number = matched_participant.get('phoneNumber') or matched_participant.get('phone_number', '')
+                                participant_jid = matched_participant.get('jid', '')
                                 
-                                # Usar telefone limpo (já vem sem + do serializer)
-                                mention_phones.append(phone)
-                                logger.debug(f"   📌 Menção via phone: {phone}")
+                                # ✅ PRIORIDADE: Usar phoneNumber (telefone real) primeiro
+                                if participant_phone_number:
+                                    # Extrair apenas os dígitos do phoneNumber (formato: 5517996196795@s.whatsapp.net)
+                                    phone_raw = participant_phone_number.split('@')[0]
+                                    if phone_raw:
+                                        mention_phones.append(phone_raw)
+                                        logger.info(f"   ✅ Menção adicionada via phoneNumber: {_mask_digits(phone_raw)} (nome: {matched_participant.get('name', 'N/A')})")
+                                elif participant_jid:
+                                    # Fallback: usar JID (pode ser LID, mas Evolution API aceita)
+                                    jid_clean = participant_jid.split('@')[0]
+                                    if jid_clean:
+                                        mention_phones.append(jid_clean)
+                                        logger.info(f"   ✅ Menção adicionada via JID: {_mask_digits(jid_clean)} (nome: {matched_participant.get('name', 'N/A')})")
+                                else:
+                                    logger.warning(f"   ⚠️ Participante encontrado mas sem phoneNumber ou JID válido: {matched_participant}")
+                            else:
+                                # Se não encontrou participante, tentar usar dados da menção diretamente (fallback)
+                                if mention_jid:
+                                    jid_clean = mention_jid.split('@')[0]
+                                    if jid_clean:
+                                        mention_phones.append(jid_clean)
+                                        logger.debug(f"   📌 Menção adicionada via JID direto (fallback): {jid_clean}")
+                                elif mention_phone:
+                                    # ✅ VALIDAÇÃO: Verificar se phone não é o número do grupo
+                                    group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
+                                    if '@' in group_phone:
+                                        group_phone = group_phone.split('@')[0]
+                                    
+                                    phone_clean = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
+                                    if phone_clean != group_phone:
+                                        mention_phones.append(phone_clean)
+                                        logger.debug(f"   📌 Menção adicionada via phone direto (fallback): {phone_clean}")
+                                    else:
+                                        logger.warning(f"   ⚠️ Phone {phone_clean} é o número do grupo, não do participante! Pulando menção...")
                         
                         if mention_phones:
                             payload['mentions'] = mention_phones
                             logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_phones)} menção(ões) à mensagem")
-                            logger.info(f"   Menções: {', '.join([_mask_remote_jid(p) for p in mention_phones])}")
+                            logger.info(f"   Menções: {', '.join([_mask_digits(p) for p in mention_phones])}")
                         else:
-                            logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento (todas eram números de grupo?)")
+                            logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento")
                 
                 # ✅ SIMPLIFICAÇÃO: Sempre usar /message/sendText com 'quoted' no root quando for reply
                 # O endpoint /message/reply pode não existir, então vamos sempre usar o formato padrão
