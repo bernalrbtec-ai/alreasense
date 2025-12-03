@@ -613,6 +613,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             
                             if participants_response.status_code == 200:
                                 participants_data = participants_response.json()
+                                
+                                # ✅ LOG CRÍTICO: Mostrar JSON completo retornado
+                                import json
+                                logger.critical(f"📦 [REFRESH GRUPO API] JSON COMPLETO retornado por findGroupInfos com getParticipants=true:")
+                                logger.critical(f"   {json.dumps(participants_data, indent=2, ensure_ascii=False)}")
+                                
                                 raw_participants = participants_data.get('participants', [])
                                 
                                 # Processar participantes
@@ -932,6 +938,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 
                 if response.status_code == 200:
                     group_data = response.json()
+                    
+                    # ✅ LOG CRÍTICO: Mostrar JSON completo retornado
+                    import json
+                    logger.critical(f"📦 [GROUP INFO API] JSON COMPLETO retornado por findGroupInfos:")
+                    logger.critical(f"   {json.dumps(group_data, indent=2, ensure_ascii=False)}")
                     
                     # Extrair informações básicas
                     group_name = group_data.get('subject', conversation.contact_name or 'Grupo WhatsApp')
@@ -1790,6 +1801,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         
                         if alt_response.status_code == 200:
                             alt_data = alt_response.json()
+                            
+                            # ✅ LOG CRÍTICO: Mostrar JSON completo retornado
+                            import json
+                            logger.critical(f"📦 [PARTICIPANTS API] JSON COMPLETO retornado por findGroupInfos com getParticipants=true (alternativo):")
+                            logger.critical(f"   {json.dumps(alt_data, indent=2, ensure_ascii=False)}")
+                            
                             raw_participants = alt_data.get('participants', [])
                             logger.info(f"✅ [PARTICIPANTS] Endpoint alternativo retornou {len(raw_participants)} participantes")
                             
