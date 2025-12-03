@@ -61,12 +61,17 @@ function mergeConversations(
     last_message: incoming.last_message !== undefined ? incoming.last_message : existing.last_message,
     last_message_at: incoming.last_message_at !== undefined ? incoming.last_message_at : existing.last_message_at,
     
-    // ✅ CORREÇÃO CRÍTICA: Garantir que nome, foto, telefone e tipo sempre sejam atualizados se vierem novos dados
-    // Se incoming tem nome/foto/telefone/tipo, usar (mesmo que seja diferente de existing)
+    // ✅ CORREÇÃO CRÍTICA: Garantir que nome, foto, telefone, tipo e department sempre sejam atualizados se vierem novos dados
+    // Se incoming tem nome/foto/telefone/tipo/department, usar (mesmo que seja diferente de existing)
     contact_name: incoming.contact_name !== undefined ? incoming.contact_name : existing.contact_name,
     profile_pic_url: incoming.profile_pic_url !== undefined ? incoming.profile_pic_url : existing.profile_pic_url,
     contact_phone: incoming.contact_phone !== undefined ? incoming.contact_phone : existing.contact_phone,
     conversation_type: incoming.conversation_type !== undefined ? incoming.conversation_type : existing.conversation_type,
+    
+    // ✅ CORREÇÃO CRÍTICA: department deve SEMPRE usar incoming se presente (mesmo que seja null)
+    // Isso garante que quando uma conversa é movida para outro departamento ou para Inbox, o department é atualizado
+    department: incoming.department !== undefined ? incoming.department : existing.department,
+    department_name: incoming.department_name !== undefined ? incoming.department_name : existing.department_name,
     
     // ✅ GARANTIR campos obrigatórios:
     status: incoming.status || existing.status || 'pending',
