@@ -645,68 +645,50 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
 
         # Prepara dados
         # ✅ CRÍTICO: Recarregar conversa do banco para garantir dados atualizados
+        from apps.chat.models import Conversation
         conversation = await sync_to_async(
             Conversation.objects.select_related('tenant').get
         )(id=message.conversation.id)
-        
-        # ✅ VALIDAÇÃO CRÍTICA DE SEGURANÇA: Verificar se conversation_type está correto
-        # Validar cruzando com formato do contact_phone
-        contact_phone = (conversation.contact_phone or '').strip()
-        detected_type = None
-        
-        if contact_phone.endswith('@g.us'):
-            detected_type = 'group'
-        elif contact_phone.endswith('@s.whatsapp.net') or (contact_phone and not contact_phone.endswith('@lid') and not contact_phone.endswith('@g.us')):
-            detected_type = 'individual'
         
         # ✅ LOG CRÍTICO DE SEGURANÇA: Validar destinatário antes de enviar
         logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO DE DESTINATÁRIO ======")
         logger.critical(f"   Message ID: {message.id}")
         logger.critical(f"   Conversation ID: {conversation.id}")
         logger.critical(f"   Conversation Type (DB): {conversation.conversation_type}")
-        logger.critical(f"   Contact Phone: {_mask_remote_jid(contact_phone)}")
-        logger.critical(f"   Detected Type (por formato): {detected_type}")
-        
-        # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type não corresponde ao formato, CORRIGIR
-        if detected_type and detected_type != conversation.conversation_type:
-            logger.critical(f"⚠️ [SEGURANÇA] INCONSISTÊNCIA DETECTADA!")
-            logger.critical(f"   DB diz: {conversation.conversation_type}, mas formato indica: {detected_type}")
-            logger.critical(f"   CORRIGINDO conversation_type para: {detected_type}")
-            conversation.conversation_type = detected_type
-            await sync_to_async(conversation.save)(update_fields=['conversation_type'])
-            logger.critical(f"✅ [SEGURANÇA] conversation_type corrigido no banco")
+        logger.critical(f"   Contact Phone: {_mask_remote_jid(conversation.contact_phone)}")
         
         def get_recipient():
             """Retorna número formatado (E.164 ou group jid) e versão mascarada."""
-            # ✅ VALIDAÇÃO CRÍTICA: Usar conversation_type atualizado (pode ter sido corrigido acima)
-            current_type = conversation.conversation_type
-            
-            if current_type == 'group':
+            # ✅ CRÍTICO: Usar APENAS conversation_type do banco (não inferir pelo formato)
+            # Isso garante que mensagens individuais não sejam enviadas para grupos
+            if conversation.conversation_type == 'group':
                 group_id = (conversation.group_metadata or {}).get('group_id') or conversation.contact_phone
                 group_id = (group_id or '').strip()
                 
-                # ✅ VALIDAÇÃO CRÍTICA: Se group_id não termina com @g.us, pode estar errado
-                if not group_id.endswith('@g.us'):
-                    if group_id.endswith('@s.whatsapp.net'):
-                        # Se termina com @s.whatsapp.net, é individual, não grupo!
-                        logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: group_id termina com @s.whatsapp.net (individual), não @g.us!")
-                        logger.critical(f"   group_id: {_mask_remote_jid(group_id)}")
-                        logger.critical(f"   Isso causaria envio para destinatário ERRADO!")
-                        raise ValueError(f"Conversa marcada como grupo mas contact_phone é individual: {_mask_remote_jid(group_id)}")
+                # ✅ VALIDAÇÃO CRÍTICA: Se group_id termina com @s.whatsapp.net, é individual, não grupo!
+                if group_id.endswith('@s.whatsapp.net'):
+                    logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: group_id termina com @s.whatsapp.net (individual), não @g.us!")
+                    logger.critical(f"   group_id: {_mask_remote_jid(group_id)}")
+                    logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                    logger.critical(f"   Isso causaria envio para destinatário ERRADO!")
+                    raise ValueError(f"Conversa marcada como grupo mas contact_phone é individual: {_mask_remote_jid(group_id)}")
+                
+                if group_id.endswith('@s.whatsapp.net'):
                     group_id = group_id.replace('@s.whatsapp.net', '@g.us')
-                    if not group_id.endswith('@g.us'):
-                        group_id = f"{group_id.rstrip('@')}@g.us"
+                if not group_id.endswith('@g.us'):
+                    group_id = f"{group_id.rstrip('@')}@g.us"
                 
                 logger.critical(f"✅ [SEGURANÇA] Destinatário GRUPO: {_mask_remote_jid(group_id)}")
                 return group_id, _mask_remote_jid(group_id)
             
             # individuais
-            phone_number = contact_phone.strip()
+            phone_number = (conversation.contact_phone or '').strip()
             
             # ✅ VALIDAÇÃO CRÍTICA: Se phone_number termina com @g.us, é grupo, não individual!
             if phone_number.endswith('@g.us'):
                 logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: phone_number termina com @g.us (grupo), não individual!")
                 logger.critical(f"   phone_number: {_mask_remote_jid(phone_number)}")
+                logger.critical(f"   Conversation Type: {conversation.conversation_type}")
                 logger.critical(f"   Isso causaria envio para destinatário ERRADO!")
                 raise ValueError(f"Conversa marcada como individual mas contact_phone é grupo: {_mask_remote_jid(phone_number)}")
             
