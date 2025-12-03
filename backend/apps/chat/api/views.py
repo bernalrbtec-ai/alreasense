@@ -1322,10 +1322,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.participants.add(request.user)
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated para aparecer na lista de conversas
+        # IMPORTANTE: Usar transaction.on_commit() para garantir que broadcast acontece APÓS commit
+        # Isso garante que a conversa e participants estejam visíveis no banco quando o broadcast ler
         try:
-            from channels.layers import get_channel_layer
-            from asgiref.sync import async_to_sync
             from apps.chat.utils.websocket import broadcast_conversation_updated
+            from django.db import transaction
             
             # ✅ DEBUG: Log detalhado antes do broadcast
             logger.critical(f"📡 [CONVERSATION START] Preparando broadcast conversation_updated")
@@ -1335,11 +1336,25 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.critical(f"   👤 Contact Name: {conversation.contact_name}")
             logger.critical(f"   📞 Contact Phone: {conversation.contact_phone}")
             
-            # Broadcast para todo o tenant (atualiza lista de conversas)
-            broadcast_conversation_updated(conversation, request=request)
-            logger.critical(f"✅ [CONVERSATION START] conversation_updated enviado para aparecer na lista")
+            def do_broadcast():
+                try:
+                    # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+                    broadcast_conversation_updated(conversation, request=request)
+                    logger.critical(f"✅ [CONVERSATION START] conversation_updated enviado para aparecer na lista")
+                except Exception as e:
+                    logger.critical(f"❌ [CONVERSATION START] Erro no broadcast após commit: {e}", exc_info=True)
+            
+            # ✅ CORREÇÃO CRÍTICA: Executar broadcast após commit da transação
+            # Isso garante que a conversa e participants estejam disponíveis no banco quando buscamos
+            # Se não estamos em uma transação ativa, executar imediatamente
+            if transaction.get_connection().in_atomic_block:
+                transaction.on_commit(do_broadcast)
+                logger.critical(f"⏳ [CONVERSATION START] Broadcast agendado para após commit da transação")
+            else:
+                # Não estamos em transação, executar imediatamente
+                do_broadcast()
         except Exception as e:
-            logger.critical(f"❌ [CONVERSATION START] Erro ao broadcast conversation_updated: {e}", exc_info=True)
+            logger.critical(f"❌ [CONVERSATION START] Erro ao configurar broadcast conversation_updated: {e}", exc_info=True)
         
         return Response(
             {

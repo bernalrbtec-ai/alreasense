@@ -157,7 +157,7 @@ export function ConversationList() {
     
     const searchLower = debouncedSearchTerm.toLowerCase().trim();
     
-    return conversations.filter((conv) => {
+    const filtered = conversations.filter((conv) => {
       // 1. Filtro de busca (nome ou telefone) - apenas se houver termo de busca
       if (searchLower) {
         const matchesSearch = 
@@ -176,31 +176,66 @@ export function ConversationList() {
         return true;
       }
       
+      const departmentId = typeof conv.department === 'string' 
+        ? conv.department 
+        : conv.department?.id || null;
+      const convStatus = conv.status || 'pending';
+      const activeDeptId = String(activeDepartment.id);
+      const convDeptId = departmentId ? String(departmentId) : null;
+      
       if (activeDepartment.id === 'inbox') {
         // Inbox: conversas pendentes SEM departamento
-        const departmentId = typeof conv.department === 'string' 
-          ? conv.department 
-          : conv.department?.id || null;
-        const convStatus = conv.status || 'pending';
-        
         // ✅ CORREÇÃO: Inbox só mostra conversas SEM departamento E com status='pending'
-        return !departmentId && convStatus === 'pending';
+        const passes = !departmentId && convStatus === 'pending';
+        
+        // ✅ DEBUG: Log quando conversa não passa no filtro do Inbox
+        if (!passes && convStatus === 'pending') {
+          console.log('🔍 [FILTER] Conversa não passou no filtro do Inbox:', {
+            conversationId: conv.id,
+            conversationName: conv.contact_name,
+            departmentId: convDeptId,
+            status: convStatus,
+            reason: departmentId ? 'Tem departamento' : 'Status não é pending'
+          });
+        }
+        
+        return passes;
       } else {
         // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
         if (conv.status === 'closed') {
           return false;
         }
         
-        const departmentId = typeof conv.department === 'string' 
-          ? conv.department 
-          : conv.department?.id || null;
+        const passes = convDeptId === activeDeptId;
         
-        const activeDeptId = String(activeDepartment.id);
-        const convDeptId = departmentId ? String(departmentId) : null;
+        // ✅ DEBUG: Log quando conversa não passa no filtro do departamento
+        if (!passes) {
+          console.log('🔍 [FILTER] Conversa não passou no filtro do departamento:', {
+            conversationId: conv.id,
+            conversationName: conv.contact_name,
+            activeDepartmentId: activeDeptId,
+            activeDepartmentName: activeDepartment.name,
+            conversationDepartmentId: convDeptId,
+            conversationStatus: convStatus,
+            reason: convDeptId !== activeDeptId ? 'Departamento diferente' : 'Status closed'
+          });
+        }
         
-        return convDeptId === activeDeptId;
+        return passes;
       }
     });
+    
+    // ✅ DEBUG: Log do resultado do filtro
+    if (filtered.length !== conversations.length) {
+      console.log('🔍 [FILTER] Resultado do filtro:', {
+        totalConversations: conversations.length,
+        filteredConversations: filtered.length,
+        activeDepartment: activeDepartment?.name || 'Nenhum',
+        searchTerm: debouncedSearchTerm || 'Nenhum'
+      });
+    }
+    
+    return filtered;
   }, [conversations, debouncedSearchTerm, activeDepartment]); // ✅ Usar debouncedSearchTerm
 
   // ✅ PERFORMANCE: Memoizar função de formatação
