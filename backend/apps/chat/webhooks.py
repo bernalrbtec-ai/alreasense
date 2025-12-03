@@ -695,10 +695,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Manter remote_jid como está (será usado como group_id)
             else:
                 # remoteJid é @lid mas remoteJidAlt é telefone real
-            logger.info(
-                f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
-            )
-            remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
+                logger.info(
+                    f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
+                )
+                remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
         
         # 🔍 Detectar tipo de conversa
         # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE ou GRUPO!
