@@ -623,6 +623,18 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 'status': message.status or 'pending'
             }
         )
+        
+        # ✅ CORREÇÃO CRÍTICA: Enviar conversation_updated para atualizar lista de conversas
+        # Isso garante que a última mensagem apareça na lista e a conversa suba para o topo
+        await self.channel_layer.group_send(
+            tenant_group,
+            {
+                'type': 'conversation_updated',
+                'conversation': conversation_data
+            }
+        )
+        
+        logger.info(f"📡 [CHAT WS V2] conversation_updated enviado para atualizar lista de conversas")
 
     @database_sync_to_async
     def mark_message_as_seen(self, message_id, conversation_id):

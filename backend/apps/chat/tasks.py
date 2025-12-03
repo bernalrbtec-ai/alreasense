@@ -1722,11 +1722,29 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             }
         )
         
+        # ✅ CORREÇÃO CRÍTICA: Enviar conversation_updated para atualizar lista de conversas
+        # Isso garante que a última mensagem apareça na lista e a conversa suba para o topo
+        # Como estamos em função async, usar database_sync_to_async para chamar broadcast_conversation_updated
+        from apps.chat.utils.websocket import broadcast_conversation_updated
+        from channels.db import database_sync_to_async
+        
+        try:
+            # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+            # Passar message_id para garantir que a mensagem recém-criada seja incluída
+            # Como broadcast_conversation_updated é síncrono, precisamos chamar via database_sync_to_async
+            await database_sync_to_async(broadcast_conversation_updated)(
+                message.conversation, 
+                message_id=str(message.id)
+            )
+            logger.info(f"📡 [CHAT ENVIO] conversation_updated enviado para atualizar lista de conversas")
+        except Exception as e:
+            logger.error(f"❌ [CHAT ENVIO] Erro no broadcast conversation_updated: {e}", exc_info=True)
+        
         logger.info(f"✅ [CHAT ENVIO] Mensagem enviada e broadcast com sucesso!")
         logger.info(f"   Message ID: {message.id}")
         logger.info(f"   Phone: {message.conversation.contact_phone}")
         logger.info(f"   Status: {message.status}")
-        logger.info(f"   Broadcast: message_received + message_status_update")
+        logger.info(f"   Broadcast: message_received + message_status_update + conversation_updated")
 
         record_latency(
             'send_message_total',
