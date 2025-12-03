@@ -941,6 +941,30 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     
                     # 🎤 ÁUDIO: Usar sendWhatsAppAudio (confirmado que existe e retorna ptt:true)
                     if is_audio:
+                        # ✅ VALIDAÇÃO CRÍTICA: Verificar se recipient_value corresponde ao conversation_type
+                        logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO DE DESTINATÁRIO (ÁUDIO) ======")
+                        logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                        logger.critical(f"   Recipient Value: {_mask_remote_jid(recipient_value)}")
+                        logger.critical(f"   Message ID: {message.id}")
+                        logger.critical(f"   Conversation ID: {conversation.id}")
+                        
+                        # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type é grupo, recipient_value DEVE terminar com @g.us
+                        if conversation.conversation_type == 'group':
+                            if not recipient_value.endswith('@g.us'):
+                                logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation é grupo mas recipient_value não termina com @g.us!")
+                                logger.critical(f"   Recipient Value: {_mask_remote_jid(recipient_value)}")
+                                logger.critical(f"   Isso causaria envio para destinatário ERRADO!")
+                                raise ValueError(f"Conversa é grupo mas destinatário não é grupo: {_mask_remote_jid(recipient_value)}")
+                            logger.critical(f"✅ [SEGURANÇA] Destinatário GRUPO validado (áudio): {_mask_remote_jid(recipient_value)}")
+                        else:
+                            # ✅ VALIDAÇÃO CRÍTICA: Se conversation_type é individual, recipient_value NÃO deve terminar com @g.us
+                            if recipient_value.endswith('@g.us'):
+                                logger.critical(f"❌ [SEGURANÇA] ERRO CRÍTICO: Conversation é individual mas recipient_value termina com @g.us!")
+                                logger.critical(f"   Recipient Value: {_mask_remote_jid(recipient_value)}")
+                                logger.critical(f"   Isso causaria envio para grupo ao invés de individual!")
+                                raise ValueError(f"Conversa é individual mas destinatário é grupo: {_mask_remote_jid(recipient_value)}")
+                            logger.critical(f"✅ [SEGURANÇA] Destinatário INDIVIDUAL validado (áudio): {_mask_remote_jid(recipient_value)}")
+                        
                         # Estrutura para PTT via sendWhatsAppAudio
                         # Ref: https://doc.evolution-api.com/v2/api-reference/message-controller/send-audio
                         # TESTADO E FUNCIONANDO: {number, audio, delay, linkPreview: false}
@@ -951,6 +975,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             'delay': 1200,        # Delay opcional
                             'linkPreview': False  # ✅ OBRIGATÓRIO: evita "Encaminhada"
                         }
+                        
+                        logger.critical(f"✅ [SEGURANÇA] Payload de áudio criado com destinatário validado:")
+                        logger.critical(f"   number: {_mask_remote_jid(payload['number'])}")
+                        logger.critical(f"   conversation_type: {conversation.conversation_type}")
+                        logger.critical(f"   message_id: {message.id}")
+                        logger.critical(f"   conversation_id: {conversation.id}")
                         
                         # ✅ NOVO: Adicionar options.quoted se for resposta (formato Evolution API)
                         if quoted_message_id and quoted_remote_jid and original_message:
