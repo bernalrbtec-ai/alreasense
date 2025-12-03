@@ -1213,8 +1213,29 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.refresh_from_db()  # ✅ IMPORTANTE: Recarregar do banco para ter dados atualizados
         group_metadata = conversation.group_metadata or {}
         participants_raw = group_metadata.get('participants', [])
+        
+        # ✅ CORREÇÃO CRÍTICA: Verificar se participantes têm apenas LIDs sem phoneNumber
+        # Se sim, forçar busca da API para obter telefones reais
+        has_only_lids = False
+        if participants_raw:
+            for p in participants_raw:
+                participant_phone = p.get('phone', '')
+                participant_phone_number = p.get('phoneNumber', '') or p.get('phone_number', '')
+                participant_jid = p.get('jid', '')
+                
+                # Se phone é LID e não tem phoneNumber, precisa buscar da API
+                if (is_lid_number(participant_phone) or participant_jid.endswith('@lid')) and not participant_phone_number:
+                    has_only_lids = True
+                    logger.warning(f"⚠️ [PARTICIPANTS] Participante com LID sem phoneNumber detectado: jid={participant_jid}, phone={participant_phone[:30] if participant_phone else 'N/A'}...")
+                    break
+        
         # ✅ CRÍTICO: Limpar participantes do metadata também (pode ter LIDs antigos)
         participants = clean_participants_for_metadata(participants_raw)
+        
+        # ✅ NOVA LÓGICA: Se participantes têm apenas LIDs sem phoneNumber, buscar da API
+        if has_only_lids:
+            logger.warning(f"🔄 [PARTICIPANTS] Participantes têm apenas LIDs sem phoneNumber, forçando busca da API...")
+            participants = []  # Limpar para forçar busca
         
         # Se não tem participantes, tentar buscar diretamente da API
         if not participants:
