@@ -68,6 +68,72 @@ def is_lid_number(phone: str) -> bool:
     
     return False
 
+def fetch_pushname_from_evolution(instance: WhatsAppInstance, phone: str) -> str | None:
+    """
+    Busca pushname de um contato via Evolution API.
+    
+    Args:
+        instance: Instância WhatsApp ativa
+        phone: Telefone em formato E.164 (ex: +5517996196795) ou sem formatação
+    
+    Returns:
+        Pushname do contato ou None se não encontrado
+    """
+    try:
+        from apps.notifications.services import normalize_phone
+        from django.conf import settings
+        
+        # Normalizar telefone (remover + e @s.whatsapp.net)
+        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '').strip()
+        
+        # Buscar configuração da Evolution API
+        base_url = getattr(settings, 'EVOLUTION_API_URL', None)
+        api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
+        
+        if not base_url or not api_key:
+            logger.warning("⚠️ [PUSHNAME] Evolution API não configurada")
+            return None
+        
+        # Endpoint da Evolution API para buscar informações de contato
+        base_url_clean = base_url.rstrip('/')
+        endpoint = f"{base_url_clean}/chat/whatsappNumbers/{instance.instance_name}"
+        
+        headers = {
+            'apikey': api_key,
+            'Content-Type': 'application/json'
+        }
+        
+        # Fazer requisição POST com lista de números
+        response = httpx.post(
+            endpoint,
+            json={'numbers': [clean_phone]},
+            headers=headers,
+            timeout=10.0
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            if data and isinstance(data, list) and len(data) > 0:
+                contact_info = data[0]
+                # Retornar pushname ou name (prioridade: pushname > name)
+                pushname = contact_info.get('pushname') or contact_info.get('name', '')
+                if pushname and not is_lid_number(pushname):
+                    logger.info(f"   ✅ [PUSHNAME] Encontrado via Evolution API: {pushname} para {phone}")
+                    return pushname
+        
+        logger.debug(f"   ℹ️ [PUSHNAME] Pushname não encontrado para {phone}")
+        return None
+        
+    except httpx.TimeoutException:
+        logger.warning(f"   ⚠️ [PUSHNAME] Timeout ao buscar pushname para {phone}")
+        return None
+    except httpx.HTTPError as e:
+        logger.warning(f"   ⚠️ [PUSHNAME] Erro HTTP ao buscar pushname para {phone}: {e}")
+        return None
+    except Exception as e:
+        logger.warning(f"   ⚠️ [PUSHNAME] Erro ao buscar pushname para {phone}: {e}")
+        return None
+
 def clean_participants_for_metadata(participants_list: list) -> list:
     """
     Limpa lista de participantes garantindo que phone sempre tenha telefone real.
@@ -662,14 +728,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                         phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
                                     ).first()
                                     
-                                    # ✅ CORREÇÃO: Prioridade: nome do contato > telefone formatado
-                                    # Se não tem contato, deixar name vazio (frontend mostrará apenas telefone formatado)
+                                    # ✅ CORREÇÃO: Prioridade: nome do contato > pushname da Evolution API > telefone formatado
                                     participant_name = ''
                                     if contact and contact.name:
                                         participant_name = contact.name
                                         logger.info(f"   ✅ [REFRESH GRUPO] Nome do contato encontrado: {participant_name}")
                                     else:
-                                        logger.info(f"   ℹ️ [REFRESH GRUPO] Contato não encontrado, name vazio (telefone será mostrado)")
+                                        # Se não encontrou contato cadastrado, buscar pushname da Evolution API
+                                        logger.info(f"   🔍 [REFRESH GRUPO] Contato não encontrado, buscando pushname na Evolution API...")
+                                        pushname = fetch_pushname_from_evolution(instance, normalized_phone)
+                                        if pushname:
+                                            participant_name = pushname
+                                            logger.info(f"   ✅ [REFRESH GRUPO] Pushname encontrado via Evolution API: {participant_name}")
+                                        else:
+                                            logger.info(f"   ℹ️ [REFRESH GRUPO] Pushname não encontrado, name vazio (telefone será mostrado)")
                                     
                                     participant_info = {
                                         'phone': normalized_phone,  # Telefone real normalizado E.164
