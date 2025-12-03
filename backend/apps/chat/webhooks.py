@@ -707,7 +707,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         is_broadcast = remote_jid.endswith('@broadcast')
         is_lid = remote_jid.endswith('@lid')  # ✅ Detectar se ainda é @lid (sem remoteJidAlt)
         
-        if is_group:
+        # ✅ VALIDAÇÃO CRÍTICA: Se remoteJid termina com @s.whatsapp.net, NUNCA é grupo!
+        # Isso previne falsos positivos quando contato individual tem remoteJidAlt com @lid
+        if remote_jid.endswith('@s.whatsapp.net') and is_group:
+            logger.critical(f"❌ [TIPO] ERRO CRÍTICO: remoteJid termina com @s.whatsapp.net (individual) mas is_group=True!")
+            logger.critical(f"   remoteJid: {remote_jid}")
+            logger.critical(f"   remoteJidAlt: {remote_jid_alt}")
+            logger.critical(f"   pushName: {push_name}")
+            logger.critical(f"   is_group_by_lid: {is_group_by_lid}")
+            logger.critical(f"   ⚠️ FORÇANDO conversation_type='individual' para evitar confusão!")
+            is_group = False
+            conversation_type = 'individual'
+        elif is_group:
             conversation_type = 'group'
         elif is_broadcast:
             conversation_type = 'broadcast'
@@ -722,7 +733,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         else:
             conversation_type = 'individual'
         
-        logger.info(f"🔍 [TIPO] Conversa: {conversation_type} | RemoteJID: {remote_jid}")
+        logger.critical(f"🔍 [TIPO] Conversa: {conversation_type} | RemoteJID: {remote_jid} | RemoteJidAlt: {remote_jid_alt}")
+        logger.critical(f"   is_group: {is_group} | is_group_by_lid: {is_group_by_lid} | pushName: {push_name}")
         
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone/ID de forma consistente
         # Isso previne criação de conversas duplicadas para o mesmo contato
