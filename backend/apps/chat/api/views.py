@@ -1548,8 +1548,50 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.critical(f"✅ [PARTICIPANTS] Cache encontrado: {len(cached_participants)} participantes")
             # ✅ CRÍTICO: Limpar participantes do cache também (pode ter LIDs antigos)
             cleaned_cached_participants = clean_participants_for_metadata(cached_participants)
+            
+            # ✅ NOVO: Enriquecer participantes do cache com informações de contatos cadastrados
+            from apps.contacts.models import Contact
+            from apps.notifications.services import normalize_phone
+            
+            participant_phones = []
+            for p in cleaned_cached_participants:
+                phone = p.get('phone', '')
+                if phone:
+                    normalized = normalize_phone(phone)
+                    if normalized:
+                        participant_phones.append(normalized)
+            
+            contacts_map = {}
+            if participant_phones:
+                try:
+                    contacts = Contact.objects.filter(
+                        tenant=conversation.tenant,
+                        phone__in=participant_phones
+                    ).values('phone', 'name')
+                    
+                    for contact in contacts:
+                        normalized_contact_phone = normalize_phone(contact['phone'])
+                        if normalized_contact_phone:
+                            contacts_map[normalized_contact_phone] = contact['name']
+                    
+                    logger.info(f"✅ [PARTICIPANTS] {len(contacts_map)} contatos cadastrados encontrados para participantes do cache")
+                except Exception as e:
+                    logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar contatos do cache: {e}")
+            
+            # Enriquecer participantes do cache
+            for p in cleaned_cached_participants:
+                phone = p.get('phone', '')
+                normalized_phone = normalize_phone(phone) if phone else None
+                
+                if normalized_phone and normalized_phone in contacts_map:
+                    p['is_contact'] = True
+                    p['contact_name'] = contacts_map[normalized_phone]
+                else:
+                    p['is_contact'] = False
+                    p['contact_name'] = None
+            
             group_metadata = conversation.group_metadata or {}
-            logger.critical(f"✅ [PARTICIPANTS] Retornando {len(cleaned_cached_participants)} participantes do cache")
+            logger.critical(f"✅ [PARTICIPANTS] Retornando {len(cleaned_cached_participants)} participantes do cache (enriquecidos com contatos)")
             return Response({
                 'participants': cleaned_cached_participants,
                 'count': len(cleaned_cached_participants),
@@ -1578,6 +1620,48 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 if elapsed_minutes < 5:  # Atualizado há menos de 5 minutos
                     logger.info(f"✅ [PARTICIPANTS] Usando participantes recentes ({elapsed_minutes:.1f}min atrás)")
                     participants = clean_participants_for_metadata(participants_raw)
+                    
+                    # ✅ NOVO: Enriquecer participantes do metadata com informações de contatos cadastrados
+                    from apps.contacts.models import Contact
+                    from apps.notifications.services import normalize_phone
+                    
+                    participant_phones = []
+                    for p in participants:
+                        phone = p.get('phone', '')
+                        if phone:
+                            normalized = normalize_phone(phone)
+                            if normalized:
+                                participant_phones.append(normalized)
+                    
+                    contacts_map = {}
+                    if participant_phones:
+                        try:
+                            contacts = Contact.objects.filter(
+                                tenant=conversation.tenant,
+                                phone__in=participant_phones
+                            ).values('phone', 'name')
+                            
+                            for contact in contacts:
+                                normalized_contact_phone = normalize_phone(contact['phone'])
+                                if normalized_contact_phone:
+                                    contacts_map[normalized_contact_phone] = contact['name']
+                            
+                            logger.info(f"✅ [PARTICIPANTS] {len(contacts_map)} contatos cadastrados encontrados para participantes do metadata")
+                        except Exception as e:
+                            logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar contatos do metadata: {e}")
+                    
+                    # Enriquecer participantes
+                    for p in participants:
+                        phone = p.get('phone', '')
+                        normalized_phone = normalize_phone(phone) if phone else None
+                        
+                        if normalized_phone and normalized_phone in contacts_map:
+                            p['is_contact'] = True
+                            p['contact_name'] = contacts_map[normalized_phone]
+                        else:
+                            p['is_contact'] = False
+                            p['contact_name'] = None
+                    
                     # Salvar no cache
                     cache.set(cache_key, participants, 300)  # 5 minutos
                     return Response({
@@ -1655,6 +1739,52 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             participants = []
         
         logger.critical(f"📋 [PARTICIPANTS] Antes de limpar: {len(participants)} participantes")
+        
+        # ✅ NOVO: Enriquecer participantes com informações de contatos cadastrados
+        # Buscar contatos cadastrados para verificar quais participantes estão na lista de contatos
+        from apps.contacts.models import Contact
+        from apps.notifications.services import normalize_phone
+        
+        # Normalizar telefones dos participantes para busca
+        participant_phones = []
+        for p in participants:
+            phone = p.get('phone', '')
+            if phone:
+                normalized = normalize_phone(phone)
+                if normalized:
+                    participant_phones.append(normalized)
+        
+        # Buscar contatos cadastrados em lote (otimizado)
+        contacts_map = {}
+        if participant_phones:
+            try:
+                contacts = Contact.objects.filter(
+                    tenant=conversation.tenant,
+                    phone__in=participant_phones
+                ).values('phone', 'name')
+                
+                for contact in contacts:
+                    normalized_contact_phone = normalize_phone(contact['phone'])
+                    if normalized_contact_phone:
+                        contacts_map[normalized_contact_phone] = contact['name']
+                
+                logger.info(f"✅ [PARTICIPANTS] {len(contacts_map)} contatos cadastrados encontrados para {len(participant_phones)} participantes")
+            except Exception as e:
+                logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar contatos cadastrados: {e}")
+        
+        # ✅ Enriquecer participantes com informações de contatos
+        for p in participants:
+            phone = p.get('phone', '')
+            normalized_phone = normalize_phone(phone) if phone else None
+            
+            if normalized_phone and normalized_phone in contacts_map:
+                p['is_contact'] = True
+                p['contact_name'] = contacts_map[normalized_phone]
+                logger.debug(f"   ✅ Participante {normalized_phone} é contato cadastrado: {contacts_map[normalized_phone]}")
+            else:
+                p['is_contact'] = False
+                p['contact_name'] = None
+                logger.debug(f"   ℹ️ Participante {normalized_phone if normalized_phone else phone} não é contato cadastrado")
         
         # ✅ CRÍTICO: Limpar participantes antes de salvar no cache (remover LIDs do phone)
         cleaned_participants = clean_participants_for_metadata(participants)

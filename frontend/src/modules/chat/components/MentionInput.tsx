@@ -40,6 +40,9 @@ interface Participant {
   name: string;
   pushname?: string;
   jid?: string;
+  // ✅ NOVO: Informações de contato cadastrado
+  is_contact?: boolean;
+  contact_name?: string | null;
 }
 
 interface MentionInputProps {
@@ -179,9 +182,10 @@ export function MentionInput({
           filtered = participants;
           console.log('📋 [MENTIONS] Query vazia - mostrando todos os participantes:', filtered.length);
         } else {
-          // ✅ CORREÇÃO: Filtrar participantes baseado na query (nome, pushname ou telefone)
+          // ✅ NOVO: Filtrar participantes baseado na query (contact_name, pushname, name ou telefone)
           filtered = participants.filter(p => {
-            const displayName = (p.pushname || p.name).toLowerCase();
+            // ✅ Prioridade: contact_name > pushname > name
+            const displayName = (p.contact_name || p.pushname || p.name || '').toLowerCase();
             const nameMatch = displayName.includes(query.toLowerCase());
             const phoneMatch = p.phone.replace(/\D/g, '').includes(query.replace(/\D/g, ''));
             return nameMatch || phoneMatch;
@@ -214,8 +218,11 @@ export function MentionInput({
   const insertMention = useCallback((participant: Participant) => {
     if (mentionStart === null || !inputRef.current) return;
 
-    // ✅ CORREÇÃO: Usar pushname ou name para exibição no texto
-    const displayName = participant.pushname || participant.name;
+    // ✅ NOVO: Prioridade: contact_name (contato cadastrado) > pushname > name > telefone formatado
+    const displayName = participant.contact_name || 
+                       participant.pushname || 
+                       participant.name || 
+                       (participant.phone ? formatPhoneForDisplay(participant.phone) : 'Contato');
     
     const textBefore = value.substring(0, mentionStart);
     const textAfter = value.substring(inputRef.current.selectionStart);
@@ -238,8 +245,8 @@ export function MentionInput({
       const identifier = p.jid || p.phone;
       if (identifier) {
         validParticipantsMap.set(identifier, p);
-        // Também mapear por nome para busca rápida
-        const name = (p.pushname || p.name || '').toLowerCase();
+        // ✅ NOVO: Mapear por contact_name (prioridade), pushname ou name para busca rápida
+        const name = (p.contact_name || p.pushname || p.name || '').toLowerCase();
         if (name) {
           validParticipantsMap.set(name, p);
         }
@@ -376,28 +383,48 @@ export function MentionInput({
           ref={suggestionsRef}
           className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 min-w-[200px]"
         >
-          {suggestions.map((participant, index) => (
-            <div
-              key={participant.phone}
-              className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
-                index === selectedIndex ? 'bg-blue-100' : ''
-              }`}
-              onMouseDown={(e) => {
-                e.preventDefault(); // Prevenir blur do textarea
-                console.log('🖱️ [MENTIONS] Participante selecionado:', participant);
-                insertMention(participant);
-              }}
-            >
-              <div className="font-medium text-gray-900">
-                {participant.pushname || participant.name || (participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem nome')}
-              </div>
-              {participant.pushname || participant.name ? (
-                <div className="text-xs text-gray-500">
-                  {participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem telefone'}
+          {suggestions.map((participant, index) => {
+            // ✅ NOVO: Prioridade: contact_name (contato cadastrado) > pushname > name > telefone formatado
+            const displayName = participant.contact_name || 
+                               participant.pushname || 
+                               participant.name || 
+                               (participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem nome');
+            
+            // ✅ Se tem contact_name, mostrar como contato cadastrado (destaque)
+            // ✅ Se não tem contact_name mas tem pushname/name, mostrar nome + telefone
+            // ✅ Se não tem nenhum nome, mostrar apenas telefone formatado
+            const hasContactName = !!participant.contact_name;
+            const hasAnyName = !!(participant.pushname || participant.name);
+            
+            return (
+              <div
+                key={participant.phone}
+                className={`px-3 py-2 cursor-pointer hover:bg-blue-50 ${
+                  index === selectedIndex ? 'bg-blue-100' : ''
+                }`}
+                onMouseDown={(e) => {
+                  e.preventDefault(); // Prevenir blur do textarea
+                  console.log('🖱️ [MENTIONS] Participante selecionado:', participant);
+                  insertMention(participant);
+                }}
+              >
+                <div className={`font-medium ${hasContactName ? 'text-blue-700' : 'text-gray-900'}`}>
+                  {displayName}
+                  {hasContactName && (
+                    <span className="ml-2 text-xs text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded">
+                      Contato
+                    </span>
+                  )}
                 </div>
-              ) : null}
-            </div>
-          ))}
+                {/* ✅ Mostrar telefone apenas se não for contato cadastrado OU se tiver nome adicional */}
+                {(hasAnyName && !hasContactName) || hasContactName ? (
+                  <div className="text-xs text-gray-500">
+                    {participant.phone ? formatPhoneForDisplay(participant.phone) : 'Sem telefone'}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
