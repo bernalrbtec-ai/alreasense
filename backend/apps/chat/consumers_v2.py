@@ -626,15 +626,29 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         
         # ✅ CORREÇÃO CRÍTICA: Enviar conversation_updated para atualizar lista de conversas
         # Isso garante que a última mensagem apareça na lista e a conversa suba para o topo
-        await self.channel_layer.group_send(
-            tenant_group,
-            {
-                'type': 'conversation_updated',
-                'conversation': conversation_data
-            }
-        )
+        # ✅ FIX: Usar broadcast_conversation_updated que faz refresh_from_db e busca last_message
+        from apps.chat.utils.websocket import broadcast_conversation_updated
+        from channels.db import database_sync_to_async
         
-        logger.info(f"📡 [CHAT WS V2] conversation_updated enviado para atualizar lista de conversas")
+        try:
+            # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+            # Passar message_id para garantir que a mensagem recém-criada seja incluída
+            await database_sync_to_async(broadcast_conversation_updated)(
+                message.conversation,
+                message_id=str(message.id)
+            )
+            logger.info(f"📡 [CHAT WS V2] conversation_updated enviado via broadcast_conversation_updated para atualizar lista de conversas")
+        except Exception as e:
+            logger.error(f"❌ [CHAT WS V2] Erro no broadcast conversation_updated: {e}", exc_info=True)
+            # Fallback: enviar conversation_data serializado diretamente
+            await self.channel_layer.group_send(
+                tenant_group,
+                {
+                    'type': 'conversation_updated',
+                    'conversation': conversation_data
+                }
+            )
+            logger.info(f"📡 [CHAT WS V2] conversation_updated enviado via fallback (sem last_message)")
 
     @database_sync_to_async
     def mark_message_as_seen(self, message_id, conversation_id):
