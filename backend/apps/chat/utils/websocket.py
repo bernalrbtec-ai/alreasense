@@ -152,6 +152,14 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
     if last_message_in_data:
         logger.info(f"   last_message content: {last_message_in_data.get('content', 'N/A')[:50]}...")
     
+    # ✅ LOG CRÍTICO: Verificar department sendo enviado
+    logger.critical(f"📋 [WEBSOCKET] Department sendo enviado no broadcast:")
+    logger.critical(f"   department (UUID): {conv_data.get('department')}")
+    logger.critical(f"   department_name: {conv_data.get('department_name', 'N/A')}")
+    logger.critical(f"   status: {conv_data.get('status', 'N/A')}")
+    logger.critical(f"   contact_name: {conv_data.get('contact_name', 'N/A')}")
+    logger.critical(f"   contact_phone: {conv_data.get('contact_phone', 'N/A')}")
+    
     broadcast_to_tenant(
         tenant_id=str(conversation.tenant_id),
         event_type='conversation_updated',
