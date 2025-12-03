@@ -1763,8 +1763,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             logger.critical(f"   Contact Phone: {conversation.contact_phone}")
                             logger.critical(f"   is_group: {is_group}")
                             logger.critical(f"   ⚠️ NÃO ENFILEIRANDO fetch_profile_pic para evitar confusão!")
-                    else:
-                        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                        else:
+                            clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
                             logger.critical(f"👤 [INDIVIDUAL] Enfileirando busca de informações do contato: {clean_phone}")
                             logger.critical(f"   Conversation ID: {conversation.id}")
                             logger.critical(f"   Conversation Type: {conversation.conversation_type}")
