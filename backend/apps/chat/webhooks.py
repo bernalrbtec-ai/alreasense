@@ -1896,7 +1896,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta com default_department: {default_department.name}")
                 else:
                     # Sem default_department, remover departamento para voltar ao Inbox
-                conversation.status = 'pending' if not from_me else 'open'
+                    conversation.status = 'pending' if not from_me else 'open'
                     conversation.department = None
                     logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta sem departamento (Inbox)")
                 
