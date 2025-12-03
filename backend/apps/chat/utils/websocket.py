@@ -152,13 +152,22 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
     if last_message_in_data:
         logger.info(f"   last_message content: {last_message_in_data.get('content', 'N/A')[:50]}...")
     
-    # ✅ LOG CRÍTICO: Verificar department sendo enviado
-    logger.critical(f"📋 [WEBSOCKET] Department sendo enviado no broadcast:")
+    # ✅ LOG CRÍTICO: Verificar department e status sendo enviado
+    logger.critical(f"📋 [WEBSOCKET] Dados sendo enviados no broadcast:")
+    logger.critical(f"   conversation_id: {conv_data.get('id', 'N/A')}")
     logger.critical(f"   department (UUID): {conv_data.get('department')}")
     logger.critical(f"   department_name: {conv_data.get('department_name', 'N/A')}")
     logger.critical(f"   status: {conv_data.get('status', 'N/A')}")
     logger.critical(f"   contact_name: {conv_data.get('contact_name', 'N/A')}")
     logger.critical(f"   contact_phone: {conv_data.get('contact_phone', 'N/A')}")
+    logger.critical(f"   last_message_at: {conv_data.get('last_message_at', 'N/A')}")
+    logger.critical(f"   last_message presente: {conv_data.get('last_message') is not None}")
+    
+    # ✅ VALIDAÇÃO CRÍTICA: Se status é 'closed', logar como WARNING
+    if conv_data.get('status') == 'closed':
+        logger.warning(f"⚠️ [WEBSOCKET] ATENÇÃO: Conversa {conv_data.get('id')} está sendo enviada com status='closed'!")
+        logger.warning(f"   Isso pode fazer a conversa não aparecer na lista!")
+        logger.warning(f"   Verifique se a conversa deveria estar fechada.")
     
     broadcast_to_tenant(
         tenant_id=str(conversation.tenant_id),
