@@ -1294,6 +1294,77 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 existing.contact_phone = normalized_phone
                 existing.save(update_fields=['contact_phone'])
             
+            # ✅ CORREÇÃO CRÍTICA: Se conversa estava fechada, reabrir automaticamente
+            # Isso garante que conversas fechadas sejam reabertas quando usuário inicia nova conversa
+            needs_update = False
+            update_fields_list = []
+            
+            if existing.status == 'closed':
+                old_status = existing.status
+                old_department = existing.department.name if existing.department else 'Nenhum'
+                
+                # ✅ CORREÇÃO: Quando reabrir, usar o department enviado (ou None se Inbox)
+                # Se department foi enviado, usar ele. Senão, remover para voltar ao Inbox
+                if department:
+                    existing.department = department
+                    existing.status = 'open'
+                    logger.info(f"🔄 [CONVERSATION START] Conversa {normalized_phone} reaberta com department: {department.name}")
+                else:
+                    # Sem department, remover departamento para voltar ao Inbox
+                    existing.status = 'pending'
+                    existing.department = None
+                    logger.info(f"🔄 [CONVERSATION START] Conversa {normalized_phone} reaberta sem departamento (Inbox)")
+                
+                update_fields_list.extend(['status', 'department'])
+                needs_update = True
+                
+                status_str = existing.department.name if existing.department else "Inbox"
+                logger.info(f"🔄 [CONVERSATION START] Conversa reaberta: {old_status} → {existing.status}")
+                logger.info(f"   📋 Departamento: {old_department} → {status_str}")
+            
+            # ✅ CORREÇÃO: Se department foi enviado mas conversa tem department diferente, atualizar
+            if department and existing.department != department:
+                existing.department = department
+                # Se estava pending, mudar para open ao atribuir departamento
+                if existing.status == 'pending':
+                    existing.status = 'open'
+                    update_fields_list.append('status')
+                update_fields_list.append('department')
+                needs_update = True
+                logger.info(f"🔄 [CONVERSATION START] Departamento atualizado: {existing.department.name if existing.department else 'Nenhum'} → {department.name}")
+            
+            # ✅ CORREÇÃO: Atualizar nome se fornecido e diferente
+            if contact_name and existing.contact_name != contact_name:
+                existing.contact_name = contact_name
+                update_fields_list.append('contact_name')
+                needs_update = True
+                logger.info(f"🔄 [CONVERSATION START] Nome atualizado: {existing.contact_name} → {contact_name}")
+            
+            if needs_update:
+                existing.save(update_fields=update_fields_list)
+                logger.info(f"✅ [CONVERSATION START] Conversa existente atualizada: {existing.id}")
+            
+            # ✅ CORREÇÃO CRÍTICA: Broadcast conversation_updated mesmo para conversas existentes
+            # Isso garante que a conversa apareça na lista se estava fechada
+            try:
+                from apps.chat.utils.websocket import broadcast_conversation_updated
+                from django.db import transaction
+                
+                def do_broadcast():
+                    try:
+                        broadcast_conversation_updated(existing, request=request)
+                        logger.critical(f"✅ [CONVERSATION START] conversation_updated enviado para conversa existente")
+                    except Exception as e:
+                        logger.critical(f"❌ [CONVERSATION START] Erro no broadcast após commit: {e}", exc_info=True)
+                
+                if transaction.get_connection().in_atomic_block:
+                    transaction.on_commit(do_broadcast)
+                    logger.critical(f"⏳ [CONVERSATION START] Broadcast agendado para após commit da transação")
+                else:
+                    do_broadcast()
+            except Exception as e:
+                logger.critical(f"❌ [CONVERSATION START] Erro ao configurar broadcast para conversa existente: {e}", exc_info=True)
+            
             return Response(
                 {
                     'message': 'Conversa já existe',
