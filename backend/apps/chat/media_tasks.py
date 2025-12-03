@@ -115,6 +115,17 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
                             logger.warning(f"   Group JID: {group_jid}")
                             break  # ✅ Sair do loop de retry - conversa não existe mais
                         
+                        # ✅ VALIDAÇÃO CRÍTICA: Verificar se conversation_type é realmente 'group'
+                        # Se não for, NÃO atualizar para evitar sobrescrever dados de contato individual
+                        if conversation.conversation_type != 'group':
+                            logger.critical(f"❌ [GROUP INFO] ERRO CRÍTICO: Tentativa de atualizar conversa individual com dados de grupo!")
+                            logger.critical(f"   Conversation ID: {conversation_id}")
+                            logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+                            logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+                            logger.critical(f"   Group JID recebido: {group_jid}")
+                            logger.critical(f"   ⚠️ NÃO ATUALIZANDO para evitar sobrescrever dados de contato individual!")
+                            break  # ✅ Sair do loop - não atualizar conversa individual
+                        
                         update_fields = []
                         
                         # ✅ MELHORIA: Sempre atualizar nome, mesmo se já existir (garante nome correto)

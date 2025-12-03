@@ -695,10 +695,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Manter remote_jid como está (será usado como group_id)
             else:
                 # remoteJid é @lid mas remoteJidAlt é telefone real
-                logger.info(
-                    f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
-                )
-                remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
+            logger.info(
+                f"🔄 [@LID] RemoteJID é @lid ({remote_jid}), usando remoteJidAlt: {remote_jid_alt}"
+            )
+            remote_jid = remote_jid_alt  # Usar telefone real ao invés do ID @lid
         
         # 🔍 Detectar tipo de conversa
         # ⚠️ IMPORTANTE: @lid é o novo formato de ID de PARTICIPANTE ou GRUPO!
@@ -770,10 +770,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 if remote_jid.endswith('@g.us'):
                     return remote_jid
                 elif remote_jid.endswith('@s.whatsapp.net'):
-                    # Converter individual para grupo (caso raro)
+                        # Converter individual para grupo (caso raro)
                     return remote_jid.replace('@s.whatsapp.net', '@g.us')
-                else:
-                    # Adicionar @g.us se não tiver sufixo
+                    else:
+                        # Adicionar @g.us se não tiver sufixo
                     return f"{remote_jid}@g.us"
             else:
                 # 👤 INDIVIDUAIS: Remover @s.whatsapp.net e normalizar com +
@@ -1502,7 +1502,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.warning(f"   ⚠️ A Evolution API pode não aceitar este formato!")
                 
                 # ✅ IMPORTANTE: Salvar também o LID no metadata para referência futura
-                defaults['group_metadata'] = {
+            defaults['group_metadata'] = {
                     'group_id': group_id,  # Tentar usar telefone convertido para @g.us
                     'group_id_lid': remote_jid_alt,  # ✅ Salvar LID também para referência
                     'group_name': push_name or 'Grupo WhatsApp',
@@ -1530,8 +1530,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 defaults['group_metadata'] = {
                     'group_id': group_id,
                     'group_name': push_name or 'Grupo WhatsApp',
-                    'is_group': True,
-                }
+                'is_group': True,
+            }
             
             defaults['contact_name'] = push_name or 'Grupo WhatsApp'  # Usar pushName se disponível
             logger.info(f"✅ [GRUPO] group_id salvo: {group_id}")
@@ -1559,6 +1559,35 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 )
                 existing_conversation.contact_phone = normalized_phone
                 existing_conversation.save(update_fields=['contact_phone'])
+            
+            # ✅ CORREÇÃO CRÍTICA: Se conversa existente está como 'group' mas deveria ser 'individual'
+            # Isso corrige conversas que foram classificadas incorretamente anteriormente
+            if existing_conversation.conversation_type == 'group' and conversation_type == 'individual':
+                logger.critical(f"❌ [TIPO] CORREÇÃO CRÍTICA: Conversa existente está como 'group' mas deveria ser 'individual'!")
+                logger.critical(f"   Conversation ID: {existing_conversation.id}")
+                logger.critical(f"   Contact Phone: {existing_conversation.contact_phone}")
+                logger.critical(f"   Tipo atual: {existing_conversation.conversation_type}")
+                logger.critical(f"   Tipo correto: {conversation_type}")
+                logger.critical(f"   ⚠️ CORRIGINDO conversation_type e limpando group_metadata!")
+                
+                existing_conversation.conversation_type = 'individual'
+                existing_conversation.group_metadata = {}  # ✅ Limpar metadados de grupo
+                existing_conversation.save(update_fields=['conversation_type', 'group_metadata'])
+                logger.critical(f"✅ [TIPO] Conversa corrigida: group → individual")
+            
+            # ✅ CORREÇÃO CRÍTICA: Se conversa existente está como 'individual' mas deveria ser 'group'
+            # Isso corrige conversas que foram classificadas incorretamente anteriormente
+            elif existing_conversation.conversation_type == 'individual' and conversation_type == 'group':
+                logger.critical(f"❌ [TIPO] CORREÇÃO CRÍTICA: Conversa existente está como 'individual' mas deveria ser 'group'!")
+                logger.critical(f"   Conversation ID: {existing_conversation.id}")
+                logger.critical(f"   Contact Phone: {existing_conversation.contact_phone}")
+                logger.critical(f"   Tipo atual: {existing_conversation.conversation_type}")
+                logger.critical(f"   Tipo correto: {conversation_type}")
+                logger.critical(f"   ⚠️ CORRIGINDO conversation_type!")
+                
+                existing_conversation.conversation_type = 'group'
+                existing_conversation.save(update_fields=['conversation_type'])
+                logger.critical(f"✅ [TIPO] Conversa corrigida: individual → group")
             
             conversation = existing_conversation
             created = False
@@ -1693,7 +1722,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         group_jid = None
                         
                         if remote_jid.endswith('@g.us'):
-                            group_jid = remote_jid
+                        group_jid = remote_jid
                         elif conversation.group_metadata and conversation.group_metadata.get('group_id'):
                             group_jid = conversation.group_metadata.get('group_id')
                             # ✅ Verificar se group_id realmente termina com @g.us
@@ -1712,16 +1741,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         
                         if group_jid:
                             logger.critical(f"👥 [GRUPO NOVO] Enfileirando busca de informações para Group JID: {group_jid}")
-                            
-                            # ✅ Enfileirar task assíncrona para buscar informações do grupo
-                            from apps.chat.tasks import fetch_group_info
-                            fetch_group_info.delay(
-                                conversation_id=str(conversation.id),
-                                group_jid=group_jid,
-                                instance_name=instance_name,
-                                api_key=api_key,
-                                base_url=base_url
-                            )
+                        
+                        # ✅ Enfileirar task assíncrona para buscar informações do grupo
+                        from apps.chat.tasks import fetch_group_info
+                        fetch_group_info.delay(
+                            conversation_id=str(conversation.id),
+                            group_jid=group_jid,
+                            instance_name=instance_name,
+                            api_key=api_key,
+                            base_url=base_url
+                        )
                             logger.critical(f"✅ [GRUPO NOVO] Task enfileirada - informações serão buscadas em background")
                     
                     # 👤 Para INDIVIDUAIS: enfileirar busca de foto E nome (assíncrona, não bloqueia webhook)
@@ -1734,21 +1763,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             logger.critical(f"   Contact Phone: {conversation.contact_phone}")
                             logger.critical(f"   is_group: {is_group}")
                             logger.critical(f"   ⚠️ NÃO ENFILEIRANDO fetch_profile_pic para evitar confusão!")
-                        else:
-                            clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
+                    else:
+                        clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
                             logger.critical(f"👤 [INDIVIDUAL] Enfileirando busca de informações do contato: {clean_phone}")
                             logger.critical(f"   Conversation ID: {conversation.id}")
                             logger.critical(f"   Conversation Type: {conversation.conversation_type}")
                             logger.critical(f"   Contact Phone: {conversation.contact_phone}")
-                            
-                            # ✅ OTIMIZAÇÃO: fetch_profile_pic já busca nome E foto juntos (mais rápido que duas tasks separadas)
-                            # Similar ao comportamento de grupos que usa uma única task
-                            from apps.chat.tasks import fetch_profile_pic
-                            
-                            fetch_profile_pic.delay(
-                                conversation_id=str(conversation.id),
-                                phone=clean_phone
-                            )
+                        
+                        # ✅ OTIMIZAÇÃO: fetch_profile_pic já busca nome E foto juntos (mais rápido que duas tasks separadas)
+                        # Similar ao comportamento de grupos que usa uma única task
+                        from apps.chat.tasks import fetch_profile_pic
+                        
+                        fetch_profile_pic.delay(
+                            conversation_id=str(conversation.id),
+                            phone=clean_phone
+                        )
                             logger.critical(f"✅ [INDIVIDUAL] Task de foto+nome enfileirada - informações serão buscadas em background")
                 else:
                     logger.info(f"ℹ️ [WEBHOOK] Nenhuma instância Evolution ativa para buscar foto")
@@ -1776,7 +1805,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     group_jid = None
                     
                     if remote_jid.endswith('@g.us'):
-                        group_jid = remote_jid
+                    group_jid = remote_jid
                     elif conversation.group_metadata and conversation.group_metadata.get('group_id'):
                         group_jid = conversation.group_metadata.get('group_id')
                         # ✅ Verificar se group_id realmente termina com @g.us
@@ -1795,18 +1824,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     if group_jid:
                         logger.critical("👥 [GRUPO EXISTENTE] Enfileirando busca para Group JID: %s", group_jid)
 
-                        base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-                        api_key = wa_instance.api_key or evolution_server.api_key
-                        instance_name = wa_instance.instance_name
+                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
+                    api_key = wa_instance.api_key or evolution_server.api_key
+                    instance_name = wa_instance.instance_name
 
-                        # ✅ MELHORIA: Sempre enfileirar busca de info (garante nome e foto atualizados)
-                        fetch_group_info.delay(
-                            conversation_id=str(conversation.id),
-                            group_jid=group_jid,
-                            instance_name=instance_name,
-                            api_key=api_key,
-                            base_url=base_url
-                        )
+                    # ✅ MELHORIA: Sempre enfileirar busca de info (garante nome e foto atualizados)
+                    fetch_group_info.delay(
+                        conversation_id=str(conversation.id),
+                        group_jid=group_jid,
+                        instance_name=instance_name,
+                        api_key=api_key,
+                        base_url=base_url
+                    )
                         logger.critical("✅ [GRUPO EXISTENTE] Task enfileirada - informações serão buscadas em background")
                 else:
                     logger.warning("⚠️ [GRUPO EXISTENTE] Instância WhatsApp ou servidor Evolution não encontrado")
@@ -1867,7 +1896,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta com default_department: {default_department.name}")
                 else:
                     # Sem default_department, remover departamento para voltar ao Inbox
-                    conversation.status = 'pending' if not from_me else 'open'
+                conversation.status = 'pending' if not from_me else 'open'
                     conversation.department = None
                     logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta sem departamento (Inbox)")
                 
@@ -2574,7 +2603,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 # Passar message.id para garantir que a mensagem seja incluída no last_message
                 def do_broadcast():
                     try:
-                        # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+                # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
                         # Passar message_id para garantir que a mensagem recém-criada seja incluída
                         broadcast_conversation_updated(conversation, message_id=str(message.id))
                     except Exception as e:
