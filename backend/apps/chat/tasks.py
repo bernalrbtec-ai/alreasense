@@ -456,12 +456,25 @@ async def send_reaction_to_evolution(message, emoji: str):
                         await asyncio.sleep(retry_delays[attempt])
                         continue
                         
-            except (httpx.TimeoutException, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.NetworkError) as e:
-                logger.warning(f"⚠️ [REACTION] Erro de rede/timeout na tentativa {attempt + 1}/{max_retries}: {type(e).__name__}")
+            except httpx.TimeoutException as e:
+                # ✅ httpx.ReadTimeout é subclasse de TimeoutException, então captura ambos
+                logger.warning(f"⚠️ [REACTION] Timeout na tentativa {attempt + 1}/{max_retries}: {type(e).__name__}")
                 
                 # Se é última tentativa, retornar False
                 if attempt == max_retries - 1:
-                    logger.error(f"❌ [REACTION] Falha após {max_retries} tentativas devido a erro de rede/timeout")
+                    logger.error(f"❌ [REACTION] Falha após {max_retries} tentativas devido a timeout")
+                    return False
+                
+                # Aguardar antes de tentar novamente
+                await asyncio.sleep(retry_delays[attempt])
+                continue
+                
+            except (httpx.ConnectError, httpx.NetworkError) as e:
+                logger.warning(f"⚠️ [REACTION] Erro de conexão/rede na tentativa {attempt + 1}/{max_retries}: {type(e).__name__}")
+                
+                # Se é última tentativa, retornar False
+                if attempt == max_retries - 1:
+                    logger.error(f"❌ [REACTION] Falha após {max_retries} tentativas devido a erro de conexão/rede")
                     return False
                 
                 # Aguardar antes de tentar novamente
