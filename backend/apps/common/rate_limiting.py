@@ -20,6 +20,7 @@ class RateLimitExceeded(Exception):
 def rate_limit(key_func, rate='10/m', method='ALL'):
     """
     Decorator para rate limiting de views.
+    Suporta tanto views funcionais quanto métodos de ViewSet.
     
     Args:
         key_func: Função que retorna a chave única para o rate limit (ex: IP, user_id)
@@ -30,16 +31,36 @@ def rate_limit(key_func, rate='10/m', method='ALL'):
         @rate_limit(key_func=lambda req: req.META.get('REMOTE_ADDR'), rate='10/m')
         def my_view(request):
             pass
+        
+        # Em ViewSet:
+        @rate_limit_by_user(rate='50/h', method='POST')
+        def perform_create(self, serializer):
+            pass
     """
     def decorator(view_func):
         @wraps(view_func)
-        def wrapper(request, *args, **kwargs):
+        def wrapper(first_arg, *args, **kwargs):
+            # Detectar se é método de ViewSet (primeiro arg é 'self' com atributo 'request')
+            # ou view funcional (primeiro arg é 'request')
+            if hasattr(first_arg, 'request'):
+                # É método de ViewSet
+                request = first_arg.request
+                view_self = first_arg
+            else:
+                # É view funcional
+                request = first_arg
+                view_self = None
+            
             # Skip rate limiting in DEBUG mode (opcional)
             if settings.DEBUG and not getattr(settings, 'RATELIMIT_ENABLE_IN_DEBUG', False):
+                if view_self is not None:
+                    return view_func(view_self, *args, **kwargs)
                 return view_func(request, *args, **kwargs)
             
             # Verificar método HTTP
             if method != 'ALL' and request.method != method:
+                if view_self is not None:
+                    return view_func(view_self, *args, **kwargs)
                 return view_func(request, *args, **kwargs)
             
             # Obter chave única
@@ -48,9 +69,13 @@ def rate_limit(key_func, rate='10/m', method='ALL'):
                 if not rate_key:
                     # Se não conseguir chave, permitir acesso
                     logger.warning("Rate limit: Unable to get key, allowing request")
+                    if view_self is not None:
+                        return view_func(view_self, *args, **kwargs)
                     return view_func(request, *args, **kwargs)
             except Exception as e:
                 logger.error(f"Rate limit: Error getting key: {e}")
+                if view_self is not None:
+                    return view_func(view_self, *args, **kwargs)
                 return view_func(request, *args, **kwargs)
             
             # Parse rate (ex: "10/m" -> 10 requests per minute)
@@ -101,9 +126,13 @@ def rate_limit(key_func, rate='10/m', method='ALL'):
             except Exception as e:
                 logger.error(f"Rate limit: Error updating cache: {e}")
                 # Em caso de erro de cache, permitir acesso
+                if view_self is not None:
+                    return view_func(view_self, *args, **kwargs)
                 return view_func(request, *args, **kwargs)
             
             # Execute view
+            if view_self is not None:
+                return view_func(view_self, *args, **kwargs)
             return view_func(request, *args, **kwargs)
         
         return wrapper
