@@ -770,10 +770,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 if remote_jid.endswith('@g.us'):
                     return remote_jid
                 elif remote_jid.endswith('@s.whatsapp.net'):
-                        # Converter individual para grupo (caso raro)
+                    # Converter individual para grupo (caso raro)
                     return remote_jid.replace('@s.whatsapp.net', '@g.us')
-                    else:
-                        # Adicionar @g.us se não tiver sufixo
+                else:
+                    # Adicionar @g.us se não tiver sufixo
                     return f"{remote_jid}@g.us"
             else:
                 # 👤 INDIVIDUAIS: Remover @s.whatsapp.net e normalizar com +
@@ -1530,8 +1530,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 defaults['group_metadata'] = {
                     'group_id': group_id,
                     'group_name': push_name or 'Grupo WhatsApp',
-                'is_group': True,
-            }
+                    'is_group': True,
+                }
             
             defaults['contact_name'] = push_name or 'Grupo WhatsApp'  # Usar pushName se disponível
             logger.info(f"✅ [GRUPO] group_id salvo: {group_id}")
