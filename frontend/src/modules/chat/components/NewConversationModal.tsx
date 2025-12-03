@@ -128,16 +128,18 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
-        const createResponse = await api.post('/chat/conversations/', {
+        // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
+        const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
-          contact_name: contact.name,
-          status: 'open'
+          contact_name: contact.name
         });
-        conversation = createResponse.data;
+        conversation = createResponse.data.conversation || createResponse.data;
+        // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
         addConversation(conversation);
       }
       
-      // Selecionar conversa
+      // ✅ CORREÇÃO CRÍTICA: Selecionar conversa como ativa
+      // Isso garante que a conversa apareça no chat e seja setada como ativa
       setActiveConversation(conversation);
       onClose();
     } catch (error: any) {
@@ -172,16 +174,18 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
-        const createResponse = await api.post('/chat/conversations/', {
+        // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
+        const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
-          contact_name: normalizedPhone, // Usar telefone como nome se não tiver contato
-          status: 'open'
+          contact_name: normalizedPhone // Usar telefone como nome se não tiver contato
         });
-        conversation = createResponse.data;
+        conversation = createResponse.data.conversation || createResponse.data;
+        // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
         addConversation(conversation);
       }
       
-      // Selecionar conversa
+      // ✅ CORREÇÃO CRÍTICA: Selecionar conversa como ativa
+      // Isso garante que a conversa apareça no chat e seja setada como ativa
       setActiveConversation(conversation);
       onClose();
     } catch (error: any) {
