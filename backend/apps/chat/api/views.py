@@ -1003,10 +1003,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         
                         if contact_name:
                             participant_name = contact_name
-                        elif not participant_name:
-                            # ✅ CORREÇÃO: Não usar telefone como fallback (pode ser LID)
+                        # ✅ CORREÇÃO: Não usar telefone como fallback (pode ser LID)
+                        # Se não tem nome válido, deixar vazio - frontend mostrará apenas telefone formatado
+                        if not participant_name:
                             participant_name = ''  # Vazio - frontend mostrará apenas telefone formatado
-                            participant_name = format_phone_for_display(phone)
                         
                         participant_info = {
                             'jid': participant_id,
