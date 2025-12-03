@@ -352,7 +352,10 @@ export function ChatWindow() {
       }
       console.log(`🔌 [REFRESH] Cleanup - cancelando refresh-info para conversa ${currentConversationId}`);
     };
-  }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.group_metadata]);
+    // ✅ CORREÇÃO: Usar apenas id e conversation_type nas dependências
+    // group_metadata pode mudar de referência constantemente, causando re-execuções infinitas
+    // Acessamos group_metadata diretamente dentro do useEffect quando necessário
+  }, [activeConversation?.id, activeConversation?.conversation_type]);
 
   // Fechar menu ao clicar fora
   useEffect(() => {
