@@ -25,6 +25,25 @@ function mergeConversations(
   existing: Conversation,
   incoming: Conversation
 ): Conversation {
+  // ✅ CORREÇÃO CRÍTICA: Se conversation_type mudou, é uma mudança importante (contato -> grupo ou vice-versa)
+  // Nesse caso, usar TODOS os dados novos, não fazer merge
+  if (existing.conversation_type !== incoming.conversation_type && incoming.conversation_type) {
+    console.log('🔄 [UPDATER] Tipo de conversa mudou! Usando dados completamente novos:', {
+      oldType: existing.conversation_type,
+      newType: incoming.conversation_type,
+      oldName: existing.contact_name,
+      newName: incoming.contact_name,
+      oldPhone: existing.contact_phone,
+      newPhone: incoming.contact_phone
+    });
+    // Retornar dados novos completamente (sem merge)
+    return {
+      ...incoming,
+      // Preservar apenas campos que não devem ser perdidos
+      contact_tags: incoming.contact_tags || existing.contact_tags,
+    };
+  }
+  
   return {
     ...existing,
     ...incoming, // Sobrescrever com dados novos
@@ -39,14 +58,15 @@ function mergeConversations(
     // - Última mensagem (preservar se não vier nova)
     last_message: incoming.last_message || existing.last_message,
     
-    // ✅ CORREÇÃO: Garantir que nome e foto sempre sejam atualizados se vierem novos dados
-    // Se incoming tem nome/foto, usar (mesmo que seja diferente de existing)
+    // ✅ CORREÇÃO CRÍTICA: Garantir que nome, foto, telefone e tipo sempre sejam atualizados se vierem novos dados
+    // Se incoming tem nome/foto/telefone/tipo, usar (mesmo que seja diferente de existing)
     contact_name: incoming.contact_name !== undefined ? incoming.contact_name : existing.contact_name,
     profile_pic_url: incoming.profile_pic_url !== undefined ? incoming.profile_pic_url : existing.profile_pic_url,
+    contact_phone: incoming.contact_phone !== undefined ? incoming.contact_phone : existing.contact_phone,
+    conversation_type: incoming.conversation_type !== undefined ? incoming.conversation_type : existing.conversation_type,
     
     // ✅ GARANTIR campos obrigatórios:
     status: incoming.status || existing.status || 'pending',
-    conversation_type: incoming.conversation_type || existing.conversation_type || 'individual',
   };
 }
 
@@ -55,18 +75,35 @@ function mergeConversations(
  * ✅ Otimização: Só reordena se necessário
  */
 function sortConversations(conversations: Conversation[]): Conversation[] {
-  // ✅ Verificar se precisa reordenar (cache de última ordenação)
+  // ✅ CORREÇÃO CRÍTICA: Sempre reordenar se houver mudanças importantes
+  // O cache pode causar problemas quando conversas mudam de tipo ou dados importantes
   const now = Date.now();
   const needsResort = 
     conversations.length !== lastSortedConversations.length ||
     conversations.some((conv, idx) => {
       const lastConv = lastSortedConversations[idx];
-      return !lastConv || conv.id !== lastConv.id || 
-             conv.last_message_at !== lastConv.last_message_at;
+      if (!lastConv || conv.id !== lastConv.id) {
+        return true; // Conversa diferente ou nova
+      }
+      // ✅ Verificar mudanças importantes além de last_message_at
+      if (conv.last_message_at !== lastConv.last_message_at) {
+        return true; // Última mensagem mudou
+      }
+      if (conv.contact_name !== lastConv.contact_name) {
+        return true; // Nome mudou
+      }
+      if (conv.conversation_type !== lastConv.conversation_type) {
+        return true; // Tipo mudou
+      }
+      if (conv.contact_phone !== lastConv.contact_phone) {
+        return true; // Telefone mudou
+      }
+      return false;
     });
   
-  if (!needsResort && now - lastSortTimestamp < 1000) {
-    // ✅ Cache ainda válido (última ordenação foi há menos de 1s)
+  // ✅ CORREÇÃO: Reduzir tempo de cache de 1s para 100ms para atualizações mais rápidas
+  if (!needsResort && now - lastSortTimestamp < 100) {
+    // ✅ Cache ainda válido (última ordenação foi há menos de 100ms)
     return lastSortedConversations;
   }
   
@@ -109,9 +146,11 @@ export function upsertConversation(
       incoming.unread_count !== undefined ||
       incoming.status !== undefined ||
       incoming.last_message_at !== undefined ||
-      // ✅ CORREÇÃO: Sempre processar atualizações de nome e foto (não ignorar por debounce)
+      // ✅ CORREÇÃO CRÍTICA: Sempre processar atualizações de nome, foto, tipo e telefone (não ignorar por debounce)
       (existing && existing.contact_name !== incoming.contact_name) ||
       (existing && existing.profile_pic_url !== incoming.profile_pic_url) ||
+      (existing && existing.contact_phone !== incoming.contact_phone) ||
+      (existing && existing.conversation_type !== incoming.conversation_type) ||
       (existing && existing.group_metadata?.group_name !== incoming.group_metadata?.group_name);
     
     if (!isImportantUpdate) {

@@ -77,6 +77,12 @@ export function ConversationList() {
         const convs = response.data.results || response.data;
         console.log(`✅ [ConversationList] ${convs.length} conversas carregadas do backend`);
         
+        // ✅ CORREÇÃO CRÍTICA: Limpar cache do conversationUpdater antes de fazer merge
+        // Isso garante que atualizações importantes não sejam ignoradas por debounce
+        import('../store/conversationUpdater').then(({ clearUpdateCache }) => {
+          clearUpdateCache();
+        });
+        
         // ✅ MELHORIA: Usar upsertConversation para cada conversa (evita sobrescrever WebSocket)
         // Isso garante que se WebSocket adicionou conversas enquanto estava carregando, não serão perdidas
         const { conversations: currentConvs } = useChatStore.getState();
