@@ -46,7 +46,28 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
     from asgiref.sync import async_to_sync
     from asgiref.sync import sync_to_async
     
-    logger.info(f"👥 [GROUP INFO] Buscando informações do grupo: {group_jid}")
+    logger.critical(f"👥 [GROUP INFO] Buscando informações do grupo: {group_jid}")
+    
+    # ✅ VALIDAÇÃO CRÍTICA: Garantir que group_jid termina com @g.us
+    if not group_jid.endswith('@g.us'):
+        logger.critical(f"❌ [GROUP INFO] ERRO CRÍTICO: group_jid não termina com @g.us!")
+        logger.critical(f"   group_jid recebido: {group_jid}")
+        logger.critical(f"   conversation_id: {conversation_id}")
+        logger.critical(f"   ⚠️ ISSO CAUSA ERRO 400 NA EVOLUTION API!")
+        logger.critical(f"   ⚠️ NÃO BUSCANDO INFORMAÇÕES DO GRUPO!")
+        
+        # ✅ Tentar buscar conversation para verificar conversation_type
+        try:
+            conversation = await sync_to_async(
+                Conversation.objects.select_related('tenant').get
+            )(id=conversation_id)
+            logger.critical(f"   Conversation Type: {conversation.conversation_type}")
+            logger.critical(f"   Contact Phone: {conversation.contact_phone}")
+            logger.critical(f"   ⚠️ Se conversation_type é 'individual', isso explica o erro!")
+        except Exception as e:
+            logger.critical(f"   Erro ao buscar conversation: {e}")
+        
+        return  # ✅ Retornar sem processar
     
     try:
         # Buscar informações do grupo
@@ -55,6 +76,9 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
             'apikey': api_key,
             'Content-Type': 'application/json'
         }
+        
+        logger.critical(f"📡 [GROUP INFO] Chamando Evolution API: {endpoint}")
+        logger.critical(f"   groupJid: {group_jid}")
         
         # ✅ MELHORIA: Retry com backoff exponencial para erros de rede
         max_retries = 3
