@@ -1235,6 +1235,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ NOVA LÓGICA: Se participantes têm apenas LIDs sem phoneNumber, buscar da API
         if has_only_lids:
             logger.warning(f"🔄 [PARTICIPANTS] Participantes têm apenas LIDs sem phoneNumber, forçando busca da API...")
+            # ✅ CRÍTICO: Invalidar cache para forçar busca fresca da API
+            cache.delete(cache_key)
+            logger.info(f"🗑️ [PARTICIPANTS] Cache invalidado devido a participantes com apenas LIDs")
             participants = []  # Limpar para forçar busca
         
         # Se não tem participantes, tentar buscar diretamente da API
