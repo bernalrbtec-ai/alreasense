@@ -1454,15 +1454,38 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 if find_group_response.status_code == 200:
                     group_data = find_group_response.json()
                     logger.info(f"✅ [PARTICIPANTS] find-group-by-jid retornou dados do grupo")
+                    logger.info(f"   📋 [DEBUG] Estrutura completa do grupo: {group_data}")
                     
                     # Extrair participantes do grupo
                     raw_participants = group_data.get('participants', [])
                     if raw_participants:
                         logger.info(f"✅ [PARTICIPANTS] {len(raw_participants)} participantes encontrados via find-group-by-jid")
+                        logger.info(f"   📋 [DEBUG] Primeiro participante: {raw_participants[0] if raw_participants else 'N/A'}")
                         # Processar participantes (código abaixo)
                     else:
-                        logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid não retornou participantes, tentando find-participants...")
-                        raw_participants = None
+                        logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid não retornou participantes, tentando com getParticipants=true...")
+                        # ✅ NOVA TENTATIVA: Chamar novamente com getParticipants=true
+                        try:
+                            find_group_with_participants = client.get(
+                                find_group_endpoint,
+                                params={'groupJid': group_jid, 'getParticipants': 'true'},
+                                headers=headers
+                            )
+                            if find_group_with_participants.status_code == 200:
+                                group_data_with_participants = find_group_with_participants.json()
+                                raw_participants = group_data_with_participants.get('participants', [])
+                                if raw_participants:
+                                    logger.info(f"✅ [PARTICIPANTS] {len(raw_participants)} participantes encontrados via find-group-by-jid com getParticipants=true")
+                                    logger.info(f"   📋 [DEBUG] Primeiro participante: {raw_participants[0] if raw_participants else 'N/A'}")
+                                else:
+                                    logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid com getParticipants=true não retornou participantes")
+                                    raw_participants = None
+                            else:
+                                logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid com getParticipants=true retornou {find_group_with_participants.status_code}")
+                                raw_participants = None
+                        except Exception as e:
+                            logger.warning(f"⚠️ [PARTICIPANTS] Erro ao buscar com getParticipants=true: {e}")
+                            raw_participants = None
                 else:
                     logger.warning(f"⚠️ [PARTICIPANTS] find-group-by-jid retornou {find_group_response.status_code}, tentando find-participants...")
                     raw_participants = None
@@ -1507,21 +1530,51 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     from apps.contacts.signals import normalize_phone_for_search
                     
                     for participant in raw_participants:
-                        # ✅ CORREÇÃO CRÍTICA: Usar phoneNumber ao invés de id
-                        # id = LID (@lid), phoneNumber = JID real (@s.whatsapp.net)
-                        participant_phone = participant.get('phoneNumber') or participant.get('phone_number') or ''
+                        logger.info(f"   🔍 [DEBUG] Processando participante completo: {participant}")
+                        
+                        # ✅ CORREÇÃO CRÍTICA: Tentar múltiplos campos para encontrar telefone real
+                        # findGroupInfos pode retornar: id, jid, phoneNumber, phone, etc.
+                        participant_phone_number = (
+                            participant.get('phoneNumber') or 
+                            participant.get('phone_number') or 
+                            participant.get('phone') or
+                            ''
+                        )
                         participant_id = participant.get('id') or participant.get('jid') or ''
                         
-                        # ✅ PRIORIDADE: Usar phoneNumber (JID real) se disponível
-                        if participant_phone:
-                            # Extrair telefone do JID (formato: 5511999999999@s.whatsapp.net)
-                            phone_raw = participant_phone.split('@')[0]
-                        elif participant_id and not participant_id.endswith('@lid'):
-                            # Se id não é LID, usar ele
-                            phone_raw = participant_id.split('@')[0]
-                        else:
-                            # Se só tem LID, não usar como telefone
-                            logger.warning(f"⚠️ [PARTICIPANTS] Participante sem phoneNumber válido: {participant_id}")
+                        # ✅ ESTRATÉGIA: Tentar extrair telefone de diferentes formatos
+                        phone_raw = None
+                        
+                        # 1. Tentar phoneNumber primeiro (JID real @s.whatsapp.net)
+                        if participant_phone_number:
+                            if '@' in participant_phone_number:
+                                phone_raw = participant_phone_number.split('@')[0]
+                                logger.info(f"   ✅ [PARTICIPANTS] Telefone extraído de phoneNumber: {phone_raw}")
+                            else:
+                                # Se não tem @, pode ser telefone direto
+                                phone_raw = participant_phone_number
+                                logger.info(f"   ✅ [PARTICIPANTS] Telefone direto de phoneNumber: {phone_raw}")
+                        
+                        # 2. Se não encontrou, tentar id/jid (mas verificar se não é LID)
+                        if not phone_raw and participant_id:
+                            if participant_id.endswith('@lid'):
+                                logger.warning(f"   ⚠️ [PARTICIPANTS] id é LID, não usar como telefone: {participant_id}")
+                            elif '@' in participant_id:
+                                # Pode ser @s.whatsapp.net ou @g.us
+                                if participant_id.endswith('@s.whatsapp.net'):
+                                    phone_raw = participant_id.split('@')[0]
+                                    logger.info(f"   ✅ [PARTICIPANTS] Telefone extraído de id (@s.whatsapp.net): {phone_raw}")
+                                else:
+                                    logger.warning(f"   ⚠️ [PARTICIPANTS] id não é telefone válido: {participant_id}")
+                            else:
+                                # Se não tem @, pode ser telefone direto (mas verificar se não é LID)
+                                if not is_lid_number(participant_id):
+                                    phone_raw = participant_id
+                                    logger.info(f"   ✅ [PARTICIPANTS] Telefone direto de id: {phone_raw}")
+                        
+                        # 3. Se ainda não encontrou, pular participante
+                        if not phone_raw:
+                            logger.warning(f"⚠️ [PARTICIPANTS] Participante sem telefone válido: id={participant_id}, phoneNumber={participant_phone_number}")
                             continue
                         
                         # ✅ CORREÇÃO: Normalizar telefone para E.164 (+5511999999999)
@@ -1539,7 +1592,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         
                         # ✅ CORREÇÃO: Extrair pushname da resposta da API
                         # A API pode retornar: name, pushName, notify, ou não ter nada
-                        logger.info(f"🔍 [PARTICIPANTS] Processando participante: id={participant_id}, phoneNumber={participant_phone}")
+                        logger.info(f"🔍 [PARTICIPANTS] Processando participante: id={participant_id}, phoneNumber={participant_phone_number}")
                         pushname = (
                             participant.get('pushName') or 
                             participant.get('name') or 
@@ -1564,20 +1617,27 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         # Se normalized_phone veio de phoneNumber, usar ele
                         # Se não, tentar extrair de phoneNumber novamente
                         final_phone = normalized_phone
-                        if participant_phone:
+                        if participant_phone_number:
                             # Extrair telefone do phoneNumber (JID real)
-                            phone_from_number = participant_phone.split('@')[0]
+                            phone_from_number = participant_phone_number.split('@')[0] if '@' in participant_phone_number else participant_phone_number
                             normalized_from_number = normalize_phone(phone_from_number)
                             if normalized_from_number:
                                 final_phone = normalized_from_number
+                        
+                        # ✅ CORREÇÃO: Garantir que phoneNumber seja salvo (pode vir de diferentes campos)
+                        saved_phone_number = participant_phone_number
+                        if not saved_phone_number and phone_raw:
+                            # Se não tem phoneNumber mas tem phone_raw, construir JID
+                            saved_phone_number = f"{phone_raw}@s.whatsapp.net"
                         
                         participant_info = {
                             'phone': final_phone,  # Telefone real normalizado E.164 (NUNCA LID)
                             'name': display_name,  # Nome para exibição (pushname > contato > telefone)
                             'pushname': pushname,  # Pushname original da API
                             'jid': participant_id,  # LID ou JID original
-                            'phoneNumber': participant_phone  # JID real do telefone (@s.whatsapp.net)
+                            'phoneNumber': saved_phone_number  # JID real do telefone (@s.whatsapp.net)
                         }
+                        logger.info(f"   ✅ [PARTICIPANTS] Participante final: phone={final_phone}, phoneNumber={saved_phone_number}, jid={participant_id}")
                         logger.info(f"   ✅ Participante processado: {participant_info}")
                         participants_list.append(participant_info)
                     
