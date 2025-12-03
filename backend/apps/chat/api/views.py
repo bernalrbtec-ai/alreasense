@@ -1513,6 +1513,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     logger.info(f"✅ [PARTICIPANTS] find-group-by-jid retornou dados do grupo")
                     logger.info(f"   📋 [DEBUG] Estrutura completa do grupo: {group_data}")
                     
+                    # ✅ LOG CRÍTICO: Mostrar JSON completo retornado
+                    import json
+                    logger.critical(f"📦 [PARTICIPANTS API] JSON COMPLETO retornado por find-group-by-jid:")
+                    logger.critical(f"   {json.dumps(group_data, indent=2, ensure_ascii=False)}")
+                    
                     # Extrair participantes do grupo
                     raw_participants = group_data.get('participants', [])
                     if raw_participants:
@@ -1530,6 +1535,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             )
                             if find_group_with_participants.status_code == 200:
                                 group_data_with_participants = find_group_with_participants.json()
+                                
+                                # ✅ LOG CRÍTICO: Mostrar JSON completo retornado
+                                import json
+                                logger.critical(f"📦 [PARTICIPANTS API] JSON COMPLETO retornado por find-group-by-jid com getParticipants=true:")
+                                logger.critical(f"   {json.dumps(group_data_with_participants, indent=2, ensure_ascii=False)}")
+                                
                                 raw_participants = group_data_with_participants.get('participants', [])
                                 if raw_participants:
                                     logger.info(f"✅ [PARTICIPANTS] {len(raw_participants)} participantes encontrados via find-group-by-jid com getParticipants=true")
@@ -1566,6 +1577,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     if participants_response.status_code == 200:
                         participants_data = participants_response.json()
                         logger.info(f"📥 [PARTICIPANTS] Dados recebidos: {type(participants_data)}")
+                        
+                        # ✅ LOG CRÍTICO: Mostrar JSON completo retornado
+                        import json
+                        logger.critical(f"📦 [PARTICIPANTS API] JSON COMPLETO retornado por /group/participants:")
+                        logger.critical(f"   {json.dumps(participants_data, indent=2, ensure_ascii=False)}")
                         
                         # ✅ CORREÇÃO: A resposta é objeto com "participants" array
                         # Cada participante tem: id (@lid), phoneNumber (@s.whatsapp.net), admin, name, imgUrl
