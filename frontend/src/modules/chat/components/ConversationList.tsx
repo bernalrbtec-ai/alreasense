@@ -223,10 +223,18 @@ export function ConversationList() {
       } else {
         // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
         if (conv.status === 'closed') {
-          console.log('🔍 [FILTER] Conversa fechada, excluindo:', {
+          console.warn('⚠️ [FILTER] Conversa fechada, excluindo:', {
             conversationId: conv.id,
             conversationName: conv.contact_name,
-            status: conv.status
+            conversationPhone: conv.contact_phone,
+            status: conv.status,
+            department: conv.department_name || 'N/A',
+            departmentId: convDeptId,
+            activeDepartmentId: activeDeptId,
+            activeDepartmentName: activeDepartment.name,
+            last_message_at: conv.last_message_at,
+            isActiveConversation: isActiveConversation,
+            reason: 'Status é closed - conversa não deve aparecer na lista'
           });
           return false;
         }
