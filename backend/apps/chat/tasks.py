@@ -417,26 +417,61 @@ async def send_reaction_to_evolution(message, emoji: str):
         logger.info(f"   Emoji: {emoji}")
         logger.info(f"   Payload (mascado): {mask_sensitive_data(payload)}")
         
-        # Enviar reação
-        # ✅ CORREÇÃO: Aumentar timeout para 30s (reação pode demorar mais)
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                endpoint,
-                json=payload,
-                headers=headers
-            )
-            
-            # ✅ CORREÇÃO: Evolution API retorna 201 Created para reações, não 200
-            if response.status_code in (200, 201):
-                logger.info(f"✅ [REACTION] Reação enviada com sucesso para Evolution API (status: {response.status_code})")
-                return True
-            else:
-                logger.error(f"❌ [REACTION] Erro {response.status_code} ao enviar reação:")
-                logger.error(f"   Resposta: {response.text[:200]}")
-                return False
+        # ✅ CORREÇÃO: Implementar retry com backoff exponencial para reações
+        # Reações podem falhar por timeout ou problemas temporários de rede
+        max_retries = 3
+        retry_delays = [1.0, 2.0, 4.0]  # 1s, 2s, 4s
+        
+        for attempt in range(max_retries):
+            try:
+                logger.info(f"📡 [REACTION] Tentativa {attempt + 1}/{max_retries}...")
+                
+                # ✅ CORREÇÃO: Aumentar timeout para 30s (reação pode demorar mais)
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    response = await client.post(
+                        endpoint,
+                        json=payload,
+                        headers=headers
+                    )
+                    
+                    # ✅ CORREÇÃO: Evolution API retorna 201 Created para reações, não 200
+                    if response.status_code in (200, 201):
+                        logger.info(f"✅ [REACTION] Reação enviada com sucesso para Evolution API (status: {response.status_code})")
+                        return True
+                    else:
+                        logger.warning(f"⚠️ [REACTION] Erro {response.status_code} ao enviar reação (tentativa {attempt + 1}/{max_retries}):")
+                        logger.warning(f"   Resposta: {response.text[:200]}")
+                        
+                        # Se não é erro temporário (5xx), não tentar novamente
+                        if response.status_code < 500:
+                            logger.error(f"❌ [REACTION] Erro permanente ({response.status_code}), não tentando novamente")
+                            return False
+                        
+                        # Se é última tentativa, retornar False
+                        if attempt == max_retries - 1:
+                            logger.error(f"❌ [REACTION] Falha após {max_retries} tentativas")
+                            return False
+                        
+                        # Aguardar antes de tentar novamente
+                        import asyncio
+                        await asyncio.sleep(retry_delays[attempt])
+                        continue
+                        
+            except (httpx.TimeoutException, httpx.ReadTimeout, httpx.ConnectTimeout, httpx.ConnectError, httpx.NetworkError) as e:
+                logger.warning(f"⚠️ [REACTION] Erro de rede/timeout na tentativa {attempt + 1}/{max_retries}: {type(e).__name__}")
+                
+                # Se é última tentativa, retornar False
+                if attempt == max_retries - 1:
+                    logger.error(f"❌ [REACTION] Falha após {max_retries} tentativas devido a erro de rede/timeout")
+                    return False
+                
+                # Aguardar antes de tentar novamente
+                import asyncio
+                await asyncio.sleep(retry_delays[attempt])
+                continue
                 
     except Exception as e:
-        logger.error(f"❌ [REACTION] Erro ao enviar reação para Evolution API: {e}", exc_info=True)
+        logger.error(f"❌ [REACTION] Erro inesperado ao enviar reação para Evolution API: {e}", exc_info=True)
         return False
 
 
