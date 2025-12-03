@@ -1722,7 +1722,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         group_jid = None
                         
                         if remote_jid.endswith('@g.us'):
-                        group_jid = remote_jid
+                            group_jid = remote_jid
                         elif conversation.group_metadata and conversation.group_metadata.get('group_id'):
                             group_jid = conversation.group_metadata.get('group_id')
                             # ✅ Verificar se group_id realmente termina com @g.us
