@@ -620,9 +620,14 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                             phone__in=[normalized_phone, phone, f"+{phone}"]
                                         ).first()
                                         
+                                        # ✅ VALIDAÇÃO: Não usar LID como nome
+                                        raw_name = participant.get('name', '')
+                                        if raw_name and is_lid_number(raw_name):
+                                            raw_name = ''  # Não usar LID como nome
+                                        
                                         participant_info = {
                                             'phone': phone,
-                                            'name': contact.name if contact else participant.get('name', '') or phone,
+                                            'name': contact.name if contact else raw_name,  # Não usar phone como fallback (pode ser LID)
                                             'jid': participant_id
                                         }
                                         participants_list.append(participant_info)
@@ -973,8 +978,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         # Verificar se é admin
                         is_admin = participant.get('isAdmin', False) or participant.get('admin', False)
                         
-                        # Buscar nome (prioridade: contato cadastrado > pushname > name > telefone formatado)
-                        participant_name = participant.get('pushname') or participant.get('name') or ''
+                        # ✅ CORREÇÃO: Buscar nome (prioridade: contato cadastrado > pushname válido > name válido)
+                        # ⚠️ CRÍTICO: Validar se não é LID antes de usar
+                        raw_pushname = participant.get('pushname') or ''
+                        raw_name = participant.get('name') or ''
+                        
+                        # Validar se não são LIDs
+                        participant_name = ''
+                        if raw_pushname and not is_lid_number(raw_pushname) and raw_pushname != phone:
+                            participant_name = raw_pushname
+                        elif raw_name and not is_lid_number(raw_name) and raw_name != phone:
+                            participant_name = raw_name
                         
                         # Tentar buscar do contato cadastrado
                         from apps.contacts.signals import normalize_phone_for_search
@@ -984,7 +998,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         if contact_name:
                             participant_name = contact_name
                         elif not participant_name:
-                            # Fallback: formatar telefone
+                            # ✅ CORREÇÃO: Não usar telefone como fallback (pode ser LID)
+                            participant_name = ''  # Vazio - frontend mostrará apenas telefone formatado
                             participant_name = format_phone_for_display(phone)
                         
                         participant_info = {
@@ -1616,16 +1631,32 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         
                         # ✅ CORREÇÃO: Extrair pushname da resposta da API
                         # A API pode retornar: name, pushName, notify, ou não ter nada
+                        # ⚠️ CRÍTICO: Validar se não é LID antes de usar
                         logger.info(f"🔍 [PARTICIPANTS] Processando participante: id={participant_id}, phoneNumber={participant_phone_number}")
-                        pushname = (
+                        raw_pushname = (
                             participant.get('pushName') or 
                             participant.get('name') or 
                             participant.get('notify') or 
                             ''
                         )
-                        logger.info(f"   Pushname extraído: {pushname}")
                         
-                        # ✅ CORREÇÃO: Prioridade: pushname > nome do contato
+                        # ✅ VALIDAÇÃO CRÍTICA: Se pushname é LID ou igual ao participant_id (LID), não usar
+                        pushname = ''
+                        if raw_pushname:
+                            # Verificar se não é LID
+                            if not is_lid_number(raw_pushname) and raw_pushname != participant_id:
+                                # Verificar se não é igual ao LID (sem @lid)
+                                if not (participant_id.endswith('@lid') and raw_pushname == participant_id.replace('@lid', '')):
+                                    pushname = raw_pushname
+                                    logger.info(f"   ✅ Pushname válido extraído: {pushname}")
+                                else:
+                                    logger.warning(f"   ⚠️ Pushname é igual ao LID (sem @lid), ignorando: {raw_pushname}")
+                            else:
+                                logger.warning(f"   ⚠️ Pushname é LID ou inválido, ignorando: {raw_pushname}")
+                        
+                        logger.info(f"   Pushname final: {pushname if pushname else '(vazio - não é LID)'}")
+                        
+                        # ✅ CORREÇÃO: Prioridade: pushname válido > nome do contato
                         # NÃO usar telefone como name - deixar vazio para frontend mostrar apenas telefone formatado
                         display_name = pushname
                         if not display_name and contact:
@@ -1725,15 +1756,25 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                         phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
                                     ).first()
                                     
-                                    # Extrair pushname
-                                    pushname = (
+                                    # ✅ CORREÇÃO: Extrair pushname da resposta da API
+                                    # ⚠️ CRÍTICO: Validar se não é LID antes de usar
+                                    raw_pushname = (
                                         participant.get('pushName') or 
                                         participant.get('name') or 
                                         participant.get('notify') or 
                                         ''
                                     )
                                     
-                                    # ✅ CORREÇÃO: Prioridade: pushname > nome do contato
+                                    # ✅ VALIDAÇÃO CRÍTICA: Se pushname é LID ou igual ao participant_id (LID), não usar
+                                    pushname = ''
+                                    if raw_pushname:
+                                        # Verificar se não é LID
+                                        if not is_lid_number(raw_pushname) and raw_pushname != participant_id:
+                                            # Verificar se não é igual ao LID (sem @lid)
+                                            if not (participant_id.endswith('@lid') and raw_pushname == participant_id.replace('@lid', '')):
+                                                pushname = raw_pushname
+                                    
+                                    # ✅ CORREÇÃO: Prioridade: pushname válido > nome do contato
                                     # NÃO usar telefone como name - deixar vazio para frontend mostrar apenas telefone formatado
                                     display_name = pushname
                                     if not display_name and contact:
