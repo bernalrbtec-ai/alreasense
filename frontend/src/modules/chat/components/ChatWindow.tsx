@@ -12,7 +12,6 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { useChatSocket } from '../hooks/useChatSocket';
 import { usePollingFallback } from '../hooks/usePollingFallback';
-import { getDisplayName } from '../utils/phoneFormatter';
 import ContactModal from '@/components/contacts/ContactModal';
 import ContactHistory from '@/components/contacts/ContactHistory';
 
@@ -499,15 +498,13 @@ export function ChatWindow() {
       // Verificar existência da propriedade antes de acessar
       if (conversationType === 'group' && 'group_metadata' in activeConversation) {
         const rawMetadata = activeConversation.group_metadata;
-        if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
-          // ✅ Capturar group_name de forma segura
-          if ('group_name' in rawMetadata) {
-            const rawGroupName = (rawMetadata as any).group_name;
-            if (rawGroupName && typeof rawGroupName === 'string') {
-              const trimmed = rawGroupName.trim();
-              if (trimmed.length > 0) {
-                groupName = trimmed;
-              }
+        if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null && 'group_name' in rawMetadata) {
+          const rawGroupName = (rawMetadata as any).group_name;
+          // ✅ Validar e capturar group_name apenas se for string não vazia
+          if (typeof rawGroupName === 'string') {
+            const trimmed = rawGroupName.trim();
+            if (trimmed.length > 0) {
+              groupName = trimmed;
             }
           }
         }
