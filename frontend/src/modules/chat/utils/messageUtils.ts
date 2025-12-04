@@ -9,9 +9,9 @@ import type { Message, MessageAttachment } from '../types';
  * Ordena mensagens por timestamp (mais antiga primeiro - estilo WhatsApp)
  */
 export function sortMessagesByTimestamp(messages: Message[]): Message[] {
-  return [...messages].sort((a, b) => {
-    const timeA = new Date(a.created_at).getTime();
-    const timeB = new Date(b.created_at).getTime();
+  return [...messages].sort((messageA, messageB) => {
+    const timeA = new Date(messageA.created_at).getTime();
+    const timeB = new Date(messageB.created_at).getTime();
     return timeA - timeB; // Mais antiga primeiro (timeA - timeB)
   });
 }

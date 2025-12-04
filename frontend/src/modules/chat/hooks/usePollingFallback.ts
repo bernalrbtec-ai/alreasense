@@ -69,8 +69,8 @@ export function usePollingFallback(conversationId?: string) {
             console.log(`📥 [POLLING] ${newMessages.length} nova(s) mensagem(ns) encontrada(s)`);
             
             // Adicionar mensagens (ordenadas do mais antigo para o mais recente)
-            const sortedMessages = [...newMessages].sort((a, b) => 
-              new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+            const sortedMessages = [...newMessages].sort((messageA, messageB) => 
+              new Date(messageA.created_at).getTime() - new Date(messageB.created_at).getTime()
             );
             
             sortedMessages.forEach(message => {
