@@ -645,7 +645,8 @@ export function ChatWindow() {
                 }}
               />
                 {/* Badge de grupo */}
-                {conversationType === 'group' && (
+                {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+                {(activeConversation?.conversation_type || conversationType) === 'group' && (
                   <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px]">
                     👥
                   </div>
@@ -653,7 +654,8 @@ export function ChatWindow() {
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                {conversationType === 'group' ? '👥' : (displayName[0] || '?').toUpperCase()}
+                {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+                {(activeConversation?.conversation_type || conversationType) === 'group' ? '👥' : (displayName[0] || '?').toUpperCase()}
               </div>
             )}
           </div>
@@ -663,12 +665,14 @@ export function ChatWindow() {
             {/* Nome com botão de contato */}
             <div className="flex items-center gap-2">
               <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
-                {conversationType === 'group' && <span>👥</span>}
+                {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+                {(activeConversation?.conversation_type || conversationType) === 'group' && <span>👥</span>}
                 {displayName}
               </h2>
               
               {/* ✅ Botão Adicionar/Ver Contato (apenas para contatos individuais) */}
-              {conversationType !== 'group' && (
+              {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+              {(activeConversation?.conversation_type || conversationType) !== 'group' && (
                 <button
                   onClick={() => {
                     if (existingContact) {
@@ -734,7 +738,8 @@ export function ChatWindow() {
         {/* Actions */}
         <div className="flex items-center gap-2">
           {/* Botão Histórico (apenas se contato existir) */}
-          {existingContact && conversationType !== 'group' && (
+          {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+          {existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
             <button
               onClick={() => setShowHistory(!showHistory)}
               className={`p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md ${
@@ -766,7 +771,8 @@ export function ChatWindow() {
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
                 {/* Informações do Grupo - apenas para grupos */}
-                {conversationType === 'group' && (
+                {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+                {(activeConversation?.conversation_type || conversationType) === 'group' && (
                   <button
                     onClick={async () => {
                       if (!conversationId) return;
@@ -858,13 +864,14 @@ export function ChatWindow() {
           sendTyping={sendTyping}
           isConnected={isConnected}
             conversationId={conversationId}
-            conversationType={conversationType as 'individual' | 'group' | 'broadcast'}
+            conversationType={(activeConversation?.conversation_type || conversationType) as 'individual' | 'group' | 'broadcast'}
         />
         )}
       </div>
 
       {/* Sidebar de Histórico */}
-      {showHistory && existingContact && conversationType !== 'group' && (
+      {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+      {showHistory && existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
         <div className="hidden md:flex flex-col w-[320px] bg-white border-l border-gray-200 shadow-lg flex-shrink-0 h-full overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
             <h3 className="font-semibold text-gray-900">Histórico</h3>
@@ -889,7 +896,7 @@ export function ChatWindow() {
         <TransferModal
           conversation={{
             id: conversationId!,
-            conversation_type: conversationType as any,
+            conversation_type: (activeConversation?.conversation_type || conversationType) as any,
             contact_name: contactName,
             contact_phone: contactPhone,
             tenant: activeConversation.tenant || '',
