@@ -198,8 +198,8 @@ export function ChatWindow() {
     const currentConversationId = activeConversation.id;
     const currentConversationType = activeConversation.conversation_type || 'individual';
     
-    const refreshInfo = async () => {
-      try {
+      const refreshInfo = async () => {
+        try {
         // ✅ Verificar se ainda é a mesma conversa (pode ter mudado durante o request)
         if (isCancelled) {
           console.log(`⏸️ [REFRESH] Cancelado - conversa mudou durante request`);
@@ -276,10 +276,10 @@ export function ChatWindow() {
             console.log(`✅ [${type}] Informações já disponíveis, pulando refresh-info`);
             return;
           }
-        }
-        
-        console.log(`🔄 [${type}] Atualizando informações...`);
-        
+          }
+          
+          console.log(`🔄 [${type}] Atualizando informações...`);
+          
         const response = await api.post(`/chat/conversations/${currentConversationId}/refresh-info/`);
         
         // ✅ Verificar novamente se ainda é a mesma conversa após request
@@ -342,28 +342,28 @@ export function ChatWindow() {
           // ✅ Atualizar tanto a lista quanto a activeConversation
           updateConversation(updatedConversation);
         }
-        
-        if (response.data.from_cache) {
-          console.log(`✅ [${type}] Informações em cache (atualizadas recentemente)`);
-        } else if (response.data.warning === 'group_not_found') {
-          console.warn(`⚠️ [${type}] ${response.data.message}`);
-          // Grupo não encontrado - pode ter sido deletado ou instância saiu
-          // Não mostrar erro para não alarmar usuário
-        } else {
-          console.log(`✅ [${type}] Informações atualizadas:`, response.data.updated_fields);
-          // Store será atualizado via WebSocket broadcast
-        }
-      } catch (error: any) {
+          
+          if (response.data.from_cache) {
+            console.log(`✅ [${type}] Informações em cache (atualizadas recentemente)`);
+          } else if (response.data.warning === 'group_not_found') {
+            console.warn(`⚠️ [${type}] ${response.data.message}`);
+            // Grupo não encontrado - pode ter sido deletado ou instância saiu
+            // Não mostrar erro para não alarmar usuário
+          } else {
+            console.log(`✅ [${type}] Informações atualizadas:`, response.data.updated_fields);
+            // Store será atualizado via WebSocket broadcast
+          }
+        } catch (error: any) {
         // ✅ Verificar se foi cancelado antes de logar erro
         if (isCancelled) {
           console.log(`⏸️ [REFRESH] Erro ignorado - conversa mudou durante request`);
           return;
         }
-        // Silencioso: não mostrar toast se falhar (não crítico)
-        console.warn('⚠️ Erro ao atualizar:', error.response?.data?.error || error.message);
-      }
-    };
-    
+          // Silencioso: não mostrar toast se falhar (não crítico)
+          console.warn('⚠️ Erro ao atualizar:', error.response?.data?.error || error.message);
+        }
+      };
+      
     // ✅ NOVO: Debounce - aguardar 300ms antes de executar (evita múltiplas chamadas)
     if (refreshTimeoutRef.current) {
       clearTimeout(refreshTimeoutRef.current);
@@ -459,6 +459,8 @@ export function ChatWindow() {
 
   // ✅ CORREÇÃO CRÍTICA: Extrair groupName para um estado separado para evitar problemas de inicialização
   const [groupName, setGroupName] = useState<string | null>(null);
+  // ✅ CORREÇÃO CRÍTICA: Extrair displayName para um estado separado para evitar problemas de inicialização
+  const [displayName, setDisplayName] = useState<string>('');
   
   // ✅ CORREÇÃO CRÍTICA: Atualizar groupName quando activeConversation muda (apenas para grupos)
   // ✅ CORREÇÃO: Usar apenas id e conversation_type nas dependências para evitar re-renders infinitos
@@ -495,6 +497,50 @@ export function ChatWindow() {
     // Acessamos group_metadata diretamente dentro do useEffect quando necessário
   }, [activeConversation?.id, activeConversation?.conversation_type]);
   
+  // ✅ CORREÇÃO CRÍTICA: Calcular displayName em um useEffect separado para evitar problemas de inicialização
+  useEffect(() => {
+    if (!activeConversation || !activeConversation.id) {
+      setDisplayName('');
+      return;
+    }
+    
+    try {
+      const conversation = activeConversation;
+      const conversationType = conversation.conversation_type || 'individual';
+      const contactName = conversation.contact_name || '';
+      const contactPhone = conversation.contact_phone || '';
+      
+      if (conversationType === 'group') {
+        // Para grupos: group_name (do estado) → contact_name → fallback
+        const hasGroupName = groupName !== null && typeof groupName === 'string' && groupName.length > 0;
+        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
+        
+        if (hasGroupName) {
+          setDisplayName(groupName);
+        } else if (hasContactName) {
+          setDisplayName(contactName);
+        } else {
+          setDisplayName('Grupo sem nome');
+        }
+      } else {
+        // Para contatos individuais: contact_name → contact_phone → fallback
+        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
+        const hasContactPhone = contactPhone !== null && typeof contactPhone === 'string' && contactPhone.length > 0;
+        
+        if (hasContactName) {
+          setDisplayName(contactName);
+        } else if (hasContactPhone) {
+          setDisplayName(contactPhone);
+        } else {
+          setDisplayName('Contato sem nome');
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ [ChatWindow] Erro ao calcular displayName:', e);
+      setDisplayName('');
+    }
+  }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.contact_name, activeConversation?.contact_phone, groupName]);
+  
   // ✅ CORREÇÃO CRÍTICA: Usar useMemo ANTES de qualquer return condicional
   // Isso garante que hooks sejam chamados na mesma ordem em cada render
   // Isso evita problemas de TDZ quando activeConversation muda rapidamente
@@ -517,7 +563,6 @@ export function ChatWindow() {
     let instanceFriendlyName: string | null = null;
     let instanceName: string | null = null;
     let contactTags: any[] = [];
-    let displayName: string = ''; // ✅ Inicializado antes de qualquer uso
     
     // ✅ CORREÇÃO CRÍTICA: Capturar referência de activeConversation no início para evitar problemas de referência
     const conversation = activeConversation;
@@ -541,36 +586,6 @@ export function ChatWindow() {
       if (Array.isArray(conversation.contact_tags)) {
         contactTags = conversation.contact_tags;
       }
-      
-      // ✅ Calcular displayName DENTRO do try para usar valores já capturados
-      // Isso garante que todas as variáveis estejam inicializadas antes do uso
-      // ✅ CORREÇÃO CRÍTICA: Usar groupName do estado separado para evitar problemas de inicialização
-      if (conversationType === 'group') {
-        // Para grupos: group_name (do estado) → contact_name → fallback
-        // ✅ CORREÇÃO: Usar groupName do estado separado
-        const hasGroupName = groupName !== null && typeof groupName === 'string' && groupName.length > 0;
-        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
-        
-        if (hasGroupName) {
-          displayName = groupName;
-        } else if (hasContactName) {
-          displayName = contactName;
-        } else {
-          displayName = 'Grupo sem nome';
-        }
-      } else {
-        // Para contatos individuais: contact_name → contact_phone → fallback
-        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
-        const hasContactPhone = contactPhone !== null && typeof contactPhone === 'string' && contactPhone.length > 0;
-        
-        if (hasContactName) {
-          displayName = contactName;
-        } else if (hasContactPhone) {
-          displayName = contactPhone;
-        } else {
-          displayName = 'Contato sem nome';
-        }
-      }
     } catch (e) {
       // ✅ Se houver qualquer erro ao acessar propriedades, retornar null
       // Isso previne crashes quando activeConversation está em estado inconsistente
@@ -587,9 +602,9 @@ export function ChatWindow() {
       instanceFriendlyName,
       instanceName,
       contactTags,
-      displayName,
+      displayName, // ✅ Usar displayName do estado separado
     };
-  }, [activeConversation, groupName]);
+  }, [activeConversation, displayName]);
 
   // ✅ Se não há propriedades válidas, não renderizar
   if (!conversationProps) {
@@ -621,7 +636,7 @@ export function ChatWindow() {
   const instanceFriendlyName = conversationProps.instanceFriendlyName || null;
   const instanceName = conversationProps.instanceName || null;
   const contactTags = Array.isArray(conversationProps.contactTags) ? conversationProps.contactTags : [];
-  const displayName = conversationProps.displayName || '';
+  // ✅ CORREÇÃO: displayName agora é um estado separado, não precisa desestruturar de conversationProps
   
   // ✅ CORREÇÃO CRÍTICA: Se conversationId não existe, não renderizar
   if (!conversationId) {
@@ -875,21 +890,21 @@ export function ChatWindow() {
       {/* Messages */}
       {/* ✅ CORREÇÃO: Renderizar MessageList apenas se conversationId estiver inicializado */}
       {conversationId && (
-        <div className="flex-1 overflow-hidden">
-          <MessageList />
-        </div>
+      <div className="flex-1 overflow-hidden">
+        <MessageList />
+      </div>
       )}
 
         {/* Input */}
         {/* ✅ CORREÇÃO: Renderizar MessageInput apenas se conversationId estiver inicializado */}
         {conversationId && conversationProps && (
-          <MessageInput 
-            sendMessage={sendMessage}
-            sendTyping={sendTyping}
-            isConnected={isConnected}
+        <MessageInput 
+          sendMessage={sendMessage}
+          sendTyping={sendTyping}
+          isConnected={isConnected}
             conversationId={conversationId}
             conversationType={conversationType as 'individual' | 'group' | 'broadcast'}
-          />
+        />
         )}
       </div>
 
@@ -1115,12 +1130,12 @@ export function ChatWindow() {
                   // ✅ CORREÇÃO: Usar getState para garantir que temos a versão mais atualizada
                   const { updateConversation, activeConversation: currentActiveConversation } = useChatStore.getState();
                   if (currentActiveConversation && currentActiveConversation.id === conversationId) {
-                    updateConversation({
+                  updateConversation({
                       ...currentActiveConversation,
-                      contact_tags: contact.tags || []
-                    });
-                    
-                    console.log('✅ [CONTACT MODAL] Contato atualizado e conversa sincronizada com tags');
+                    contact_tags: contact.tags || []
+                  });
+                  
+                  console.log('✅ [CONTACT MODAL] Contato atualizado e conversa sincronizada com tags');
                   }
                 } else {
                   // Se não encontrou, limpar existingContact (contato foi deletado)
