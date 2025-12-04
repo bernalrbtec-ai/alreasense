@@ -821,7 +821,7 @@ export function MessageList() {
                 className={`
                   max-w-[65%] md:max-w-md rounded-2xl px-4 py-2.5 shadow-md
                   transform transition-all duration-200 hover:shadow-lg cursor-pointer
-                  ${msg.direction === 'outgoing'
+                  ${messageItem.direction === 'outgoing'
                     ? 'bg-[#d9fdd3] text-gray-900'
                     : 'bg-white text-gray-900'
                   }
