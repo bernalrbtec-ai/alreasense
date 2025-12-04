@@ -878,12 +878,13 @@ export function MessageList() {
                 )}
                 
                 {/* Anexos - renderizar ANTES do texto (apenas se não estiver apagada) */}
+                {/* ✅ CORREÇÃO: Renomear attachment para attachmentItem para evitar conflito de minificação */}
                 {!messageItem.is_deleted && messageItem.attachments && messageItem.attachments.length > 0 && (
                   <div className="message-attachments mb-2 space-y-2">
-                    {messageItem.attachments.map((attachment) => (
+                    {messageItem.attachments.map((attachmentItem) => (
                       <AttachmentPreview
-                        key={attachment.id}
-                        attachment={attachment}
+                        key={attachmentItem.id}
+                        attachment={attachmentItem}
                         showAI={hasFlowAI}
                       />
                     ))}
