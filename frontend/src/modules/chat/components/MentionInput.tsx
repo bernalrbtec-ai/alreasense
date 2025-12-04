@@ -276,7 +276,7 @@ export function MentionInput({
 
     setShowSuggestions(false);
     setMentionStart(null);
-  }, [onChange, participants, conversationType]);
+  }, [onChange, participants, conversationType, conversationId, loadParticipants]);
 
   // Processar seleção de menção
   const insertMention = useCallback((participant: Participant) => {
