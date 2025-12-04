@@ -454,27 +454,8 @@ export function ChatWindow() {
     }
   };
 
-  // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation ANTES de qualquer renderização
-  if (!activeConversation || !activeConversation.id) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
-        <div className="max-w-md text-center">
-          <div className="w-64 h-64 mx-auto mb-8 opacity-20">
-            <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400">
-              <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.30-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
-            </svg>
-          </div>
-          <h2 className="text-2xl font-light text-gray-700 mb-2">Flow Chat Web</h2>
-          <p className="text-gray-500 text-sm">
-            Envie e receba mensagens sem manter seu celular conectado.<br/>
-            Selecione uma conversa para começar.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ CORREÇÃO CRÍTICA: Usar useMemo para garantir que propriedades sejam calculadas de forma segura
+  // ✅ CORREÇÃO CRÍTICA: Usar useMemo ANTES de qualquer return condicional
+  // Isso garante que hooks sejam chamados na mesma ordem em cada render
   // Isso evita problemas de TDZ quando activeConversation muda rapidamente
   const conversationProps = useMemo(() => {
     if (!activeConversation || !activeConversation.id) {
