@@ -457,142 +457,145 @@ export function ChatWindow() {
     }
   };
 
-  // ✅ CORREÇÃO CRÍTICA: Extrair groupName para um estado separado para evitar problemas de inicialização
+  // ✅ CORREÇÃO CRÍTICA: Extrair TODAS as propriedades para estados separados para evitar problemas de inicialização
   const [groupName, setGroupName] = useState<string | null>(null);
-  // ✅ CORREÇÃO CRÍTICA: Extrair displayName para um estado separado para evitar problemas de inicialização
   const [displayName, setDisplayName] = useState<string>('');
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationType, setConversationType] = useState<string>('individual');
+  const [contactName, setContactName] = useState<string>('');
+  const [contactPhone, setContactPhone] = useState<string>('');
+  const [profilePicUrl, setProfilePicUrl] = useState<string | null>(null);
+  const [instanceFriendlyName, setInstanceFriendlyName] = useState<string | null>(null);
+  const [instanceName, setInstanceName] = useState<string | null>(null);
+  const [contactTags, setContactTags] = useState<any[]>([]);
   
-  // ✅ CORREÇÃO CRÍTICA: Atualizar groupName quando activeConversation muda (apenas para grupos)
-  // ✅ CORREÇÃO: Usar apenas id e conversation_type nas dependências para evitar re-renders infinitos
-  useEffect(() => {
-    if (!activeConversation || activeConversation.conversation_type !== 'group') {
-      setGroupName(null);
-      return;
-    }
-    
-    try {
-      const conversation = activeConversation;
-      if ('group_metadata' in conversation && conversation.group_metadata) {
-        const rawMetadata = conversation.group_metadata;
-        if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
-          const metadataObj = rawMetadata as Record<string, any>;
-          if ('group_name' in metadataObj) {
-            const rawGroupName = metadataObj.group_name;
-            if (rawGroupName && typeof rawGroupName === 'string') {
-              const trimmed = rawGroupName.trim();
-              if (trimmed.length > 0) {
-                setGroupName(trimmed);
-                return;
-              }
-            }
-          }
-        }
-      }
-      setGroupName(null);
-    } catch (groupError) {
-      console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
-      setGroupName(null);
-    }
-    // ✅ CORREÇÃO: Não incluir group_metadata nas dependências para evitar re-renders infinitos
-    // Acessamos group_metadata diretamente dentro do useEffect quando necessário
-  }, [activeConversation?.id, activeConversation?.conversation_type]);
-  
-  // ✅ CORREÇÃO CRÍTICA: Calcular displayName em um useEffect separado para evitar problemas de inicialização
+  // ✅ CORREÇÃO CRÍTICA: Atualizar TODAS as propriedades em um único useEffect para evitar problemas de inicialização
   useEffect(() => {
     if (!activeConversation || !activeConversation.id) {
+      setConversationId(null);
+      setConversationType('individual');
+      setContactName('');
+      setContactPhone('');
+      setProfilePicUrl(null);
+      setInstanceFriendlyName(null);
+      setInstanceName(null);
+      setContactTags([]);
+      setGroupName(null);
       setDisplayName('');
       return;
     }
     
     try {
-      const conversation = activeConversation;
-      const conversationType = conversation.conversation_type || 'individual';
-      const contactName = conversation.contact_name || '';
-      const contactPhone = conversation.contact_phone || '';
+      const conv = activeConversation;
+      const id = conv.id || null;
+      const type = conv.conversation_type || 'individual';
+      const name = conv.contact_name || '';
+      const phone = conv.contact_phone || '';
+      const pic = conv.profile_pic_url || null;
+      const friendlyName = conv.instance_friendly_name || null;
+      const instName = conv.instance_name || null;
+      const tags = Array.isArray(conv.contact_tags) ? conv.contact_tags : [];
       
-      if (conversationType === 'group') {
-        // Para grupos: group_name (do estado) → contact_name → fallback
-        const hasGroupName = groupName !== null && typeof groupName === 'string' && groupName.length > 0;
-        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
-        
-        if (hasGroupName) {
-          setDisplayName(groupName);
-        } else if (hasContactName) {
-          setDisplayName(contactName);
+      setConversationId(id);
+      setConversationType(type);
+      setContactName(name);
+      setContactPhone(phone);
+      setProfilePicUrl(pic);
+      setInstanceFriendlyName(friendlyName);
+      setInstanceName(instName);
+      setContactTags(tags);
+      
+      // ✅ Atualizar groupName (apenas para grupos)
+      if (type === 'group') {
+        if ('group_metadata' in conv && conv.group_metadata) {
+          const rawMetadata = conv.group_metadata;
+          if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
+            const metadataObj = rawMetadata as Record<string, any>;
+            if ('group_name' in metadataObj) {
+              const rawGroupName = metadataObj.group_name;
+              if (rawGroupName && typeof rawGroupName === 'string') {
+                const trimmed = rawGroupName.trim();
+                if (trimmed.length > 0) {
+                  setGroupName(trimmed);
+                } else {
+                  setGroupName(null);
+                }
+              } else {
+                setGroupName(null);
+              }
+            } else {
+              setGroupName(null);
+            }
+          } else {
+            setGroupName(null);
+          }
+        } else {
+          setGroupName(null);
+        }
+      } else {
+        setGroupName(null);
+      }
+      
+      // ✅ Calcular displayName (usar groupName do estado atual, não do parâmetro)
+      // Para grupos, precisamos calcular displayName em um useEffect separado que depende de groupName
+      if (type === 'group') {
+        // Para grupos, displayName será calculado em useEffect separado que depende de groupName
+        // Por enquanto, usar contact_name como fallback
+        const hasContactName = name !== null && typeof name === 'string' && name.length > 0;
+        if (hasContactName) {
+          setDisplayName(name);
         } else {
           setDisplayName('Grupo sem nome');
         }
       } else {
-        // Para contatos individuais: contact_name → contact_phone → fallback
-        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
-        const hasContactPhone = contactPhone !== null && typeof contactPhone === 'string' && contactPhone.length > 0;
+        const hasContactName = name !== null && typeof name === 'string' && name.length > 0;
+        const hasContactPhone = phone !== null && typeof phone === 'string' && phone.length > 0;
         
         if (hasContactName) {
-          setDisplayName(contactName);
+          setDisplayName(name);
         } else if (hasContactPhone) {
-          setDisplayName(contactPhone);
+          setDisplayName(phone);
         } else {
           setDisplayName('Contato sem nome');
         }
       }
     } catch (e) {
-      console.warn('⚠️ [ChatWindow] Erro ao calcular displayName:', e);
+      console.warn('⚠️ [ChatWindow] Erro ao atualizar propriedades:', e);
+      setConversationId(null);
+      setConversationType('individual');
+      setContactName('');
+      setContactPhone('');
+      setProfilePicUrl(null);
+      setInstanceFriendlyName(null);
+      setInstanceName(null);
+      setContactTags([]);
+      setGroupName(null);
       setDisplayName('');
     }
-  }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.contact_name, activeConversation?.contact_phone, groupName]);
+  }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.contact_name, activeConversation?.contact_phone, activeConversation?.profile_pic_url, activeConversation?.instance_friendly_name, activeConversation?.instance_name, activeConversation?.contact_tags]);
   
-  // ✅ CORREÇÃO CRÍTICA: Usar useMemo ANTES de qualquer return condicional
-  // Isso garante que hooks sejam chamados na mesma ordem em cada render
-  // Isso evita problemas de TDZ quando activeConversation muda rapidamente
+  // ✅ CORREÇÃO CRÍTICA: Atualizar displayName para grupos após groupName ser atualizado
+  useEffect(() => {
+    if (conversationType === 'group') {
+      const hasGroupName = groupName !== null && typeof groupName === 'string' && groupName.length > 0;
+      const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
+      
+      if (hasGroupName) {
+        setDisplayName(groupName);
+      } else if (hasContactName) {
+        setDisplayName(contactName);
+      } else {
+        setDisplayName('Grupo sem nome');
+      }
+    }
+  }, [conversationType, groupName, contactName]);
+  
+  // ✅ CORREÇÃO CRÍTICA: useMemo simplificado - apenas retorna um objeto de referência estável
+  // Todas as propriedades são estados separados, não precisam estar no useMemo
   const conversationProps = useMemo(() => {
-    // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation de forma segura e explícita
-    // Garantir que activeConversation existe e tem id antes de continuar
-    if (!activeConversation || !activeConversation.id) {
+    if (!conversationId) {
       return null;
     }
-    
-    // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades de forma segura usando try-catch
-    // Isso previne qualquer erro de acesso a propriedades não inicializadas
-    // ✅ IMPORTANTE: Inicializar TODAS as variáveis ANTES do try-catch para evitar TDZ
-    // ✅ CORREÇÃO: Garantir inicialização explícita e sequencial para evitar problemas de minificação
-    let conversationId: string | null = null;
-    let conversationType: string = 'individual';
-    let contactName: string = '';
-    let contactPhone: string = '';
-    let profilePicUrl: string | null = null;
-    let instanceFriendlyName: string | null = null;
-    let instanceName: string | null = null;
-    let contactTags: any[] = [];
-    
-    // ✅ CORREÇÃO CRÍTICA: Capturar referência de activeConversation no início para evitar problemas de referência
-    const conversation = activeConversation;
-    
-    try {
-      // ✅ Capturar id primeiro - se não existir, retornar null
-      conversationId = conversation.id || null;
-      if (!conversationId) {
-        return null;
-      }
-      
-      // ✅ Capturar propriedades básicas com valores padrão seguros
-      conversationType = conversation.conversation_type || 'individual';
-      contactName = conversation.contact_name || '';
-      contactPhone = conversation.contact_phone || '';
-      profilePicUrl = conversation.profile_pic_url || null;
-      instanceFriendlyName = conversation.instance_friendly_name || null;
-      instanceName = conversation.instance_name || null;
-      
-      // ✅ Capturar contact_tags de forma segura
-      if (Array.isArray(conversation.contact_tags)) {
-        contactTags = conversation.contact_tags;
-      }
-    } catch (e) {
-      // ✅ Se houver qualquer erro ao acessar propriedades, retornar null
-      // Isso previne crashes quando activeConversation está em estado inconsistente
-      console.warn('⚠️ [ChatWindow] Erro ao capturar propriedades da conversa:', e);
-      return null;
-    }
-    
     return {
       conversationId,
       conversationType,
@@ -602,9 +605,8 @@ export function ChatWindow() {
       instanceFriendlyName,
       instanceName,
       contactTags,
-      // ✅ CORREÇÃO: displayName não deve estar aqui - é um estado separado, não parte do useMemo
     };
-  }, [activeConversation]);
+  }, [conversationId, conversationType, profilePicUrl, contactName, contactPhone, instanceFriendlyName, instanceName, contactTags]);
 
   // ✅ Se não há propriedades válidas, não renderizar
   if (!conversationProps) {
@@ -626,17 +628,8 @@ export function ChatWindow() {
     );
   }
 
-  // ✅ CORREÇÃO CRÍTICA: Desestruturar propriedades do useMemo de forma segura
-  // Garantir que todas as propriedades existam antes de usar
-  const conversationId = conversationProps.conversationId || null;
-  const conversationType = conversationProps.conversationType || 'individual';
-  const profilePicUrl = conversationProps.profilePicUrl || null;
-  const contactName = conversationProps.contactName || '';
-  const contactPhone = conversationProps.contactPhone || '';
-  const instanceFriendlyName = conversationProps.instanceFriendlyName || null;
-  const instanceName = conversationProps.instanceName || null;
-  const contactTags = Array.isArray(conversationProps.contactTags) ? conversationProps.contactTags : [];
-  // ✅ CORREÇÃO: displayName agora é um estado separado, não precisa desestruturar de conversationProps
+  // ✅ CORREÇÃO CRÍTICA: Todas as propriedades agora são estados separados
+  // Não precisamos desestruturar de conversationProps - usamos diretamente os estados
   
   // ✅ CORREÇÃO CRÍTICA: Se conversationId não existe, não renderizar
   if (!conversationId) {
