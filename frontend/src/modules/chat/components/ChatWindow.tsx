@@ -463,15 +463,31 @@ export function ChatWindow() {
     }
     
     // ✅ Capturar todas as propriedades com valores padrão seguros
+    const conversationType = activeConversation.conversation_type || 'individual';
+    const contactName = activeConversation.contact_name || '';
+    const contactPhone = activeConversation.contact_phone || '';
+    
+    // ✅ Calcular displayName de forma segura ANTES de usar em expressões
+    let displayName = '';
+    if (conversationType === 'group') {
+      // Para grupos, usar group_metadata.group_name ou contact_name
+      const groupMetadata = activeConversation.group_metadata as any;
+      displayName = groupMetadata?.group_name || contactName || 'Grupo sem nome';
+    } else {
+      // Para contatos individuais, usar contact_name ou contact_phone
+      displayName = contactName || contactPhone || 'Contato sem nome';
+    }
+    
     return {
       conversationId: activeConversation.id,
-      conversationType: activeConversation.conversation_type || 'individual',
+      conversationType,
       profilePicUrl: activeConversation.profile_pic_url || null,
-      contactName: activeConversation.contact_name || '',
-      contactPhone: activeConversation.contact_phone || '',
+      contactName,
+      contactPhone,
       instanceFriendlyName: activeConversation.instance_friendly_name || null,
       instanceName: activeConversation.instance_name || null,
       contactTags: Array.isArray(activeConversation.contact_tags) ? activeConversation.contact_tags : [],
+      displayName, // ✅ Incluir displayName calculado
     };
   }, [activeConversation]);
 
@@ -496,7 +512,7 @@ export function ChatWindow() {
   }
 
   // ✅ Desestruturar propriedades do useMemo
-  const { conversationId, conversationType, profilePicUrl, contactName, contactPhone, instanceFriendlyName, instanceName, contactTags } = conversationProps;
+  const { conversationId, conversationType, profilePicUrl, contactName, contactPhone, instanceFriendlyName, instanceName, contactTags, displayName } = conversationProps;
 
   return (
     <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
@@ -520,7 +536,7 @@ export function ChatWindow() {
               <>
                 <img 
                   src={getMediaProxyUrl(profilePicUrl)}
-                  alt={getDisplayName(activeConversation)}
+                  alt={displayName}
                   className="w-full h-full object-cover"
                   onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
                 onError={(e) => {
@@ -538,7 +554,7 @@ export function ChatWindow() {
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                {conversationType === 'group' ? '👥' : getDisplayName(activeConversation)[0].toUpperCase()}
+                {conversationType === 'group' ? '👥' : (displayName[0] || '?').toUpperCase()}
               </div>
             )}
           </div>
@@ -549,7 +565,7 @@ export function ChatWindow() {
             <div className="flex items-center gap-2">
               <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
                 {conversationType === 'group' && <span>👥</span>}
-                {getDisplayName(activeConversation)}
+                {displayName}
               </h2>
               
               {/* ✅ Botão Adicionar/Ver Contato (apenas para contatos individuais) */}
