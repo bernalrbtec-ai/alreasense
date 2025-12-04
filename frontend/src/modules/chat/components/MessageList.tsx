@@ -1060,7 +1060,15 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     reactionsSummaryType: typeof message?.reactions_summary
   });
   
-  const { user } = useAuthStore();
+  // ✅ CORREÇÃO CRÍTICA: Capturar user de forma segura para evitar problemas de minificação
+  console.log('🔍 [MessageReactions] Capturando user do useAuthStore...');
+  const authStoreState = useAuthStore();
+  const currentUser = authStoreState?.user || null;
+  console.log('✅ [MessageReactions] currentUser capturado:', {
+    hasUser: !!currentUser,
+    userId: currentUser?.id
+  });
+  
   const { getMessagesArray, setMessages, updateMessageReactions, activeConversation } = useChatStore();
   const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
@@ -1088,8 +1096,8 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
 
   // Verificar se usuário já reagiu com cada emoji
   const getUserReaction = (emoji: string): MessageReaction | null => {
-    if (!message.reactions || !user) return null;
-    return message.reactions.find((r: MessageReaction) => r.emoji === emoji && r.user === user.id) || null;
+    if (!message.reactions || !currentUser) return null;
+    return message.reactions.find((r: MessageReaction) => r.emoji === emoji && r.user === currentUser.id) || null;
   };
 
   // ✅ CORREÇÃO: Validação de emoji no frontend
@@ -1128,7 +1136,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     
     // ✅ CORREÇÃO CRÍTICA: Verificar se usuário já reagiu com este emoji
     const userReaction = previousReactions.find(
-      (reaction) => reaction.user === String(user.id) && reaction.emoji === emoji
+      (reaction) => reaction.user === String(currentUser?.id) && reaction.emoji === emoji
     );
     
     // ✅ CORREÇÃO: Se já reagiu com este emoji, remover (toggle off)
@@ -1173,7 +1181,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     
     // ✅ CORREÇÃO: Se usuário já reagiu com outro emoji, substituir (remover antiga)
     const otherUserReaction = previousReactions.find(
-      (reaction) => reaction.user === String(user.id) && reaction.emoji !== emoji
+      (reaction) => reaction.user === String(currentUser?.id) && reaction.emoji !== emoji
     );
     
     const optimisticReaction: MessageReaction = {
@@ -1258,7 +1266,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     const previousReactions = cloneReactions(currentStoreMessage?.reactions);
 
     const optimisticReactions = previousReactions.filter(
-      (reaction) => !(reaction.emoji === emoji && reaction.user === String(user.id))
+      (reaction) => !(reaction.emoji === emoji && reaction.user === String(currentUser?.id))
     );
     const optimisticSummary = buildSummaryFromReactions(optimisticReactions);
 
