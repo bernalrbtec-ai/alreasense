@@ -15,10 +15,13 @@ const MAX_POLLING_ATTEMPTS = 10; // Parar após 10 tentativas (50s)
 
 export function usePollingFallback(conversationId?: string) {
   const [isPolling, setIsPolling] = useState(false);
-  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pollingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollingAttemptsRef = useRef(0);
   const lastMessageTimestampRef = useRef<string | null>(null);
-  const { addMessage, activeConversation } = useChatStore();
+  
+  // ✅ CORREÇÃO: Usar getState() para evitar problemas de TDZ
+  const getChatStore = () => useChatStore.getState();
+  const { addMessage } = getChatStore();
 
   useEffect(() => {
     // Verificar se WebSocket falhou e deve usar polling
@@ -28,8 +31,8 @@ export function usePollingFallback(conversationId?: string) {
       pollingAttemptsRef.current = 0;
       
       // Obter timestamp da última mensagem conhecida
-      const { getMessagesArray } = useChatStore.getState();
-      const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
+      const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+      const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
       if (messages.length > 0) {
         lastMessageTimestampRef.current = messages[messages.length - 1].created_at;
       }
@@ -108,7 +111,7 @@ export function usePollingFallback(conversationId?: string) {
         pollingIntervalRef.current = null;
       }
     };
-  }, [isPolling, conversationId, addMessage, activeConversation]);
+  }, [isPolling, conversationId, addMessage]);
 
   // Listener para evento de falha de conexão
   useEffect(() => {
