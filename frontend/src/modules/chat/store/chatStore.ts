@@ -257,7 +257,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Remover mensagens do byId também (opcional - pode manter para cache)
     
     return {
-      conversations: state.conversations.filter(c => c.id !== conversationId),
+      conversations: state.conversations.filter((conversationItem) => conversationItem.id !== conversationId),
       // Se a conversa removida era a ativa, limpar
       activeConversation: state.activeConversation?.id === conversationId 
         ? null 

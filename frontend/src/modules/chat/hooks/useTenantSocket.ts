@@ -420,7 +420,7 @@ export function useTenantSocket() {
         const { updateConversation, addConversation, conversations, activeConversation, setMessages, setDepartments } = useChatStore.getState();
         if (data.conversation) {
           // ✅ CORREÇÃO CRÍTICA: Verificar se last_message foi atualizado
-          const existingConversation = conversations.find(c => c.id === data.conversation.id);
+          const existingConversation = conversations.find((conversationItem) => conversationItem.id === data.conversation.id);
           const lastMessageUpdated = existingConversation && 
             JSON.stringify(existingConversation.last_message) !== JSON.stringify(data.conversation.last_message);
           

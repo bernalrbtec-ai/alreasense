@@ -32,15 +32,15 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
     if (!searchQuery.trim()) {
       // Mostrar todas as conversas exceto a atual
       setFilteredConversations(
-        conversations.filter(c => c.id !== activeConversation?.id)
+        conversations.filter((conversationItem) => conversationItem.id !== activeConversation?.id)
       );
     } else {
       const query = searchQuery.toLowerCase();
       setFilteredConversations(
-        conversations.filter(c => {
-          if (c.id === activeConversation?.id) return false;
-          const name = (c.contact_name || '').toLowerCase();
-          const phone = (c.contact_phone || '').toLowerCase();
+        conversations.filter((conversationItem) => {
+          if (conversationItem.id === activeConversation?.id) return false;
+          const name = (conversationItem.contact_name || '').toLowerCase();
+          const phone = (conversationItem.contact_phone || '').toLowerCase();
           return name.includes(query) || phone.includes(query);
         })
       );

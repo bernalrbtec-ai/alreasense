@@ -160,7 +160,7 @@ export function upsertConversation(
   if (now - lastUpdate < DEBOUNCE_MS) {
     // ✅ Atualização muito recente, aguardar um pouco
     // Mas ainda processar se for uma atualização importante (nova mensagem, mudança de status, nome/foto)
-    const existing = conversations.find(c => c.id === incoming.id);
+    const existing = conversations.find((conversationItem) => conversationItem.id === incoming.id);
     const isImportantUpdate = 
       incoming.unread_count !== undefined ||
       incoming.status !== undefined ||
@@ -182,7 +182,7 @@ export function upsertConversation(
   updateTimestamps.set(incoming.id, now);
   
   // ✅ Verificar se conversa já existe
-  const existingIndex = conversations.findIndex(c => c.id === incoming.id);
+  const existingIndex = conversations.findIndex((conversationItem) => conversationItem.id === incoming.id);
   
   if (existingIndex === -1) {
     // ✅ NOVA CONVERSA: Adicionar e ordenar
