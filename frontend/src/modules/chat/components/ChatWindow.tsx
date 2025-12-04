@@ -613,17 +613,19 @@ export function ChatWindow() {
                       try {
                         const response = await api.get(`/chat/conversations/${activeConversation.id}/group-info/`);
                         
-                        // Garantir que response.data existe e inicializar valores padrão
+                        // Garantir que response.data existe e inicializar valores padrão de forma segura
                         const groupData = response.data || {};
-                        setGroupInfo({
+                        // ✅ CORREÇÃO: Inicializar objeto completo de uma vez para evitar TDZ
+                        const safeGroupInfo = {
                           group_name: groupData.group_name || 'Sem nome',
                           description: groupData.description || null,
                           creation_date: groupData.creation_date || null,
-                          participants_count: groupData.participants_count || 0,
+                          participants_count: typeof groupData.participants_count === 'number' ? groupData.participants_count : 0,
                           participants: Array.isArray(groupData.participants) ? groupData.participants : [],
                           admins: Array.isArray(groupData.admins) ? groupData.admins : [],
                           warning: groupData.warning || null
-                        });
+                        };
+                        setGroupInfo(safeGroupInfo);
                       } catch (error: any) {
                         console.error('Erro ao buscar informações do grupo:', error);
                         toast.error(error?.response?.data?.error || 'Erro ao buscar informações do grupo');
@@ -770,7 +772,18 @@ export function ChatWindow() {
                       )}
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-600 w-24">Participantes:</span>
-                        <span className="text-sm font-medium text-gray-900">{groupInfo?.participants_count || (Array.isArray(groupInfo?.participants) ? groupInfo.participants.length : 0) || 0}</span>
+                        <span className="text-sm font-medium text-gray-900">
+                          {(() => {
+                            if (!groupInfo) return 0;
+                            if (typeof groupInfo.participants_count === 'number') {
+                              return groupInfo.participants_count;
+                            }
+                            if (Array.isArray(groupInfo.participants)) {
+                              return groupInfo.participants.length;
+                            }
+                            return 0;
+                          })()}
+                        </span>
                       </div>
                     </div>
                   </div>
