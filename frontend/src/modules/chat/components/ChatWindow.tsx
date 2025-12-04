@@ -70,7 +70,15 @@ export function ChatWindow() {
 
   // ✅ Verificar se contato existe quando conversa abre (apenas para contatos individuais)
   useEffect(() => {
-    if (!activeConversation || activeConversation.conversation_type === 'group') {
+    // ✅ CORREÇÃO: Verificar activeConversation e conversation_type de forma segura
+    if (!activeConversation) {
+      setExistingContact(null);
+      return;
+    }
+    
+    // ✅ CORREÇÃO: Capturar conversation_type antes de usar em comparação
+    const conversationType = activeConversation.conversation_type;
+    if (conversationType === 'group') {
       setExistingContact(null);
       return;
     }
