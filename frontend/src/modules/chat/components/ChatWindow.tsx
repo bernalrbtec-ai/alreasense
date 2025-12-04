@@ -37,6 +37,8 @@ export function ChatWindow() {
   const [showGroupInfo, setShowGroupInfo] = useState(false);
   const [groupInfo, setGroupInfo] = useState<any>(null);
   const [loadingGroupInfo, setLoadingGroupInfo] = useState(false);
+  // ✅ CORREÇÃO CRÍTICA: Adicionar estado para controlar se está pronto para renderizar
+  const [isReady, setIsReady] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -550,6 +552,13 @@ export function ChatWindow() {
         }
       }
       setDisplayName(newDisplayName);
+      
+      // ✅ CORREÇÃO CRÍTICA: Aguardar um tick antes de marcar como pronto para renderizar
+      // Isso garante que todos os estados foram atualizados antes de renderizar
+      // Especialmente importante para grupos que podem ter mais propriedades
+      setTimeout(() => {
+        setIsReady(true);
+      }, 0);
     } catch (e) {
       console.warn('⚠️ [ChatWindow] Erro ao atualizar propriedades:', e);
       setConversationId(null);
@@ -562,15 +571,24 @@ export function ChatWindow() {
       setContactTags([]);
       setGroupName(null);
       setDisplayName('');
+      setIsReady(false);
     }
   }, [activeConversation]);
+  
+  // ✅ CORREÇÃO CRÍTICA: Resetar isReady quando activeConversation muda
+  useEffect(() => {
+    if (!activeConversation || !activeConversation.id) {
+      setIsReady(false);
+    }
+  }, [activeConversation?.id]);
   
   // ✅ REMOVIDO: useEffect separado para displayName - agora é calculado diretamente no useEffect acima
   // Isso evita problemas de inicialização e dependências circulares
   
-  // ✅ CORREÇÃO CRÍTICA: Verificar se activeConversation e conversationId existem antes de renderizar
+  // ✅ CORREÇÃO CRÍTICA: Verificar se activeConversation, conversationId e isReady antes de renderizar
   // Isso evita problemas de inicialização quando um grupo é acessado
-  if (!activeConversation || !activeConversation.id || !conversationId) {
+  // isReady garante que todos os estados foram atualizados antes de renderizar
+  if (!activeConversation || !activeConversation.id || !conversationId || !isReady) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
         <div className="max-w-md text-center">
