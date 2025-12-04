@@ -852,11 +852,13 @@ export function ChatWindow() {
 
         {/* Input */}
         {/* ✅ CORREÇÃO: Renderizar MessageInput apenas se conversationId estiver inicializado */}
-        {conversationId && (
+        {conversationId && conversationProps && (
           <MessageInput 
             sendMessage={sendMessage}
             sendTyping={sendTyping}
             isConnected={isConnected}
+            conversationId={conversationId}
+            conversationType={conversationType}
           />
         )}
       </div>

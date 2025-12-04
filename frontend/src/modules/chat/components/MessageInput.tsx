@@ -16,10 +16,15 @@ interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[]) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
+  conversationId?: string;
+  conversationType?: 'individual' | 'group' | 'broadcast';
 }
 
-export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply } = useChatStore();
+  // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
+  const conversationId = propConversationId || activeConversation?.id;
+  const conversationType = propConversationType || activeConversation?.conversation_type || 'individual';
   const [message, setMessage] = useState('');
   const [mentions, setMentions] = useState<string[]>([]); // ✅ NOVO: Lista de números mencionados
   const [sending, setSending] = useState(false);
@@ -446,8 +451,8 @@ export function MessageInput({ sendMessage, sendTyping, isConnected }: MessageIn
             value={message}
             onChange={handleMessageChange}
             onMentionsChange={setMentions}
-            conversationId={activeConversation.id}
-            conversationType={activeConversation.conversation_type}
+            conversationId={conversationId}
+            conversationType={conversationType as 'individual' | 'group' | 'broadcast'}
             placeholder="Digite uma mensagem (use @ para mencionar)"
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
             disabled={sending}
