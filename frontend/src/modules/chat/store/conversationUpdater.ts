@@ -127,9 +127,9 @@ function sortConversations(conversations: Conversation[]): Conversation[] {
   }
   
   // ✅ Reordenar
-  const sorted = [...conversations].sort((a, b) => {
-    const aTime = a.last_message_at ? new Date(a.last_message_at).getTime() : 0;
-    const bTime = b.last_message_at ? new Date(b.last_message_at).getTime() : 0;
+  const sorted = [...conversations].sort((conversationA, conversationB) => {
+    const aTime = conversationA.last_message_at ? new Date(conversationA.last_message_at).getTime() : 0;
+    const bTime = conversationB.last_message_at ? new Date(conversationB.last_message_at).getTime() : 0;
     return bTime - aTime; // Mais recente primeiro
   });
   

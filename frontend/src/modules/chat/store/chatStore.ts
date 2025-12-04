@@ -521,10 +521,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
     let foundMessage: Message | null = null;
     let foundMessageId: string | null = null;
     
-    for (const [messageId, message] of Object.entries(state.messages.byId)) {
-      if (message.attachments?.some(att => att.id === attachmentId)) {
-        foundMessage = message;
-        foundMessageId = messageId;
+    for (const [messageIdKey, messageItem] of Object.entries(state.messages.byId)) {
+      if (messageItem.attachments?.some((attachmentItem) => attachmentItem.id === attachmentId)) {
+        foundMessage = messageItem;
+        foundMessageId = messageIdKey;
         break;
       }
     }

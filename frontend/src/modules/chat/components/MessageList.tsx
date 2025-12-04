@@ -1323,10 +1323,10 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       {/* Reações existentes */}
       {hasReactions && (
         <div className="flex items-center gap-1 flex-wrap">
-          {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
-            // ✅ CORREÇÃO CRÍTICA: Capturar data em variável local ANTES de usar
-            // Isso evita problemas de inicialização com minificação
-            const reactionData = data;
+          {Object.entries(reactionsSummary).map(([emojiKey, reactionDataValue]: [string, any]) => {
+            // ✅ CORREÇÃO CRÍTICA: Renomear variáveis de desestruturação para evitar conflito de minificação
+            // A variável 'data' pode estar sendo minificada como 'd' e causando conflito
+            const reactionData = reactionDataValue;
             
             console.log('🔍 [MessageReactions] Processando reação:', {
               emoji,
