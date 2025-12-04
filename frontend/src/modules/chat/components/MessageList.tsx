@@ -39,7 +39,7 @@ const cloneReactions = (reactions?: MessageReaction[] | null): MessageReaction[]
  */
 function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Message[] }) {
   const [repliedMessage, setRepliedMessage] = useState<Message | null>(
-    () => messages.find(m => m.id === replyToId) || null
+    () => messages.find((messageItem) => messageItem.id === replyToId) || null
   );
   const [isLoadingOriginal, setIsLoadingOriginal] = useState(false);
   const { addMessage } = useChatStore();
@@ -53,7 +53,7 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
           const originalMsg = response.data;
           setRepliedMessage(originalMsg);
           // ✅ Adicionar mensagem original à lista se não estiver presente
-          if (!messages.find(m => m.id === originalMsg.id)) {
+          if (!messages.find((messageItem) => messageItem.id === originalMsg.id)) {
             addMessage(originalMsg);
           }
         })
@@ -355,13 +355,13 @@ export function MessageList() {
         // para preservar attachments que foram atualizados via WebSocket
         const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
         const currentMessages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
-        const mergedMessages = sortedMsgs.map(serverMsg => {
-          const existingMsg = currentMessages.find(m => m.id === serverMsg.id);
+        const mergedMessages = sortedMsgs.map((serverMsg) => {
+          const existingMsg = currentMessages.find((messageItem) => messageItem.id === serverMsg.id);
           if (existingMsg && existingMsg.attachments && existingMsg.attachments.length > 0) {
             // Se mensagem existente tem attachments atualizados, preservar
             const serverAttachments = serverMsg.attachments || [];
-            const mergedAttachments = existingMsg.attachments.map(existingAtt => {
-              const serverAtt = serverAttachments.find(a => a.id === existingAtt.id);
+            const mergedAttachments = existingMsg.attachments.map((existingAtt) => {
+              const serverAtt = serverAttachments.find((attachmentItem) => attachmentItem.id === existingAtt.id);
               if (serverAtt) {
                 // Priorizar attachment com file_url válido
                 const existingHasUrl = existingAtt.file_url && existingAtt.file_url.trim() &&
@@ -380,8 +380,8 @@ export function MessageList() {
             });
             
             // Adicionar novos attachments do servidor
-            const existingAttachmentIds = new Set(mergedAttachments.map(a => a.id));
-            serverAttachments.forEach(serverAtt => {
+            const existingAttachmentIds = new Set(mergedAttachments.map((attachmentItem) => attachmentItem.id));
+            serverAttachments.forEach((serverAtt) => {
               if (!existingAttachmentIds.has(serverAtt.id)) {
                 mergedAttachments.push(serverAtt);
               }
