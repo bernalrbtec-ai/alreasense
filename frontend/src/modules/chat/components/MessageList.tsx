@@ -644,26 +644,54 @@ export function MessageList() {
 
   // ✅ CORREÇÃO CRÍTICA: Usar useMemo para garantir que safeMessages seja calculado de forma segura
   // Isso evita problemas de inicialização com minificação
+  // IMPORTANTE: Este useMemo deve estar DEPOIS de todos os hooks para evitar problemas de ordem
   const safeMessages = useMemo(() => {
-    console.log('🔄 [MessageList] useMemo calculando safeMessages:', {
-      messagesIsArray: Array.isArray(messages),
-      messagesType: typeof messages,
-      messagesLength: messages?.length || 0
-    });
-    
-    if (!Array.isArray(messages)) {
-      console.warn('⚠️ [MessageList] messages não é array, retornando array vazio');
+    try {
+      console.log('🔄 [MessageList] useMemo calculando safeMessages:', {
+        messagesIsArray: Array.isArray(messages),
+        messagesType: typeof messages,
+        messagesLength: messages?.length || 0,
+        messagesValue: messages
+      });
+      
+      // ✅ CORREÇÃO: Verificar se messages existe e é array antes de usar
+      if (!messages) {
+        console.warn('⚠️ [MessageList] messages é null/undefined, retornando array vazio');
+        return [];
+      }
+      
+      if (!Array.isArray(messages)) {
+        console.warn('⚠️ [MessageList] messages não é array, retornando array vazio:', {
+          messagesType: typeof messages,
+          messagesValue: messages
+        });
+        return [];
+      }
+      
+      // ✅ CORREÇÃO: Filtrar valores inválidos de forma segura
+      const safe = messages.filter((msg: any) => {
+        if (!msg || typeof msg !== 'object') {
+          return false;
+        }
+        return Boolean(msg.id); // Garantir que tem id válido
+      });
+      
+      console.log('✅ [MessageList] safeMessages calculado:', {
+        originalLength: messages.length,
+        safeLength: safe.length
+      });
+      
+      return safe;
+    } catch (error) {
+      console.error('❌ [MessageList] ERRO ao calcular safeMessages:', error);
       return [];
     }
-    
-    const safe = messages.filter(Boolean); // Remove valores null/undefined
-    console.log('✅ [MessageList] safeMessages calculado:', {
-      originalLength: messages.length,
-      safeLength: safe.length
-    });
-    
-    return safe;
   }, [messages]);
+
+  console.log('✅ [MessageList] safeMessages pronto para renderizar:', {
+    safeMessagesLength: safeMessages.length,
+    safeMessagesIsArray: Array.isArray(safeMessages)
+  });
 
   return (
     <div 
