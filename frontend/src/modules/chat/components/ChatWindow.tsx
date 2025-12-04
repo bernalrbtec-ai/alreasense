@@ -858,7 +858,7 @@ export function ChatWindow() {
             sendTyping={sendTyping}
             isConnected={isConnected}
             conversationId={conversationId}
-            conversationType={conversationType}
+            conversationType={conversationType as 'individual' | 'group' | 'broadcast'}
           />
         )}
       </div>
