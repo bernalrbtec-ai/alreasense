@@ -1449,7 +1449,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                 disabled={processingEmoji === emojiKey}
                 className={`
                   px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-all
-                  ${processingEmoji === emoji ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
+                  ${processingEmoji === emojiKey ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
                   ${isUserReaction
                     ? 'bg-blue-100 dark:bg-blue-900/30 border border-blue-300 dark:border-blue-700'
                     : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600/50'
@@ -1457,9 +1457,9 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                 `}
                 title={`${count} ${count === 1 ? 'reação' : 'reações'}${usersText ? `: ${usersText}` : ''}`}
               >
-                <span className="text-sm">{emoji}</span>
+                <span className="text-sm">{emojiKey}</span>
                 <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
-                  {processingEmoji === emoji ? '...' : count}
+                  {processingEmoji === emojiKey ? '...' : count}
                 </span>
               </button>
             );
