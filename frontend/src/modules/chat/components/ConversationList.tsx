@@ -89,8 +89,8 @@ export function ConversationList() {
         const { conversations: currentConvs } = useChatStore.getState();
         let updatedConvs = currentConvs;
         
-        for (const conv of convs) {
-          updatedConvs = upsertConversation(updatedConvs, conv);
+        for (const conversationItem of convs) {
+          updatedConvs = upsertConversation(updatedConvs, conversationItem);
         }
         
         setConversations(updatedConvs);
@@ -131,8 +131,8 @@ export function ConversationList() {
         let updatedConvs = currentConvs;
         
         // ✅ Usar upsert para não perder conversas do WebSocket
-        for (const conv of convs) {
-          updatedConvs = upsertConversation(updatedConvs, conv);
+        for (const conversationItem of convs) {
+          updatedConvs = upsertConversation(updatedConvs, conversationItem);
         }
         
         setConversations(updatedConvs);
@@ -157,13 +157,14 @@ export function ConversationList() {
     
     const searchLower = debouncedSearchTerm.toLowerCase().trim();
     
-    const filtered = conversations.filter((conv) => {
+    // ✅ CORREÇÃO: Renomear conv para conversationItem para evitar conflito de minificação
+    const filtered = conversations.filter((conversationItem) => {
       // 1. Filtro de busca (nome ou telefone) - apenas se houver termo de busca
       if (searchLower) {
         const matchesSearch = 
-          conv.contact_name?.toLowerCase().includes(searchLower) ||
-          conv.contact_phone.includes(debouncedSearchTerm) ||
-          (conv.group_metadata?.group_name || '').toLowerCase().includes(searchLower);
+          conversationItem.contact_name?.toLowerCase().includes(searchLower) ||
+          conversationItem.contact_phone.includes(debouncedSearchTerm) ||
+          (conversationItem.group_metadata?.group_name || '').toLowerCase().includes(searchLower);
         
         if (!matchesSearch) {
           return false;
@@ -176,23 +177,23 @@ export function ConversationList() {
         return true;
       }
       
-      const departmentId = typeof conv.department === 'string' 
-        ? conv.department 
-        : conv.department?.id || null;
-      const convStatus = conv.status || 'pending';
+      const departmentId = typeof conversationItem.department === 'string' 
+        ? conversationItem.department 
+        : conversationItem.department?.id || null;
+      const convStatus = conversationItem.status || 'pending';
       const activeDeptId = String(activeDepartment.id);
       const convDeptId = departmentId ? String(departmentId) : null;
       
       // ✅ DEBUG CRÍTICO: Log detalhado para TODAS as conversas sendo filtradas
       // Isso ajuda a identificar por que conversas não aparecem
-      const isActiveConversation = activeConversation?.id === conv.id;
+      const isActiveConversation = activeConversation?.id === conversationItem.id;
       if (isActiveConversation || convStatus === 'pending' || convStatus === 'open') {
         console.log('🔍 [FILTER] Verificando conversa:', {
-          conversationId: conv.id,
-          conversationName: conv.contact_name,
-          conversationPhone: conv.contact_phone,
+          conversationId: conversationItem.id,
+          conversationName: conversationItem.contact_name,
+          conversationPhone: conversationItem.contact_phone,
           conversationDepartmentId: convDeptId,
-          conversationDepartmentName: conv.department_name || 'N/A',
+          conversationDepartmentName: conversationItem.department_name || 'N/A',
           conversationStatus: convStatus,
           activeDepartmentId: activeDeptId,
           activeDepartmentName: activeDepartment.name,
@@ -210,8 +211,8 @@ export function ConversationList() {
         // ✅ DEBUG: Log quando conversa não passa no filtro do Inbox
         if (!passes) {
           console.log('🔍 [FILTER] Conversa não passou no filtro do Inbox:', {
-            conversationId: conv.id,
-            conversationName: conv.contact_name,
+            conversationId: conversationItem.id,
+            conversationName: conversationItem.contact_name,
             departmentId: convDeptId,
             status: convStatus,
             reason: departmentId ? 'Tem departamento' : 'Status não é pending',
@@ -222,17 +223,17 @@ export function ConversationList() {
         return passes;
       } else {
         // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
-        if (conv.status === 'closed') {
+        if (conversationItem.status === 'closed') {
           console.warn('⚠️ [FILTER] Conversa fechada, excluindo:', {
-            conversationId: conv.id,
-            conversationName: conv.contact_name,
-            conversationPhone: conv.contact_phone,
-            status: conv.status,
-            department: conv.department_name || 'N/A',
+            conversationId: conversationItem.id,
+            conversationName: conversationItem.contact_name,
+            conversationPhone: conversationItem.contact_phone,
+            status: conversationItem.status,
+            department: conversationItem.department_name || 'N/A',
             departmentId: convDeptId,
             activeDepartmentId: activeDeptId,
             activeDepartmentName: activeDepartment.name,
-            last_message_at: conv.last_message_at,
+            last_message_at: conversationItem.last_message_at,
             isActiveConversation: isActiveConversation,
             reason: 'Status é closed - conversa não deve aparecer na lista'
           });
@@ -244,20 +245,20 @@ export function ConversationList() {
         // ✅ DEBUG: Log quando conversa não passa no filtro do departamento
         if (!passes) {
           console.log('🔍 [FILTER] Conversa não passou no filtro do departamento:', {
-            conversationId: conv.id,
-            conversationName: conv.contact_name,
+            conversationId: conversationItem.id,
+            conversationName: conversationItem.contact_name,
             activeDepartmentId: activeDeptId,
             activeDepartmentName: activeDepartment.name,
             conversationDepartmentId: convDeptId,
-            conversationDepartmentName: conv.department_name || 'N/A',
+            conversationDepartmentName: conversationItem.department_name || 'N/A',
             conversationStatus: convStatus,
             reason: convDeptId !== activeDeptId ? 'Departamento diferente' : 'Status closed',
             expected: `departmentId === ${activeDeptId}`
           });
         } else {
           console.log('✅ [FILTER] Conversa passou no filtro do departamento:', {
-            conversationId: conv.id,
-            conversationName: conv.contact_name,
+            conversationId: conversationItem.id,
+            conversationName: conversationItem.contact_name,
             departmentId: convDeptId,
             status: convStatus
           });
@@ -344,55 +345,55 @@ export function ConversationList() {
             </p>
           </div>
         ) : (
-          filteredConversations.map((conv, index) => (
+          filteredConversations.map((conversationItem, index) => (
             <button
-              key={conv.id}
+              key={conversationItem.id}
               onClick={() => {
                 // ✅ FIX: Verificar se é a mesma conversa antes de definir
                 // Se já é a conversa ativa, não fazer nada (evita desselecionar)
-                if (activeConversation?.id === conv.id) {
-                  console.log('🔕 [LIST] Conversa já está ativa, mantendo selecionada:', conv.id);
+                if (activeConversation?.id === conversationItem.id) {
+                  console.log('🔕 [LIST] Conversa já está ativa, mantendo selecionada:', conversationItem.id);
                   return;
                 }
-                console.log('✅ [LIST] Selecionando conversa:', conv.id);
-                setActiveConversation(conv);
+                console.log('✅ [LIST] Selecionando conversa:', conversationItem.id);
+                setActiveConversation(conversationItem);
               }}
               className={`
                 w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 
                 hover:bg-[#f0f2f5] active:scale-[0.98] 
                 transition-all duration-150 border-b border-gray-100
                 animate-fade-in
-                ${activeConversation?.id === conv.id ? 'bg-[#f0f2f5] shadow-sm' : ''}
+                ${activeConversation?.id === conversationItem.id ? 'bg-[#f0f2f5] shadow-sm' : ''}
               `}
               style={{ animationDelay: `${index * 30}ms` }}
             >
               {/* Avatar com foto - responsivo */}
               <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden relative">
-                {conv.profile_pic_url ? (
-                  <img 
-                    src={getMediaProxyUrl(conv.profile_pic_url)}
-                    alt={getDisplayName(conv)}
+                {conversationItem.profile_pic_url ? (
+                    <img
+                      src={getMediaProxyUrl(conversationItem.profile_pic_url)}
+                      alt={getDisplayName(conversationItem)}
                     className="w-full h-full object-cover"
-                    onLoad={() => console.log(`✅ [IMG LIST] Foto carregada: ${conv.contact_name}`)}
-                    onError={(e) => {
-                      console.error(`❌ [IMG LIST] Erro ao carregar foto: ${conv.contact_name}`, e.currentTarget.src);
+                      onLoad={() => console.log(`✅ [IMG LIST] Foto carregada: ${conversationItem.contact_name}`)}
+                      onError={(e) => {
+                        console.error(`❌ [IMG LIST] Erro ao carregar foto: ${conversationItem.contact_name}`, e.currentTarget.src);
                       // Fallback se imagem não carregar
                       e.currentTarget.style.display = 'none';
                       e.currentTarget.parentElement!.innerHTML = `
                         <div class="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                          ${conv.conversation_type === 'group' ? '👥' : (conv.contact_name || conv.contact_phone)[0].toUpperCase()}
+                          ${conversationItem.conversation_type === 'group' ? '👥' : (conversationItem.contact_name || conversationItem.contact_phone)[0].toUpperCase()}
                         </div>
                       `;
                     }}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                    {conv.conversation_type === 'group' ? '👥' : getDisplayName(conv)[0].toUpperCase()}
+                    {conversationItem.conversation_type === 'group' ? '👥' : getDisplayName(conversationItem)[0].toUpperCase()}
                   </div>
                 )}
                 
                 {/* Badge de grupo no canto inferior direito */}
-                {conv.conversation_type === 'group' && (
+                {conversationItem.conversation_type === 'group' && (
                   <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[10px]">
                     👥
                   </div>
@@ -404,14 +405,14 @@ export function ConversationList() {
                 {/* Nome + Hora */}
                 <div className="flex items-baseline justify-between mb-1">
                   <h3 className="font-medium text-gray-900 truncate text-sm flex items-center gap-1">
-                    {conv.conversation_type === 'group' && <span>👥</span>}
-                    {conv.conversation_type === 'group' 
-                      ? (conv.group_metadata?.group_name || conv.contact_name || 'Grupo WhatsApp')
-                      : getDisplayName(conv)
+                    {conversationItem.conversation_type === 'group' && <span>👥</span>}
+                    {conversationItem.conversation_type === 'group' 
+                      ? (conversationItem.group_metadata?.group_name || conversationItem.contact_name || 'Grupo WhatsApp')
+                      : getDisplayName(conversationItem)
                     }
                   </h3>
                   <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
-                    {formatTime(conv.last_message_at)}
+                    {formatTime(conversationItem.last_message_at)}
                   </span>
                 </div>
 
@@ -426,7 +427,7 @@ export function ConversationList() {
                     )}
                     
                     {/* Tags do Contato */}
-                    {conv.contact_tags && conv.contact_tags.map((tag) => (
+                    {conversationItem.contact_tags && conversationItem.contact_tags.map((tag) => (
                       <span 
                         key={tag.id}
                         className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium"
