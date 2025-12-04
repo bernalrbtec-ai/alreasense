@@ -2178,15 +2178,6 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             else:
                                 logger.info(f"   ℹ️ [PARTICIPANTS] Pushname não encontrado, name vazio (telefone será mostrado)")
                         
-                        participant_info = {
-                            'jid': participant_id,  # LID original
-                            'phone': normalized_phone,  # Telefone real normalizado E.164
-                            'name': participant_name,  # Nome do contato ou vazio
-                            'phoneNumber': participant_phone_number,  # JID real do telefone
-                        }
-                        logger.info(f"   ✅ [PARTICIPANTS] Participante processado: phone={normalized_phone}, name={participant_name}, phoneNumber={participant_phone_number}")
-                        
-                        participants_list.append(participant_info)
                         contact = Contact.objects.filter(
                             tenant=conversation.tenant,
                             phone__in=[normalized_phone_for_search, normalized_phone, phone_raw, f"+{phone_raw}"]
