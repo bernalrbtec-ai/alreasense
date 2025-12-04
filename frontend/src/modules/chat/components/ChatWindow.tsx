@@ -457,6 +457,44 @@ export function ChatWindow() {
     }
   };
 
+  // ✅ CORREÇÃO CRÍTICA: Extrair groupName para um estado separado para evitar problemas de inicialização
+  const [groupName, setGroupName] = useState<string | null>(null);
+  
+  // ✅ CORREÇÃO CRÍTICA: Atualizar groupName quando activeConversation muda (apenas para grupos)
+  // ✅ CORREÇÃO: Usar apenas id e conversation_type nas dependências para evitar re-renders infinitos
+  useEffect(() => {
+    if (!activeConversation || activeConversation.conversation_type !== 'group') {
+      setGroupName(null);
+      return;
+    }
+    
+    try {
+      const conversation = activeConversation;
+      if ('group_metadata' in conversation && conversation.group_metadata) {
+        const rawMetadata = conversation.group_metadata;
+        if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
+          const metadataObj = rawMetadata as Record<string, any>;
+          if ('group_name' in metadataObj) {
+            const rawGroupName = metadataObj.group_name;
+            if (rawGroupName && typeof rawGroupName === 'string') {
+              const trimmed = rawGroupName.trim();
+              if (trimmed.length > 0) {
+                setGroupName(trimmed);
+                return;
+              }
+            }
+          }
+        }
+      }
+      setGroupName(null);
+    } catch (groupError) {
+      console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
+      setGroupName(null);
+    }
+    // ✅ CORREÇÃO: Não incluir group_metadata nas dependências para evitar re-renders infinitos
+    // Acessamos group_metadata diretamente dentro do useEffect quando necessário
+  }, [activeConversation?.id, activeConversation?.conversation_type]);
+  
   // ✅ CORREÇÃO CRÍTICA: Usar useMemo ANTES de qualquer return condicional
   // Isso garante que hooks sejam chamados na mesma ordem em cada render
   // Isso evita problemas de TDZ quando activeConversation muda rapidamente
@@ -479,7 +517,6 @@ export function ChatWindow() {
     let instanceFriendlyName: string | null = null;
     let instanceName: string | null = null;
     let contactTags: any[] = [];
-    let groupName: string | null = null; // ✅ Inicializado como null antes de qualquer uso
     let displayName: string = ''; // ✅ Inicializado antes de qualquer uso
     
     // ✅ CORREÇÃO CRÍTICA: Capturar referência de activeConversation no início para evitar problemas de referência
@@ -505,56 +542,30 @@ export function ChatWindow() {
         contactTags = conversation.contact_tags;
       }
       
-      // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura APENAS para grupos
-      // Esta é a única seção que acessa group_metadata, então isolamos completamente
-      // ✅ IMPORTANTE: groupName já está inicializado como null acima, então não há risco de TDZ
-      // ✅ CORREÇÃO: Simplificar lógica para evitar problemas durante minificação
-      if (conversationType === 'group') {
-        try {
-          // ✅ Verificar se group_metadata existe antes de acessar
-          const hasGroupMetadata = conversation && 'group_metadata' in conversation;
-          if (hasGroupMetadata) {
-            const rawMetadata = conversation.group_metadata;
-            // ✅ Validação em múltiplas camadas antes de acessar group_name
-            if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
-              const metadataObj = rawMetadata as Record<string, any>;
-              if ('group_name' in metadataObj) {
-                const rawGroupName = metadataObj.group_name;
-                // ✅ Validar e capturar group_name apenas se for string não vazia
-                if (rawGroupName && typeof rawGroupName === 'string') {
-                  const trimmed = rawGroupName.trim();
-                  if (trimmed.length > 0) {
-                    groupName = trimmed; // ✅ Atribuir apenas se válido
-                  }
-                }
-              }
-            }
-          }
-        } catch (groupError) {
-          // ✅ Se houver erro ao acessar group_metadata, manter null (já inicializado)
-          console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
-          // groupName já é null, não precisa reatribuir
-        }
-      }
-      
       // ✅ Calcular displayName DENTRO do try para usar valores já capturados
       // Isso garante que todas as variáveis estejam inicializadas antes do uso
-      // ✅ CORREÇÃO CRÍTICA: Simplificar lógica para evitar problemas de inicialização durante minificação
+      // ✅ CORREÇÃO CRÍTICA: Usar groupName do estado separado para evitar problemas de inicialização
       if (conversationType === 'group') {
-        // Para grupos: group_name → contact_name → fallback
-        // ✅ CORREÇÃO: Usar lógica sequencial simples para evitar problemas de TDZ
-        if (groupName && typeof groupName === 'string' && groupName.length > 0) {
+        // Para grupos: group_name (do estado) → contact_name → fallback
+        // ✅ CORREÇÃO: Usar groupName do estado separado
+        const hasGroupName = groupName !== null && typeof groupName === 'string' && groupName.length > 0;
+        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
+        
+        if (hasGroupName) {
           displayName = groupName;
-        } else if (contactName && contactName.length > 0) {
+        } else if (hasContactName) {
           displayName = contactName;
         } else {
           displayName = 'Grupo sem nome';
         }
       } else {
         // Para contatos individuais: contact_name → contact_phone → fallback
-        if (contactName && contactName.length > 0) {
+        const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
+        const hasContactPhone = contactPhone !== null && typeof contactPhone === 'string' && contactPhone.length > 0;
+        
+        if (hasContactName) {
           displayName = contactName;
-        } else if (contactPhone && contactPhone.length > 0) {
+        } else if (hasContactPhone) {
           displayName = contactPhone;
         } else {
           displayName = 'Contato sem nome';
@@ -578,7 +589,7 @@ export function ChatWindow() {
       contactTags,
       displayName,
     };
-  }, [activeConversation]);
+  }, [activeConversation, groupName]);
 
   // ✅ Se não há propriedades válidas, não renderizar
   if (!conversationProps) {
