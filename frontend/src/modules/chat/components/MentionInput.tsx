@@ -79,72 +79,12 @@ export function MentionInput({
   const [mentionStart, setMentionStart] = useState<number | null>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-
-  // Carregar participantes quando for grupo
-  useEffect(() => {
-    if (conversationType === 'group' && conversationId) {
-      console.log('🔄 [MENTIONS] Carregando participantes para grupo:', conversationId);
-      loadParticipants();
-    } else {
-      console.log('ℹ️ [MENTIONS] Não é grupo ou sem conversationId:', { conversationType, conversationId });
-      setParticipants([]); // Limpar participantes se não for grupo
-    }
-  }, [conversationId, conversationType, loadParticipants]);
-
-  // ✅ NOVO: Quando participantes são carregados e há um @ ativo, mostrar sugestões
-  useEffect(() => {
-    if (mentionStart !== null && participants.length > 0 && conversationType === 'group') {
-      const inputValue = value;
-      const textBeforeCursor = inputValue.substring(0, mentionStart);
-      const textAfterAt = inputValue.substring(mentionStart + 1);
-      const query = textAfterAt.split(/\s/)[0]; // Pegar apenas a primeira palavra após @
-      
-      // Filtrar participantes baseado na query
-      let filtered: Participant[] = [];
-      if (query === '') {
-        filtered = participants;
-      } else {
-        filtered = participants.filter(p => {
-          const displayName = (p.contact_name || p.pushname || p.name || '').toLowerCase();
-          const nameMatch = displayName.includes(query.toLowerCase());
-          const phoneMatch = p.phone.replace(/\D/g, '').includes(query.replace(/\D/g, ''));
-          return nameMatch || phoneMatch;
-        });
-      }
-      
-      if (filtered.length > 0) {
-        console.log('✅ [MENTIONS] Participantes carregados, mostrando sugestões:', filtered.length);
-        setSuggestions(filtered);
-        setShowSuggestions(true);
-        setSelectedIndex(0);
-      }
-    }
-  }, [participants, mentionStart, value, conversationType]);
-
+  
   // ✅ NOVO: Ref para evitar múltiplas chamadas simultâneas
   const loadingRef = useRef(false);
-  
-  // ✅ NOVO: Função para tentar recarregar participantes se necessário
-  const ensureParticipantsLoaded = useCallback(async () => {
-    if (conversationType === 'group' && conversationId && !loadingRef.current) {
-      // Usar estado atual do store para verificar se realmente está vazio
-      if (participants.length === 0) {
-        console.log('🔄 [MENTIONS] Participantes vazios, tentando recarregar...', {
-          conversationId,
-          conversationType
-        });
-        loadingRef.current = true;
-        try {
-          await loadParticipants();
-        } finally {
-          loadingRef.current = false;
-        }
-      } else {
-        console.log('✅ [MENTIONS] Participantes já carregados:', participants.length);
-      }
-    }
-  }, [conversationType, conversationId, participants.length]);
 
+  // ✅ CORREÇÃO CRÍTICA: Mover loadParticipants para ANTES do useEffect que o usa
+  // Isso previne erro "Cannot access 'loadParticipants' before initialization"
   const loadParticipants = useCallback(async (retryCount = 0) => {
     const maxRetries = 2;
     const retryDelay = 1000; // 1 segundo
