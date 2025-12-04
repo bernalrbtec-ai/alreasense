@@ -908,8 +908,11 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
 
 
-  // Reações agrupadas por emoji
-  const reactionsSummary = message.reactions_summary || {};
+  // ✅ CORREÇÃO CRÍTICA: Garantir que reactionsSummary está sempre inicializado corretamente
+  // Verificar se message.reactions_summary existe e é um objeto válido
+  const reactionsSummary: ReactionsSummary = (message.reactions_summary && typeof message.reactions_summary === 'object' && message.reactions_summary !== null) 
+    ? message.reactions_summary 
+    : {};
   const hasReactions = Object.keys(reactionsSummary).length > 0;
 
   // Verificar se usuário já reagiu com cada emoji
@@ -1142,8 +1145,18 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       {hasReactions && (
         <div className="flex items-center gap-1 flex-wrap">
           {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
+            // ✅ CORREÇÃO CRÍTICA: Verificar se data existe e tem propriedades válidas antes de usar
+            if (!data || typeof data !== 'object') return null;
+            
             const userReaction = getUserReaction(emoji);
             const isUserReaction = !!userReaction;
+            
+            // ✅ CORREÇÃO CRÍTICA: Garantir que data.users é um array válido antes de usar
+            const users = Array.isArray(data?.users) ? data.users : [];
+            const usersText = users.length > 0 
+              ? users.map((u: any) => u?.email || u?.first_name || 'Usuário').join(', ')
+              : '';
+            const count = typeof data?.count === 'number' ? data.count : 0;
             
             return (
               <button
@@ -1160,11 +1173,11 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                     : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600/50'
                   }
                 `}
-                title={`${data.count} ${data.count === 1 ? 'reação' : 'reações'}: ${Array.isArray(data.users) ? data.users.map((u: any) => u?.email || u?.first_name || 'Usuário').join(', ') : ''}`}
+                title={`${count} ${count === 1 ? 'reação' : 'reações'}${usersText ? `: ${usersText}` : ''}`}
               >
                 <span className="text-sm">{emoji}</span>
                 <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
-                  {processingEmoji === emoji ? '...' : data.count}
+                  {processingEmoji === emoji ? '...' : count}
                 </span>
               </button>
             );
