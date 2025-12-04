@@ -53,8 +53,6 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
     }
     return { x: pos.x, y: pos.y };
   };
-  
-  const safePosition = getSafePosition(position);
 
   // Ajustar posição do menu para não sair da tela - INICIALIZAR COM VALOR SEGURO
   const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number }>(() => {
