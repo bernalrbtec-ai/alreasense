@@ -468,11 +468,18 @@ export function ChatWindow() {
     const contactPhone = activeConversation.contact_phone || '';
     
     // ✅ Calcular displayName de forma segura ANTES de usar em expressões
+    // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma segura antes de acessar propriedades
     let displayName = '';
     if (conversationType === 'group') {
       // Para grupos, usar group_metadata.group_name ou contact_name
-      const groupMetadata = activeConversation.group_metadata as any;
-      displayName = groupMetadata?.group_name || contactName || 'Grupo sem nome';
+      // ✅ CORREÇÃO: Verificar se group_metadata existe antes de acessar
+      const groupMetadata = activeConversation?.group_metadata;
+      if (groupMetadata && typeof groupMetadata === 'object') {
+        const groupName = (groupMetadata as any)?.group_name;
+        displayName = groupName || contactName || 'Grupo sem nome';
+      } else {
+        displayName = contactName || 'Grupo sem nome';
+      }
     } else {
       // Para contatos individuais, usar contact_name ou contact_phone
       displayName = contactName || contactPhone || 'Contato sem nome';
