@@ -1160,7 +1160,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                     : 'bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600/50'
                   }
                 `}
-                title={`${data.count} ${data.count === 1 ? 'reação' : 'reações'}: ${data.users.map((u: any) => u.email || u.first_name || 'Usuário').join(', ')}`}
+                title={`${data.count} ${data.count === 1 ? 'reação' : 'reações'}: ${Array.isArray(data.users) ? data.users.map((u: any) => u?.email || u?.first_name || 'Usuário').join(', ') : ''}`}
               >
                 <span className="text-sm">{emoji}</span>
                 <span className={`text-xs font-medium ${isUserReaction ? 'text-blue-700 dark:text-blue-300' : 'text-gray-700 dark:text-gray-300'}`}>
