@@ -42,6 +42,11 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
   const { activeConversation, setMessages, getMessagesArray, setReplyToMessage } = useChatStore();
   const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
 
+  // Validar position e usar valores padrão se inválida
+  const safePosition = position && typeof position.x === 'number' && typeof position.y === 'number'
+    ? position
+    : { x: 0, y: 0 };
+
   // Fechar menu ao clicar fora
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -66,15 +71,20 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
   }, [onClose]);
 
   // Ajustar posição do menu para não sair da tela
-  const [adjustedPosition, setAdjustedPosition] = useState(position);
+  const [adjustedPosition, setAdjustedPosition] = useState(safePosition);
+  
   useEffect(() => {
+    if (!safePosition || typeof safePosition.x !== 'number' || typeof safePosition.y !== 'number') {
+      return;
+    }
+    
     if (menuRef.current) {
       const rect = menuRef.current.getBoundingClientRect();
       const windowWidth = window.innerWidth;
       const windowHeight = window.innerHeight;
 
-      let x = position.x;
-      let y = position.y;
+      let x = safePosition.x;
+      let y = safePosition.y;
 
       // Ajustar horizontalmente
       if (x + rect.width > windowWidth) {
@@ -94,7 +104,7 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
 
       setAdjustedPosition({ x, y });
     }
-  }, [position]);
+  }, [safePosition]);
 
   // Verificar se mensagem tem anexos para mostrar opção de baixar
   const hasAttachments = message.attachments && message.attachments.length > 0;
