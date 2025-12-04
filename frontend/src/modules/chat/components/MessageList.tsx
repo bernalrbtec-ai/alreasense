@@ -242,10 +242,10 @@ export function MessageList() {
       messageIds: messageIds.slice(0, 5) // Primeiros 5 para não poluir o log
     });
     
-    const mappedMessages = messageIds.map(id => {
-      const message = state.messages.byId[id];
+    const mappedMessages = messageIds.map((messageIdItem) => {
+      const message = state.messages.byId[messageIdItem];
       console.log('🔍 [MessageList] Mapeando mensagem:', {
-        id,
+        id: messageIdItem,
         hasMessage: !!message,
         messageId: message?.id,
         hasReactions: !!(message?.reactions),
