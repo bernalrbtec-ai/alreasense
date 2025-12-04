@@ -1330,10 +1330,11 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
           {Object.entries(reactionsSummary).map(([emojiKey, reactionDataValue]: [string, any]) => {
             // ✅ CORREÇÃO CRÍTICA: Renomear variáveis de desestruturação para evitar conflito de minificação
             // A variável 'data' pode estar sendo minificada como 'd' e causando conflito
+            // ✅ CORREÇÃO: Usar emojiKey ao invés de emoji (que não está definido)
             const reactionData = reactionDataValue;
             
             console.log('🔍 [MessageReactions] Processando reação:', {
-              emoji,
+              emojiKey,
               hasData: !!reactionData,
               dataType: typeof reactionData,
               isObject: reactionData && typeof reactionData === 'object',
@@ -1345,16 +1346,16 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
             
             // ✅ CORREÇÃO CRÍTICA: Verificar se reactionData existe e tem propriedades válidas antes de usar
             if (!reactionData || typeof reactionData !== 'object') {
-              console.warn('⚠️ [MessageReactions] reactionData inválido, pulando:', { emoji, reactionData });
+              console.warn('⚠️ [MessageReactions] reactionData inválido, pulando:', { emojiKey, reactionData });
               return null;
             }
             
-            const userReaction = getUserReaction(emoji);
+            const userReaction = getUserReaction(emojiKey);
             const isUserReaction = !!userReaction;
             
             // ✅ CORREÇÃO CRÍTICA: Garantir que reactionData.users é um array válido antes de usar
             console.log('🔍 [MessageReactions] Verificando reactionData.users ANTES do map:', {
-              emoji,
+              emojiKey,
               hasReactionData: !!reactionData,
               hasUsers: !!(reactionData?.users),
               usersType: typeof reactionData?.users,
@@ -1364,7 +1365,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
             
             const users = Array.isArray(reactionData?.users) ? reactionData.users : [];
             console.log('👥 [MessageReactions] Users extraídos:', {
-              emoji,
+              emojiKey,
               usersCount: users.length,
               usersIsArray: Array.isArray(users),
               usersType: typeof users,
@@ -1374,7 +1375,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
             let usersText = '';
             if (users.length > 0) {
               console.log('🔄 [MessageReactions] Iniciando map de users:', {
-                emoji,
+                emojiKey,
                 usersLength: users.length
               });
               
@@ -1383,7 +1384,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                 // A variável u pode estar sendo minificada causando erro "Cannot access 'u' before initialization"
                 usersText = users.map((reactionUserItem: any, index: number) => {
                   console.log(`🔍 [MessageReactions] Processando user[${index}]:`, {
-                    emoji,
+                    emojiKey,
                     index,
                     hasReactionUserItem: !!reactionUserItem,
                     reactionUserItemType: typeof reactionUserItem,
@@ -1403,7 +1404,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                   const result = email || firstName || 'Usuário';
                   
                   console.log(`✅ [MessageReactions] User[${index}] processado:`, {
-                    emoji,
+                    emojiKey,
                     index,
                     result
                   });
@@ -1412,13 +1413,13 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                 }).join(', ');
                 
                 console.log('✅ [MessageReactions] usersText gerado:', {
-                  emoji,
+                  emojiKey,
                   usersText,
                   usersTextLength: usersText.length
                 });
               } catch (mapError) {
                 console.error('❌ [MessageReactions] ERRO no map de users:', {
-                  emoji,
+                  emojiKey,
                   error: mapError,
                   errorMessage: (mapError as Error).message,
                   errorStack: (mapError as Error).stack,
@@ -1427,13 +1428,13 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
                 usersText = '';
               }
             } else {
-              console.log('⚠️ [MessageReactions] Nenhum user para processar:', { emoji });
+              console.log('⚠️ [MessageReactions] Nenhum user para processar:', { emojiKey });
             }
             
             const count = typeof reactionData?.count === 'number' ? reactionData.count : 0;
             
             console.log('✅ [MessageReactions] Reação processada com sucesso:', {
-              emoji,
+              emojiKey,
               count,
               usersTextLength: usersText.length,
               isUserReaction
@@ -1441,11 +1442,11 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
             
             return (
               <button
-                key={emoji}
-                onClick={() => handleToggleReaction(emoji)}
-                onMouseEnter={() => setHoveredEmoji(emoji)}
+                key={emojiKey}
+                onClick={() => handleToggleReaction(emojiKey)}
+                onMouseEnter={() => setHoveredEmoji(emojiKey)}
                 onMouseLeave={() => setHoveredEmoji(null)}
-                disabled={processingEmoji === emoji}
+                disabled={processingEmoji === emojiKey}
                 className={`
                   px-2 py-0.5 rounded-full text-xs flex items-center gap-1 transition-all
                   ${processingEmoji === emoji ? 'opacity-50 cursor-wait' : 'cursor-pointer'}
