@@ -398,17 +398,17 @@ export function MessageList() {
         // Reduzido delay de 20ms para 10ms e limita animação a 15 mensagens
         setTimeout(() => {
           const messagesToAnimate = mergedMessages.slice(-15); // Apenas últimas 15 para não demorar muito
-          messagesToAnimate.forEach((msg, index) => {
+          messagesToAnimate.forEach((messageItem, index) => {
             setTimeout(() => {
-              setVisibleMessages(prev => new Set([...prev, msg.id]));
+              setVisibleMessages(prev => new Set([...prev, messageItem.id]));
             }, index * 10); // ✅ Reduzido de 20ms para 10ms
           });
           
           // Adicionar mensagens restantes imediatamente (sem animação)
           if (mergedMessages.length > 15) {
             const restMessages = mergedMessages.slice(0, -15);
-            restMessages.forEach(msg => {
-              setVisibleMessages(prev => new Set([...prev, msg.id]));
+            restMessages.forEach((messageItem) => {
+              setVisibleMessages(prev => new Set([...prev, messageItem.id]));
             });
           }
         }, 50);
@@ -520,13 +520,13 @@ export function MessageList() {
     if (messages.length === 0) return;
     
     // Identificar novas mensagens (não visíveis ainda)
-    const newMessages = messages.filter(msg => !visibleMessages.has(msg.id));
+    const newMessages = messages.filter((messageItem) => !visibleMessages.has(messageItem.id));
     
     if (newMessages.length > 0) {
       // Adicionar fade-in para novas mensagens
-      newMessages.forEach((msg, index) => {
+      newMessages.forEach((messageItem, index) => {
         setTimeout(() => {
-          setVisibleMessages(prev => new Set([...prev, msg.id]));
+          setVisibleMessages(prev => new Set([...prev, messageItem.id]));
         }, index * 50); // 50ms entre cada nova mensagem
       });
     }
