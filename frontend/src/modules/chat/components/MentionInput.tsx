@@ -223,7 +223,7 @@ export function MentionInput({
         if (conversationType === 'group' && participants.length === 0 && conversationId && !loadingRef.current) {
           console.log('🔄 [MENTIONS] @ digitado mas sem participantes, tentando recarregar...');
           // Chamar de forma assíncrona e aguardar
-          ensureParticipantsLoaded().then(() => {
+          loadParticipants().then(() => {
             // Após carregar, verificar novamente e mostrar sugestões se houver participantes
             // Isso será tratado no próximo handleInputChange quando o estado atualizar
           });
