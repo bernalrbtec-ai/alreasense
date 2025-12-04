@@ -804,9 +804,9 @@ export function ChatWindow() {
       )}
 
       {/* Modals */}
-      {showTransferModal && (
+      {showTransferModal && conversationProps && (
         <TransferModal
-          conversation={activeConversation}
+          conversation={activeConversation!}
           onClose={() => setShowTransferModal(false)}
           onTransferSuccess={() => {
             setShowTransferModal(false);
