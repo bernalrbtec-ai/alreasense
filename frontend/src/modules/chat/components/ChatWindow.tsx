@@ -173,11 +173,12 @@ export function ChatWindow() {
   // 🔄 Atualizar informações da conversa quando abre (foto, nome, metadados)
   // ✅ MELHORIA ULTRA-REFINADA: Verificação inteligente com debounce e fallback
   useEffect(() => {
-    if (!activeConversation) return;
+    if (!activeConversation?.id) return;
     
     // ✅ CORREÇÃO CRÍTICA: Cancelar refresh-info anterior quando muda de conversa
     let isCancelled = false;
     const currentConversationId = activeConversation.id;
+    const currentConversationType = activeConversation.conversation_type;
     
     const refreshInfo = async () => {
       try {
@@ -188,17 +189,17 @@ export function ChatWindow() {
         }
         
         const { activeConversation: current } = useChatStore.getState();
-        if (current?.id !== currentConversationId) {
+        if (!current || current.id !== currentConversationId) {
           console.log(`⏸️ [REFRESH] Cancelado - conversa diferente da que iniciou refresh`);
           return;
         }
         
-        const type = activeConversation.conversation_type === 'group' ? 'GRUPO' : 'CONTATO';
+        const type = currentConversationType === 'group' ? 'GRUPO' : 'CONTATO';
         
         // ✅ VERIFICAÇÃO ULTRA-REFINADA: Para grupos, verificar qualidade dos participantes
-        if (activeConversation.conversation_type === 'group') {
-          const groupMetadata = activeConversation.group_metadata || {};
-          const participants = groupMetadata.participants || [];
+        if (currentConversationType === 'group') {
+          const groupMetadata = current.group_metadata || {};
+          const participants = Array.isArray(groupMetadata.participants) ? groupMetadata.participants : [];
           const participantsCount = groupMetadata.participants_count || 0;
           const participantsUpdatedAt = groupMetadata.participants_updated_at;
           
@@ -207,7 +208,7 @@ export function ChatWindow() {
           
           // ✅ Verificação 2: Qualidade (pelo menos 50% válidos)
           const hasPoorQuality = participants.length > 0 && 
-            participants.filter(p => p.phone && p.phone.length >= 10).length < participants.length * 0.5;
+            participants.filter(p => p && p.phone && p.phone.length >= 10).length < participants.length * 0.5;
           
           // ✅ Verificação 3: Timestamp (se disponível, verificar se > 1 hora)
           let isStale = false;
@@ -221,10 +222,10 @@ export function ChatWindow() {
           const needsParticipants = hasInconsistency || hasPoorQuality || isStale;
           
           // ✅ Verificação padrão: foto e nome
-          const hasPhoto = activeConversation.profile_pic_url;
-          const hasName = activeConversation.contact_name && 
-                         activeConversation.contact_name !== 'Grupo WhatsApp' &&
-                         !activeConversation.contact_name.match(/^\d+$/);
+          const hasPhoto = current.profile_pic_url;
+          const hasName = current.contact_name && 
+                         current.contact_name !== 'Grupo WhatsApp' &&
+                         !current.contact_name.match(/^\d+$/);
           
           // ✅ Decisão: só pular se tem foto + nome + participantes OK
           if (hasPhoto && hasName && !needsParticipants && participants.length > 0) {
@@ -237,10 +238,10 @@ export function ChatWindow() {
           }
         } else {
           // ✅ Contatos individuais: verificação padrão (foto + nome)
-          const hasPhoto = activeConversation.profile_pic_url;
-          const hasName = activeConversation.contact_name && 
-                         activeConversation.contact_name !== 'Grupo WhatsApp' &&
-                         !activeConversation.contact_name.match(/^\d+$/);
+          const hasPhoto = current.profile_pic_url;
+          const hasName = current.contact_name && 
+                         current.contact_name !== 'Grupo WhatsApp' &&
+                         !current.contact_name.match(/^\d+$/);
           
           if (hasPhoto && hasName) {
             console.log(`✅ [${type}] Informações já disponíveis, pulando refresh-info`);
@@ -265,7 +266,7 @@ export function ChatWindow() {
         }
         
         // ✅ NOVO: Verificar se refresh-info trouxe participantes (para grupos)
-        if (response.data.conversation && activeConversation.conversation_type === 'group') {
+        if (response.data.conversation && currentConversationType === 'group') {
           const updatedConversation = response.data.conversation;
           const updatedGroupMetadata = updatedConversation.group_metadata || {};
           const updatedParticipants = updatedGroupMetadata.participants || [];
@@ -302,9 +303,9 @@ export function ChatWindow() {
           const { updateConversation } = useChatStore.getState();
           
           console.log(`🔄 [${type}] Atualizando activeConversation com dados do refresh-info:`, {
-            oldName: activeConversation.contact_name,
+            oldName: current.contact_name,
             newName: updatedConversation.contact_name,
-            oldPhoto: activeConversation.profile_pic_url,
+            oldPhoto: current.profile_pic_url,
             newPhoto: updatedConversation.profile_pic_url,
             conversationId: currentConversationId
           });
