@@ -201,9 +201,11 @@ export function ChatWindow() {
         // ✅ VERIFICAÇÃO ULTRA-REFINADA: Para grupos, verificar qualidade dos participantes
         if (currentConversationType === 'group') {
           const groupMetadata = current.group_metadata || {};
-          const participants = Array.isArray(groupMetadata.participants) ? groupMetadata.participants : [];
+          // ✅ CORREÇÃO: group_metadata pode ter propriedades extras não tipadas
+          const metadataAny = groupMetadata as any;
+          const participants = Array.isArray(metadataAny.participants) ? metadataAny.participants : [];
           const participantsCount = groupMetadata.participants_count || 0;
-          const participantsUpdatedAt = groupMetadata.participants_updated_at;
+          const participantsUpdatedAt = metadataAny.participants_updated_at;
           
           // ✅ Verificação 1: Inconsistência
           const hasInconsistency = participantsCount > 0 && participants.length === 0;
