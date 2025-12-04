@@ -642,15 +642,28 @@ export function MessageList() {
     return null;
   }
 
-  // ✅ CORREÇÃO CRÍTICA: Garantir que messages é um array válido antes de renderizar
-  // Isso deve estar ANTES do return para evitar problemas de inicialização
-  const safeMessages = Array.isArray(messages) ? messages : [];
-  console.log('✅ [MessageList] safeMessages criado ANTES do return:', {
-    originalLength: messages.length,
-    safeLength: safeMessages.length,
-    messagesIsArray: Array.isArray(messages),
-    messagesType: typeof messages
-  });
+  // ✅ CORREÇÃO CRÍTICA: Usar useMemo para garantir que safeMessages seja calculado de forma segura
+  // Isso evita problemas de inicialização com minificação
+  const safeMessages = useMemo(() => {
+    console.log('🔄 [MessageList] useMemo calculando safeMessages:', {
+      messagesIsArray: Array.isArray(messages),
+      messagesType: typeof messages,
+      messagesLength: messages?.length || 0
+    });
+    
+    if (!Array.isArray(messages)) {
+      console.warn('⚠️ [MessageList] messages não é array, retornando array vazio');
+      return [];
+    }
+    
+    const safe = messages.filter(Boolean); // Remove valores null/undefined
+    console.log('✅ [MessageList] safeMessages calculado:', {
+      originalLength: messages.length,
+      safeLength: safe.length
+    });
+    
+    return safe;
+  }, [messages]);
 
   return (
     <div 
