@@ -24,7 +24,9 @@ const getMediaProxyUrl = (externalUrl: string) => {
 
 export function ChatWindow() {
   const { activeConversation, setActiveConversation } = useChatStore();
-  const { can_transfer_conversations } = usePermissions();
+  // ✅ CORREÇÃO: can_transfer_conversations pode não existir no tipo, usar verificação segura
+  const permissions = usePermissions();
+  const can_transfer_conversations = (permissions as any).can_transfer_conversations || false;
   
   // ✅ DEBUG: Log quando activeConversation muda (especialmente contact_name)
   useEffect(() => {
@@ -47,7 +49,7 @@ export function ChatWindow() {
   const [loadingGroupInfo, setLoadingGroupInfo] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
-  const refreshTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
   // 🔍 Debug: Log quando profile_pic_url muda
   useEffect(() => {
@@ -208,7 +210,7 @@ export function ChatWindow() {
           
           // ✅ Verificação 2: Qualidade (pelo menos 50% válidos)
           const hasPoorQuality = participants.length > 0 && 
-            participants.filter(p => p && p.phone && p.phone.length >= 10).length < participants.length * 0.5;
+            participants.filter((p: any) => p && p.phone && p.phone.length >= 10).length < participants.length * 0.5;
           
           // ✅ Verificação 3: Timestamp (se disponível, verificar se > 1 hora)
           let isStale = false;
