@@ -792,19 +792,27 @@ export function MessageList() {
           
           <div ref={messagesStartRef} /> {/* ✅ NOVO: Ref para topo */}
           
-          {safeMessages.map((msg) => {
+          {safeMessages.map((messageItem) => {
+            // ✅ CORREÇÃO CRÍTICA: Renomear msg para messageItem para evitar conflito de minificação
+            // A variável msg pode estar sendo minificada como 'm', causando o erro
             console.log('🔍 [MessageList] Renderizando mensagem:', {
-              messageId: msg?.id,
-              hasMsg: !!msg,
-              msgType: typeof msg
+              messageId: messageItem?.id,
+              hasMessageItem: !!messageItem,
+              messageItemType: typeof messageItem
             });
+            
+            // ✅ CORREÇÃO: Verificar se messageItem é válido antes de renderizar
+            if (!messageItem || !messageItem.id) {
+              console.warn('⚠️ [MessageList] messageItem inválido, pulando:', messageItem);
+              return null;
+            }
             
             return (
             <div
-              key={msg.id}
-              data-message-id={msg.id}
-              className={`flex flex-col ${msg.direction === 'outgoing' ? 'items-end' : 'items-start'} ${
-                visibleMessages.has(msg.id) 
+              key={messageItem.id}
+              data-message-id={messageItem.id}
+              className={`flex flex-col ${messageItem.direction === 'outgoing' ? 'items-end' : 'items-start'} ${
+                visibleMessages.has(messageItem.id) 
                   ? 'opacity-100 translate-y-0' 
                   : 'opacity-0 translate-y-2'
               } transition-all duration-300 ease-out group group/message`}
@@ -821,21 +829,21 @@ export function MessageList() {
                 onContextMenu={(e) => {
                   e.preventDefault();
                   setContextMenu({
-                    message: msg,
+                    message: messageItem,
                     position: { x: e.clientX, y: e.clientY }
                   });
                 }}
               >
                 {/* Nome do remetente (apenas para GRUPOS e mensagens RECEBIDAS) */}
                 {/* ✅ CORREÇÃO CRÍTICA: Usar optional chaining para evitar erro de inicialização */}
-                {activeConversation?.conversation_type === 'group' && msg.direction === 'incoming' && (msg.sender_name || msg.sender_phone) && (
+                {activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone) && (
                   <p className="text-xs font-semibold text-green-600 mb-1">
-                    {msg.sender_name || msg.sender_phone}
+                    {messageItem.sender_name || messageItem.sender_phone}
                   </p>
                 )}
 
                 {/* ✅ NOVO: Badge "Fora de Horário" para mensagens recebidas fora do horário de atendimento */}
-                {msg.direction === 'incoming' && msg.metadata?.is_after_hours_auto && (
+                {messageItem.direction === 'incoming' && messageItem.metadata?.is_after_hours_auto && (
                   <div className="mb-2 flex items-center gap-1.5 px-2 py-1 bg-amber-50 border border-amber-200 rounded-lg">
                     <Clock className="w-3.5 h-3.5 text-amber-600" />
                     <span className="text-xs font-medium text-amber-700">
@@ -845,12 +853,12 @@ export function MessageList() {
                 )}
 
                 {/* ✅ NOVO: Preview de mensagem respondida (reply_to) */}
-                {msg.metadata?.reply_to && (
-                  <ReplyPreview replyToId={msg.metadata.reply_to} messages={safeMessages} />
+                {messageItem.metadata?.reply_to && (
+                  <ReplyPreview replyToId={messageItem.metadata.reply_to} messages={safeMessages} />
                 )}
                 
                 {/* ✅ NOVO: Mensagem apagada */}
-                {msg.is_deleted && (
+                {messageItem.is_deleted && (
                   <div className="mb-2 flex items-center gap-2 text-gray-400 italic text-sm py-2 px-3 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
                     <Trash2 className="w-4 h-4 flex-shrink-0" />
                     <span>Esta mensagem foi apagada</span>
@@ -858,10 +866,10 @@ export function MessageList() {
                 )}
                 
                 {/* ✅ NOVO: Contato compartilhado */}
-                {(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
+                {(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) && (
                   <SharedContactCard
-                    contactData={msg.metadata?.contact_message || {}}
-                    content={msg.content}
+                    contactData={messageItem.metadata?.contact_message || {}}
+                    content={messageItem.content}
                     onAddContact={(contact) => {
                       setContactToAdd(contact);
                       setShowContactModal(true);
@@ -870,9 +878,9 @@ export function MessageList() {
                 )}
                 
                 {/* Anexos - renderizar ANTES do texto (apenas se não estiver apagada) */}
-                {!msg.is_deleted && msg.attachments && msg.attachments.length > 0 && (
+                {!messageItem.is_deleted && messageItem.attachments && messageItem.attachments.length > 0 && (
                   <div className="message-attachments mb-2 space-y-2">
-                    {msg.attachments.map((attachment) => (
+                    {messageItem.attachments.map((attachment) => (
                       <AttachmentPreview
                         key={attachment.id}
                         attachment={attachment}
@@ -887,34 +895,34 @@ export function MessageList() {
                 {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {/* ✅ NOVO: Formatação WhatsApp (negrito, itálico, riscado, monoespaçado) */}
-                {!msg.is_deleted && msg.content && msg.content.trim() && 
-                 !(msg.metadata?.contact_message || msg.content?.includes('📇') || msg.content?.includes('Compartilhou contato')) && (
+                {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() && 
+                 !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) && (
                   <p className="text-sm whitespace-pre-wrap break-words mb-1">
-                    {msg.metadata?.mentions && Array.isArray(msg.metadata.mentions) && msg.metadata.mentions.length > 0 ? (
+                    {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
                       <MentionRenderer 
-                        content={msg.content} 
-                        mentions={msg.metadata.mentions}
+                        content={messageItem.content} 
+                        mentions={messageItem.metadata.mentions}
                       />
                     ) : (
-                      <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(msg.content) }} />
+                      <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(messageItem.content) }} />
                     )}
                   </p>
                 )}
                 
-                <div className={`flex items-center gap-1 justify-end mt-1 ${msg.direction === 'outgoing' ? '' : 'opacity-60'}`}>
+                <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
                   <span className="text-xs text-gray-600">
-                    {formatTime(msg.created_at)}
+                    {formatTime(messageItem.created_at)}
                   </span>
-                  {msg.direction === 'outgoing' && (
+                  {messageItem.direction === 'outgoing' && (
                     <span className="flex-shrink-0">
-                      {getStatusIcon(msg.status)}
+                      {getStatusIcon(messageItem.status)}
                     </span>
                   )}
                 </div>
               </div>
               
               {/* ✅ MELHORIA UX: Reações posicionadas como WhatsApp (ao final da mensagem, fora do card, alinhadas) */}
-              <MessageReactions message={msg} direction={msg.direction} />
+              <MessageReactions message={messageItem} direction={messageItem.direction} />
             </div>
             );
           })}
