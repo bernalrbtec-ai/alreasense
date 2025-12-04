@@ -417,12 +417,12 @@ export function ConversationList() {
                 </div>
 
                 {/* Tags: Instância + Tags do Contato */}
-                {((conv.instance_friendly_name || conv.instance_name) || (conv.contact_tags && conv.contact_tags.length > 0)) && (
+                {((conversationItem.instance_friendly_name || conversationItem.instance_name) || (conversationItem.contact_tags && conversationItem.contact_tags.length > 0)) && (
                   <div className="flex items-center gap-1 flex-wrap mb-1">
                     {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
-                    {(conv.instance_friendly_name || conv.instance_name) && (
+                    {(conversationItem.instance_friendly_name || conversationItem.instance_name) && (
                       <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
-                        📱 {conv.instance_friendly_name || conv.instance_name}
+                        📱 {conversationItem.instance_friendly_name || conversationItem.instance_name}
                       </span>
                     )}
                     
@@ -445,12 +445,12 @@ export function ConversationList() {
                 {/* Última mensagem + Badge de não lidas */}
                 <div className="flex items-center justify-between">
                   {/* ✅ MELHORIA UX: Loading state para última mensagem */}
-                  {conv.last_message ? (
+                  {conversationItem.last_message ? (
                     <p className="text-sm text-gray-600 truncate">
                       {/* Para grupos, mostrar "Nome: mensagem" */}
-                      {conv.conversation_type === 'group' && conv.last_message?.sender_name
-                        ? `${conv.last_message.sender_name}: ${conv.last_message.content || ''}`
-                        : (conv.last_message?.content || '📎 Anexo')
+                      {conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
+                        ? `${conversationItem.last_message.sender_name}: ${conversationItem.last_message.content || ''}`
+                        : (conversationItem.last_message?.content || '📎 Anexo')
                       }
                     </p>
                   ) : (
@@ -459,9 +459,9 @@ export function ConversationList() {
                       <span className="text-xs text-gray-400 truncate">Carregando última mensagem...</span>
                     </div>
                   )}
-                  {conv.unread_count > 0 && (
+                  {conversationItem.unread_count > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium flex-shrink-0">
-                      {conv.unread_count}
+                      {conversationItem.unread_count}
                     </span>
                   )}
                 </div>
