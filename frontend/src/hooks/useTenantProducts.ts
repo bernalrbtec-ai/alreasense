@@ -10,6 +10,9 @@ interface UseTenantProductsReturn {
   refetch: () => Promise<void>;
 }
 
+// Constante global para evitar problemas de TDZ
+const DEFAULT_ACTIVE_PRODUCT_SLUGS: string[] = [];
+
 export const useTenantProducts = (): UseTenantProductsReturn => {
   const [products, setProducts] = useState<TenantProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,36 +87,31 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
     return billingService.hasProduct(products, productSlug);
   };
 
-  // Inicializar activeProductSlugs com array vazio para evitar problemas de TDZ
-  const activeProductSlugs = useMemo(() => {
+  // Calcular activeProductSlugs com verificação robusta
+  const activeProductSlugs = useMemo((): string[] => {
     try {
       console.log('🔄 Calculando activeProductSlugs...');
       console.log('   Products:', products);
       
       // Verificar se products existe e é array
-      if (!products || !Array.isArray(products)) {
-        console.log('   ❌ Products não é array, retornando []');
-        return [];
+      if (!products || !Array.isArray(products) || products.length === 0) {
+        console.log('   ❌ Products não é array válido, retornando []');
+        return DEFAULT_ACTIVE_PRODUCT_SLUGS;
       }
       
       // Filtrar e mapear com verificações de segurança
-      const active = products
-        .filter((tp): tp is NonNullable<typeof tp> => {
-          return Boolean(tp && tp.is_active && tp.product && tp.product.slug);
-        })
-        .map(tp => {
-          // Verificação adicional para garantir que slug existe
-          return tp.product?.slug;
-        })
-        .filter((slug): slug is string => {
-          return Boolean(slug && typeof slug === 'string');
-        });
+      const active: string[] = [];
+      for (const tp of products) {
+        if (tp && tp.is_active && tp.product && tp.product.slug && typeof tp.product.slug === 'string') {
+          active.push(tp.product.slug);
+        }
+      }
       
       console.log('   ✅ Produtos ativos:', active);
       return active;
     } catch (error) {
       console.error('❌ Erro ao calcular activeProductSlugs:', error);
-      return [];
+      return DEFAULT_ACTIVE_PRODUCT_SLUGS;
     }
   }, [products]);
 
