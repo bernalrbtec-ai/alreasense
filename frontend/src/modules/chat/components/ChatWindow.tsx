@@ -1,7 +1,7 @@
 /**
  * Janela de chat principal - Estilo WhatsApp Web
  */
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, CheckCircle, XCircle, Plus, User, Clock } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
@@ -590,26 +590,10 @@ export function ChatWindow() {
     }
   }, [conversationType, groupName, contactName]);
   
-  // ✅ CORREÇÃO CRÍTICA: useMemo simplificado - apenas retorna um objeto de referência estável
-  // Todas as propriedades são estados separados, não precisam estar no useMemo
-  const conversationProps = useMemo(() => {
-    if (!conversationId) {
-      return null;
-    }
-    return {
-      conversationId,
-      conversationType,
-      profilePicUrl,
-      contactName,
-      contactPhone,
-      instanceFriendlyName,
-      instanceName,
-      contactTags,
-    };
-  }, [conversationId, conversationType, profilePicUrl, contactName, contactPhone, instanceFriendlyName, instanceName, contactTags]);
-
+  // ✅ CORREÇÃO CRÍTICA: Remover useMemo completamente - todas as propriedades são estados separados
+  // Não precisamos de useMemo, apenas verificamos conversationId diretamente
   // ✅ Se não há propriedades válidas, não renderizar
-  if (!conversationProps) {
+  if (!conversationId) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
         <div className="max-w-md text-center">
@@ -890,7 +874,7 @@ export function ChatWindow() {
 
         {/* Input */}
         {/* ✅ CORREÇÃO: Renderizar MessageInput apenas se conversationId estiver inicializado */}
-        {conversationId && conversationProps && (
+        {conversationId && (
         <MessageInput 
           sendMessage={sendMessage}
           sendTyping={sendTyping}
@@ -923,7 +907,7 @@ export function ChatWindow() {
       )}
 
       {/* Modals */}
-      {showTransferModal && conversationProps && activeConversation && (
+      {showTransferModal && activeConversation && (
         <TransferModal
           conversation={{
             id: conversationId!,
@@ -1078,7 +1062,7 @@ export function ChatWindow() {
       )}
 
       {/* ✅ Modal de Contato */}
-      {showContactModal && conversationProps && (
+      {showContactModal && (
         <ContactModal
           isOpen={showContactModal}
           onClose={() => {
