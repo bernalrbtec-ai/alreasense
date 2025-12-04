@@ -463,63 +463,83 @@ export function ChatWindow() {
       return null;
     }
     
-    // ✅ CORREÇÃO CRÍTICA: Verificar id separadamente para evitar acesso antes da inicialização
-    const conversationId = activeConversation.id;
-    if (!conversationId) {
-      return null;
-    }
-    
-    // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades básicas primeiro
-    const conversationType = activeConversation.conversation_type || 'individual';
-    const contactName = activeConversation.contact_name || '';
-    const contactPhone = activeConversation.contact_phone || '';
-    
-    // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura ANTES de qualquer uso
-    // Usar optional chaining e verificação de tipo em múltiplas camadas
-    let groupMetadata: any = null;
+    // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades de forma segura usando try-catch
+    // Isso previne qualquer erro de acesso a propriedades não inicializadas
+    let conversationId: string | null = null;
+    let conversationType: string = 'individual';
+    let contactName: string = '';
+    let contactPhone: string = '';
+    let profilePicUrl: string | null = null;
+    let instanceFriendlyName: string | null = null;
+    let instanceName: string | null = null;
+    let contactTags: any[] = [];
     let groupName: string | null = null;
     
     try {
-      // ✅ Verificar se activeConversation tem group_metadata antes de acessar
-      if (activeConversation && 'group_metadata' in activeConversation) {
+      // ✅ Capturar id primeiro - se não existir, retornar null
+      conversationId = activeConversation.id || null;
+      if (!conversationId) {
+        return null;
+      }
+      
+      // ✅ Capturar propriedades básicas com valores padrão seguros
+      conversationType = activeConversation.conversation_type || 'individual';
+      contactName = activeConversation.contact_name || '';
+      contactPhone = activeConversation.contact_phone || '';
+      profilePicUrl = activeConversation.profile_pic_url || null;
+      instanceFriendlyName = activeConversation.instance_friendly_name || null;
+      instanceName = activeConversation.instance_name || null;
+      
+      // ✅ Capturar contact_tags de forma segura
+      if (Array.isArray(activeConversation.contact_tags)) {
+        contactTags = activeConversation.contact_tags;
+      }
+      
+      // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura
+      // Verificar existência da propriedade antes de acessar
+      if (conversationType === 'group' && 'group_metadata' in activeConversation) {
         const rawMetadata = activeConversation.group_metadata;
         if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
-          groupMetadata = rawMetadata;
           // ✅ Capturar group_name de forma segura
           if ('group_name' in rawMetadata) {
             const rawGroupName = (rawMetadata as any).group_name;
-            if (rawGroupName && typeof rawGroupName === 'string' && rawGroupName.trim().length > 0) {
-              groupName = rawGroupName.trim();
+            if (rawGroupName && typeof rawGroupName === 'string') {
+              const trimmed = rawGroupName.trim();
+              if (trimmed.length > 0) {
+                groupName = trimmed;
+              }
             }
           }
         }
       }
     } catch (e) {
-      // Se houver qualquer erro ao acessar group_metadata, usar valores padrão
-      groupMetadata = null;
-      groupName = null;
+      // ✅ Se houver qualquer erro ao acessar propriedades, retornar null
+      // Isso previne crashes quando activeConversation está em estado inconsistente
+      console.warn('⚠️ [ChatWindow] Erro ao capturar propriedades da conversa:', e);
+      return null;
     }
     
     // ✅ Calcular displayName de forma segura ANTES de usar em expressões
+    // Usar valores já capturados e validados
     let displayName = '';
     if (conversationType === 'group') {
-      // Para grupos, usar group_name → contact_name → fallback
+      // Para grupos: group_name → contact_name → fallback
       displayName = groupName || contactName || 'Grupo sem nome';
     } else {
-      // Para contatos individuais, usar contact_name → contact_phone → fallback
+      // Para contatos individuais: contact_name → contact_phone → fallback
       displayName = contactName || contactPhone || 'Contato sem nome';
     }
     
     return {
       conversationId,
       conversationType,
-      profilePicUrl: activeConversation.profile_pic_url || null,
+      profilePicUrl,
       contactName,
       contactPhone,
-      instanceFriendlyName: activeConversation.instance_friendly_name || null,
-      instanceName: activeConversation.instance_name || null,
-      contactTags: Array.isArray(activeConversation.contact_tags) ? activeConversation.contact_tags : [],
-      displayName, // ✅ Incluir displayName calculado
+      instanceFriendlyName,
+      instanceName,
+      contactTags,
+      displayName,
     };
   }, [activeConversation]);
 
