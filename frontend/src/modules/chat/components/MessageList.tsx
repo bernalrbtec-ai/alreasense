@@ -805,7 +805,7 @@ export function MessageList() {
 
                 {/* ✅ NOVO: Preview de mensagem respondida (reply_to) */}
                 {msg.metadata?.reply_to && (
-                  <ReplyPreview replyToId={msg.metadata.reply_to} messages={messages} />
+                  <ReplyPreview replyToId={msg.metadata.reply_to} messages={safeMessages} />
                 )}
                 
                 {/* ✅ NOVO: Mensagem apagada */}
