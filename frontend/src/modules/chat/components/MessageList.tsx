@@ -870,8 +870,8 @@ export function MessageList() {
                   <SharedContactCard
                     contactData={messageItem.metadata?.contact_message || {}}
                     content={messageItem.content}
-                    onAddContact={(contact) => {
-                      setContactToAdd(contact);
+                    onAddContact={(contactItem) => {
+                      setContactToAdd(contactItem);
                       setShowContactModal(true);
                     }}
                   />
