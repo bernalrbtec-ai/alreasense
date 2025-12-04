@@ -419,32 +419,15 @@ export function useTenantSocket() {
         
         const { updateConversation, activeConversation } = useChatStore.getState();
         
-        // Atualizar conversa se fornecida
+        // Atualizar conversa se fornecida (isso atualiza os participantes no store)
         if (data.conversation) {
           updateConversation(data.conversation);
         }
         
-        // Mostrar notificação toast se houver mudanças
-        if (data.added_count > 0 || data.removed_count > 0) {
-          const addedText = data.added_count > 0 
-            ? `${data.added_count} ${data.added_count === 1 ? 'participante adicionado' : 'participantes adicionados'}`
-            : '';
-          const removedText = data.removed_count > 0
-            ? `${data.removed_count} ${data.removed_count === 1 ? 'participante removido' : 'participantes removidos'}`
-            : '';
-          
-          const message = [addedText, removedText].filter(Boolean).join(', ');
-          
-          toast.info(`👥 ${message}`, {
-            title: 'Grupo Atualizado',
-            duration: 4000,
-          });
-        }
-        
-        // Se a conversa ativa é a que foi atualizada, forçar refresh dos participantes
+        // Se a conversa ativa é a que foi atualizada, participantes serão atualizados automaticamente
+        // A informação será visível dentro do grupo quando o usuário visualizar os participantes
         if (activeConversation?.id === data.conversation_id) {
-          console.log('🔄 [TENANT WS] Conversa ativa atualizada, participantes podem precisar ser recarregados');
-          // O frontend pode recarregar participantes se necessário
+          console.log('🔄 [TENANT WS] Conversa ativa atualizada, participantes atualizados no store');
         }
         break;
 
