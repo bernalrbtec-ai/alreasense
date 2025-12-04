@@ -274,9 +274,28 @@ export function MessageList() {
   
   // ✅ CORREÇÃO: Usar hooks DEPOIS de inicializar estados e capturar conversationId
   // ✅ CORREÇÃO CRÍTICA: useUserAccess agora é seguro e sempre retorna valores válidos
+  console.log('🔍 [MessageList] Capturando useUserAccess...');
   const { hasProductAccess } = useUserAccess();
+  console.log('✅ [MessageList] useUserAccess capturado:', {
+    hasHasProductAccess: !!hasProductAccess,
+    hasProductAccessType: typeof hasProductAccess
+  });
+  
   // ✅ CORREÇÃO: Verificar se hasProductAccess existe antes de chamar
-  const hasFlowAI = hasProductAccess ? hasProductAccess('flow-ai').canAccess : false;
+  console.log('🔍 [MessageList] Calculando hasFlowAI...');
+  let hasFlowAI = false;
+  try {
+    if (hasProductAccess && typeof hasProductAccess === 'function') {
+      const flowAIAccess = hasProductAccess('flow-ai');
+      hasFlowAI = flowAIAccess?.canAccess || false;
+      console.log('✅ [MessageList] hasFlowAI calculado:', { hasFlowAI, flowAIAccess });
+    } else {
+      console.warn('⚠️ [MessageList] hasProductAccess não é uma função válida:', hasProductAccess);
+    }
+  } catch (error) {
+    console.error('❌ [MessageList] ERRO ao calcular hasFlowAI:', error);
+    hasFlowAI = false;
+  }
 
   useEffect(() => {
     if (!activeConversation?.id) {
@@ -1230,37 +1249,41 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       {hasReactions && (
         <div className="flex items-center gap-1 flex-wrap">
           {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
+            // ✅ CORREÇÃO CRÍTICA: Capturar data em variável local ANTES de usar
+            // Isso evita problemas de inicialização com minificação
+            const reactionData = data;
+            
             console.log('🔍 [MessageReactions] Processando reação:', {
               emoji,
-              hasData: !!data,
-              dataType: typeof data,
-              isObject: data && typeof data === 'object',
-              hasUsers: !!(data?.users),
-              usersType: typeof data?.users,
-              isUsersArray: Array.isArray(data?.users),
-              usersLength: Array.isArray(data?.users) ? data.users.length : 'N/A'
+              hasData: !!reactionData,
+              dataType: typeof reactionData,
+              isObject: reactionData && typeof reactionData === 'object',
+              hasUsers: !!(reactionData?.users),
+              usersType: typeof reactionData?.users,
+              isUsersArray: Array.isArray(reactionData?.users),
+              usersLength: Array.isArray(reactionData?.users) ? reactionData.users.length : 'N/A'
             });
             
-            // ✅ CORREÇÃO CRÍTICA: Verificar se data existe e tem propriedades válidas antes de usar
-            if (!data || typeof data !== 'object') {
-              console.warn('⚠️ [MessageReactions] data inválido, pulando:', { emoji, data });
+            // ✅ CORREÇÃO CRÍTICA: Verificar se reactionData existe e tem propriedades válidas antes de usar
+            if (!reactionData || typeof reactionData !== 'object') {
+              console.warn('⚠️ [MessageReactions] reactionData inválido, pulando:', { emoji, reactionData });
               return null;
             }
             
             const userReaction = getUserReaction(emoji);
             const isUserReaction = !!userReaction;
             
-            // ✅ CORREÇÃO CRÍTICA: Garantir que data.users é um array válido antes de usar
-            console.log('🔍 [MessageReactions] Verificando data.users ANTES do map:', {
+            // ✅ CORREÇÃO CRÍTICA: Garantir que reactionData.users é um array válido antes de usar
+            console.log('🔍 [MessageReactions] Verificando reactionData.users ANTES do map:', {
               emoji,
-              hasData: !!data,
-              hasUsers: !!(data?.users),
-              usersType: typeof data?.users,
-              isArray: Array.isArray(data?.users),
-              usersValue: data?.users
+              hasReactionData: !!reactionData,
+              hasUsers: !!(reactionData?.users),
+              usersType: typeof reactionData?.users,
+              isArray: Array.isArray(reactionData?.users),
+              usersValue: reactionData?.users
             });
             
-            const users = Array.isArray(data?.users) ? data.users : [];
+            const users = Array.isArray(reactionData?.users) ? reactionData.users : [];
             console.log('👥 [MessageReactions] Users extraídos:', {
               emoji,
               usersCount: users.length,
@@ -1326,7 +1349,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
               console.log('⚠️ [MessageReactions] Nenhum user para processar:', { emoji });
             }
             
-            const count = typeof data?.count === 'number' ? data.count : 0;
+            const count = typeof reactionData?.count === 'number' ? reactionData.count : 0;
             
             console.log('✅ [MessageReactions] Reação processada com sucesso:', {
               emoji,
