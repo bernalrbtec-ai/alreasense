@@ -436,18 +436,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     
     // ✅ Atualizar também nas conversas se for last_message
-    const updatedConversations = state.conversations.map((conversation) => {
-      if (conversation.last_message?.id === messageId) {
+    // ✅ CORREÇÃO: Renomear conversation para conversationItem para evitar conflito de minificação
+    const updatedConversations = state.conversations.map((conversationItem) => {
+      if (conversationItem.last_message?.id === messageId) {
         return {
-          ...conversation,
+          ...conversationItem,
           last_message: {
-            ...conversation.last_message,
+            ...conversationItem.last_message,
             reactions: reactions ? [...reactions] : [],
             reactions_summary: summary ? { ...summary } : {},
           },
         };
       }
-      return conversation;
+      return conversationItem;
     });
 
     const updatedActiveConversation =

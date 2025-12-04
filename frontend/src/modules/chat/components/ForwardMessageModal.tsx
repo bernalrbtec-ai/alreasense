@@ -122,23 +122,23 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredConversations.map((conversation) => (
+              {filteredConversations.map((conversationItem) => (
                 <button
-                  key={conversation.id}
-                  onClick={() => setSelectedConversation(conversation)}
+                  key={conversationItem.id}
+                  onClick={() => setSelectedConversation(conversationItem)}
                   className={`
                     w-full text-left p-3 rounded-lg border transition-all flex items-center gap-3
-                    ${selectedConversation?.id === conversation.id
+                    ${selectedConversation?.id === conversationItem.id
                       ? 'border-blue-500 bg-blue-50'
                       : 'border-gray-200 hover:bg-gray-50'
                     }
                   `}
                 >
                   {/* Foto de perfil (apenas se existir em cache) */}
-                  {conversation.profile_pic_url ? (
+                  {conversationItem.profile_pic_url ? (
                     <img
-                      src={getMediaProxyUrl(conversation.profile_pic_url)}
-                      alt={conversation.contact_name || conversation.contact_phone}
+                      src={getMediaProxyUrl(conversationItem.profile_pic_url)}
+                      alt={conversationItem.contact_name || conversationItem.contact_phone}
                       className="w-10 h-10 rounded-full object-cover flex-shrink-0"
                       onError={(e) => {
                         // Se a imagem falhar ao carregar, esconder
@@ -153,10 +153,10 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
                   
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-gray-900 truncate">
-                      {conversation.contact_name || conversation.contact_phone}
+                      {conversationItem.contact_name || conversationItem.contact_phone}
                     </p>
-                    {conversation.contact_name && (
-                      <p className="text-sm text-gray-500 truncate">{conversation.contact_phone}</p>
+                    {conversationItem.contact_name && (
+                      <p className="text-sm text-gray-500 truncate">{conversationItem.contact_phone}</p>
                     )}
                   </div>
                 </button>
