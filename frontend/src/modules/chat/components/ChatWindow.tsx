@@ -494,18 +494,30 @@ export function ChatWindow() {
         contactTags = activeConversation.contact_tags;
       }
       
-      // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura
-      // Verificar existência da propriedade antes de acessar
-      if (conversationType === 'group' && 'group_metadata' in activeConversation) {
-        const rawMetadata = activeConversation.group_metadata;
-        if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null && 'group_name' in rawMetadata) {
-          const rawGroupName = (rawMetadata as any).group_name;
-          // ✅ Validar e capturar group_name apenas se for string não vazia
-          if (typeof rawGroupName === 'string') {
-            const trimmed = rawGroupName.trim();
-            if (trimmed.length > 0) {
-              groupName = trimmed;
+      // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura APENAS para grupos
+      // Esta é a única seção que acessa group_metadata, então isolamos completamente
+      if (conversationType === 'group') {
+        // ✅ Verificar múltiplas condições antes de acessar group_metadata
+        if ('group_metadata' in activeConversation) {
+          try {
+            const rawMetadata = activeConversation.group_metadata;
+            // ✅ Validação em múltiplas camadas antes de acessar group_name
+            if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
+              if ('group_name' in rawMetadata) {
+                const rawGroupName = (rawMetadata as any).group_name;
+                // ✅ Validar e capturar group_name apenas se for string não vazia
+                if (rawGroupName && typeof rawGroupName === 'string') {
+                  const trimmed = rawGroupName.trim();
+                  if (trimmed.length > 0) {
+                    groupName = trimmed;
+                  }
+                }
+              }
             }
+          } catch (groupError) {
+            // ✅ Se houver erro ao acessar group_metadata, usar fallback seguro
+            console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
+            groupName = null;
           }
         }
       }
