@@ -835,7 +835,13 @@ export function ChatWindow() {
       {/* Modals */}
       {showTransferModal && conversationProps && (
         <TransferModal
-          conversation={activeConversation!}
+          conversation={{
+            ...activeConversation!,
+            id: conversationId,
+            conversation_type: conversationType as any,
+            contact_name: contactName,
+            contact_phone: contactPhone,
+          } as any}
           onClose={() => setShowTransferModal(false)}
           onTransferSuccess={() => {
             setShowTransferModal(false);
@@ -973,7 +979,7 @@ export function ChatWindow() {
       )}
 
       {/* ✅ Modal de Contato */}
-      {showContactModal && activeConversation && (
+      {showContactModal && conversationProps && (
         <ContactModal
           isOpen={showContactModal}
           onClose={() => {
@@ -1015,13 +1021,16 @@ export function ChatWindow() {
                   setExistingContact(contact);
                   
                   // ✅ Atualizar activeConversation no store com tags atualizadas
-                  const { updateConversation } = useChatStore.getState();
-                  updateConversation({
-                    ...activeConversation,
-                    contact_tags: contact.tags || []
-                  });
-                  
-                  console.log('✅ [CONTACT MODAL] Contato atualizado e conversa sincronizada com tags');
+                  // ✅ CORREÇÃO: Usar getState para garantir que temos a versão mais atualizada
+                  const { updateConversation, activeConversation: currentActiveConversation } = useChatStore.getState();
+                  if (currentActiveConversation && currentActiveConversation.id === conversationId) {
+                    updateConversation({
+                      ...currentActiveConversation,
+                      contact_tags: contact.tags || []
+                    });
+                    
+                    console.log('✅ [CONTACT MODAL] Contato atualizado e conversa sincronizada com tags');
+                  }
                 } else {
                   // Se não encontrou, limpar existingContact (contato foi deletado)
                   setExistingContact(null);
