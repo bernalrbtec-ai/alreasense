@@ -188,7 +188,10 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
 };
 
 export function MessageList() {
+  console.log('🔄 [MessageList] Componente iniciando renderização...');
+  
   // ✅ CORREÇÃO CRÍTICA: Inicializar estados ANTES de usar seletores que dependem de activeConversation
+  console.log('📝 [MessageList] Inicializando estados...');
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactToAdd, setContactToAdd] = useState<{ name: string; phone: string } | null>(null);
   const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
@@ -200,19 +203,63 @@ export function MessageList() {
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   
+  console.log('✅ [MessageList] Estados inicializados');
+  
   // ✅ CORREÇÃO: Capturar activeConversation ANTES de usar em outros seletores
+  console.log('🔍 [MessageList] Capturando activeConversation do store...');
   const activeConversation = useChatStore((state) => state.activeConversation);
+  console.log('✅ [MessageList] activeConversation capturado:', {
+    hasActiveConversation: !!activeConversation,
+    activeConversationId: activeConversation?.id,
+    conversationType: activeConversation?.conversation_type
+  });
   
   // ✅ CORREÇÃO: Capturar conversationId de forma segura antes de usar
   const conversationId = activeConversation?.id;
+  console.log('✅ [MessageList] conversationId extraído:', conversationId);
   
   // ✅ CORREÇÃO CRÍTICA: Usar selector do Zustand que reage às mudanças no store
   // Observar diretamente messages.byId e messages.byConversationId para a conversa ativa
   // Isso garante que o componente re-renderize quando novas mensagens são adicionadas
+  console.log('🔍 [MessageList] Capturando messages do store...');
   const messages = useChatStore((state) => {
-    if (!conversationId) return [];
+    console.log('🔍 [MessageList] Selector de messages executado:', {
+      conversationId,
+      hasConversationId: !!conversationId,
+      hasMessagesByConversationId: !!(state.messages.byConversationId[conversationId || '']),
+      messageIdsCount: conversationId ? (state.messages.byConversationId[conversationId] || []).length : 0
+    });
+    
+    if (!conversationId) {
+      console.log('⚠️ [MessageList] Sem conversationId, retornando array vazio');
+      return [];
+    }
+    
     const messageIds = state.messages.byConversationId[conversationId] || [];
-    return messageIds.map(id => state.messages.byId[id]).filter(Boolean);
+    console.log('📨 [MessageList] messageIds encontrados:', {
+      conversationId,
+      messageIdsCount: messageIds.length,
+      messageIds: messageIds.slice(0, 5) // Primeiros 5 para não poluir o log
+    });
+    
+    const mappedMessages = messageIds.map(id => {
+      const message = state.messages.byId[id];
+      console.log('🔍 [MessageList] Mapeando mensagem:', {
+        id,
+        hasMessage: !!message,
+        messageId: message?.id,
+        hasReactions: !!(message?.reactions),
+        hasReactionsSummary: !!(message?.reactions_summary)
+      });
+      return message;
+    }).filter(Boolean);
+    
+    console.log('✅ [MessageList] Messages mapeados:', {
+      conversationId,
+      totalMessages: mappedMessages.length
+    });
+    
+    return mappedMessages;
   });
   
   const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
