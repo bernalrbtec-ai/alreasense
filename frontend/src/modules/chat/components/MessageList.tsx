@@ -660,7 +660,7 @@ export function MessageList() {
             <p className="text-sm text-gray-500">Carregando mensagens...</p>
           </div>
         </div>
-      ) : messages.length === 0 ? (
+      ) : safeMessages.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full p-8">
           <div className="w-32 h-32 mb-4 opacity-20">
             <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400 w-full h-full">
@@ -741,7 +741,14 @@ export function MessageList() {
           
           <div ref={messagesStartRef} /> {/* ✅ NOVO: Ref para topo */}
           
-          {messages.map((msg) => (
+          {safeMessages.map((msg) => {
+            console.log('🔍 [MessageList] Renderizando mensagem:', {
+              messageId: msg?.id,
+              hasMsg: !!msg,
+              msgType: typeof msg
+            });
+            
+            return (
             <div
               key={msg.id}
               data-message-id={msg.id}
@@ -858,7 +865,8 @@ export function MessageList() {
               {/* ✅ MELHORIA UX: Reações posicionadas como WhatsApp (ao final da mensagem, fora do card, alinhadas) */}
               <MessageReactions message={msg} direction={msg.direction} />
             </div>
-          ))}
+            );
+          })}
           
           {/* Indicador de digitando - Melhorado */}
           {typing && (
