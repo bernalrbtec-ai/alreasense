@@ -454,13 +454,14 @@ export function ChatWindow() {
     }
   };
 
+  // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation ANTES de qualquer renderização
   if (!activeConversation) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
         <div className="max-w-md text-center">
           <div className="w-64 h-64 mx-auto mb-8 opacity-20">
             <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400">
-              <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
+              <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.30-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
             </svg>
           </div>
           <h2 className="text-2xl font-light text-gray-700 mb-2">Flow Chat Web</h2>
@@ -472,6 +473,17 @@ export function ChatWindow() {
       </div>
     );
   }
+
+  // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades necessárias ANTES do JSX
+  // Isso evita problemas de TDZ quando activeConversation muda rapidamente
+  const conversationType = activeConversation.conversation_type;
+  const profilePicUrl = activeConversation.profile_pic_url;
+  const contactName = activeConversation.contact_name;
+  const contactPhone = activeConversation.contact_phone;
+  const instanceFriendlyName = activeConversation.instance_friendly_name;
+  const instanceName = activeConversation.instance_name;
+  const contactTags = activeConversation.contact_tags;
+  const conversationId = activeConversation.id;
 
   return (
     <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
@@ -491,10 +503,10 @@ export function ChatWindow() {
 
           {/* Avatar */}
           <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 relative">
-            {activeConversation.profile_pic_url ? (
+            {profilePicUrl ? (
               <>
                 <img 
-                  src={getMediaProxyUrl(activeConversation.profile_pic_url)}
+                  src={getMediaProxyUrl(profilePicUrl)}
                   alt={getDisplayName(activeConversation)}
                   className="w-full h-full object-cover"
                   onLoad={() => console.log('✅ [IMG] Foto carregada com sucesso!')}
@@ -505,7 +517,7 @@ export function ChatWindow() {
                 }}
               />
                 {/* Badge de grupo */}
-                {activeConversation.conversation_type === 'group' && (
+                {conversationType === 'group' && (
                   <div className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center text-[8px]">
                     👥
                   </div>
@@ -513,7 +525,7 @@ export function ChatWindow() {
               </>
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
-                {activeConversation.conversation_type === 'group' ? '👥' : getDisplayName(activeConversation)[0].toUpperCase()}
+                {conversationType === 'group' ? '👥' : getDisplayName(activeConversation)[0].toUpperCase()}
               </div>
             )}
           </div>
@@ -523,12 +535,12 @@ export function ChatWindow() {
             {/* Nome com botão de contato */}
             <div className="flex items-center gap-2">
               <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
-                {activeConversation.conversation_type === 'group' && <span>👥</span>}
+                {conversationType === 'group' && <span>👥</span>}
                 {getDisplayName(activeConversation)}
               </h2>
               
               {/* ✅ Botão Adicionar/Ver Contato (apenas para contatos individuais) */}
-              {activeConversation.conversation_type !== 'group' && (
+              {conversationType !== 'group' && (
                 <button
                   onClick={() => {
                     if (existingContact) {
@@ -564,16 +576,16 @@ export function ChatWindow() {
             {/* Tags: Instância + Tags do Contato */}
             <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
               {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
-              {(activeConversation.instance_friendly_name || activeConversation.instance_name) && (
+              {(instanceFriendlyName || instanceName) && (
                 <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-medium">
-                  📱 {activeConversation.instance_friendly_name || activeConversation.instance_name}
+                  📱 {instanceFriendlyName || instanceName}
                 </span>
               )}
               
               {/* Tags do Contato (customizadas por cor) */}
-              {activeConversation.contact_tags && activeConversation.contact_tags.length > 0 && (
+              {contactTags && contactTags.length > 0 && (
                 <>
-                  {activeConversation.contact_tags.map((tag) => (
+                  {contactTags.map((tag) => (
                     <span 
                       key={tag.id}
                       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium"
@@ -594,7 +606,7 @@ export function ChatWindow() {
         {/* Actions */}
         <div className="flex items-center gap-2">
           {/* Botão Histórico (apenas se contato existir) */}
-          {existingContact && activeConversation?.conversation_type !== 'group' && (
+          {existingContact && conversationType !== 'group' && (
             <button
               onClick={() => setShowHistory(!showHistory)}
               className={`p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md ${
@@ -626,10 +638,10 @@ export function ChatWindow() {
             {showMenu && (
               <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
                 {/* Informações do Grupo - apenas para grupos */}
-                {activeConversation?.conversation_type === 'group' && (
+                {conversationType === 'group' && (
                   <button
                     onClick={async () => {
-                      if (!activeConversation?.id) return;
+                      if (!conversationId) return;
                       
                       setShowMenu(false);
                       setShowGroupInfo(true);
@@ -637,7 +649,7 @@ export function ChatWindow() {
                       setGroupInfo(null); // Limpar dados anteriores antes de carregar novos
                       
                       try {
-                        const response = await api.get(`/chat/conversations/${activeConversation.id}/group-info/`);
+                        const response = await api.get(`/chat/conversations/${conversationId}/group-info/`);
                         
                         // Garantir que response.data existe e inicializar valores padrão de forma segura
                         const groupData = response.data || {};
@@ -716,7 +728,7 @@ export function ChatWindow() {
       </div>
 
       {/* Sidebar de Histórico */}
-      {showHistory && existingContact && activeConversation?.conversation_type !== 'group' && (
+      {showHistory && existingContact && conversationType !== 'group' && (
         <div className="hidden md:flex flex-col w-[320px] bg-white border-l border-gray-200 shadow-lg flex-shrink-0 h-full overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
             <h3 className="font-semibold text-gray-900">Histórico</h3>
