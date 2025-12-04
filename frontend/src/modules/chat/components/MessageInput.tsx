@@ -446,7 +446,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
 
       {/* Input */}
       <div className="flex-1 bg-white rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg focus-within:shadow-lg focus-within:ring-2 focus-within:ring-[#00a884]/20">
-        {activeConversation?.conversation_type === 'group' ? (
+        {conversationType === 'group' ? (
           <MentionInput
             value={message}
             onChange={handleMessageChange}
