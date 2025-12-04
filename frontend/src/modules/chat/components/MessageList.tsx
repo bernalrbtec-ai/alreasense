@@ -152,18 +152,35 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
   );
 }
 
+// ✅ CORREÇÃO CRÍTICA: Garantir que buildSummaryFromReactions sempre retorna objeto válido
 const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSummary => {
+  // ✅ CORREÇÃO: Verificar se reactions é array válido antes de usar
+  if (!Array.isArray(reactions) || reactions.length === 0) {
+    return {};
+  }
+  
   return reactions.reduce((acc, reaction) => {
+    // ✅ CORREÇÃO: Verificar se reaction e reaction.emoji existem antes de usar
+    if (!reaction || !reaction.emoji) {
+      return acc;
+    }
+    
     if (!acc[reaction.emoji]) {
       acc[reaction.emoji] = { count: 0, users: [] };
     }
 
     acc[reaction.emoji].count += 1;
+    
+    // ✅ CORREÇÃO: Verificar se users é array antes de fazer push
+    if (!Array.isArray(acc[reaction.emoji].users)) {
+      acc[reaction.emoji].users = [];
+    }
+    
     acc[reaction.emoji].users.push({
-      id: reaction.user,
+      id: reaction.user || '',
       email: reaction.user_data?.email || '',
-      first_name: reaction.user_data?.first_name,
-      last_name: reaction.user_data?.last_name,
+      first_name: reaction.user_data?.first_name || undefined,
+      last_name: reaction.user_data?.last_name || undefined,
     });
 
     return acc;
