@@ -458,25 +458,38 @@ export function ChatWindow() {
   // Isso garante que hooks sejam chamados na mesma ordem em cada render
   // Isso evita problemas de TDZ quando activeConversation muda rapidamente
   const conversationProps = useMemo(() => {
-    if (!activeConversation || !activeConversation.id) {
+    // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation de forma segura
+    if (!activeConversation) {
       return null;
     }
     
-    // ✅ Capturar todas as propriedades com valores padrão seguros
+    // ✅ CORREÇÃO CRÍTICA: Verificar id separadamente para evitar acesso antes da inicialização
+    const conversationId = activeConversation.id;
+    if (!conversationId) {
+      return null;
+    }
+    
+    // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades básicas primeiro
     const conversationType = activeConversation.conversation_type || 'individual';
     const contactName = activeConversation.contact_name || '';
     const contactPhone = activeConversation.contact_phone || '';
     
+    // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma segura ANTES de qualquer uso
+    let groupMetadata: any = null;
+    try {
+      groupMetadata = activeConversation.group_metadata || null;
+    } catch (e) {
+      // Se houver erro ao acessar group_metadata, usar null
+      groupMetadata = null;
+    }
+    
     // ✅ Calcular displayName de forma segura ANTES de usar em expressões
-    // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma segura antes de acessar propriedades
     let displayName = '';
     if (conversationType === 'group') {
       // Para grupos, usar group_metadata.group_name ou contact_name
-      // ✅ CORREÇÃO: Verificar se group_metadata existe antes de acessar
-      const groupMetadata = activeConversation?.group_metadata;
-      if (groupMetadata && typeof groupMetadata === 'object') {
-        const groupName = (groupMetadata as any)?.group_name;
-        displayName = groupName || contactName || 'Grupo sem nome';
+      if (groupMetadata && typeof groupMetadata === 'object' && groupMetadata !== null) {
+        const groupName = groupMetadata.group_name;
+        displayName = (groupName && typeof groupName === 'string') ? groupName : (contactName || 'Grupo sem nome');
       } else {
         displayName = contactName || 'Grupo sem nome';
       }
@@ -486,7 +499,7 @@ export function ChatWindow() {
     }
     
     return {
-      conversationId: activeConversation.id,
+      conversationId,
       conversationType,
       profilePicUrl: activeConversation.profile_pic_url || null,
       contactName,
