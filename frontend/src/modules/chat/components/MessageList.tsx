@@ -1367,25 +1367,27 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
               });
               
               try {
-                usersText = users.map((u: any, index: number) => {
+                // ✅ CORREÇÃO CRÍTICA: Renomear u para reactionUserItem para evitar conflito de minificação
+                // A variável u pode estar sendo minificada causando erro "Cannot access 'u' before initialization"
+                usersText = users.map((reactionUserItem: any, index: number) => {
                   console.log(`🔍 [MessageReactions] Processando user[${index}]:`, {
                     emoji,
                     index,
-                    hasU: !!u,
-                    uType: typeof u,
-                    uValue: u,
-                    uKeys: u ? Object.keys(u) : [],
-                    email: u?.email,
-                    firstName: u?.first_name
+                    hasReactionUserItem: !!reactionUserItem,
+                    reactionUserItemType: typeof reactionUserItem,
+                    reactionUserItemValue: reactionUserItem,
+                    reactionUserItemKeys: reactionUserItem ? Object.keys(reactionUserItem) : [],
+                    email: reactionUserItem?.email,
+                    firstName: reactionUserItem?.first_name
                   });
                   
-                  if (!u || typeof u !== 'object') {
-                    console.warn(`⚠️ [MessageReactions] User[${index}] inválido:`, u);
+                  if (!reactionUserItem || typeof reactionUserItem !== 'object') {
+                    console.warn(`⚠️ [MessageReactions] User[${index}] inválido:`, reactionUserItem);
                     return 'Usuário';
                   }
                   
-                  const email = u?.email || '';
-                  const firstName = u?.first_name || '';
+                  const email = reactionUserItem?.email || '';
+                  const firstName = reactionUserItem?.first_name || '';
                   const result = email || firstName || 'Usuário';
                   
                   console.log(`✅ [MessageReactions] User[${index}] processado:`, {
