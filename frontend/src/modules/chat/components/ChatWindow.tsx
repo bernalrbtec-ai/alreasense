@@ -464,6 +464,7 @@ export function ChatWindow() {
     
     // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades de forma segura usando try-catch
     // Isso previne qualquer erro de acesso a propriedades não inicializadas
+    // ✅ IMPORTANTE: Inicializar TODAS as variáveis ANTES do try-catch para evitar TDZ
     let conversationId: string | null = null;
     let conversationType: string = 'individual';
     let contactName: string = '';
@@ -472,7 +473,8 @@ export function ChatWindow() {
     let instanceFriendlyName: string | null = null;
     let instanceName: string | null = null;
     let contactTags: any[] = [];
-    let groupName: string | null = null;
+    let groupName: string | null = null; // ✅ Inicializado como null antes de qualquer uso
+    let displayName: string = ''; // ✅ Inicializado antes de qualquer uso
     
     try {
       // ✅ Capturar id primeiro - se não existir, retornar null
@@ -496,6 +498,7 @@ export function ChatWindow() {
       
       // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura APENAS para grupos
       // Esta é a única seção que acessa group_metadata, então isolamos completamente
+      // ✅ IMPORTANTE: groupName já está inicializado como null acima, então não há risco de TDZ
       if (conversationType === 'group') {
         // ✅ Verificar múltiplas condições antes de acessar group_metadata
         if ('group_metadata' in activeConversation) {
@@ -509,34 +512,33 @@ export function ChatWindow() {
                 if (rawGroupName && typeof rawGroupName === 'string') {
                   const trimmed = rawGroupName.trim();
                   if (trimmed.length > 0) {
-                    groupName = trimmed;
+                    groupName = trimmed; // ✅ Atribuir apenas se válido
                   }
                 }
               }
             }
           } catch (groupError) {
-            // ✅ Se houver erro ao acessar group_metadata, usar fallback seguro
+            // ✅ Se houver erro ao acessar group_metadata, manter null (já inicializado)
             console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
-            groupName = null;
+            // groupName já é null, não precisa reatribuir
           }
         }
+      }
+      
+      // ✅ Calcular displayName DENTRO do try para usar valores já capturados
+      // Isso garante que todas as variáveis estejam inicializadas antes do uso
+      if (conversationType === 'group') {
+        // Para grupos: group_name → contact_name → fallback
+        displayName = groupName || contactName || 'Grupo sem nome';
+      } else {
+        // Para contatos individuais: contact_name → contact_phone → fallback
+        displayName = contactName || contactPhone || 'Contato sem nome';
       }
     } catch (e) {
       // ✅ Se houver qualquer erro ao acessar propriedades, retornar null
       // Isso previne crashes quando activeConversation está em estado inconsistente
       console.warn('⚠️ [ChatWindow] Erro ao capturar propriedades da conversa:', e);
       return null;
-    }
-    
-    // ✅ Calcular displayName de forma segura ANTES de usar em expressões
-    // Usar valores já capturados e validados
-    let displayName = '';
-    if (conversationType === 'group') {
-      // Para grupos: group_name → contact_name → fallback
-      displayName = groupName || contactName || 'Grupo sem nome';
-    } else {
-      // Para contatos individuais: contact_name → contact_phone → fallback
-      displayName = contactName || contactPhone || 'Contato sem nome';
     }
     
     return {
