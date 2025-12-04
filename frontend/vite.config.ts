@@ -26,6 +26,11 @@ export default defineConfig({
       // Manter nomes de variáveis mais descritivos durante minificação
       // Isso ajuda a evitar conflitos de inicialização
       keepNames: true,
+      // ✅ CORREÇÃO CRÍTICA: Desabilitar minificação de nomes de variáveis locais
+      // Isso previne que variáveis sejam renomeadas para letras únicas
+      minifyIdentifiers: false,
+      minifySyntax: true,
+      minifyWhitespace: true,
     },
     rollupOptions: {
       output: {
