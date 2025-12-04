@@ -439,9 +439,194 @@ class EvolutionWebhookView(APIView):
         return JsonResponse({'status': 'success', 'event': 'groups.update'})
     
     def handle_group_participants_update(self, data):
-        """Handle group.participants.update events."""
-        logger.info(f"👥 Group participants updated: {data.get('event')}")
-        return JsonResponse({'status': 'success', 'event': 'group.participants.update'})
+        """
+        Handle group.participants.update events.
+        
+        Processa quando participantes são adicionados ou removidos de um grupo.
+        Atualiza a lista de participantes na conversa e envia broadcast via WebSocket.
+        """
+        logger.info(f"👥 [GROUP PARTICIPANTS] Evento recebido: {data.get('event')}")
+        logger.info(f"   Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+        
+        try:
+            instance_name = data.get('instance')
+            group_jid = data.get('groupJid') or data.get('group_jid') or data.get('jid')
+            
+            if not instance_name or not group_jid:
+                logger.warning(f"⚠️ [GROUP PARTICIPANTS] Dados incompletos: instance={instance_name}, groupJid={group_jid}")
+                return JsonResponse({'status': 'error', 'message': 'Missing instance or groupJid'}, status=400)
+            
+            logger.info(f"👥 [GROUP PARTICIPANTS] Processando: instance={instance_name}, groupJid={group_jid}")
+            
+            # Buscar WhatsAppInstance
+            from apps.notifications.models import WhatsAppInstance
+            from django.db.models import Q
+            from apps.chat.models import Conversation
+            from apps.chat.api.views import clean_participants_for_metadata
+            from django.utils import timezone
+            from django.db import transaction
+            from apps.chat.utils.websocket import broadcast_conversation_updated
+            
+            whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
+                Q(instance_name=instance_name) | Q(friendly_name=instance_name),
+                is_active=True
+            ).first()
+            
+            if not whatsapp_instance:
+                logger.warning(f"⚠️ [GROUP PARTICIPANTS] WhatsAppInstance não encontrada: {instance_name}")
+                return JsonResponse({'status': 'error', 'message': 'Instance not found'}, status=404)
+            
+            tenant = whatsapp_instance.tenant
+            logger.info(f"✅ [GROUP PARTICIPANTS] Tenant encontrado: {tenant.name}")
+            
+            # Buscar conversa do grupo
+            # Normalizar group_jid para formato usado no banco
+            normalized_group_jid = group_jid
+            if not normalized_group_jid.endswith('@g.us'):
+                if normalized_group_jid.endswith('@s.whatsapp.net'):
+                    normalized_group_jid = normalized_group_jid.replace('@s.whatsapp.net', '@g.us')
+                else:
+                    normalized_group_jid = f"{normalized_group_jid.rstrip('@')}@g.us"
+            
+            conversation = Conversation.objects.filter(
+                tenant=tenant,
+                contact_phone=normalized_group_jid,
+                conversation_type='group'
+            ).first()
+            
+            if not conversation:
+                logger.warning(f"⚠️ [GROUP PARTICIPANTS] Conversa não encontrada: {normalized_group_jid}")
+                return JsonResponse({'status': 'error', 'message': 'Conversation not found'}, status=404)
+            
+            logger.info(f"✅ [GROUP PARTICIPANTS] Conversa encontrada: {conversation.id} - {conversation.contact_name}")
+            
+            # Extrair participantes adicionados e removidos
+            participants_added = data.get('participants', {}).get('add', []) or data.get('added', []) or []
+            participants_removed = data.get('participants', {}).get('remove', []) or data.get('removed', []) or []
+            
+            # Também verificar formato alternativo
+            if not participants_added and not participants_removed:
+                participants_data = data.get('participants', [])
+                if isinstance(participants_data, list):
+                    # Se é lista, pode ser lista completa de participantes
+                    participants_added = participants_data
+                elif isinstance(participants_data, dict):
+                    participants_added = participants_data.get('add', [])
+                    participants_removed = participants_data.get('remove', [])
+            
+            logger.info(f"👥 [GROUP PARTICIPANTS] Adicionados: {len(participants_added)}, Removidos: {len(participants_removed)}")
+            
+            # Buscar lista atual de participantes do grupo via API Evolution
+            # Isso garante que temos a lista completa e atualizada
+            from apps.notifications.models import EvolutionConnection
+            import httpx
+            
+            connection = EvolutionConnection.objects.filter(is_active=True).first()
+            if not connection:
+                logger.warning(f"⚠️ [GROUP PARTICIPANTS] EvolutionConnection não encontrada")
+                return JsonResponse({'status': 'error', 'message': 'Evolution connection not found'}, status=404)
+            
+            base_url = (whatsapp_instance.api_url or connection.base_url).rstrip('/')
+            api_key = whatsapp_instance.api_key or connection.api_key
+            
+            if not base_url or not api_key:
+                logger.warning(f"⚠️ [GROUP PARTICIPANTS] API URL ou key não configurados")
+                return JsonResponse({'status': 'error', 'message': 'API not configured'}, status=500)
+            
+            headers = {'apikey': api_key, 'Content-Type': 'application/json'}
+            
+            # Buscar lista completa de participantes da API
+            try:
+                endpoint = f"{base_url}/group/findGroupInfos/{instance_name}"
+                with httpx.Client(timeout=15.0) as client:
+                    response = client.get(
+                        endpoint,
+                        params={'groupJid': group_jid, 'getParticipants': 'true'},
+                        headers=headers
+                    )
+                    
+                    if response.status_code == 200:
+                        group_data = response.json()
+                        participants_list = group_data.get('participants', [])
+                        
+                        logger.info(f"✅ [GROUP PARTICIPANTS] {len(participants_list)} participantes obtidos da API")
+                        
+                        # Limpar participantes (remover LIDs)
+                        cleaned_participants = clean_participants_for_metadata(participants_list)
+                        
+                        # Atualizar conversa com nova lista de participantes
+                        with transaction.atomic():
+                            conversation.group_metadata = {
+                                **conversation.group_metadata,
+                                'participants': cleaned_participants,
+                                'participants_count': len(cleaned_participants),
+                                'participants_updated_at': timezone.now().isoformat(),
+                            }
+                            conversation.save(update_fields=['group_metadata'])
+                            
+                            logger.info(f"✅ [GROUP PARTICIPANTS] Conversa atualizada com {len(cleaned_participants)} participantes")
+                        
+                        # Preparar dados para broadcast
+                        added_names = []
+                        removed_names = []
+                        
+                        # Processar adicionados
+                        for p in participants_added:
+                            if isinstance(p, dict):
+                                name = p.get('name') or p.get('pushname') or p.get('phone', 'Usuário')
+                                added_names.append(name)
+                            elif isinstance(p, str):
+                                added_names.append(p)
+                        
+                        # Processar removidos
+                        for p in participants_removed:
+                            if isinstance(p, dict):
+                                name = p.get('name') or p.get('pushname') or p.get('phone', 'Usuário')
+                                removed_names.append(name)
+                            elif isinstance(p, str):
+                                removed_names.append(p)
+                        
+                        # Enviar broadcast via WebSocket
+                        from apps.chat.utils.websocket import broadcast_to_tenant
+                        from apps.chat.api.serializers import ConversationSerializer
+                        
+                        conv_data = ConversationSerializer(conversation).data
+                        
+                        broadcast_to_tenant(
+                            tenant_id=str(tenant.id),
+                            event_type='group_participants_updated',
+                            data={
+                                'conversation': conv_data,
+                                'conversation_id': str(conversation.id),
+                                'added': added_names,
+                                'removed': removed_names,
+                                'added_count': len(participants_added),
+                                'removed_count': len(participants_removed),
+                                'total_participants': len(cleaned_participants)
+                            }
+                        )
+                        
+                        logger.info(f"📡 [GROUP PARTICIPANTS] Broadcast enviado: +{len(participants_added)} -{len(participants_removed)}")
+                        
+                        return JsonResponse({
+                            'status': 'success',
+                            'event': 'group.participants.update',
+                            'conversation_id': str(conversation.id),
+                            'added_count': len(participants_added),
+                            'removed_count': len(participants_removed),
+                            'total_participants': len(cleaned_participants)
+                        })
+                    else:
+                        logger.warning(f"⚠️ [GROUP PARTICIPANTS] Erro ao buscar participantes: {response.status_code}")
+                        return JsonResponse({'status': 'error', 'message': f'API error: {response.status_code}'}, status=500)
+                        
+            except Exception as e:
+                logger.error(f"❌ [GROUP PARTICIPANTS] Erro ao processar: {e}", exc_info=True)
+                return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+                
+        except Exception as e:
+            logger.error(f"❌ [GROUP PARTICIPANTS] Erro geral: {e}", exc_info=True)
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     
     def handle_send_message(self, data):
         """Handle send.message events."""

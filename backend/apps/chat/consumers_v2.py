@@ -430,6 +430,21 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'conversation': event.get('conversation')
         }))
     
+    async def group_participants_updated(self, event):
+        """✅ NOVO: Broadcast quando participantes são adicionados/removidos de grupo."""
+        logger.info(f"👥 [CHAT WS V2] group_participants_updated recebido")
+        await self.send(text_data=json.dumps({
+            'type': 'group_participants_updated',
+            'conversation': event.get('conversation'),
+            'conversation_id': event.get('conversation_id'),
+            'added': event.get('added', []),
+            'removed': event.get('removed', []),
+            'added_count': event.get('added_count', 0),
+            'removed_count': event.get('removed_count', 0),
+            'total_participants': event.get('total_participants', 0)
+        }))
+        logger.info(f"✅ [CHAT WS V2] group_participants_updated enviado para frontend")
+    
     # Database queries (sync_to_async)
     
     @database_sync_to_async

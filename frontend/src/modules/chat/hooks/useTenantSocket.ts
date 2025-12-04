@@ -406,6 +406,48 @@ export function useTenantSocket() {
         }
         break;
 
+      case 'group_participants_updated':
+        // ✅ NOVO: Handler para atualização de participantes do grupo
+        console.log('👥 [TENANT WS] Participantes do grupo atualizados:', {
+          conversationId: data.conversation_id,
+          added: data.added,
+          removed: data.removed,
+          addedCount: data.added_count,
+          removedCount: data.removed_count,
+          totalParticipants: data.total_participants
+        });
+        
+        const { updateConversation, activeConversation } = useChatStore.getState();
+        
+        // Atualizar conversa se fornecida
+        if (data.conversation) {
+          updateConversation(data.conversation);
+        }
+        
+        // Mostrar notificação toast se houver mudanças
+        if (data.added_count > 0 || data.removed_count > 0) {
+          const addedText = data.added_count > 0 
+            ? `${data.added_count} ${data.added_count === 1 ? 'participante adicionado' : 'participantes adicionados'}`
+            : '';
+          const removedText = data.removed_count > 0
+            ? `${data.removed_count} ${data.removed_count === 1 ? 'participante removido' : 'participantes removidos'}`
+            : '';
+          
+          const message = [addedText, removedText].filter(Boolean).join(', ');
+          
+          toast.info(`👥 ${message}`, {
+            title: 'Grupo Atualizado',
+            duration: 4000,
+          });
+        }
+        
+        // Se a conversa ativa é a que foi atualizada, forçar refresh dos participantes
+        if (activeConversation?.id === data.conversation_id) {
+          console.log('🔄 [TENANT WS] Conversa ativa atualizada, participantes podem precisar ser recarregados');
+          // O frontend pode recarregar participantes se necessário
+        }
+        break;
+
       case 'conversation_updated':
         // ✅ DEBUG: Log detalhado para debug de conversas criadas via aplicação
         console.log('📨 [TENANT WS] conversation_updated recebido:', {
