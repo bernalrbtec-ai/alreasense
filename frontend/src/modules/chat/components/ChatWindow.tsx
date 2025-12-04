@@ -28,16 +28,7 @@ export function ChatWindow() {
   const permissions = usePermissions();
   const can_transfer_conversations = (permissions as any).can_transfer_conversations || false;
   
-  // ✅ DEBUG: Log quando activeConversation muda (especialmente contact_name)
-  useEffect(() => {
-    if (activeConversation) {
-      console.log('🔄 [ChatWindow] activeConversation atualizado:', {
-        id: activeConversation.id,
-        contact_name: activeConversation.contact_name,
-        contact_phone: activeConversation.contact_phone
-      });
-    }
-  }, [activeConversation?.id, activeConversation?.contact_name]);
+  // ✅ CORREÇÃO CRÍTICA: Inicializar todos os estados ANTES de qualquer hook que dependa de activeConversation
   const [showMenu, setShowMenu] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -51,17 +42,31 @@ export function ChatWindow() {
   // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   
-  // 🔍 Debug: Log quando profile_pic_url muda
+  // ✅ CORREÇÃO: Capturar activeConversation.id de forma segura antes de usar em hooks
+  const activeConversationId = activeConversation?.id;
+  
+  // 🔌 Conectar WebSocket para esta conversa (usa manager global) - DEPOIS de inicializar estados
+  const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversationId);
+  // ✅ NOVO: Fallback de polling quando WebSocket falha - DEPOIS de inicializar estados
+  usePollingFallback(activeConversationId);
+  
+  // ✅ DEBUG: Log quando activeConversation muda (especialmente contact_name) - DEPOIS de hooks
+  useEffect(() => {
+    if (activeConversation) {
+      console.log('🔄 [ChatWindow] activeConversation atualizado:', {
+        id: activeConversation.id,
+        contact_name: activeConversation.contact_name,
+        contact_phone: activeConversation.contact_phone
+      });
+    }
+  }, [activeConversation?.id, activeConversation?.contact_name]);
+  
+  // 🔍 Debug: Log quando profile_pic_url muda - DEPOIS de hooks
   useEffect(() => {
     if (activeConversation) {
       console.log('🖼️ [ChatWindow] profile_pic_url atual:', activeConversation.profile_pic_url);
     }
   }, [activeConversation?.profile_pic_url]);
-
-  // 🔌 Conectar WebSocket para esta conversa (usa manager global)
-  const { isConnected, sendMessage, sendTyping } = useChatSocket(activeConversation?.id);
-  // ✅ NOVO: Fallback de polling quando WebSocket falha
-  usePollingFallback(activeConversation?.id);
 
   // ✅ Verificar se contato existe quando conversa abre (apenas para contatos individuais)
   useEffect(() => {
