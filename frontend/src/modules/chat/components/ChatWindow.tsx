@@ -191,8 +191,12 @@ export function ChatWindow() {
     
     // ✅ CORREÇÃO CRÍTICA: Cancelar refresh-info anterior quando muda de conversa
     let isCancelled = false;
+    // ✅ CORREÇÃO CRÍTICA: Usar optional chaining para evitar acesso antes da inicialização
+    if (!activeConversation || !activeConversation.id) {
+      return;
+    }
     const currentConversationId = activeConversation.id;
-    const currentConversationType = activeConversation.conversation_type;
+    const currentConversationType = activeConversation.conversation_type || 'individual';
     
     const refreshInfo = async () => {
       try {
@@ -879,14 +883,23 @@ export function ChatWindow() {
       )}
 
       {/* Modals */}
-      {showTransferModal && conversationProps && (
+      {showTransferModal && conversationProps && activeConversation && (
         <TransferModal
           conversation={{
-            ...activeConversation!,
-            id: conversationId,
+            id: conversationId!,
             conversation_type: conversationType as any,
             contact_name: contactName,
             contact_phone: contactPhone,
+            tenant: activeConversation.tenant || '',
+            department: activeConversation.department || null,
+            department_name: activeConversation.department_name || '',
+            status: activeConversation.status || 'open',
+            metadata: activeConversation.metadata || {},
+            participants: activeConversation.participants || [],
+            created_at: activeConversation.created_at || '',
+            updated_at: activeConversation.updated_at || '',
+            unread_count: activeConversation.unread_count || 0,
+            ...(activeConversation.group_metadata ? { group_metadata: activeConversation.group_metadata } : {}),
           } as any}
           onClose={() => setShowTransferModal(false)}
           onTransferSuccess={() => {
