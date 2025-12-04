@@ -205,45 +205,54 @@ export function ChatWindow() {
         
         // ✅ VERIFICAÇÃO ULTRA-REFINADA: Para grupos, verificar qualidade dos participantes
         if (currentConversationType === 'group') {
-          const groupMetadata = current.group_metadata || {};
-          // ✅ CORREÇÃO: group_metadata pode ter propriedades extras não tipadas
-          const metadataAny = groupMetadata as any;
-          const participants = Array.isArray(metadataAny.participants) ? metadataAny.participants : [];
-          const participantsCount = groupMetadata.participants_count || 0;
-          const participantsUpdatedAt = metadataAny.participants_updated_at;
-          
-          // ✅ Verificação 1: Inconsistência
-          const hasInconsistency = participantsCount > 0 && participants.length === 0;
-          
-          // ✅ Verificação 2: Qualidade (pelo menos 50% válidos)
-          const hasPoorQuality = participants.length > 0 && 
-            participants.filter((p: any) => p && p.phone && p.phone.length >= 10).length < participants.length * 0.5;
-          
-          // ✅ Verificação 3: Timestamp (se disponível, verificar se > 1 hora)
-          let isStale = false;
-          if (participantsUpdatedAt && participants.length === 0) {
-            const updatedTime = new Date(participantsUpdatedAt).getTime();
-            const now = Date.now();
-            const oneHourAgo = now - (60 * 60 * 1000);
-            isStale = updatedTime < oneHourAgo;
-          }
-          
-          const needsParticipants = hasInconsistency || hasPoorQuality || isStale;
-          
-          // ✅ Verificação padrão: foto e nome
-          const hasPhoto = current.profile_pic_url;
-          const hasName = current.contact_name && 
-                         current.contact_name !== 'Grupo WhatsApp' &&
-                         !current.contact_name.match(/^\d+$/);
-          
-          // ✅ Decisão: só pular se tem foto + nome + participantes OK
-          if (hasPhoto && hasName && !needsParticipants && participants.length > 0) {
-            console.log(`✅ [${type}] Informações completas (foto + nome + participantes), pulando refresh-info`);
-            return;
-          }
-          
-          if (needsParticipants) {
-            console.log(`🔄 [${type}] Forçando refresh-info para atualizar participantes`);
+          // ✅ CORREÇÃO CRÍTICA: Garantir que group_metadata existe antes de acessar
+          if (!current.group_metadata) {
+            console.log(`🔄 [${type}] Sem group_metadata, forçando refresh-info`);
+            // Continuar para fazer refresh-info
+          } else {
+            const groupMetadata = current.group_metadata;
+            // ✅ CORREÇÃO: group_metadata pode ter propriedades extras não tipadas
+            const metadataAny = groupMetadata as any;
+            // ✅ CORREÇÃO: Inicializar variáveis ANTES de usar em expressões
+            const participants: any[] = Array.isArray(metadataAny.participants) ? metadataAny.participants : [];
+            const participantsCount: number = typeof groupMetadata.participants_count === 'number' ? groupMetadata.participants_count : 0;
+            const participantsUpdatedAt: string | undefined = metadataAny.participants_updated_at;
+            
+            // ✅ Verificação 1: Inconsistência
+            const hasInconsistency: boolean = participantsCount > 0 && participants.length === 0;
+            
+            // ✅ Verificação 2: Qualidade (pelo menos 50% válidos)
+            const validParticipants = participants.filter((p: any) => p && p.phone && p.phone.length >= 10);
+            const hasPoorQuality: boolean = participants.length > 0 && validParticipants.length < participants.length * 0.5;
+            
+            // ✅ Verificação 3: Timestamp (se disponível, verificar se > 1 hora)
+            let isStale: boolean = false;
+            if (participantsUpdatedAt && participants.length === 0) {
+              const updatedTime = new Date(participantsUpdatedAt).getTime();
+              const now = Date.now();
+              const oneHourAgo = now - (60 * 60 * 1000);
+              isStale = updatedTime < oneHourAgo;
+            }
+            
+            const needsParticipants: boolean = hasInconsistency || hasPoorQuality || isStale;
+            
+            // ✅ Verificação padrão: foto e nome
+            const hasPhoto: boolean = Boolean(current.profile_pic_url);
+            const hasName: boolean = Boolean(
+              current.contact_name && 
+              current.contact_name !== 'Grupo WhatsApp' &&
+              !current.contact_name.match(/^\d+$/)
+            );
+            
+            // ✅ Decisão: só pular se tem foto + nome + participantes OK
+            if (hasPhoto && hasName && !needsParticipants && participants.length > 0) {
+              console.log(`✅ [${type}] Informações completas (foto + nome + participantes), pulando refresh-info`);
+              return;
+            }
+            
+            if (needsParticipants) {
+              console.log(`🔄 [${type}] Forçando refresh-info para atualizar participantes`);
+            }
           }
         } else {
           // ✅ Contatos individuais: verificação padrão (foto + nome)
