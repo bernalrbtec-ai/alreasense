@@ -19,4 +19,19 @@ export default defineConfig({
     port: 80,
     allowedHosts: 'all',
   },
+  build: {
+    // ✅ CORREÇÃO: Configurar minificação para evitar conflitos de nomes de variáveis
+    minify: 'esbuild',
+    esbuild: {
+      // Manter nomes de variáveis mais descritivos durante minificação
+      // Isso ajuda a evitar conflitos de inicialização
+      keepNames: true,
+    },
+    rollupOptions: {
+      output: {
+        // Manter nomes de funções e variáveis mais legíveis
+        manualChunks: undefined,
+      },
+    },
+  },
 })
