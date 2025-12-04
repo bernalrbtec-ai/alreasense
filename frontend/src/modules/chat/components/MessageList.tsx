@@ -1185,15 +1185,15 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     );
     
     const optimisticReaction: MessageReaction = {
-      id: `optimistic-${user.id}-${emoji}-${Date.now()}`,
+      id: `optimistic-${currentUser?.id || 'unknown'}-${emoji}-${Date.now()}`,
       message: message.id,
-      user: String(user.id),
-      user_data: {
-        id: String(user.id),
-        email: user.email,
-        first_name: user.first_name,
-        last_name: user.last_name,
-      },
+      user: String(currentUser?.id || ''),
+      user_data: currentUser ? {
+        id: String(currentUser.id),
+        email: currentUser.email || '',
+        first_name: currentUser.first_name,
+        last_name: currentUser.last_name,
+      } : undefined,
       emoji,
       created_at: new Date().toISOString(),
     };
