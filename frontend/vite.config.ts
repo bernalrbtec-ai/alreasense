@@ -20,14 +20,24 @@ export default defineConfig({
     allowedHosts: 'all',
   },
   build: {
-    // ✅ CORREÇÃO TEMPORÁRIA: Desabilitar minificação completamente para debug
-    // Isso previne qualquer renomeação de variáveis que possa causar conflitos
-    minify: false,
-    // rollupOptions: {
-    //   output: {
-    //     // Manter nomes de funções e variáveis mais legíveis
-    //     manualChunks: undefined,
-    //   },
-    // },
+    // ✅ CORREÇÃO: Reativar minificação de forma conservadora
+    // Mantém minifyIdentifiers: false para evitar renomeação de variáveis
+    minify: 'esbuild',
+    esbuild: {
+      // ✅ CRÍTICO: Desabilitar minificação de identificadores para evitar conflitos
+      // Isso previne que variáveis sejam renomeadas para letras únicas (c, u, m, etc.)
+      minifyIdentifiers: false,
+      // Manter minificação de sintaxe e espaços (reduz tamanho sem renomear variáveis)
+      minifySyntax: true,
+      minifyWhitespace: true,
+      // Manter nomes de funções e classes para facilitar debug
+      keepNames: true,
+    },
+    rollupOptions: {
+      output: {
+        // Manter nomes de funções e variáveis mais legíveis
+        manualChunks: undefined,
+      },
+    },
   },
 })
