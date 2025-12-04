@@ -897,11 +897,11 @@ export function ChatWindow() {
             setExistingContact(null);
           }}
           contact={existingContact}
-          initialPhone={activeConversation.contact_phone || ''}
+          initialPhone={contactPhone || ''}
           initialName={getDisplayName(activeConversation)}
           onSuccess={async () => {
             // ✅ MELHORIA: Recarregar contato completo e atualizar activeConversation com tags
-            if (activeConversation.contact_phone) {
+            if (contactPhone) {
               // Normalizar telefone para comparação
               const normalizePhone = (phone: string) => {
                 if (!phone) return '';
@@ -910,7 +910,7 @@ export function ChatWindow() {
                 return hasPlus ? `+${numbers}` : numbers;
               };
 
-              const normalizedPhone = normalizePhone(activeConversation.contact_phone);
+              const normalizedPhone = normalizePhone(contactPhone);
               
               try {
                 // Buscar contato completo com tags
