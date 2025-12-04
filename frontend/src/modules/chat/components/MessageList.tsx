@@ -171,25 +171,38 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
 };
 
 export function MessageList() {
+  // ✅ CORREÇÃO CRÍTICA: Inicializar estados ANTES de usar seletores que dependem de activeConversation
   const [showContactModal, setShowContactModal] = useState(false);
   const [contactToAdd, setContactToAdd] = useState<{ name: string; phone: string } | null>(null);
-  const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
-  // ✅ MELHORIA: Seletores memoizados com shallow comparison
+  const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
+  const [isLoading, setIsLoading] = useState(false);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ message: Message; position: { x: number; y: number } } | null>(null);
+  const [showMessageInfo, setShowMessageInfo] = useState<Message | null>(null);
+  const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+  
+  // ✅ CORREÇÃO: Capturar activeConversation ANTES de usar em outros seletores
   const activeConversation = useChatStore((state) => state.activeConversation);
-  const setMessages = useChatStore((state) => state.setMessages);
-  const typing = useChatStore((state) => state.typing);
-  const typingUser = useChatStore((state) => state.typingUser);
-  const getMessagesArray = useChatStore((state) => state.getMessagesArray);
+  
+  // ✅ CORREÇÃO: Capturar conversationId de forma segura antes de usar
+  const conversationId = activeConversation?.id;
   
   // ✅ CORREÇÃO CRÍTICA: Usar selector do Zustand que reage às mudanças no store
   // Observar diretamente messages.byId e messages.byConversationId para a conversa ativa
   // Isso garante que o componente re-renderize quando novas mensagens são adicionadas
   const messages = useChatStore((state) => {
-    if (!activeConversation?.id) return [];
-    const conversationId = activeConversation.id;
+    if (!conversationId) return [];
     const messageIds = state.messages.byConversationId[conversationId] || [];
     return messageIds.map(id => state.messages.byId[id]).filter(Boolean);
   });
+  
+  const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
+  const setMessages = useChatStore((state) => state.setMessages);
+  const typing = useChatStore((state) => state.typing);
+  const typingUser = useChatStore((state) => state.typingUser);
+  const getMessagesArray = useChatStore((state) => state.getMessagesArray);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const { hasProductAccess } = useUserAccess();
