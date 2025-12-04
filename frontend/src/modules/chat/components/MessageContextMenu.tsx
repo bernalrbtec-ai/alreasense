@@ -42,10 +42,26 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
   const { activeConversation, setMessages, getMessagesArray, setReplyToMessage } = useChatStore();
   const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
 
-  // Validar position e usar valores padrão se inválida
-  const safePosition = position && typeof position.x === 'number' && typeof position.y === 'number'
-    ? position
-    : { x: 0, y: 0 };
+  // Validar position e usar valores padrão se inválida - DEFINIR PRIMEIRO
+  const DEFAULT_POSITION = { x: 0, y: 0 };
+  
+  // Calcular safePosition de forma segura
+  const getSafePosition = (pos: { x: number; y: number } | undefined | null): { x: number; y: number } => {
+    if (!pos) return DEFAULT_POSITION;
+    if (typeof pos.x !== 'number' || typeof pos.y !== 'number') {
+      return DEFAULT_POSITION;
+    }
+    return { x: pos.x, y: pos.y };
+  };
+  
+  const safePosition = getSafePosition(position);
+
+  // Ajustar posição do menu para não sair da tela - INICIALIZAR COM VALOR SEGURO
+  const [adjustedPosition, setAdjustedPosition] = useState<{ x: number; y: number }>(() => {
+    // Garantir que sempre retornamos um objeto válido
+    const safe = getSafePosition(position);
+    return { x: safe.x, y: safe.y };
+  });
 
   // Fechar menu ao clicar fora
   useEffect(() => {
@@ -69,42 +85,49 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
       document.removeEventListener('keydown', handleEscape);
     };
   }, [onClose]);
-
-  // Ajustar posição do menu para não sair da tela
-  const [adjustedPosition, setAdjustedPosition] = useState(safePosition);
   
   useEffect(() => {
-    if (!safePosition || typeof safePosition.x !== 'number' || typeof safePosition.y !== 'number') {
+    // Recalcular safePosition sempre que position mudar
+    const currentSafePosition = getSafePosition(position);
+    
+    // Verificação robusta antes de acessar propriedades
+    if (typeof currentSafePosition.x !== 'number' || typeof currentSafePosition.y !== 'number') {
+      setAdjustedPosition(DEFAULT_POSITION);
       return;
     }
     
-    if (menuRef.current) {
-      const rect = menuRef.current.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      const windowHeight = window.innerHeight;
-
-      let x = safePosition.x;
-      let y = safePosition.y;
-
-      // Ajustar horizontalmente
-      if (x + rect.width > windowWidth) {
-        x = windowWidth - rect.width - 10;
-      }
-      if (x < 10) {
-        x = 10;
-      }
-
-      // Ajustar verticalmente
-      if (y + rect.height > windowHeight) {
-        y = windowHeight - rect.height - 10;
-      }
-      if (y < 10) {
-        y = 10;
-      }
-
-      setAdjustedPosition({ x, y });
+    if (!menuRef.current) {
+      // Se ainda não temos ref, usar posição segura diretamente
+      setAdjustedPosition(currentSafePosition);
+      return;
     }
-  }, [safePosition]);
+    
+    const rect = menuRef.current.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    // Declarar x e y ANTES de usar - garantir inicialização explícita
+    let x: number = currentSafePosition.x;
+    let y: number = currentSafePosition.y;
+
+    // Ajustar horizontalmente
+    if (x + rect.width > windowWidth) {
+      x = windowWidth - rect.width - 10;
+    }
+    if (x < 10) {
+      x = 10;
+    }
+
+    // Ajustar verticalmente
+    if (y + rect.height > windowHeight) {
+      y = windowHeight - rect.height - 10;
+    }
+    if (y < 10) {
+      y = 10;
+    }
+
+    setAdjustedPosition({ x, y });
+  }, [position]);
 
   // Verificar se mensagem tem anexos para mostrar opção de baixar
   const hasAttachments = message.attachments && message.attachments.length > 0;
