@@ -550,42 +550,51 @@ export function ChatWindow() {
       setGroupName(null);
       setDisplayName('');
     }
-  }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.contact_name, activeConversation?.contact_phone, activeConversation?.profile_pic_url, activeConversation?.instance_friendly_name, activeConversation?.instance_name, activeConversation?.contact_tags]);
+  }, [activeConversation]);
   
   // ✅ CORREÇÃO CRÍTICA: Calcular displayName em useEffect separado para evitar problemas de inicialização
+  // ✅ CORREÇÃO: Usar apenas activeConversation e groupName como dependências
   useEffect(() => {
-    // ✅ CORREÇÃO: Capturar valores em variáveis locais PRIMEIRO para evitar problemas de inicialização
-    const currentType = conversationType;
-    const currentGroupName = groupName;
-    const currentContactName = contactName;
-    const currentContactPhone = contactPhone;
+    // ✅ CORREÇÃO: Verificar se há activeConversation primeiro
+    if (!activeConversation || !activeConversation.id) {
+      setDisplayName('');
+      return;
+    }
     
-    if (currentType === 'group') {
+    // ✅ CORREÇÃO: Capturar valores diretamente de activeConversation e estados PRIMEIRO
+    const conv = activeConversation;
+    const type = conv.conversation_type || 'individual';
+    const name = conv.contact_name || '';
+    const phone = conv.contact_phone || '';
+    const currentGroupName = groupName;
+    
+    // ✅ CORREÇÃO: Calcular displayName diretamente sem depender de outros estados
+    if (type === 'group') {
       // Para grupos: group_name → contact_name → fallback
       const hasGroupName = currentGroupName !== null && typeof currentGroupName === 'string' && currentGroupName.length > 0;
-      const hasContactName = currentContactName !== null && typeof currentContactName === 'string' && currentContactName.length > 0;
+      const hasContactName = name !== null && typeof name === 'string' && name.length > 0;
       
       if (hasGroupName) {
         setDisplayName(currentGroupName);
       } else if (hasContactName) {
-        setDisplayName(currentContactName);
+        setDisplayName(name);
       } else {
         setDisplayName('Grupo sem nome');
       }
     } else {
       // Para contatos individuais: contact_name → contact_phone → fallback
-      const hasContactName = currentContactName !== null && typeof currentContactName === 'string' && currentContactName.length > 0;
-      const hasContactPhone = currentContactPhone !== null && typeof currentContactPhone === 'string' && currentContactPhone.length > 0;
+      const hasContactName = name !== null && typeof name === 'string' && name.length > 0;
+      const hasContactPhone = phone !== null && typeof phone === 'string' && phone.length > 0;
       
       if (hasContactName) {
-        setDisplayName(currentContactName);
+        setDisplayName(name);
       } else if (hasContactPhone) {
-        setDisplayName(currentContactPhone);
+        setDisplayName(phone);
       } else {
         setDisplayName('Contato sem nome');
       }
     }
-  }, [conversationType, groupName, contactName, contactPhone]);
+  }, [activeConversation, groupName]);
   
   // ✅ CORREÇÃO CRÍTICA: Remover useMemo completamente - todas as propriedades são estados separados
   // Não precisamos de useMemo, apenas verificamos conversationId diretamente
