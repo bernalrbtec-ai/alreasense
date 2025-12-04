@@ -715,16 +715,22 @@ export function ChatWindow() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-hidden">
-        <MessageList />
-      </div>
+      {/* ✅ CORREÇÃO: Renderizar MessageList apenas se conversationId estiver inicializado */}
+      {conversationId && (
+        <div className="flex-1 overflow-hidden">
+          <MessageList />
+        </div>
+      )}
 
         {/* Input */}
-        <MessageInput 
-          sendMessage={sendMessage}
-          sendTyping={sendTyping}
-          isConnected={isConnected}
-        />
+        {/* ✅ CORREÇÃO: Renderizar MessageInput apenas se conversationId estiver inicializado */}
+        {conversationId && (
+          <MessageInput 
+            sendMessage={sendMessage}
+            sendTyping={sendTyping}
+            isConnected={isConnected}
+          />
+        )}
       </div>
 
       {/* Sidebar de Histórico */}
