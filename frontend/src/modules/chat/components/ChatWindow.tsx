@@ -455,7 +455,8 @@ export function ChatWindow() {
   };
 
   // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation ANTES de qualquer renderização
-  if (!activeConversation) {
+  // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation e id antes de renderizar
+  if (!activeConversation || !activeConversation.id) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
         <div className="max-w-md text-center">
@@ -474,16 +475,17 @@ export function ChatWindow() {
     );
   }
 
-  // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades necessárias ANTES do JSX
+  // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades necessárias com valores padrão seguros
   // Isso evita problemas de TDZ quando activeConversation muda rapidamente
-  const conversationType = activeConversation.conversation_type;
-  const profilePicUrl = activeConversation.profile_pic_url;
-  const contactName = activeConversation.contact_name;
-  const contactPhone = activeConversation.contact_phone;
-  const instanceFriendlyName = activeConversation.instance_friendly_name;
-  const instanceName = activeConversation.instance_name;
-  const contactTags = activeConversation.contact_tags;
+  // Usar optional chaining e valores padrão para garantir inicialização completa
   const conversationId = activeConversation.id;
+  const conversationType = activeConversation.conversation_type || 'individual';
+  const profilePicUrl = activeConversation.profile_pic_url || null;
+  const contactName = activeConversation.contact_name || '';
+  const contactPhone = activeConversation.contact_phone || '';
+  const instanceFriendlyName = activeConversation.instance_friendly_name || null;
+  const instanceName = activeConversation.instance_name || null;
+  const contactTags = activeConversation.contact_tags || [];
 
   return (
     <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
