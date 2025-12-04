@@ -1864,8 +1864,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             group_metadata = conversation.group_metadata or {}
             group_jid = group_metadata.get('group_id')
             
-            # ✅ VALIDAÇÃO CRÍTICA: Se group_id não existe ou parece ser LID, tentar buscar de mensagens recentes
-            if not group_jid or is_lid_number(group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '')):
+            # ✅ VALIDAÇÃO CRÍTICA: Se group_id não existe ou termina com @lid, tentar buscar de mensagens recentes
+            # ✅ CORREÇÃO: Não verificar comprimento - grupos podem ter IDs longos e ainda assim serem válidos
+            if not group_jid or group_jid.endswith('@lid'):
                 logger.warning(f"⚠️ [PARTICIPANTS] group_id não encontrado ou é LID, tentando buscar de mensagens recentes...")
                 # Buscar mensagem recente do grupo para extrair remoteJid real
                 from apps.chat.models import Message
@@ -1958,10 +1959,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.info(f"🔄 [PARTICIPANTS] group_jid final: {group_jid}")
             logger.info(f"   Raw contact_phone: {conversation.contact_phone}")
             
-            # ✅ VALIDAÇÃO FINAL: Se group_jid ainda parece ser LID, não tentar buscar
-            group_jid_without_suffix = group_jid.replace('@g.us', '').replace('@s.whatsapp.net', '').replace('+', '').strip()
-            if is_lid_number(group_jid_without_suffix):
-                logger.error(f"❌ [PARTICIPANTS] group_jid final parece ser LID: {group_jid}, não é possível buscar participantes")
+            # ✅ VALIDAÇÃO FINAL: Se group_jid termina com @lid, não tentar buscar (grupo usa LID)
+            # ✅ CORREÇÃO CRÍTICA: @g.us = grupo válido, NÃO é LID. Apenas @lid é LID.
+            # IDs de grupo podem ser longos (ex: 120363404279692186@g.us) e ainda assim são válidos!
+            if group_jid.endswith('@lid'):
+                logger.error(f"❌ [PARTICIPANTS] group_jid é LID: {group_jid}, não é possível buscar participantes")
                 # ✅ CORREÇÃO: Se grupo usa LID, retornar participantes do group_metadata (se existirem)
                 if group_metadata and group_metadata.get('uses_lid'):
                     participants_from_metadata = group_metadata.get('participants', [])
@@ -1970,6 +1972,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         cleaned_participants = clean_participants_for_metadata(participants_from_metadata)
                         return cleaned_participants
                 return []
+            
+            # ✅ VALIDAÇÃO: Se group_jid termina com @g.us, é grupo válido e pode ser buscado
+            # Não verificar comprimento do ID - grupos podem ter IDs longos e ainda assim serem válidos
+            if not group_jid.endswith('@g.us'):
+                logger.warning(f"⚠️ [PARTICIPANTS] group_jid não termina com @g.us: {group_jid}")
+                # Tentar usar mesmo assim se não for @lid
+                if group_jid.endswith('@lid'):
+                    logger.error(f"❌ [PARTICIPANTS] group_jid é LID: {group_jid}, não é possível buscar participantes")
+                    return []
             
             logger.info(f"🔄 [PARTICIPANTS] Buscando participantes diretamente: {group_jid}")
             
