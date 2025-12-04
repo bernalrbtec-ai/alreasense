@@ -589,7 +589,20 @@ export function ChatWindow() {
   // ✅ CORREÇÃO CRÍTICA: Verificar se activeConversation, conversationId e isReady antes de renderizar
   // Isso evita problemas de inicialização quando um grupo é acessado
   // isReady garante que todos os estados foram atualizados antes de renderizar
-  if (!activeConversation || !activeConversation.id || !conversationId || !isReady) {
+  // ✅ CORREÇÃO ADICIONAL: Verificar também se displayName está definido (não vazio ou undefined)
+  if (!activeConversation || !activeConversation.id || !conversationId || !isReady || displayName === undefined) {
+    // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
+    if (activeConversation && activeConversation.id && conversationId) {
+      return (
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
+            <p className="text-sm text-gray-500">Carregando conversa...</p>
+          </div>
+        </div>
+      );
+    }
+    
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
         <div className="max-w-md text-center">
