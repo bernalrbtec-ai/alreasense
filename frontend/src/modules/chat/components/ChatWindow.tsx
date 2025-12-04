@@ -536,29 +536,7 @@ export function ChatWindow() {
         setGroupName(null);
       }
       
-      // ✅ Calcular displayName (usar groupName do estado atual, não do parâmetro)
-      // Para grupos, precisamos calcular displayName em um useEffect separado que depende de groupName
-      if (type === 'group') {
-        // Para grupos, displayName será calculado em useEffect separado que depende de groupName
-        // Por enquanto, usar contact_name como fallback
-        const hasContactName = name !== null && typeof name === 'string' && name.length > 0;
-        if (hasContactName) {
-          setDisplayName(name);
-        } else {
-          setDisplayName('Grupo sem nome');
-        }
-      } else {
-        const hasContactName = name !== null && typeof name === 'string' && name.length > 0;
-        const hasContactPhone = phone !== null && typeof phone === 'string' && phone.length > 0;
-        
-        if (hasContactName) {
-          setDisplayName(name);
-        } else if (hasContactPhone) {
-          setDisplayName(phone);
-        } else {
-          setDisplayName('Contato sem nome');
-        }
-      }
+      // ✅ CORREÇÃO: displayName será calculado em useEffect separado para evitar problemas de inicialização
     } catch (e) {
       console.warn('⚠️ [ChatWindow] Erro ao atualizar propriedades:', e);
       setConversationId(null);
@@ -574,21 +552,40 @@ export function ChatWindow() {
     }
   }, [activeConversation?.id, activeConversation?.conversation_type, activeConversation?.contact_name, activeConversation?.contact_phone, activeConversation?.profile_pic_url, activeConversation?.instance_friendly_name, activeConversation?.instance_name, activeConversation?.contact_tags]);
   
-  // ✅ CORREÇÃO CRÍTICA: Atualizar displayName para grupos após groupName ser atualizado
+  // ✅ CORREÇÃO CRÍTICA: Calcular displayName em useEffect separado para evitar problemas de inicialização
   useEffect(() => {
-    if (conversationType === 'group') {
-      const hasGroupName = groupName !== null && typeof groupName === 'string' && groupName.length > 0;
-      const hasContactName = contactName !== null && typeof contactName === 'string' && contactName.length > 0;
+    // ✅ CORREÇÃO: Capturar valores em variáveis locais PRIMEIRO para evitar problemas de inicialização
+    const currentType = conversationType;
+    const currentGroupName = groupName;
+    const currentContactName = contactName;
+    const currentContactPhone = contactPhone;
+    
+    if (currentType === 'group') {
+      // Para grupos: group_name → contact_name → fallback
+      const hasGroupName = currentGroupName !== null && typeof currentGroupName === 'string' && currentGroupName.length > 0;
+      const hasContactName = currentContactName !== null && typeof currentContactName === 'string' && currentContactName.length > 0;
       
       if (hasGroupName) {
-        setDisplayName(groupName);
+        setDisplayName(currentGroupName);
       } else if (hasContactName) {
-        setDisplayName(contactName);
+        setDisplayName(currentContactName);
       } else {
         setDisplayName('Grupo sem nome');
       }
+    } else {
+      // Para contatos individuais: contact_name → contact_phone → fallback
+      const hasContactName = currentContactName !== null && typeof currentContactName === 'string' && currentContactName.length > 0;
+      const hasContactPhone = currentContactPhone !== null && typeof currentContactPhone === 'string' && currentContactPhone.length > 0;
+      
+      if (hasContactName) {
+        setDisplayName(currentContactName);
+      } else if (hasContactPhone) {
+        setDisplayName(currentContactPhone);
+      } else {
+        setDisplayName('Contato sem nome');
+      }
     }
-  }, [conversationType, groupName, contactName]);
+  }, [conversationType, groupName, contactName, contactPhone]);
   
   // ✅ CORREÇÃO CRÍTICA: Remover useMemo completamente - todas as propriedades são estados separados
   // Não precisamos de useMemo, apenas verificamos conversationId diretamente
