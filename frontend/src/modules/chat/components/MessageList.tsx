@@ -1119,7 +1119,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
 
   // ✅ CORREÇÃO: Adicionar ou remover reação (comportamento WhatsApp)
   const handleAddReaction = async (emoji: string) => {
-    if (!user || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
+    if (!currentUser || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
     
     // ✅ CORREÇÃO: Validar emoji antes de enviar
     if (!validateEmoji(emoji)) {
@@ -1201,7 +1201,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
     // ✅ CORREÇÃO: Remover reação antiga do usuário (se existir) e adicionar nova
     const optimisticReactions = [
       ...previousReactions.filter(
-        (reaction) => reaction.user !== String(user.id) // Remover TODAS as reações do usuário
+        (reaction) => reaction.user !== String(currentUser?.id) // Remover TODAS as reações do usuário
       ),
       optimisticReaction, // Adicionar nova reação
     ];
@@ -1256,7 +1256,7 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
 
   // Remover reação
   const handleRemoveReaction = async (emoji: string) => {
-    if (!user || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
+    if (!currentUser || processingEmoji) return; // ✅ CORREÇÃO: Prevenir duplo clique
     
     setProcessingEmoji(emoji); // ✅ CORREÇÃO: Feedback visual
     
