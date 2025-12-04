@@ -669,11 +669,11 @@ export function MessageList() {
       }
       
       // ✅ CORREÇÃO: Filtrar valores inválidos de forma segura
-      const safe = messages.filter((msg: any) => {
-        if (!msg || typeof msg !== 'object') {
+      const safe = messages.filter((messageItem: any) => {
+        if (!messageItem || typeof messageItem !== 'object') {
           return false;
         }
-        return Boolean(msg.id); // Garantir que tem id válido
+        return Boolean(messageItem.id); // Garantir que tem id válido
       });
       
       console.log('✅ [MessageList] safeMessages calculado:', {

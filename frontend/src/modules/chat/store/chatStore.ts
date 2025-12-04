@@ -78,8 +78,8 @@ function normalizeMessages(messages: Message[]): NormalizedMessages {
   // Ordenar uma vez antes de normalizar
   const sorted = sortMessagesByTimestamp(messages);
   
-  sorted.forEach(message => {
-    byId[message.id] = message;
+  sorted.forEach((messageItem) => {
+    byId[messageItem.id] = messageItem;
     
     // Extrair conversationId
     const conversationId = message.conversation_id 

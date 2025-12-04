@@ -620,9 +620,9 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
         {/* ✨ TAGS IA */}
         {showAI && attachment.ai_tags && attachment.ai_tags.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-1">
-            {attachment.ai_tags.map((tag, i) => (
+            {attachment.ai_tags.map((tag, tagIndex) => (
               <span
-                key={i}
+                key={tagIndex}
                 className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs rounded"
               >
                 {tag}

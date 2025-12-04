@@ -134,7 +134,7 @@ export function useChatSocket(conversationId?: string) {
         // ✅ CORREÇÃO: Usar currentActiveConversation já obtido acima (evita múltiplas chamadas)
         const { getMessagesArray } = useChatStore.getState();
         const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
-        const existingMessage = messages.find(m => m.id === data.message.id);
+        const existingMessage = messages.find((messageItem) => messageItem.id === data.message.id);
         if (existingMessage && existingMessage.attachments && existingMessage.attachments.length > 0) {
           // Se a mensagem nova não tiver attachments mas a antiga tiver, preservar
           if (!data.message.attachments || data.message.attachments.length === 0) {
