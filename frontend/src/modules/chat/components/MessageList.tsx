@@ -684,7 +684,8 @@ export function MessageList() {
                 }}
               >
                 {/* Nome do remetente (apenas para GRUPOS e mensagens RECEBIDAS) */}
-                {activeConversation.conversation_type === 'group' && msg.direction === 'incoming' && (msg.sender_name || msg.sender_phone) && (
+                {/* ✅ CORREÇÃO CRÍTICA: Usar optional chaining para evitar erro de inicialização */}
+                {activeConversation?.conversation_type === 'group' && msg.direction === 'incoming' && (msg.sender_name || msg.sender_phone) && (
                   <p className="text-xs font-semibold text-green-600 mb-1">
                     {msg.sender_name || msg.sender_phone}
                   </p>
