@@ -87,40 +87,39 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
     return billingService.hasProduct(products, productSlug);
   };
 
-  // Calcular activeProductSlugs com verificação robusta
+  // ✅ CORREÇÃO CRÍTICA: Calcular activeProductSlugs com verificação robusta
+  // ✅ CORREÇÃO: Garantir que products está sempre definido antes de usar no useMemo
+  const safeProducts = Array.isArray(products) ? products : [];
+  
   const activeProductSlugs = useMemo((): string[] => {
     try {
-      console.log('🔄 Calculando activeProductSlugs...');
-      console.log('   Products:', products);
-      
-      // Verificar se products existe e é array
-      if (!products || !Array.isArray(products) || products.length === 0) {
-        console.log('   ❌ Products não é array válido, retornando []');
+      // ✅ CORREÇÃO: Usar safeProducts ao invés de products diretamente
+      if (!safeProducts || safeProducts.length === 0) {
         return DEFAULT_ACTIVE_PRODUCT_SLUGS;
       }
       
       // Filtrar e mapear com verificações de segurança
       const active: string[] = [];
-      for (const tp of products) {
+      for (const tp of safeProducts) {
         if (tp && tp.is_active && tp.product && tp.product.slug && typeof tp.product.slug === 'string') {
           active.push(tp.product.slug);
         }
       }
       
-      console.log('   ✅ Produtos ativos:', active);
       return active;
     } catch (error) {
       console.error('❌ Erro ao calcular activeProductSlugs:', error);
       return DEFAULT_ACTIVE_PRODUCT_SLUGS;
     }
-  }, [products]);
+  }, [safeProducts]);
 
+  // ✅ CORREÇÃO: Garantir que sempre retornamos valores válidos
   return {
-    products: Array.isArray(products) ? products : [],
+    products: safeProducts,
     loading,
     error,
     hasProduct,
-    activeProductSlugs: Array.isArray(activeProductSlugs) ? activeProductSlugs : [],
+    activeProductSlugs: Array.isArray(activeProductSlugs) ? activeProductSlugs : DEFAULT_ACTIVE_PRODUCT_SLUGS,
     refetch: fetchProducts,
   };
 };

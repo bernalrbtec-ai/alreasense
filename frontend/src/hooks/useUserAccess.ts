@@ -14,6 +14,9 @@ export const useUserAccess = () => {
   const { products, loading } = useTenantProducts()
   const { can_access_chat, isAdmin, isGerente, isAgente } = usePermissions()
 
+  // ✅ CORREÇÃO CRÍTICA: Garantir que products está sempre definido antes de usar
+  const safeProducts = Array.isArray(products) ? products : []
+
   const hasProductAccess = (productSlug: string): ProductAccess => {
     // Super admin tem acesso a tudo
     if (user?.is_superuser || user?.is_staff) {
@@ -25,10 +28,9 @@ export const useUserAccess = () => {
       return { canAccess: false, isActive: false }
     }
 
+    // ✅ CORREÇÃO: Usar safeProducts ao invés de products diretamente
     // Buscar o produto nas TenantProducts
-    const tenantProduct = Array.isArray(products) 
-      ? products.find(tp => tp && tp.product && tp.product.slug === productSlug)
-      : null
+    const tenantProduct = safeProducts.find(tp => tp && tp.product && tp.product.slug === productSlug)
     
     if (!tenantProduct) {
       return { canAccess: false, isActive: false }

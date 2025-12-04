@@ -207,8 +207,10 @@ export function MessageList() {
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   
   // ✅ CORREÇÃO: Usar hooks DEPOIS de inicializar estados e capturar conversationId
+  // ✅ CORREÇÃO CRÍTICA: useUserAccess agora é seguro e sempre retorna valores válidos
   const { hasProductAccess } = useUserAccess();
-  const hasFlowAI = hasProductAccess('flow-ai').canAccess;
+  // ✅ CORREÇÃO: Verificar se hasProductAccess existe antes de chamar
+  const hasFlowAI = hasProductAccess ? hasProductAccess('flow-ai').canAccess : false;
 
   useEffect(() => {
     if (!activeConversation?.id) {
