@@ -262,11 +262,13 @@ export function MessageList() {
     return mappedMessages;
   });
   
+  console.log('🔍 [MessageList] Capturando outras funções do store...');
   const updateMessageReactions = useChatStore((state) => state.updateMessageReactions);
   const setMessages = useChatStore((state) => state.setMessages);
   const typing = useChatStore((state) => state.typing);
   const typingUser = useChatStore((state) => state.typingUser);
   const getMessagesArray = useChatStore((state) => state.getMessagesArray);
+  console.log('✅ [MessageList] Funções do store capturadas');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   
