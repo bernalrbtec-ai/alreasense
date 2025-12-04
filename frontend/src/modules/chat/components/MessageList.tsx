@@ -918,19 +918,38 @@ export function MessageList() {
  */
 // ✅ CORREÇÃO: Memoização de componente de reações para evitar re-renders desnecessários
 const MessageReactions = React.memo(function MessageReactions({ message, direction }: { message: any; direction: 'incoming' | 'outgoing' }) {
+  console.log('🔍 [MessageReactions] Componente renderizado:', {
+    messageId: message?.id,
+    hasMessage: !!message,
+    hasReactionsSummary: !!message?.reactions_summary,
+    reactionsSummaryType: typeof message?.reactions_summary
+  });
+  
   const { user } = useAuthStore();
   const { getMessagesArray, setMessages, updateMessageReactions, activeConversation } = useChatStore();
   const messages = activeConversation ? getMessagesArray(activeConversation.id) : [];
   const [hoveredEmoji, setHoveredEmoji] = useState<string | null>(null);
   const [processingEmoji, setProcessingEmoji] = useState<string | null>(null); // ✅ CORREÇÃO: Loading state
 
-
   // ✅ CORREÇÃO CRÍTICA: Garantir que reactionsSummary está sempre inicializado corretamente
   // Verificar se message.reactions_summary existe e é um objeto válido
+  console.log('🔍 [MessageReactions] Verificando reactions_summary:', {
+    hasMessage: !!message,
+    hasReactionsSummary: !!message?.reactions_summary,
+    reactionsSummaryType: typeof message?.reactions_summary,
+    isObject: message?.reactions_summary && typeof message.reactions_summary === 'object' && message.reactions_summary !== null
+  });
+  
   const reactionsSummary: ReactionsSummary = (message.reactions_summary && typeof message.reactions_summary === 'object' && message.reactions_summary !== null) 
     ? message.reactions_summary 
     : {};
   const hasReactions = Object.keys(reactionsSummary).length > 0;
+  
+  console.log('✅ [MessageReactions] reactionsSummary inicializado:', {
+    hasReactions,
+    reactionsCount: Object.keys(reactionsSummary).length,
+    reactionsKeys: Object.keys(reactionsSummary)
+  });
 
   // Verificar se usuário já reagiu com cada emoji
   const getUserReaction = (emoji: string): MessageReaction | null => {
@@ -1162,18 +1181,110 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
       {hasReactions && (
         <div className="flex items-center gap-1 flex-wrap">
           {Object.entries(reactionsSummary).map(([emoji, data]: [string, any]) => {
+            console.log('🔍 [MessageReactions] Processando reação:', {
+              emoji,
+              hasData: !!data,
+              dataType: typeof data,
+              isObject: data && typeof data === 'object',
+              hasUsers: !!(data?.users),
+              usersType: typeof data?.users,
+              isUsersArray: Array.isArray(data?.users),
+              usersLength: Array.isArray(data?.users) ? data.users.length : 'N/A'
+            });
+            
             // ✅ CORREÇÃO CRÍTICA: Verificar se data existe e tem propriedades válidas antes de usar
-            if (!data || typeof data !== 'object') return null;
+            if (!data || typeof data !== 'object') {
+              console.warn('⚠️ [MessageReactions] data inválido, pulando:', { emoji, data });
+              return null;
+            }
             
             const userReaction = getUserReaction(emoji);
             const isUserReaction = !!userReaction;
             
             // ✅ CORREÇÃO CRÍTICA: Garantir que data.users é um array válido antes de usar
+            console.log('🔍 [MessageReactions] Verificando data.users ANTES do map:', {
+              emoji,
+              hasData: !!data,
+              hasUsers: !!(data?.users),
+              usersType: typeof data?.users,
+              isArray: Array.isArray(data?.users),
+              usersValue: data?.users
+            });
+            
             const users = Array.isArray(data?.users) ? data.users : [];
-            const usersText = users.length > 0 
-              ? users.map((u: any) => u?.email || u?.first_name || 'Usuário').join(', ')
-              : '';
+            console.log('👥 [MessageReactions] Users extraídos:', {
+              emoji,
+              usersCount: users.length,
+              usersIsArray: Array.isArray(users),
+              usersType: typeof users,
+              usersValue: users
+            });
+            
+            let usersText = '';
+            if (users.length > 0) {
+              console.log('🔄 [MessageReactions] Iniciando map de users:', {
+                emoji,
+                usersLength: users.length
+              });
+              
+              try {
+                usersText = users.map((u: any, index: number) => {
+                  console.log(`🔍 [MessageReactions] Processando user[${index}]:`, {
+                    emoji,
+                    index,
+                    hasU: !!u,
+                    uType: typeof u,
+                    uValue: u,
+                    uKeys: u ? Object.keys(u) : [],
+                    email: u?.email,
+                    firstName: u?.first_name
+                  });
+                  
+                  if (!u || typeof u !== 'object') {
+                    console.warn(`⚠️ [MessageReactions] User[${index}] inválido:`, u);
+                    return 'Usuário';
+                  }
+                  
+                  const email = u?.email || '';
+                  const firstName = u?.first_name || '';
+                  const result = email || firstName || 'Usuário';
+                  
+                  console.log(`✅ [MessageReactions] User[${index}] processado:`, {
+                    emoji,
+                    index,
+                    result
+                  });
+                  
+                  return result;
+                }).join(', ');
+                
+                console.log('✅ [MessageReactions] usersText gerado:', {
+                  emoji,
+                  usersText,
+                  usersTextLength: usersText.length
+                });
+              } catch (mapError) {
+                console.error('❌ [MessageReactions] ERRO no map de users:', {
+                  emoji,
+                  error: mapError,
+                  errorMessage: (mapError as Error).message,
+                  errorStack: (mapError as Error).stack,
+                  users
+                });
+                usersText = '';
+              }
+            } else {
+              console.log('⚠️ [MessageReactions] Nenhum user para processar:', { emoji });
+            }
+            
             const count = typeof data?.count === 'number' ? data.count : 0;
+            
+            console.log('✅ [MessageReactions] Reação processada com sucesso:', {
+              emoji,
+              count,
+              usersTextLength: usersText.length,
+              isUserReaction
+            });
             
             return (
               <button

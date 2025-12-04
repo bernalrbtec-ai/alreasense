@@ -474,7 +474,15 @@ export function ChatWindow() {
   
   // ✅ CORREÇÃO CRÍTICA: Atualizar TODAS as propriedades em um único useEffect para evitar problemas de inicialização
   useEffect(() => {
+    console.log('🔄 [ChatWindow] useEffect de propriedades executado', {
+      hasActiveConversation: !!activeConversation,
+      activeConversationId: activeConversation?.id,
+      conversationType: activeConversation?.conversation_type,
+      hasGroupMetadata: !!(activeConversation as any)?.group_metadata
+    });
+    
     if (!activeConversation || !activeConversation.id) {
+      console.log('⚠️ [ChatWindow] Sem activeConversation, limpando estados');
       setConversationId(null);
       setConversationType('individual');
       setContactName('');
@@ -485,10 +493,17 @@ export function ChatWindow() {
       setContactTags([]);
       setGroupName(null);
       setDisplayName('');
+      setIsReady(false);
       return;
     }
     
     try {
+      console.log('✅ [ChatWindow] Iniciando atualização de propriedades para:', {
+        id: activeConversation.id,
+        type: activeConversation.conversation_type,
+        isGroup: activeConversation.conversation_type === 'group'
+      });
+      
       const conv = activeConversation;
       const id = conv.id || null;
       const type = conv.conversation_type || 'individual';
@@ -498,6 +513,15 @@ export function ChatWindow() {
       const friendlyName = conv.instance_friendly_name || null;
       const instName = conv.instance_name || null;
       const tags = Array.isArray(conv.contact_tags) ? conv.contact_tags : [];
+      
+      console.log('📝 [ChatWindow] Propriedades extraídas:', {
+        id,
+        type,
+        name: name.substring(0, 20),
+        phone: phone.substring(0, 10),
+        hasPic: !!pic,
+        tagsCount: tags.length
+      });
       
       setConversationId(id);
       setConversationType(type);
@@ -511,20 +535,38 @@ export function ChatWindow() {
       // ✅ Atualizar groupName (apenas para grupos)
       let newGroupName: string | null = null;
       if (type === 'group') {
+        console.log('👥 [ChatWindow] Processando grupo, verificando group_metadata...');
         if ('group_metadata' in conv && conv.group_metadata) {
           const rawMetadata = conv.group_metadata;
+          console.log('📦 [ChatWindow] group_metadata encontrado:', {
+            hasMetadata: !!rawMetadata,
+            metadataType: typeof rawMetadata,
+            isObject: typeof rawMetadata === 'object' && rawMetadata !== null
+          });
+          
           if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
             const metadataObj = rawMetadata as Record<string, any>;
             if ('group_name' in metadataObj) {
               const rawGroupName = metadataObj.group_name;
+              console.log('📝 [ChatWindow] group_name encontrado:', {
+                rawGroupName,
+                type: typeof rawGroupName,
+                isString: typeof rawGroupName === 'string'
+              });
+              
               if (rawGroupName && typeof rawGroupName === 'string') {
                 const trimmed = rawGroupName.trim();
                 if (trimmed.length > 0) {
                   newGroupName = trimmed;
+                  console.log('✅ [ChatWindow] groupName definido:', newGroupName);
                 }
               }
+            } else {
+              console.log('⚠️ [ChatWindow] group_name não encontrado em metadataObj');
             }
           }
+        } else {
+          console.log('⚠️ [ChatWindow] group_metadata não encontrado ou inválido');
         }
       }
       setGroupName(newGroupName); // Mantido para possível uso futuro
@@ -551,9 +593,19 @@ export function ChatWindow() {
           newDisplayName = 'Contato sem nome';
         }
       }
+      
+      console.log('✅ [ChatWindow] displayName calculado:', {
+        displayName: newDisplayName,
+        type,
+        usedGroupName: type === 'group' && newGroupName && newGroupName.length > 0
+      });
+      
       setDisplayName(newDisplayName);
+      console.log('✅ [ChatWindow] Todos os estados atualizados com sucesso');
     } catch (e) {
-      console.warn('⚠️ [ChatWindow] Erro ao atualizar propriedades:', e);
+      console.error('❌ [ChatWindow] ERRO ao atualizar propriedades:', e);
+      console.error('❌ [ChatWindow] Stack trace:', (e as Error).stack);
+      console.error('❌ [ChatWindow] activeConversation no momento do erro:', activeConversation);
       setConversationId(null);
       setConversationType('individual');
       setContactName('');
@@ -572,13 +624,26 @@ export function ChatWindow() {
   // ✅ CORREÇÃO CRÍTICA: Marcar como pronto apenas quando conversationId e displayName estão definidos
   // Isso garante que todos os estados foram atualizados antes de renderizar
   useEffect(() => {
+    console.log('🔍 [ChatWindow] Verificando isReady:', {
+      conversationId,
+      displayName,
+      displayNameType: typeof displayName,
+      displayNameLength: displayName?.length
+    });
+    
     if (conversationId && displayName !== undefined) {
+      console.log('✅ [ChatWindow] Condições atendidas, aguardando tick para marcar como pronto...');
       // Aguardar um tick para garantir que todos os estados foram atualizados
       const timer = setTimeout(() => {
+        console.log('✅ [ChatWindow] Marcando como pronto para renderizar');
         setIsReady(true);
       }, 0);
-      return () => clearTimeout(timer);
+      return () => {
+        console.log('🔌 [ChatWindow] Limpando timer de isReady');
+        clearTimeout(timer);
+      };
     } else {
+      console.log('⚠️ [ChatWindow] Condições não atendidas, marcando como não pronto');
       setIsReady(false);
     }
   }, [conversationId, displayName]);
@@ -590,6 +655,16 @@ export function ChatWindow() {
   // Isso evita problemas de inicialização quando um grupo é acessado
   // isReady garante que todos os estados foram atualizados antes de renderizar
   // ✅ CORREÇÃO ADICIONAL: Verificar também se displayName está definido (não vazio ou undefined)
+  console.log('🔍 [ChatWindow] Verificando condições para renderizar:', {
+    hasActiveConversation: !!activeConversation,
+    activeConversationId: activeConversation?.id,
+    conversationId,
+    isReady,
+    displayName,
+    displayNameType: typeof displayName,
+    willRender: !!(activeConversation && activeConversation.id && conversationId && isReady && displayName !== undefined)
+  });
+  
   if (!activeConversation || !activeConversation.id || !conversationId || !isReady || displayName === undefined) {
     // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
     if (activeConversation && activeConversation.id && conversationId) {
