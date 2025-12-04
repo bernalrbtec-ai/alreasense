@@ -70,13 +70,13 @@ export function ChatWindow() {
   // ✅ Verificar se contato existe quando conversa abre (apenas para contatos individuais)
   useEffect(() => {
     // ✅ CORREÇÃO: Verificar activeConversation e conversation_type de forma segura
-    if (!activeConversation) {
+    if (!activeConversation || !activeConversation.id) {
       setExistingContact(null);
       return;
     }
     
-    // ✅ CORREÇÃO: Capturar conversation_type antes de usar em comparação
-    const conversationType = activeConversation.conversation_type;
+    // ✅ CORREÇÃO CRÍTICA: Capturar conversation_type de forma segura com optional chaining
+    const conversationType = activeConversation?.conversation_type || 'individual';
     if (conversationType === 'group') {
       setExistingContact(null);
       return;
@@ -527,9 +527,12 @@ export function ChatWindow() {
       
       // ✅ Calcular displayName DENTRO do try para usar valores já capturados
       // Isso garante que todas as variáveis estejam inicializadas antes do uso
+      // ✅ CORREÇÃO CRÍTICA: Usar valores já validados, nunca acessar groupName diretamente em expressão
       if (conversationType === 'group') {
         // Para grupos: group_name → contact_name → fallback
-        displayName = groupName || contactName || 'Grupo sem nome';
+        // ✅ CORREÇÃO: Garantir que groupName seja sempre uma string válida antes de usar
+        const safeGroupName = groupName && typeof groupName === 'string' ? groupName : null;
+        displayName = safeGroupName || contactName || 'Grupo sem nome';
       } else {
         // Para contatos individuais: contact_name → contact_phone → fallback
         displayName = contactName || contactPhone || 'Contato sem nome';
