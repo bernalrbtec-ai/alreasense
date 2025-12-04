@@ -159,31 +159,31 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
     return {};
   }
   
-  return reactions.reduce((acc, reaction) => {
+  return reactions.reduce((accumulator, reaction) => {
     // ✅ CORREÇÃO: Verificar se reaction e reaction.emoji existem antes de usar
     if (!reaction || !reaction.emoji) {
-      return acc;
+      return accumulator;
     }
     
-    if (!acc[reaction.emoji]) {
-      acc[reaction.emoji] = { count: 0, users: [] };
+    if (!accumulator[reaction.emoji]) {
+      accumulator[reaction.emoji] = { count: 0, users: [] };
     }
 
-    acc[reaction.emoji].count += 1;
+    accumulator[reaction.emoji].count += 1;
     
     // ✅ CORREÇÃO: Verificar se users é array antes de fazer push
-    if (!Array.isArray(acc[reaction.emoji].users)) {
-      acc[reaction.emoji].users = [];
+    if (!Array.isArray(accumulator[reaction.emoji].users)) {
+      accumulator[reaction.emoji].users = [];
     }
     
-    acc[reaction.emoji].users.push({
+    accumulator[reaction.emoji].users.push({
       id: reaction.user || '',
       email: reaction.user_data?.email || '',
       first_name: reaction.user_data?.first_name || undefined,
       last_name: reaction.user_data?.last_name || undefined,
     });
 
-    return acc;
+    return accumulator;
   }, {} as ReactionsSummary);
 };
 
