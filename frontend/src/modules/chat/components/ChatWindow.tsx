@@ -474,27 +474,39 @@ export function ChatWindow() {
     const contactName = activeConversation.contact_name || '';
     const contactPhone = activeConversation.contact_phone || '';
     
-    // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma segura ANTES de qualquer uso
+    // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura ANTES de qualquer uso
+    // Usar optional chaining e verificação de tipo em múltiplas camadas
     let groupMetadata: any = null;
+    let groupName: string | null = null;
+    
     try {
-      groupMetadata = activeConversation.group_metadata || null;
+      // ✅ Verificar se activeConversation tem group_metadata antes de acessar
+      if (activeConversation && 'group_metadata' in activeConversation) {
+        const rawMetadata = activeConversation.group_metadata;
+        if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
+          groupMetadata = rawMetadata;
+          // ✅ Capturar group_name de forma segura
+          if ('group_name' in rawMetadata) {
+            const rawGroupName = (rawMetadata as any).group_name;
+            if (rawGroupName && typeof rawGroupName === 'string' && rawGroupName.trim().length > 0) {
+              groupName = rawGroupName.trim();
+            }
+          }
+        }
+      }
     } catch (e) {
-      // Se houver erro ao acessar group_metadata, usar null
+      // Se houver qualquer erro ao acessar group_metadata, usar valores padrão
       groupMetadata = null;
+      groupName = null;
     }
     
     // ✅ Calcular displayName de forma segura ANTES de usar em expressões
     let displayName = '';
     if (conversationType === 'group') {
-      // Para grupos, usar group_metadata.group_name ou contact_name
-      if (groupMetadata && typeof groupMetadata === 'object' && groupMetadata !== null) {
-        const groupName = groupMetadata.group_name;
-        displayName = (groupName && typeof groupName === 'string') ? groupName : (contactName || 'Grupo sem nome');
-      } else {
-        displayName = contactName || 'Grupo sem nome';
-      }
+      // Para grupos, usar group_name → contact_name → fallback
+      displayName = groupName || contactName || 'Grupo sem nome';
     } else {
-      // Para contatos individuais, usar contact_name ou contact_phone
+      // Para contatos individuais, usar contact_name → contact_phone → fallback
       displayName = contactName || contactPhone || 'Contato sem nome';
     }
     
