@@ -933,7 +933,7 @@ export function ChatWindow() {
           }}
           contact={existingContact}
           initialPhone={contactPhone || ''}
-          initialName={getDisplayName(activeConversation)}
+          initialName={displayName}
           onSuccess={async () => {
             // ✅ MELHORIA: Recarregar contato completo e atualizar activeConversation com tags
             if (contactPhone) {
