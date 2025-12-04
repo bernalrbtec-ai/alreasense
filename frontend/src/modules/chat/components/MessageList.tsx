@@ -642,6 +642,16 @@ export function MessageList() {
     return null;
   }
 
+  // ✅ CORREÇÃO CRÍTICA: Garantir que messages é um array válido antes de renderizar
+  // Isso deve estar ANTES do return para evitar problemas de inicialização
+  const safeMessages = Array.isArray(messages) ? messages : [];
+  console.log('✅ [MessageList] safeMessages criado ANTES do return:', {
+    originalLength: messages.length,
+    safeLength: safeMessages.length,
+    messagesIsArray: Array.isArray(messages),
+    messagesType: typeof messages
+  });
+
   return (
     <div 
       className="h-full overflow-y-auto custom-scrollbar p-3 sm:p-4 space-y-2"
