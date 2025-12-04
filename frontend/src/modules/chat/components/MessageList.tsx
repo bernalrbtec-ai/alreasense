@@ -25,11 +25,12 @@ import { EmojiPicker } from './EmojiPicker';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 
+// ✅ CORREÇÃO: Renomear reaction para reactionItem para evitar conflito de minificação
 const cloneReactions = (reactions?: MessageReaction[] | null): MessageReaction[] =>
   reactions
-    ? reactions.map((reaction) => ({
-        ...reaction,
-        user_data: reaction.user_data ? { ...reaction.user_data } : undefined,
+    ? reactions.map((reactionItem) => ({
+        ...reactionItem,
+        user_data: reactionItem.user_data ? { ...reactionItem.user_data } : undefined,
       }))
     : [];
 
@@ -159,28 +160,29 @@ const buildSummaryFromReactions = (reactions: MessageReaction[]): ReactionsSumma
     return {};
   }
   
-  return reactions.reduce((accumulator, reaction) => {
-    // ✅ CORREÇÃO: Verificar se reaction e reaction.emoji existem antes de usar
-    if (!reaction || !reaction.emoji) {
+  // ✅ CORREÇÃO: Renomear reaction para reactionItem para evitar conflito de minificação
+  return reactions.reduce((accumulator, reactionItem) => {
+    // ✅ CORREÇÃO: Verificar se reactionItem e reactionItem.emoji existem antes de usar
+    if (!reactionItem || !reactionItem.emoji) {
       return accumulator;
     }
     
-    if (!accumulator[reaction.emoji]) {
-      accumulator[reaction.emoji] = { count: 0, users: [] };
+    if (!accumulator[reactionItem.emoji]) {
+      accumulator[reactionItem.emoji] = { count: 0, users: [] };
     }
 
-    accumulator[reaction.emoji].count += 1;
+    accumulator[reactionItem.emoji].count += 1;
     
     // ✅ CORREÇÃO: Verificar se users é array antes de fazer push
-    if (!Array.isArray(accumulator[reaction.emoji].users)) {
-      accumulator[reaction.emoji].users = [];
+    if (!Array.isArray(accumulator[reactionItem.emoji].users)) {
+      accumulator[reactionItem.emoji].users = [];
     }
     
-    accumulator[reaction.emoji].users.push({
-      id: reaction.user || '',
-      email: reaction.user_data?.email || '',
-      first_name: reaction.user_data?.first_name || undefined,
-      last_name: reaction.user_data?.last_name || undefined,
+    accumulator[reactionItem.emoji].users.push({
+      id: reactionItem.user || '',
+      email: reactionItem.user_data?.email || '',
+      first_name: reactionItem.user_data?.first_name || undefined,
+      last_name: reactionItem.user_data?.last_name || undefined,
     });
 
     return accumulator;
@@ -1098,7 +1100,8 @@ const MessageReactions = React.memo(function MessageReactions({ message, directi
   // Verificar se usuário já reagiu com cada emoji
   const getUserReaction = (emoji: string): MessageReaction | null => {
     if (!message.reactions || !currentUser) return null;
-    return message.reactions.find((r: MessageReaction) => r.emoji === emoji && r.user === currentUser.id) || null;
+    // ✅ CORREÇÃO: Renomear r para reactionItem para evitar conflito de minificação
+    return message.reactions.find((reactionItem: MessageReaction) => reactionItem.emoji === emoji && reactionItem.user === currentUser.id) || null;
   };
 
   // ✅ CORREÇÃO: Validação de emoji no frontend
