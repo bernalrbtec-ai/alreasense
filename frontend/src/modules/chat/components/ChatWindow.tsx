@@ -455,7 +455,6 @@ export function ChatWindow() {
   };
 
   // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation ANTES de qualquer renderização
-  // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation e id antes de renderizar
   if (!activeConversation || !activeConversation.id) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
