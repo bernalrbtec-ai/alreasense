@@ -205,16 +205,10 @@ export function MessageList() {
   const getMessagesArray = useChatStore((state) => state.getMessagesArray);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
+  
+  // ✅ CORREÇÃO: Usar hooks DEPOIS de inicializar estados e capturar conversationId
   const { hasProductAccess } = useUserAccess();
   const hasFlowAI = hasProductAccess('flow-ai').canAccess;
-  const [visibleMessages, setVisibleMessages] = useState<Set<string>>(new Set());
-  const [isLoading, setIsLoading] = useState(false);
-  const [hasMoreMessages, setHasMoreMessages] = useState(false); // ✅ NOVO: Paginação
-  const [loadingOlder, setLoadingOlder] = useState(false); // ✅ NOVO: Loading mensagens antigas
-  const [contextMenu, setContextMenu] = useState<{ message: Message; position: { x: number; y: number } } | null>(null);
-  const [showMessageInfo, setShowMessageInfo] = useState<Message | null>(null);
-  const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
-  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
 
   useEffect(() => {
     if (!activeConversation?.id) {
