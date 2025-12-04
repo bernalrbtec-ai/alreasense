@@ -552,13 +552,6 @@ export function ChatWindow() {
         }
       }
       setDisplayName(newDisplayName);
-      
-      // ✅ CORREÇÃO CRÍTICA: Aguardar um tick antes de marcar como pronto para renderizar
-      // Isso garante que todos os estados foram atualizados antes de renderizar
-      // Especialmente importante para grupos que podem ter mais propriedades
-      setTimeout(() => {
-        setIsReady(true);
-      }, 0);
     } catch (e) {
       console.warn('⚠️ [ChatWindow] Erro ao atualizar propriedades:', e);
       setConversationId(null);
@@ -572,15 +565,23 @@ export function ChatWindow() {
       setGroupName(null);
       setDisplayName('');
       setIsReady(false);
+      return;
     }
   }, [activeConversation]);
   
-  // ✅ CORREÇÃO CRÍTICA: Resetar isReady quando activeConversation muda
+  // ✅ CORREÇÃO CRÍTICA: Marcar como pronto apenas quando conversationId e displayName estão definidos
+  // Isso garante que todos os estados foram atualizados antes de renderizar
   useEffect(() => {
-    if (!activeConversation || !activeConversation.id) {
+    if (conversationId && displayName !== undefined) {
+      // Aguardar um tick para garantir que todos os estados foram atualizados
+      const timer = setTimeout(() => {
+        setIsReady(true);
+      }, 0);
+      return () => clearTimeout(timer);
+    } else {
       setIsReady(false);
     }
-  }, [activeConversation?.id]);
+  }, [conversationId, displayName]);
   
   // ✅ REMOVIDO: useEffect separado para displayName - agora é calculado diretamente no useEffect acima
   // Isso evita problemas de inicialização e dependências circulares
