@@ -574,8 +574,37 @@ export function ChatWindow() {
     );
   }
 
-  // ✅ Desestruturar propriedades do useMemo
-  const { conversationId, conversationType, profilePicUrl, contactName, contactPhone, instanceFriendlyName, instanceName, contactTags, displayName } = conversationProps;
+  // ✅ CORREÇÃO CRÍTICA: Desestruturar propriedades do useMemo de forma segura
+  // Garantir que todas as propriedades existam antes de usar
+  const conversationId = conversationProps.conversationId || null;
+  const conversationType = conversationProps.conversationType || 'individual';
+  const profilePicUrl = conversationProps.profilePicUrl || null;
+  const contactName = conversationProps.contactName || '';
+  const contactPhone = conversationProps.contactPhone || '';
+  const instanceFriendlyName = conversationProps.instanceFriendlyName || null;
+  const instanceName = conversationProps.instanceName || null;
+  const contactTags = Array.isArray(conversationProps.contactTags) ? conversationProps.contactTags : [];
+  const displayName = conversationProps.displayName || '';
+  
+  // ✅ CORREÇÃO CRÍTICA: Se conversationId não existe, não renderizar
+  if (!conversationId) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
+        <div className="max-w-md text-center">
+          <div className="w-64 h-64 mx-auto mb-8 opacity-20">
+            <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400">
+              <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.30-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
+            </svg>
+          </div>
+          <h2 className="text-2xl font-light text-gray-700 mb-2">Flow Chat Web</h2>
+          <p className="text-gray-500 text-sm">
+            Envie e receba mensagens sem manter seu celular conectado.<br/>
+            Selecione uma conversa para começar.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
