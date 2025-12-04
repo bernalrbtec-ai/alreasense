@@ -82,12 +82,12 @@ function normalizeMessages(messages: Message[]): NormalizedMessages {
     byId[messageItem.id] = messageItem;
     
     // Extrair conversationId
-    const conversationId = message.conversation_id 
-      ? String(message.conversation_id)
-      : (typeof message.conversation === 'object' && message.conversation?.id)
-      ? String(message.conversation.id)
-      : (typeof message.conversation === 'string')
-      ? message.conversation
+    const conversationId = messageItem.conversation_id 
+      ? String(messageItem.conversation_id)
+      : (typeof messageItem.conversation === 'object' && messageItem.conversation?.id)
+      ? String(messageItem.conversation.id)
+      : (typeof messageItem.conversation === 'string')
+      ? messageItem.conversation
       : null;
     
     if (conversationId) {
@@ -95,8 +95,8 @@ function normalizeMessages(messages: Message[]): NormalizedMessages {
         byConversationId[conversationId] = [];
       }
       // ✅ Adicionar ID mantendo ordem (já está ordenado)
-      if (!byConversationId[conversationId].includes(message.id)) {
-        byConversationId[conversationId].push(message.id);
+      if (!byConversationId[conversationId].includes(messageItem.id)) {
+        byConversationId[conversationId].push(messageItem.id);
       }
     }
   });
