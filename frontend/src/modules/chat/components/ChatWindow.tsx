@@ -602,9 +602,9 @@ export function ChatWindow() {
       instanceFriendlyName,
       instanceName,
       contactTags,
-      displayName, // ✅ Usar displayName do estado separado
+      // ✅ CORREÇÃO: displayName não deve estar aqui - é um estado separado, não parte do useMemo
     };
-  }, [activeConversation, displayName]);
+  }, [activeConversation]);
 
   // ✅ Se não há propriedades válidas, não renderizar
   if (!conversationProps) {
