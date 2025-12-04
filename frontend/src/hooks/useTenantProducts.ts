@@ -84,19 +84,37 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
     return billingService.hasProduct(products, productSlug);
   };
 
+  // Inicializar activeProductSlugs com array vazio para evitar problemas de TDZ
   const activeProductSlugs = useMemo(() => {
-    console.log('🔄 Calculando activeProductSlugs...');
-    console.log('   Products:', products);
-    if (!Array.isArray(products)) {
-      console.log('   ❌ Products não é array, retornando []');
+    try {
+      console.log('🔄 Calculando activeProductSlugs...');
+      console.log('   Products:', products);
+      
+      // Verificar se products existe e é array
+      if (!products || !Array.isArray(products)) {
+        console.log('   ❌ Products não é array, retornando []');
+        return [];
+      }
+      
+      // Filtrar e mapear com verificações de segurança
+      const active = products
+        .filter((tp): tp is NonNullable<typeof tp> => {
+          return Boolean(tp && tp.is_active && tp.product && tp.product.slug);
+        })
+        .map(tp => {
+          // Verificação adicional para garantir que slug existe
+          return tp.product?.slug;
+        })
+        .filter((slug): slug is string => {
+          return Boolean(slug && typeof slug === 'string');
+        });
+      
+      console.log('   ✅ Produtos ativos:', active);
+      return active;
+    } catch (error) {
+      console.error('❌ Erro ao calcular activeProductSlugs:', error);
       return [];
     }
-    const active = products
-      .filter(tp => tp && tp.is_active && tp.product && tp.product.slug)
-      .map(tp => tp.product.slug)
-      .filter((slug): slug is string => Boolean(slug));
-    console.log('   ✅ Produtos ativos:', active);
-    return active;
   }, [products]);
 
   return {

@@ -26,7 +26,9 @@ export const useUserAccess = () => {
     }
 
     // Buscar o produto nas TenantProducts
-    const tenantProduct = products.find(tp => tp.product.slug === productSlug)
+    const tenantProduct = Array.isArray(products) 
+      ? products.find(tp => tp && tp.product && tp.product.slug === productSlug)
+      : null
     
     if (!tenantProduct) {
       return { canAccess: false, isActive: false }
