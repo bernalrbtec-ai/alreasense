@@ -77,8 +77,8 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
         const contacts = response.data.results || response.data || [];
         
         // Encontrar contato que corresponde ao telefone
-        const foundContact = contacts.find((contact: any) => {
-          const contactPhone = contact.phone?.replace(/[^\d]/g, '') || '';
+        const foundContact = contacts.find((contactItem: any) => {
+          const contactPhone = contactItem.phone?.replace(/[^\d]/g, '') || '';
           return contactPhone === cleanPhoneForSearch || 
                  contactPhone === `55${cleanPhoneForSearch}` ||
                  contactPhone === `+55${cleanPhoneForSearch}`;
@@ -123,9 +123,9 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
       });
       
       const conversations = response.data.results || response.data || [];
-      let conversation = conversations.find((conv: any) => 
-        conv.contact_phone?.replace(/[^\d]/g, '') === cleanPhoneForSearch ||
-        conv.contact_phone?.replace(/[^\d]/g, '') === `55${cleanPhoneForSearch}`
+      let conversation = conversations.find((conversationItem: any) => 
+        conversationItem.contact_phone?.replace(/[^\d]/g, '') === cleanPhoneForSearch ||
+        conversationItem.contact_phone?.replace(/[^\d]/g, '') === `55${cleanPhoneForSearch}`
       );
       
       // Se não encontrou, criar nova conversa
