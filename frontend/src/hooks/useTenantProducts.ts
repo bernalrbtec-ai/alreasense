@@ -92,18 +92,19 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
       return [];
     }
     const active = products
-      .filter(tp => tp.is_active)
-      .map(tp => tp.product.slug);
+      .filter(tp => tp && tp.is_active && tp.product && tp.product.slug)
+      .map(tp => tp.product.slug)
+      .filter((slug): slug is string => Boolean(slug));
     console.log('   ✅ Produtos ativos:', active);
     return active;
   }, [products]);
 
   return {
-    products,
+    products: Array.isArray(products) ? products : [],
     loading,
     error,
     hasProduct,
-    activeProductSlugs,
+    activeProductSlugs: Array.isArray(activeProductSlugs) ? activeProductSlugs : [],
     refetch: fetchProducts,
   };
 };

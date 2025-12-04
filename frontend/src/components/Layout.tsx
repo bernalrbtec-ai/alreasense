@@ -97,7 +97,7 @@ export default function Layout() {
       
       // Adicionar itens de menu dos produtos ativos para admin/gerente
       if (isAdmin || isGerente) {
-        activeProductSlugs.forEach((productSlug) => {
+        (activeProductSlugs || []).forEach((productSlug) => {
           const productItems = productMenuItems[productSlug as keyof typeof productMenuItems]
           if (productItems) {
             // Filtrar itens baseado no acesso do usuário
@@ -132,7 +132,7 @@ export default function Layout() {
     const items = [...baseNavigation]
     
     // Adicionar itens de menu dos produtos ativos, mas filtrar por acesso
-    activeProductSlugs.forEach((productSlug) => {
+    (activeProductSlugs || []).forEach((productSlug) => {
       const productItems = productMenuItems[productSlug as keyof typeof productMenuItems]
       if (productItems) {
         // Filtrar itens baseado no acesso do usuário
