@@ -112,8 +112,8 @@ export function ChatWindow() {
         
         const contacts = response.data.results || response.data;
         // Verificar se encontrou contato com telefone exato (comparação normalizada)
-        const contact = contacts.find((c: any) => {
-          const contactPhoneNormalized = normalizePhone(c.phone);
+        const contact = contacts.find((contactItem: any) => {
+          const contactPhoneNormalized = normalizePhone(contactItem.phone);
           return contactPhoneNormalized === normalizedPhone;
         });
         
@@ -1162,8 +1162,8 @@ export function ChatWindow() {
                 });
                 
                 const contacts = response.data.results || response.data;
-                const contact = contacts.find((c: any) => {
-                  const contactPhoneNormalized = normalizePhone(c.phone);
+                const contact = contacts.find((contactItem: any) => {
+                  const contactPhoneNormalized = normalizePhone(contactItem.phone);
                   return contactPhoneNormalized === normalizedPhone;
                 });
                 
