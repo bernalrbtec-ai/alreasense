@@ -461,14 +461,16 @@ export function ChatWindow() {
   // Isso garante que hooks sejam chamados na mesma ordem em cada render
   // Isso evita problemas de TDZ quando activeConversation muda rapidamente
   const conversationProps = useMemo(() => {
-    // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation de forma segura
-    if (!activeConversation) {
+    // ✅ CORREÇÃO CRÍTICA: Verificar activeConversation de forma segura e explícita
+    // Garantir que activeConversation existe e tem id antes de continuar
+    if (!activeConversation || !activeConversation.id) {
       return null;
     }
     
     // ✅ CORREÇÃO CRÍTICA: Capturar todas as propriedades de forma segura usando try-catch
     // Isso previne qualquer erro de acesso a propriedades não inicializadas
     // ✅ IMPORTANTE: Inicializar TODAS as variáveis ANTES do try-catch para evitar TDZ
+    // ✅ CORREÇÃO: Garantir inicialização explícita e sequencial para evitar problemas de minificação
     let conversationId: string | null = null;
     let conversationType: string = 'individual';
     let contactName: string = '';
@@ -480,38 +482,44 @@ export function ChatWindow() {
     let groupName: string | null = null; // ✅ Inicializado como null antes de qualquer uso
     let displayName: string = ''; // ✅ Inicializado antes de qualquer uso
     
+    // ✅ CORREÇÃO CRÍTICA: Capturar referência de activeConversation no início para evitar problemas de referência
+    const conversation = activeConversation;
+    
     try {
       // ✅ Capturar id primeiro - se não existir, retornar null
-      conversationId = activeConversation.id || null;
+      conversationId = conversation.id || null;
       if (!conversationId) {
         return null;
       }
       
       // ✅ Capturar propriedades básicas com valores padrão seguros
-      conversationType = activeConversation.conversation_type || 'individual';
-      contactName = activeConversation.contact_name || '';
-      contactPhone = activeConversation.contact_phone || '';
-      profilePicUrl = activeConversation.profile_pic_url || null;
-      instanceFriendlyName = activeConversation.instance_friendly_name || null;
-      instanceName = activeConversation.instance_name || null;
+      conversationType = conversation.conversation_type || 'individual';
+      contactName = conversation.contact_name || '';
+      contactPhone = conversation.contact_phone || '';
+      profilePicUrl = conversation.profile_pic_url || null;
+      instanceFriendlyName = conversation.instance_friendly_name || null;
+      instanceName = conversation.instance_name || null;
       
       // ✅ Capturar contact_tags de forma segura
-      if (Array.isArray(activeConversation.contact_tags)) {
-        contactTags = activeConversation.contact_tags;
+      if (Array.isArray(conversation.contact_tags)) {
+        contactTags = conversation.contact_tags;
       }
       
       // ✅ CORREÇÃO CRÍTICA: Capturar group_metadata de forma ultra-segura APENAS para grupos
       // Esta é a única seção que acessa group_metadata, então isolamos completamente
       // ✅ IMPORTANTE: groupName já está inicializado como null acima, então não há risco de TDZ
+      // ✅ CORREÇÃO: Simplificar lógica para evitar problemas durante minificação
       if (conversationType === 'group') {
-        // ✅ Verificar múltiplas condições antes de acessar group_metadata
-        if ('group_metadata' in activeConversation) {
-          try {
-            const rawMetadata = activeConversation.group_metadata;
+        try {
+          // ✅ Verificar se group_metadata existe antes de acessar
+          const hasGroupMetadata = conversation && 'group_metadata' in conversation;
+          if (hasGroupMetadata) {
+            const rawMetadata = conversation.group_metadata;
             // ✅ Validação em múltiplas camadas antes de acessar group_name
             if (rawMetadata && typeof rawMetadata === 'object' && rawMetadata !== null) {
-              if ('group_name' in rawMetadata) {
-                const rawGroupName = (rawMetadata as any).group_name;
+              const metadataObj = rawMetadata as Record<string, any>;
+              if ('group_name' in metadataObj) {
+                const rawGroupName = metadataObj.group_name;
                 // ✅ Validar e capturar group_name apenas se for string não vazia
                 if (rawGroupName && typeof rawGroupName === 'string') {
                   const trimmed = rawGroupName.trim();
@@ -521,25 +529,36 @@ export function ChatWindow() {
                 }
               }
             }
-          } catch (groupError) {
-            // ✅ Se houver erro ao acessar group_metadata, manter null (já inicializado)
-            console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
-            // groupName já é null, não precisa reatribuir
           }
+        } catch (groupError) {
+          // ✅ Se houver erro ao acessar group_metadata, manter null (já inicializado)
+          console.warn('⚠️ [ChatWindow] Erro ao capturar group_metadata:', groupError);
+          // groupName já é null, não precisa reatribuir
         }
       }
       
       // ✅ Calcular displayName DENTRO do try para usar valores já capturados
       // Isso garante que todas as variáveis estejam inicializadas antes do uso
-      // ✅ CORREÇÃO CRÍTICA: Usar valores já validados, nunca acessar groupName diretamente em expressão
+      // ✅ CORREÇÃO CRÍTICA: Simplificar lógica para evitar problemas de inicialização durante minificação
       if (conversationType === 'group') {
         // Para grupos: group_name → contact_name → fallback
-        // ✅ CORREÇÃO: Garantir que groupName seja sempre uma string válida antes de usar
-        const safeGroupName = groupName && typeof groupName === 'string' ? groupName : null;
-        displayName = safeGroupName || contactName || 'Grupo sem nome';
+        // ✅ CORREÇÃO: Usar lógica sequencial simples para evitar problemas de TDZ
+        if (groupName && typeof groupName === 'string' && groupName.length > 0) {
+          displayName = groupName;
+        } else if (contactName && contactName.length > 0) {
+          displayName = contactName;
+        } else {
+          displayName = 'Grupo sem nome';
+        }
       } else {
         // Para contatos individuais: contact_name → contact_phone → fallback
-        displayName = contactName || contactPhone || 'Contato sem nome';
+        if (contactName && contactName.length > 0) {
+          displayName = contactName;
+        } else if (contactPhone && contactPhone.length > 0) {
+          displayName = contactPhone;
+        } else {
+          displayName = 'Contato sem nome';
+        }
       }
     } catch (e) {
       // ✅ Se houver qualquer erro ao acessar propriedades, retornar null
