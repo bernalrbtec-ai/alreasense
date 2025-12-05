@@ -82,6 +82,10 @@ export function MentionInput({
   
   // ✅ NOVO: Ref para evitar múltiplas chamadas simultâneas
   const loadingRef = useRef(false);
+  // ✅ NOVO: Ref para rastrear se já tentou carregar para esta conversa
+  const loadedConversationRef = useRef<string | null>(null);
+  // ✅ NOVO: Ref para rastrear @ pendente (aguardando carregamento)
+  const pendingMentionRef = useRef<{ position: number; query: string } | null>(null);
 
   // ✅ CORREÇÃO CRÍTICA: Mover loadParticipants para ANTES do useEffect que o usa
   // Isso previne erro "Cannot access 'loadParticipants' before initialization"
@@ -156,6 +160,35 @@ export function MentionInput({
       
       setParticipants(participantsList);
       loadingRef.current = false; // ✅ Marcar como concluído
+      // ✅ NOVO: Marcar que esta conversa foi carregada
+      if (conversationId) {
+        loadedConversationRef.current = conversationId;
+      }
+      
+      // ✅ NOVO: Se havia @ pendente, processar sugestões agora
+      if (pendingMentionRef.current && participantsList.length > 0) {
+        const pending = pendingMentionRef.current;
+        pendingMentionRef.current = null; // Limpar pendência
+        
+        // Processar sugestões com participantes recém-carregados
+        let filtered: Participant[] = [];
+        if (pending.query === '') {
+          filtered = participantsList;
+        } else {
+          filtered = participantsList.filter(p => {
+            const displayName = (p.contact_name || p.pushname || p.name || '').toLowerCase();
+            const nameMatch = displayName.includes(pending.query.toLowerCase());
+            const phoneMatch = p.phone.replace(/\D/g, '').includes(pending.query.replace(/\D/g, ''));
+            return nameMatch || phoneMatch;
+          });
+        }
+        
+        setMentionStart(pending.position);
+        setSuggestions(filtered);
+        setShowSuggestions(filtered.length > 0);
+        setSelectedIndex(0);
+        console.log('✅ [MENTIONS] Sugestões processadas após carregamento:', filtered.length, 'participantes');
+      }
     } catch (error: any) {
       // ✅ MELHORIA: Tratamento de erros mais robusto com retry
       const errorMessage = error.response?.data?.error || error.message;
@@ -193,6 +226,37 @@ export function MentionInput({
     }
   }, [conversationId, conversationType]);
 
+  // ✅ NOVO: Carregar participantes automaticamente quando conversa é aberta (grupos)
+  useEffect(() => {
+    // Só carregar se:
+    // 1. É um grupo
+    // 2. Tem conversationId
+    // 3. Ainda não carregou para esta conversa
+    // 4. Não está carregando no momento
+    if (
+      conversationType === 'group' &&
+      conversationId &&
+      loadedConversationRef.current !== conversationId &&
+      !loadingRef.current &&
+      participants.length === 0
+    ) {
+      console.log('🔄 [MENTIONS] Carregando participantes automaticamente ao abrir grupo...');
+      loadParticipants();
+    }
+  }, [conversationId, conversationType, loadParticipants, participants.length]);
+
+  // ✅ NOVO: Resetar participantes quando conversa muda
+  useEffect(() => {
+    // Se conversationId mudou, resetar participantes e flag de carregamento
+    if (loadedConversationRef.current && loadedConversationRef.current !== conversationId) {
+      console.log('🔄 [MENTIONS] Conversa mudou, resetando participantes...');
+      setParticipants([]);
+      loadedConversationRef.current = null;
+      loadingRef.current = false;
+      pendingMentionRef.current = null; // Limpar @ pendente
+    }
+  }, [conversationId]);
+
   // Detectar menções enquanto digita
   const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
@@ -219,27 +283,26 @@ export function MentionInput({
         const query = textBeforeCursor.substring(lastAtIndex + 1).trim();
         console.log('✅ [MENTIONS] @ detectado! Query:', query, 'Participantes disponíveis:', participants.length);
         
-        // ✅ NOVO: Se for grupo e não tem participantes, tentar recarregar
+        // ✅ OTIMIZAÇÃO: Se for grupo e não tem participantes, tentar recarregar E aguardar
         if (conversationType === 'group' && participants.length === 0 && conversationId && !loadingRef.current) {
-          console.log('🔄 [MENTIONS] @ digitado mas sem participantes, tentando recarregar...');
-          // Chamar de forma assíncrona e aguardar
-          loadParticipants().then(() => {
-            // Após carregar, verificar novamente e mostrar sugestões se houver participantes
-            // Isso será tratado no próximo handleInputChange quando o estado atualizar
-          });
+          console.log('🔄 [MENTIONS] @ digitado mas sem participantes, carregando agora...');
+          // ✅ MELHORIA: Marcar posição do @ e query para processar após carregamento
+          setMentionStart(lastAtIndex);
+          pendingMentionRef.current = { position: lastAtIndex, query };
+          
+          // Carregar participantes (o processamento será feito no callback do loadParticipants)
+          loadParticipants();
+          return; // Não processar sugestões ainda, aguardar carregamento
         }
         
         // ✅ CORREÇÃO: Se query está vazia (apenas @), mostrar TODOS os participantes
         // Se tem query, filtrar baseado nela
         let filtered: Participant[] = [];
         if (query === '') {
-          // Mostrar todos os participantes quando apenas @ é digitado
           filtered = participants;
           console.log('📋 [MENTIONS] Query vazia - mostrando todos os participantes:', filtered.length);
         } else {
-          // ✅ NOVO: Filtrar participantes baseado na query (contact_name, pushname, name ou telefone)
           filtered = participants.filter(p => {
-            // ✅ Prioridade: contact_name > pushname > name
             const displayName = (p.contact_name || p.pushname || p.name || '').toLowerCase();
             const nameMatch = displayName.includes(query.toLowerCase());
             const phoneMatch = p.phone.replace(/\D/g, '').includes(query.replace(/\D/g, ''));
@@ -248,27 +311,19 @@ export function MentionInput({
           console.log('🔍 [MENTIONS] Query filtrada:', query, 'Resultados:', filtered.length);
         }
 
-        // ✅ CORREÇÃO: Mostrar sugestões se for grupo E tiver participantes (mesmo que filtrados)
-        // ✅ NOVO: Se está carregando, não mostrar ainda (aguardar carregamento)
+        // ✅ CORREÇÃO: Mostrar sugestões se for grupo E tiver participantes
         if (conversationType === 'group') {
           if (participants.length > 0) {
             setMentionStart(lastAtIndex);
             setSuggestions(filtered);
-            setShowSuggestions(filtered.length > 0); // Mostrar apenas se houver resultados
+            setShowSuggestions(filtered.length > 0);
             setSelectedIndex(0);
             console.log('✅ [MENTIONS] Sugestões ativadas:', filtered.length, 'participantes');
             return;
           } else if (loadingRef.current) {
             console.log('⏳ [MENTIONS] Aguardando carregamento de participantes...');
-            // Não mostrar sugestões ainda, mas manter mentionStart para quando carregar
             setMentionStart(lastAtIndex);
             return;
-          } else {
-            console.log('⚠️ [MENTIONS] Não mostrando sugestões - sem participantes e não está carregando:', {
-              isGroup: conversationType === 'group',
-              hasParticipants: participants.length > 0,
-              isLoading: loadingRef.current
-            });
           }
         }
       }
