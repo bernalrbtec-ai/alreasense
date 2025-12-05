@@ -207,8 +207,11 @@ export default function BusinessHoursPage() {
         const finalData = {
           ...messageData,
           reply_to_groups: messageData.reply_to_groups ?? false,
+          // ✅ GARANTIR que is_active seja um booleano explícito (não usar ?? true, usar o valor real)
+          is_active: messageData.is_active !== undefined ? Boolean(messageData.is_active) : true,
         }
-        console.log('✅ [BUSINESS HOURS] Dados finais com reply_to_groups:', finalData)
+        console.log('✅ [BUSINESS HOURS] Dados finais:', finalData)
+        console.log('✅ [BUSINESS HOURS] is_active final:', finalData.is_active, '(tipo:', typeof finalData.is_active, ')')
         console.log('✅ [BUSINESS HOURS] reply_to_groups final:', finalData.reply_to_groups)
         setAfterHoursMessage(finalData)
       } else {
@@ -318,7 +321,10 @@ export default function BusinessHoursPage() {
 
       updateToastSuccess(toastId, 'salvar', 'Mensagem Automática')
       console.log('🔄 [SAVE MESSAGE] Buscando dados atualizados...')
+      // ✅ Aguardar um pouco antes de buscar para garantir que o banco foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 500))
       await fetchAfterHoursMessage()
+      console.log('✅ [SAVE MESSAGE] Dados atualizados buscados')
     } catch (error: any) {
       console.error('❌ Error saving message:', error)
       updateToastError(toastId, 'salvar', 'Mensagem Automática', error)
