@@ -194,20 +194,25 @@ export default function BusinessHoursPage() {
 
   const fetchAfterHoursMessage = async () => {
     try {
+      console.log('🔍 [BUSINESS HOURS] Buscando mensagem automática...')
       const params = selectedDepartment ? { department: selectedDepartment } : {}
       const response = await api.get('/chat/after-hours-messages/current/', { params })
+      console.log('📥 [BUSINESS HOURS] Resposta da API:', response.data)
       
       if (response.data.has_config) {
         // ✅ Garantir que reply_to_groups sempre tenha valor (default: false)
         const messageData = response.data.after_hours_message || {}
         console.log('📥 [BUSINESS HOURS] Dados recebidos da API:', messageData)
+        console.log('🔍 [BUSINESS HOURS] reply_to_groups no messageData:', messageData.reply_to_groups)
         const finalData = {
           ...messageData,
           reply_to_groups: messageData.reply_to_groups ?? false,
         }
         console.log('✅ [BUSINESS HOURS] Dados finais com reply_to_groups:', finalData)
+        console.log('✅ [BUSINESS HOURS] reply_to_groups final:', finalData.reply_to_groups)
         setAfterHoursMessage(finalData)
       } else {
+        console.log('⚠️ [BUSINESS HOURS] Nenhuma configuração encontrada, criando padrão')
         setAfterHoursMessage({
           tenant: user?.tenant_id || '',
           department: selectedDepartment || null,
@@ -586,12 +591,19 @@ export default function BusinessHoursPage() {
                 </Label>
               </div>
 
+              {/* ✅ CHECKBOX: Responder em Grupos */}
               <div className="flex items-center gap-2">
                 <input
                   type="checkbox"
                   id="reply_to_groups"
-                  checked={afterHoursMessage.reply_to_groups ?? false}
-                  onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, reply_to_groups: e.target.checked })}
+                  checked={Boolean(afterHoursMessage?.reply_to_groups ?? false)}
+                  onChange={(e) => {
+                    console.log('🔄 [CHECKBOX] reply_to_groups alterado:', e.target.checked)
+                    setAfterHoursMessage({ 
+                      ...afterHoursMessage, 
+                      reply_to_groups: e.target.checked 
+                    })
+                  }}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <Label htmlFor="reply_to_groups" className="cursor-pointer">
