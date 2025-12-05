@@ -394,11 +394,24 @@ async def send_reaction_to_evolution(message, emoji: str):
             logger.error(f"❌ [REACTION] Mensagem {message.id} não tem message_id (não foi enviada pelo sistema)")
             return False
         
+        # ✅ CORREÇÃO CRÍTICA: fromMe deve ser True se a mensagem foi ENVIADA por nós (outgoing)
+        # Se a mensagem foi RECEBIDA (incoming), fromMe deve ser False
+        # Isso é importante para a Evolution API encontrar a mensagem correta
+        from_me = message.direction == 'outgoing'
+        
+        logger.info(f"📋 [REACTION] Preparando payload:")
+        logger.info(f"   Message ID interno: {message.id}")
+        logger.info(f"   Message ID externo: {message.message_id}")
+        logger.info(f"   Direction: {message.direction}")
+        logger.info(f"   fromMe: {from_me}")
+        logger.info(f"   RemoteJID: {_mask_remote_jid(remote_jid)}")
+        logger.info(f"   Emoji: {emoji}")
+        
         payload = {
             'key': {
                 'remoteJid': remote_jid,  # ✅ Formato completo: número@s.whatsapp.net ou ID@g.us
                 'id': message.message_id,  # ✅ ID externo da mensagem no WhatsApp (key.id do webhook)
-                'fromMe': message.direction == 'outgoing'  # ✅ True se mensagem foi enviada por nós
+                'fromMe': from_me  # ✅ True se mensagem foi enviada por nós, False se foi recebida
             },
             'reaction': emoji if emoji else ''  # ✅ Emoji vazio remove reação no WhatsApp
         }
