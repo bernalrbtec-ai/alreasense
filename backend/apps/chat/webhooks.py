@@ -278,10 +278,11 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     jid_to_contact = {}  # JID/LID -> nome do contato (para buscar por LID também)
     
     if normalized_phones:
+        # ✅ CORREÇÃO: Contact não tem campo metadata, buscar apenas phone e name
         contacts = Contact.objects.filter(
             tenant=tenant,
             phone__in=normalized_phones
-        ).values('phone', 'name', 'metadata')
+        ).values('phone', 'name')
         
         # Criar mapa telefone -> nome dos contatos cadastrados
         for contact in contacts:
@@ -291,43 +292,10 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
                 contact_name = contact.get('name', '').strip()
                 if contact_name:
                     phone_to_contact[normalized_contact_phone] = contact_name
-            
-            # ✅ NOVO: Buscar também por LID no metadata do contato
-            contact_metadata = contact.get('metadata') or {}
-            if isinstance(contact_metadata, dict):
-                # Verificar se tem LID salvo no metadata
-                contact_lid = contact_metadata.get('lid') or contact_metadata.get('jid')
-                if contact_lid:
-                    contact_name = contact.get('name', '').strip()
-                    if contact_name:
-                        jid_to_contact[contact_lid] = contact_name
-                        logger.debug(f"   📝 [CONTATOS] Contato encontrado por LID: {contact_lid} -> {contact_name}")
     
-    # ✅ NOVO: Buscar contatos também pelos JIDs originais (para LIDs sem telefone válido)
-    lids_to_search = [jid for jid in mentioned_jids if jid.endswith('@lid')]
-    if lids_to_search:
-        # Buscar contatos que têm esses LIDs no metadata
-        # Usar Q objects para buscar em JSONField
-        from django.db.models import Q
-        lid_queries = Q()
-        for lid in lids_to_search:
-            # Buscar LID no metadata (pode estar em 'lid' ou 'jid')
-            lid_queries |= Q(metadata__lid=lid) | Q(metadata__jid=lid)
-        
-        if lid_queries:
-            contacts_by_lid = Contact.objects.filter(
-                tenant=tenant
-            ).filter(lid_queries).values('name', 'metadata')
-            
-            for contact in contacts_by_lid:
-                contact_name = contact.get('name', '').strip()
-                if contact_name:
-                    # Encontrar qual LID corresponde a este contato
-                    contact_metadata = contact.get('metadata') or {}
-                    contact_lid = contact_metadata.get('lid') or contact_metadata.get('jid')
-                    if contact_lid and contact_lid in lids_to_search:
-                        jid_to_contact[contact_lid] = contact_name
-                        logger.info(f"   ✅ [CONTATOS] Contato encontrado por LID no metadata: {contact_lid} -> {contact_name}")
+    # ✅ CORREÇÃO: Contact não tem campo metadata, não é possível buscar contatos por LID
+    # LIDs serão resolvidos apenas através dos participantes do grupo (jid_to_name)
+    # Isso é suficiente porque os participantes do grupo já têm o mapeamento JID -> nome
     
     # Processar menções usando os mapas (prioridade: CONTATOS CADASTRADOS > grupo > telefone formatado)
     mentions_list = []
