@@ -38,6 +38,16 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   // ✅ NOVO: Armazenar texto por conversa (persistir entre mudanças de chat)
   const messageByConversationRef = useRef<Map<string, { text: string; mentions: string[] }>>(new Map());
   const previousConversationIdRef = useRef<string | undefined>(conversationId);
+  
+  // ✅ NOVO: Refs para acessar valores atuais sem causar re-renders
+  const messageRef = useRef(message);
+  const mentionsRef = useRef(mentions);
+  
+  // Atualizar refs quando valores mudam
+  useEffect(() => {
+    messageRef.current = message;
+    mentionsRef.current = mentions;
+  }, [message, mentions]);
 
   // ✅ NOVO: Salvar e restaurar texto quando conversa muda
   useEffect(() => {
@@ -46,11 +56,10 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
     
     // Se a conversa mudou
     if (currentConvId !== previousConvId) {
-      // Salvar texto da conversa anterior (se existir)
-      // ✅ Usar ref para acessar valores atuais sem causar re-render
+      // Salvar texto da conversa anterior usando refs (valores atuais)
       if (previousConvId) {
-        const currentText = messageByConversationRef.current.get(previousConvId)?.text || message;
-        const currentMentions = messageByConversationRef.current.get(previousConvId)?.mentions || mentions;
+        const currentText = messageRef.current;
+        const currentMentions = mentionsRef.current;
         
         // Só salvar se houver conteúdo
         if (currentText.trim() || currentMentions.length > 0) {
