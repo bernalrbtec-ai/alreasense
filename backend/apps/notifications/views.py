@@ -554,6 +554,9 @@ class UserNotificationPreferencesViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get', 'patch', 'put'])
     def mine(self, request):
         """Retorna ou atualiza as preferências do usuário atual."""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         obj, created = UserNotificationPreferences.objects.get_or_create(
             user=request.user,
             tenant=request.user.tenant,
@@ -564,9 +567,18 @@ class UserNotificationPreferencesViewSet(viewsets.ModelViewSet):
         )
         
         if request.method in ['PATCH', 'PUT']:
+            logger.info(f'🔄 [NOTIFICATION PREFERENCES] Atualizando preferências para {request.user.email}')
+            logger.info(f'   Dados recebidos: {request.data}')
+            logger.info(f'   Estado atual: daily_summary_enabled={obj.daily_summary_enabled}, daily_summary_time={obj.daily_summary_time}, agenda_reminder_enabled={obj.agenda_reminder_enabled}, agenda_reminder_time={obj.agenda_reminder_time}')
+            
             serializer = self.get_serializer(obj, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
+            
+            # Recarregar do banco para confirmar salvamento
+            obj.refresh_from_db()
+            logger.info(f'   ✅ Após salvar: daily_summary_enabled={obj.daily_summary_enabled}, daily_summary_time={obj.daily_summary_time}, agenda_reminder_enabled={obj.agenda_reminder_enabled}, agenda_reminder_time={obj.agenda_reminder_time}')
+            
             return Response(serializer.data)
         
         serializer = self.get_serializer(obj)

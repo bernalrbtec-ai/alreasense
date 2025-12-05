@@ -87,27 +87,61 @@ class Command(BaseCommand):
             daily_summary_time__isnull=False
         ).select_related('user', 'tenant')
         
+        logger.info(f'🔍 [DAILY SUMMARY] Buscando preferências: {preferences.count()} usuários com daily_summary habilitado')
+        
         count_sent = 0
         count_skipped = 0
+        count_not_in_window = 0
         
         for pref in preferences:
             try:
                 user = pref.user
+                summary_time = pref.daily_summary_time
+                
+                logger.debug(f'   🔍 [DAILY SUMMARY] Verificando {user.email}: horário configurado={summary_time}, hora atual={current_time}')
                 
                 # Verificar se já foi enviado hoje
                 if pref.last_daily_summary_sent_date == current_date:
-                    logger.debug(f'⏭️ [DAILY SUMMARY] Pulando {user.email} - já enviado hoje')
+                    logger.info(f'   ⏭️ [DAILY SUMMARY] Pulando {user.email} - já enviado hoje ({pref.last_daily_summary_sent_date})')
                     count_skipped += 1
                     continue
                 
-                # Verificar se está no horário (com margem de ±2 minutos)
-                summary_time = pref.daily_summary_time
-                time_window_start = (dt_time(summary_time.hour, summary_time.minute - 2) if summary_time.minute >= 2 
-                                    else dt_time(summary_time.hour - 1, 58 + summary_time.minute))
-                time_window_end = dt_time(summary_time.hour, summary_time.minute + 2)
+                # ✅ CORREÇÃO: Verificar se está no horário (com margem de ±2 minutos)
+                # Melhorar cálculo para evitar erros com horários próximos de 00:00
+                if summary_time.minute >= 2:
+                    time_window_start = dt_time(summary_time.hour, summary_time.minute - 2)
+                elif summary_time.hour > 0:
+                    time_window_start = dt_time(summary_time.hour - 1, 58 + summary_time.minute)
+                else:
+                    # Se for 00:00 ou 00:01, usar 23:58 ou 23:59 do dia anterior
+                    time_window_start = dt_time(23, 58 + summary_time.minute)
                 
-                if not (time_window_start <= current_time <= time_window_end):
+                # Calcular fim da janela (pode passar de 23:59)
+                if summary_time.minute <= 57:
+                    time_window_end = dt_time(summary_time.hour, summary_time.minute + 2)
+                elif summary_time.hour < 23:
+                    time_window_end = dt_time(summary_time.hour + 1, summary_time.minute - 58)
+                else:
+                    # Se for 23:58 ou 23:59, usar 00:00 ou 00:01 do dia seguinte
+                    time_window_end = dt_time(0, summary_time.minute - 58)
+                
+                logger.debug(f'   ⏰ [DAILY SUMMARY] Janela de tempo: {time_window_start} <= {current_time} <= {time_window_end}')
+                
+                # ✅ CORREÇÃO: Verificar se está na janela (considerar que pode passar de 23:59)
+                is_in_window = False
+                if time_window_start <= time_window_end:
+                    # Janela normal (não passa de meia-noite)
+                    is_in_window = time_window_start <= current_time <= time_window_end
+                else:
+                    # Janela que passa de meia-noite (ex: 23:58 - 00:02)
+                    is_in_window = current_time >= time_window_start or current_time <= time_window_end
+                
+                if not is_in_window:
+                    logger.debug(f'   ⏭️ [DAILY SUMMARY] {user.email} não está na janela de tempo')
+                    count_not_in_window += 1
                     continue
+                
+                logger.info(f'   ✅ [DAILY SUMMARY] {user.email} está na janela de tempo! Enviando resumo...')
                 
                 # Enviar resumo diário
                 success = self._send_daily_summary(user, pref, current_date)
@@ -121,8 +155,10 @@ class Command(BaseCommand):
                 logger.error(f'❌ [DAILY SUMMARY] Erro ao processar {pref.user.email}: {e}', exc_info=True)
         
         if count_sent > 0:
-            logger.info(f'✅ [DAILY SUMMARY] {count_sent} resumo(s) enviado(s), {count_skipped} pulado(s)')
+            logger.info(f'✅ [DAILY SUMMARY] {count_sent} resumo(s) enviado(s), {count_skipped} pulado(s), {count_not_in_window} fora da janela')
             self.stdout.write(self.style.SUCCESS(f'✅ {count_sent} resumo(s) diário(s) enviado(s)'))
+        elif preferences.count() > 0:
+            logger.info(f'ℹ️ [DAILY SUMMARY] Nenhum resumo enviado: {count_skipped} já enviados hoje, {count_not_in_window} fora da janela de tempo')
     
     def _check_agenda_reminders(self, current_time: dt_time, current_date):
         """Verifica e envia lembretes de agenda"""
@@ -132,20 +168,54 @@ class Command(BaseCommand):
             agenda_reminder_time__isnull=False
         ).select_related('user', 'tenant')
         
+        logger.info(f'🔍 [AGENDA REMINDER] Buscando preferências: {preferences.count()} usuários com agenda_reminder habilitado')
+        
         count_sent = 0
+        count_not_in_window = 0
         
         for pref in preferences:
             try:
                 user = pref.user
-                
-                # Verificar se está no horário (com margem de ±2 minutos)
                 reminder_time = pref.agenda_reminder_time
-                time_window_start = (dt_time(reminder_time.hour, reminder_time.minute - 2) if reminder_time.minute >= 2 
-                                    else dt_time(reminder_time.hour - 1, 58 + reminder_time.minute))
-                time_window_end = dt_time(reminder_time.hour, reminder_time.minute + 2)
                 
-                if not (time_window_start <= current_time <= time_window_end):
+                logger.debug(f'   🔍 [AGENDA REMINDER] Verificando {user.email}: horário configurado={reminder_time}, hora atual={current_time}')
+                
+                # ✅ CORREÇÃO: Verificar se está no horário (com margem de ±2 minutos)
+                # Melhorar cálculo para evitar erros com horários próximos de 00:00
+                if reminder_time.minute >= 2:
+                    time_window_start = dt_time(reminder_time.hour, reminder_time.minute - 2)
+                elif reminder_time.hour > 0:
+                    time_window_start = dt_time(reminder_time.hour - 1, 58 + reminder_time.minute)
+                else:
+                    # Se for 00:00 ou 00:01, usar 23:58 ou 23:59 do dia anterior
+                    time_window_start = dt_time(23, 58 + reminder_time.minute)
+                
+                # Calcular fim da janela (pode passar de 23:59)
+                if reminder_time.minute <= 57:
+                    time_window_end = dt_time(reminder_time.hour, reminder_time.minute + 2)
+                elif reminder_time.hour < 23:
+                    time_window_end = dt_time(reminder_time.hour + 1, reminder_time.minute - 58)
+                else:
+                    # Se for 23:58 ou 23:59, usar 00:00 ou 00:01 do dia seguinte
+                    time_window_end = dt_time(0, reminder_time.minute - 58)
+                
+                logger.debug(f'   ⏰ [AGENDA REMINDER] Janela de tempo: {time_window_start} <= {current_time} <= {time_window_end}')
+                
+                # ✅ CORREÇÃO: Verificar se está na janela (considerar que pode passar de 23:59)
+                is_in_window = False
+                if time_window_start <= time_window_end:
+                    # Janela normal (não passa de meia-noite)
+                    is_in_window = time_window_start <= current_time <= time_window_end
+                else:
+                    # Janela que passa de meia-noite (ex: 23:58 - 00:02)
+                    is_in_window = current_time >= time_window_start or current_time <= time_window_end
+                
+                if not is_in_window:
+                    logger.debug(f'   ⏭️ [AGENDA REMINDER] {user.email} não está na janela de tempo')
+                    count_not_in_window += 1
                     continue
+                
+                logger.info(f'   ✅ [AGENDA REMINDER] {user.email} está na janela de tempo! Enviando lembrete...')
                 
                 # Enviar lembrete de agenda
                 success = self._send_agenda_reminder(user, pref, current_date)
@@ -156,8 +226,10 @@ class Command(BaseCommand):
                 logger.error(f'❌ [AGENDA REMINDER] Erro ao processar {pref.user.email}: {e}', exc_info=True)
         
         if count_sent > 0:
-            logger.info(f'✅ [AGENDA REMINDER] {count_sent} lembrete(s) de agenda enviado(s)')
+            logger.info(f'✅ [AGENDA REMINDER] {count_sent} lembrete(s) de agenda enviado(s), {count_not_in_window} fora da janela')
             self.stdout.write(self.style.SUCCESS(f'✅ {count_sent} lembrete(s) de agenda enviado(s)'))
+        elif preferences.count() > 0:
+            logger.info(f'ℹ️ [AGENDA REMINDER] Nenhum lembrete enviado: {count_not_in_window} fora da janela de tempo')
     
     def _send_daily_summary(self, user: User, pref: UserNotificationPreferences, current_date):
         """Envia resumo diário para o usuário"""
