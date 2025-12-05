@@ -44,6 +44,7 @@ class AfterHoursMessageSerializer(serializers.ModelSerializer):
     
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True, allow_null=True)
+    reply_to_groups = serializers.BooleanField(default=False, required=False)
     
     class Meta:
         model = AfterHoursMessage
