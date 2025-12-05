@@ -636,8 +636,8 @@ export default function BusinessHoursPage() {
                 </Label>
               </div>
 
-              {/* ✅ CHECKBOX: Responder em Grupos */}
-              <div className="flex items-center gap-2">
+              {/* ✅ CHECKBOX: Responder em Grupos - FORÇAR VISIBILIDADE */}
+              <div className="flex items-center gap-2" style={{ visibility: 'visible', display: 'flex' }}>
                 <input
                   type="checkbox"
                   id="reply_to_groups"
@@ -650,12 +650,13 @@ export default function BusinessHoursPage() {
                     })
                   }}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  style={{ visibility: 'visible', display: 'block' }}
                 />
-                <Label htmlFor="reply_to_groups" className="cursor-pointer">
+                <Label htmlFor="reply_to_groups" className="cursor-pointer" style={{ visibility: 'visible', display: 'block' }}>
                   Responder em Grupos
                 </Label>
               </div>
-              <p className="text-sm text-gray-500 ml-6">
+              <p className="text-sm text-gray-500 ml-6" style={{ visibility: 'visible', display: 'block' }}>
                 Se habilitado, envia mensagem automática também para grupos. Se desabilitado, apenas para conversas individuais.
               </p>
             </div>
