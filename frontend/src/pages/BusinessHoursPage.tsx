@@ -118,6 +118,7 @@ export default function BusinessHoursPage() {
   const [taskConfig, setTaskConfig] = useState<AfterHoursTaskConfig | null>(null)
 
   useEffect(() => {
+    console.log('🔄 [BUSINESS HOURS PAGE] useEffect - Carregando dados, department:', selectedDepartment)
     fetchData()
   }, [selectedDepartment])
 
@@ -603,8 +604,11 @@ export default function BusinessHoursPage() {
                 <input
                   type="checkbox"
                   id="message_is_active"
-                  checked={afterHoursMessage.is_active}
-                  onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, is_active: e.target.checked })}
+                  checked={Boolean(afterHoursMessage?.is_active)}
+                  onChange={(e) => {
+                    console.log('🔄 [CHECKBOX] is_active alterado:', e.target.checked)
+                    setAfterHoursMessage({ ...afterHoursMessage, is_active: e.target.checked })
+                  }}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
                 <Label htmlFor="message_is_active" className="cursor-pointer">
