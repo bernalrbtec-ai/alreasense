@@ -297,7 +297,20 @@ export default function BusinessHoursPage() {
   }
 
   const handleSaveMessage = async () => {
-    if (!afterHoursMessage) return
+    console.log('🔄 [SAVE MESSAGE] ====== INICIANDO SALVAMENTO ======')
+    console.log('🔄 [SAVE MESSAGE] afterHoursMessage existe?', !!afterHoursMessage)
+    
+    if (!afterHoursMessage) {
+      console.error('❌ [SAVE MESSAGE] afterHoursMessage é null/undefined!')
+      return
+    }
+
+    console.log('💾 [SAVE MESSAGE] Estado atual ANTES de processar:', {
+      is_active: afterHoursMessage.is_active,
+      reply_to_groups: afterHoursMessage.reply_to_groups,
+      id: afterHoursMessage.id,
+      tipo_is_active: typeof afterHoursMessage.is_active
+    })
 
     const toastId = showLoadingToast('salvar', 'Mensagem Automática')
 
@@ -312,7 +325,7 @@ export default function BusinessHoursPage() {
         reply_to_groups: Boolean(afterHoursMessage.reply_to_groups ?? false),
       }
 
-      console.log('💾 [SAVE MESSAGE] Dados que serão enviados:', data)
+      console.log('💾 [SAVE MESSAGE] Dados que serão enviados:', JSON.stringify(data, null, 2))
       console.log('💾 [SAVE MESSAGE] is_active (tipo):', typeof data.is_active, 'valor:', data.is_active)
       console.log('💾 [SAVE MESSAGE] reply_to_groups (tipo):', typeof data.reply_to_groups, 'valor:', data.reply_to_groups)
 
