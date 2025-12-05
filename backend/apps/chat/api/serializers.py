@@ -159,6 +159,10 @@ class MessageSerializer(serializers.ModelSerializer):
             
             # ✅ CORREÇÃO: Reprocessar menções para buscar nomes atualizados
             if 'mentions' in data['metadata'] and instance.conversation:
+                # ✅ CORREÇÃO CRÍTICA: Garantir que logger está definido
+                import logging
+                logger = logging.getLogger(__name__)
+                
                 mentions_saved = data['metadata'].get('mentions', [])
                 if mentions_saved:
                     # ✅ IMPORTANTE: Recarregar conversa do banco para ter dados atualizados

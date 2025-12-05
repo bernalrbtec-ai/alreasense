@@ -788,7 +788,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                                     else:
                                         # Se não encontrou contato cadastrado, buscar pushname da Evolution API
                                         logger.info(f"   🔍 [REFRESH GRUPO] Contato não encontrado, buscando pushname na Evolution API...")
-                                        pushname = fetch_pushname_from_evolution(instance, normalized_phone)
+                                        # ✅ CORREÇÃO: Usar wa_instance ao invés de instance
+                                        pushname = fetch_pushname_from_evolution(wa_instance, normalized_phone)
                                         if pushname:
                                             participant_name = pushname
                                             logger.info(f"   ✅ [REFRESH GRUPO] Pushname encontrado via Evolution API: {participant_name}")

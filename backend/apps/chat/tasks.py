@@ -1386,7 +1386,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     if mentions:
                         # ✅ CORREÇÃO CRÍTICA: Usar informações do grupo para fazer match correto
                         # Buscar participantes do grupo em group_metadata
-                        conversation.refresh_from_db()  # Garantir dados atualizados
+                        # ✅ CORREÇÃO: Usar sync_to_async para refresh_from_db em contexto assíncrono
+                        from asgiref.sync import sync_to_async
+                        await sync_to_async(conversation.refresh_from_db)()  # Garantir dados atualizados
                         group_metadata = conversation.group_metadata or {}
                         group_participants = group_metadata.get('participants', [])
                         
