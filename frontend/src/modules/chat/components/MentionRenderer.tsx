@@ -39,6 +39,7 @@ function formatPhoneForDisplay(phone: string): string {
 interface Mention {
   phone: string;
   name: string;
+  jid?: string; // ✅ NOVO: JID/LID da menção
 }
 
 interface MentionRendererProps {
@@ -57,9 +58,22 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
   // ✅ MELHORIA: Criar mapas otimizados para busca rápida
   const phoneToMention = new Map<string, Mention>();
   const nameToMention = new Map<string, Mention>(); // Nome lowercase -> Mention
+  const jidToMention = new Map<string, Mention>(); // ✅ NOVO: JID/LID -> Mention
   
   mentions.forEach(m => {
     phoneToMention.set(m.phone, m);
+    
+    // ✅ NOVO: Mapear por JID/LID (importante para fazer match com conteúdo que tem LID)
+    if (m.jid) {
+      jidToMention.set(m.jid, m);
+      // Também mapear apenas os dígitos do LID (sem @lid)
+      const jidDigits = m.jid.split('@')[0];
+      if (jidDigits) {
+        jidToMention.set(jidDigits, m);
+        jidToMention.set(jidDigits + '@lid', m); // Com @lid também
+      }
+    }
+    
     // Mapear por nome (case-insensitive)
     if (m.name) {
       nameToMention.set(m.name.toLowerCase(), m);
@@ -73,8 +87,8 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
     }
   });
 
-  // Regex para encontrar menções no formato @nome ou @número
-  const mentionRegex = /@(\d+|\w[\w\s]*?)(?=\s|$|@|,|\.|!|\?)/g;
+  // ✅ CORREÇÃO: Regex para encontrar menções no formato @nome, @número ou @número@lid
+  const mentionRegex = /@(\d+@?lid|\d+|\w[\w\s]*?)(?=\s|$|@|,|\.|!|\?)/g;
   
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
@@ -96,10 +110,26 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
     let mention: Mention | null = null;
     
     // ✅ MELHORIA: Busca otimizada usando mapas
-    // 1. Tentar buscar por nome exato (case-insensitive)
-    mention = nameToMention.get(mentionText.toLowerCase()) || null;
+    // 1. ✅ NOVO: Tentar buscar por JID/LID primeiro (se mentionText contém @lid ou é número longo)
+    if (mentionText.includes('@lid') || /^\d{15,}$/.test(mentionText)) {
+      // É LID ou número longo, buscar por JID
+      mention = jidToMention.get(mentionText) || null;
+      
+      // Se não encontrou, tentar apenas os dígitos
+      if (!mention) {
+        const jidDigits = mentionText.split('@')[0];
+        if (jidDigits) {
+          mention = jidToMention.get(jidDigits) || jidToMention.get(jidDigits + '@lid') || null;
+        }
+      }
+    }
     
-    // 2. Se não encontrou, tentar busca parcial por nome
+    // 2. Tentar buscar por nome exato (case-insensitive)
+    if (!mention) {
+      mention = nameToMention.get(mentionText.toLowerCase()) || null;
+    }
+    
+    // 3. Se não encontrou, tentar busca parcial por nome
     if (!mention) {
       const mentionLower = mentionText.toLowerCase();
       for (const [key, m] of nameToMention.entries()) {
@@ -110,7 +140,7 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
       }
     }
     
-    // 3. Se não encontrou por nome, buscar por número
+    // 4. Se não encontrou por nome, buscar por número
     if (!mention) {
       const cleanPhone = mentionText.replace(/\D/g, ''); // Remove não-dígitos
       for (const [phone, m] of phoneToMention.entries()) {
@@ -122,6 +152,11 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
           break;
         }
       }
+    }
+    
+    // 5. ✅ NOVO: Se ainda não encontrou e mentionText é número, tentar buscar por JID também
+    if (!mention && /^\d+$/.test(mentionText)) {
+      mention = jidToMention.get(mentionText) || jidToMention.get(mentionText + '@lid') || null;
     }
 
     if (mention) {
