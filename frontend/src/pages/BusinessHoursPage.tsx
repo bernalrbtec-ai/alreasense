@@ -198,7 +198,12 @@ export default function BusinessHoursPage() {
       const response = await api.get('/chat/after-hours-messages/current/', { params })
       
       if (response.data.has_config) {
-        setAfterHoursMessage(response.data.after_hours_message)
+        // ✅ Garantir que reply_to_groups sempre tenha valor (default: false)
+        const messageData = response.data.after_hours_message || {}
+        setAfterHoursMessage({
+          ...messageData,
+          reply_to_groups: messageData.reply_to_groups ?? false,
+        })
       } else {
         setAfterHoursMessage({
           tenant: user?.tenant_id || '',
@@ -582,7 +587,7 @@ export default function BusinessHoursPage() {
                 <input
                   type="checkbox"
                   id="reply_to_groups"
-                  checked={afterHoursMessage.reply_to_groups}
+                  checked={afterHoursMessage.reply_to_groups ?? false}
                   onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, reply_to_groups: e.target.checked })}
                   className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
                 />
