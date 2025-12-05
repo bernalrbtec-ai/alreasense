@@ -296,6 +296,12 @@ class BusinessHoursService:
             logger.info(f"Mensagem fora de horário recebida, mas sem mensagem automática configurada")
             return True, None
         
+        # ✅ VERIFICAÇÃO: Se é grupo, verificar se reply_to_groups está habilitado
+        is_group = conversation.conversation_type == 'group'
+        if is_group and not after_hours_msg.reply_to_groups:
+            logger.info(f"⏰ [BUSINESS HOURS] Mensagem recebida em grupo fora de horário, mas 'reply_to_groups' está desabilitado - não enviando mensagem automática")
+            return True, None
+        
         # Formata mensagem
         context = {
             'contact_name': conversation.contact_name or 'Cliente',

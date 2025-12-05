@@ -145,6 +145,12 @@ class AfterHoursMessage(models.Model):
         help_text='Template da mensagem. Variáveis: {contact_name}, {department_name}, {next_open_time}'
     )
     
+    reply_to_groups = models.BooleanField(
+        default=False,
+        verbose_name='Responder em Grupos',
+        help_text='Se habilitado, envia mensagem automática também para grupos. Se desabilitado, apenas para conversas individuais.'
+    )
+    
     is_active = models.BooleanField(
         default=True,
         db_index=True,

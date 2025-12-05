@@ -54,6 +54,7 @@ class AfterHoursMessageSerializer(serializers.ModelSerializer):
             'department',
             'department_name',
             'message_template',
+            'reply_to_groups',
             'is_active',
             'created_at',
             'updated_at',

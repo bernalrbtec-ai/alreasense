@@ -46,6 +46,7 @@ interface AfterHoursMessage {
   department?: string | null
   department_name?: string
   message_template: string
+  reply_to_groups: boolean
   is_active: boolean
 }
 
@@ -203,6 +204,7 @@ export default function BusinessHoursPage() {
           tenant: user?.tenant_id || '',
           department: selectedDepartment || null,
           message_template: 'Olá {contact_name}! Recebemos sua mensagem fora do horário de atendimento.\n\nNosso horário de funcionamento é:\n{next_open_time}\n\nRetornaremos em breve!',
+          reply_to_groups: false,
           is_active: true,
         })
       }
@@ -562,17 +564,35 @@ export default function BusinessHoursPage() {
               />
             </div>
 
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="message_is_active"
-                checked={afterHoursMessage.is_active}
-                onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, is_active: e.target.checked })}
-                className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-              />
-              <Label htmlFor="message_is_active" className="cursor-pointer">
-                Ativo
-              </Label>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="message_is_active"
+                  checked={afterHoursMessage.is_active}
+                  onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, is_active: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <Label htmlFor="message_is_active" className="cursor-pointer">
+                  Ativo
+                </Label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="reply_to_groups"
+                  checked={afterHoursMessage.reply_to_groups}
+                  onChange={(e) => setAfterHoursMessage({ ...afterHoursMessage, reply_to_groups: e.target.checked })}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <Label htmlFor="reply_to_groups" className="cursor-pointer">
+                  Responder em Grupos
+                </Label>
+              </div>
+              <p className="text-sm text-gray-500 ml-6">
+                Se habilitado, envia mensagem automática também para grupos. Se desabilitado, apenas para conversas individuais.
+              </p>
             </div>
 
             <div className="flex justify-end">
