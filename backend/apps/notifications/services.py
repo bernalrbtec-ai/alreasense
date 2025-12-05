@@ -145,6 +145,13 @@ def send_whatsapp_notification(user, message):
     max_retries = 3
     base_delay = 1  # 1 segundo base
     
+    logger.info(f'📱 [WHATSAPP NOTIFICATION] ====== INICIANDO ENVIO ======')
+    logger.info(f'   Usuário: {user.email} (ID: {user.id})')
+    logger.info(f'   Telefone normalizado: {phone_normalized}')
+    logger.info(f'   URL: {url}')
+    logger.info(f'   Instance: {instance_name}')
+    logger.info(f'   Mensagem (primeiros 100 chars): {message[:100]}...')
+    
     for attempt in range(max_retries):
         try:
             logger.info(f'📱 [WHATSAPP NOTIFICATION] Tentativa {attempt + 1}/{max_retries} - Enviando para {phone_normalized} (usuário: {user.email})')

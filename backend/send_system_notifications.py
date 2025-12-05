@@ -13,8 +13,11 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'alrea_sense.settings')
 django.setup()
 
 from apps.notifications.models import NotificationTemplate
-from apps.notifications.tasks import send_notification_task
+from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
 from apps.authn.models import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 def send_celery_worker_down_notification(tenant_id=None):
     """Envia notificação quando workers do Celery param"""
@@ -41,12 +44,34 @@ def send_celery_worker_down_notification(tenant_id=None):
             'tenant_name': users.first().tenant.name if users.exists() else 'Sistema'
         }
         
-        for user in users:
-            if user.phone:  # Só enviar se tiver telefone
-                send_notification_task.delay(str(template.id), user.id, context)
-                print(f"📱 Notificação enviada para: {user.email}")
+        notifications_sent = 0
+        notifications_failed = 0
         
-        return True
+        for user in users:
+            if not user.phone:
+                logger.debug(f'⏭️ [SYSTEM NOTIFICATION] Pulando {user.email} - sem telefone')
+                continue
+            
+            try:
+                # Renderizar template com contexto
+                message = template.content
+                for key, value in context.items():
+                    message = message.replace(f'{{{{{key}}}}}', str(value))
+                
+                # Enviar via WhatsApp
+                success = send_whatsapp_notification(user, message)
+                if success:
+                    notifications_sent += 1
+                    logger.info(f'✅ [SYSTEM NOTIFICATION] Notificação enviada para {user.email}')
+                else:
+                    notifications_failed += 1
+                    logger.warning(f'⚠️ [SYSTEM NOTIFICATION] Falha ao enviar para {user.email}')
+            except Exception as e:
+                notifications_failed += 1
+                logger.error(f'❌ [SYSTEM NOTIFICATION] Erro ao enviar para {user.email}: {e}', exc_info=True)
+        
+        logger.info(f'📊 [SYSTEM NOTIFICATION] Total: {notifications_sent} enviadas, {notifications_failed} falhas')
+        return notifications_sent > 0
         
     except NotificationTemplate.DoesNotExist:
         print("❌ Template 'celery_worker_down' não encontrado")
@@ -80,12 +105,34 @@ def send_celery_worker_up_notification(tenant_id=None):
             'tenant_name': users.first().tenant.name if users.exists() else 'Sistema'
         }
         
-        for user in users:
-            if user.phone:
-                send_notification_task.delay(str(template.id), user.id, context)
-                print(f"📱 Notificação enviada para: {user.email}")
+        notifications_sent = 0
+        notifications_failed = 0
         
-        return True
+        for user in users:
+            if not user.phone:
+                logger.debug(f'⏭️ [SYSTEM NOTIFICATION] Pulando {user.email} - sem telefone')
+                continue
+            
+            try:
+                # Renderizar template com contexto
+                message = template.content
+                for key, value in context.items():
+                    message = message.replace(f'{{{{{key}}}}}', str(value))
+                
+                # Enviar via WhatsApp
+                success = send_whatsapp_notification(user, message)
+                if success:
+                    notifications_sent += 1
+                    logger.info(f'✅ [SYSTEM NOTIFICATION] Notificação enviada para {user.email}')
+                else:
+                    notifications_failed += 1
+                    logger.warning(f'⚠️ [SYSTEM NOTIFICATION] Falha ao enviar para {user.email}')
+            except Exception as e:
+                notifications_failed += 1
+                logger.error(f'❌ [SYSTEM NOTIFICATION] Erro ao enviar para {user.email}: {e}', exc_info=True)
+        
+        logger.info(f'📊 [SYSTEM NOTIFICATION] Total: {notifications_sent} enviadas, {notifications_failed} falhas')
+        return notifications_sent > 0
         
     except NotificationTemplate.DoesNotExist:
         print("❌ Template 'celery_worker_up' não encontrado")

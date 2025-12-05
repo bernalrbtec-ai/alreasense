@@ -20,6 +20,7 @@ from datetime import timedelta
 from apps.contacts.models import Task
 from apps.authn.models import User
 from apps.notifications.models import WhatsAppInstance
+from apps.notifications.services import send_whatsapp_notification, send_websocket_notification
 from apps.connections.models import EvolutionConnection
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
@@ -273,55 +274,8 @@ class Command(BaseCommand):
             return False
     
     def _send_whatsapp_notification(self, task: Task, user: User, is_reminder=True):
-        """Envia notificação via WhatsApp"""
-        import re
-        
+        """Envia notificação via WhatsApp usando services.py"""
         try:
-            # Buscar instância WhatsApp ativa do tenant
-            instance = WhatsAppInstance.objects.filter(
-                tenant=task.tenant,
-                is_active=True,
-                status='active'
-            ).first()
-            
-            if not instance:
-                logger.warning(f'⚠️ Nenhuma instância WhatsApp ativa para tenant {task.tenant.name}')
-                return False
-            
-            # Buscar servidor Evolution
-            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-            
-            if not evolution_server and not instance.api_url:
-                logger.error('❌ Configuração da Evolution API não encontrada')
-                return False
-            
-            # Preparar URL e credenciais
-            base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
-            api_key = instance.api_key or evolution_server.api_key
-            
-            # ✅ MELHORIA: Normalizar telefone com validação
-            phone = user.phone.strip()
-            phone_clean = re.sub(r'[^\d+]', '', phone)
-            
-            if not phone_clean or len(phone_clean) < 10:
-                logger.warning(f'⚠️ Telefone inválido para {user.email}: {phone}')
-                return False
-            
-            # Garantir formato E.164
-            if not phone_clean.startswith('+'):
-                if phone_clean.startswith('55'):
-                    phone_clean = f'+{phone_clean}'
-                else:
-                    phone_digits = ''.join(filter(str.isdigit, phone_clean))
-                    if phone_digits.startswith('0'):
-                        phone_digits = phone_digits[1:]
-                    phone_clean = f'+55{phone_digits}'
-            
-            # Validar formato final
-            if len(phone_clean) < 13 or not phone_clean.startswith('+'):
-                logger.warning(f'⚠️ Telefone em formato inválido após normalização: {phone_clean}')
-                return False
-            
             # ✅ MELHORIA: Formatar mensagem com mais contexto
             due_time = task.due_date.strftime('%d/%m/%Y às %H:%M')
             
@@ -363,37 +317,16 @@ class Command(BaseCommand):
             
             message += f"\nAcesse o sistema para mais detalhes."
             
-            # ✅ MELHORIA: Retry em caso de falha
-            max_retries = 2
-            for attempt in range(max_retries):
-                try:
-                    response = requests.post(
-                        f"{base_url}/message/sendText/{instance.instance_name}",
-                        headers={'apikey': api_key, 'Content-Type': 'application/json'},
-                        json={
-                            'number': phone_clean,
-                            'text': message
-                        },
-                        timeout=10
-                    )
-                    
-                    if response.status_code in [200, 201]:
-                        logger.info(f'✅ WhatsApp enviado para {user.email} ({phone_clean})')
-                        return True
-                    else:
-                        logger.warning(f'⚠️ Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
-                        if attempt < max_retries - 1:
-                            time.sleep(2)
-                        
-                except requests.exceptions.RequestException as e:
-                    logger.warning(f'⚠️ Erro de conexão ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {e}')
-                    if attempt < max_retries - 1:
-                        time.sleep(2)
+            # ✅ USAR services.py (já tem retry e normalização de telefone)
+            success = send_whatsapp_notification(user, message)
+            if success:
+                logger.info(f'✅ [TASK NOTIFICATION] WhatsApp enviado para {user.email}')
+            else:
+                logger.warning(f'⚠️ [TASK NOTIFICATION] Falha ao enviar WhatsApp para {user.email}')
             
-            logger.error(f'❌ Falha ao enviar WhatsApp após {max_retries} tentativas')
-            return False
+            return success
                 
         except Exception as e:
-            logger.error(f'❌ Erro ao enviar WhatsApp para {user.email}: {e}', exc_info=True)
+            logger.error(f'❌ [TASK NOTIFICATION] Erro ao enviar WhatsApp para {user.email}: {e}', exc_info=True)
             return False
 
