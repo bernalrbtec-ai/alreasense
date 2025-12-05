@@ -585,6 +585,13 @@ export default function BusinessHoursPage() {
 
       {activeTab === 'message' && afterHoursMessage && (
         <Card className="p-6">
+          {/* Debug: Verificar se reply_to_groups existe */}
+          {console.log('🔍 [RENDER] Renderizando aba mensagem:', {
+            hasAfterHoursMessage: !!afterHoursMessage,
+            reply_to_groups: afterHoursMessage?.reply_to_groups,
+            is_active: afterHoursMessage?.is_active,
+            keys: afterHoursMessage ? Object.keys(afterHoursMessage) : []
+          })}
           <div className="space-y-6">
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <div className="flex items-start gap-2">
