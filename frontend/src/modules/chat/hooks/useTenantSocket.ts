@@ -417,9 +417,8 @@ export function useTenantSocket() {
           totalParticipants: data.total_participants
         });
         
-        const { updateConversation, activeConversation } = useChatStore.getState();
-        
         // Atualizar conversa se fornecida (isso atualiza os participantes no store)
+        const { updateConversation, activeConversation } = useChatStore.getState();
         if (data.conversation) {
           updateConversation(data.conversation);
         }
@@ -442,7 +441,7 @@ export function useTenantSocket() {
         });
         
         // ✅ PERFORMANCE: Reduzir logs excessivos, manter apenas logs importantes
-        const { updateConversation, addConversation, conversations, activeConversation, setMessages, setDepartments } = useChatStore.getState();
+        const { updateConversation: updateConv, addConversation, conversations, activeConversation: activeConv, setMessages, setDepartments } = useChatStore.getState();
         if (data.conversation) {
           // ✅ CORREÇÃO CRÍTICA: Verificar se last_message foi atualizado
           const existingConversation = conversations.find((conversationItem) => conversationItem.id === data.conversation.id);
@@ -483,7 +482,7 @@ export function useTenantSocket() {
               id: data.conversation.id,
               name: data.conversation.contact_name
             });
-            updateConversation(data.conversation);
+            updateConv(data.conversation);
           }
           
           // ✅ FIX CRÍTICO: SEMPRE refetch departamentos quando conversation_updated é recebido
@@ -512,7 +511,7 @@ export function useTenantSocket() {
           
           // ✅ NOVO: Se conversa atualizada é a conversa ativa E foi criada recentemente,
           // forçar re-fetch de mensagens para garantir que mensagens novas sejam carregadas
-          if (activeConversation?.id === data.conversation.id && data.updated_fields) {
+          if (activeConv?.id === data.conversation.id && data.updated_fields) {
             const updatedName = data.updated_fields.includes('contact_name');
             const updatedMetadata = data.updated_fields.includes('group_metadata');
             
