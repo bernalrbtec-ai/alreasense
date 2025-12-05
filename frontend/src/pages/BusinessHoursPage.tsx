@@ -200,10 +200,13 @@ export default function BusinessHoursPage() {
       if (response.data.has_config) {
         // ✅ Garantir que reply_to_groups sempre tenha valor (default: false)
         const messageData = response.data.after_hours_message || {}
-        setAfterHoursMessage({
+        console.log('📥 [BUSINESS HOURS] Dados recebidos da API:', messageData)
+        const finalData = {
           ...messageData,
           reply_to_groups: messageData.reply_to_groups ?? false,
-        })
+        }
+        console.log('✅ [BUSINESS HOURS] Dados finais com reply_to_groups:', finalData)
+        setAfterHoursMessage(finalData)
       } else {
         setAfterHoursMessage({
           tenant: user?.tenant_id || '',
