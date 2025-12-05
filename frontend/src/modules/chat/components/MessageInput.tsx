@@ -34,6 +34,73 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   const [uploadingFile, setUploadingFile] = useState(false);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
+  
+  // ✅ NOVO: Armazenar texto por conversa (persistir entre mudanças de chat)
+  const messageByConversationRef = useRef<Map<string, { text: string; mentions: string[] }>>(new Map());
+  const previousConversationIdRef = useRef<string | undefined>(conversationId);
+
+  // ✅ NOVO: Salvar e restaurar texto quando conversa muda
+  useEffect(() => {
+    const currentConvId = conversationId;
+    const previousConvId = previousConversationIdRef.current;
+    
+    // Se a conversa mudou
+    if (currentConvId !== previousConvId) {
+      // Salvar texto da conversa anterior (se existir)
+      // ✅ Usar ref para acessar valores atuais sem causar re-render
+      if (previousConvId) {
+        const currentText = messageByConversationRef.current.get(previousConvId)?.text || message;
+        const currentMentions = messageByConversationRef.current.get(previousConvId)?.mentions || mentions;
+        
+        // Só salvar se houver conteúdo
+        if (currentText.trim() || currentMentions.length > 0) {
+          messageByConversationRef.current.set(previousConvId, {
+            text: currentText,
+            mentions: [...currentMentions]
+          });
+          console.log('💾 [MessageInput] Texto salvo para conversa:', previousConvId, {
+            textLength: currentText.length,
+            mentionsCount: currentMentions.length
+          });
+        }
+      }
+      
+      // Restaurar texto da nova conversa (ou vazio se não houver)
+      if (currentConvId) {
+        const savedData = messageByConversationRef.current.get(currentConvId);
+        if (savedData) {
+          setMessage(savedData.text);
+          setMentions(savedData.mentions);
+          console.log('📖 [MessageInput] Texto restaurado para conversa:', currentConvId, {
+            textLength: savedData.text.length,
+            mentionsCount: savedData.mentions.length
+          });
+        } else {
+          // Nova conversa ou sem texto salvo - limpar
+          setMessage('');
+          setMentions([]);
+          console.log('🆕 [MessageInput] Nova conversa ou sem texto salvo, limpando input');
+        }
+      } else {
+        // Sem conversa ativa - limpar
+        setMessage('');
+        setMentions([]);
+      }
+      
+      // Atualizar referência
+      previousConversationIdRef.current = currentConvId;
+    }
+  }, [conversationId]); // ✅ CRÍTICO: Só executar quando conversationId mudar
+  
+  // ✅ NOVO: Salvar texto atual periodicamente (para não perder ao mudar conversa rapidamente)
+  useEffect(() => {
+    if (conversationId && (message.trim() || mentions.length > 0)) {
+      messageByConversationRef.current.set(conversationId, {
+        text: message,
+        mentions: [...mentions]
+      });
+    }
+  }, [message, mentions, conversationId]);
 
   // Limpar timeout de digitando ao desmontar
   useEffect(() => {
@@ -189,6 +256,11 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         if (success) {
           setMessage('');
           setMentions([]); // ✅ Limpar mentions após enviar
+          // ✅ NOVO: Limpar texto salvo para esta conversa (já foi enviado)
+          if (conversationId) {
+            messageByConversationRef.current.delete(conversationId);
+            console.log('🗑️ [MessageInput] Texto salvo removido após envio para conversa:', conversationId);
+          }
           // ✅ Limpar reply após enviar mensagem
           if (replyToMessage) {
             clearReply();
