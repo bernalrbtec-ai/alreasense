@@ -441,25 +441,64 @@ class BusinessHoursService:
         
         # ✅ VALIDAÇÃO 5: Busca ou cria contato
         try:
-            contact = Contact.objects.get(
+            # ✅ CORREÇÃO: Normalizar telefone para garantir que não exceda 20 caracteres
+            from apps.notifications.services import normalize_phone
+            
+            contact_phone_raw = conversation.contact_phone
+            # Remover sufixos de grupo (@g.us) para buscar contato individual
+            if '@g.us' in contact_phone_raw:
+                # Para grupos, não criar contato (grupos não são contatos individuais)
+                logger.warning(
+                    f"⚠️ [BUSINESS HOURS TASK] Conversa é grupo ({contact_phone_raw}), "
+                    f"não criando contato individual"
+                )
+                # Usar telefone do grupo truncado para relacionar tarefa
+                contact_phone_normalized = contact_phone_raw[:20] if len(contact_phone_raw) > 20 else contact_phone_raw
+            else:
+                # Normalizar telefone individual
+                contact_phone_normalized = normalize_phone(contact_phone_raw)
+                if not contact_phone_normalized:
+                    logger.warning(
+                        f"⚠️ [BUSINESS HOURS TASK] Não foi possível normalizar telefone: {contact_phone_raw}"
+                    )
+                    contact_phone_normalized = contact_phone_raw[:20] if len(contact_phone_raw) > 20 else contact_phone_raw
+            
+            # ✅ CORREÇÃO CRÍTICA: Truncar telefone para máximo de 20 caracteres (limite do modelo)
+            if len(contact_phone_normalized) > 20:
+                logger.warning(
+                    f"⚠️ [BUSINESS HOURS TASK] Telefone excede 20 caracteres ({len(contact_phone_normalized)}), "
+                    f"truncando: {contact_phone_normalized[:20]}"
+                )
+                contact_phone_normalized = contact_phone_normalized[:20]
+            
+            # Buscar contato existente
+            contact = Contact.objects.filter(
                 tenant=tenant,
-                phone=conversation.contact_phone
-            )
-            logger.info(f"✅ [BUSINESS HOURS TASK] Contato encontrado: {contact.name} (ID: {contact.id})")
-        except Contact.DoesNotExist:
-            # Cria contato básico se não existir
-            contact = Contact.objects.create(
-                tenant=tenant,
-                phone=conversation.contact_phone,
-                name=conversation.contact_name or 'Cliente',
-            )
-            logger.info(f"➕ [BUSINESS HOURS TASK] Contato criado: {contact.name} (ID: {contact.id})")
+                phone=contact_phone_normalized
+            ).first()
+            
+            if contact:
+                logger.info(f"✅ [BUSINESS HOURS TASK] Contato encontrado: {contact.name} (ID: {contact.id})")
+            else:
+                # Cria contato básico se não existir (apenas para conversas individuais)
+                if '@g.us' not in contact_phone_raw:
+                    contact = Contact.objects.create(
+                        tenant=tenant,
+                        phone=contact_phone_normalized,
+                        name=conversation.contact_name or 'Cliente',
+                    )
+                    logger.info(f"➕ [BUSINESS HOURS TASK] Contato criado: {contact.name} (ID: {contact.id})")
+                else:
+                    # Para grupos, não criar contato - usar None
+                    contact = None
+                    logger.info(f"ℹ️ [BUSINESS HOURS TASK] Conversa é grupo, não criando contato individual")
+                    
         except Exception as e:
             logger.error(
                 f"❌ [BUSINESS HOURS TASK] Erro ao buscar/criar contato: {e}",
                 exc_info=True
             )
-            return None
+            contact = None  # Continuar sem contato se houver erro
         
         # ✅ FORMATAÇÃO: Prepara contexto para templates
         contact_name = conversation.contact_name or contact.name or 'Cliente'
@@ -526,8 +565,11 @@ class BusinessHoursService:
                 }
             )
             
-            # Relaciona com contato
-            task.related_contacts.add(contact)
+            # Relaciona com contato (se existir)
+            if contact:
+                task.related_contacts.add(contact)
+            else:
+                logger.info(f"ℹ️ [BUSINESS HOURS TASK] Tarefa criada sem contato relacionado (grupo ou erro ao criar contato)")
             
             logger.info(f"✅ [BUSINESS HOURS TASK] ====== TAREFA CRIADA COM SUCESSO ======")
             logger.info(f"   Task ID: {task.id}")
