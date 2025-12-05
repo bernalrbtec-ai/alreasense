@@ -1511,8 +1511,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         logger.warning(f"   ⚠️ Phone {phone_clean} é o número do grupo, não do participante! Pulando menção...")
                         
                         if mention_phones:
-                            payload['mentions'] = mention_phones
+                            # ✅ CORREÇÃO: Evolution API usa 'mentioned' (não 'mentions')
+                            # Formato: array de JIDs/telefones mencionados
+                            payload['mentioned'] = mention_phones
                             logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_phones)} menção(ões) à mensagem")
+                            logger.info(f"   Campo usado: 'mentioned' (formato Evolution API)")
                             logger.info(f"   Menções: {', '.join([_mask_digits(p) for p in mention_phones])}")
                         else:
                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento")
