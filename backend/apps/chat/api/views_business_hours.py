@@ -193,15 +193,29 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
         if existing:
             # ✅ Atualizar registro existente (não atualizar tenant/department)
             logger.info(f"🔄 [AFTER HOURS MESSAGE] Atualizando registro existente (ID: {existing.id}) para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            logger.info(f"   📝 Dados recebidos: is_active={serializer.validated_data.get('is_active')}, reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
             serializer.instance = existing
             # Remover tenant e department do validated_data para não atualizar (já estão corretos)
             serializer.validated_data.pop('tenant', None)
             serializer.validated_data.pop('department', None)
             serializer.save()
+            logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active}, reply_to_groups={serializer.instance.reply_to_groups}")
         else:
             # ✅ Criar novo registro
             logger.info(f"➕ [AFTER HOURS MESSAGE] Criando novo registro para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
+            logger.info(f"   📝 Dados recebidos: is_active={serializer.validated_data.get('is_active')}, reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
             serializer.save(tenant=tenant)
+            logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active}, reply_to_groups={serializer.instance.reply_to_groups}")
+    
+    def perform_update(self, serializer):
+        """
+        ✅ CORREÇÃO: Garantir que is_active seja salvo corretamente no PATCH.
+        """
+        logger.info(f"🔄 [AFTER HOURS MESSAGE] PATCH - Atualizando registro (ID: {serializer.instance.id})")
+        logger.info(f"   📝 Dados recebidos: is_active={serializer.validated_data.get('is_active')}, reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
+        logger.info(f"   📝 Estado atual no banco: is_active={serializer.instance.is_active}, reply_to_groups={getattr(serializer.instance, 'reply_to_groups', 'N/A')}")
+        serializer.save()
+        logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active}, reply_to_groups={getattr(serializer.instance, 'reply_to_groups', 'N/A')}")
     
     @action(detail=False, methods=['get'])
     def current(self, request):

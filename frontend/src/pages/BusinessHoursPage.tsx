@@ -302,13 +302,22 @@ export default function BusinessHoursPage() {
         department: selectedDepartment || null,
       }
 
+      console.log('💾 [SAVE MESSAGE] Dados que serão enviados:', data)
+      console.log('💾 [SAVE MESSAGE] is_active:', data.is_active)
+      console.log('💾 [SAVE MESSAGE] reply_to_groups:', data.reply_to_groups)
+
       if (afterHoursMessage.id) {
-        await api.patch(`/chat/after-hours-messages/${afterHoursMessage.id}/`, data)
+        console.log('💾 [SAVE MESSAGE] Fazendo PATCH para:', afterHoursMessage.id)
+        const response = await api.patch(`/chat/after-hours-messages/${afterHoursMessage.id}/`, data)
+        console.log('✅ [SAVE MESSAGE] Resposta do PATCH:', response.data)
       } else {
-        await api.post('/chat/after-hours-messages/', data)
+        console.log('💾 [SAVE MESSAGE] Fazendo POST (novo registro)')
+        const response = await api.post('/chat/after-hours-messages/', data)
+        console.log('✅ [SAVE MESSAGE] Resposta do POST:', response.data)
       }
 
       updateToastSuccess(toastId, 'salvar', 'Mensagem Automática')
+      console.log('🔄 [SAVE MESSAGE] Buscando dados atualizados...')
       await fetchAfterHoursMessage()
     } catch (error: any) {
       console.error('❌ Error saving message:', error)
