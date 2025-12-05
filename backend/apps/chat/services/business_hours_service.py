@@ -357,49 +357,95 @@ class BusinessHoursService:
         department=None
     ) -> Optional[Task]:
         """
-        Cria tarefa automática para retorno ao cliente.
+        Cria tarefa automática para retorno ao cliente quando mensagem é recebida fora de horário.
+        
+        Validações realizadas:
+        - Verifica se configuração existe e está ativa
+        - Verifica se criação de tarefa está habilitada
+        - Verifica se mensagem está realmente fora de horário
+        - Verifica se já existe tarefa para esta mensagem (evita duplicatas)
+        - Cria ou busca contato relacionado
+        
+        Args:
+            conversation: Conversa onde a mensagem foi recebida
+            message: Mensagem recebida fora de horário
+            tenant: Tenant da conversa
+            department: Departamento da conversa (opcional)
         
         Returns:
-            Optional[Task]: Tarefa criada ou None
+            Optional[Task]: Tarefa criada ou None se não deve criar
         """
-        logger.info(f"🔍 [BUSINESS HOURS TASK] Iniciando criação de tarefa automática...")
+        logger.info(f"🔍 [BUSINESS HOURS TASK] ====== INICIANDO CRIAÇÃO DE TAREFA ======")
         logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
         logger.info(f"   Department: {department.name if department else 'None'}")
         logger.info(f"   Conversation: {conversation.id} | Phone: {conversation.contact_phone}")
         logger.info(f"   Message: {message.id} | Created: {message.created_at}")
         
-        # Busca configuração
+        # ✅ VALIDAÇÃO 1: Busca configuração
         task_config = BusinessHoursService.get_after_hours_task_config(tenant, department)
         
         if not task_config:
-            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Configuração de tarefa não encontrada para tenant={tenant.name}, department={department.name if department else 'None'}")
+            logger.warning(
+                f"⚠️ [BUSINESS HOURS TASK] Configuração não encontrada - "
+                f"tenant={tenant.name}, department={department.name if department else 'None'}"
+            )
             return None
         
-        logger.info(f"✅ [BUSINESS HOURS TASK] Configuração encontrada: ID={task_config.id}, create_task_enabled={task_config.create_task_enabled}")
+        logger.info(
+            f"✅ [BUSINESS HOURS TASK] Configuração encontrada: "
+            f"ID={task_config.id}, create_task_enabled={task_config.create_task_enabled}"
+        )
         
+        # ✅ VALIDAÇÃO 2: Verifica se criação está habilitada
         if not task_config.create_task_enabled:
-            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Criação de tarefa está desabilitada na configuração")
+            logger.info(
+                f"⏭️ [BUSINESS HOURS TASK] Criação de tarefa está desabilitada na configuração "
+                f"(create_task_enabled=False)"
+            )
             return None
         
-        # Verifica se está fora de horário
+        # ✅ VALIDAÇÃO 3: Verifica se está realmente fora de horário
         is_open, next_open_time = BusinessHoursService.is_business_hours(
             tenant, department, message.created_at
         )
         
-        logger.info(f"🔍 [BUSINESS HOURS TASK] Verificação de horário: is_open={is_open}, next_open_time={next_open_time}")
+        logger.info(
+            f"⏰ [BUSINESS HOURS TASK] Verificação de horário: "
+            f"is_open={is_open}, next_open_time={next_open_time}"
+        )
         
         if is_open:
-            # Dentro do horário = não cria tarefa
-            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Mensagem está dentro do horário de atendimento - não criando tarefa")
+            logger.warning(
+                f"⚠️ [BUSINESS HOURS TASK] Mensagem está dentro do horário de atendimento - "
+                f"não criando tarefa (mensagem criada em: {message.created_at})"
+            )
             return None
         
-        # Busca ou cria contato
-        contact = None
+        # ✅ VALIDAÇÃO 4: Verifica se já existe tarefa para esta mensagem (evita duplicatas)
+        existing_task = Task.objects.filter(
+            tenant=tenant,
+            metadata__is_after_hours_auto=True,
+            metadata__original_message_id=str(message.id),
+            status__in=['pending', 'in_progress']
+        ).first()
+        
+        if existing_task:
+            logger.warning(
+                f"⚠️ [BUSINESS HOURS TASK] Tarefa já existe para esta mensagem! "
+                f"Task ID: {existing_task.id}, Title: {existing_task.title}"
+            )
+            logger.info(
+                f"   ⏭️ Pulando criação de tarefa duplicada para mensagem {message.id}"
+            )
+            return existing_task
+        
+        # ✅ VALIDAÇÃO 5: Busca ou cria contato
         try:
             contact = Contact.objects.get(
                 tenant=tenant,
                 phone=conversation.contact_phone
             )
+            logger.info(f"✅ [BUSINESS HOURS TASK] Contato encontrado: {contact.name} (ID: {contact.id})")
         except Contact.DoesNotExist:
             # Cria contato básico se não existir
             contact = Contact.objects.create(
@@ -407,10 +453,18 @@ class BusinessHoursService:
                 phone=conversation.contact_phone,
                 name=conversation.contact_name or 'Cliente',
             )
+            logger.info(f"➕ [BUSINESS HOURS TASK] Contato criado: {contact.name} (ID: {contact.id})")
+        except Exception as e:
+            logger.error(
+                f"❌ [BUSINESS HOURS TASK] Erro ao buscar/criar contato: {e}",
+                exc_info=True
+            )
+            return None
         
-        # Formata título e descrição
+        # ✅ FORMATAÇÃO: Prepara contexto para templates
+        contact_name = conversation.contact_name or contact.name or 'Cliente'
         context = {
-            'contact_name': conversation.contact_name or contact.name or 'Cliente',
+            'contact_name': contact_name,
             'department_name': department.name if department else 'Atendimento',
             'message_time': message.created_at.strftime('%d/%m/%Y às %H:%M'),
             'message_content': (message.content or '')[:500] if task_config.include_message_preview else '',
@@ -418,51 +472,81 @@ class BusinessHoursService:
             'contact_phone': conversation.contact_phone,
         }
         
-        task_title = BusinessHoursService.format_message_template(
-            task_config.task_title_template,
-            context
-        )
+        # Formata título e descrição usando templates
+        try:
+            task_title = BusinessHoursService.format_message_template(
+                task_config.task_title_template,
+                context
+            )
+            task_description = BusinessHoursService.format_message_template(
+                task_config.task_description_template,
+                context
+            )
+        except Exception as e:
+            logger.error(
+                f"❌ [BUSINESS HOURS TASK] Erro ao formatar templates: {e}",
+                exc_info=True
+            )
+            return None
         
-        task_description = BusinessHoursService.format_message_template(
-            task_config.task_description_template,
-            context
-        )
+        # ✅ CÁLCULO: Data de vencimento (1h após início do próximo dia de atendimento)
+        try:
+            due_date = BusinessHoursService._calculate_task_due_date(
+                tenant, department, message.created_at
+            )
+            logger.info(f"📅 [BUSINESS HOURS TASK] Vencimento calculado: {due_date}")
+        except Exception as e:
+            logger.error(
+                f"❌ [BUSINESS HOURS TASK] Erro ao calcular vencimento: {e}",
+                exc_info=True
+            )
+            # Fallback: vence em 24h
+            from datetime import timedelta
+            due_date = message.created_at + timedelta(hours=24)
+            logger.warning(f"⚠️ [BUSINESS HOURS TASK] Usando vencimento fallback: {due_date}")
         
-        # Calcula vencimento: até 1h após o início do próximo dia de atendimento
-        due_date = BusinessHoursService._calculate_task_due_date(
-            tenant, department, message.created_at
-        )
-        
-        # Cria tarefa
-        task = Task.objects.create(
-            tenant=tenant,
-            department=department if task_config.auto_assign_to_department else None,
-            assigned_to=task_config.auto_assign_to_agent,
-            title=task_title,
-            description=task_description,
-            priority=task_config.task_priority,
-            due_date=due_date,
-            status='pending',
-            created_by=None,  # Sistema
-            metadata={
-                'is_after_hours_auto': True,
-                'original_message_id': str(message.id),
-                'conversation_id': str(conversation.id),
-                'next_open_time': next_open_time,
-            }
-        )
-        
-        # Relaciona com contato
-        task.related_contacts.add(contact)
-        
-        logger.info(f"✅ [BUSINESS HOURS TASK] Tarefa automática criada com sucesso!")
-        logger.info(f"   Task ID: {task.id}")
-        logger.info(f"   Title: {task.title}")
-        logger.info(f"   Due Date: {task.due_date}")
-        logger.info(f"   Department: {task.department.name if task.department else 'None'}")
-        logger.info(f"   Assigned To: {task.assigned_to.email if task.assigned_to else 'None'}")
-        
-        return task
+        # ✅ CRIAÇÃO: Tarefa automática
+        try:
+            task = Task.objects.create(
+                tenant=tenant,
+                department=department if task_config.auto_assign_to_department else None,
+                assigned_to=task_config.auto_assign_to_agent,
+                title=task_title,
+                description=task_description,
+                priority=task_config.task_priority,
+                due_date=due_date,
+                status='pending',
+                created_by=None,  # Sistema
+                metadata={
+                    'is_after_hours_auto': True,
+                    'original_message_id': str(message.id),
+                    'conversation_id': str(conversation.id),
+                    'next_open_time': next_open_time,
+                    'created_at': message.created_at.isoformat(),
+                }
+            )
+            
+            # Relaciona com contato
+            task.related_contacts.add(contact)
+            
+            logger.info(f"✅ [BUSINESS HOURS TASK] ====== TAREFA CRIADA COM SUCESSO ======")
+            logger.info(f"   Task ID: {task.id}")
+            logger.info(f"   Title: {task.title}")
+            logger.info(f"   Description: {task.description[:100]}...")
+            logger.info(f"   Due Date: {task.due_date}")
+            logger.info(f"   Priority: {task.priority}")
+            logger.info(f"   Department: {task.department.name if task.department else 'None'}")
+            logger.info(f"   Assigned To: {task.assigned_to.email if task.assigned_to else 'None'}")
+            logger.info(f"   Contact: {contact.name} ({contact.phone})")
+            
+            return task
+            
+        except Exception as e:
+            logger.error(
+                f"❌ [BUSINESS HOURS TASK] Erro ao criar tarefa: {e}",
+                exc_info=True
+            )
+            return None
     
     @staticmethod
     def _calculate_task_due_date(tenant, department=None, message_datetime: datetime = None) -> datetime:
