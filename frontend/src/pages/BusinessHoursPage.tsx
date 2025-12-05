@@ -303,14 +303,17 @@ export default function BusinessHoursPage() {
     try {
       setIsSaving(true)
 
+      // ✅ GARANTIR que is_active seja boolean explícito antes de enviar
       const data = {
         ...afterHoursMessage,
         department: selectedDepartment || null,
+        is_active: Boolean(afterHoursMessage.is_active),
+        reply_to_groups: Boolean(afterHoursMessage.reply_to_groups ?? false),
       }
 
       console.log('💾 [SAVE MESSAGE] Dados que serão enviados:', data)
-      console.log('💾 [SAVE MESSAGE] is_active:', data.is_active)
-      console.log('💾 [SAVE MESSAGE] reply_to_groups:', data.reply_to_groups)
+      console.log('💾 [SAVE MESSAGE] is_active (tipo):', typeof data.is_active, 'valor:', data.is_active)
+      console.log('💾 [SAVE MESSAGE] reply_to_groups (tipo):', typeof data.reply_to_groups, 'valor:', data.reply_to_groups)
 
       if (afterHoursMessage.id) {
         console.log('💾 [SAVE MESSAGE] Fazendo PATCH para:', afterHoursMessage.id)
