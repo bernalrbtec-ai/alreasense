@@ -176,50 +176,51 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
             logger.debug(f"   Participante {i+1}: JID={participant_jid}, phone={participant_phone[:20] if participant_phone else 'N/A'}..., phoneNumber={participant_phone_number[:30] if participant_phone_number else 'N/A'}..., name={participant_name[:20] if participant_name else 'N/A'}...")
             
             if participant_jid:
-                # ✅ CORREÇÃO CRÍTICA: Se JID é @lid, usar phoneNumber se disponível
-                if participant_jid.endswith('@lid'):
-                    logger.info(f"   🔍 [@LID] Processando JID @lid: {participant_jid}")
-                    
-                    # ✅ PRIORIDADE: Tentar usar phoneNumber primeiro (JID real)
-                    if participant_phone_number:
-                        phone_raw = participant_phone_number.split('@')[0]
-                        normalized_real_phone = normalize_phone(phone_raw)
+                # ✅ CORREÇÃO CRÍTICA: Para menções em grupos, SEMPRE usar phoneNumber (remoteJid real) ao invés de LID
+                # phoneNumber vem no formato "5511999999999@s.whatsapp.net" = número real do participante
+                # participant_jid pode ser LID (ex: "188278548476086@lid") = ID interno do WhatsApp
+                # Para menções, precisamos do número real (phoneNumber), não do LID
+                
+                # ✅ PRIORIDADE 1: Usar phoneNumber (remoteJid real) se disponível
+                if participant_phone_number:
+                    # phoneNumber vem como "5511999999999@s.whatsapp.net" - extrair número
+                    phone_raw = participant_phone_number.split('@')[0]
+                    normalized_real_phone = normalize_phone(phone_raw)
+                    if normalized_real_phone:
+                        # ✅ IMPORTANTE: Mapear tanto o JID (pode ser LID) quanto o phoneNumber para o telefone real
+                        jid_to_real_phone[participant_jid] = normalized_real_phone
+                        # Também mapear phoneNumber completo para telefone real (caso mentionedJid venha como phoneNumber)
+                        if '@' in participant_phone_number:
+                            jid_to_real_phone[participant_phone_number] = normalized_real_phone
+                        logger.info(f"   ✅ [MENTIONS] JID {participant_jid} -> telefone real via phoneNumber: {normalized_real_phone}")
+                    else:
+                        logger.warning(f"   ⚠️ [MENTIONS] JID {participant_jid} não conseguiu normalizar phoneNumber: {participant_phone_number}")
+                        jid_to_real_phone[participant_jid] = None
+                elif participant_phone:
+                    # ✅ VALIDAÇÃO: Verificar se o phone também é LID
+                    if is_lid_number(participant_phone):
+                        logger.warning(f"   ⚠️ [MENTIONS] JID {participant_jid} tem phone que também é LID: {participant_phone[:30]}...")
+                        logger.warning(f"   ⚠️ [MENTIONS] Não será possível buscar contatos por telefone para este participante")
+                        jid_to_real_phone[participant_jid] = None
+                    else:
+                        # Normalizar telefone real do participante
+                        clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                        normalized_real_phone = normalize_phone(clean_phone)
                         if normalized_real_phone:
                             jid_to_real_phone[participant_jid] = normalized_real_phone
-                            logger.info(f"   ✅ [@LID] JID {participant_jid} -> telefone real via phoneNumber: {normalized_real_phone}")
+                            logger.info(f"   ✅ [MENTIONS] JID {participant_jid} -> telefone real: {normalized_real_phone}")
                         else:
-                            logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não conseguiu normalizar phoneNumber: {participant_phone_number}")
+                            logger.warning(f"   ⚠️ [MENTIONS] JID {participant_jid} não conseguiu normalizar phone: {participant_phone}")
                             jid_to_real_phone[participant_jid] = None
-                    elif participant_phone:
-                        # ✅ VALIDAÇÃO CRÍTICA: Verificar se o phone também é LID
-                        if is_lid_number(participant_phone):
-                            logger.warning(f"   ⚠️ [@LID] JID {participant_jid} tem phone que também é LID: {participant_phone[:30]}...")
-                            logger.warning(f"   ⚠️ [@LID] Não será possível buscar contatos por telefone para este participante")
-                            # Não usar como telefone real, mas salvar o LID para busca em contatos
-                            jid_to_real_phone[participant_jid] = None  # Marcar como sem telefone válido
-                        else:
-                            # Normalizar telefone real do participante
-                            clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
-                            normalized_real_phone = normalize_phone(clean_phone)
-                            if normalized_real_phone:
-                                jid_to_real_phone[participant_jid] = normalized_real_phone
-                                logger.info(f"   ✅ [@LID] JID {participant_jid} -> telefone real: {normalized_real_phone}")
-                            else:
-                                logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não conseguiu normalizar phone: {participant_phone}")
-                                jid_to_real_phone[participant_jid] = None
-                    else:
-                        logger.warning(f"   ⚠️ [@LID] JID {participant_jid} não tem phone nem phoneNumber, não será possível buscar contatos")
                 else:
-                    # JID não é @lid, usar phone normalmente
-                    if participant_phone:
-                        clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
-                        normalized_phone = normalize_phone(clean_phone)
-                        if normalized_phone:
-                            jid_to_real_phone[participant_jid] = normalized_phone
+                    logger.warning(f"   ⚠️ [MENTIONS] JID {participant_jid} não tem phone nem phoneNumber, não será possível buscar contatos")
                 
                 # Mapear JID -> nome
                 if participant_name:
                     jid_to_name[participant_jid] = participant_name
+                    # Também mapear phoneNumber para nome (caso mentionedJid venha como phoneNumber)
+                    if participant_phone_number and '@' in participant_phone_number:
+                        jid_to_name[participant_phone_number] = participant_name
                     logger.debug(f"   ✅ Mapeado JID -> nome: {participant_jid} -> {participant_name}")
     
     # Normalizar todos os telefones primeiro (usar telefone real quando disponível)
@@ -227,29 +228,52 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     jid_to_phone = {}  # Mapear JID original -> telefone normalizado
     
     for mentioned_jid in mentioned_jids:
-        # ✅ CORREÇÃO: Se temos telefone real do participante (@lid), usar ele
+        logger.info(f"   🔍 [MENTIONS] Processando mentionedJid do webhook: {mentioned_jid}")
+        
+        # ✅ CORREÇÃO CRÍTICA: Para menções em grupos, mentionedJid pode vir como:
+        # 1. LID (ex: "188278548476086@lid") - ID interno do WhatsApp
+        # 2. phoneNumber completo (ex: "5511999999999@s.whatsapp.net") - número real do participante
+        # 3. Apenas número (ex: "5511999999999") - número sem sufixo
+        
+        # ✅ PRIORIDADE: Se temos telefone real mapeado (via phoneNumber dos participantes), usar ele
         if mentioned_jid in jid_to_real_phone:
             normalized_phone = jid_to_real_phone[mentioned_jid]
-            normalized_phones.append(normalized_phone)
-            jid_to_phone[mentioned_jid] = normalized_phone
-            logger.info(f"   ✅ [MENTIONS] Usando telefone real para @lid: {mentioned_jid} -> {normalized_phone}")
-        else:
-            # Formato normal: "5511999999999@s.whatsapp.net" ou apenas "5511999999999"
-            phone_raw = mentioned_jid.split('@')[0] if '@' in mentioned_jid else mentioned_jid
-            
-            # ✅ VALIDAÇÃO: Se é @lid mas não temos telefone real, não tentar normalizar LID
-            if mentioned_jid.endswith('@lid'):
-                logger.warning(f"   ⚠️ [MENTIONS] JID @lid sem telefone real: {mentioned_jid}, pulando busca de contatos")
-                jid_to_phone[mentioned_jid] = None  # Marcar como sem telefone válido
-                continue
-            
-            # Normalizar telefone
-            normalized_phone = normalize_phone(phone_raw)
             if normalized_phone:
                 normalized_phones.append(normalized_phone)
                 jid_to_phone[mentioned_jid] = normalized_phone
+                logger.info(f"   ✅ [MENTIONS] Usando telefone real mapeado: {mentioned_jid} -> {normalized_phone}")
             else:
-                logger.warning(f"⚠️ [WEBHOOK] Não foi possível normalizar telefone da menção: {phone_raw}")
+                logger.warning(f"   ⚠️ [MENTIONS] JID mapeado mas sem telefone válido: {mentioned_jid}")
+                jid_to_phone[mentioned_jid] = None
+        else:
+            # ✅ CORREÇÃO: Se mentionedJid já é um phoneNumber completo (ex: "5511999999999@s.whatsapp.net")
+            # Extrair número e normalizar diretamente
+            if '@' in mentioned_jid and not mentioned_jid.endswith('@lid'):
+                # É um JID completo válido (não LID), extrair número
+                phone_raw = mentioned_jid.split('@')[0]
+                normalized_phone = normalize_phone(phone_raw)
+                if normalized_phone:
+                    normalized_phones.append(normalized_phone)
+                    jid_to_phone[mentioned_jid] = normalized_phone
+                    logger.info(f"   ✅ [MENTIONS] Extraído telefone de JID completo: {mentioned_jid} -> {normalized_phone}")
+                else:
+                    logger.warning(f"   ⚠️ [MENTIONS] Não foi possível normalizar telefone do JID: {mentioned_jid}")
+                    jid_to_phone[mentioned_jid] = None
+            elif mentioned_jid.endswith('@lid'):
+                # ✅ VALIDAÇÃO: Se é @lid mas não temos telefone real mapeado, não tentar normalizar LID
+                logger.warning(f"   ⚠️ [MENTIONS] JID @lid sem telefone real mapeado: {mentioned_jid}")
+                logger.warning(f"   ⚠️ [MENTIONS] Isso pode acontecer se o participante não está na lista de participantes do grupo")
+                jid_to_phone[mentioned_jid] = None  # Marcar como sem telefone válido
+            else:
+                # Formato: apenas número (ex: "5511999999999")
+                normalized_phone = normalize_phone(mentioned_jid)
+                if normalized_phone:
+                    normalized_phones.append(normalized_phone)
+                    jid_to_phone[mentioned_jid] = normalized_phone
+                    logger.info(f"   ✅ [MENTIONS] Normalizado telefone direto: {mentioned_jid} -> {normalized_phone}")
+                else:
+                    logger.warning(f"   ⚠️ [MENTIONS] Não foi possível normalizar telefone: {mentioned_jid}")
+                    jid_to_phone[mentioned_jid] = None
     
     # ✅ MELHORIA 1: Buscar nomes dos participantes do grupo
     phone_to_name = {}  # Telefone normalizado -> nome
