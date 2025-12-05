@@ -207,8 +207,11 @@ export default function BusinessHoursPage() {
         const finalData = {
           ...messageData,
           reply_to_groups: messageData.reply_to_groups ?? false,
-          // ✅ GARANTIR que is_active seja um booleano explícito (não usar ?? true, usar o valor real)
-          is_active: messageData.is_active !== undefined ? Boolean(messageData.is_active) : true,
+          // ✅ GARANTIR que is_active seja um booleano explícito - usar valor real da API
+          // Se vier como string "false", converter para boolean false
+          is_active: messageData.is_active === false || messageData.is_active === 'false' 
+            ? false 
+            : (messageData.is_active === true || messageData.is_active === 'true' ? true : true),
         }
         console.log('✅ [BUSINESS HOURS] Dados finais:', finalData)
         console.log('✅ [BUSINESS HOURS] is_active final:', finalData.is_active, '(tipo:', typeof finalData.is_active, ')')
