@@ -3834,42 +3834,70 @@ class MessageReactionViewSet(viewsets.ViewSet):
         # Usar threading com tratamento robusto de erros e logs detalhados
         def send_reaction_async():
             """Executa envio de reação de forma assíncrona em thread separada."""
+            logger.critical(f"🚀 [REACTION THREAD] ====== THREAD INICIADA ======")
+            logger.critical(f"   Thread ID: {threading_module.current_thread().ident}")
+            logger.critical(f"   Thread Name: {threading_module.current_thread().name}")
+            logger.critical(f"   Message ID: {message.id}")
+            logger.critical(f"   Message ID externo: {message.message_id}")
+            logger.critical(f"   Emoji: {emoji}")
+            logger.critical(f"   Direction: {message.direction}")
+            logger.critical(f"   Conversation Type: {message.conversation.conversation_type}")
+            logger.critical(f"   Contact Phone: {message.conversation.contact_phone}")
+            
             try:
                 logger.info(f"🔄 [REACTION THREAD] Iniciando envio de reação: {emoji} em {message.id}")
                 
                 # Criar novo event loop para esta thread
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
+                logger.info(f"✅ [REACTION THREAD] Event loop criado")
                 
                 try:
                     # Executar função assíncrona
+                    logger.info(f"📡 [REACTION THREAD] Chamando send_reaction_to_evolution...")
                     result = loop.run_until_complete(send_reaction_to_evolution(message, emoji))
+                    logger.critical(f"📋 [REACTION THREAD] Resultado de send_reaction_to_evolution: {result}")
                     
                     if result:
+                        logger.critical(f"✅ [REACTION THREAD] ====== SUCESSO ======")
                         logger.info(f"✅ [REACTION THREAD] Reação enviada com SUCESSO para Evolution API: {request.user.email} {emoji} em {message.id}")
                     else:
+                        logger.critical(f"⚠️ [REACTION THREAD] ====== FALHA (retornou False) ======")
                         logger.warning(f"⚠️ [REACTION THREAD] Reação NÃO foi enviada (retornou False): {emoji} em {message.id}")
+                        logger.warning(f"   Verifique os logs anteriores para identificar o problema")
                 finally:
                     # Sempre fechar o loop
                     loop.close()
                     logger.debug(f"🔌 [REACTION THREAD] Event loop fechado")
                     
             except httpx.TimeoutException as e:
+                logger.critical(f"❌ [REACTION THREAD] ====== TIMEOUT ======")
                 logger.error(f"❌ [REACTION THREAD] Timeout ao enviar reação: {e}")
                 logger.error(f"   Message ID: {message.id}, Emoji: {emoji}")
             except httpx.ReadTimeout as e:
+                logger.critical(f"❌ [REACTION THREAD] ====== READ TIMEOUT ======")
                 logger.error(f"❌ [REACTION THREAD] ReadTimeout ao enviar reação: {e}")
                 logger.error(f"   Message ID: {message.id}, Emoji: {emoji}")
             except Exception as e:
                 # Logar TODOS os erros com traceback completo para debug
+                logger.critical(f"❌ [REACTION THREAD] ====== ERRO INESPERADO ======")
                 logger.error(f"❌ [REACTION THREAD] Erro inesperado ao enviar reação para Evolution API: {e}", exc_info=True)
                 logger.error(f"   Message ID: {message.id}, Emoji: {emoji}")
                 logger.error(f"   Tipo de erro: {type(e).__name__}")
+            finally:
+                logger.critical(f"🏁 [REACTION THREAD] ====== THREAD FINALIZADA ======")
         
         # Executar em thread separada para não bloquear resposta HTTP
         # ✅ CORREÇÃO: threading_module já importado no início da função
+        logger.critical(f"🚀 [REACTION] Criando thread para envio de reação...")
+        logger.critical(f"   Message ID: {message.id}")
+        logger.critical(f"   Emoji: {emoji}")
+        logger.critical(f"   Message ID externo: {message.message_id}")
+        logger.critical(f"   Direction: {message.direction}")
+        
         thread = threading_module.Thread(target=send_reaction_async, daemon=True, name=f"ReactionSender-{message.id}")
         thread.start()
+        logger.critical(f"✅ [REACTION] Thread iniciada (ID: {thread.ident}, Name: {thread.name})")
         logger.info(f"🚀 [REACTION] Thread iniciada para envio de reação: {emoji} em {message.id}")
         
         # ✅ CORREÇÃO CRÍTICA: Broadcast WebSocket sempre (mesmo se reação já existe)

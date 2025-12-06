@@ -423,6 +423,19 @@ async def send_reaction_to_evolution(message, emoji: str):
         
         endpoint = f"{base_url}/message/sendReaction/{instance_name}"
         
+        logger.critical(f"📡 [REACTION] ====== ENVIANDO PARA EVOLUTION API ======")
+        logger.critical(f"   Endpoint: {endpoint}")
+        logger.critical(f"   Base URL: {base_url}")
+        logger.critical(f"   Instance Name: {instance_name}")
+        logger.critical(f"   API Key presente: {bool(api_key)}")
+        logger.critical(f"   RemoteJID (mascado): {_mask_remote_jid(remote_jid)}")
+        logger.critical(f"   RemoteJID completo: {remote_jid}")
+        logger.critical(f"   Message ID interno: {message.id}")
+        logger.critical(f"   Message ID externo: {message.message_id}")
+        logger.critical(f"   Emoji: {emoji}")
+        logger.critical(f"   Direction: {message.direction}")
+        logger.critical(f"   fromMe: {from_me}")
+        logger.critical(f"   Payload (mascado): {mask_sensitive_data(payload)}")
         logger.info(f"📡 [REACTION] Enviando para Evolution API...")
         logger.info(f"   Endpoint: {endpoint}")
         logger.info(f"   RemoteJID (mascado): {_mask_remote_jid(remote_jid)}")
@@ -448,10 +461,21 @@ async def send_reaction_to_evolution(message, emoji: str):
                     )
                     
                     # ✅ CORREÇÃO: Evolution API retorna 201 Created para reações, não 200
+                    logger.critical(f"📋 [REACTION] Resposta recebida: Status {response.status_code}")
+                    logger.critical(f"   Response Headers: {dict(response.headers)}")
+                    logger.critical(f"   Response Text (primeiros 500 chars): {response.text[:500]}")
+                    
                     if response.status_code in (200, 201):
+                        logger.critical(f"✅ [REACTION] ====== SUCESSO AO ENVIAR ======")
                         logger.info(f"✅ [REACTION] Reação enviada com sucesso para Evolution API (status: {response.status_code})")
+                        try:
+                            response_json = response.json()
+                            logger.critical(f"   Response JSON: {response_json}")
+                        except:
+                            logger.critical(f"   Response não é JSON válido")
                         return True
                     else:
+                        logger.critical(f"❌ [REACTION] ====== ERRO HTTP {response.status_code} ======")
                         logger.warning(f"⚠️ [REACTION] Erro {response.status_code} ao enviar reação (tentativa {attempt + 1}/{max_retries}):")
                         logger.warning(f"   Resposta: {response.text[:200]}")
                         
