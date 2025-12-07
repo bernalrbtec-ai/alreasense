@@ -857,5 +857,122 @@ Local:
 
 ---
 
-**Última atualização:** 20 de Outubro de 2025  
+## 🛡️ REGRA CRÍTICA: PRESERVAÇÃO DE CÓDIGO EXISTENTE
+
+### ⚠️ PRINCÍPIO FUNDAMENTAL
+
+**NENHUMA MODIFICAÇÃO PODE QUEBRAR O CÓDIGO JÁ EXISTENTE**
+
+Esta é uma regra **NÃO NEGOCIÁVEL** e deve ser seguida em **TODAS** as alterações.
+
+### Regras Obrigatórias
+
+1. **✅ SEMPRE testar funcionalidades existentes antes de modificar**
+   ```bash
+   # Antes de qualquer mudança:
+   # 1. Testar funcionalidade atual
+   # 2. Fazer alteração
+   # 3. Testar novamente que ainda funciona
+   # 4. Testar nova funcionalidade
+   ```
+
+2. **✅ SEMPRE manter compatibilidade retroativa**
+   - Endpoints existentes devem continuar funcionando
+   - Estruturas de dados não devem mudar sem migração
+   - APIs públicas não devem quebrar contratos existentes
+
+3. **✅ SEMPRE usar feature flags para mudanças grandes**
+   ```python
+   # Exemplo: Nova funcionalidade opcional
+   if settings.ENABLE_NEW_FEATURE:
+       # Nova lógica
+   else:
+       # Lógica antiga (mantém funcionando)
+   ```
+
+4. **✅ SEMPRE fazer refatoração incremental**
+   - Não refatorar tudo de uma vez
+   - Fazer mudanças pequenas e testáveis
+   - Manter código antigo funcionando enquanto migra
+
+5. **✅ SEMPRE verificar dependências antes de remover**
+   ```bash
+   # Antes de remover código:
+   # 1. Buscar todas as referências
+   grep -r "funcao_antiga" backend/
+   # 2. Verificar se está sendo usado
+   # 3. Se sim, criar alternativa antes de remover
+   ```
+
+6. **✅ SEMPRE documentar breaking changes**
+   ```markdown
+   ## BREAKING CHANGE
+   - Endpoint `/api/old/` foi removido
+   - Use `/api/new/` ao invés
+   - Migração automática disponível em `/api/migrate/`
+   ```
+
+### Checklist Antes de Commitar
+
+- [ ] Funcionalidades existentes ainda funcionam?
+- [ ] Testes existentes ainda passam?
+- [ ] Não quebrei nenhum endpoint público?
+- [ ] Não removi código que ainda é usado?
+- [ ] Documentei mudanças que podem afetar outros?
+- [ ] Criei migração se necessário?
+- [ ] Testei localmente antes de push?
+
+### Exemplos de Violações
+
+```python
+# ❌ ERRADO: Remover endpoint sem aviso
+# @api_view(['POST'])
+# def old_endpoint(request):
+#     ...
+
+# ✅ CORRETO: Deprecar primeiro, depois remover
+@api_view(['POST'])
+@deprecated("Use /api/new/ ao invés. Será removido em 2026-01-01")
+def old_endpoint(request):
+    ...
+```
+
+```typescript
+// ❌ ERRADO: Mudar estrutura sem aviso
+interface Message {
+  // content: string  // Removido!
+  text: string  // Novo
+}
+
+// ✅ CORRETO: Manter compatibilidade
+interface Message {
+  content?: string  // Deprecated, use text
+  text: string      // Novo
+}
+```
+
+### Consequências de Quebrar Código
+
+1. **Rollback imediato** - Mudança será revertida
+2. **Análise de impacto** - Verificar o que foi afetado
+3. **Correção prioritária** - Fix deve ser feito imediatamente
+4. **Documentação** - Registrar o que aconteceu e por quê
+
+### Exceções (Raríssimas)
+
+Apenas em casos **EXTREMAMENTE CRÍTICOS** de segurança ou bugs graves que afetam produção:
+
+1. Bug de segurança que expõe dados
+2. Bug que corrompe dados no banco
+3. Bug que quebra funcionalidade crítica de produção
+
+**Mesmo nestes casos:**
+- Documentar claramente o motivo
+- Criar plano de migração
+- Notificar usuários afetados
+- Fazer rollback se possível
+
+---
+
+**Última atualização:** 5 de Dezembro de 2025  
 **Mantido por:** Time de Desenvolvimento ALREA Sense
