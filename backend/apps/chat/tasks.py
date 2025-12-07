@@ -1548,12 +1548,23 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         logger.warning(f"   ⚠️ Phone {phone_clean} é o número do grupo, não do participante! Pulando menção...")
                         
                         if mention_phones:
-                            # ✅ CORREÇÃO: Evolution API usa 'mentioned' (não 'mentions')
-                            # Formato: array de JIDs/telefones mencionados
-                            payload['mentioned'] = mention_phones
-                            logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_phones)} menção(ões) à mensagem")
-                            logger.info(f"   Campo usado: 'mentioned' (formato Evolution API)")
-                            logger.info(f"   Menções: {', '.join([_mask_digits(p) for p in mention_phones])}")
+                            # ✅ CORREÇÃO CRÍTICA: Evolution API usa 'mentions' (plural) e precisa de JIDs completos
+                            # Formato: array de JIDs completos (ex: ["5517996196795@s.whatsapp.net"])
+                            # Se não tiver @s.whatsapp.net, adicionar
+                            mention_jids = []
+                            for phone in mention_phones:
+                                # Se já é JID completo, usar direto
+                                if '@' in phone:
+                                    mention_jids.append(phone)
+                                else:
+                                    # Adicionar @s.whatsapp.net para formar JID completo
+                                    mention_jids.append(f"{phone}@s.whatsapp.net")
+                            
+                            payload['mentions'] = mention_jids
+                            logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_jids)} menção(ões) à mensagem")
+                            logger.info(f"   Campo usado: 'mentions' (formato Evolution API)")
+                            logger.info(f"   Menções (mascaradas): {', '.join([_mask_remote_jid(jid) for jid in mention_jids])}")
+                            logger.info(f"   Menções (formato completo): {json.dumps(mention_jids, ensure_ascii=False)}")
                         else:
                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento")
                 
