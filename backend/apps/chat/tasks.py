@@ -1037,9 +1037,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             
                             # ✅ CORREÇÃO CRÍTICA: Montar quoted.key com participant quando necessário
                             quoted_key = {
-                                'remoteJid': quoted_remote_jid,
-                                'fromMe': original_message.direction == 'outgoing',
-                                'id': quoted_message_id
+                                        'remoteJid': quoted_remote_jid,
+                                        'fromMe': original_message.direction == 'outgoing',
+                                        'id': quoted_message_id
                             }
                             
                             # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
@@ -1137,9 +1137,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             
                             # ✅ CORREÇÃO CRÍTICA: Montar quoted.key com participant quando necessário
                             quoted_key = {
-                                'remoteJid': quoted_remote_jid,
-                                'fromMe': original_message.direction == 'outgoing',
-                                'id': quoted_message_id
+                                        'remoteJid': quoted_remote_jid,
+                                        'fromMe': original_message.direction == 'outgoing',
+                                        'id': quoted_message_id
                             }
                             
                             # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
@@ -1781,6 +1781,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             replacement = f'@{phone}'
                                             logger.debug(f"   🔍 [CHAT ENVIO] Tentando substituir padrão: {pattern}")
                                             logger.debug(f"   🔍 [CHAT ENVIO] Substituição: '@{name}' -> '@{_mask_digits(phone)}'")
+                                            logger.debug(f"   🔍 [CHAT ENVIO] Texto atual: {payload['text'][:200]}")
                                             
                                             # ✅ FIX: Fazer substituição case-insensitive e substituir apenas uma vez por ocorrência
                                             # Usar count=0 para substituir todas as ocorrências, mas garantir que não substitua parcialmente
@@ -1790,7 +1791,30 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                                 logger.debug(f"   📝 [CHAT ENVIO] Texto após substituição: {new_text[:200]}")
                                                 payload['text'] = new_text
                                             else:
-                                                logger.warning(f"   ⚠️ [CHAT ENVIO] Padrão '@{name}' não encontrado no texto atual")
+                                                # ✅ FIX: Tentar busca mais flexível se não encontrou com padrão exato
+                                                # Pode ser que o nome no texto tenha espaços extras ou formatação diferente
+                                                logger.warning(f"   ⚠️ [CHAT ENVIO] Padrão exato '@{name}' não encontrado, tentando busca flexível...")
+                                                
+                                                # Buscar por partes do nome (caso o nome completo não esteja exatamente como esperado)
+                                                # Primeiro, tentar encontrar o nome no texto sem escape (para ver se há diferenças)
+                                                name_parts = name.split()
+                                                if len(name_parts) > 1:
+                                                    # Nome composto: tentar encontrar cada parte
+                                                    first_part = name_parts[0]
+                                                    remaining_parts = ' '.join(name_parts[1:])
+                                                    
+                                                    # Buscar padrão: @PrimeiraParte SegundaParte...
+                                                    # Usar regex mais flexível que aceita espaços variáveis
+                                                    flexible_pattern = rf'@{re.escape(first_part)}\s+{re.escape(remaining_parts)}(?=\s|$|,|\.|!|\?|:)'
+                                                    new_text_flexible = re.sub(flexible_pattern, replacement, payload['text'], flags=re.IGNORECASE, count=0)
+                                                    
+                                                    if new_text_flexible != payload['text']:
+                                                        logger.info(f"   ✅ [CHAT ENVIO] Substituição realizada (busca flexível): '@{name}' -> '@{_mask_digits(phone)}'")
+                                                        payload['text'] = new_text_flexible
+                                                    else:
+                                                        logger.warning(f"   ⚠️ [CHAT ENVIO] Nome composto não encontrado mesmo com busca flexível: '{name}'")
+                                                else:
+                                                    logger.warning(f"   ⚠️ [CHAT ENVIO] Nome simples não encontrado: '{name}'")
                                         
                                         if text_before != payload['text']:
                                             logger.info(f"✅ [CHAT ENVIO] Texto atualizado com telefones reais:")
