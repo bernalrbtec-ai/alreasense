@@ -307,7 +307,7 @@ class BusinessHoursService:
             'contact_name': conversation.contact_name or 'Cliente',
             'department_name': department.name if department else 'Atendimento',
             'next_open_time': next_open_time or 'Em breve',
-            'message_time': message.created_at.strftime('%d/%m/%Y às %H:%M'),
+            'message_time': message.created_at.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%d/%m/%Y às %H:%M'),
             'message_content': (message.content or '')[:100],
             'contact_phone': conversation.contact_phone,
         }
@@ -502,10 +502,15 @@ class BusinessHoursService:
         
         # ✅ FORMATAÇÃO: Prepara contexto para templates
         contact_name = conversation.contact_name or contact.name or 'Cliente'
+        
+        # ✅ CORREÇÃO: Converter horário para UTC-3 (America/Sao_Paulo) antes de formatar
+        sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
+        message_time_local = message.created_at.astimezone(sao_paulo_tz)
+        
         context = {
             'contact_name': contact_name,
             'department_name': department.name if department else 'Atendimento',
-            'message_time': message.created_at.strftime('%d/%m/%Y às %H:%M'),
+            'message_time': message_time_local.strftime('%d/%m/%Y às %H:%M'),
             'message_content': (message.content or '')[:500] if task_config.include_message_preview else '',
             'next_open_time': next_open_time or 'Em breve',
             'contact_phone': conversation.contact_phone,
