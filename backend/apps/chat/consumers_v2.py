@@ -592,25 +592,74 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 
                 # Processar menções individuais (se não for @everyone)
                 if mentions and not mention_everyone:
-                    # Validar números e buscar nomes dos participantes
+                    # ✅ CORREÇÃO CRÍTICA: Buscar participantes corretos usando JID/LID
                     processed_mentions = []
                     group_metadata = conversation.group_metadata or {}
                     participants = group_metadata.get('participants', [])
                     
-                    # Criar mapa de telefone -> nome para busca rápida
-                    phone_to_name = {p.get('phone', ''): p.get('name', '') for p in participants}
+                    # ✅ MELHORIA: Criar mapas para busca rápida: JID -> participante, phone -> participante
+                    participants_by_jid = {}  # JID/LID -> participante completo
+                    participants_by_phone = {}  # phone -> participante completo
                     
-                    for phone in mentions:
-                        # Normalizar telefone (remover + e espaços)
-                        clean_phone = phone.replace('+', '').replace(' ', '').strip()
-                        name = phone_to_name.get(clean_phone, '')
+                    for p in participants:
+                        participant_jid = p.get('jid', '')
+                        participant_phone = p.get('phone', '')
+                        participant_phone_number = p.get('phoneNumber', '') or p.get('phone_number', '')
                         
-                        processed_mentions.append({
-                            'phone': clean_phone,
-                            'name': name or clean_phone
-                        })
+                        # Mapear por JID (pode ser LID)
+                        if participant_jid:
+                            participants_by_jid[participant_jid] = p
+                        
+                        # Mapear por phone (normalizado)
+                        if participant_phone:
+                            clean_phone = participant_phone.replace('+', '').replace(' ', '').strip()
+                            participants_by_phone[clean_phone] = p
+                        
+                        # Mapear por phoneNumber (telefone real)
+                        if participant_phone_number:
+                            phone_raw = participant_phone_number.split('@')[0] if '@' in participant_phone_number else participant_phone_number
+                            if phone_raw:
+                                participants_by_phone[phone_raw] = p
+                    
+                    # Processar cada menção do frontend (pode ser JID/LID ou phone)
+                    for mention_id in mentions:
+                        # ✅ PRIORIDADE 1: Buscar por JID/LID primeiro (mais confiável)
+                        participant = None
+                        if mention_id in participants_by_jid:
+                            participant = participants_by_jid[mention_id]
+                            logger.debug(f"   ✅ [CHAT WS V2] Participante encontrado por JID: {mention_id}")
+                        elif mention_id in participants_by_phone:
+                            participant = participants_by_phone[mention_id]
+                            logger.debug(f"   ✅ [CHAT WS V2] Participante encontrado por phone: {mention_id}")
+                        
+                        if participant:
+                            # ✅ CORREÇÃO: Usar phoneNumber real (não LID) quando disponível
+                            participant_phone_number = participant.get('phoneNumber') or participant.get('phone_number', '')
+                            participant_jid = participant.get('jid', '')
+                            participant_name = participant.get('name') or participant.get('pushname', '')
+                            
+                            # Extrair telefone real do phoneNumber (formato: 5517996196795@s.whatsapp.net)
+                            real_phone = ''
+                            if participant_phone_number:
+                                real_phone = participant_phone_number.split('@')[0] if '@' in participant_phone_number else participant_phone_number
+                            
+                            processed_mentions.append({
+                                'jid': participant_jid,  # ✅ IMPORTANTE: Incluir JID para busca no backend
+                                'phone': real_phone if real_phone else participant_phone_number or participant_jid,  # Usar telefone real, não LID
+                                'name': participant_name or real_phone or participant_jid
+                            })
+                            logger.debug(f"   ✅ [CHAT WS V2] Menção processada: jid={participant_jid}, phone={real_phone[:20] if real_phone else 'N/A'}, name={participant_name[:20] if participant_name else 'N/A'}")
+                        else:
+                            # Fallback: usar mention_id diretamente (pode ser LID ou phone)
+                            logger.warning(f"   ⚠️ [CHAT WS V2] Participante não encontrado para menção: {mention_id}")
+                            processed_mentions.append({
+                                'jid': mention_id if '@' in mention_id else '',  # Se parece JID, usar como jid
+                                'phone': mention_id if '@' not in mention_id else '',  # Se não parece JID, usar como phone
+                                'name': mention_id
+                            })
                     
                     metadata['mentions'] = processed_mentions
+                    logger.info(f"✅ [CHAT WS V2] {len(processed_mentions)} menção(ões) processadas e adicionadas ao metadata")
             
             message = Message.objects.create(
                 conversation=conversation,
