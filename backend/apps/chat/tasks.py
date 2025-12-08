@@ -1644,26 +1644,27 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     mention_phones.append(phone_digits)
                                     logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via contato cadastrado: {_mask_digits(phone_digits)}")
                             
-                            # Se encontrou participante do grupo, usar phoneNumber ou jid para menção
+                            # Se encontrou participante do grupo, usar phoneNumber (telefone real) para menção
                             elif matched_participant:
                                 participant_phone_number = matched_participant.get('phoneNumber') or matched_participant.get('phone_number', '')
-                                participant_jid = matched_participant.get('jid', '')
                                 
-                                # ✅ PRIORIDADE: Usar phoneNumber (telefone real) primeiro
+                                # ✅ CRÍTICO: Evolution API requer telefone real, NÃO LID
+                                # Sempre usar phoneNumber (telefone real) se disponível
                                 if participant_phone_number:
                                     # Extrair apenas os dígitos do phoneNumber (formato: 5517996196795@s.whatsapp.net)
                                     phone_raw = participant_phone_number.split('@')[0]
-                                    if phone_raw:
+                                    if phone_raw and len(phone_raw) >= 10:  # Validar que tem pelo menos 10 dígitos
                                         mention_phones.append(phone_raw)
                                         logger.info(f"   ✅ Menção adicionada via phoneNumber: {_mask_digits(phone_raw)} (nome: {matched_participant.get('name', 'N/A')})")
-                                elif participant_jid:
-                                    # Fallback: usar JID (pode ser LID, mas Evolution API aceita)
-                                    jid_clean = participant_jid.split('@')[0]
-                                    if jid_clean:
-                                        mention_phones.append(jid_clean)
-                                        logger.info(f"   ✅ Menção adicionada via JID: {_mask_digits(jid_clean)} (nome: {matched_participant.get('name', 'N/A')})")
+                                    else:
+                                        logger.warning(f"   ⚠️ phoneNumber inválido ou muito curto: {phone_raw}")
                                 else:
-                                    logger.warning(f"   ⚠️ Participante encontrado mas sem phoneNumber ou JID válido: {matched_participant}")
+                                    # ✅ CRÍTICO: Se não tem phoneNumber, não podemos enviar menção válida
+                                    # Evolution API não aceita LIDs no array mentioned
+                                    logger.error(f"   ❌ [CHAT ENVIO] Participante encontrado mas SEM phoneNumber válido!")
+                                    logger.error(f"   ❌ [CHAT ENVIO] JID: {matched_participant.get('jid', 'N/A')}")
+                                    logger.error(f"   ❌ [CHAT ENVIO] Phone: {matched_participant.get('phone', 'N/A')}")
+                                    logger.error(f"   ❌ [CHAT ENVIO] Não é possível enviar menção sem telefone real (Evolution API requer número, não LID)")
                             else:
                                 # Se não encontrou participante nem contato, tentar usar dados da menção diretamente (fallback)
                                 if mention_jid:
