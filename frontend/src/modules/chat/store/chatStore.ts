@@ -49,6 +49,7 @@ interface ChatState {
     summary: Message['reactions_summary']
   ) => void;
   updateMessageDeleted: (messageId: string) => void;
+  updateMessage: (conversationId: string, message: Message) => void;
   updateAttachment: (attachmentId: string, updates: Partial<Message['attachments'][number]>) => void;
 
   // Estado do chat
@@ -514,6 +515,37 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       },
       activeConversation: updatedActiveConversation
+    };
+  }),
+
+  updateMessage: (conversationId, message) => set((state) => {
+    const messageId = message.id;
+    const normalizedMessage = {
+      ...message,
+      conversation_id: conversationId,
+      conversation: conversationId
+    };
+    
+    // ✅ Garantir que mensagem está na estrutura normalizada
+    const updatedById = {
+      ...state.messages.byId,
+      [messageId]: normalizedMessage
+    };
+    
+    // ✅ Garantir que messageId está na lista da conversa
+    const conversationMessageIds = state.messages.byConversationId[conversationId] || [];
+    const updatedByConversationId = {
+      ...state.messages.byConversationId,
+      [conversationId]: conversationMessageIds.includes(messageId)
+        ? conversationMessageIds
+        : [...conversationMessageIds, messageId]
+    };
+
+    return {
+      messages: {
+        byId: updatedById,
+        byConversationId: updatedByConversationId
+      }
     };
   }),
 
