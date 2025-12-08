@@ -1736,10 +1736,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 
                                 # ✅ CRÍTICO: Substituir nomes por telefones no texto
                                 # Evolution API requer que o texto tenha @telefone, não @nome
-                                if mentions_metadata and isinstance(mentions_metadata, list):
+                                if mentions and isinstance(mentions, list):
                                     # Criar mapeamento nome -> telefone
                                     name_to_phone_map = {}
-                                    for mention_meta in mentions_metadata:
+                                    for mention_meta in mentions:
                                         mention_name = mention_meta.get('name', '')
                                         mention_phone = mention_meta.get('phone', '')
                                         # Buscar telefone correspondente no array mentioned_numbers
