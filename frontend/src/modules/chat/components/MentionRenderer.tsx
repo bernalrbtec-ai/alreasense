@@ -97,20 +97,15 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
 
   while ((match = mentionRegex.exec(content)) !== null) {
     // Texto antes da menção (com formatação WhatsApp)
-    const beforeMatch = content.substring(lastIndex, match.index);
-    if (beforeMatch) {
-      parts.push(
-        <span 
-          key={`text-${lastIndex}`}
-          dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(beforeMatch) }}
-        />
-      );
-    }
-
+    let beforeMatch = content.substring(lastIndex, match.index);
+    
+    // ✅ FIX: Se beforeMatch termina com @ e encontramos uma menção válida depois,
+    // remover o @ extra para evitar @@ ao renderizar
+    // Isso resolve casos onde usuário digitou @@número por engano
     const mentionText = match[1];
-    // ✅ FIX: match[0] contém o @ completo (ex: "@188278548476086")
-    // match[1] contém apenas o texto após o @ (ex: "188278548476086")
     let mention: Mention | null = null;
+    
+    // Buscar menção primeiro para saber se é válida
     
     // ✅ MELHORIA: Busca otimizada usando mapas
     // 1. ✅ NOVO: Tentar buscar por JID/LID primeiro (se mentionText contém @lid ou é número longo)
@@ -160,6 +155,22 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
     // 5. ✅ NOVO: Se ainda não encontrou e mentionText é número, tentar buscar por JID também
     if (!mention && /^\d+$/.test(mentionText)) {
       mention = jidToMention.get(mentionText) || jidToMention.get(mentionText + '@lid') || null;
+    }
+
+    // ✅ FIX: Se encontramos uma menção válida e beforeMatch termina com @, remover o @ extra
+    // Isso resolve casos onde conteúdo tem @@número (usuário digitou errado)
+    if (mention && beforeMatch.endsWith('@')) {
+      beforeMatch = beforeMatch.slice(0, -1); // Remover último caractere (@)
+    }
+    
+    // Renderizar texto antes da menção (após remover @ extra se necessário)
+    if (beforeMatch) {
+      parts.push(
+        <span 
+          key={`text-${lastIndex}`}
+          dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(beforeMatch) }}
+        />
+      );
     }
 
     if (mention) {
