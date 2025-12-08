@@ -302,20 +302,35 @@ def process_mentions_optimized(mentioned_jids: list, tenant, conversation=None) 
     jid_to_contact = {}  # JID/LID -> nome do contato (para buscar por LID também)
     
     if normalized_phones:
-        # ✅ CORREÇÃO: Contact não tem campo metadata, buscar apenas phone e name
-        contacts = Contact.objects.filter(
-            tenant=tenant,
-            phone__in=normalized_phones
-        ).values('phone', 'name')
+        # ✅ CORREÇÃO CRÍTICA: Buscar TODOS os contatos do tenant e normalizar telefones
+        # Isso garante que encontramos contatos mesmo se estiverem em formatos diferentes no banco
+        all_contacts = Contact.objects.filter(
+            tenant=tenant
+        ).exclude(phone__isnull=True).exclude(phone='').values('phone', 'name')
         
-        # Criar mapa telefone -> nome dos contatos cadastrados
-        for contact in contacts:
-            normalized_contact_phone = normalize_phone(contact['phone'])
+        logger.info(f"🔍 [MENTIONS] Buscando contatos cadastrados: {all_contacts.count()} contatos no tenant")
+        
+        # Criar mapa telefone normalizado -> nome dos contatos cadastrados
+        for contact in all_contacts:
+            contact_phone_raw = contact.get('phone', '').strip()
+            if not contact_phone_raw:
+                continue
+                
+            # Normalizar telefone do contato cadastrado
+            normalized_contact_phone = normalize_phone(contact_phone_raw)
             if normalized_contact_phone:
                 # ✅ IMPORTANTE: Contatos cadastrados têm prioridade sobre participantes do grupo
                 contact_name = contact.get('name', '').strip()
                 if contact_name:
+                    # Mapear telefone normalizado -> nome do contato
                     phone_to_contact[normalized_contact_phone] = contact_name
+                    logger.debug(f"   ✅ [MENTIONS] Contato cadastrado mapeado: {normalized_contact_phone} -> {contact_name}")
+                else:
+                    logger.debug(f"   ⚠️ [MENTIONS] Contato sem nome: {normalized_contact_phone}")
+            else:
+                logger.debug(f"   ⚠️ [MENTIONS] Não foi possível normalizar telefone do contato: {contact_phone_raw[:20]}...")
+        
+        logger.info(f"✅ [MENTIONS] {len(phone_to_contact)} contatos cadastrados mapeados por telefone normalizado")
     
     # ✅ CORREÇÃO: Contact não tem campo metadata, não é possível buscar contatos por LID
     # LIDs serão resolvidos apenas através dos participantes do grupo (jid_to_name)
