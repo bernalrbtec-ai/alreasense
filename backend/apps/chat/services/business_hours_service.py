@@ -550,35 +550,41 @@ class BusinessHoursService:
         task_department = department if task_config.auto_assign_to_department else (department or conversation.department)
         
         # ✅ VALIDAÇÃO FINAL: Se não tiver department, usar department "Inbox"
-        # ✅ CORREÇÃO: Inbox é padrão para todos os tenants (conversas sem department)
-        # Buscar department "Inbox" existente ou criar uma única vez (get_or_create garante sem duplicação)
-        # O unique_together [['tenant', 'name']] no modelo previne duplicação
+        # ✅ CORREÇÃO: Inbox é criado automaticamente quando o tenant é criado
+        # Apenas buscar o department "Inbox" existente (não criar)
         if not task_department:
             from apps.authn.models import Department
-            # Buscar ou criar department "Inbox" (cria apenas uma vez por tenant)
-            # O get_or_create + unique_together garante que não haverá duplicação
-            inbox_department, created = Department.objects.get_or_create(
+            # Buscar department "Inbox" existente (já criado automaticamente com o tenant)
+            inbox_department = Department.objects.filter(
                 tenant=tenant,
-                name='Inbox',
-                defaults={
-                    'color': '#6b7280',  # Cinza
-                    'ai_enabled': False
-                }
-            )
-            task_department = inbox_department
-            if created:
+                name='Inbox'
+            ).first()
+            
+            if inbox_department:
+                task_department = inbox_department
                 logger.info(
-                    f"➕ [BUSINESS HOURS TASK] Department 'Inbox' criado automaticamente para tenant {tenant.name} "
-                    f"(ID: {inbox_department.id}) - será usado para tarefas de conversas sem department"
+                    f"ℹ️ [BUSINESS HOURS TASK] Conversa {conversation.id} sem department atribuído. "
+                    f"Tarefa será criada no department 'Inbox' (ID: {inbox_department.id})"
                 )
             else:
-                logger.debug(
-                    f"ℹ️ [BUSINESS HOURS TASK] Usando department 'Inbox' existente (ID: {inbox_department.id})"
+                # Se Inbox não existe, é um erro do sistema (deveria ter sido criado com o tenant)
+                logger.error(
+                    f"❌ [BUSINESS HOURS TASK] Department 'Inbox' não encontrado para tenant {tenant.name}. "
+                    f"O Inbox deveria ter sido criado automaticamente com o tenant."
                 )
-            logger.info(
-                f"ℹ️ [BUSINESS HOURS TASK] Conversa {conversation.id} sem department atribuído. "
-                f"Tarefa será criada no department 'Inbox'"
-            )
+                # Fallback: buscar primeiro department do tenant
+                task_department = Department.objects.filter(tenant=tenant).first()
+                if task_department:
+                    logger.warning(
+                        f"⚠️ [BUSINESS HOURS TASK] Usando department '{task_department.name}' como fallback "
+                        f"(conversa {conversation.id} sem department atribuído)"
+                    )
+                else:
+                    logger.error(
+                        f"❌ [BUSINESS HOURS TASK] Não é possível criar tarefa. "
+                        f"Tenant {tenant.name} não tem departments cadastrados."
+                    )
+                    return None
         
         try:
             task = Task.objects.create(
