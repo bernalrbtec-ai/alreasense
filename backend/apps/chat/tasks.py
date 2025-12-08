@@ -1850,7 +1850,6 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             
                                             # ✅ VALIDAÇÃO CRÍTICA: Verificar se todos os números no texto estão no array mentioned
                                             # Extrair todos os números mencionados no texto (formato @número)
-                                            import re
                                             mentioned_in_text = re.findall(r'@(\d+)', payload['text'])
                                             logger.info(f"🔍 [CHAT ENVIO] Números mencionados no texto: {[f'@{num}' for num in mentioned_in_text]}")
                                             logger.info(f"🔍 [CHAT ENVIO] Números no array mentioned: {mentioned_numbers}")
