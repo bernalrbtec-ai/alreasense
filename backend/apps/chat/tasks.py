@@ -1483,7 +1483,17 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 if conversation.conversation_type == 'group':
                     metadata = message.metadata or {}
                     mentions = metadata.get('mentions', [])
-                    if mentions:
+                    mention_everyone = metadata.get('mention_everyone', False)  # ✅ NOVO: Flag para @everyone
+                    
+                    # ✅ NOVO: Suporte a @everyone (mencionar todos)
+                    if mention_everyone:
+                        logger.info(f"🔔 [CHAT ENVIO] Mencionando TODOS os participantes do grupo (@everyone)")
+                        payload['mentions'] = {
+                            'everyOne': True,
+                            'mentioned': []  # Array vazio quando everyOne é True
+                        }
+                        logger.info(f"✅ [CHAT ENVIO] Payload mentions configurado para mencionar todos")
+                    elif mentions:
                         # ✅ CORREÇÃO CRÍTICA: Usar informações do grupo para fazer match correto
                         # Buscar participantes do grupo em group_metadata
                         # ✅ CORREÇÃO: Usar sync_to_async para refresh_from_db em contexto assíncrono
