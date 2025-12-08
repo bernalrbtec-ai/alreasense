@@ -1732,6 +1732,44 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 logger.info(f"   Formato: objeto com 'everyOne' e 'mentioned'")
                                 logger.info(f"   Menções (mascaradas): {', '.join([_mask_digits(num) for num in mentioned_numbers])}")
                                 logger.info(f"   Menções (formato completo): {json.dumps(payload['mentions'], ensure_ascii=False)}")
+                                
+                                # ✅ CRÍTICO: Substituir nomes por telefones no texto
+                                # Evolution API requer que o texto tenha @telefone, não @nome
+                                if mentions_metadata and isinstance(mentions_metadata, list):
+                                    # Criar mapeamento nome -> telefone
+                                    name_to_phone_map = {}
+                                    for mention_meta in mentions_metadata:
+                                        mention_name = mention_meta.get('name', '')
+                                        mention_phone = mention_meta.get('phone', '')
+                                        # Buscar telefone correspondente no array mentioned_numbers
+                                        if mention_name and mention_phone:
+                                            # Normalizar telefone para comparar
+                                            phone_normalized = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
+                                            phone_normalized = ''.join(filter(str.isdigit, phone_normalized))
+                                            # Verificar se este telefone está no array mentioned_numbers
+                                            for mentioned_num in mentioned_numbers:
+                                                if phone_normalized == mentioned_num:
+                                                    name_to_phone_map[mention_name] = mentioned_num
+                                                    logger.debug(f"   🔄 [CHAT ENVIO] Mapeamento nome->telefone: {mention_name} -> {_mask_digits(mentioned_num)}")
+                                                    break
+                                    
+                                    # Substituir @Nome por @Telefone no texto
+                                    if name_to_phone_map:
+                                        text_before = payload['text']
+                                        for name, phone in name_to_phone_map.items():
+                                            # Substituir @Nome por @Telefone (case-insensitive)
+                                            import re
+                                            # Pattern: @ seguido do nome (pode ter espaços, pontos, etc)
+                                            pattern = rf'@{re.escape(name)}'
+                                            replacement = f'@{phone}'
+                                            payload['text'] = re.sub(pattern, replacement, payload['text'], flags=re.IGNORECASE)
+                                        
+                                        if text_before != payload['text']:
+                                            logger.info(f"✅ [CHAT ENVIO] Texto atualizado com telefones reais:")
+                                            logger.info(f"   Antes: {text_before[:150]}")
+                                            logger.info(f"   Depois: {payload['text'][:150]}")
+                                        else:
+                                            logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma substituição realizada no texto")
                             else:
                                 logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após normalização")
                         else:
