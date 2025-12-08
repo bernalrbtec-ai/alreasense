@@ -1494,13 +1494,38 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         
                         logger.info(f"🔍 [CHAT ENVIO] Processando {len(mentions)} menção(ões) usando {len(group_participants)} participantes do grupo")
                         
+                        # ✅ MELHORIA: Buscar contatos cadastrados primeiro (mesma lógica do recebimento)
+                        from apps.contacts.models import Contact
+                        from apps.notifications.services import normalize_phone
+                        from apps.contacts.signals import normalize_phone_for_search
+                        
+                        # Buscar TODOS os contatos do tenant e criar mapa telefone normalizado -> nome
+                        phone_to_contact = {}
+                        all_contacts = await sync_to_async(list)(
+                            Contact.objects.filter(
+                                tenant=conversation.tenant
+                            ).exclude(phone__isnull=True).exclude(phone='').values('phone', 'name')
+                        )
+                        
+                        logger.info(f"🔍 [CHAT ENVIO] Buscando contatos cadastrados: {len(all_contacts)} contatos no tenant")
+                        
+                        for contact in all_contacts:
+                            contact_phone_raw = contact.get('phone', '').strip()
+                            if not contact_phone_raw:
+                                continue
+                            normalized_contact_phone = normalize_phone(contact_phone_raw)
+                            if normalized_contact_phone:
+                                contact_name = contact.get('name', '').strip()
+                                if contact_name:
+                                    phone_to_contact[normalized_contact_phone] = contact_name
+                                    logger.debug(f"   ✅ [CHAT ENVIO] Contato cadastrado mapeado: {normalized_contact_phone} -> {contact_name}")
+                        
+                        logger.info(f"✅ [CHAT ENVIO] {len(phone_to_contact)} contatos cadastrados mapeados")
+                        
                         # Criar mapas para busca rápida: nome -> participante, phone -> participante, jid -> participante
                         participants_by_name = {}  # nome normalizado -> participante
                         participants_by_phone = {}  # phone normalizado -> participante
                         participants_by_jid = {}  # jid -> participante
-                        
-                        from apps.notifications.services import normalize_phone
-                        from apps.contacts.signals import normalize_phone_for_search
                         
                         for p in group_participants:
                             participant_name = (p.get('name') or '').strip().lower()
@@ -1611,23 +1636,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         logger.warning(f"   ⚠️ Phone {phone_clean} é o número do grupo, não do participante! Pulando menção...")
                         
                         if mention_phones:
-                            # ✅ CORREÇÃO CRÍTICA: Evolution API usa 'mentions' (plural) e precisa de JIDs completos
-                            # Formato: array de JIDs completos (ex: ["5517996196795@s.whatsapp.net"])
-                            # Se não tiver @s.whatsapp.net, adicionar
-                            mention_jids = []
-                            for phone in mention_phones:
-                                # Se já é JID completo, usar direto
-                                if '@' in phone:
-                                    mention_jids.append(phone)
-                                else:
-                                    # Adicionar @s.whatsapp.net para formar JID completo
-                                    mention_jids.append(f"{phone}@s.whatsapp.net")
+                            # ✅ CORREÇÃO CRÍTICA: Formato correto da Evolution API para menções
+                            # Formato: objeto com "everyOne" (boolean) e "mentioned" (array de números)
+                            # Números devem estar no formato internacional SEM + e SEM @
+                            # Exemplo: {"everyOne": false, "mentioned": ["5517996196795"]}
                             
-                            payload['mentions'] = mention_jids
-                            logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mention_jids)} menção(ões) à mensagem")
-                            logger.info(f"   Campo usado: 'mentions' (formato Evolution API)")
-                            logger.info(f"   Menções (mascaradas): {', '.join([_mask_remote_jid(jid) for jid in mention_jids])}")
-                            logger.info(f"   Menções (formato completo): {json.dumps(mention_jids, ensure_ascii=False)}")
+                            # Normalizar números: remover + e garantir formato internacional
+                            mentioned_numbers = []
+                            for phone in mention_phones:
+                                # Remover @ se tiver (caso venha como JID)
+                                phone_clean = phone.split('@')[0] if '@' in phone else phone
+                                # Remover + se tiver
+                                phone_clean = phone_clean.lstrip('+')
+                                # Garantir que é apenas números
+                                phone_clean = ''.join(filter(str.isdigit, phone_clean))
+                                if phone_clean and len(phone_clean) >= 10:  # Validar que tem pelo menos 10 dígitos
+                                    mentioned_numbers.append(phone_clean)
+                                    logger.debug(f"   ✅ [CHAT ENVIO] Número normalizado para menção: {_mask_digits(phone_clean)}")
+                            
+                            if mentioned_numbers:
+                                # ✅ FORMATO CORRETO: objeto com everyOne e mentioned
+                                payload['mentions'] = {
+                                    'everyOne': False,  # Para mencionar todos, usar True e mentioned vazio
+                                    'mentioned': mentioned_numbers  # Array de números sem + e sem @
+                                }
+                                logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mentioned_numbers)} menção(ões) à mensagem")
+                                logger.info(f"   Formato: objeto com 'everyOne' e 'mentioned'")
+                                logger.info(f"   Menções (mascaradas): {', '.join([_mask_digits(num) for num in mentioned_numbers])}")
+                                logger.info(f"   Menções (formato completo): {json.dumps(payload['mentions'], ensure_ascii=False)}")
+                            else:
+                                logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após normalização")
                         else:
                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após processamento")
                 
