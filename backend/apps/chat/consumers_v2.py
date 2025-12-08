@@ -267,6 +267,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         include_signature = data.get('include_signature', True)  # ✅ Por padrão inclui assinatura
         reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
         mentions = data.get('mentions', [])  # ✅ NOVO: Lista de números mencionados
+        mention_everyone = data.get('mention_everyone', False)  # ✅ NOVO: Flag para @everyone
         
         # ✅ LOG CRÍTICO: Confirmar conversation_id que será usado
         logger.critical(f"✅ [CHAT WS V2] conversation_id validado: {conversation_id}")
@@ -289,7 +290,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             attachment_urls=attachment_urls,
             include_signature=include_signature,
             reply_to=reply_to,  # ✅ NOVO: Passar reply_to
-            mentions=mentions  # ✅ NOVO: Passar mentions
+            mentions=mentions,  # ✅ NOVO: Passar mentions
+            mention_everyone=mention_everyone  # ✅ NOVO: Passar mention_everyone
         )
         
         if not message:
@@ -512,7 +514,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             return False
     
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None):
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False):
         """
         Cria mensagem no banco.
         
@@ -582,26 +584,33 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 logger.debug(f"💬 [CHAT WS V2] Nenhum reply_to fornecido")
             
             # ✅ NOVO: Processar menções se for grupo
-            if mentions and conversation.conversation_type == 'group':
-                # Validar números e buscar nomes dos participantes
-                processed_mentions = []
-                group_metadata = conversation.group_metadata or {}
-                participants = group_metadata.get('participants', [])
+            if conversation.conversation_type == 'group':
+                # ✅ NOVO: Adicionar flag mention_everyone no metadata
+                if mention_everyone:
+                    metadata['mention_everyone'] = True
+                    logger.info(f"🔔 [CHAT WS V2] Flag mention_everyone adicionada ao metadata")
                 
-                # Criar mapa de telefone -> nome para busca rápida
-                phone_to_name = {p.get('phone', ''): p.get('name', '') for p in participants}
-                
-                for phone in mentions:
-                    # Normalizar telefone (remover + e espaços)
-                    clean_phone = phone.replace('+', '').replace(' ', '').strip()
-                    name = phone_to_name.get(clean_phone, '')
+                # Processar menções individuais (se não for @everyone)
+                if mentions and not mention_everyone:
+                    # Validar números e buscar nomes dos participantes
+                    processed_mentions = []
+                    group_metadata = conversation.group_metadata or {}
+                    participants = group_metadata.get('participants', [])
                     
-                    processed_mentions.append({
-                        'phone': clean_phone,
-                        'name': name or clean_phone
-                    })
-                
-                metadata['mentions'] = processed_mentions
+                    # Criar mapa de telefone -> nome para busca rápida
+                    phone_to_name = {p.get('phone', ''): p.get('name', '') for p in participants}
+                    
+                    for phone in mentions:
+                        # Normalizar telefone (remover + e espaços)
+                        clean_phone = phone.replace('+', '').replace(' ', '').strip()
+                        name = phone_to_name.get(clean_phone, '')
+                        
+                        processed_mentions.append({
+                            'phone': clean_phone,
+                            'name': name or clean_phone
+                        })
+                    
+                    metadata['mentions'] = processed_mentions
             
             message = Message.objects.create(
                 conversation=conversation,

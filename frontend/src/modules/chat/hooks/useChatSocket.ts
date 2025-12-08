@@ -278,7 +278,7 @@ export function useChatSocket(conversationId?: string) {
   // API pública
   // ✅ CORREÇÃO CRÍTICA: Buscar conversationId do store diretamente ao invés de usar do closure
   // Isso garante que sempre usamos a conversa ativa atual, mesmo se mudou rapidamente
-  const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false, replyToMessageId?: string, mentions?: string[]): boolean => {
+  const sendMessage = useCallback((content: string, includeSignature = true, isInternal = false, replyToMessageId?: string, mentions?: string[], mentionEveryone?: boolean): boolean => {
     if (!isConnected) {
       console.warn('⚠️ [HOOK] WebSocket não conectado (ignorando envio)');
       return false;
@@ -319,12 +319,12 @@ export function useChatSocket(conversationId?: string) {
       });
       // ✅ CORREÇÃO CRÍTICA: Passar replyToMessageId para sendChatMessage
       console.log('📤 [HOOK] Enviando mensagem com reply via sendChatMessage');
-      return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId, replyToMessageId);
+      return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId, replyToMessageId, mentionEveryone);
     }
 
-    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`, mentions ? `| Mentions: ${mentions.length}` : '');
+    console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`, mentions ? `| Mentions: ${mentions.length}` : '', mentionEveryone ? '| @everyone: SIM' : '');
     // ✅ CORREÇÃO: Passar conversationId atual para sendChatMessage
-    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId);
+    return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId, undefined, mentionEveryone);
   }, [isConnected, conversationId]); // ✅ Manter conversationId na dependência para detectar mudanças
 
   const sendTyping = useCallback((isTyping: boolean) => {

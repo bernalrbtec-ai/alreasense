@@ -288,7 +288,7 @@ class ChatWebSocketManager {
    * Envia uma mensagem de chat
    * ✅ CORREÇÃO: Aceita conversationId opcional para garantir que usa a conversa correta
    */
-  public sendChatMessage(content: string, includeSignature = true, isInternal = false, mentions?: string[], conversationId?: string, replyTo?: string): boolean {
+  public sendChatMessage(content: string, includeSignature = true, isInternal = false, mentions?: string[], conversationId?: string, replyTo?: string, mentionEveryone?: boolean): boolean {
     // ✅ CORREÇÃO CRÍTICA: Usar conversationId passado como parâmetro se fornecido
     // Isso garante que sempre usamos a conversa ativa atual, não a do closure
     const targetConversationId = conversationId || this.currentConversationId;
@@ -323,6 +323,12 @@ class ChatWebSocketManager {
     if (replyTo) {
       payload.reply_to = replyTo;
       console.log('📤 [MANAGER] Adicionando reply_to ao payload:', replyTo);
+    }
+    
+    // ✅ NOVO: Adicionar mention_everyone se fornecido
+    if (mentionEveryone) {
+      payload.mention_everyone = true;
+      console.log('📤 [MANAGER] Adicionando mention_everyone ao payload');
     }
 
     return this.sendMessage(payload);

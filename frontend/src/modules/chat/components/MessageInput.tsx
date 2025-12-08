@@ -13,7 +13,7 @@ import { MentionInput } from './MentionInput';
 import { api } from '@/lib/api';
 
 interface MessageInputProps {
-  sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[]) => boolean;
+  sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[], mentionEveryone?: boolean) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
   conversationId?: string;
@@ -256,10 +256,18 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         console.log('   replyToMessage:', replyToMessage);
         console.log('   replyToId:', replyToId);
         console.log('   includeSignature:', includeSignature);
-        // ✅ NOVO: Enviar mentions apenas se for grupo e tiver menções
-        const mentionsToSend = activeConversation?.conversation_type === 'group' && mentions.length > 0 ? mentions : undefined;
+        
+        // ✅ NOVO: Detectar @everyone no texto (case-insensitive)
+        const messageText = message.trim();
+        const hasEveryone = /@everyone\b/i.test(messageText);
+        
+        // ✅ NOVO: Enviar mentions apenas se for grupo e tiver menções OU @everyone
+        const mentionsToSend = activeConversation?.conversation_type === 'group' && (mentions.length > 0 || hasEveryone) ? mentions : undefined;
+        const mentionEveryone = activeConversation?.conversation_type === 'group' && hasEveryone;
+        
         console.log('   mentionsToSend:', mentionsToSend);
-        const success = sendMessage(message.trim(), includeSignature, false, replyToId, mentionsToSend);
+        console.log('   mentionEveryone:', mentionEveryone);
+        const success = sendMessage(message.trim(), includeSignature, false, replyToId, mentionsToSend, mentionEveryone);
         console.log('📤 [MESSAGE INPUT] Resultado do sendMessage:', success);
         
         if (success) {
