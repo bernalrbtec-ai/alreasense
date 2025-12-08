@@ -1757,12 +1757,28 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     # Substituir @Nome por @Telefone no texto
                                     if name_to_phone_map:
                                         text_before = payload['text']
-                                        for name, phone in name_to_phone_map.items():
-                                            # Substituir @Nome por @Telefone (case-insensitive)
-                                            # Pattern: @ seguido do nome (pode ter espaços, pontos, etc)
-                                            pattern = rf'@{re.escape(name)}'
+                                        # ✅ FIX: Ordenar nomes por tamanho (mais longos primeiro) para evitar substituições parciais
+                                        # Exemplo: "Paulo J. M. Bernal" deve ser substituído antes de "Paulo"
+                                        sorted_names = sorted(name_to_phone_map.items(), key=lambda x: len(x[0]), reverse=True)
+                                        
+                                        for name, phone in sorted_names:
+                                            # ✅ FIX: Usar regex que captura o nome completo, incluindo espaços
+                                            # Pattern: @ seguido do nome completo (escapado) e depois um delimitador (espaço, fim de linha, ou fim da string)
+                                            # Isso evita substituir apenas parte do nome
+                                            escaped_name = re.escape(name)
+                                            # Pattern: @Nome seguido de espaço, fim de linha, ou fim da string
+                                            # Usar lookahead positivo para garantir que não capture apenas parte do nome
+                                            # IMPORTANTE: Não usar word boundary (\b) porque nomes podem ter espaços e pontos
+                                            pattern = rf'@{escaped_name}(?=\s|$|,|\.|!|\?|:)'
                                             replacement = f'@{phone}'
-                                            payload['text'] = re.sub(pattern, replacement, payload['text'], flags=re.IGNORECASE)
+                                            # ✅ FIX: Fazer substituição case-insensitive e substituir apenas uma vez por ocorrência
+                                            # Usar count=0 para substituir todas as ocorrências, mas garantir que não substitua parcialmente
+                                            new_text = re.sub(pattern, replacement, payload['text'], flags=re.IGNORECASE, count=0)
+                                            if new_text != payload['text']:
+                                                payload['text'] = new_text
+                                                logger.debug(f"   ✅ [CHAT ENVIO] Substituído '@{name}' por '@{_mask_digits(phone)}'")
+                                            else:
+                                                logger.debug(f"   ⚠️ [CHAT ENVIO] Padrão '@{name}' não encontrado no texto")
                                         
                                         if text_before != payload['text']:
                                             logger.info(f"✅ [CHAT ENVIO] Texto atualizado com telefones reais:")
