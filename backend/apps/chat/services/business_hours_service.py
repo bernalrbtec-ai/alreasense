@@ -549,12 +549,14 @@ class BusinessHoursService:
         # Se auto_assign_to_department for False, usar department da conversa como fallback
         task_department = department if task_config.auto_assign_to_department else (department or conversation.department)
         
-        # ✅ VALIDAÇÃO FINAL: Se não tiver department, buscar ou criar department "Inbox"
-        # ✅ CORREÇÃO: Criar department "Inbox" se não existir para evitar duplicação
-        # O Inbox aparece como department no sistema para organizar tarefas de conversas sem department
+        # ✅ VALIDAÇÃO FINAL: Se não tiver department, usar department "Inbox"
+        # ✅ CORREÇÃO: Inbox é padrão para todos os tenants (conversas sem department)
+        # Buscar department "Inbox" existente ou criar uma única vez (get_or_create garante sem duplicação)
+        # O unique_together [['tenant', 'name']] no modelo previne duplicação
         if not task_department:
             from apps.authn.models import Department
-            # Buscar ou criar department "Inbox" (get_or_create evita duplicação)
+            # Buscar ou criar department "Inbox" (cria apenas uma vez por tenant)
+            # O get_or_create + unique_together garante que não haverá duplicação
             inbox_department, created = Department.objects.get_or_create(
                 tenant=tenant,
                 name='Inbox',
@@ -566,16 +568,15 @@ class BusinessHoursService:
             task_department = inbox_department
             if created:
                 logger.info(
-                    f"➕ [BUSINESS HOURS TASK] Department 'Inbox' criado para tenant {tenant.name} "
-                    f"(ID: {inbox_department.id})"
+                    f"➕ [BUSINESS HOURS TASK] Department 'Inbox' criado automaticamente para tenant {tenant.name} "
+                    f"(ID: {inbox_department.id}) - será usado para tarefas de conversas sem department"
                 )
             else:
-                logger.info(
-                    f"ℹ️ [BUSINESS HOURS TASK] Department 'Inbox' já existe para tenant {tenant.name} "
-                    f"(ID: {inbox_department.id})"
+                logger.debug(
+                    f"ℹ️ [BUSINESS HOURS TASK] Usando department 'Inbox' existente (ID: {inbox_department.id})"
                 )
             logger.info(
-                f"ℹ️ [BUSINESS HOURS TASK] Conversa {conversation.id} não tem department atribuído. "
+                f"ℹ️ [BUSINESS HOURS TASK] Conversa {conversation.id} sem department atribuído. "
                 f"Tarefa será criada no department 'Inbox'"
             )
         
