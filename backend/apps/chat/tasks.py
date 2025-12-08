@@ -1587,6 +1587,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         
                         # Processar cada menção e fazer match com participantes do grupo
                         mention_phones = []
+                        mention_jids_map = {}  # ✅ TESTE: Mapear telefone -> JID completo para usar no array mentioned
                         for m in mentions:
                             mention_name = (m.get('name') or '').strip().lower()
                             mention_phone = m.get('phone', '')
@@ -1643,11 +1644,26 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 phone_digits = matched_contact_phone.lstrip('+')
                                 if phone_digits:
                                     mention_phones.append(phone_digits)
-                                    logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via contato cadastrado: {_mask_digits(phone_digits)}")
+                                    # ✅ TESTE: Tentar encontrar JID correspondente para este telefone
+                                    # Buscar nos participantes do grupo por phoneNumber
+                                    found_jid = None
+                                    for p in group_participants:
+                                        p_phone_number = p.get('phoneNumber') or p.get('phone_number', '')
+                                        if p_phone_number:
+                                            p_phone_raw = p_phone_number.split('@')[0]
+                                            if p_phone_raw == phone_digits:
+                                                found_jid = p_phone_number  # Usar phoneNumber completo (JID)
+                                                break
+                                    if found_jid:
+                                        mention_jids_map[phone_digits] = found_jid
+                                        logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via contato cadastrado: {_mask_digits(phone_digits)} (JID: {_mask_remote_jid(found_jid)})")
+                                    else:
+                                        logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via contato cadastrado: {_mask_digits(phone_digits)} (sem JID correspondente)")
                             
                             # Se encontrou participante do grupo, usar phoneNumber (telefone real) para menção
                             elif matched_participant:
                                 participant_phone_number = matched_participant.get('phoneNumber') or matched_participant.get('phone_number', '')
+                                participant_jid = matched_participant.get('jid', '')
                                 
                                 # ✅ CRÍTICO: Evolution API requer telefone real, NÃO LID
                                 # Sempre usar phoneNumber (telefone real) se disponível
@@ -1656,7 +1672,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     phone_raw = participant_phone_number.split('@')[0]
                                     if phone_raw and len(phone_raw) >= 10:  # Validar que tem pelo menos 10 dígitos
                                         mention_phones.append(phone_raw)
-                                        logger.info(f"   ✅ Menção adicionada via phoneNumber: {_mask_digits(phone_raw)} (nome: {matched_participant.get('name', 'N/A')})")
+                                        # ✅ TESTE: Armazenar JID completo (phoneNumber) para usar no array mentioned
+                                        mention_jids_map[phone_raw] = participant_phone_number
+                                        logger.info(f"   ✅ Menção adicionada via phoneNumber: {_mask_digits(phone_raw)} (JID: {_mask_remote_jid(participant_phone_number)}, nome: {matched_participant.get('name', 'N/A')})")
                                     else:
                                         logger.warning(f"   ⚠️ phoneNumber inválido ou muito curto: {phone_raw}")
                                 else:
@@ -1680,7 +1698,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                                 phone_raw = participant_phone_number.split('@')[0]
                                                 if phone_raw and len(phone_raw) >= 10:  # Validar que tem pelo menos 10 dígitos
                                                     mention_phones.append(phone_raw)
-                                                    logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via phoneNumber do JID/LID: {_mask_digits(phone_raw)}")
+                                                    # ✅ TESTE: Armazenar JID completo (phoneNumber) para usar no array mentioned
+                                                    mention_jids_map[phone_raw] = participant_phone_number
+                                                    logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via phoneNumber do JID/LID: {_mask_digits(phone_raw)} (JID: {_mask_remote_jid(participant_phone_number)})")
                                                     found_phone = True
                                                     break
                                     
@@ -1705,33 +1725,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     logger.error(f"   ❌ [CHAT ENVIO] Evolution API requer telefone real, não LID. Menção será ignorada.")
                         
                         if mention_phones:
-                            # ✅ CORREÇÃO CRÍTICA: Formato correto da Evolution API para menções
-                            # Formato: objeto com "everyOne" (boolean) e "mentioned" (array de números)
-                            # Números devem estar no formato internacional SEM + e SEM @
-                            # Exemplo: {"everyOne": false, "mentioned": ["5517996196795"]}
+                            # ✅ TESTE: Usar remoteJid (JID completo) ao invés de telefone normalizado
+                            # Formato: objeto com "everyOne" (boolean) e "mentioned" (array de JIDs completos)
+                            # Exemplo: {"everyOne": false, "mentioned": ["5517996196795@s.whatsapp.net"]}
                             
-                            # Normalizar números: remover + e garantir formato internacional
-                            mentioned_numbers = []
+                            # ✅ TESTE: Usar JIDs completos quando disponíveis, senão usar telefones normalizados
+                            mentioned_jids_or_phones = []
                             for phone in mention_phones:
-                                # Remover @ se tiver (caso venha como JID)
-                                phone_clean = phone.split('@')[0] if '@' in phone else phone
-                                # Remover + se tiver
-                                phone_clean = phone_clean.lstrip('+')
-                                # Garantir que é apenas números
-                                phone_clean = ''.join(filter(str.isdigit, phone_clean))
-                                if phone_clean and len(phone_clean) >= 10:  # Validar que tem pelo menos 10 dígitos
-                                    mentioned_numbers.append(phone_clean)
-                                    logger.debug(f"   ✅ [CHAT ENVIO] Número normalizado para menção: {_mask_digits(phone_clean)}")
+                                # ✅ TESTE: Se temos JID completo mapeado, usar ele ao invés do telefone
+                                if phone in mention_jids_map:
+                                    jid_complete = mention_jids_map[phone]
+                                    mentioned_jids_or_phones.append(jid_complete)
+                                    logger.info(f"   ✅ [CHAT ENVIO] Usando JID completo para menção: {_mask_remote_jid(jid_complete)} (telefone: {_mask_digits(phone)})")
+                                else:
+                                    # Fallback: usar telefone normalizado se não tem JID
+                                    phone_clean = phone.split('@')[0] if '@' in phone else phone
+                                    phone_clean = phone_clean.lstrip('+')
+                                    phone_clean = ''.join(filter(str.isdigit, phone_clean))
+                                    if phone_clean and len(phone_clean) >= 10:
+                                        mentioned_jids_or_phones.append(phone_clean)
+                                        logger.info(f"   ⚠️ [CHAT ENVIO] Usando telefone normalizado (sem JID): {_mask_digits(phone_clean)}")
                             
-                            if mentioned_numbers:
-                                # ✅ FORMATO CORRETO: objeto com everyOne e mentioned
+                            if mentioned_jids_or_phones:
+                                # ✅ TESTE: FORMATO COM JID COMPLETO: objeto com everyOne e mentioned (JIDs completos)
                                 payload['mentions'] = {
                                     'everyOne': False,  # Para mencionar todos, usar True e mentioned vazio
-                                    'mentioned': mentioned_numbers  # Array de números sem + e sem @
+                                    'mentioned': mentioned_jids_or_phones  # ✅ TESTE: Array de JIDs completos ou telefones
                                 }
-                                logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mentioned_numbers)} menção(ões) à mensagem")
+                                logger.info(f"✅ [CHAT ENVIO] Adicionando {len(mentioned_jids_or_phones)} menção(ões) à mensagem (TESTE: usando JIDs completos)")
                                 logger.info(f"   Formato: objeto com 'everyOne' e 'mentioned'")
-                                logger.info(f"   Menções (mascaradas): {', '.join([_mask_digits(num) for num in mentioned_numbers])}")
+                                logger.info(f"   Menções (mascaradas): {', '.join([_mask_remote_jid(j) if '@' in str(j) else _mask_digits(str(j)) for j in mentioned_jids_or_phones])}")
                                 logger.info(f"   Menções (formato completo): {json.dumps(payload['mentions'], ensure_ascii=False)}")
                                 
                                 # ✅ CRÍTICO: Substituir nomes por telefones no texto
@@ -1746,16 +1769,25 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         mention_phone = mention_meta.get('phone', '')
                                         logger.debug(f"   📋 [CHAT ENVIO] Menção: name='{mention_name}', phone='{_mask_digits(mention_phone) if mention_phone else 'N/A'}'")
                                         
-                                        # Buscar telefone correspondente no array mentioned_numbers
+                                        # Buscar telefone correspondente no array mentioned_jids_or_phones
                                         if mention_name and mention_phone:
                                             # Normalizar telefone para comparar
                                             phone_normalized = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
                                             phone_normalized = ''.join(filter(str.isdigit, phone_normalized))
-                                            # Verificar se este telefone está no array mentioned_numbers
-                                            for mentioned_num in mentioned_numbers:
-                                                if phone_normalized == mentioned_num:
-                                                    name_to_phone_map[mention_name] = mentioned_num
-                                                    logger.info(f"   ✅ [CHAT ENVIO] Mapeamento criado: '{mention_name}' -> {_mask_digits(mentioned_num)}")
+                                            # ✅ TESTE: Verificar se este telefone está no array mentioned_jids_or_phones
+                                            # Pode ser JID completo ou telefone normalizado
+                                            for mentioned_item in mentioned_jids_or_phones:
+                                                # Extrair telefone do JID se for JID completo
+                                                if '@' in str(mentioned_item):
+                                                    mentioned_phone = str(mentioned_item).split('@')[0]
+                                                else:
+                                                    mentioned_phone = str(mentioned_item)
+                                                
+                                                # Comparar telefones normalizados
+                                                if phone_normalized == mentioned_phone:
+                                                    # ✅ TESTE: Para substituição no texto, usar telefone normalizado (não JID completo)
+                                                    name_to_phone_map[mention_name] = mentioned_phone
+                                                    logger.info(f"   ✅ [CHAT ENVIO] Mapeamento criado: '{mention_name}' -> {_mask_digits(mentioned_phone)}")
                                                     break
                                     
                                     # Substituir @Nome por @Telefone no texto
