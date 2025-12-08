@@ -1666,24 +1666,42 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     logger.error(f"   ❌ [CHAT ENVIO] Phone: {matched_participant.get('phone', 'N/A')}")
                                     logger.error(f"   ❌ [CHAT ENVIO] Não é possível enviar menção sem telefone real (Evolution API requer número, não LID)")
                             else:
-                                # Se não encontrou participante nem contato, tentar usar dados da menção diretamente (fallback)
+                                # Se não encontrou participante nem contato, tentar buscar phoneNumber real usando JID/LID
+                                # ✅ CRÍTICO: Evolution API requer telefone real, NÃO LID
                                 if mention_jid:
-                                    jid_clean = mention_jid.split('@')[0]
-                                    if jid_clean:
-                                        mention_phones.append(jid_clean)
-                                        logger.debug(f"   📌 Menção adicionada via JID direto (fallback): {jid_clean}")
-                                elif mention_phone:
+                                    logger.debug(f"   🔍 [CHAT ENVIO] Tentando encontrar phoneNumber real para JID/LID: {mention_jid}")
+                                    # Buscar em todos os participantes por JID (pode ser LID)
+                                    found_phone = False
+                                    for p in group_participants:
+                                        if p.get('jid') == mention_jid:
+                                            participant_phone_number = p.get('phoneNumber') or p.get('phone_number', '')
+                                            if participant_phone_number:
+                                                phone_raw = participant_phone_number.split('@')[0]
+                                                if phone_raw and len(phone_raw) >= 10:  # Validar que tem pelo menos 10 dígitos
+                                                    mention_phones.append(phone_raw)
+                                                    logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via phoneNumber do JID/LID: {_mask_digits(phone_raw)}")
+                                                    found_phone = True
+                                                    break
+                                    
+                                    if not found_phone:
+                                        logger.error(f"   ❌ [CHAT ENVIO] Não foi possível encontrar phoneNumber real para JID/LID: {mention_jid}")
+                                        logger.error(f"   ❌ [CHAT ENVIO] Evolution API requer telefone real, não LID. Menção será ignorada.")
+                                elif mention_phone and not mention_phone.endswith('@lid'):
                                     # ✅ VALIDAÇÃO: Verificar se phone não é o número do grupo
                                     group_phone = conversation.contact_phone.replace('+', '').replace(' ', '').strip()
                                     if '@' in group_phone:
                                         group_phone = group_phone.split('@')[0]
                                     
                                     phone_clean = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
-                                    if phone_clean != group_phone:
+                                    # Validar que é telefone válido (pelo menos 10 dígitos)
+                                    if phone_clean and len(phone_clean) >= 10 and phone_clean != group_phone:
                                         mention_phones.append(phone_clean)
                                         logger.debug(f"   📌 Menção adicionada via phone direto (fallback): {phone_clean}")
                                     else:
-                                        logger.warning(f"   ⚠️ Phone {phone_clean} é o número do grupo, não do participante! Pulando menção...")
+                                        logger.warning(f"   ⚠️ Phone {phone_clean} é inválido ou é o número do grupo! Pulando menção...")
+                                elif mention_phone and mention_phone.endswith('@lid'):
+                                    logger.error(f"   ❌ [CHAT ENVIO] mention_phone é LID mas não encontrou participante: {mention_phone}")
+                                    logger.error(f"   ❌ [CHAT ENVIO] Evolution API requer telefone real, não LID. Menção será ignorada.")
                         
                         if mention_phones:
                             # ✅ CORREÇÃO CRÍTICA: Formato correto da Evolution API para menções
