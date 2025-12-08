@@ -26,6 +26,7 @@ import asyncio
 import aio_pika
 import httpx
 import time
+import re
 from typing import Optional, Dict, Any
 from django.conf import settings
 from django.core.cache import cache
@@ -1758,7 +1759,6 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         text_before = payload['text']
                                         for name, phone in name_to_phone_map.items():
                                             # Substituir @Nome por @Telefone (case-insensitive)
-                                            import re
                                             # Pattern: @ seguido do nome (pode ter espaços, pontos, etc)
                                             pattern = rf'@{re.escape(name)}'
                                             replacement = f'@{phone}'
