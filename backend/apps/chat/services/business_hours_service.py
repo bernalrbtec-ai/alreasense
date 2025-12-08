@@ -507,6 +507,29 @@ class BusinessHoursService:
         sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
         message_time_local = message.created_at.astimezone(sao_paulo_tz)
         
+        # ✅ NOVO: Informações de grupo e contato quando for grupo
+        is_group = conversation.conversation_type == 'group'
+        group_name = conversation.contact_name if is_group else None
+        sender_name = message.sender_name if is_group else None
+        sender_phone = message.sender_phone if is_group else None
+        
+        # Formatar informações do grupo e contato para exibição
+        group_info = ''
+        if is_group:
+            group_info_parts = []
+            if group_name:
+                group_info_parts.append(f'Grupo: {group_name}')
+            if sender_name:
+                group_info_parts.append(f'Contato: {sender_name}')
+            elif sender_phone:
+                # Formatar telefone para exibição
+                phone_display = sender_phone.replace('+', '').replace('@s.whatsapp.net', '')
+                if len(phone_display) >= 10:
+                    # Formatar como (XX) XXXXX-XXXX
+                    phone_display = f"({phone_display[-11:-9]}) {phone_display[-9:-4]}-{phone_display[-4:]}"
+                group_info_parts.append(f'Contato: {phone_display}')
+            group_info = ' | '.join(group_info_parts) if group_info_parts else 'Grupo'
+        
         context = {
             'contact_name': contact_name,
             'department_name': department.name if department else 'Atendimento',
@@ -514,6 +537,11 @@ class BusinessHoursService:
             'message_content': (message.content or '')[:500] if task_config.include_message_preview else '',
             'next_open_time': next_open_time or 'Em breve',
             'contact_phone': conversation.contact_phone,
+            'is_group': is_group,
+            'group_name': group_name or '',
+            'sender_name': sender_name or '',
+            'sender_phone': sender_phone or '',
+            'group_info': group_info,  # Formato: "Grupo: Nome do Grupo | Contato: Nome do Contato"
         }
         
         # Formata título e descrição usando templates
