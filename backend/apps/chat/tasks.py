@@ -2919,9 +2919,10 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                     metadata={'response_status': response.status_code}
                 )
                 
-                # Atualizar conteúdo da mensagem no banco
+                # Atualizar conteúdo da mensagem no banco e marcar como editada
                 message.content = new_content
-                await sync_to_async(message.save)(update_fields=['content'])
+                message.is_edited = True
+                await sync_to_async(message.save)(update_fields=['content', 'is_edited'])
                 
                 logger.info(f"✅ [EDIT MESSAGE] Histórico de edição salvo: {edit_history.id}")
                 

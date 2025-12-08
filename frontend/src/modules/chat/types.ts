@@ -81,6 +81,7 @@ export interface Message {
   is_internal: boolean;
   is_deleted?: boolean;
   deleted_at?: string;
+  is_edited?: boolean;
   attachments: MessageAttachment[];
   reactions?: MessageReaction[];
   reactions_summary?: Record<string, { count: number; users: Array<{ id: string; email: string; first_name?: string; last_name?: string }> }>;

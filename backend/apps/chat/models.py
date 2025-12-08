@@ -283,6 +283,12 @@ class Message(models.Model):
         verbose_name='Data de Exclusão',
         help_text='Timestamp quando mensagem foi apagada'
     )
+    is_edited = models.BooleanField(
+        default=False,
+        db_index=True,
+        verbose_name='Mensagem Editada',
+        help_text='True se mensagem foi editada'
+    )
     metadata = models.JSONField(
         default=dict,
         blank=True,
@@ -293,6 +299,10 @@ class Message(models.Model):
         auto_now_add=True,
         db_index=True,
         verbose_name='Criado em'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Atualizado em'
     )
     
     class Meta:

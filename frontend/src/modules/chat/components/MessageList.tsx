@@ -915,6 +915,11 @@ export function MessageList() {
                 )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
+                  {messageItem.is_edited && (
+                    <span className="text-xs text-gray-500 italic">
+                      Editada
+                    </span>
+                  )}
                   <span className="text-xs text-gray-600">
                     {formatTime(messageItem.created_at)}
                   </span>
