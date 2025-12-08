@@ -1206,6 +1206,20 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.critical(f"   contextInfo final: {bool(conversation_context)}")
             if conversation_context:
                 logger.critical(f"   contextInfo keys: {list(conversation_context.keys()) if isinstance(conversation_context, dict) else 'not dict'}")
+            
+            # ✅ NOVO: Extrair menções do contextInfo (quando mensagem recebida tem menções)
+            mentioned_jids = conversation_context.get('mentionedJid', [])
+            if mentioned_jids:
+                logger.info(f"🗣️ [WEBHOOK] Menções detectadas na mensagem conversation recebida: {len(mentioned_jids)}")
+                logger.info(f"   JIDs mencionados: {mentioned_jids}")
+                # ✅ MELHORIA: Armazenar JIDs para reprocessar depois com conversa disponível
+                mentioned_jids_raw.extend(mentioned_jids)
+                # Processar inicialmente (será reprocessado depois com conversa)
+                conversation_mentions = process_mentions_optimized(mentioned_jids, tenant, conversation=None)
+                mentions_list.extend(conversation_mentions)
+                if conversation_mentions:
+                    logger.info(f"✅ [WEBHOOK] {len(conversation_mentions)} menções de conversation processadas")
+            
             quoted_id = extract_quoted_message(conversation_context)
             if quoted_id:
                 quoted_message_id_evolution = quoted_id
