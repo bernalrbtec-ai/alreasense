@@ -1739,9 +1739,13 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 if mentions and isinstance(mentions, list):
                                     # Criar mapeamento nome -> telefone
                                     name_to_phone_map = {}
+                                    logger.info(f"🔍 [CHAT ENVIO] Processando {len(mentions)} menção(ões) para substituição de nomes")
+                                    
                                     for mention_meta in mentions:
-                                        mention_name = mention_meta.get('name', '')
+                                        mention_name = mention_meta.get('name', '').strip()
                                         mention_phone = mention_meta.get('phone', '')
+                                        logger.debug(f"   📋 [CHAT ENVIO] Menção: name='{mention_name}', phone='{_mask_digits(mention_phone) if mention_phone else 'N/A'}'")
+                                        
                                         # Buscar telefone correspondente no array mentioned_numbers
                                         if mention_name and mention_phone:
                                             # Normalizar telefone para comparar
@@ -1751,15 +1755,19 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             for mentioned_num in mentioned_numbers:
                                                 if phone_normalized == mentioned_num:
                                                     name_to_phone_map[mention_name] = mentioned_num
-                                                    logger.debug(f"   🔄 [CHAT ENVIO] Mapeamento nome->telefone: {mention_name} -> {_mask_digits(mentioned_num)}")
+                                                    logger.info(f"   ✅ [CHAT ENVIO] Mapeamento criado: '{mention_name}' -> {_mask_digits(mentioned_num)}")
                                                     break
                                     
                                     # Substituir @Nome por @Telefone no texto
                                     if name_to_phone_map:
                                         text_before = payload['text']
+                                        logger.info(f"🔍 [CHAT ENVIO] Texto ANTES da substituição: {text_before[:200]}")
+                                        logger.info(f"🔍 [CHAT ENVIO] Mapeamentos disponíveis: {list(name_to_phone_map.keys())}")
+                                        
                                         # ✅ FIX: Ordenar nomes por tamanho (mais longos primeiro) para evitar substituições parciais
                                         # Exemplo: "Paulo J. M. Bernal" deve ser substituído antes de "Paulo"
                                         sorted_names = sorted(name_to_phone_map.items(), key=lambda x: len(x[0]), reverse=True)
+                                        logger.info(f"🔍 [CHAT ENVIO] Nomes ordenados por tamanho (mais longos primeiro): {[name for name, _ in sorted_names]}")
                                         
                                         for name, phone in sorted_names:
                                             # ✅ FIX: Usar regex que captura o nome completo, incluindo espaços
@@ -1771,21 +1779,29 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             # IMPORTANTE: Não usar word boundary (\b) porque nomes podem ter espaços e pontos
                                             pattern = rf'@{escaped_name}(?=\s|$|,|\.|!|\?|:)'
                                             replacement = f'@{phone}'
+                                            logger.debug(f"   🔍 [CHAT ENVIO] Tentando substituir padrão: {pattern}")
+                                            logger.debug(f"   🔍 [CHAT ENVIO] Substituição: '@{name}' -> '@{_mask_digits(phone)}'")
+                                            
                                             # ✅ FIX: Fazer substituição case-insensitive e substituir apenas uma vez por ocorrência
                                             # Usar count=0 para substituir todas as ocorrências, mas garantir que não substitua parcialmente
                                             new_text = re.sub(pattern, replacement, payload['text'], flags=re.IGNORECASE, count=0)
                                             if new_text != payload['text']:
+                                                logger.info(f"   ✅ [CHAT ENVIO] Substituição realizada: '@{name}' -> '@{_mask_digits(phone)}'")
+                                                logger.debug(f"   📝 [CHAT ENVIO] Texto após substituição: {new_text[:200]}")
                                                 payload['text'] = new_text
-                                                logger.debug(f"   ✅ [CHAT ENVIO] Substituído '@{name}' por '@{_mask_digits(phone)}'")
                                             else:
-                                                logger.debug(f"   ⚠️ [CHAT ENVIO] Padrão '@{name}' não encontrado no texto")
+                                                logger.warning(f"   ⚠️ [CHAT ENVIO] Padrão '@{name}' não encontrado no texto atual")
                                         
                                         if text_before != payload['text']:
                                             logger.info(f"✅ [CHAT ENVIO] Texto atualizado com telefones reais:")
-                                            logger.info(f"   Antes: {text_before[:150]}")
-                                            logger.info(f"   Depois: {payload['text'][:150]}")
+                                            logger.info(f"   Antes: {text_before[:200]}")
+                                            logger.info(f"   Depois: {payload['text'][:200]}")
                                         else:
                                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma substituição realizada no texto")
+                                            logger.warning(f"   Texto original: {text_before[:200]}")
+                                            logger.warning(f"   Mapeamentos disponíveis: {list(name_to_phone_map.keys())}")
+                                    else:
+                                        logger.warning(f"⚠️ [CHAT ENVIO] Nenhum mapeamento nome->telefone criado para substituição")
                             else:
                                 logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma menção válida após normalização")
                         else:
