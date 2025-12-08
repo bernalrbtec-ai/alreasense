@@ -1595,15 +1595,23 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             matched_contact_phone = None  # ✅ NOVO: Telefone do contato cadastrado encontrado
                             
                             # ✅ PRIORIDADE 1: Buscar em CONTATOS CADASTRADOS primeiro (mesma lógica do recebimento)
-                            if mention_phone:
-                                normalized_mention_phone = normalize_phone(mention_phone)
-                                if normalized_mention_phone and normalized_mention_phone in phone_to_contact:
-                                    # Contato cadastrado encontrado! Usar telefone dele
-                                    matched_contact_phone = normalized_mention_phone
-                                    contact_name = phone_to_contact[normalized_mention_phone]
-                                    logger.info(f"   ✅ [CHAT ENVIO] Contato cadastrado encontrado: {contact_name} ({_mask_digits(normalized_mention_phone)})")
+                            # ✅ FIX: Verificar se mention_phone não é LID antes de normalizar
+                            if mention_phone and not mention_phone.endswith('@lid'):
+                                try:
+                                    normalized_mention_phone = normalize_phone(mention_phone)
+                                    if normalized_mention_phone and normalized_mention_phone in phone_to_contact:
+                                        # Contato cadastrado encontrado! Usar telefone dele
+                                        matched_contact_phone = normalized_mention_phone
+                                        contact_name = phone_to_contact[normalized_mention_phone]
+                                        logger.info(f"   ✅ [CHAT ENVIO] Contato cadastrado encontrado: {contact_name} ({_mask_digits(normalized_mention_phone)})")
+                                    else:
+                                        logger.debug(f"   ⚠️ [CHAT ENVIO] mention_phone não encontrado em contatos cadastrados: {_mask_digits(mention_phone)}")
+                                except Exception as e:
+                                    logger.debug(f"   ⚠️ [CHAT ENVIO] Erro ao normalizar mention_phone: {e}")
+                            elif mention_phone and mention_phone.endswith('@lid'):
+                                logger.debug(f"   ⚠️ [CHAT ENVIO] mention_phone é LID, não pode buscar em contatos cadastrados: {mention_phone}")
                             
-                            # ✅ PRIORIDADE 2: Buscar por JID nos participantes do grupo
+                            # ✅ PRIORIDADE 2: Buscar por JID nos participantes do grupo (incluindo LIDs)
                             if not matched_contact_phone and mention_jid and mention_jid in participants_by_jid:
                                 matched_participant = participants_by_jid[mention_jid]
                                 logger.debug(f"   📌 Menção encontrada por JID: {mention_jid}")
