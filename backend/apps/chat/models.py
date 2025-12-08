@@ -711,3 +711,68 @@ class MessageReaction(models.Model):
     def __str__(self):
         return f"{self.user.email} {self.emoji} em {self.message.id}"
 
+
+class MessageEditHistory(models.Model):
+    """
+    Histórico de edições de mensagens.
+    
+    Armazena todas as versões anteriores do conteúdo de uma mensagem editada.
+    """
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='edit_history',
+        verbose_name='Mensagem'
+    )
+    old_content = models.TextField(
+        verbose_name='Conteúdo Anterior',
+        help_text='Conteúdo antes da edição'
+    )
+    new_content = models.TextField(
+        verbose_name='Novo Conteúdo',
+        help_text='Conteúdo após a edição'
+    )
+    edited_by = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='Editado Por',
+        help_text='Usuário que fez a edição'
+    )
+    edited_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Editado Em',
+        db_index=True
+    )
+    evolution_message_id = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        verbose_name='ID da Mensagem Evolution',
+        help_text='ID da mensagem na Evolution API'
+    )
+    metadata = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name='Metadados',
+        help_text='Dados extras da edição'
+    )
+    
+    class Meta:
+        verbose_name = 'Histórico de Edição'
+        verbose_name_plural = 'Históricos de Edições'
+        ordering = ['-edited_at']
+        indexes = [
+            models.Index(fields=['message', '-edited_at']),
+            models.Index(fields=['edited_by', '-edited_at']),
+        ]
+    
+    def __str__(self):
+        return f"Edição de {self.message.id} em {self.edited_at}"
+

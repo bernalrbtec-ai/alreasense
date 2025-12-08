@@ -305,6 +305,20 @@ class fetch_contact_name:
         })
 
 
+class edit_message:
+    """Producer: Edita mensagem enviada via Evolution API (Redis - 10x mais rápido)."""
+    
+    @staticmethod
+    def delay(message_id: str, new_content: str, edited_by_id: int = None):
+        """Enfileira edição de mensagem (Redis)."""
+        from apps.chat.redis_queue import REDIS_QUEUE_EDIT_MESSAGE, enqueue_message
+        enqueue_message(REDIS_QUEUE_EDIT_MESSAGE, {
+            'message_id': message_id,
+            'new_content': new_content,
+            'edited_by_id': edited_by_id
+        })
+
+
 def enqueue_mark_as_read(conversation_id: str, message_id: str):
     """Producer auxiliar: enfileira envio de read receipt."""
     enqueue_mark_stream_message(conversation_id, message_id)
@@ -2729,6 +2743,222 @@ async def handle_fetch_contact_name(
     
     except Exception as e:
         logger.error(f"❌ [CONTACT NAME] Erro inesperado ao buscar nome: {e}", exc_info=True)
+
+
+async def handle_edit_message(message_id: str, new_content: str, edited_by_id: int = None, retry_count: int = 0):
+    """
+    Handler: Edita mensagem enviada via Evolution API.
+    
+    Validações:
+    - Mensagem deve ser outgoing (enviada pela aplicação)
+    - Mensagem deve ter message_id (foi enviada com sucesso)
+    - Mensagem deve ser de texto (não mídia)
+    - Deve ter menos de 15 minutos desde o envio
+    - Novo conteúdo não pode estar vazio
+    """
+    from apps.chat.models import Message, MessageEditHistory
+    from apps.notifications.models import WhatsAppInstance
+    from apps.connections.models import EvolutionConnection
+    from asgiref.sync import sync_to_async
+    from channels.layers import get_channel_layer
+    from channels.db import database_sync_to_async
+    import httpx
+    from datetime import timedelta
+    
+    logger.info(f"✏️ [EDIT MESSAGE] Iniciando edição de mensagem: {message_id}")
+    
+    try:
+        # Buscar mensagem
+        message = await sync_to_async(
+            Message.objects.select_related(
+                'conversation',
+                'conversation__tenant',
+                'sender'
+            ).prefetch_related('attachments').get
+        )(id=message_id)
+        
+        # ✅ VALIDAÇÃO 1: Mensagem deve ser outgoing
+        if message.direction != 'outgoing':
+            logger.error(f"❌ [EDIT MESSAGE] Mensagem não é outgoing: {message.direction}")
+            raise ValueError("Apenas mensagens enviadas pela aplicação podem ser editadas")
+        
+        # ✅ VALIDAÇÃO 2: Mensagem deve ter message_id
+        if not message.message_id:
+            logger.error(f"❌ [EDIT MESSAGE] Mensagem sem message_id (não foi enviada com sucesso)")
+            raise ValueError("Mensagem não foi enviada com sucesso")
+        
+        # ✅ VALIDAÇÃO 3: Mensagem deve ser de texto (não mídia)
+        attachments = await sync_to_async(list)(message.attachments.all())
+        if attachments:
+            logger.error(f"❌ [EDIT MESSAGE] Mensagem tem anexos, não pode ser editada")
+            raise ValueError("Mensagens com anexos não podem ser editadas")
+        
+        # ✅ VALIDAÇÃO 4: Deve ter menos de 15 minutos desde o envio
+        time_since_sent = timezone.now() - message.created_at
+        if time_since_sent > timedelta(minutes=15):
+            logger.error(f"❌ [EDIT MESSAGE] Mensagem tem mais de 15 minutos: {time_since_sent}")
+            raise ValueError("Mensagens só podem ser editadas até 15 minutos após o envio")
+        
+        # ✅ VALIDAÇÃO 5: Novo conteúdo não pode estar vazio
+        new_content = new_content.strip()
+        if not new_content:
+            logger.error(f"❌ [EDIT MESSAGE] Novo conteúdo está vazio")
+            raise ValueError("Novo conteúdo não pode estar vazio")
+        
+        # ✅ VALIDAÇÃO 6: Novo conteúdo deve ser diferente do atual
+        if new_content == message.content:
+            logger.warning(f"⚠️ [EDIT MESSAGE] Novo conteúdo é igual ao atual")
+            return  # Não precisa editar se é igual
+        
+        old_content = message.content
+        
+        logger.info(f"✅ [EDIT MESSAGE] Validações passadas:")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   Evolution Message ID: {message.message_id}")
+        logger.info(f"   Conteúdo antigo: {old_content[:100]}...")
+        logger.info(f"   Conteúdo novo: {new_content[:100]}...")
+        logger.info(f"   Tempo desde envio: {time_since_sent}")
+        
+        # Buscar instância WhatsApp
+        instance = await sync_to_async(
+            WhatsAppInstance.objects.filter(
+                tenant=message.conversation.tenant,
+                is_active=True,
+                status='active'
+            ).first
+        )()
+        
+        if not instance:
+            logger.error(f"❌ [EDIT MESSAGE] Nenhuma instância WhatsApp ativa")
+            raise ValueError("Nenhuma instância WhatsApp ativa")
+        
+        # Buscar servidor Evolution
+        evolution_server = await sync_to_async(
+            EvolutionConnection.objects.filter(is_active=True).first
+        )()
+        
+        if not evolution_server and not instance.api_url:
+            logger.error(f"❌ [EDIT MESSAGE] Configuração da Evolution API não encontrada")
+            raise ValueError("Configuração da Evolution API não encontrada")
+        
+        # Preparar URL e credenciais
+        base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
+        api_key = instance.api_key or evolution_server.api_key
+        instance_name = instance.instance_name
+        
+        # Preparar remoteJid
+        if message.conversation.conversation_type == 'group':
+            remote_jid = message.conversation.contact_phone
+            if not remote_jid.endswith('@g.us'):
+                if remote_jid.endswith('@s.whatsapp.net'):
+                    remote_jid = remote_jid.replace('@s.whatsapp.net', '@g.us')
+                else:
+                    remote_jid = f"{remote_jid.rstrip('@')}@g.us"
+        else:
+            phone = message.conversation.contact_phone
+            if phone.endswith('@s.whatsapp.net'):
+                remote_jid = phone
+            else:
+                phone_clean = phone.lstrip('+')
+                remote_jid = f"{phone_clean}@s.whatsapp.net"
+        
+        # Preparar payload para Evolution API
+        # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/xxxxx/edit-message
+        payload = {
+            'key': {
+                'remoteJid': remote_jid,
+                'fromMe': True,
+                'id': message.message_id
+            },
+            'message': {
+                'conversation': new_content
+            }
+        }
+        
+        # Se for grupo, adicionar participant
+        if message.conversation.conversation_type == 'group':
+            # Buscar participant do metadata ou do sender_phone
+            participant = None
+            if message.metadata and isinstance(message.metadata, dict):
+                participant = message.metadata.get('participant')
+            
+            if not participant and message.sender_phone:
+                # Tentar construir participant do sender_phone
+                phone_clean = message.sender_phone.lstrip('+')
+                participant = f"{phone_clean}@s.whatsapp.net"
+            
+            if participant:
+                payload['key']['participant'] = participant
+        
+        headers = {
+            'Content-Type': 'application/json',
+            'apikey': api_key
+        }
+        
+        endpoint = f"{base_url}/message/editMessage/{instance_name}"
+        
+        logger.info(f"✏️ [EDIT MESSAGE] Enviando edição para Evolution API...")
+        logger.info(f"   Endpoint: {endpoint}")
+        logger.info(f"   RemoteJid: {_mask_remote_jid(remote_jid)}")
+        logger.info(f"   Message ID: {_mask_digits(message.message_id)}")
+        
+        # Enviar para Evolution API
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(endpoint, headers=headers, json=payload)
+            
+            if response.status_code in (200, 201):
+                logger.info(f"✅ [EDIT MESSAGE] Mensagem editada com sucesso!")
+                
+                # Salvar histórico de edição
+                edit_history = await sync_to_async(MessageEditHistory.objects.create)(
+                    message=message,
+                    old_content=old_content,
+                    new_content=new_content,
+                    edited_by_id=edited_by_id,
+                    evolution_message_id=message.message_id,
+                    metadata={'response_status': response.status_code}
+                )
+                
+                # Atualizar conteúdo da mensagem no banco
+                message.content = new_content
+                await sync_to_async(message.save)(update_fields=['content'])
+                
+                logger.info(f"✅ [EDIT MESSAGE] Histórico de edição salvo: {edit_history.id}")
+                
+                # Broadcast via WebSocket
+                channel_layer = get_channel_layer()
+                if channel_layer:
+                    conversation_id = str(message.conversation_id)
+                    room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{conversation_id}"
+                    
+                    # Serializar mensagem atualizada
+                    from apps.chat.utils.serialization import serialize_message_for_ws
+                    message_data = await database_sync_to_async(serialize_message_for_ws)(message)
+                    
+                    await channel_layer.group_send(
+                        room_group_name,
+                        {
+                            'type': 'message_edited',
+                            'message': message_data,
+                            'conversation_id': conversation_id
+                        }
+                    )
+                    
+                    logger.info(f"✅ [EDIT MESSAGE] Broadcast WebSocket enviado")
+                
+                return True
+            else:
+                error_text = response.text[:500] if response.text else 'Sem resposta'
+                logger.error(f"❌ [EDIT MESSAGE] Erro ao editar mensagem: HTTP {response.status_code}")
+                logger.error(f"   Resposta: {error_text}")
+                raise Exception(f"Evolution API retornou erro: HTTP {response.status_code}")
+                
+    except Message.DoesNotExist:
+        logger.error(f"❌ [EDIT MESSAGE] Mensagem não encontrada: {message_id}")
+        raise
+    except Exception as e:
+        logger.error(f"❌ [EDIT MESSAGE] Erro ao editar mensagem: {e}", exc_info=True)
+        raise
 
 
 async def handle_mark_message_as_read(conversation_id: str, message_id: str, retry_count: int = 0):

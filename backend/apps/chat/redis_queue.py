@@ -21,6 +21,7 @@ REDIS_QUEUE_SEND_MESSAGE = f"{QUEUE_PREFIX}send_message"
 REDIS_QUEUE_FETCH_PROFILE_PIC = f"{QUEUE_PREFIX}fetch_profile_pic"
 REDIS_QUEUE_FETCH_GROUP_INFO = f"{QUEUE_PREFIX}fetch_group_info"
 REDIS_QUEUE_FETCH_CONTACT_NAME = f"{QUEUE_PREFIX}fetch_contact_name"  # ✅ NOVO: Busca nome de contato
+REDIS_QUEUE_EDIT_MESSAGE = f"{QUEUE_PREFIX}edit_message"  # ✅ NOVO: Editar mensagem
 REDIS_QUEUE_MARK_AS_READ = f"{QUEUE_PREFIX}mark_as_read"
 
 # ✅ CORREÇÃO CRÍTICA: Dead-Letter Queue
@@ -303,6 +304,10 @@ def get_queue_metrics():
             'fetch_contact_name': {
                 'length': client.llen(REDIS_QUEUE_FETCH_CONTACT_NAME),
                 'name': REDIS_QUEUE_FETCH_CONTACT_NAME
+            },
+            'edit_message': {
+                'length': client.llen(REDIS_QUEUE_EDIT_MESSAGE),
+                'name': REDIS_QUEUE_EDIT_MESSAGE
             },
             'mark_as_read': {
                 'length': client.llen(REDIS_QUEUE_MARK_AS_READ),

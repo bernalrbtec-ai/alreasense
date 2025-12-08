@@ -18,10 +18,12 @@ from apps.chat.redis_queue import (
     REDIS_QUEUE_FETCH_PROFILE_PIC,
     REDIS_QUEUE_FETCH_GROUP_INFO,
     REDIS_QUEUE_FETCH_CONTACT_NAME,  # ✅ NOVO: Busca nome de contato
+    REDIS_QUEUE_EDIT_MESSAGE,  # ✅ NOVO: Editar mensagem
 )
 from apps.chat.tasks import (
     handle_fetch_profile_pic,
     handle_fetch_contact_name,  # ✅ NOVO: Handler para buscar nome
+    handle_edit_message,  # ✅ NOVO: Handler para editar mensagem
 )
 from apps.chat.media_tasks import handle_fetch_group_info
 from apps.chat.utils.metrics import update_worker_heartbeat, record_latency
@@ -58,6 +60,7 @@ QUEUE_ALIASES = {
     'fetch_profile_pic': 'fetch_profile_pic',
     'fetch_group_info': 'fetch_group_info',
     'fetch_contact_name': 'fetch_contact_name',  # ✅ NOVO: Busca nome de contato
+    'edit_message': 'edit_message',  # ✅ NOVO: Editar mensagem
 }
 
 
@@ -70,6 +73,7 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
     - fetch_profile_pic: Buscar foto de perfil
     - fetch_group_info: Buscar info de grupo
     - fetch_contact_name: Buscar nome de contato (✅ NOVO)
+    - edit_message: Editar mensagem enviada (✅ NOVO)
     """
     logger.info("=" * 80)
     if queue_filters:
@@ -251,6 +255,65 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
                 logger.error(f"❌ [REDIS CONSUMER] Erro fetch_contact_name: {e}", exc_info=True)
                 await asyncio.sleep(1)
     
+    async def process_edit_message():
+        """Processa fila edit_message com retry e dead-letter queue."""
+        if queue_filters and 'edit_message' not in queue_filters:
+            logger.info("⏭️ [REDIS CONSUMER] Fila edit_message não selecionada, ignorando.")
+            return
+        logger.info("📥 [REDIS CONSUMER] Consumer edit_message iniciado")
+        
+        backoff_delay = 1
+        
+        while True:
+            try:
+                try:
+                    payload = dequeue_message(REDIS_QUEUE_EDIT_MESSAGE, timeout=5)
+                except redis.exceptions.ConnectionError as e:
+                    logger.warning(f"⚠️ [REDIS CONSUMER] Erro de conexão (edit_message): {e}")
+                    logger.warning(f"   Aguardando {backoff_delay}s antes de retry...")
+                    await asyncio.sleep(backoff_delay)
+                    backoff_delay = min(backoff_delay * 2, 60)
+                    continue
+                
+                backoff_delay = 1
+                
+                if payload:
+                    message_id = payload.get('message_id')
+                    new_content = payload.get('new_content')
+                    edited_by_id = payload.get('edited_by_id')
+                    retry_count = payload.get('_retry_count', 0)
+                    
+                    logger.info(f"📥 [REDIS CONSUMER] Recebida task edit_message: {message_id} (tentativa {retry_count + 1})")
+                    
+                    try:
+                        await handle_edit_message(
+                            message_id,
+                            new_content,
+                            edited_by_id,
+                            retry_count
+                        )
+                        logger.info(f"✅ [REDIS CONSUMER] edit_message concluída: {message_id}")
+                    except Exception as e:
+                        retry_count += 1
+                        if retry_count >= MAX_RETRIES:
+                            logger.error(f"❌ [REDIS CONSUMER] edit_message falhou após {retry_count} tentativas: {message_id}")
+                            enqueue_dead_letter(
+                                REDIS_QUEUE_EDIT_MESSAGE,
+                                payload,
+                                str(e),
+                                retry_count
+                            )
+                        else:
+                            logger.warning(f"⚠️ [REDIS CONSUMER] edit_message falhou (tentativa {retry_count}/{MAX_RETRIES}), re-enfileirando...")
+                            payload['_retry_count'] = retry_count
+                            _schedule_requeue(REDIS_QUEUE_EDIT_MESSAGE, payload, delay_seconds=1)
+                else:
+                    await asyncio.sleep(0.1)
+                
+            except Exception as e:
+                logger.error(f"❌ [REDIS CONSUMER] Erro edit_message: {e}", exc_info=True)
+                await asyncio.sleep(1)
+    
     # Executar consumers em paralelo
     logger.info("✅ [REDIS CONSUMER] Consumers iniciados!")
     logger.info("=" * 80)
@@ -263,6 +326,8 @@ async def start_redis_consumers(queue_filters: set[str] | None = None):
             consumers.append(process_fetch_group_info())
         if not queue_filters or 'fetch_contact_name' in queue_filters:
             consumers.append(process_fetch_contact_name())
+        if not queue_filters or 'edit_message' in queue_filters:
+            consumers.append(process_edit_message())
         if not consumers:
             logger.warning("⚠️ [REDIS CONSUMER] Nenhuma fila ativa configurada. Nada a processar.")
             return

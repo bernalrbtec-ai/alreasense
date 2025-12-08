@@ -3416,6 +3416,116 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['post'], url_path='edit')
+    def edit_message(self, request, pk=None):
+        """
+        Edita uma mensagem enviada via Evolution API.
+        
+        ✅ Validações:
+        - Mensagem deve ser outgoing (enviada pela aplicação)
+        - Mensagem deve ter message_id (foi enviada com sucesso)
+        - Mensagem deve ser de texto (não mídia)
+        - Deve ter menos de 15 minutos desde o envio
+        - Novo conteúdo não pode estar vazio
+        
+        Body:
+        {
+            "new_content": "Novo texto da mensagem"
+        }
+        """
+        message = self.get_object()
+        user = request.user
+        
+        logger.info(f"✏️ [EDIT MESSAGE] Requisição recebida:")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   User: {user.email}")
+        logger.info(f"   Tenant: {user.tenant_id}")
+        
+        # Verificar se mensagem pertence ao tenant do usuário
+        if message.conversation.tenant_id != user.tenant_id:
+            logger.warning(f"⚠️ [EDIT MESSAGE] Mensagem não pertence ao tenant do usuário")
+            return Response(
+                {'error': 'Mensagem não pertence ao seu tenant'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        
+        # Obter novo conteúdo
+        new_content = request.data.get('new_content', '').strip()
+        if not new_content:
+            return Response(
+                {'error': 'Novo conteúdo não pode estar vazio'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ VALIDAÇÃO 1: Mensagem deve ser outgoing
+        if message.direction != 'outgoing':
+            logger.warning(f"⚠️ [EDIT MESSAGE] Mensagem não é outgoing: {message.direction}")
+            return Response(
+                {'error': 'Apenas mensagens enviadas pela aplicação podem ser editadas'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ VALIDAÇÃO 2: Mensagem deve ter message_id
+        if not message.message_id:
+            logger.warning(f"⚠️ [EDIT MESSAGE] Mensagem não tem message_id")
+            return Response(
+                {'error': 'Mensagem não foi enviada com sucesso'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ VALIDAÇÃO 3: Mensagem deve ser de texto (não mídia)
+        attachments = list(message.attachments.all())
+        if attachments:
+            logger.warning(f"⚠️ [EDIT MESSAGE] Mensagem tem anexos")
+            return Response(
+                {'error': 'Mensagens com anexos não podem ser editadas'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ VALIDAÇÃO 4: Deve ter menos de 15 minutos desde o envio
+        from datetime import timedelta
+        time_since_sent = timezone.now() - message.created_at
+        if time_since_sent > timedelta(minutes=15):
+            logger.warning(f"⚠️ [EDIT MESSAGE] Mensagem tem mais de 15 minutos: {time_since_sent}")
+            return Response(
+                {'error': 'Mensagens só podem ser editadas até 15 minutos após o envio'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # ✅ VALIDAÇÃO 5: Novo conteúdo deve ser diferente do atual
+        if new_content == message.content:
+            logger.warning(f"⚠️ [EDIT MESSAGE] Novo conteúdo é igual ao atual")
+            return Response(
+                {'error': 'Novo conteúdo deve ser diferente do atual'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Enfileirar edição para processamento assíncrono
+            from apps.chat.tasks import edit_message
+            edit_message.delay(
+                message_id=str(message.id),
+                new_content=new_content,
+                edited_by_id=user.id
+            )
+            
+            logger.info(f"✅ [EDIT MESSAGE] Edição enfileirada para processamento")
+            
+            return Response(
+                {
+                    'status': 'success',
+                    'message': 'Edição enfileirada com sucesso',
+                    'message_id': str(message.id)
+                },
+                status=status.HTTP_202_ACCEPTED
+            )
+        except Exception as e:
+            logger.error(f"❌ [EDIT MESSAGE] Erro ao enfileirar edição: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao enfileirar edição: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
     @action(detail=True, methods=['post'], url_path='forward')
     def forward_message(self, request, pk=None):
         """

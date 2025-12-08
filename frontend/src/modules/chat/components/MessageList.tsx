@@ -20,6 +20,7 @@ import { MentionRenderer } from './MentionRenderer';
 import { SharedContactCard } from './SharedContactCard';
 import { MessageInfoModal } from './MessageInfoModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
+import { EditMessageModal } from './EditMessageModal';
 import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
 import { EmojiPicker } from './EmojiPicker';
 
@@ -204,6 +205,7 @@ export function MessageList() {
   const [showMessageInfo, setShowMessageInfo] = useState<Message | null>(null);
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+  const [editMessage, setEditMessage] = useState<Message | null>(null);
   
   console.log('✅ [MessageList] Estados inicializados');
   
@@ -970,6 +972,10 @@ export function MessageList() {
             setContextMenu(null);
             setForwardMessage(message);
           }}
+          onShowEdit={(message) => {
+            setContextMenu(null);
+            setEditMessage(message);
+          }}
         />
       )}
 
@@ -1044,6 +1050,14 @@ export function MessageList() {
             setShowContactModal(false);
             setContactToAdd(null);
           }}
+        />
+      )}
+
+      {/* Modal de Editar Mensagem */}
+      {editMessage && (
+        <EditMessageModal
+          message={editMessage}
+          onClose={() => setEditMessage(null)}
         />
       )}
     </div>

@@ -432,6 +432,19 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'conversation': event.get('conversation')
         }))
     
+    async def message_edited(self, event):
+        """✅ NOVO: Broadcast quando mensagem é editada."""
+        message_data = event.get('message', {})
+        conversation_id = event.get('conversation_id')
+        
+        logger.info(f"✏️ [CHAT WS V2] Mensagem editada: {message_data.get('id')}")
+        
+        await self.send(text_data=json.dumps({
+            'type': 'message_edited',
+            'message': message_data,
+            'conversation_id': conversation_id
+        }))
+    
     async def group_participants_updated(self, event):
         """✅ NOVO: Broadcast quando participantes são adicionados/removidos de grupo."""
         logger.info(f"👥 [CHAT WS V2] group_participants_updated recebido")

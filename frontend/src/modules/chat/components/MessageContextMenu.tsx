@@ -19,6 +19,7 @@ import {
   Download,
   Forward,
   Trash2,
+  Edit,
   X
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -34,9 +35,10 @@ interface MessageContextMenuProps {
   onShowInfo?: (message: Message) => void;
   onShowEmojiPicker?: (message: Message) => void;
   onShowForward?: (message: Message) => void;
+  onShowEdit?: (message: Message) => void;
 }
 
-export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker, onShowForward }: MessageContextMenuProps) {
+export function MessageContextMenu({ message, position, onClose, onShowInfo, onShowEmojiPicker, onShowForward, onShowEdit }: MessageContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const { activeConversation, setMessages, getMessagesArray, setReplyToMessage } = useChatStore();
@@ -129,6 +131,36 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
 
   // Verificar se mensagem tem anexos para mostrar opção de baixar
   const hasAttachments = message.attachments && message.attachments.length > 0;
+  
+  // ✅ NOVO: Verificar se mensagem pode ser editada
+  const canEdit = (() => {
+    // Apenas mensagens enviadas (outgoing)
+    if (message.direction !== 'outgoing') return false;
+    
+    // Deve ter message_id (foi enviada com sucesso)
+    if (!message.message_id) return false;
+    
+    // Não pode ter anexos
+    if (hasAttachments) return false;
+    
+    // Deve ter menos de 15 minutos desde o envio
+    if (message.created_at) {
+      const createdDate = new Date(message.created_at);
+      const now = new Date();
+      const minutesSinceSent = (now.getTime() - createdDate.getTime()) / (1000 * 60);
+      if (minutesSinceSent > 15) return false;
+    }
+    
+    return true;
+  })();
+  
+  // Editar mensagem
+  const handleEdit = () => {
+    if (onShowEdit) {
+      onShowEdit(message);
+    }
+    onClose();
+  };
 
   // Copiar mensagem
   const handleCopy = async () => {
@@ -310,6 +342,17 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           <Forward className="w-4 h-4 text-gray-500" />
           <span>Encaminhar</span>
         </button>
+
+        {/* Editar (apenas se pode editar) */}
+        {canEdit && (
+          <button
+            onClick={handleEdit}
+            className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
+          >
+            <Edit className="w-4 h-4 text-gray-500" />
+            <span>Editar</span>
+          </button>
+        )}
 
         {/* Apagar */}
         <button
