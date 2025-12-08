@@ -1875,6 +1875,16 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                                 logger.info(f"✅ [CHAT ENVIO] Validação OK: Todos os números no texto estão no array mentioned")
                                             else:
                                                 logger.error(f"❌ [CHAT ENVIO] Validação FALHOU: Números no texto não correspondem ao array mentioned!")
+                                            
+                                            # ✅ CRÍTICO: Atualizar conteúdo da mensagem no banco com o texto substituído
+                                            # Isso garante que o frontend mostre o texto correto (com números ao invés de nomes)
+                                            if payload['text'] != message.content:
+                                                from asgiref.sync import sync_to_async
+                                                message.content = payload['text']
+                                                await sync_to_async(message.save)(update_fields=['content'])
+                                                logger.info(f"✅ [CHAT ENVIO] Conteúdo da mensagem atualizado no banco com texto substituído")
+                                                logger.info(f"   Antes: {text_before[:100]}...")
+                                                logger.info(f"   Depois: {payload['text'][:100]}...")
                                         else:
                                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma substituição realizada no texto")
                                             logger.warning(f"   Texto original: {text_before[:200]}")
