@@ -1214,9 +1214,43 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 'fileName': filename,
                                 'linkPreview': False
                             }
+                            
+                            # ✅ CORREÇÃO: Adicionar options.quoted no fallback também se for reply
+                            if quoted_message_id and quoted_remote_jid and original_message:
+                                original_content = original_message.content or ''
+                                if not original_content:
+                                    attachments_list = list(original_message.attachments.all())
+                                    if attachments_list:
+                                        original_content = '📎 Áudio'
+                                
+                                # ✅ CORREÇÃO CRÍTICA: Montar quoted.key com participant quando necessário
+                                quoted_key = {
+                                    'remoteJid': quoted_remote_jid,
+                                    'fromMe': original_message.direction == 'outgoing',
+                                    'id': quoted_message_id
+                                }
+                                
+                                # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
+                                if quoted_participant and original_message.conversation.conversation_type == 'group':
+                                    quoted_key['participant'] = quoted_participant
+                                    logger.info(f"💬 [CHAT ENVIO FALLBACK] Adicionando participant ao quoted.key (grupo, áudio): {_mask_remote_jid(quoted_participant)}")
+                                
+                                fb_payload['options'] = {
+                                    'quoted': {
+                                        'key': quoted_key,
+                                        'message': {
+                                            'conversation': original_content[:100] if original_content else 'Áudio'
+                                        }
+                                    }
+                                }
+                                logger.info(f"💬 [CHAT ENVIO FALLBACK] Adicionando options.quoted ao áudio (fallback)")
+                                logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
+                                logger.info(f"   Message ID: {quoted_message_id}")
+                                logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
+                            
                             logger.warning("⚠️ [CHAT] sendWhatsAppAudio retornou 404. Tentando fallback sendMedia (audio)...")
                             logger.info(f"   FB Endpoint: {fb_endpoint}")
-                            logger.info(f"   FB Payload: {json.dumps(fb_payload)}")
+                            logger.info(f"   FB Payload (mascado): {mask_sensitive_data(fb_payload)}")
                             request_start = time.perf_counter()
                             fb_resp = await client.post(
                                 fb_endpoint,
