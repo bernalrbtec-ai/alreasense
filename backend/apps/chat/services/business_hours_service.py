@@ -549,13 +549,27 @@ class BusinessHoursService:
         # Se auto_assign_to_department for False, usar department da conversa como fallback
         task_department = department if task_config.auto_assign_to_department else (department or conversation.department)
         
-        # ✅ VALIDAÇÃO FINAL: Se não tiver department, não criar tarefa (conversa fica no Inbox)
+        # ✅ VALIDAÇÃO FINAL: Se não tiver department, criar/buscar department "Inbox"
         if not task_department:
+            from apps.authn.models import Department
+            # Buscar ou criar department "Inbox"
+            inbox_department, created = Department.objects.get_or_create(
+                tenant=tenant,
+                name='Inbox',
+                defaults={
+                    'color': '#6b7280',  # Cinza
+                    'ai_enabled': False
+                }
+            )
+            task_department = inbox_department
+            if created:
+                logger.info(
+                    f"➕ [BUSINESS HOURS TASK] Department 'Inbox' criado para tenant {tenant.name}"
+                )
             logger.info(
                 f"ℹ️ [BUSINESS HOURS TASK] Conversa {conversation.id} não tem department atribuído. "
-                f"Conversa ficará no Inbox (sem criar tarefa automática)."
+                f"Tarefa será criada no Inbox (department: {task_department.name})"
             )
-            return None
         
         try:
             task = Task.objects.create(
