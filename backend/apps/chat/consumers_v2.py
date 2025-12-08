@@ -643,11 +643,23 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                             if participant_phone_number:
                                 real_phone = participant_phone_number.split('@')[0] if '@' in participant_phone_number else participant_phone_number
                             
-                            processed_mentions.append({
+                            # ✅ CRÍTICO: Sempre usar phoneNumber real, nunca LID
+                            # Se não tem phoneNumber real, não incluir phone (backend vai buscar)
+                            mention_data = {
                                 'jid': participant_jid,  # ✅ IMPORTANTE: Incluir JID para busca no backend
-                                'phone': real_phone if real_phone else participant_phone_number or participant_jid,  # Usar telefone real, não LID
                                 'name': participant_name or real_phone or participant_jid
-                            })
+                            }
+                            
+                            # ✅ CRÍTICO: Só incluir phone se for telefone real válido (não LID)
+                            if real_phone and len(real_phone) >= 10 and not real_phone.endswith('@lid'):
+                                mention_data['phone'] = real_phone
+                            elif participant_phone_number and '@' in participant_phone_number:
+                                # Extrair telefone do phoneNumber se ainda não extraiu
+                                phone_from_number = participant_phone_number.split('@')[0]
+                                if phone_from_number and len(phone_from_number) >= 10:
+                                    mention_data['phone'] = phone_from_number
+                            
+                            processed_mentions.append(mention_data)
                             logger.debug(f"   ✅ [CHAT WS V2] Menção processada: jid={participant_jid}, phone={real_phone[:20] if real_phone else 'N/A'}, name={participant_name[:20] if participant_name else 'N/A'}")
                         else:
                             # Fallback: usar mention_id diretamente (pode ser LID ou phone)
