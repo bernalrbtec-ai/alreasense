@@ -1,9 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical } from 'lucide-react'
+import { Plus, Calendar, Clock, User, Search, XCircle, AlertCircle, MoreVertical, Grid3x3, CalendarDays, Calendar as CalendarIcon } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import TaskModal from '../components/tasks/TaskModal'
+import { CalendarMonthView } from '../components/calendar/CalendarMonthView'
+import { CalendarWeekView } from '../components/calendar/CalendarWeekView'
+import { CalendarDayView } from '../components/calendar/CalendarDayView'
 import { api } from '../lib/api'
 import { showErrorToast } from '../lib/toastHelper'
 
@@ -91,6 +94,8 @@ export default function AgendaPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [searchExpanded, setSearchExpanded] = useState(false)
+  const [viewMode, setViewMode] = useState<'list' | 'month' | 'week' | 'day'>('list')
+  const [currentDate, setCurrentDate] = useState(new Date())
 
   useEffect(() => {
     loadTasks()
@@ -260,23 +265,51 @@ export default function AgendaPage() {
     loadStats()
   }
 
-  const filteredTasks = tasks.filter(task => {
-    // Se houver busca, incluir todas as tarefas (incluindo concluídas)
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase()
-      return (
-        task.title.toLowerCase().includes(searchLower) ||
-        task.description?.toLowerCase().includes(searchLower) ||
-        task.assigned_to_data?.email.toLowerCase().includes(searchLower)
-      )
-    }
-    // Se não houver busca e statusFilter for 'active', já foi filtrado no loadTasks
-    // Mas vamos garantir aqui também para segurança
-    if (statusFilter === 'active' && task.status === 'completed') {
-      return false
-    }
-    return true
-  })
+  const filteredTasks = tasks
+    .filter(task => {
+      // Se houver busca, incluir todas as tarefas (incluindo concluídas)
+      if (searchTerm) {
+        const searchLower = searchTerm.toLowerCase()
+        return (
+          task.title.toLowerCase().includes(searchLower) ||
+          task.description?.toLowerCase().includes(searchLower) ||
+          task.assigned_to_data?.email.toLowerCase().includes(searchLower)
+        )
+      }
+      // Se não houver busca e statusFilter for 'active', já foi filtrado no loadTasks
+      // Mas vamos garantir aqui também para segurança
+      if (statusFilter === 'active' && task.status === 'completed') {
+        return false
+      }
+      return true
+    })
+    // ✅ ORDENAÇÃO: Pendentes/não concluídas primeiro, concluídas ao fim
+    .sort((a, b) => {
+      // Tarefas concluídas sempre ao fim
+      if (a.status === 'completed' && b.status !== 'completed') return 1
+      if (a.status !== 'completed' && b.status === 'completed') return -1
+      
+      // Entre não concluídas, ordenar por data (mais próximas primeiro)
+      if (a.status !== 'completed' && b.status !== 'completed') {
+        if (a.due_date && b.due_date) {
+          return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
+        }
+        if (a.due_date) return -1
+        if (b.due_date) return 1
+      }
+      
+      // Entre concluídas, ordenar por data (mais recentes primeiro)
+      if (a.status === 'completed' && b.status === 'completed') {
+        if (a.due_date && b.due_date) {
+          return new Date(b.due_date).getTime() - new Date(a.due_date).getTime()
+        }
+        if (a.updated_at && b.updated_at) {
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+        }
+      }
+      
+      return 0
+    })
 
   return (
     <div className="p-6 space-y-6">
@@ -286,10 +319,59 @@ export default function AgendaPage() {
           <h1 className="text-2xl font-bold text-gray-900">Agenda e Tarefas</h1>
           <p className="text-sm text-gray-500 mt-1">Gerencie seus compromissos e pendências</p>
         </div>
-        <Button onClick={handleNewTask}>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Tarefa
-        </Button>
+        <div className="flex items-center gap-2">
+          {/* Seletor de Visualização */}
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setViewMode('list')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                viewMode === 'list' 
+                  ? 'bg-white text-gray-900 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title="Lista"
+            >
+              <Grid3x3 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('month')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                viewMode === 'month' 
+                  ? 'bg-white text-gray-900 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title="Mês"
+            >
+              <CalendarIcon className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('week')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                viewMode === 'week' 
+                  ? 'bg-white text-gray-900 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title="Semana"
+            >
+              <CalendarDays className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setViewMode('day')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                viewMode === 'day' 
+                  ? 'bg-white text-gray-900 shadow-sm' 
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+              title="Dia"
+            >
+              <Calendar className="h-4 w-4" />
+            </button>
+          </div>
+          <Button onClick={handleNewTask}>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Tarefa
+          </Button>
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -426,19 +508,20 @@ export default function AgendaPage() {
         </div>
       </Card>
 
-      {/* Lista de Tarefas */}
+      {/* Visualizações de Calendário */}
       {isLoading ? (
         <div className="flex justify-center py-12">
           <LoadingSpinner />
         </div>
-      ) : filteredTasks.length === 0 ? (
-        <Card className="p-12 text-center">
-          <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-          <p className="text-gray-500">Nenhuma tarefa encontrada</p>
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {filteredTasks.map((task) => (
+      ) : viewMode === 'list' ? (
+        filteredTasks.length === 0 ? (
+          <Card className="p-12 text-center">
+            <Calendar className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <p className="text-gray-500">Nenhuma tarefa encontrada</p>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            {filteredTasks.map((task) => (
             <Card key={task.id} className="p-4 hover:shadow-md transition-shadow">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -511,7 +594,38 @@ export default function AgendaPage() {
             </Card>
           ))}
         </div>
-      )}
+        )
+      ) : viewMode === 'month' ? (
+        <CalendarMonthView 
+          tasks={filteredTasks} 
+          currentDate={currentDate}
+          onDateChange={setCurrentDate}
+          onTaskClick={(task) => {
+            setEditingTask(task)
+            setShowTaskModal(true)
+          }}
+        />
+      ) : viewMode === 'week' ? (
+        <CalendarWeekView 
+          tasks={filteredTasks} 
+          currentDate={currentDate}
+          onDateChange={setCurrentDate}
+          onTaskClick={(task) => {
+            setEditingTask(task)
+            setShowTaskModal(true)
+          }}
+        />
+      ) : viewMode === 'day' ? (
+        <CalendarDayView 
+          tasks={filteredTasks} 
+          currentDate={currentDate}
+          onDateChange={setCurrentDate}
+          onTaskClick={(task) => {
+            setEditingTask(task)
+            setShowTaskModal(true)
+          }}
+        />
+      ) : null}
 
       {/* Modal de Tarefa */}
       {showTaskModal && (
