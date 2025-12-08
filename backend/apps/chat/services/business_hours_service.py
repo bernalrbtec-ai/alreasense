@@ -545,10 +545,31 @@ class BusinessHoursService:
             logger.warning(f"⚠️ [BUSINESS HOURS TASK] Usando vencimento fallback: {due_date}")
         
         # ✅ CRIAÇÃO: Tarefa automática
+        # ✅ CORREÇÃO: department é obrigatório no modelo Task, então sempre usar um válido
+        # Se auto_assign_to_department for False, usar department da conversa como fallback
+        task_department = department if task_config.auto_assign_to_department else (department or conversation.department)
+        
+        # ✅ VALIDAÇÃO FINAL: Garantir que temos um department válido
+        # Se ainda não tiver, buscar primeiro department do tenant como fallback
+        if not task_department:
+            from apps.authn.models import Department
+            task_department = Department.objects.filter(tenant=tenant).first()
+            if task_department:
+                logger.warning(
+                    f"⚠️ [BUSINESS HOURS TASK] Usando department padrão do tenant: {task_department.name} "
+                    f"(conversa {conversation.id} não tem department atribuído)"
+                )
+            else:
+                logger.error(
+                    f"❌ [BUSINESS HOURS TASK] Não é possível criar tarefa sem department. "
+                    f"Tenant {tenant.name} não tem departments cadastrados."
+                )
+                return None
+        
         try:
             task = Task.objects.create(
                 tenant=tenant,
-                department=department if task_config.auto_assign_to_department else None,
+                department=task_department,
                 assigned_to=task_config.auto_assign_to_agent,
                 title=task_title,
                 description=task_description,
@@ -647,8 +668,9 @@ class BusinessHoursService:
                 # Combina data + horário de início + 1 hora
                 due_datetime_local = datetime.combine(check_date, start_time) + timedelta(hours=1)
                 
-                # Converte para timezone aware e depois para UTC
-                due_datetime_aware = tz.localize(due_datetime_local)
+                # ✅ CORREÇÃO: zoneinfo.ZoneInfo não tem método localize() (isso é do pytz)
+                # Com zoneinfo, usamos replace() para adicionar timezone
+                due_datetime_aware = due_datetime_local.replace(tzinfo=tz)
                 due_datetime_utc = due_datetime_aware.astimezone(ZoneInfo('UTC'))
                 
                 logger.info(
