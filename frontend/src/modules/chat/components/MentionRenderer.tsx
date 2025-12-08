@@ -88,6 +88,7 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
   });
 
   // ✅ CORREÇÃO: Regex para encontrar menções no formato @nome, @número ou @número@lid
+  // ✅ FIX: Capturar o @ também para poder removê-lo do conteúdo quando há menção válida
   const mentionRegex = /@(\d+@?lid|\d+|\w[\w\s]*?)(?=\s|$|@|,|\.|!|\?)/g;
   
   const parts: React.ReactNode[] = [];
@@ -107,6 +108,8 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
     }
 
     const mentionText = match[1];
+    // ✅ FIX: match[0] contém o @ completo (ex: "@188278548476086")
+    // match[1] contém apenas o texto após o @ (ex: "188278548476086")
     let mention: Mention | null = null;
     
     // ✅ MELHORIA: Busca otimizada usando mapas
@@ -192,6 +195,8 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
         }
       }
       
+      // ✅ FIX: Renderizar menção sem adicionar @ extra (já está no match[0])
+      // O match[0] já contém o @ original do conteúdo, então não precisamos adicionar outro
       parts.push(
         <span
           key={`mention-${match.index}`}
@@ -202,10 +207,12 @@ export function MentionRenderer({ content, mentions = [] }: MentionRendererProps
         </span>
       );
     } else {
-      // Menção não encontrada, renderizar como texto normal
-      parts.push(<span key={`text-${match.index}`}>@{mentionText}</span>);
+      // Menção não encontrada, renderizar como texto normal (incluindo o @ original)
+      // ✅ FIX: Usar match[0] que já contém o @, não adicionar outro
+      parts.push(<span key={`text-${match.index}`}>{match[0]}</span>);
     }
 
+    // ✅ FIX: Usar match[0].length para avançar corretamente (inclui o @)
     lastIndex = match.index + match[0].length;
   }
 
