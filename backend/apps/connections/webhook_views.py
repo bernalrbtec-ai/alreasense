@@ -171,7 +171,7 @@ class EvolutionWebhookView(APIView):
                 
                 logger.info(f"📞 Contact updated - Instance: {instance}, JID: {remote_jid}, Name: {push_name}")
             
-                # 📸 Atualizar foto de perfil nas conversas
+                # 📸 Atualizar foto de perfil nas conversas E no Contact
                 if profile_pic and remote_jid:
                     try:
                         # Buscar instância WhatsApp pelo nome (pode ser UUID ou friendly_name)
@@ -189,6 +189,40 @@ class EvolutionWebhookView(APIView):
                             if not phone.startswith('+'):
                                 phone = f'+{phone}'
                             
+                            # ✅ NOVO: Atualizar Contact primeiro (fonte única de verdade)
+                            from apps.contacts.models import Contact
+                            from apps.notifications.services import normalize_phone
+                            
+                            # Normalizar telefone para busca
+                            normalized_phone = normalize_phone(phone) or phone
+                            
+                            # Buscar contato pelo telefone normalizado
+                            contact = Contact.objects.filter(
+                                tenant=whatsapp_instance.tenant,
+                                phone=normalized_phone
+                            ).first()
+                            
+                            # Se não encontrou com telefone normalizado, tentar com telefone original
+                            if not contact:
+                                contact = Contact.objects.filter(
+                                    tenant=whatsapp_instance.tenant,
+                                    phone=phone
+                                ).first()
+                            
+                            # ✅ Atualizar Contact apenas se URL mudou
+                            if contact:
+                                if contact.profile_pic_url != profile_pic:
+                                    old_contact_pic = contact.profile_pic_url
+                                    contact.profile_pic_url = profile_pic
+                                    contact.save(update_fields=['profile_pic_url'])
+                                    logger.info(f"✅ [FOTO CONTACT] Atualizada foto do contato {contact.name} ({phone})")
+                                    logger.info(f"   URL antiga: {old_contact_pic[:50] if old_contact_pic else 'N/A'}...")
+                                    logger.info(f"   URL nova: {profile_pic[:50]}...")
+                                else:
+                                    logger.debug(f"🔄 [FOTO CONTACT] Foto do contato {contact.name} não mudou, mantendo atual")
+                            else:
+                                logger.debug(f"ℹ️ [FOTO CONTACT] Contato não encontrado para {phone}, apenas atualizando conversas")
+                            
                             # Atualizar todas as conversas com esse telefone
                             from apps.chat.models import Conversation
                             
@@ -203,7 +237,7 @@ class EvolutionWebhookView(APIView):
                             updated_count = conversations.update(profile_pic_url=profile_pic)
                             
                             if updated_count > 0:
-                                logger.info(f"✅ [FOTO] Atualizada foto de perfil para {phone}: {profile_pic[:50]}...")
+                                logger.info(f"✅ [FOTO CONVERSATION] Atualizada foto de perfil para {phone}: {profile_pic[:50]}...")
                                 logger.info(f"   {updated_count} conversa(s) atualizada(s)")
                                 
                                 # Invalidar cache Redis se URL mudou

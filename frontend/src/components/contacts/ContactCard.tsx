@@ -3,6 +3,13 @@ import { useState } from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
 
+// Helper para gerar URL do media proxy
+const getMediaProxyUrl = (externalUrl: string) => {
+  const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+  if (!externalUrl) return null;
+  return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
+};
+
 interface Tag {
   id: string
   name: string
@@ -19,6 +26,7 @@ interface Contact {
   name: string
   phone: string
   email?: string
+  profile_pic_url?: string | null  // ✅ NOVO: Foto de perfil
   city?: string
   state?: string
   birth_date?: string
@@ -74,12 +82,42 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory }
     <Card className="p-4 hover:shadow-lg transition-shadow">
       {/* Header */}
       <div className="flex justify-between items-start mb-3">
-        <div className="flex-1">
-          <h3 className="font-semibold text-lg">{contact.name}</h3>
-          <p className="text-sm text-gray-500 flex items-center gap-1">
-            <Phone className="h-3 w-3" />
-            {contact.phone}
-          </p>
+        <div className="flex items-start gap-3 flex-1">
+          {/* ✅ NOVO: Avatar com foto de perfil */}
+          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-gray-200 overflow-hidden">
+            {contact.profile_pic_url ? (
+              <img
+                src={getMediaProxyUrl(contact.profile_pic_url) || ''}
+                alt={contact.name}
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  // Fallback se imagem não carregar
+                  const target = e.currentTarget as HTMLImageElement;
+                  target.style.display = 'none';
+                  const parent = target.parentElement;
+                  if (parent) {
+                    parent.innerHTML = `
+                      <div class="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
+                        ${contact.name.charAt(0).toUpperCase()}
+                      </div>
+                    `;
+                  }
+                }}
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
+                {contact.name.charAt(0).toUpperCase()}
+              </div>
+            )}
+          </div>
+          
+          <div className="flex-1 min-w-0">
+            <h3 className="font-semibold text-lg">{contact.name}</h3>
+            <p className="text-sm text-gray-500 flex items-center gap-1">
+              <Phone className="h-3 w-3" />
+              {contact.phone}
+            </p>
+          </div>
         </div>
         
         <div className="flex gap-1">

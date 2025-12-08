@@ -4,6 +4,13 @@ import { Button } from '../ui/Button'
 import { api } from '../../lib/api'
 import { showSuccessToast, showErrorToast, showLoadingToast, updateToastSuccess, updateToastError } from '../../lib/toastHelper'
 
+// Helper para gerar URL do media proxy
+const getMediaProxyUrl = (externalUrl: string) => {
+  const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000';
+  if (!externalUrl) return null;
+  return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
+};
+
 interface Tag {
   id: string
   name: string
@@ -15,6 +22,7 @@ interface Contact {
   name: string
   phone: string
   email?: string
+  profile_pic_url?: string | null  // ✅ NOVO: Foto de perfil
   birth_date?: string
   gender?: string
   city?: string
@@ -206,6 +214,36 @@ export default function ContactModal({
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* ✅ NOVO: Foto de perfil (apenas ao editar) */}
+            {contact?.id && contact?.profile_pic_url && (
+              <div className="flex items-center gap-4 pb-4 border-b">
+                <div className="flex-shrink-0 w-20 h-20 rounded-full bg-gray-200 overflow-hidden">
+                  <img
+                    src={getMediaProxyUrl(contact.profile_pic_url) || ''}
+                    alt={contact.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      // Fallback se imagem não carregar
+                      const target = e.currentTarget as HTMLImageElement;
+                      target.style.display = 'none';
+                      const parent = target.parentElement;
+                      if (parent) {
+                        parent.innerHTML = `
+                          <div class="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-xl">
+                            ${contact.name.charAt(0).toUpperCase()}
+                          </div>
+                        `;
+                      }
+                    }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm text-gray-600">Foto de perfil do WhatsApp</p>
+                  <p className="text-xs text-gray-500">Atualizada automaticamente quando há mudança no WhatsApp</p>
+                </div>
+              </div>
+            )}
+            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">

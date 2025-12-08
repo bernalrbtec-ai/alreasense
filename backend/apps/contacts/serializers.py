@@ -66,7 +66,7 @@ class ContactSerializer(serializers.ModelSerializer):
             'id', 'tenant',
             
             # Básico
-            'phone', 'name', 'email',
+            'phone', 'name', 'email', 'profile_pic_url',
             
             # Demográficos
             'birth_date', 'gender', 'city', 'state', 'country', 'zipcode',

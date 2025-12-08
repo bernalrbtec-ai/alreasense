@@ -1196,6 +1196,26 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         normalized_phone_for_search = normalize_phone_for_search(normalized_phone)
                         contact_name = contacts_map.get(normalized_phone_for_search) or contacts_map.get(normalized_phone) or contacts_map.get(phone_raw)
                         
+                        # ✅ NOVO: Buscar foto do contato também
+                        contact_profile_pic = None
+                        if contact_name:
+                            # Se encontrou contato por nome, buscar objeto completo para pegar foto
+                            from apps.contacts.models import Contact
+                            contact_obj = Contact.objects.filter(
+                                tenant=conversation.tenant,
+                                phone=normalized_phone
+                            ).first()
+                            if not contact_obj:
+                                # Tentar com telefone original
+                                contact_obj = Contact.objects.filter(
+                                    tenant=conversation.tenant,
+                                    phone=phone_raw
+                                ).first()
+                            
+                            if contact_obj and contact_obj.profile_pic_url:
+                                contact_profile_pic = contact_obj.profile_pic_url
+                                logger.info(f"   ✅ [GROUP INFO] Foto do contato encontrada: {contact_profile_pic[:50]}...")
+                        
                         # ✅ CORREÇÃO: Prioridade: nome do contato > pushname da Evolution API > telefone formatado
                         participant_name = ''
                         if contact_name:
@@ -1216,7 +1236,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             'phone': normalized_phone,  # Telefone real normalizado E.164
                             'name': participant_name,  # Nome do contato ou vazio
                             'phoneNumber': participant_phone_number,  # JID real do telefone
-                            'is_admin': is_admin
+                            'is_admin': is_admin,
+                            'profile_pic_url': contact_profile_pic  # ✅ NOVO: Foto do contato (se disponível)
                         }
                         logger.info(f"   ✅ [GROUP INFO] Participante processado: phone={normalized_phone}, name={participant_name}, phoneNumber={participant_phone_number}")
                         

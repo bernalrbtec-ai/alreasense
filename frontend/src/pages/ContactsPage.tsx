@@ -16,6 +16,7 @@ interface Contact {
   name: string
   phone: string
   email?: string
+  profile_pic_url?: string | null  // ✅ NOVO: Foto de perfil
   city?: string
   state?: string
   birth_date?: string

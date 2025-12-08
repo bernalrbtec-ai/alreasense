@@ -58,6 +58,14 @@ class Contact(models.Model):
         help_text="Email do contato (opcional)"
     )
     
+    profile_pic_url = models.URLField(
+        max_length=500,
+        blank=True,
+        null=True,
+        verbose_name='Foto de Perfil',
+        help_text='URL da foto de perfil do WhatsApp. Atualizada automaticamente via webhook contacts.update quando há mudança.'
+    )
+    
     # ==================== DADOS DEMOGRÁFICOS ====================
     birth_date = models.DateField(
         null=True, 
