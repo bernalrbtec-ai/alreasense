@@ -1847,6 +1847,25 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             logger.info(f"✅ [CHAT ENVIO] Texto atualizado com telefones reais:")
                                             logger.info(f"   Antes: {text_before[:200]}")
                                             logger.info(f"   Depois: {payload['text'][:200]}")
+                                            
+                                            # ✅ VALIDAÇÃO CRÍTICA: Verificar se todos os números no texto estão no array mentioned
+                                            # Extrair todos os números mencionados no texto (formato @número)
+                                            import re
+                                            mentioned_in_text = re.findall(r'@(\d+)', payload['text'])
+                                            logger.info(f"🔍 [CHAT ENVIO] Números mencionados no texto: {[f'@{num}' for num in mentioned_in_text]}")
+                                            logger.info(f"🔍 [CHAT ENVIO] Números no array mentioned: {mentioned_numbers}")
+                                            
+                                            # Verificar se todos os números do texto estão no array mentioned
+                                            all_match = True
+                                            for num_in_text in mentioned_in_text:
+                                                if num_in_text not in mentioned_numbers:
+                                                    logger.error(f"❌ [CHAT ENVIO] Número no texto '{num_in_text}' NÃO está no array mentioned!")
+                                                    all_match = False
+                                            
+                                            if all_match:
+                                                logger.info(f"✅ [CHAT ENVIO] Validação OK: Todos os números no texto estão no array mentioned")
+                                            else:
+                                                logger.error(f"❌ [CHAT ENVIO] Validação FALHOU: Números no texto não correspondem ao array mentioned!")
                                         else:
                                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma substituição realizada no texto")
                                             logger.warning(f"   Texto original: {text_before[:200]}")
