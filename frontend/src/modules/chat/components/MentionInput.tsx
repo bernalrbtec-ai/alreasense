@@ -288,7 +288,95 @@ export function MentionInput({
       // Verificar se @ não está dentro de uma palavra (deve ter espaço antes ou estar no início)
       const charBeforeAt = lastAtIndex > 0 ? textBeforeCursor[lastAtIndex - 1] : ' ';
       if (charBeforeAt === ' ' || charBeforeAt === '\n' || lastAtIndex === 0) {
-        const query = textBeforeCursor.substring(lastAtIndex + 1).trim();
+        const textAfterAt = textBeforeCursor.substring(lastAtIndex + 1);
+        
+        // ✅ FIX: Verificar se o @ já faz parte de uma menção válida (seguida de nome e espaço)
+        // Se o texto após @ contém um espaço, significa que já foi selecionada uma menção
+        // Não processar novamente para evitar reabrir a lista enquanto digita
+        const firstSpaceIndex = textAfterAt.indexOf(' ');
+        if (firstSpaceIndex !== -1) {
+          // Há um espaço após o @, verificar se o cursor está ANTES desse espaço
+          // Se sim, significa que a menção já foi selecionada e não devemos processar novamente
+          const cursorDistanceFromAt = cursorPos - lastAtIndex - 1; // Distância do cursor desde o @
+          
+          if (cursorDistanceFromAt > firstSpaceIndex) {
+            // Cursor está DEPOIS do espaço, então a menção já foi selecionada
+            // Verificar se há outro @ antes deste que ainda está sendo digitado
+            const textBeforeLastAt = textBeforeCursor.substring(0, lastAtIndex);
+            const previousAtIndex = textBeforeLastAt.lastIndexOf('@');
+            
+            if (previousAtIndex === -1) {
+              // Não há outro @ antes, então este @ já foi processado (menção selecionada)
+              console.log('✅ [MENTIONS] @ já faz parte de menção válida, ignorando...');
+              setShowSuggestions(false);
+              setMentionStart(null);
+              return;
+            }
+            
+            // Se há outro @ antes, verificar se ele também já foi processado
+            const textAfterPreviousAt = textBeforeLastAt.substring(previousAtIndex + 1);
+            const previousFirstSpaceIndex = textAfterPreviousAt.indexOf(' ');
+            
+            if (previousFirstSpaceIndex !== -1) {
+              // Ambos já foram processados, não fazer nada
+              console.log('✅ [MENTIONS] Ambos @ já foram processados, ignorando...');
+              setShowSuggestions(false);
+              setMentionStart(null);
+              return;
+            }
+            
+            // O @ anterior ainda está sendo digitado, processar ele ao invés do último
+            const query = textAfterPreviousAt.trim();
+            console.log('✅ [MENTIONS] @ anterior detectado! Query:', query, 'Participantes disponíveis:', participants.length);
+            
+            // ✅ OTIMIZAÇÃO: Se for grupo e não tem participantes, tentar recarregar E aguardar
+            if (conversationType === 'group' && participants.length === 0 && conversationId && !loadingRef.current) {
+              console.log('🔄 [MENTIONS] @ digitado mas sem participantes, carregando agora...');
+              setMentionStart(previousAtIndex);
+              pendingMentionRef.current = { position: previousAtIndex, query };
+              loadParticipants();
+              return;
+            }
+            
+            // ✅ CORREÇÃO: Se query está vazia (apenas @), mostrar TODOS os participantes
+            let filtered: Participant[] = [];
+            if (query === '') {
+              filtered = participants;
+              console.log('📋 [MENTIONS] Query vazia - mostrando todos os participantes:', filtered.length);
+            } else {
+              filtered = participants.filter(p => {
+                const displayName = (p.contact_name || p.pushname || p.name || '').toLowerCase();
+                const nameMatch = displayName.includes(query.toLowerCase());
+                const phoneMatch = p.phone.replace(/\D/g, '').includes(query.replace(/\D/g, ''));
+                return nameMatch || phoneMatch;
+              });
+              console.log('🔍 [MENTIONS] Query filtrada:', query, 'Resultados:', filtered.length);
+            }
+
+            // ✅ CORREÇÃO: Mostrar sugestões se for grupo E tiver participantes
+            if (conversationType === 'group') {
+              if (participants.length > 0) {
+                setMentionStart(previousAtIndex);
+                setSuggestions(filtered);
+                setShowSuggestions(filtered.length > 0);
+                setSelectedIndex(0);
+                console.log('✅ [MENTIONS] Sugestões ativadas:', filtered.length, 'participantes');
+                return;
+              } else if (loadingRef.current) {
+                console.log('⏳ [MENTIONS] Aguardando carregamento de participantes...');
+                setMentionStart(previousAtIndex);
+                return;
+              }
+            }
+            
+            setShowSuggestions(false);
+            setMentionStart(null);
+            return;
+          }
+          // Se cursor está ANTES do espaço, continuar processando normalmente (ainda digitando a menção)
+        }
+        
+        const query = textAfterAt.trim();
         console.log('✅ [MENTIONS] @ detectado! Query:', query, 'Participantes disponíveis:', participants.length);
         
         // ✅ OTIMIZAÇÃO: Se for grupo e não tem participantes, tentar recarregar E aguardar
