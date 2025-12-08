@@ -351,19 +351,23 @@ export function MentionInput({
     setShowSuggestions(false);
     setMentionStart(null);
 
-    // ✅ MELHORIA: Extrair todas as menções do texto final e mapear para JIDs/telefones
+    // ✅ CORREÇÃO CRÍTICA: Extrair todas as menções do texto final e mapear para JIDs/telefones
     // ✅ IMPORTANTE: Usar JID quando disponível (mais confiável que phone, especialmente para @lid)
-    // ✅ MELHORIA: Validar que apenas participantes válidos sejam mencionados
+    // ✅ CORREÇÃO: Garantir que cada participante seja mencionado apenas UMA vez
     const mentions: string[] = [];
     const mentionRegex = /@([^\s@,\.!?]+)/g;
     let match;
     
-    // ✅ MELHORIA: Criar mapa de participantes válidos para validação rápida
+    // ✅ CORREÇÃO: Criar mapa de participantes válidos para validação rápida
+    // Usar Map com chave única por participante (JID ou phone)
     const validParticipantsMap = new Map<string, Participant>();
+    
     participants.forEach(p => {
-      const identifier = p.jid || p.phone;
-      if (identifier) {
-        validParticipantsMap.set(identifier, p);
+      // ✅ CORREÇÃO: Sempre usar JID como identificador único quando disponível
+      const primaryIdentifier = p.jid || p.phone;
+      if (primaryIdentifier) {
+        validParticipantsMap.set(primaryIdentifier, p);
+        
         // ✅ NOVO: Mapear por contact_name (prioridade), pushname ou name para busca rápida
         const name = (p.contact_name || p.pushname || p.name || '').toLowerCase();
         if (name) {
@@ -372,25 +376,52 @@ export function MentionInput({
       }
     });
     
-    // Primeiro, adicionar o participante selecionado diretamente (sempre válido)
-    // ✅ CORREÇÃO: Priorizar JID sobre phone (JID é o identificador único correto)
-    const participantIdentifier = participant.jid || participant.phone;
-    if (participantIdentifier && validParticipantsMap.has(participantIdentifier)) {
-      mentions.push(participantIdentifier);
-      console.log('✅ [MENTIONS] Participante selecionado:', {
-        jid: participant.jid,
-        phone: participant.phone,
-        identifier: participantIdentifier
-      });
-    } else {
-      console.warn('⚠️ [MENTIONS] Participante selecionado não está na lista válida:', participantIdentifier);
-    }
+    // ✅ CORREÇÃO CRÍTICA: Set para rastrear participantes já adicionados (usando identificador único)
+    const addedParticipants = new Set<string>();
     
-    // Depois, processar outras menções que possam existir no texto
+    // ✅ CORREÇÃO: Função auxiliar para adicionar participante sem duplicatas
+    const addParticipantSafely = (p: Participant, source: string) => {
+      // Sempre usar JID como identificador único quando disponível
+      const uniqueId = p.jid || p.phone;
+      if (!uniqueId) {
+        console.warn(`⚠️ [MENTIONS] Participante sem identificador válido:`, p);
+        return false;
+      }
+      
+      // ✅ CORREÇÃO CRÍTICA: Verificar se já foi adicionado usando identificador único
+      if (addedParticipants.has(uniqueId)) {
+        console.log(`🔄 [MENTIONS] Participante já adicionado (${source}):`, uniqueId);
+        return false;
+      }
+      
+      // Verificar se o participante está na lista válida
+      if (!validParticipantsMap.has(uniqueId)) {
+        console.warn(`⚠️ [MENTIONS] Participante não está na lista válida (${source}):`, uniqueId);
+        return false;
+      }
+      
+      // Adicionar ao array e marcar como adicionado
+      mentions.push(uniqueId);
+      addedParticipants.add(uniqueId);
+      console.log(`✅ [MENTIONS] Participante adicionado (${source}):`, {
+        jid: p.jid,
+        phone: p.phone,
+        identifier: uniqueId,
+        name: p.contact_name || p.pushname || p.name
+      });
+      return true;
+    };
+    
+    // ✅ CORREÇÃO: Primeiro, adicionar o participante selecionado diretamente (sempre válido)
+    addParticipantSafely(participant, 'seleção direta');
+    
+    // ✅ CORREÇÃO: Depois, processar outras menções que possam existir no texto
+    // Resetar regex para processar do início
+    mentionRegex.lastIndex = 0;
     while ((match = mentionRegex.exec(newValue)) !== null) {
       const mentionText = match[1];
       
-      // ✅ MELHORIA: Buscar participante de forma mais eficiente usando o mapa
+      // ✅ CORREÇÃO: Buscar participante de forma mais eficiente usando o mapa
       let found: Participant | undefined;
       
       // Tentar buscar por nome primeiro (case-insensitive)
@@ -401,30 +432,30 @@ export function MentionInput({
       if (!found) {
         const mentionPhone = mentionText.replace(/\D/g, '');
         for (const [key, p] of validParticipantsMap.entries()) {
-          const pPhone = p.phone?.replace(/\D/g, '') || '';
-          if (pPhone && (pPhone === mentionPhone || pPhone.includes(mentionPhone) || mentionPhone.includes(pPhone))) {
-            found = p;
-            break;
+          // ✅ CORREÇÃO: Verificar se a chave é um identificador (não nome)
+          if (key === p.jid || key === p.phone) {
+            const pPhone = p.phone?.replace(/\D/g, '') || '';
+            if (pPhone && (pPhone === mentionPhone || pPhone.includes(mentionPhone) || mentionPhone.includes(pPhone))) {
+              found = p;
+              break;
+            }
           }
         }
       }
       
-      // ✅ MELHORIA: Só adicionar se encontrou participante válido
+      // ✅ CORREÇÃO: Só adicionar se encontrou participante válido E ainda não foi adicionado
       if (found) {
-        // ✅ CORREÇÃO: Priorizar JID sobre phone
-        const foundIdentifier = found.jid || found.phone;
-        if (foundIdentifier && !mentions.includes(foundIdentifier)) {
-          mentions.push(foundIdentifier);
-          console.log('✅ [MENTIONS] Menção válida encontrada:', mentionText, '->', foundIdentifier);
-        }
+        addParticipantSafely(found, `regex: "${mentionText}"`);
       } else {
         console.warn('⚠️ [MENTIONS] Menção inválida ignorada:', mentionText, '(não está na lista de participantes)');
       }
     }
     
     if (onMentionsChange) {
-      onMentionsChange([...new Set(mentions)]); // Remover duplicatas
-      console.log('✅ [MENTIONS] Menções atualizadas:', mentions);
+      // ✅ CORREÇÃO: Já removemos duplicatas acima, mas garantir com Set para segurança extra
+      const uniqueMentions = [...new Set(mentions)];
+      onMentionsChange(uniqueMentions);
+      console.log('✅ [MENTIONS] Menções atualizadas (sem duplicatas):', uniqueMentions);
     }
 
     // Focar no input novamente
