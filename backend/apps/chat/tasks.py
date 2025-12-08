@@ -1027,13 +1027,22 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 if attachments_list:
                                     original_content = '📎 Áudio'
                             
+                            # ✅ CORREÇÃO CRÍTICA: Montar quoted.key com participant quando necessário
+                            quoted_key = {
+                                'remoteJid': quoted_remote_jid,
+                                'fromMe': original_message.direction == 'outgoing',
+                                'id': quoted_message_id
+                            }
+                            
+                            # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
+                            # O participant é obrigatório para grupos quando a mensagem original foi enviada por outro participante
+                            if quoted_participant and original_message.conversation.conversation_type == 'group':
+                                quoted_key['participant'] = quoted_participant
+                                logger.info(f"💬 [CHAT ENVIO] Adicionando participant ao quoted.key (grupo, áudio): {_mask_remote_jid(quoted_participant)}")
+                            
                             payload['options'] = {
                                 'quoted': {
-                                    'key': {
-                                        'remoteJid': quoted_remote_jid,
-                                        'fromMe': original_message.direction == 'outgoing',
-                                        'id': quoted_message_id
-                                    },
+                                    'key': quoted_key,
                                     'message': {
                                         'conversation': original_content[:100] if original_content else 'Áudio'
                                     }
@@ -1042,6 +1051,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted ao áudio")
                             logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
                             logger.info(f"   Message ID: {quoted_message_id}")
+                            logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
+                            logger.info(f"   FromMe: {original_message.direction == 'outgoing'}")
                         
                         logger.info("🎤 [CHAT] Enviando PTT via sendWhatsAppAudio")
                         logger.info("   Destinatário: %s", masked_recipient)
@@ -1116,13 +1127,22 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 else:
                                     original_content = '📎 Anexo'
                             
+                            # ✅ CORREÇÃO CRÍTICA: Montar quoted.key com participant quando necessário
+                            quoted_key = {
+                                'remoteJid': quoted_remote_jid,
+                                'fromMe': original_message.direction == 'outgoing',
+                                'id': quoted_message_id
+                            }
+                            
+                            # ✅ CORREÇÃO: Adicionar participant se for grupo e mensagem foi recebida (incoming)
+                            # O participant é obrigatório para grupos quando a mensagem original foi enviada por outro participante
+                            if quoted_participant and original_message.conversation.conversation_type == 'group':
+                                quoted_key['participant'] = quoted_participant
+                                logger.info(f"💬 [CHAT ENVIO] Adicionando participant ao quoted.key (grupo): {_mask_remote_jid(quoted_participant)}")
+                            
                             payload['options'] = {
                                 'quoted': {
-                                    'key': {
-                                        'remoteJid': quoted_remote_jid,
-                                        'fromMe': original_message.direction == 'outgoing',
-                                        'id': quoted_message_id
-                                    },
+                                    'key': quoted_key,
                                     'message': {
                                         'conversation': original_content[:100] if original_content else 'Mensagem'
                                     }
@@ -1131,6 +1151,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             logger.info(f"💬 [CHAT ENVIO] Adicionando options.quoted à mídia")
                             logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid)}")
                             logger.info(f"   Message ID: {quoted_message_id}")
+                            logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A'}")
+                            logger.info(f"   FromMe: {original_message.direction == 'outgoing'}")
                     
                     # Endpoint: sendWhatsAppAudio para PTT, sendMedia para outros
                     if is_audio:
