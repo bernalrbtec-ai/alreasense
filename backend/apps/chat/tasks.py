@@ -1793,55 +1793,65 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                         logger.info(f"🔍 [CHAT ENVIO] Nomes ordenados por tamanho (mais longos primeiro): {[name for name, _ in sorted_names]}")
                                         
                                         for name, phone in sorted_names:
-                                            # ✅ FIX: Usar regex que captura o nome completo, incluindo espaços
-                                            # Pattern: @ seguido do nome completo (escapado) e depois um delimitador (espaço, fim de linha, ou fim da string)
-                                            # Isso evita substituir apenas parte do nome
-                                            escaped_name = re.escape(name)
-                                            # Pattern: @Nome seguido de espaço, fim de linha, ou fim da string
-                                            # Usar lookahead positivo para garantir que não capture apenas parte do nome
-                                            # IMPORTANTE: Não usar word boundary (\b) porque nomes podem ter espaços e pontos
-                                            # ✅ CRÍTICO: Pattern deve capturar @Nome seguido de espaço ou fim
-                                            # E substituir por @Telefone (número EXATO do array mentioned)
-                                            pattern = rf'@{escaped_name}(?=\s|$|,|\.|!|\?|:)'
-                                            # ✅ CRÍTICO: Replacement deve ser @Telefone SEM espaços extras
-                                            # O número DEVE SER EXATAMENTE IGUAL ao do array mentioned
-                                            replacement = f'@{phone}'
-                                            logger.debug(f"   🔍 [CHAT ENVIO] Tentando substituir padrão: {pattern}")
-                                            logger.debug(f"   🔍 [CHAT ENVIO] Substituição: '@{name}' -> '@{_mask_digits(phone)}'")
-                                            logger.debug(f"   🔍 [CHAT ENVIO] Texto atual: {payload['text'][:200]}")
+                                            # ✅ CRÍTICO: Substituir nome completo no texto
+                                            # O nome pode ter espaços, pontos, etc. Precisamos capturar tudo
+                                            logger.info(f"   🔍 [CHAT ENVIO] Tentando substituir: '@{name}' -> '@{_mask_digits(phone)}'")
+                                            logger.info(f"   📝 [CHAT ENVIO] Texto atual (primeiros 200 chars): {payload['text'][:200]}")
                                             
-                                            # ✅ FIX: Fazer substituição case-insensitive e substituir apenas uma vez por ocorrência
-                                            # Usar count=0 para substituir todas as ocorrências, mas garantir que não substitua parcialmente
-                                            new_text = re.sub(pattern, replacement, payload['text'], flags=re.IGNORECASE, count=0)
+                                            # ✅ ESTRATÉGIA 1: Tentar substituição exata (case-insensitive)
+                                            escaped_name = re.escape(name)
+                                            pattern_exact = rf'@{escaped_name}(?=\s|$|,|\.|!|\?|:)'
+                                            replacement = f'@{phone}'
+                                            
+                                            new_text = re.sub(pattern_exact, replacement, payload['text'], flags=re.IGNORECASE, count=0)
+                                            
                                             if new_text != payload['text']:
-                                                logger.info(f"   ✅ [CHAT ENVIO] Substituição realizada: '@{name}' -> '@{_mask_digits(phone)}'")
-                                                logger.debug(f"   📝 [CHAT ENVIO] Texto após substituição: {new_text[:200]}")
+                                                logger.info(f"   ✅ [CHAT ENVIO] Substituição EXATA realizada: '@{name}' -> '@{_mask_digits(phone)}'")
                                                 payload['text'] = new_text
-                                            else:
-                                                # ✅ FIX: Tentar busca mais flexível se não encontrou com padrão exato
-                                                # Pode ser que o nome no texto tenha espaços extras ou formatação diferente
-                                                logger.warning(f"   ⚠️ [CHAT ENVIO] Padrão exato '@{name}' não encontrado, tentando busca flexível...")
+                                                continue
+                                            
+                                            # ✅ ESTRATÉGIA 2: Se não encontrou, tentar busca flexível para nomes compostos
+                                            name_parts = name.split()
+                                            if len(name_parts) > 1:
+                                                logger.warning(f"   ⚠️ [CHAT ENVIO] Padrão exato não encontrado, tentando busca flexível para nome composto...")
                                                 
-                                                # Buscar por partes do nome (caso o nome completo não esteja exatamente como esperado)
-                                                # Primeiro, tentar encontrar o nome no texto sem escape (para ver se há diferenças)
-                                                name_parts = name.split()
-                                                if len(name_parts) > 1:
-                                                    # Nome composto: tentar encontrar cada parte
-                                                    first_part = name_parts[0]
-                                                    remaining_parts = ' '.join(name_parts[1:])
-                                                    
-                                                    # Buscar padrão: @PrimeiraParte SegundaParte...
-                                                    # Usar regex mais flexível que aceita espaços variáveis
-                                                    flexible_pattern = rf'@{re.escape(first_part)}\s+{re.escape(remaining_parts)}(?=\s|$|,|\.|!|\?|:)'
-                                                    new_text_flexible = re.sub(flexible_pattern, replacement, payload['text'], flags=re.IGNORECASE, count=0)
-                                                    
-                                                    if new_text_flexible != payload['text']:
-                                                        logger.info(f"   ✅ [CHAT ENVIO] Substituição realizada (busca flexível): '@{name}' -> '@{_mask_digits(phone)}'")
-                                                        payload['text'] = new_text_flexible
-                                                    else:
-                                                        logger.warning(f"   ⚠️ [CHAT ENVIO] Nome composto não encontrado mesmo com busca flexível: '{name}'")
-                                                else:
-                                                    logger.warning(f"   ⚠️ [CHAT ENVIO] Nome simples não encontrado: '{name}'")
+                                                # Tentar diferentes variações de espaços
+                                                # Exemplo: "Paulo J. M. Bernal" pode estar como "Paulo  J. M. Bernal" (espaços extras)
+                                                first_part = name_parts[0]
+                                                remaining_parts = ' '.join(name_parts[1:])
+                                                
+                                                # Pattern flexível: aceita 1 ou mais espaços entre as partes
+                                                flexible_pattern = rf'@{re.escape(first_part)}\s+{re.escape(remaining_parts)}(?=\s|$|,|\.|!|\?|:)'
+                                                new_text_flexible = re.sub(flexible_pattern, replacement, payload['text'], flags=re.IGNORECASE, count=0)
+                                                
+                                                if new_text_flexible != payload['text']:
+                                                    logger.info(f"   ✅ [CHAT ENVIO] Substituição FLEXÍVEL realizada: '@{name}' -> '@{_mask_digits(phone)}'")
+                                                    payload['text'] = new_text_flexible
+                                                    continue
+                                                
+                                                # ✅ ESTRATÉGIA 3: Buscar manualmente no texto (último recurso)
+                                                logger.warning(f"   ⚠️ [CHAT ENVIO] Busca flexível também falhou, tentando busca manual...")
+                                                
+                                                # Buscar todas as ocorrências de @ seguido de texto no texto atual
+                                                text_lower = payload['text'].lower()
+                                                name_lower = name.lower()
+                                                
+                                                # Procurar por @nome no texto (case-insensitive)
+                                                at_index = text_lower.find(f'@{name_lower}')
+                                                if at_index != -1:
+                                                    # Verificar se há espaço ou fim após o nome
+                                                    after_name_index = at_index + len(f'@{name_lower}')
+                                                    if after_name_index >= len(payload['text']) or payload['text'][after_name_index] in [' ', '\n', ',', '.', '!', '?', ':']:
+                                                        # Substituir manualmente
+                                                        text_before_mention = payload['text'][:at_index]
+                                                        text_after_mention = payload['text'][after_name_index:]
+                                                        payload['text'] = text_before_mention + replacement + text_after_mention
+                                                        logger.info(f"   ✅ [CHAT ENVIO] Substituição MANUAL realizada: '@{name}' -> '@{_mask_digits(phone)}'")
+                                                        continue
+                                            
+                                            logger.error(f"   ❌ [CHAT ENVIO] NÃO FOI POSSÍVEL substituir '@{name}' no texto!")
+                                            logger.error(f"   📝 [CHAT ENVIO] Texto completo: {payload['text']}")
+                                            logger.error(f"   📝 [CHAT ENVIO] Nome procurado: '{name}'")
                                         
                                         if text_before != payload['text']:
                                             logger.info(f"✅ [CHAT ENVIO] Texto atualizado com telefones reais:")
