@@ -853,10 +853,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 # Para grupos, usar o JID do grupo diretamente
                                 quoted_remote_jid = clean_phone
                                 logger.critical(f"✅ [CHAT ENVIO] quoted_remote_jid definido (grupo): {_mask_remote_jid(quoted_remote_jid)}")
-                    else:
-                        logger.error(f"❌ [CHAT ENVIO] original_message não tem conversation!")
                         
-                        # ✅ NOVO: Determinar participant baseado na direção da mensagem original
+                        # ✅ CORREÇÃO CRÍTICA: Determinar participant baseado na direção da mensagem original
                         # Se a mensagem original foi recebida (incoming), o participant é o remetente
                         # Se foi enviada por nós (outgoing), o participant pode ser vazio ou nosso número
                         if original_message.direction == 'incoming':
@@ -865,27 +863,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 # Para grupos: usar sender_phone se disponível
                                 if original_message.sender_phone:
                                     sender_phone = original_message.sender_phone
-                                    if '@' in sender_phone:
-                                        quoted_participant = sender_phone
+                                    # Remover + se tiver
+                                    sender_phone_clean = sender_phone.lstrip('+')
+                                    if '@' in sender_phone_clean:
+                                        quoted_participant = sender_phone_clean
                                     else:
-                                        quoted_participant = f"{sender_phone}@s.whatsapp.net"
+                                        quoted_participant = f"{sender_phone_clean}@s.whatsapp.net"
+                                    logger.critical(f"✅ [CHAT ENVIO] quoted_participant definido (grupo, sender_phone): {_mask_remote_jid(quoted_participant)}")
                                 else:
-                                    # Fallback: usar contact_phone da conversa (grupo)
+                                    # Fallback: usar contact_phone da conversa (grupo) - não ideal mas funciona
                                     quoted_participant = quoted_remote_jid
+                                    logger.warning(f"⚠️ [CHAT ENVIO] sender_phone não disponível, usando quoted_remote_jid como fallback")
                             else:
                                 # Para mensagens individuais recebidas: participant é o contato da conversa
                                 # O contact_phone já está no formato correto (com @s.whatsapp.net)
                                 quoted_participant = quoted_remote_jid
+                                logger.critical(f"✅ [CHAT ENVIO] quoted_participant definido (individual): {_mask_remote_jid(quoted_participant)}")
                         else:
                             # Mensagem enviada por nós: participant pode ser vazio ou nosso número
                             # Para mensagens enviadas por nós, geralmente não precisa de participant
                             quoted_participant = None
+                            logger.critical(f"✅ [CHAT ENVIO] Mensagem original foi enviada por nós, quoted_participant = None")
                         
                         logger.info(f"💬 [CHAT ENVIO] Mensagem é resposta de: {reply_to_uuid}")
                         logger.info(f"   Evolution ID: {quoted_message_id}")
                         logger.info(f"   RemoteJid: {_mask_remote_jid(quoted_remote_jid) if quoted_remote_jid else 'N/A'}")
                         logger.info(f"   Participant: {_mask_remote_jid(quoted_participant) if quoted_participant else 'N/A (mensagem enviada por nós)'}")
                         logger.info(f"   Direction original: {original_message.direction}")
+                    else:
+                        logger.error(f"❌ [CHAT ENVIO] original_message não tem conversation!")
+                        quoted_remote_jid = None  # Limpar se não tem conversation
                 else:
                     logger.warning(f"⚠️ [CHAT ENVIO] Mensagem original não encontrada ou sem message_id: {reply_to_uuid}")
                     original_message = None  # Limpar se não encontrada
