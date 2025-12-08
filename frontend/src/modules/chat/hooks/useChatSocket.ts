@@ -317,13 +317,9 @@ export function useChatSocket(conversationId?: string) {
         reply_to: replyToMessageId,
         mentions: mentions
       });
-      // ✅ CORREÇÃO: Usar sendChatMessage ao invés de sendMessage privado
-      // sendChatMessage não suporta reply_to diretamente, então precisamos usar o método público
-      // que aceita todos os parâmetros necessários
+      // ✅ CORREÇÃO CRÍTICA: Passar replyToMessageId para sendChatMessage
       console.log('📤 [HOOK] Enviando mensagem com reply via sendChatMessage');
-      // Nota: reply_to será adicionado via metadata no backend se necessário
-      // Por enquanto, usar sendChatMessage normal e o backend processará reply_to se fornecido
-      return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId);
+      return chatWebSocketManager.sendChatMessage(content, includeSignature, isInternal, mentions, currentConversationId, replyToMessageId);
     }
 
     console.log('📤 [HOOK] Enviando mensagem:', content.substring(0, 50), `| Assinatura: ${includeSignature ? 'SIM' : 'NÃO'}`, mentions ? `| Mentions: ${mentions.length}` : '');
