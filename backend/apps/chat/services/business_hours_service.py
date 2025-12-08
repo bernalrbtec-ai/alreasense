@@ -545,26 +545,17 @@ class BusinessHoursService:
             logger.warning(f"⚠️ [BUSINESS HOURS TASK] Usando vencimento fallback: {due_date}")
         
         # ✅ CRIAÇÃO: Tarefa automática
-        # ✅ CORREÇÃO: department é obrigatório no modelo Task, então sempre usar um válido
+        # ✅ CORREÇÃO: department é obrigatório no modelo Task
         # Se auto_assign_to_department for False, usar department da conversa como fallback
         task_department = department if task_config.auto_assign_to_department else (department or conversation.department)
         
-        # ✅ VALIDAÇÃO FINAL: Garantir que temos um department válido
-        # Se ainda não tiver, buscar primeiro department do tenant como fallback
+        # ✅ VALIDAÇÃO FINAL: Se não tiver department, não criar tarefa (conversa fica no Inbox)
         if not task_department:
-            from apps.authn.models import Department
-            task_department = Department.objects.filter(tenant=tenant).first()
-            if task_department:
-                logger.warning(
-                    f"⚠️ [BUSINESS HOURS TASK] Usando department padrão do tenant: {task_department.name} "
-                    f"(conversa {conversation.id} não tem department atribuído)"
-                )
-            else:
-                logger.error(
-                    f"❌ [BUSINESS HOURS TASK] Não é possível criar tarefa sem department. "
-                    f"Tenant {tenant.name} não tem departments cadastrados."
-                )
-                return None
+            logger.info(
+                f"ℹ️ [BUSINESS HOURS TASK] Conversa {conversation.id} não tem department atribuído. "
+                f"Conversa ficará no Inbox (sem criar tarefa automática)."
+            )
+            return None
         
         try:
             task = Task.objects.create(
