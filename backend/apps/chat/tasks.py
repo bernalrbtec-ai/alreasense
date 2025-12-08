@@ -1622,16 +1622,19 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 logger.debug(f"   📌 Menção encontrada por nome: {mention_name}")
                             
                             # ✅ PRIORIDADE 4: Buscar por telefone nos participantes do grupo
-                            elif not matched_contact_phone and mention_phone:
+                            # ✅ FIX: Não tentar normalizar se mention_phone é LID
+                            elif not matched_contact_phone and mention_phone and not mention_phone.endswith('@lid'):
                                 phone_clean = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
-                                normalized = normalize_phone(mention_phone)
-                                
-                                if normalized and normalized in participants_by_phone:
-                                    matched_participant = participants_by_phone[normalized]
-                                    logger.debug(f"   📌 Menção encontrada por telefone normalizado: {normalized}")
-                                elif phone_clean and phone_clean in participants_by_phone:
-                                    matched_participant = participants_by_phone[phone_clean]
-                                    logger.debug(f"   📌 Menção encontrada por telefone limpo: {phone_clean}")
+                                try:
+                                    normalized = normalize_phone(mention_phone)
+                                    if normalized and normalized in participants_by_phone:
+                                        matched_participant = participants_by_phone[normalized]
+                                        logger.debug(f"   📌 Menção encontrada por telefone normalizado: {normalized}")
+                                    elif phone_clean and phone_clean in participants_by_phone:
+                                        matched_participant = participants_by_phone[phone_clean]
+                                        logger.debug(f"   📌 Menção encontrada por telefone limpo: {phone_clean}")
+                                except Exception as e:
+                                    logger.debug(f"   ⚠️ [CHAT ENVIO] Erro ao normalizar mention_phone para busca: {e}")
                             
                             # ✅ PRIORIDADE MÁXIMA: Se encontrou contato cadastrado, usar telefone dele
                             if matched_contact_phone:
