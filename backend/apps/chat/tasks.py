@@ -1572,19 +1572,29 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             mention_jid = m.get('jid', '')
                             
                             matched_participant = None
+                            matched_contact_phone = None  # ✅ NOVO: Telefone do contato cadastrado encontrado
                             
-                            # ✅ PRIORIDADE 1: Buscar por JID (mais confiável)
-                            if mention_jid and mention_jid in participants_by_jid:
+                            # ✅ PRIORIDADE 1: Buscar em CONTATOS CADASTRADOS primeiro (mesma lógica do recebimento)
+                            if mention_phone:
+                                normalized_mention_phone = normalize_phone(mention_phone)
+                                if normalized_mention_phone and normalized_mention_phone in phone_to_contact:
+                                    # Contato cadastrado encontrado! Usar telefone dele
+                                    matched_contact_phone = normalized_mention_phone
+                                    contact_name = phone_to_contact[normalized_mention_phone]
+                                    logger.info(f"   ✅ [CHAT ENVIO] Contato cadastrado encontrado: {contact_name} ({_mask_digits(normalized_mention_phone)})")
+                            
+                            # ✅ PRIORIDADE 2: Buscar por JID nos participantes do grupo
+                            if not matched_contact_phone and mention_jid and mention_jid in participants_by_jid:
                                 matched_participant = participants_by_jid[mention_jid]
                                 logger.debug(f"   📌 Menção encontrada por JID: {mention_jid}")
                             
-                            # ✅ PRIORIDADE 2: Buscar por nome (quando usuário digita @contato)
-                            elif mention_name and mention_name in participants_by_name:
+                            # ✅ PRIORIDADE 3: Buscar por nome nos participantes do grupo (quando usuário digita @contato)
+                            elif not matched_contact_phone and mention_name and mention_name in participants_by_name:
                                 matched_participant = participants_by_name[mention_name]
                                 logger.debug(f"   📌 Menção encontrada por nome: {mention_name}")
                             
-                            # ✅ PRIORIDADE 3: Buscar por telefone
-                            elif mention_phone:
+                            # ✅ PRIORIDADE 4: Buscar por telefone nos participantes do grupo
+                            elif not matched_contact_phone and mention_phone:
                                 phone_clean = mention_phone.replace('+', '').replace(' ', '').replace('-', '').strip()
                                 normalized = normalize_phone(mention_phone)
                                 
@@ -1595,8 +1605,16 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     matched_participant = participants_by_phone[phone_clean]
                                     logger.debug(f"   📌 Menção encontrada por telefone limpo: {phone_clean}")
                             
-                            # Se encontrou participante, usar phoneNumber ou jid para menção
-                            if matched_participant:
+                            # ✅ PRIORIDADE MÁXIMA: Se encontrou contato cadastrado, usar telefone dele
+                            if matched_contact_phone:
+                                # Extrair apenas dígitos (remover +)
+                                phone_digits = matched_contact_phone.lstrip('+')
+                                if phone_digits:
+                                    mention_phones.append(phone_digits)
+                                    logger.info(f"   ✅ [CHAT ENVIO] Menção adicionada via contato cadastrado: {_mask_digits(phone_digits)}")
+                            
+                            # Se encontrou participante do grupo, usar phoneNumber ou jid para menção
+                            elif matched_participant:
                                 participant_phone_number = matched_participant.get('phoneNumber') or matched_participant.get('phone_number', '')
                                 participant_jid = matched_participant.get('jid', '')
                                 
@@ -1616,7 +1634,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 else:
                                     logger.warning(f"   ⚠️ Participante encontrado mas sem phoneNumber ou JID válido: {matched_participant}")
                             else:
-                                # Se não encontrou participante, tentar usar dados da menção diretamente (fallback)
+                                # Se não encontrou participante nem contato, tentar usar dados da menção diretamente (fallback)
                                 if mention_jid:
                                     jid_clean = mention_jid.split('@')[0]
                                     if jid_clean:
