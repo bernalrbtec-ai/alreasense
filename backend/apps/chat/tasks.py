@@ -1511,9 +1511,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         
                         # Buscar TODOS os contatos do tenant e criar mapa telefone normalizado -> nome
                         phone_to_contact = {}
+                        # ✅ FIX: Usar tenant_id ao invés de conversation.tenant para evitar erro de contexto assíncrono
+                        tenant_id = conversation.tenant_id
                         all_contacts = await sync_to_async(list)(
                             Contact.objects.filter(
-                                tenant=conversation.tenant
+                                tenant_id=tenant_id
                             ).exclude(phone__isnull=True).exclude(phone='').values('phone', 'name')
                         )
                         
