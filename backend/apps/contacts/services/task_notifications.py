@@ -337,3 +337,142 @@ def send_task_reminder_to_contacts(task: Task, is_15min_before: bool = True) -> 
     
     return message_ids
 
+
+def send_daily_summary_to_user(user, date=None) -> Optional[str]:
+    """
+    Envia resumo diário de tarefas/compromissos para um usuário.
+    
+    Args:
+        user: Usuário para enviar resumo
+        date: Data do resumo (padrão: hoje)
+        
+    Returns:
+        ID da mensagem criada ou None se erro
+    """
+    from apps.authn.models import Department
+    
+    if not user.phone:
+        logger.debug(f"ℹ️ [DAILY SUMMARY] Usuário {user.email} não tem telefone")
+        return None
+    
+    # Buscar instância WhatsApp
+    instance = WhatsAppInstance.objects.filter(
+        tenant=user.tenant,
+        is_active=True,
+        status='active'
+    ).first()
+    
+    if not instance:
+        logger.warning(f"⚠️ [DAILY SUMMARY] Nenhuma instância WhatsApp ativa para tenant {user.tenant.name}")
+        return None
+    
+    # Data do resumo (hoje por padrão)
+    if date is None:
+        date = timezone.now().date()
+    
+    # Buscar tarefas do dia
+    date_start = timezone.make_aware(datetime.combine(date, datetime.min.time()))
+    date_end = timezone.make_aware(datetime.combine(date, datetime.max.time()))
+    
+    # Buscar tarefas do usuário ou do departamento
+    user_departments = user.departments.all()
+    tasks = Task.objects.filter(
+        tenant=user.tenant,
+        due_date__gte=date_start,
+        due_date__lte=date_end,
+        status__in=['pending', 'in_progress']
+    ).filter(
+        # Tarefas atribuídas ao usuário OU tarefas do departamento do usuário
+        models.Q(assigned_to=user) | models.Q(department__in=user_departments)
+    ).select_related('department', 'assigned_to').order_by('due_date')
+    
+    if not tasks.exists():
+        logger.debug(f"ℹ️ [DAILY SUMMARY] Nenhuma tarefa encontrada para {user.email} em {date}")
+        return None
+    
+    # Formatar resumo
+    date_str = date.strftime('%d/%m/%Y')
+    message_content = f"📅 *Resumo do Dia - {date_str}*\n\n"
+    message_content += f"Você tem {tasks.count()} compromisso(s) agendado(s) para hoje:\n\n"
+    
+    for task in tasks:
+        due_time = task.due_date.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%H:%M')
+        status_emoji = "⏰" if task.status == 'pending' else "🔄"
+        message_content += f"{status_emoji} *{due_time}* - {task.title}\n"
+        if task.department:
+            message_content += f"   🏢 {task.department.name}\n"
+        message_content += "\n"
+    
+    # Buscar ou criar conversa
+    phone = user.phone
+    if not phone.startswith('+'):
+        if phone.startswith('55'):
+            phone = '+' + phone
+        else:
+            phone = '+55' + phone
+    
+    conversation = get_or_create_conversation(
+        tenant=user.tenant,
+        contact_phone=phone,
+        contact_name=user.get_full_name() or user.email,
+        instance=instance
+    )
+    
+    if not conversation:
+        return None
+    
+    # Criar mensagem
+    message = Message.objects.create(
+        conversation=conversation,
+        content=message_content,
+        direction='outgoing',
+        status='pending',
+        is_internal=False,
+        metadata={
+            'is_daily_summary': True,
+            'summary_date': date.isoformat(),
+            'tasks_count': tasks.count(),
+        }
+    )
+    
+    # Enfileirar para envio
+    send_message_to_evolution.delay(str(message.id))
+    logger.info(f"✅ [DAILY SUMMARY] Resumo diário criado e enfileirado para {user.email}")
+    
+    return str(message.id)
+
+
+def send_department_summary_to_users(department, date=None) -> List[str]:
+    """
+    Envia resumo de tarefas/compromissos do departamento para todos os usuários do departamento.
+    
+    Args:
+        department: Departamento
+        date: Data do resumo (padrão: hoje)
+        
+    Returns:
+        Lista de IDs das mensagens criadas
+    """
+    from apps.authn.models import User
+    
+    message_ids = []
+    
+    # Buscar usuários do departamento que têm telefone
+    users = User.objects.filter(
+        tenant=department.tenant,
+        departments=department,
+        phone__isnull=False
+    ).exclude(phone='')
+    
+    for user in users:
+        try:
+            # Enviar resumo diário para cada usuário
+            message_id = send_daily_summary_to_user(user, date)
+            if message_id:
+                message_ids.append(message_id)
+        except Exception as e:
+            logger.error(f"❌ [DEPARTMENT SUMMARY] Erro ao enviar resumo para {user.email}: {e}", exc_info=True)
+            continue
+    
+    return message_ids
+
