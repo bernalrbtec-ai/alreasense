@@ -901,18 +901,61 @@ export function MessageList() {
                 {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {/* ✅ NOVO: Formatação WhatsApp (negrito, itálico, riscado, monoespaçado) */}
+                {/* ✅ NOVO: Renderizar assinatura 'Nome disse:' como cabeçalho separado */}
                 {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() && 
                  !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) && (
-                  <p className="text-sm whitespace-pre-wrap break-words mb-1">
-                    {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
-                      <MentionRenderer 
-                        content={messageItem.content} 
-                        mentions={messageItem.metadata.mentions}
-                      />
-                    ) : (
-                      <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(messageItem.content) }} />
+                  <>
+                    {/* ✅ NOVO: Renderizar assinatura como cabeçalho separado (apenas para mensagens enviadas) */}
+                    {messageItem.direction === 'outgoing' && (() => {
+                      const parsed = parseMessageSignature(messageItem.content);
+                      if (parsed.signature) {
+                        return (
+                          <div className="mb-1">
+                            <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-1">
+                              {parsed.signature}
+                            </p>
+                            <p className="text-sm whitespace-pre-wrap break-words mb-1">
+                              {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
+                                <MentionRenderer 
+                                  content={parsed.content} 
+                                  mentions={messageItem.metadata.mentions}
+                                />
+                              ) : (
+                                <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(parsed.content) }} />
+                              )}
+                            </p>
+                          </div>
+                        );
+                      }
+                      // Sem assinatura, renderizar normalmente
+                      return (
+                        <p className="text-sm whitespace-pre-wrap break-words mb-1">
+                          {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
+                            <MentionRenderer 
+                              content={messageItem.content} 
+                              mentions={messageItem.metadata.mentions}
+                            />
+                          ) : (
+                            <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(messageItem.content) }} />
+                          )}
+                        </p>
+                      );
+                    })()}
+                    
+                    {/* Mensagens recebidas (sem assinatura) */}
+                    {messageItem.direction === 'incoming' && (
+                      <p className="text-sm whitespace-pre-wrap break-words mb-1">
+                        {messageItem.metadata?.mentions && Array.isArray(messageItem.metadata.mentions) && messageItem.metadata.mentions.length > 0 ? (
+                          <MentionRenderer 
+                            content={messageItem.content} 
+                            mentions={messageItem.metadata.mentions}
+                          />
+                        ) : (
+                          <span dangerouslySetInnerHTML={{ __html: formatWhatsAppTextWithLinks(messageItem.content) }} />
+                        )}
+                      </p>
                     )}
-                  </p>
+                  </>
                 )}
                 
                 <div className={`flex items-center gap-1 justify-end mt-1 ${messageItem.direction === 'outgoing' ? '' : 'opacity-60'}`}>
