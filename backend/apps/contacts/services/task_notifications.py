@@ -397,10 +397,7 @@ def send_daily_summary_to_user(user, date=None, include_department_tasks=True, u
         logger.warning(f"⚠️ [DAILY SUMMARY] Nenhuma instância WhatsApp ativa para tenant {user.tenant.name}")
         return None
     
-    # ✅ CORREÇÃO: Garantir uso de UTC-3 (America/Sao_Paulo) para busca de tarefas
-    sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
-    
-    # Data do resumo (hoje por padrão) - usar timezone local
+    # Data do resumo (hoje por padrão) - usar timezone local (UTC-3)
     if date is None:
         now_local = timezone.now().astimezone(sao_paulo_tz)
         date = now_local.date()
