@@ -1929,14 +1929,28 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                                     content_from_payload = re.sub(signature_pattern_asterisk, '', content_from_payload, flags=re.IGNORECASE)
                                             
                                             # ✅ NOVO: Adicionar assinatura no formato "Nome disse:" para o banco
+                                            # ✅ CRÍTICO: Verificar se message.content já tem "disse:" (foi salvo anteriormente)
+                                            # Se já tem, apenas substituir o conteúdo após "disse:", não adicionar novamente
                                             if sender and (sender.first_name or sender.last_name):
                                                 full_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
                                                 if full_name and content_from_payload:
-                                                    # Verificar se já tem "disse:" no conteúdo (não duplicar)
-                                                    if not re.search(rf'^{re.escape(full_name)}\s+disse:', content_from_payload, flags=re.IGNORECASE):
+                                                    # Verificar se message.content já tem formato "Nome disse:"
+                                                    existing_signature_pattern = rf'^{re.escape(full_name)}\s+disse:\s*\n*\s*'
+                                                    if re.match(existing_signature_pattern, message.content, flags=re.IGNORECASE):
+                                                        # Já tem assinatura, apenas substituir o conteúdo após "disse:"
+                                                        content_to_save = re.sub(
+                                                            existing_signature_pattern,
+                                                            rf'{full_name} disse:\n\n',
+                                                            message.content,
+                                                            flags=re.IGNORECASE,
+                                                            count=1
+                                                        )
+                                                        # Substituir apenas o conteúdo após "disse:" pelo novo conteúdo (com telefones)
+                                                        content_after_signature = re.sub(existing_signature_pattern, '', content_to_save, flags=re.IGNORECASE, count=1)
                                                         content_to_save = f"{full_name} disse:\n\n{content_from_payload}"
                                                     else:
-                                                        content_to_save = content_from_payload
+                                                        # Não tem assinatura ainda, adicionar
+                                                        content_to_save = f"{full_name} disse:\n\n{content_from_payload}"
                                                 else:
                                                     content_to_save = content_from_payload
                                             else:
