@@ -348,6 +348,7 @@ class EvolutionWebhookView(APIView):
             instance_name = data.get('instance')
             if instance_name:
                 from apps.notifications.models import WhatsAppInstance
+                from apps.connections.models import EvolutionConnection
                 from django.db.models import Q
                 
                 whatsapp_instance = WhatsAppInstance.objects.select_related('tenant').filter(
