@@ -1,6 +1,7 @@
 /**
  * Visualização de calendário semanal
  */
+import React from 'react'
 import { Card } from '../ui/Card'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '../ui/Button'
@@ -21,9 +22,10 @@ interface CalendarWeekViewProps {
   currentDate: Date
   onDateChange: (date: Date) => void
   onTaskClick: (task: Task) => void
+  onDateClick?: (date: Date) => void
 }
 
-export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick }: CalendarWeekViewProps) {
+export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick, onDateClick }: CalendarWeekViewProps) {
   // Obter início da semana (domingo)
   const startOfWeek = new Date(currentDate)
   const day = startOfWeek.getDay()
@@ -52,6 +54,31 @@ export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick
   const isToday = (date: Date): boolean => {
     const today = new Date()
     return date.toDateString() === today.toDateString()
+  }
+
+  // Função para verificar se a data é no passado
+  const isPast = (date: Date): boolean => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dateToCheck = new Date(date)
+    dateToCheck.setHours(0, 0, 0, 0)
+    return dateToCheck < today
+  }
+
+  const handleDateClick = (date: Date, event: React.MouseEvent) => {
+    if (!onDateClick) return
+    
+    // Prevenir que o clique na tarefa propague para o dia
+    if ((event.target as HTMLElement).closest('.task-item')) {
+      return
+    }
+
+    // Não permitir criar tarefa em datas passadas
+    if (isPast(date)) {
+      return
+    }
+
+    onDateClick(date)
   }
 
   // Navegação
@@ -107,8 +134,18 @@ export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick
           const dayTasks = getTasksForDay(date)
           const isCurrentDay = isToday(date)
 
+          const isPastDay = isPast(date)
+          const canClick = !isPastDay && onDateClick
+
           return (
-            <div key={index} className="border border-gray-200 rounded-lg p-3">
+            <div 
+              key={index} 
+              onClick={(e) => canClick && handleDateClick(date, e)}
+              className={`border border-gray-200 rounded-lg p-3 ${
+                canClick ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''
+              } ${isPastDay ? 'opacity-60' : ''}`}
+              title={isPastDay ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
+            >
               <div className={`text-center mb-3 ${isCurrentDay ? 'text-blue-600 font-bold' : 'text-gray-700'}`}>
                 <div className="text-sm font-medium">{weekDayNames[date.getDay()]}</div>
                 <div className={`text-2xl ${isCurrentDay ? 'text-blue-600' : 'text-gray-900'}`}>
@@ -135,8 +172,11 @@ export function CalendarWeekView({ tasks, currentDate, onDateChange, onTaskClick
                     return (
                       <div
                         key={task.id}
-                        onClick={() => onTaskClick(task)}
-                        className={`p-2 rounded cursor-pointer text-sm ${
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          onTaskClick(task)
+                        }}
+                        className={`task-item p-2 rounded cursor-pointer text-sm ${
                           task.status === 'completed'
                             ? 'bg-gray-200 text-gray-600 line-through'
                             : task.priority === 'urgent'

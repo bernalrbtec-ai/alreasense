@@ -31,9 +31,10 @@ interface CalendarDayViewProps {
   currentDate: Date
   onDateChange: (date: Date) => void
   onTaskClick: (task: Task) => void
+  onDateClick?: (date: Date) => void
 }
 
-export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick }: CalendarDayViewProps) {
+export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick, onDateClick }: CalendarDayViewProps) {
   // Obter tarefas do dia
   const dateStr = currentDate.toISOString().split('T')[0]
   const dayTasks = tasks
@@ -57,6 +58,26 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick 
   const isToday = (date: Date): boolean => {
     const today = new Date()
     return date.toDateString() === today.toDateString()
+  }
+
+  // Função para verificar se a data é no passado
+  const isPast = (date: Date): boolean => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dateToCheck = new Date(date)
+    dateToCheck.setHours(0, 0, 0, 0)
+    return dateToCheck < today
+  }
+
+  const handleDateClick = () => {
+    if (!onDateClick) return
+
+    // Não permitir criar tarefa em datas passadas
+    if (isPast(currentDate)) {
+      return
+    }
+
+    onDateClick(currentDate)
   }
 
   // Navegação
@@ -127,9 +148,20 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick 
       {/* Lista de Tarefas por Hora */}
       <div className="space-y-4">
         {Object.keys(tasksByHour).length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
+          <div 
+            onClick={handleDateClick}
+            className={`text-center py-12 text-gray-500 ${
+              onDateClick && !isPast(currentDate) 
+                ? 'cursor-pointer hover:bg-gray-50 rounded-lg transition-colors' 
+                : ''
+            }`}
+            title={onDateClick && !isPast(currentDate) ? 'Clique para criar uma tarefa' : ''}
+          >
             <Clock className="h-12 w-12 mx-auto mb-4 text-gray-300" />
             <p>Nenhuma tarefa agendada para este dia</p>
+            {onDateClick && !isPast(currentDate) && (
+              <p className="text-sm text-blue-600 mt-2">Clique aqui para criar uma tarefa</p>
+            )}
           </div>
         ) : (
           Object.keys(tasksByHour)
@@ -149,8 +181,11 @@ export function CalendarDayView({ tasks, currentDate, onDateChange, onTaskClick 
                       return (
                         <div
                           key={task.id}
-                          onClick={() => onTaskClick(task)}
-                          className={`p-3 rounded-lg cursor-pointer transition-shadow hover:shadow-md ${
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onTaskClick(task)
+                          }}
+                          className={`task-item p-3 rounded-lg cursor-pointer transition-shadow hover:shadow-md ${
                             task.status === 'completed'
                               ? 'bg-gray-100 text-gray-600 line-through'
                               : task.priority === 'urgent'

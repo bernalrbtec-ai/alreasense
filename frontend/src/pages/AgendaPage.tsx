@@ -96,6 +96,7 @@ export default function AgendaPage() {
   const [searchExpanded, setSearchExpanded] = useState(false)
   const [viewMode, setViewMode] = useState<'list' | 'month' | 'week' | 'day'>('list')
   const [currentDate, setCurrentDate] = useState(new Date())
+  const [selectedDateForTask, setSelectedDateForTask] = useState<Date | null>(null)
 
   useEffect(() => {
     loadTasks()
@@ -258,9 +259,16 @@ export default function AgendaPage() {
     setShowTaskModal(true)
   }
 
+  const handleDateClick = (date: Date) => {
+    setEditingTask(null)
+    setSelectedDateForTask(date)
+    setShowTaskModal(true)
+  }
+
   const handleModalSuccess = () => {
     setShowTaskModal(false)
     setEditingTask(null)
+    setSelectedDateForTask(null)
     loadTasks()
     loadStats()
   }
@@ -602,8 +610,10 @@ export default function AgendaPage() {
           onDateChange={setCurrentDate}
           onTaskClick={(task) => {
             setEditingTask(task)
+            setSelectedDateForTask(null)
             setShowTaskModal(true)
           }}
+          onDateClick={handleDateClick}
         />
       ) : viewMode === 'week' ? (
         <CalendarWeekView 
@@ -612,8 +622,10 @@ export default function AgendaPage() {
           onDateChange={setCurrentDate}
           onTaskClick={(task) => {
             setEditingTask(task)
+            setSelectedDateForTask(null)
             setShowTaskModal(true)
           }}
+          onDateClick={handleDateClick}
         />
       ) : viewMode === 'day' ? (
         <CalendarDayView 
@@ -622,8 +634,10 @@ export default function AgendaPage() {
           onDateChange={setCurrentDate}
           onTaskClick={(task) => {
             setEditingTask(task)
+            setSelectedDateForTask(null)
             setShowTaskModal(true)
           }}
+          onDateClick={handleDateClick}
         />
       ) : null}
 
@@ -634,6 +648,7 @@ export default function AgendaPage() {
           onClose={() => {
             setShowTaskModal(false)
             setEditingTask(null)
+            setSelectedDateForTask(null)
           }}
           onSuccess={handleModalSuccess}
           task={editingTask ? {
@@ -641,6 +656,7 @@ export default function AgendaPage() {
             department: editingTask.department || '',
             related_contacts: editingTask.related_contacts || []
           } : undefined}
+          initialDate={selectedDateForTask || undefined}
           departments={departments}
           users={users}
         />

@@ -1,6 +1,7 @@
 /**
  * Visualização de calendário mensal
  */
+import React from 'react'
 import { Card } from '../ui/Card'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from '../ui/Button'
@@ -20,9 +21,10 @@ interface CalendarMonthViewProps {
   currentDate: Date
   onDateChange: (date: Date) => void
   onTaskClick: (task: Task) => void
+  onDateClick?: (date: Date) => void
 }
 
-export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClick }: CalendarMonthViewProps) {
+export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClick, onDateClick }: CalendarMonthViewProps) {
   const year = currentDate.getFullYear()
   const month = currentDate.getMonth()
 
@@ -68,6 +70,32 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
     if (!date) return false
     const today = new Date()
     return date.toDateString() === today.toDateString()
+  }
+
+  // Função para verificar se a data é no passado
+  const isPast = (date: Date | null): boolean => {
+    if (!date) return false
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const dateToCheck = new Date(date)
+    dateToCheck.setHours(0, 0, 0, 0)
+    return dateToCheck < today
+  }
+
+  const handleDateClick = (date: Date | null, event: React.MouseEvent) => {
+    if (!date || !onDateClick) return
+    
+    // Prevenir que o clique na tarefa propague para o dia
+    if ((event.target as HTMLElement).closest('.task-item')) {
+      return
+    }
+
+    // Não permitir criar tarefa em datas passadas
+    if (isPast(date)) {
+      return
+    }
+
+    onDateClick(date)
   }
 
   // Navegação
@@ -125,12 +153,19 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
           const isCurrentDay = isToday(date)
           const isCurrentMonth = date && date.getMonth() === month
 
+          const isPastDay = isPast(date)
+          const canClick = date && isCurrentMonth && !isPastDay && onDateClick
+
           return (
             <div
               key={index}
+              onClick={(e) => canClick && handleDateClick(date, e)}
               className={`min-h-[100px] border border-gray-200 p-2 ${
                 !isCurrentMonth ? 'bg-gray-50' : ''
-              } ${isCurrentDay ? 'bg-blue-50 border-blue-300' : ''}`}
+              } ${isCurrentDay ? 'bg-blue-50 border-blue-300' : ''} ${
+                canClick ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''
+              } ${isPastDay && isCurrentMonth ? 'opacity-60' : ''}`}
+              title={isPastDay && isCurrentMonth ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
             >
               {date && (
                 <>
@@ -151,8 +186,11 @@ export function CalendarMonthView({ tasks, currentDate, onDateChange, onTaskClic
                       .map(task => (
                         <div
                           key={task.id}
-                          onClick={() => onTaskClick(task)}
-                          className={`text-xs p-1 rounded cursor-pointer truncate ${
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onTaskClick(task)
+                          }}
+                          className={`task-item text-xs p-1 rounded cursor-pointer truncate ${
                             task.status === 'completed'
                               ? 'bg-gray-200 text-gray-600 line-through'
                               : task.priority === 'urgent'
