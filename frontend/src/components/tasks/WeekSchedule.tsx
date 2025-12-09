@@ -38,9 +38,12 @@ const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
 export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekScheduleProps) {
   const now = new Date()
-  const weekStart = startOfWeek(now, { locale: ptBR })
-  const weekEnd = endOfWeek(now, { locale: ptBR })
-  const weekDays = eachDayOfInterval({ start: weekStart, end: weekEnd })
+  // Começar do dia atual e ir até +6 dias (7 dias no total)
+  const today = new Date(now)
+  today.setHours(0, 0, 0, 0)
+  const weekEnd = new Date(today)
+  weekEnd.setDate(today.getDate() + 6)
+  const weekDays = eachDayOfInterval({ start: today, end: weekEnd })
 
   // Filtrar tarefas da semana (não concluídas)
   const weekTasks = useMemo(() => {
@@ -129,56 +132,71 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
         <div className="text-center py-12 text-gray-500 flex-1 flex items-center justify-center">
           <div>
             <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-            <p className="text-sm font-medium">Nenhum compromisso esta semana</p>
+            <p className="text-sm font-medium">Nenhum compromisso nos próximos 7 dias</p>
             <p className="text-xs mt-1">Suas tarefas agendadas aparecerão aqui</p>
           </div>
         </div>
       ) : (
-        <div className="flex-1 overflow-y-auto">
-          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+        <div className="flex-1 overflow-y-auto space-y-3">
           {weekDays.map((day, idx) => {
             const { dayName, dayNumber, isCurrentDay } = getDayLabel(day)
             const dayTasks = tasksByDay[day.getTime()] || []
             const isPastDay = isPast(day) && !isToday(day)
-
             const canClick = !isPastDay && onDateClick
 
             return (
               <div
                 key={idx}
-                onClick={(e) => {
-                  // Prevenir que o clique na tarefa propague para o dia
-                  if ((e.target as HTMLElement).closest('.task-item')) {
-                    return
-                  }
-                  if (canClick) {
-                    onDateClick(day)
-                  }
-                }}
-                className={`border rounded-lg p-3 min-h-[200px] ${
+                className={`border rounded-lg p-4 ${
                   isCurrentDay
                     ? 'border-blue-500 bg-blue-50'
                     : isPastDay
                     ? 'border-gray-200 bg-gray-50 opacity-60'
                     : 'border-gray-200 bg-white'
-                } ${canClick ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
-                title={isPastDay ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
+                }`}
               >
-                <div className={`text-center mb-3 pb-2 border-b ${
-                  isCurrentDay ? 'border-blue-200' : 'border-gray-200'
-                }`}>
-                  <div className="text-xs font-medium text-gray-500 mb-1">{dayName}</div>
-                  <div className={`text-xl font-bold ${
-                    isCurrentDay ? 'text-blue-600' : 'text-gray-900'
-                  }`}>
-                    {dayNumber}
+                {/* Header do Dia */}
+                <div 
+                  onClick={(e) => {
+                    if (canClick && !(e.target as HTMLElement).closest('.task-item')) {
+                      onDateClick(day)
+                    }
+                  }}
+                  className={`flex items-center justify-between mb-3 pb-2 border-b ${
+                    isCurrentDay ? 'border-blue-200' : 'border-gray-200'
+                  } ${canClick ? 'cursor-pointer' : ''}`}
+                  title={isPastDay ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`text-center ${isCurrentDay ? 'text-blue-600' : 'text-gray-700'}`}>
+                      <div className="text-xs font-medium text-gray-500">{dayName}</div>
+                      <div className={`text-2xl font-bold ${
+                        isCurrentDay ? 'text-blue-600' : 'text-gray-900'
+                      }`}>
+                        {dayNumber}
+                      </div>
+                    </div>
+                    <div className="text-sm text-gray-600">
+                      {format(day, "dd 'de' MMMM", { locale: ptBR })}
+                    </div>
                   </div>
+                  {dayTasks.length > 0 && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                      {dayTasks.length} {dayTasks.length === 1 ? 'compromisso' : 'compromissos'}
+                    </span>
+                  )}
                 </div>
 
+                {/* Lista de Tarefas */}
                 <div className="space-y-2">
                   {dayTasks.length === 0 ? (
-                    <div className="text-center py-4">
-                      <p className="text-xs text-gray-400">Sem tarefas</p>
+                    <div 
+                      onClick={() => canClick && onDateClick(day)}
+                      className={`text-center py-4 text-xs text-gray-400 ${
+                        canClick ? 'cursor-pointer hover:text-gray-600' : ''
+                      }`}
+                    >
+                      {canClick ? 'Clique para criar uma tarefa' : 'Sem tarefas'}
                     </div>
                   ) : (
                     dayTasks.map(task => {
@@ -192,7 +210,7 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                             e.stopPropagation()
                             onTaskClick?.(task)
                           }}
-                          className={`task-item p-2 rounded border cursor-pointer transition-all hover:shadow-sm ${
+                          className={`task-item p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md ${
                             task.is_overdue
                               ? 'border-red-300 bg-red-50'
                               : task.status === 'completed'
@@ -200,35 +218,41 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
                               : 'border-gray-200 bg-white hover:border-blue-300'
                           }`}
                         >
-                          <div className="flex items-start gap-1.5 mb-1">
-                            <span className={`text-xs px-1.5 py-0.5 rounded flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`}>
-                              {task.priority_display}
-                            </span>
-                            {task.is_overdue && (
-                              <AlertCircle className="h-3 w-3 text-red-600 flex-shrink-0 mt-0.5" />
-                            )}
-                            {task.status === 'completed' && (
-                              <CheckCircle className="h-3 w-3 text-gray-500 flex-shrink-0 mt-0.5" />
-                            )}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`text-xs px-2 py-0.5 rounded flex-shrink-0 ${PRIORITY_COLORS[task.priority]}`}>
+                                  {task.priority_display}
+                                </span>
+                                {task.is_overdue && (
+                                  <AlertCircle className="h-4 w-4 text-red-600 flex-shrink-0" />
+                                )}
+                                {task.status === 'completed' && (
+                                  <CheckCircle className="h-4 w-4 text-gray-500 flex-shrink-0" />
+                                )}
+                              </div>
+                              <h4 className={`text-sm font-medium mb-1 ${
+                                task.status === 'completed'
+                                  ? 'line-through text-gray-500'
+                                  : 'text-gray-900'
+                              }`}>
+                                {task.title}
+                              </h4>
+                              <div className="flex items-center gap-3 text-xs text-gray-500">
+                                {hasTime && taskDate && (
+                                  <span className="flex items-center gap-1">
+                                    <Clock className="h-3 w-3" />
+                                    {format(taskDate, 'HH:mm', { locale: ptBR })}
+                                  </span>
+                                )}
+                                {task.assigned_to_name && (
+                                  <span className="truncate">
+                                    {task.assigned_to_name}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <h4 className={`text-xs font-medium mb-1 line-clamp-2 ${
-                            task.status === 'completed'
-                              ? 'line-through text-gray-500'
-                              : 'text-gray-900'
-                          }`}>
-                            {task.title}
-                          </h4>
-                          {hasTime && taskDate && (
-                            <p className="text-xs text-gray-500 flex items-center gap-1">
-                              <Clock className="h-3 w-3" />
-                              {format(taskDate, 'HH:mm', { locale: ptBR })}
-                            </p>
-                          )}
-                          {task.assigned_to_name && (
-                            <p className="text-xs text-gray-400 mt-1 truncate">
-                              {task.assigned_to_name}
-                            </p>
-                          )}
                         </div>
                       )
                     })
@@ -237,7 +261,6 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
               </div>
             )
           })}
-          </div>
         </div>
       )}
     </Card>
