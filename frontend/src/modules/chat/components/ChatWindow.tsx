@@ -953,6 +953,7 @@ export function ChatWindow() {
         />
         )}
       </div>
+      )}
 
       {/* ✅ CORREÇÃO: Histórico ocupa toda a tela quando aberto */}
       {showHistory && existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
