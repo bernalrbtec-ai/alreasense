@@ -1,9 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '../stores/authStore'
 import TaskList from '../components/tasks/TaskList'
 import TaskEventsBox from '../components/tasks/TaskEventsBox'
+import WeekSchedule from '../components/tasks/WeekSchedule'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
+import { Card } from '../components/ui/Card'
+import { CheckCircle, Clock, AlertCircle, Calendar, TrendingUp } from 'lucide-react'
+import { isToday, isPast, isFuture } from 'date-fns'
 
 interface Task {
   id: string
@@ -92,15 +96,95 @@ export default function DashboardPage() {
     setRefreshTrigger(prev => prev + 1)
   }
 
+  // Calcular estatísticas
+  const stats = useMemo(() => {
+    const total = tasks.length
+    const completed = tasks.filter(t => t.status === 'completed').length
+    const pending = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length
+    const overdue = tasks.filter(t => t.is_overdue && t.status !== 'completed').length
+    const today = tasks.filter(t => {
+      if (!t.due_date || t.status === 'completed') return false
+      return isToday(new Date(t.due_date))
+    }).length
+    const upcoming = tasks.filter(t => {
+      if (!t.due_date || t.status === 'completed') return false
+      const taskDate = new Date(t.due_date)
+      return isFuture(taskDate) && !isToday(taskDate)
+    }).length
+
+    return {
+      total,
+      completed,
+      pending,
+      overdue,
+      today,
+      upcoming,
+    }
+  }, [tasks])
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div>
         <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
         <p className="text-sm sm:text-base text-gray-600">
-          Tarefas e agenda de {user?.tenant?.name}
+          Visão geral de tarefas e compromissos de {user?.tenant?.name}
         </p>
       </div>
+
+      {/* Cards de Estatísticas */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Total de Tarefas</p>
+              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
+            </div>
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <Calendar className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Pendentes</p>
+              <p className="text-2xl font-bold text-orange-600">{stats.pending}</p>
+            </div>
+            <div className="p-3 bg-orange-100 rounded-lg">
+              <Clock className="h-6 w-6 text-orange-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Atrasadas</p>
+              <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
+            </div>
+            <div className="p-3 bg-red-100 rounded-lg">
+              <AlertCircle className="h-6 w-6 text-red-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Concluídas</p>
+              <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
+            </div>
+            <div className="p-3 bg-green-100 rounded-lg">
+              <CheckCircle className="h-6 w-6 text-green-600" />
+            </div>
+          </div>
+        </Card>
+      </div>
+
+      {/* Compromissos da Semana */}
+      <WeekSchedule tasks={tasks} onTaskClick={handleTaskClick} />
 
       {/* Layout: Calendário/Lista + Box de Eventos */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -110,6 +194,7 @@ export default function DashboardPage() {
             onTasksChange={setTasks} 
             onEditTaskRequest={handleEditTaskRequest}
             refreshTrigger={refreshTrigger}
+            hideActions={true}
           />
         </div>
 

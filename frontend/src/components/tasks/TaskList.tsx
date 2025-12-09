@@ -48,6 +48,7 @@ interface TaskListProps {
   onTasksChange?: (tasks: Task[]) => void
   onEditTaskRequest?: (task: Task) => void
   refreshTrigger?: number // Quando muda, força recarregamento
+  hideActions?: boolean // Se true, oculta botões "Nova Tarefa" e "Pesquisar"
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -64,7 +65,7 @@ const STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-gray-100 text-gray-700 border-gray-200',
 }
 
-export default function TaskList({ departmentId, contactId, onTasksChange, onEditTaskRequest, refreshTrigger }: TaskListProps) {
+export default function TaskList({ departmentId, contactId, onTasksChange, onEditTaskRequest, refreshTrigger, hideActions = false }: TaskListProps) {
   const [tasks, setTasks] = useState<Task[]>([])
   const [loading, setLoading] = useState(true)
   const [viewMode, setViewMode] = useState<'list' | 'calendar'>('calendar')
@@ -279,20 +280,22 @@ export default function TaskList({ departmentId, contactId, onTasksChange, onEdi
       {/* Header */}
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-gray-900">Tarefas e Agenda</h3>
-        <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            size="sm" 
-            onClick={() => setShowSearchModal(true)}
-            title="Pesquisar e filtrar tarefas"
-          >
-            <Search className="h-4 w-4" />
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleCreate}>
-            <Plus className="h-4 w-4 mr-1" />
-            Nova Tarefa
-          </Button>
-        </div>
+        {!hideActions && (
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => setShowSearchModal(true)}
+              title="Pesquisar e filtrar tarefas"
+            >
+              <Search className="h-4 w-4" />
+            </Button>
+            <Button variant="outline" size="sm" onClick={handleCreate}>
+              <Plus className="h-4 w-4 mr-1" />
+              Nova Tarefa
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Tabs */}
