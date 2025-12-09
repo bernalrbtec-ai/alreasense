@@ -1622,6 +1622,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 **defaults
             )
             created = True
+            
+            # ✅ NOVO: Enviar menu de boas-vindas para conversa nova (se configurado)
+            if not from_me:  # Apenas para mensagens recebidas
+                try:
+                    from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                    if WelcomeMenuService.should_send_menu(conversation):
+                        logger.info(f"📋 [WELCOME MENU] Enviando menu para nova conversa: {conversation.id}")
+                        WelcomeMenuService.send_welcome_menu(conversation)
+                except Exception as e:
+                    logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para nova conversa: {e}", exc_info=True)
         
         logger.info(f"📋 [CONVERSA] {'NOVA' if created else 'EXISTENTE'}: {normalized_phone} (original: {phone}) | Tipo: {conversation_type}")
         logger.info(f"   📋 Departamento atual ANTES: {conversation.department.name if conversation.department else 'Nenhum (Inbox)'}")
@@ -1929,6 +1939,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 status_changed = True
                 logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status}")
                 logger.info(f"   📋 Departamento: {old_department} → {status_str}")
+                
+                # ✅ NOVO: Enviar menu de boas-vindas para conversa fechada que recebeu mensagem (se configurado)
+                if not from_me:  # Apenas para mensagens recebidas
+                    try:
+                        from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                        if WelcomeMenuService.should_send_menu(conversation):
+                            logger.info(f"📋 [WELCOME MENU] Enviando menu para conversa reaberta: {conversation.id}")
+                            WelcomeMenuService.send_welcome_menu(conversation)
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para conversa reaberta: {e}", exc_info=True)
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista
@@ -2398,6 +2418,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.info(f"✅ [BUSINESS HOURS] Mensagem recebida dentro do horário de atendimento")
                 except Exception as e:
                     logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
+                
+                # ✅ NOVO: Processar resposta do menu de boas-vindas (apenas mensagens recebidas)
+                try:
+                    from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                    processed = WelcomeMenuService.process_menu_response(conversation, message)
+                    if processed:
+                        logger.info(f"✅ [WELCOME MENU] Resposta do menu processada com sucesso")
+                        # Recarregar conversa para obter status atualizado
+                        conversation.refresh_from_db()
+                except Exception as e:
+                    logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
             else:
                 logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
             
