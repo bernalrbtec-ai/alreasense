@@ -699,7 +699,9 @@ export function ChatWindow() {
   return (
     <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
       {/* Main Chat Area */}
-      <div className={`flex flex-col flex-1 min-w-0 transition-all duration-300 ${showHistory ? 'md:mr-[320px]' : ''}`}>
+      {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
+      {!showHistory && (
+      <div className="flex flex-col flex-1 min-w-0 transition-all duration-300">
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
