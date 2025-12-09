@@ -23,6 +23,7 @@ import { ForwardMessageModal } from './ForwardMessageModal';
 import { EditMessageModal } from './EditMessageModal';
 import { formatWhatsAppTextWithLinks } from '../utils/whatsappFormatter';
 import { EmojiPicker } from './EmojiPicker';
+import { parseMessageSignature } from '../utils/signatureParser';
 
 type ReactionsSummary = NonNullable<Message['reactions_summary']>;
 

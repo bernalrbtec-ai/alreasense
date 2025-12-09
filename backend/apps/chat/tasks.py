@@ -938,14 +938,26 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 last_name = sender.last_name or ''
                 
                 if first_name or last_name:
-                    # Montar assinatura com nome completo em negrito
+                    # Montar assinatura com nome completo
                     full_name = f"{first_name} {last_name}".strip()
-                    signature = f"*{full_name}:*\n\n"
-                    # ✅ CORREÇÃO: Adicionar assinatura apenas em content_for_send (não em content)
-                    content_for_send = signature + content
-                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada para envio: {full_name}")
+                    
+                    # ✅ NOVO: Formato para Evolution API (com asteriscos para negrito)
+                    signature_for_send = f"*{full_name}:*\n\n"
+                    content_for_send = signature_for_send + content
+                    
+                    # ✅ NOVO: Formato para banco/app (sem asteriscos, com "disse:")
+                    signature_for_db = f"{full_name} disse:\n\n"
+                    # ✅ CRÍTICO: Atualizar message.content para salvar no banco com formato "disse:"
+                    message.content = signature_for_db + content
+                    # Salvar imediatamente no banco
+                    from asgiref.sync import sync_to_async
+                    await sync_to_async(message.save)(update_fields=['content'])
+                    
+                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada:")
+                    logger.critical(f"   Nome: {full_name}")
                     logger.critical(f"   content original (sem assinatura): {content[:50] if content else 'VAZIO'}...")
-                    logger.critical(f"   content_for_send (com assinatura): {content_for_send[:100] if content_for_send else 'VAZIO'}...")
+                    logger.critical(f"   content_for_send (Evolution API, com *): {content_for_send[:100] if content_for_send else 'VAZIO'}...")
+                    logger.critical(f"   message.content (banco/app, com 'disse:'): {message.content[:100] if message.content else 'VAZIO'}...")
                 else:
                     logger.warning(f"⚠️ [CHAT ENVIO] Sender sem nome (first_name='{first_name}', last_name='{last_name}')")
             else:
@@ -953,7 +965,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         else:
             logger.info(f"✍️ [CHAT ENVIO] Assinatura desabilitada pelo usuário")
         
-        # ✅ CORREÇÃO: Usar content_for_send daqui em diante para envio, mas manter content original no banco
+        # ✅ CORREÇÃO: Usar content_for_send daqui em diante para envio (Evolution API)
         
         logger.info("📱 [CHAT ENVIO] Destino=%s | tipo=%s", phone, conversation.conversation_type)
         
@@ -1903,24 +1915,40 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             else:
                                                 logger.error(f"❌ [CHAT ENVIO] Validação FALHOU: Números no texto não correspondem ao array mentioned!")
                                             
-                                            # ✅ CORREÇÃO CRÍTICA: NÃO atualizar message.content com assinatura
-                                            # Apenas atualizar se houver substituição de nomes por telefones (sem assinatura)
-                                            # Remover assinatura antes de salvar (se houver)
-                                            content_to_save = payload['text']
-                                            # Remover assinatura se existir (formato: *Nome:*\n\n)
+                                            # ✅ CORREÇÃO CRÍTICA: Atualizar message.content após substituição de menções
+                                            # O payload['text'] tem assinatura com asteriscos (*Nome:*), mas no banco deve ter formato "Nome disse:"
+                                            # Extrair apenas o conteúdo da mensagem (sem assinatura) do payload
+                                            content_from_payload = payload['text']
+                                            
+                                            # Remover assinatura com asteriscos do payload (formato: *Nome:*\n\n)
                                             if sender and (sender.first_name or sender.last_name):
                                                 full_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
                                                 if full_name:
-                                                    signature_pattern = rf'\*{re.escape(full_name)}:\*\s*\n\s*\n?'
-                                                    content_to_save = re.sub(signature_pattern, '', content_to_save, flags=re.IGNORECASE)
+                                                    # Remover assinatura com asteriscos
+                                                    signature_pattern_asterisk = rf'\*{re.escape(full_name)}:\*\s*\n\s*\n?'
+                                                    content_from_payload = re.sub(signature_pattern_asterisk, '', content_from_payload, flags=re.IGNORECASE)
+                                            
+                                            # ✅ NOVO: Adicionar assinatura no formato "Nome disse:" para o banco
+                                            if sender and (sender.first_name or sender.last_name):
+                                                full_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
+                                                if full_name and content_from_payload:
+                                                    # Verificar se já tem "disse:" no conteúdo (não duplicar)
+                                                    if not re.search(rf'^{re.escape(full_name)}\s+disse:', content_from_payload, flags=re.IGNORECASE):
+                                                        content_to_save = f"{full_name} disse:\n\n{content_from_payload}"
+                                                    else:
+                                                        content_to_save = content_from_payload
+                                                else:
+                                                    content_to_save = content_from_payload
+                                            else:
+                                                content_to_save = content_from_payload
                                             
                                             # ✅ CORREÇÃO: Atualizar apenas se conteúdo mudou (substituição de nomes)
-                                            # Mas SEM assinatura no banco
+                                            # Formato no banco: "Nome disse:\n\n{mensagem com telefones}"
                                             if content_to_save != message.content:
                                                 from asgiref.sync import sync_to_async
-                                                message.content = content_to_save  # ✅ Sem assinatura
+                                                message.content = content_to_save  # ✅ Com formato "disse:"
                                                 await sync_to_async(message.save)(update_fields=['content'])
-                                                logger.info(f"✅ [CHAT ENVIO] Conteúdo da mensagem atualizado no banco (sem assinatura)")
+                                                logger.info(f"✅ [CHAT ENVIO] Conteúdo da mensagem atualizado no banco (com formato 'disse:')")
                                                 logger.info(f"   Antes: {message.content[:100] if message.content else 'N/A'}...")
                                                 logger.info(f"   Depois: {content_to_save[:100]}...")
                                         else:

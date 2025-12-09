@@ -7,6 +7,7 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { useChatStore } from '../store/chatStore';
 import type { Message } from '../types';
+import { removeSignature } from '../utils/signatureParser';
 
 interface EditMessageModalProps {
   message: Message;
@@ -14,7 +15,9 @@ interface EditMessageModalProps {
 }
 
 export function EditMessageModal({ message, onClose }: EditMessageModalProps) {
-  const [newContent, setNewContent] = useState(message.content || '');
+  // ✅ NOVO: Remover assinatura do conteúdo editável
+  const contentWithoutSignature = removeSignature(message.content || '');
+  const [newContent, setNewContent] = useState(contentWithoutSignature);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { updateMessage, activeConversation } = useChatStore();
 
@@ -36,7 +39,8 @@ export function EditMessageModal({ message, onClose }: EditMessageModalProps) {
       return;
     }
     
-    if (newContent.trim() === message.content?.trim()) {
+    // ✅ CORREÇÃO: Comparar com conteúdo sem assinatura
+    if (newContent.trim() === contentWithoutSignature.trim()) {
       toast.error('Novo conteúdo deve ser diferente do atual');
       return;
     }
