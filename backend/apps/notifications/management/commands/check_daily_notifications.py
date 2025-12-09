@@ -232,62 +232,58 @@ class Command(BaseCommand):
             logger.info(f'ℹ️ [AGENDA REMINDER] Nenhum lembrete enviado: {count_not_in_window} fora da janela de tempo')
     
     def _send_daily_summary(self, user: User, pref: UserNotificationPreferences, current_date):
-        """Envia resumo diário para o usuário"""
+        """
+        Envia resumo diário para o usuário.
+        
+        ✅ UNIFICADO: Usa função centralizada do task_notifications.py
+        """
         try:
-            # Buscar tarefas do dia
-            tasks_today = Task.objects.filter(
-                tenant=user.tenant,
-                assigned_to=user,
-                due_date__date=current_date,
-                status__in=['pending', 'in_progress']
-            ).select_related('department')
+            from apps.contacts.services.task_notifications import send_daily_summary_to_user
             
-            tasks_pending = tasks_today.filter(status='pending')
-            tasks_in_progress = tasks_today.filter(status='in_progress')
-            tasks_overdue = Task.objects.filter(
-                tenant=user.tenant,
-                assigned_to=user,
-                due_date__lt=timezone.now(),
-                status__in=['pending', 'in_progress']
-            ).count()
+            # ✅ NOVO: Usar função unificada que cria mensagem no chat
+            # Isso garante que o resumo apareça no histórico de conversas
+            message_id = send_daily_summary_to_user(
+                user=user,
+                date=current_date,
+                include_department_tasks=True,  # Incluir tarefas do departamento por padrão
+                use_preferences=False  # Já verificamos preferências antes de chamar esta função
+            )
             
-            greeting = get_greeting()
-            weekday = format_weekday_pt(current_date)
-            
-            # Formatar mensagem
-            message = f"{greeting}, {user.first_name or user.email}!\n\n"
-            message += f"📅 *Resumo do Dia - {weekday}*\n\n"
-            
-            if tasks_pending.exists() or tasks_in_progress.exists() or tasks_overdue > 0:
-                message += f"📋 *Tarefas de Hoje:*\n"
-                message += f"   • Pendentes: {tasks_pending.count()}\n"
-                message += f"   • Em progresso: {tasks_in_progress.count()}\n"
-                if tasks_overdue > 0:
-                    message += f"   ⚠️ Atrasadas: {tasks_overdue}\n"
-                message += f"\n"
-            else:
-                message += f"✅ Nenhuma tarefa agendada para hoje!\n\n"
-            
-            message += f"Tenha um ótimo dia! 🚀"
-            
-            # Enviar via WhatsApp se habilitado
-            if pref.notify_via_whatsapp and user.notify_whatsapp and user.phone:
-                success = send_whatsapp_notification(user, message)
-                if success:
-                    logger.info(f'✅ [DAILY SUMMARY] Resumo enviado para {user.email}')
-                    return True
-            
-            # Enviar via WebSocket se habilitado
-            if pref.notify_via_websocket:
-                data = {
-                    'type': 'daily_summary',
-                    'date': current_date.isoformat(),
-                    'tasks_pending': tasks_pending.count(),
-                    'tasks_in_progress': tasks_in_progress.count(),
-                    'tasks_overdue': tasks_overdue
-                }
-                send_websocket_notification(user, 'daily_summary', data)
-                logger.info(f'✅ [DAILY SUMMARY] Resumo WebSocket enviado para {user.email}')
+            if message_id:
+                # ✅ NOVO: Também enviar via WebSocket se habilitado (notificação no navegador)
+                if pref.notify_via_websocket:
+                    try:
+                        # Buscar dados para WebSocket
+                        tasks_today = Task.objects.filter(
+                            tenant=user.tenant,
+                            assigned_to=user,
+                            due_date__date=current_date,
+                            status__in=['pending', 'in_progress']
+                        )
+                        
+                        tasks_pending = tasks_today.filter(status='pending').count()
+                        tasks_in_progress = tasks_today.filter(status='in_progress').count()
+                        tasks_overdue = Task.objects.filter(
+                            tenant=user.tenant,
+                            assigned_to=user,
+                            due_date__lt=timezone.now(),
+                            status__in=['pending', 'in_progress']
+                        ).count()
+                        
+                        data = {
+                            'type': 'daily_summary',
+                            'date': current_date.isoformat(),
+                            'tasks_pending': tasks_pending,
+                            'tasks_in_progress': tasks_in_progress,
+                            'tasks_overdue': tasks_overdue,
+                            'message_id': message_id
+                        }
+                        send_websocket_notification(user, 'daily_summary', data)
+                        logger.info(f'✅ [DAILY SUMMARY] Notificação WebSocket enviada para {user.email}')
+                    except Exception as e:
+                        logger.warning(f'⚠️ [DAILY SUMMARY] Erro ao enviar WebSocket: {e}')
+                
+                logger.info(f'✅ [DAILY SUMMARY] Resumo enviado para {user.email} (mensagem: {message_id})')
                 return True
             
             return False

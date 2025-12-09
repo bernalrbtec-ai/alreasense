@@ -338,18 +338,45 @@ def send_task_reminder_to_contacts(task: Task, is_15min_before: bool = True) -> 
     return message_ids
 
 
-def send_daily_summary_to_user(user, date=None) -> Optional[str]:
+def send_daily_summary_to_user(user, date=None, include_department_tasks=True, use_preferences=True) -> Optional[str]:
     """
     Envia resumo diário de tarefas/compromissos para um usuário.
+    
+    ✅ UNIFICADO: Integra funcionalidade existente com melhorias de UX.
     
     Args:
         user: Usuário para enviar resumo
         date: Data do resumo (padrão: hoje)
+        include_department_tasks: Se True, inclui tarefas do departamento do usuário
+        use_preferences: Se True, verifica preferências do usuário antes de enviar
         
     Returns:
         ID da mensagem criada ou None se erro
     """
-    from apps.authn.models import Department
+    from apps.notifications.models import UserNotificationPreferences
+    from apps.notifications.services import get_greeting, format_weekday_pt
+    
+    # Verificar preferências se solicitado
+    if use_preferences:
+        try:
+            pref = UserNotificationPreferences.objects.filter(
+                user=user,
+                tenant=user.tenant
+            ).first()
+            
+            if not pref or not pref.daily_summary_enabled:
+                logger.debug(f"ℹ️ [DAILY SUMMARY] Resumo diário desabilitado para {user.email}")
+                return None
+            
+            # Verificar se já foi enviado hoje
+            if date is None:
+                date = timezone.now().date()
+            
+            if pref.last_daily_summary_sent_date == date:
+                logger.debug(f"ℹ️ [DAILY SUMMARY] Resumo já enviado hoje para {user.email}")
+                return None
+        except Exception as e:
+            logger.warning(f"⚠️ [DAILY SUMMARY] Erro ao verificar preferências: {e}")
     
     if not user.phone:
         logger.debug(f"ℹ️ [DAILY SUMMARY] Usuário {user.email} não tem telefone")
@@ -374,34 +401,105 @@ def send_daily_summary_to_user(user, date=None) -> Optional[str]:
     date_start = timezone.make_aware(datetime.combine(date, datetime.min.time()))
     date_end = timezone.make_aware(datetime.combine(date, datetime.max.time()))
     
-    # Buscar tarefas do usuário ou do departamento
-    user_departments = user.departments.all()
-    tasks = Task.objects.filter(
+    # Buscar tarefas atribuídas ao usuário
+    tasks_assigned = Task.objects.filter(
         tenant=user.tenant,
+        assigned_to=user,
         due_date__gte=date_start,
         due_date__lte=date_end,
         status__in=['pending', 'in_progress']
-    ).filter(
-        # Tarefas atribuídas ao usuário OU tarefas do departamento do usuário
-        models.Q(assigned_to=user) | models.Q(department__in=user_departments)
     ).select_related('department', 'assigned_to').order_by('due_date')
     
-    if not tasks.exists():
-        logger.debug(f"ℹ️ [DAILY SUMMARY] Nenhuma tarefa encontrada para {user.email} em {date}")
-        return None
+    # Buscar tarefas do departamento (se habilitado)
+    tasks_department = Task.objects.none()
+    if include_department_tasks:
+        user_departments = user.departments.all()
+        if user_departments.exists():
+            tasks_department = Task.objects.filter(
+                tenant=user.tenant,
+                department__in=user_departments,
+                due_date__gte=date_start,
+                due_date__lte=date_end,
+                status__in=['pending', 'in_progress']
+            ).exclude(assigned_to=user).select_related('department', 'assigned_to').order_by('due_date')
     
-    # Formatar resumo
+    # Combinar tarefas (remover duplicatas)
+    all_tasks = list(tasks_assigned) + list(tasks_department)
+    unique_tasks = {task.id: task for task in all_tasks}.values()
+    tasks = sorted(unique_tasks, key=lambda t: t.due_date)
+    
+    # Buscar tarefas atrasadas
+    tasks_overdue = Task.objects.filter(
+        tenant=user.tenant,
+        assigned_to=user,
+        due_date__lt=timezone.now(),
+        status__in=['pending', 'in_progress']
+    ).count()
+    
+    # Preparar dados para formatação
+    tasks_pending = [t for t in tasks if t.status == 'pending']
+    tasks_in_progress = [t for t in tasks if t.status == 'in_progress']
+    
+    # Formatar mensagem melhorada (UX unificada)
+    greeting = get_greeting()
+    weekday = format_weekday_pt(date)
     date_str = date.strftime('%d/%m/%Y')
-    message_content = f"📅 *Resumo do Dia - {date_str}*\n\n"
-    message_content += f"Você tem {tasks.count()} compromisso(s) agendado(s) para hoje:\n\n"
     
-    for task in tasks:
-        due_time = task.due_date.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%H:%M')
-        status_emoji = "⏰" if task.status == 'pending' else "🔄"
-        message_content += f"{status_emoji} *{due_time}* - {task.title}\n"
-        if task.department:
-            message_content += f"   🏢 {task.department.name}\n"
-        message_content += "\n"
+    message_parts = []
+    
+    # Saudação personalizada
+    user_name = user.first_name or user.email.split('@')[0]
+    message_parts.append(f"{greeting}, {user_name}!\n")
+    
+    # Cabeçalho
+    message_parts.append(f"📅 *Resumo do Dia - {weekday}*\n")
+    message_parts.append(f"📆 {date_str}\n")
+    message_parts.append("")  # Linha em branco
+    
+    # Resumo com contadores (melhor UX)
+    if tasks_pending or tasks_in_progress or tasks_overdue > 0:
+        message_parts.append("📋 *Resumo de Tarefas:*\n")
+        if tasks_pending:
+            message_parts.append(f"   ⏰ Pendentes: {len(tasks_pending)}")
+        if tasks_in_progress:
+            message_parts.append(f"   🔄 Em progresso: {len(tasks_in_progress)}")
+        if tasks_overdue > 0:
+            message_parts.append(f"   ⚠️ Atrasadas: {tasks_overdue}")
+        message_parts.append("")  # Linha em branco
+        
+        # Lista detalhada de tarefas (melhor UX)
+        if tasks:
+            message_parts.append("📝 *Compromissos de Hoje:*\n")
+            for task in tasks:
+                due_time = task.due_date.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%H:%M')
+                status_emoji = "⏰" if task.status == 'pending' else "🔄"
+                
+                # Verificar se está atrasada
+                if task.due_date < timezone.now():
+                    status_emoji = "⚠️"
+                
+                message_parts.append(f"{status_emoji} *{due_time}* - {task.title}")
+                
+                # Adicionar informações extras
+                info_parts = []
+                if task.department:
+                    info_parts.append(f"🏢 {task.department.name}")
+                if task.assigned_to != user:
+                    assigned_name = task.assigned_to.get_full_name() if task.assigned_to else "Não atribuído"
+                    info_parts.append(f"👤 {assigned_name}")
+                
+                if info_parts:
+                    message_parts.append(f"   {' | '.join(info_parts)}")
+                
+                message_parts.append("")  # Linha em branco
+    else:
+        message_parts.append("✅ Nenhuma tarefa agendada para hoje!\n")
+        message_parts.append("")  # Linha em branco
+    
+    # Mensagem de despedida
+    message_parts.append("Tenha um ótimo dia! 🚀")
+    
+    message_content = "\n".join(message_parts)
     
     # Buscar ou criar conversa
     phone = user.phone
@@ -431,13 +529,31 @@ def send_daily_summary_to_user(user, date=None) -> Optional[str]:
         metadata={
             'is_daily_summary': True,
             'summary_date': date.isoformat(),
-            'tasks_count': tasks.count(),
+            'tasks_count': len(tasks),
+            'tasks_pending': len(tasks_pending),
+            'tasks_in_progress': len(tasks_in_progress),
+            'tasks_overdue': tasks_overdue,
+            'include_department_tasks': include_department_tasks,
         }
     )
     
     # Enfileirar para envio
     send_message_to_evolution.delay(str(message.id))
-    logger.info(f"✅ [DAILY SUMMARY] Resumo diário criado e enfileirado para {user.email}")
+    
+    # Atualizar preferências se necessário
+    if use_preferences:
+        try:
+            pref = UserNotificationPreferences.objects.filter(
+                user=user,
+                tenant=user.tenant
+            ).first()
+            if pref:
+                pref.last_daily_summary_sent_date = date
+                pref.save(update_fields=['last_daily_summary_sent_date'])
+        except Exception as e:
+            logger.warning(f"⚠️ [DAILY SUMMARY] Erro ao atualizar preferências: {e}")
+    
+    logger.info(f"✅ [DAILY SUMMARY] Resumo diário criado e enfileirado para {user.email} ({len(tasks)} tarefas)")
     
     return str(message.id)
 
