@@ -1135,7 +1135,9 @@ export function ChatWindow() {
           isOpen={showContactModal}
           onClose={() => {
             setShowContactModal(false);
-            setExistingContact(null);
+            // ✅ CORREÇÃO: NÃO resetar existingContact ao fechar
+            // O contato pode ter sido salvo/atualizado, então manter o estado
+            // O existingContact será atualizado no onSuccess se necessário
           }}
           contact={existingContact}
           initialPhone={contactPhone || ''}
