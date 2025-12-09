@@ -1379,11 +1379,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 
                 # ✅ FORMATO CORRETO: Evolution API usa 'text' no root e 'quoted' no root
                 # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/0nthjkr/send-text
-                # ✅ LOG CRÍTICO: Verificar se content ainda tem assinatura antes de criar payload
+                # ✅ LOG CRÍTICO: Verificar conteúdo original vs conteúdo para envio
                 logger.critical(f"✍️ [CHAT ENVIO] ====== CRIANDO PAYLOAD DE TEXTO ======")
-                logger.critical(f"   content final (primeiros 150 chars): {content[:150] if content else 'VAZIO'}...")
+                logger.critical(f"   content original (sem assinatura, primeiros 150 chars): {content[:150] if content else 'VAZIO'}...")
+                logger.critical(f"   content_for_send (com assinatura, primeiros 150 chars): {content_for_send[:150] if content_for_send else 'VAZIO'}...")
                 logger.critical(f"   content tem assinatura? {'*' in content[:50] if content else False}")
+                logger.critical(f"   content_for_send tem assinatura? {'*' in content_for_send[:50] if content_for_send else False}")
                 logger.critical(f"   content length: {len(content) if content else 0}")
+                logger.critical(f"   content_for_send length: {len(content_for_send) if content_for_send else 0}")
                 
                 # ✅ VALIDAÇÃO CRÍTICA FINAL: Verificar se final_number corresponde ao conversation_type
                 logger.critical(f"🔒 [SEGURANÇA] ====== VALIDAÇÃO FINAL DO DESTINATÁRIO ======")
