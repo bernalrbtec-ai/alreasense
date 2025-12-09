@@ -94,8 +94,8 @@ export default function WeekSchedule({ tasks, onTaskClick }: WeekScheduleProps) 
   }).length
 
   return (
-    <Card className="p-6">
-      <div className="mb-6">
+    <Card className="p-6 h-full flex flex-col">
+      <div className="mb-6 flex-shrink-0">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
             <Calendar className="h-5 w-5 text-blue-600" />
@@ -125,13 +125,16 @@ export default function WeekSchedule({ tasks, onTaskClick }: WeekScheduleProps) 
       </div>
 
       {totalTasks === 0 ? (
-        <div className="text-center py-12 text-gray-500">
-          <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-          <p className="text-sm font-medium">Nenhum compromisso esta semana</p>
-          <p className="text-xs mt-1">Suas tarefas agendadas aparecerão aqui</p>
+        <div className="text-center py-12 text-gray-500 flex-1 flex items-center justify-center">
+          <div>
+            <Calendar className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+            <p className="text-sm font-medium">Nenhum compromisso esta semana</p>
+            <p className="text-xs mt-1">Suas tarefas agendadas aparecerão aqui</p>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
+        <div className="flex-1 overflow-y-auto">
+          <div className="grid grid-cols-1 md:grid-cols-7 gap-3">
           {weekDays.map((day, idx) => {
             const { dayName, dayNumber, isCurrentDay } = getDayLabel(day)
             const dayTasks = tasksByDay[day.getTime()] || []
@@ -218,6 +221,7 @@ export default function WeekSchedule({ tasks, onTaskClick }: WeekScheduleProps) 
               </div>
             )
           })}
+          </div>
         </div>
       )}
     </Card>

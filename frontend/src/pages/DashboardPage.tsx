@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '../stores/authStore'
-import TaskList from '../components/tasks/TaskList'
-import TaskEventsBox from '../components/tasks/TaskEventsBox'
+import PendingTasksList from '../components/tasks/PendingTasksList'
 import WeekSchedule from '../components/tasks/WeekSchedule'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { Card } from '../components/ui/Card'
-import { CheckCircle, Clock, AlertCircle, Calendar, TrendingUp } from 'lucide-react'
+import { CheckCircle, Clock, AlertCircle, Calendar } from 'lucide-react'
 import { isToday, isPast, isFuture } from 'date-fns'
 
 interface Task {
@@ -83,18 +82,30 @@ export default function DashboardPage() {
     }
   }
 
-  const handleEditTaskRequest = (task: Task) => {
-    // Chamado pelo TaskList quando precisa editar
-    setEditingTask(task)
-    setShowTaskModal(true)
-  }
-
   const handleModalSuccess = async () => {
     setShowTaskModal(false)
     setEditingTask(null)
-    // Forçar recarregamento do TaskList
+    // Recarregar tarefas
     setRefreshTrigger(prev => prev + 1)
   }
+
+  // Carregar tarefas
+  useEffect(() => {
+    const fetchTasks = async () => {
+      try {
+        const response = await api.get('/contacts/tasks/', {
+          params: {
+            status: 'active' // Apenas tarefas ativas
+          }
+        })
+        const fetchedTasks = response.data.results || response.data
+        setTasks(fetchedTasks)
+      } catch (error) {
+        console.error('Erro ao carregar tarefas:', error)
+      }
+    }
+    fetchTasks()
+  }, [refreshTrigger])
 
   // Calcular estatísticas
   const stats = useMemo(() => {
@@ -183,26 +194,16 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Compromissos da Semana */}
-      <WeekSchedule tasks={tasks} onTaskClick={handleTaskClick} />
-
-      {/* Layout: Calendário/Lista + Box de Eventos */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Calendário/Lista - Ocupa 2/3 */}
-        <div className="lg:col-span-2">
-          <TaskList 
-            onTasksChange={setTasks} 
-            onEditTaskRequest={handleEditTaskRequest}
-            refreshTrigger={refreshTrigger}
-            hideActions={true}
-          />
+      {/* Layout: Compromissos da Semana + Pendências lado a lado */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Compromissos da Semana */}
+        <div className="h-[600px]">
+          <WeekSchedule tasks={tasks} onTaskClick={handleTaskClick} />
         </div>
 
-        {/* Box de Eventos - Ocupa 1/3 */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-4" style={{ maxHeight: 'calc(100vh - 2rem)' }}>
-            <TaskEventsBox tasks={tasks} onTaskClick={handleTaskClick} />
-          </div>
+        {/* Pendências */}
+        <div className="h-[600px]">
+          <PendingTasksList tasks={tasks} onTaskClick={handleTaskClick} />
         </div>
       </div>
 
