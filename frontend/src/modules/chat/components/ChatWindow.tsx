@@ -954,11 +954,10 @@ export function ChatWindow() {
         )}
       </div>
 
-      {/* Sidebar de Histórico */}
-      {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
+      {/* ✅ CORREÇÃO: Histórico ocupa toda a tela quando aberto */}
       {showHistory && existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
-        <div className="hidden md:flex flex-col w-[320px] bg-white border-l border-gray-200 shadow-lg flex-shrink-0 h-full overflow-hidden">
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50">
+        <div className="flex flex-col flex-1 min-w-0 bg-white h-full overflow-hidden">
+          <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
             <h3 className="font-semibold text-gray-900">Histórico</h3>
             <button
               onClick={() => setShowHistory(false)}
