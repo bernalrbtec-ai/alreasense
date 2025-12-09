@@ -2932,18 +2932,35 @@ def handle_message_edited(data, tenant):
         key = message_data.get('key', {}) if isinstance(message_data, dict) else {}
         message_id_evo = key.get('id') if isinstance(key, dict) else None
         
-        # Novo conteúdo da mensagem
-        message_info = message_data.get('message', {})
+        # ✅ CORREÇÃO: Novo conteúdo pode estar em 'message' OU 'editedMessage'
+        # Evolution API pode enviar em diferentes formatos:
+        # 1. message_data.editedMessage.conversation (formato mais comum para MESSAGE_EDIT)
+        # 2. message_data.message.conversation
+        # 3. message_data.message.extendedTextMessage.text
+        # 4. message_data.message.text
+        message_info = message_data.get('message', {}) if isinstance(message_data, dict) else {}
+        edited_message_info = message_data.get('editedMessage', {}) if isinstance(message_data, dict) else {}
         new_content = None
         
-        # Tentar extrair conteúdo de diferentes formatos
-        if isinstance(message_info, dict):
-            # Pode estar em conversation, extendedTextMessage, etc.
+        # ✅ NOVO: Verificar editedMessage primeiro (formato mais comum para mensagens editadas)
+        if isinstance(edited_message_info, dict):
+            new_content = (
+                edited_message_info.get('conversation') or
+                edited_message_info.get('extendedTextMessage', {}).get('text') or
+                edited_message_info.get('text')
+            )
+            if new_content:
+                logger.debug(f"📝 [WEBHOOK EDITED] Conteúdo encontrado em editedMessage.conversation")
+        
+        # Se não encontrou em editedMessage, tentar em message
+        if not new_content and isinstance(message_info, dict):
             new_content = (
                 message_info.get('conversation') or
                 message_info.get('extendedTextMessage', {}).get('text') or
                 message_info.get('text')
             )
+            if new_content:
+                logger.debug(f"📝 [WEBHOOK EDITED] Conteúdo encontrado em message.conversation")
         
         if not message_id_evo:
             logger.warning(f"⚠️ [WEBHOOK EDITED] Payload sem message_id. Dados (mascados): %s", mask_sensitive_data(message_data))
