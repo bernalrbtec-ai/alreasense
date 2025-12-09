@@ -246,6 +246,7 @@ export default function ConfigurationsPage() {
       fetchBusinessHoursData()
     }
     if (activeTab === 'welcome-menu' && user?.is_admin) {
+      // ✅ CORREÇÃO: Sempre recarregar quando entrar na aba (garantir dados atualizados)
       fetchWelcomeMenuConfig()
     }
   }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
@@ -764,8 +765,23 @@ export default function ConfigurationsPage() {
   const fetchWelcomeMenuConfig = async () => {
     try {
       const response = await api.get('/chat/welcome-menu-config/')
-      setWelcomeMenuConfig(response.data)
-      generateWelcomeMenuPreview(response.data)
+      const data = response.data
+      
+      // ✅ CORREÇÃO: Converter departments (objetos) para department_ids (IDs)
+      // O backend retorna 'departments' como array de objetos, mas o frontend usa 'department_ids'
+      const configData = {
+        ...data,
+        department_ids: data.departments?.map((d: any) => d.id) || data.department_ids || []
+      }
+      
+      console.log('📋 [WELCOME MENU] Configuração carregada:', {
+        enabled: configData.enabled,
+        department_ids: configData.department_ids,
+        departments_count: data.departments?.length || 0
+      })
+      
+      setWelcomeMenuConfig(configData)
+      generateWelcomeMenuPreview(configData)
     } catch (error: any) {
       console.error('Erro ao carregar configuração do menu:', error)
       if (error.response?.status === 403) {
@@ -805,7 +821,8 @@ export default function ConfigurationsPage() {
     const toastId = showLoadingToast('salvar', 'Configuração do Menu')
     try {
       setWelcomeMenuSaving(true)
-      await api.post('/chat/welcome-menu-config/', {
+      
+      const payload = {
         enabled: welcomeMenuConfig.enabled,
         welcome_message: welcomeMenuConfig.welcome_message,
         department_ids: welcomeMenuConfig.department_ids || [],
@@ -813,12 +830,19 @@ export default function ConfigurationsPage() {
         close_option_text: welcomeMenuConfig.close_option_text,
         send_to_new_conversations: welcomeMenuConfig.send_to_new_conversations,
         send_to_closed_conversations: welcomeMenuConfig.send_to_closed_conversations
-      })
+      }
+      
+      console.log('💾 [WELCOME MENU] Salvando configuração:', payload)
+      
+      const response = await api.post('/chat/welcome-menu-config/', payload)
+      
+      console.log('✅ [WELCOME MENU] Configuração salva com sucesso:', response.data)
       
       updateToastSuccess(toastId, 'salvar', 'Configuração do Menu')
+      // ✅ CORREÇÃO: Recarregar configuração após salvar para garantir sincronização
       await fetchWelcomeMenuConfig()
     } catch (error: any) {
-      console.error('Erro ao salvar configuração:', error)
+      console.error('❌ [WELCOME MENU] Erro ao salvar configuração:', error)
       const errorMsg = error.response?.data?.error || error.response?.data?.detail || 'Erro ao salvar configuração'
       updateToastError(toastId, 'salvar', 'Configuração do Menu', error)
     } finally {
