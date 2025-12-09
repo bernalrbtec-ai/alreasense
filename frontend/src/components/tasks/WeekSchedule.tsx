@@ -52,9 +52,9 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
       if (task.status === 'completed' || task.status === 'cancelled') return false
       
       const taskDate = new Date(task.due_date)
-      return taskDate >= weekStart && taskDate <= weekEnd
+      return taskDate >= today && taskDate <= weekEnd
     })
-  }, [tasks, weekStart, weekEnd])
+  }, [tasks, today, weekEnd])
 
   // Agrupar tarefas por dia
   const tasksByDay = useMemo(() => {
@@ -124,7 +124,7 @@ export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekSc
           </div>
         </div>
         <p className="text-sm text-gray-500">
-          {format(weekStart, "dd 'de' MMMM", { locale: ptBR })} até {format(weekEnd, "dd 'de' MMMM", { locale: ptBR })}
+          {format(today, "dd 'de' MMMM", { locale: ptBR })} até {format(weekEnd, "dd 'de' MMMM", { locale: ptBR })}
         </p>
       </div>
 
