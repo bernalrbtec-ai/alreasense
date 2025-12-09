@@ -1,12 +1,14 @@
 -- Migration: Adicionar tabela de histórico de edições de mensagens
--- Data: 2025-01-XX
+-- Data: 2025-12-09
 -- Descrição: Tabela para armazenar histórico de edições de mensagens enviadas
+-- ✅ CORREÇÃO: Garantir que old_content e new_content sejam nullable (podem estar vazios)
 
+-- Criar tabela se não existir
 CREATE TABLE IF NOT EXISTS chat_messageedithistory (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     message_id UUID NOT NULL REFERENCES chat_message(id) ON DELETE CASCADE,
-    old_content TEXT NOT NULL,
-    new_content TEXT NOT NULL,
+    old_content TEXT,  -- ✅ CORREÇÃO: Nullable (pode estar vazio)
+    new_content TEXT,   -- ✅ CORREÇÃO: Nullable (pode estar vazio)
     edited_by_id INTEGER REFERENCES authn_user(id) ON DELETE SET NULL,
     edited_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
     evolution_message_id VARCHAR(255),
