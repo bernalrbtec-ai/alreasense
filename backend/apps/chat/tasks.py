@@ -2862,6 +2862,131 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                 phone_clean = phone.lstrip('+')
                 remote_jid = f"{phone_clean}@s.whatsapp.net"
         
+        # ✅ NOVO: Processar menções se for grupo e o conteúdo tiver menções
+        processed_content = new_content
+        mentions_payload = None
+        
+        if message.conversation.conversation_type == 'group':
+            # Extrair menções do conteúdo (formato @número ou @nome)
+            import re
+            mentioned_numbers_in_text = re.findall(r'@(\d+)', new_content)
+            mentioned_names_in_text = re.findall(r'@([A-Za-zÀ-ÿ\s\.]+?)(?=\s|$|,|\.|!|\?|:)', new_content)
+            
+            # Se houver menções, processar similar ao envio normal
+            if mentioned_numbers_in_text or mentioned_names_in_text:
+                logger.info(f"✏️ [EDIT MESSAGE] Processando menções na edição:")
+                logger.info(f"   Números encontrados: {len(mentioned_numbers_in_text)}")
+                logger.info(f"   Nomes encontrados: {len(mentioned_names_in_text)}")
+                
+                # Buscar participantes do grupo
+                await sync_to_async(message.conversation.refresh_from_db)()
+                group_metadata = message.conversation.group_metadata or {}
+                group_participants = group_metadata.get('participants', [])
+                
+                if group_participants:
+                    # Buscar contatos cadastrados primeiro
+                    from apps.contacts.models import Contact
+                    from apps.notifications.services import normalize_phone
+                    from apps.contacts.signals import normalize_phone_for_search
+                    
+                    tenant_id = message.conversation.tenant_id
+                    all_contacts = await sync_to_async(list)(
+                        Contact.objects.filter(
+                            tenant_id=tenant_id
+                        ).exclude(phone__isnull=True).exclude(phone='').values('phone', 'name')
+                    )
+                    
+                    phone_to_contact = {}
+                    for contact in all_contacts:
+                        contact_phone_raw = contact.get('phone', '').strip()
+                        if contact_phone_raw:
+                            normalized_contact_phone = normalize_phone(contact_phone_raw)
+                            if normalized_contact_phone:
+                                contact_name = contact.get('name', '').strip()
+                                if contact_name:
+                                    phone_to_contact[normalized_contact_phone] = contact_name
+                    
+                    # Criar mapas para busca rápida
+                    participants_by_name = {}
+                    participants_by_phone = {}
+                    
+                    for p in group_participants:
+                        participant_name = (p.get('name') or '').strip().lower()
+                        participant_phone_number = p.get('phoneNumber') or p.get('phone_number', '')
+                        
+                        if participant_name:
+                            participants_by_name[participant_name] = p
+                        
+                        if participant_phone_number:
+                            phone_raw = participant_phone_number.split('@')[0]
+                            if phone_raw:
+                                normalized = normalize_phone(phone_raw)
+                                if normalized:
+                                    participants_by_phone[normalized] = p
+                                    participants_by_phone[normalize_phone_for_search(normalized)] = p
+                                phone_clean = phone_raw.replace('+', '').replace(' ', '').replace('-', '').strip()
+                                if phone_clean:
+                                    participants_by_phone[phone_clean] = p
+                    
+                    # Processar menções e criar array de números
+                    mention_phones = []
+                    name_to_phone_map = {}
+                    
+                    # Processar números já no formato @número
+                    for num in mentioned_numbers_in_text:
+                        num_clean = num.lstrip('+')
+                        num_clean = ''.join(filter(str.isdigit, num_clean))
+                        if num_clean and len(num_clean) >= 10:
+                            mention_phones.append(num_clean)
+                    
+                    # Processar nomes (@nome) e converter para números
+                    for name_match in mentioned_names_in_text:
+                        name = name_match.strip()
+                        name_lower = name.lower()
+                        
+                        matched_phone = None
+                        
+                        # Buscar em contatos cadastrados primeiro
+                        for contact_phone, contact_name in phone_to_contact.items():
+                            if contact_name.lower() == name_lower:
+                                matched_phone = contact_phone.lstrip('+')
+                                matched_phone = ''.join(filter(str.isdigit, matched_phone))
+                                name_to_phone_map[name] = matched_phone
+                                break
+                        
+                        # Se não encontrou, buscar em participantes do grupo
+                        if not matched_phone and name_lower in participants_by_name:
+                            participant = participants_by_name[name_lower]
+                            participant_phone_number = participant.get('phoneNumber') or participant.get('phone_number', '')
+                            if participant_phone_number:
+                                phone_raw = participant_phone_number.split('@')[0]
+                                if phone_raw:
+                                    matched_phone = phone_raw.lstrip('+')
+                                    matched_phone = ''.join(filter(str.isdigit, matched_phone))
+                                    name_to_phone_map[name] = matched_phone
+                        
+                        if matched_phone and len(matched_phone) >= 10:
+                            if matched_phone not in mention_phones:
+                                mention_phones.append(matched_phone)
+                    
+                    # Substituir nomes por telefones no conteúdo
+                    if name_to_phone_map:
+                        sorted_names = sorted(name_to_phone_map.items(), key=lambda x: len(x[0]), reverse=True)
+                        for name, phone in sorted_names:
+                            escaped_name = re.escape(name)
+                            pattern = rf'@{escaped_name}(?=\s|$|,|\.|!|\?|:)'
+                            replacement = f'@{phone}'
+                            processed_content = re.sub(pattern, replacement, processed_content, flags=re.IGNORECASE)
+                            logger.info(f"   ✅ Substituído: '@{name}' -> '@{_mask_digits(phone)}'")
+                    
+                    # Criar payload de menções se houver números
+                    if mention_phones:
+                        mentions_payload = {
+                            'everyOne': False,
+                            'mentioned': mention_phones
+                        }
+                        logger.info(f"✅ [EDIT MESSAGE] {len(mention_phones)} menção(ões) processada(s)")
+        
         # Preparar payload para Evolution API
         # Documentação: https://www.postman.com/agenciadgcode/evolution-api/request/xxxxx/edit-message
         payload = {
@@ -2871,9 +2996,13 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                 'id': message.message_id
             },
             'message': {
-                'conversation': new_content
+                'conversation': processed_content  # ✅ Usar conteúdo processado (com telefones ao invés de nomes)
             }
         }
+        
+        # ✅ NOVO: Adicionar menções ao payload se houver
+        if mentions_payload:
+            payload['mentions'] = mentions_payload
         
         # Se for grupo, adicionar participant
         if message.conversation.conversation_type == 'group':
