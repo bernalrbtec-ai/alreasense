@@ -67,11 +67,19 @@ class Command(BaseCommand):
     
     def _check_and_send(self):
         """Verifica e envia notificações diárias"""
-        now = timezone.localtime(timezone.now())
-        current_time = now.time()
-        current_date = now.date()
+        from zoneinfo import ZoneInfo
         
-        logger.info(f'🔔 [DAILY NOTIFICATIONS] Verificando notificações para {current_time.strftime("%H:%M:%S")}')
+        # ✅ CORREÇÃO: Garantir uso de UTC-3 (America/Sao_Paulo) explicitamente
+        sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
+        now_utc = timezone.now()  # UTC
+        now_local = now_utc.astimezone(sao_paulo_tz)  # UTC-3
+        
+        current_time = now_local.time()
+        current_date = now_local.date()
+        
+        logger.info(f'🔔 [DAILY NOTIFICATIONS] Verificando notificações para {current_time.strftime("%H:%M:%S")} (UTC-3: America/Sao_Paulo)')
+        logger.debug(f'   UTC atual: {now_utc.strftime("%Y-%m-%d %H:%M:%S %Z")}')
+        logger.debug(f'   Local (UTC-3): {now_local.strftime("%Y-%m-%d %H:%M:%S %Z")}')
         
         # 1. Verificar resumos diários (daily_summary)
         self._check_daily_summaries(current_time, current_date)

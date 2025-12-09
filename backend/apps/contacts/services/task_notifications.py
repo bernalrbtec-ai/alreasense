@@ -356,6 +356,9 @@ def send_daily_summary_to_user(user, date=None, include_department_tasks=True, u
     from apps.notifications.models import UserNotificationPreferences
     from apps.notifications.services import get_greeting, format_weekday_pt
     
+    # ✅ CORREÇÃO: Definir timezone UTC-3 explicitamente
+    sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
+    
     # Verificar preferências se solicitado
     if use_preferences:
         try:
@@ -368,9 +371,10 @@ def send_daily_summary_to_user(user, date=None, include_department_tasks=True, u
                 logger.debug(f"ℹ️ [DAILY SUMMARY] Resumo diário desabilitado para {user.email}")
                 return None
             
-            # Verificar se já foi enviado hoje
+            # ✅ CORREÇÃO: Verificar se já foi enviado hoje usando UTC-3
             if date is None:
-                date = timezone.now().date()
+                now_local = timezone.now().astimezone(sao_paulo_tz)
+                date = now_local.date()
             
             if pref.last_daily_summary_sent_date == date:
                 logger.debug(f"ℹ️ [DAILY SUMMARY] Resumo já enviado hoje para {user.email}")
@@ -393,13 +397,24 @@ def send_daily_summary_to_user(user, date=None, include_department_tasks=True, u
         logger.warning(f"⚠️ [DAILY SUMMARY] Nenhuma instância WhatsApp ativa para tenant {user.tenant.name}")
         return None
     
-    # Data do resumo (hoje por padrão)
-    if date is None:
-        date = timezone.now().date()
+    # ✅ CORREÇÃO: Garantir uso de UTC-3 (America/Sao_Paulo) para busca de tarefas
+    sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
     
-    # Buscar tarefas do dia
-    date_start = timezone.make_aware(datetime.combine(date, datetime.min.time()))
-    date_end = timezone.make_aware(datetime.combine(date, datetime.max.time()))
+    # Data do resumo (hoje por padrão) - usar timezone local
+    if date is None:
+        now_local = timezone.now().astimezone(sao_paulo_tz)
+        date = now_local.date()
+    
+    # Buscar tarefas do dia usando UTC-3
+    # Criar datetime início e fim do dia em UTC-3
+    date_start_local = datetime.combine(date, datetime.min.time())
+    date_end_local = datetime.combine(date, datetime.max.time())
+    
+    # Converter para timezone-aware em UTC-3
+    date_start = sao_paulo_tz.localize(date_start_local)
+    date_end = sao_paulo_tz.localize(date_end_local)
+    
+    logger.debug(f"🔍 [DAILY SUMMARY] Buscando tarefas de {date_start.strftime('%Y-%m-%d %H:%M:%S %Z')} até {date_end.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     # Buscar tarefas atribuídas ao usuário
     tasks_assigned = Task.objects.filter(
@@ -428,11 +443,12 @@ def send_daily_summary_to_user(user, date=None, include_department_tasks=True, u
     unique_tasks = {task.id: task for task in all_tasks}.values()
     tasks = sorted(unique_tasks, key=lambda t: t.due_date)
     
-    # Buscar tarefas atrasadas
+    # ✅ CORREÇÃO: Buscar tarefas atrasadas usando UTC-3
+    now_local = timezone.now().astimezone(sao_paulo_tz)
     tasks_overdue = Task.objects.filter(
         tenant=user.tenant,
         assigned_to=user,
-        due_date__lt=timezone.now(),
+        due_date__lt=now_local,
         status__in=['pending', 'in_progress']
     ).count()
     
@@ -471,11 +487,13 @@ def send_daily_summary_to_user(user, date=None, include_department_tasks=True, u
         if tasks:
             message_parts.append("📝 *Compromissos de Hoje:*\n")
             for task in tasks:
-                due_time = task.due_date.astimezone(ZoneInfo('America/Sao_Paulo')).strftime('%H:%M')
+                # ✅ CORREÇÃO: Converter para UTC-3 explicitamente
+                task_due_local = task.due_date.astimezone(sao_paulo_tz)
+                due_time = task_due_local.strftime('%H:%M')
                 status_emoji = "⏰" if task.status == 'pending' else "🔄"
                 
-                # Verificar se está atrasada
-                if task.due_date < timezone.now():
+                # ✅ CORREÇÃO: Verificar se está atrasada usando UTC-3
+                if task_due_local < now_local:
                     status_emoji = "⚠️"
                 
                 message_parts.append(f"{status_emoji} *{due_time}* - {task.title}")
