@@ -355,9 +355,24 @@ class EvolutionWebhookView(APIView):
                     is_active=True
                 ).first()
                 
+                # Buscar conexão Evolution
+                connection = EvolutionConnection.objects.filter(is_active=True).first()
+                
                 if whatsapp_instance:
-                    # TODO: Implementar lógica de edição de mensagem no chat
                     logger.info(f"✏️ [FLOW CHAT] Mensagem editada para tenant {whatsapp_instance.tenant.name}")
+                    # ✅ CORREÇÃO: Chamar handler correto do chat/webhooks.py
+                    from apps.chat.webhooks import handle_message_edited
+                    handle_message_edited(
+                        data,
+                        tenant=whatsapp_instance.tenant
+                    )
+                elif connection:
+                    logger.info(f"✏️ [FLOW CHAT] Mensagem editada para tenant {connection.tenant.name}")
+                    from apps.chat.webhooks import handle_message_edited
+                    handle_message_edited(
+                        data,
+                        tenant=connection.tenant
+                    )
                 else:
                     logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para: {instance_name}")
         except Exception as e:
