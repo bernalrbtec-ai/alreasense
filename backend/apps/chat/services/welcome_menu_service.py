@@ -8,7 +8,6 @@ from apps.chat.models import Conversation, Message
 from apps.chat.models_welcome_menu import WelcomeMenuConfig
 from apps.authn.models import Department
 from apps.notifications.models import WhatsAppInstance
-from apps.connections.models import EvolutionConnection
 from apps.chat.redis_queue import REDIS_QUEUE_SEND_MESSAGE
 
 logger = logging.getLogger(__name__)
@@ -88,6 +87,7 @@ class WelcomeMenuService:
         menu_text = config.get_menu_text()
         
         # Buscar instância WhatsApp ativa
+        # ✅ CORREÇÃO: Não precisa de EvolutionConnection - usa configurações do .env
         try:
             wa_instance = WhatsAppInstance.objects.filter(
                 tenant=conversation.tenant,
@@ -99,13 +99,16 @@ class WelcomeMenuService:
                 logger.warning(f"⚠️ [WELCOME MENU] Instância WhatsApp não encontrada para tenant {conversation.tenant.id}")
                 return None
             
-            evolution_connection = EvolutionConnection.objects.filter(
-                tenant=conversation.tenant,
-                is_active=True
-            ).first()
+            # ✅ CORREÇÃO: Verificar se configurações do .env estão disponíveis
+            from django.conf import settings
+            evolution_api_url = getattr(settings, 'EVOLUTION_API_URL', None)
+            evolution_api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
             
-            if not evolution_connection:
-                logger.warning(f"⚠️ [WELCOME MENU] Evolution Connection não encontrada para tenant {conversation.tenant.id}")
+            if not evolution_api_url or not evolution_api_key:
+                logger.warning(
+                    f"⚠️ [WELCOME MENU] Configurações Evolution API não encontradas no .env "
+                    f"(EVOLUTION_API_URL ou EVOLUTION_API_KEY) para tenant {conversation.tenant.id}"
+                )
                 return None
             
         except Exception as e:
