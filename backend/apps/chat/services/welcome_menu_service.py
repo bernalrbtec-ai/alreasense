@@ -8,7 +8,6 @@ from apps.chat.models import Conversation, Message
 from apps.chat.models_welcome_menu import WelcomeMenuConfig
 from apps.authn.models import Department
 from apps.notifications.models import WhatsAppInstance
-from apps.chat.redis_queue import REDIS_QUEUE_SEND_MESSAGE
 
 logger = logging.getLogger(__name__)
 
@@ -132,12 +131,10 @@ class WelcomeMenuService:
                     }
                 )
                 
-                # Enfileirar envio via Redis
-                from apps.chat.redis_queue import enqueue_message
-                enqueue_message(REDIS_QUEUE_SEND_MESSAGE, {
-                    'message_id': str(message.id),
-                    'tenant_id': str(conversation.tenant.id)
-                })
+                # ✅ CORREÇÃO: Usar send_message_to_evolution.delay() (mesmo método usado pelo resto do sistema)
+                # Isso enfileira no Redis Stream correto que é processado pelo stream_consumer
+                from apps.chat.tasks import send_message_to_evolution
+                send_message_to_evolution.delay(str(message.id))
                 
                 logger.info(f"✅ [WELCOME MENU] Menu enfileirado para envio - conversa {conversation.id}, mensagem {message.id}")
                 return message
