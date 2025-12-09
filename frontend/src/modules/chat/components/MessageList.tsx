@@ -100,6 +100,23 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
     );
   }
   
+  // ✅ CORREÇÃO: Verificar se mensagem foi apagada
+  if (repliedMessage.is_deleted) {
+    return (
+      <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
+        <div className="flex items-center gap-1 mb-0.5">
+          <Reply className="w-3 h-3 text-gray-500" />
+          <p className="text-xs font-medium text-gray-600 dark:text-gray-400">
+            Mensagem apagada
+          </p>
+        </div>
+        <p className="text-xs text-gray-500 dark:text-gray-500 italic">
+          Esta mensagem foi apagada e não pode ser visualizada
+        </p>
+      </div>
+    );
+  }
+  
   // ✅ MELHORIA: Função para scroll até mensagem original
   const scrollToOriginal = () => {
     const originalElement = document.querySelector(`[data-message-id="${replyToId}"]`);
