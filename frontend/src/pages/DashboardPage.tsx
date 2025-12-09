@@ -5,8 +5,9 @@ import WeekSchedule from '../components/tasks/WeekSchedule'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { Card } from '../components/ui/Card'
-import { CheckCircle, Clock, AlertCircle, Calendar } from 'lucide-react'
+import { CheckCircle, Clock, AlertCircle, Calendar, MessageSquare, Users } from 'lucide-react'
 import { isToday, isPast, isFuture } from 'date-fns'
+import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
 
 interface Task {
   id: string
@@ -49,6 +50,24 @@ export default function DashboardPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [refreshTrigger, setRefreshTrigger] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [openConversations, setOpenConversations] = useState(0)
+  const [selectedDateForTask, setSelectedDateForTask] = useState<Date | null>(null)
+
+  // WebSocket para atualização em tempo real
+  useTenantSocket()
+  
+  // Escutar eventos do WebSocket via store
+  useEffect(() => {
+    const checkForUpdates = () => {
+      // Recarregar estatísticas periodicamente quando WebSocket estiver ativo
+      fetchChatStats()
+    }
+    
+    // Atualizar a cada 10 segundos quando WebSocket estiver conectado
+    const interval = setInterval(checkForUpdates, 10000)
+    return () => clearInterval(interval)
+  }, [])
 
   // Carregar departamentos e usuários para o modal (mesmos endpoints do TaskList)
   useEffect(() => {
@@ -107,31 +126,57 @@ export default function DashboardPage() {
     fetchTasks()
   }, [refreshTrigger])
 
-  // Calcular estatísticas
+  // Buscar estatísticas do chat
+  const fetchChatStats = async () => {
+    try {
+      // Buscar todas as conversas para contar abertas e mensagens não lidas
+      const conversationsRes = await api.get('/chat/conversations/', {
+        params: {
+          page_size: 1000 // Buscar todas para contar
+        }
+      })
+      const conversations = conversationsRes.data.results || conversationsRes.data || []
+      
+      // Contar conversas abertas (open + pending) - inclui inbox
+      const openConvs = conversations.filter((conv: any) => 
+        conv.status === 'open' || conv.status === 'pending'
+      )
+      setOpenConversations(openConvs.length)
+
+      // Somar mensagens não lidas
+      const totalUnread = conversations.reduce((sum: number, conv: any) => {
+        return sum + (conv.unread_count || 0)
+      }, 0)
+      setUnreadMessages(totalUnread)
+    } catch (error) {
+      console.error('Erro ao buscar estatísticas do chat:', error)
+    }
+  }
+
+  // Carregar estatísticas do chat ao montar e periodicamente
+  useEffect(() => {
+    fetchChatStats()
+    // Atualizar a cada 30 segundos
+    const interval = setInterval(fetchChatStats, 30000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // Calcular estatísticas de tarefas
   const stats = useMemo(() => {
-    const total = tasks.length
-    const completed = tasks.filter(t => t.status === 'completed').length
     const pending = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length
     const overdue = tasks.filter(t => t.is_overdue && t.status !== 'completed').length
-    const today = tasks.filter(t => {
-      if (!t.due_date || t.status === 'completed') return false
-      return isToday(new Date(t.due_date))
-    }).length
-    const upcoming = tasks.filter(t => {
-      if (!t.due_date || t.status === 'completed') return false
-      const taskDate = new Date(t.due_date)
-      return isFuture(taskDate) && !isToday(taskDate)
-    }).length
 
     return {
-      total,
-      completed,
       pending,
       overdue,
-      today,
-      upcoming,
     }
   }, [tasks])
+
+  const handleDateClick = (date: Date) => {
+    setEditingTask(null)
+    setSelectedDateForTask(date)
+    setShowTaskModal(true)
+  }
 
   return (
     <div className="space-y-6">
@@ -145,18 +190,6 @@ export default function DashboardPage() {
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Total de Tarefas</p>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-            </div>
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <Calendar className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </Card>
-
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -184,11 +217,28 @@ export default function DashboardPage() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Concluídas</p>
-              <p className="text-2xl font-bold text-green-600">{stats.completed}</p>
+              <p className="text-sm text-gray-600 mb-1">Novas Mensagens</p>
+              <p className={`text-2xl font-bold ${unreadMessages > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
+                {unreadMessages > 0 ? unreadMessages : '0'}
+              </p>
+              {unreadMessages === 0 && (
+                <p className="text-xs text-gray-400 mt-1">Nenhuma nova</p>
+              )}
             </div>
-            <div className="p-3 bg-green-100 rounded-lg">
-              <CheckCircle className="h-6 w-6 text-green-600" />
+            <div className="p-3 bg-blue-100 rounded-lg">
+              <MessageSquare className="h-6 w-6 text-blue-600" />
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Conversas Abertas</p>
+              <p className="text-2xl font-bold text-purple-600">{openConversations}</p>
+            </div>
+            <div className="p-3 bg-purple-100 rounded-lg">
+              <Users className="h-6 w-6 text-purple-600" />
             </div>
           </div>
         </Card>
@@ -198,7 +248,11 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Compromissos da Semana */}
         <div className="h-[600px]">
-          <WeekSchedule tasks={tasks} onTaskClick={handleTaskClick} />
+          <WeekSchedule 
+            tasks={tasks} 
+            onTaskClick={handleTaskClick}
+            onDateClick={handleDateClick}
+          />
         </div>
 
         {/* Pendências */}
@@ -207,16 +261,22 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Modal de Tarefa (compartilhado entre TaskList e TaskEventsBox) */}
-      {showTaskModal && editingTask && (
+      {/* Modal de Tarefa */}
+      {showTaskModal && (
         <TaskModal
           isOpen={showTaskModal}
           onClose={() => {
             setShowTaskModal(false)
             setEditingTask(null)
+            setSelectedDateForTask(null)
           }}
           onSuccess={handleModalSuccess}
-          task={editingTask}
+          task={editingTask ? {
+            ...editingTask,
+            department: editingTask.department || '',
+            related_contacts: editingTask.related_contacts || []
+          } : undefined}
+          initialDate={selectedDateForTask || undefined}
           departments={departments}
           users={users}
         />

@@ -1,7 +1,7 @@
 /**
  * Componente para exibir compromissos da semana
  */
-import { useMemo } from 'react'
+import React, { useMemo } from 'react'
 import { format, startOfWeek, endOfWeek, eachDayOfInterval, isToday, isPast, isFuture, isSameDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import { Calendar, Clock, AlertCircle, CheckCircle } from 'lucide-react'
@@ -24,6 +24,7 @@ interface Task {
 interface WeekScheduleProps {
   tasks: Task[]
   onTaskClick?: (task: Task) => void
+  onDateClick?: (date: Date) => void
 }
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -35,7 +36,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 
 const DAY_NAMES = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
 
-export default function WeekSchedule({ tasks, onTaskClick }: WeekScheduleProps) {
+export default function WeekSchedule({ tasks, onTaskClick, onDateClick }: WeekScheduleProps) {
   const now = new Date()
   const weekStart = startOfWeek(now, { locale: ptBR })
   const weekEnd = endOfWeek(now, { locale: ptBR })
@@ -140,16 +141,28 @@ export default function WeekSchedule({ tasks, onTaskClick }: WeekScheduleProps) 
             const dayTasks = tasksByDay[day.getTime()] || []
             const isPastDay = isPast(day) && !isToday(day)
 
+            const canClick = !isPastDay && onDateClick
+
             return (
               <div
                 key={idx}
+                onClick={(e) => {
+                  // Prevenir que o clique na tarefa propague para o dia
+                  if ((e.target as HTMLElement).closest('.task-item')) {
+                    return
+                  }
+                  if (canClick) {
+                    onDateClick(day)
+                  }
+                }}
                 className={`border rounded-lg p-3 min-h-[200px] ${
                   isCurrentDay
                     ? 'border-blue-500 bg-blue-50'
                     : isPastDay
                     ? 'border-gray-200 bg-gray-50 opacity-60'
                     : 'border-gray-200 bg-white'
-                }`}
+                } ${canClick ? 'cursor-pointer hover:bg-gray-50 transition-colors' : ''}`}
+                title={isPastDay ? 'Não é possível criar tarefas em datas passadas' : canClick ? 'Clique para criar uma tarefa' : ''}
               >
                 <div className={`text-center mb-3 pb-2 border-b ${
                   isCurrentDay ? 'border-blue-200' : 'border-gray-200'
@@ -175,8 +188,11 @@ export default function WeekSchedule({ tasks, onTaskClick }: WeekScheduleProps) 
                       return (
                         <div
                           key={task.id}
-                          onClick={() => onTaskClick?.(task)}
-                          className={`p-2 rounded border cursor-pointer transition-all hover:shadow-sm ${
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onTaskClick?.(task)
+                          }}
+                          className={`task-item p-2 rounded border cursor-pointer transition-all hover:shadow-sm ${
                             task.is_overdue
                               ? 'border-red-300 bg-red-50'
                               : task.status === 'completed'
