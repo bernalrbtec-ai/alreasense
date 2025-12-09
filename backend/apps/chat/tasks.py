@@ -1780,6 +1780,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 
                                 # ✅ CRÍTICO: Substituir nomes por telefones no texto
                                 # Evolution API requer que o texto tenha @telefone, não @nome
+                                # ✅ CORREÇÃO: Usar content_for_send (pode ter assinatura) para substituição
                                 if mentions and isinstance(mentions, list):
                                     # Criar mapeamento nome -> telefone
                                     name_to_phone_map = {}
@@ -1804,7 +1805,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                                     logger.info(f"   ✅ [CHAT ENVIO] Mapeamento criado: '{mention_name}' -> {_mask_digits(mentioned_num)}")
                                                     break
                                     
-                                    # Substituir @Nome por @Telefone no texto
+                                    # Substituir @Nome por @Telefone no texto (usar content_for_send)
                                     if name_to_phone_map:
                                         text_before = payload['text']
                                         logger.info(f"🔍 [CHAT ENVIO] Texto ANTES da substituição: {text_before[:200]}")
@@ -1899,15 +1900,26 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             else:
                                                 logger.error(f"❌ [CHAT ENVIO] Validação FALHOU: Números no texto não correspondem ao array mentioned!")
                                             
-                                            # ✅ CRÍTICO: Atualizar conteúdo da mensagem no banco com o texto substituído
-                                            # Isso garante que o frontend mostre o texto correto (com números ao invés de nomes)
-                                            if payload['text'] != message.content:
+                                            # ✅ CORREÇÃO CRÍTICA: NÃO atualizar message.content com assinatura
+                                            # Apenas atualizar se houver substituição de nomes por telefones (sem assinatura)
+                                            # Remover assinatura antes de salvar (se houver)
+                                            content_to_save = payload['text']
+                                            # Remover assinatura se existir (formato: *Nome:*\n\n)
+                                            if sender and (sender.first_name or sender.last_name):
+                                                full_name = f"{sender.first_name or ''} {sender.last_name or ''}".strip()
+                                                if full_name:
+                                                    signature_pattern = rf'\*{re.escape(full_name)}:\*\s*\n\s*\n?'
+                                                    content_to_save = re.sub(signature_pattern, '', content_to_save, flags=re.IGNORECASE)
+                                            
+                                            # ✅ CORREÇÃO: Atualizar apenas se conteúdo mudou (substituição de nomes)
+                                            # Mas SEM assinatura no banco
+                                            if content_to_save != message.content:
                                                 from asgiref.sync import sync_to_async
-                                                message.content = payload['text']
+                                                message.content = content_to_save  # ✅ Sem assinatura
                                                 await sync_to_async(message.save)(update_fields=['content'])
-                                                logger.info(f"✅ [CHAT ENVIO] Conteúdo da mensagem atualizado no banco com texto substituído")
-                                                logger.info(f"   Antes: {text_before[:100]}...")
-                                                logger.info(f"   Depois: {payload['text'][:100]}...")
+                                                logger.info(f"✅ [CHAT ENVIO] Conteúdo da mensagem atualizado no banco (sem assinatura)")
+                                                logger.info(f"   Antes: {message.content[:100] if message.content else 'N/A'}...")
+                                                logger.info(f"   Depois: {content_to_save[:100]}...")
                                         else:
                                             logger.warning(f"⚠️ [CHAT ENVIO] Nenhuma substituição realizada no texto")
                                             logger.warning(f"   Texto original: {text_before[:200]}")
