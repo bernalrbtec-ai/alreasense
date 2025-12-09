@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useAuthStore } from '../stores/authStore'
+import { useChatStore } from '../modules/chat/store/chatStore'
 import PendingTasksList from '../components/tasks/PendingTasksList'
 import WeekSchedule from '../components/tasks/WeekSchedule'
 import TaskModal from '../components/tasks/TaskModal'
@@ -44,6 +45,8 @@ interface User {
 
 export default function DashboardPage() {
   const { user } = useAuthStore()
+  // ✅ CORREÇÃO: Usar hook do store para atualização em tempo real
+  const conversations = useChatStore((state) => state.conversations)
   const [tasks, setTasks] = useState<Task[]>([])
   const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [showTaskModal, setShowTaskModal] = useState(false)
@@ -57,17 +60,20 @@ export default function DashboardPage() {
   // WebSocket para atualização em tempo real
   useTenantSocket()
   
-  // Escutar eventos do WebSocket via store
+  // ✅ CORREÇÃO: Atualizar estatísticas quando conversations mudar (via WebSocket)
   useEffect(() => {
-    const checkForUpdates = () => {
-      // Recarregar estatísticas periodicamente quando WebSocket estiver ativo
-      fetchChatStats()
-    }
-    
-    // Atualizar a cada 10 segundos quando WebSocket estiver conectado
-    const interval = setInterval(checkForUpdates, 10000)
-    return () => clearInterval(interval)
-  }, [])
+    // Contar conversas abertas (open + pending) - EXCLUIR closed
+    const openConvs = conversations.filter((conv: any) => 
+      conv.status === 'open' || conv.status === 'pending'
+    )
+    setOpenConversations(openConvs.length)
+
+    // Somar mensagens não lidas
+    const totalUnread = conversations.reduce((sum: number, conv: any) => {
+      return sum + (conv.unread_count || 0)
+    }, 0)
+    setUnreadMessages(totalUnread)
+  }, [conversations])
 
   // Carregar departamentos e usuários para o modal (mesmos endpoints do TaskList)
   useEffect(() => {
@@ -135,28 +141,23 @@ export default function DashboardPage() {
           page_size: 1000 // Buscar todas para contar
         }
       })
-      const conversations = conversationsRes.data.results || conversationsRes.data || []
+      const fetchedConversations = conversationsRes.data.results || conversationsRes.data || []
       
-      // Contar conversas abertas (open + pending) - inclui inbox
-      const openConvs = conversations.filter((conv: any) => 
-        conv.status === 'open' || conv.status === 'pending'
-      )
-      setOpenConversations(openConvs.length)
-
-      // Somar mensagens não lidas
-      const totalUnread = conversations.reduce((sum: number, conv: any) => {
-        return sum + (conv.unread_count || 0)
-      }, 0)
-      setUnreadMessages(totalUnread)
+      // ✅ CORREÇÃO: Atualizar store com conversas buscadas (para sincronizar com API)
+      const { setConversations } = useChatStore.getState()
+      setConversations(fetchedConversations)
+      
+      // As estatísticas serão atualizadas automaticamente pelo useEffect que escuta o store
     } catch (error) {
       console.error('Erro ao buscar estatísticas do chat:', error)
     }
   }
 
-  // Carregar estatísticas do chat ao montar e periodicamente
+  // Carregar estatísticas do chat ao montar (polling inicial)
+  // Depois disso, as estatísticas são atualizadas em tempo real via WebSocket (useEffect acima)
   useEffect(() => {
     fetchChatStats()
-    // Atualizar a cada 30 segundos
+    // Manter polling como fallback (a cada 30 segundos) caso WebSocket falhe
     const interval = setInterval(fetchChatStats, 30000)
     return () => clearInterval(interval)
   }, [])
