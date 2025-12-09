@@ -112,15 +112,15 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchTasks = async () => {
       try {
-        const response = await api.get('/contacts/tasks/', {
-          params: {
-            status: 'active' // Apenas tarefas ativas
-          }
-        })
-        const fetchedTasks = response.data.results || response.data
+        // Buscar todas as tarefas (sem filtro de status para pegar todas)
+        // O backend já filtra por tenant e departamentos do usuário
+        const response = await api.get('/contacts/tasks/')
+        const fetchedTasks = response.data.results || response.data || []
         setTasks(fetchedTasks)
-      } catch (error) {
+      } catch (error: any) {
         console.error('Erro ao carregar tarefas:', error)
+        // Se houver erro, definir array vazio para não quebrar a interface
+        setTasks([])
       }
     }
     fetchTasks()
