@@ -9,7 +9,6 @@ from apps.chat.models_welcome_menu import WelcomeMenuConfig
 from apps.authn.models import Department
 from apps.notifications.models import WhatsAppInstance
 from apps.connections.models import EvolutionConnection
-from apps.chat.tasks import send_message
 from apps.chat.redis_queue import REDIS_QUEUE_SEND_MESSAGE
 
 logger = logging.getLogger(__name__)
