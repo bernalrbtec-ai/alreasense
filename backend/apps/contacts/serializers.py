@@ -506,6 +506,32 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             )
             task.related_contacts.set(contacts)
         
+        # ✅ NOVO: Enviar notificações se notify_contacts estiver habilitado
+        notify_contacts = metadata.get('notify_contacts', False)
+        if notify_contacts and task.related_contacts.exists() and task.due_date:
+            try:
+                from apps.contacts.services.task_notifications import send_task_notification_to_contacts
+                from django.db import transaction
+                
+                # Enfileirar envio após commit da transação
+                def send_notifications_after_commit():
+                    try:
+                        message_ids = send_task_notification_to_contacts(task)
+                        if message_ids:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.info(f"✅ [TASK CREATE] {len(message_ids)} notificação(ões) enfileirada(s) para contatos relacionados")
+                    except Exception as e:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.error(f"❌ [TASK CREATE] Erro ao enviar notificações: {e}", exc_info=True)
+                
+                transaction.on_commit(send_notifications_after_commit)
+            except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"❌ [TASK CREATE] Erro ao preparar envio de notificações: {e}", exc_info=True)
+        
         return task
     
     def update(self, instance, validated_data):
@@ -578,6 +604,27 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             instance.related_contacts.set(contacts)
         
         instance.save()
+        
+        # ✅ NOVO: Enviar notificações se notify_contacts estiver habilitado E due_date foi alterado
+        notify_contacts = (instance.metadata or {}).get('notify_contacts', False)
+        if notify_contacts and instance.related_contacts.exists() and instance.due_date and due_date_changed:
+            try:
+                from apps.contacts.services.task_notifications import send_task_notification_to_contacts
+                from django.db import transaction
+                
+                # Enfileirar envio após commit da transação
+                def send_notifications_after_commit():
+                    try:
+                        message_ids = send_task_notification_to_contacts(instance)
+                        if message_ids:
+                            logger.info(f"✅ [TASK UPDATE] {len(message_ids)} notificação(ões) enfileirada(s) para contatos relacionados (data alterada)")
+                    except Exception as e:
+                        logger.error(f"❌ [TASK UPDATE] Erro ao enviar notificações: {e}", exc_info=True)
+                
+                transaction.on_commit(send_notifications_after_commit)
+            except Exception as e:
+                logger.error(f"❌ [TASK UPDATE] Erro ao preparar envio de notificações: {e}", exc_info=True)
+        
         return instance
 
 

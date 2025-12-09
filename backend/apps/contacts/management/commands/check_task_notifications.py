@@ -165,8 +165,23 @@ class Command(BaseCommand):
                     success = self._notify_user(task, task.created_by, is_reminder=True)
                     notification_sent = notification_sent or success
                 
+                # ✅ NOVO: Enviar notificações para contatos relacionados se notify_contacts estiver habilitado
+                contacts_notified = False
+                metadata = task.metadata or {}
+                notify_contacts = metadata.get('notify_contacts', False)
+                
+                if notify_contacts and task.related_contacts.exists():
+                    try:
+                        from apps.contacts.services.task_notifications import send_task_reminder_to_contacts
+                        contact_message_ids = send_task_reminder_to_contacts(task, is_15min_before=True)
+                        if contact_message_ids:
+                            contacts_notified = True
+                            logger.info(f'✅ [TASK NOTIFICATIONS] {len(contact_message_ids)} lembrete(s) enviado(s) para contatos relacionados da tarefa {task.id}')
+                    except Exception as e:
+                        logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar lembretes para contatos: {e}', exc_info=True)
+                
                 # ✅ MELHORIA: Só marcar como notificada se pelo menos uma notificação foi enviada
-                if notification_sent:
+                if notification_sent or contacts_notified:
                     task.notification_sent = True
                     task.save(update_fields=['notification_sent'])
                     count_reminder += 1
@@ -200,7 +215,22 @@ class Command(BaseCommand):
                     success = self._notify_user(task, task.created_by, is_reminder=False)
                     notification_sent = notification_sent or success
                 
-                if notification_sent:
+                # ✅ NOVO: Enviar notificações para contatos relacionados se notify_contacts estiver habilitado
+                contacts_notified = False
+                metadata = task.metadata or {}
+                notify_contacts = metadata.get('notify_contacts', False)
+                
+                if notify_contacts and task.related_contacts.exists():
+                    try:
+                        from apps.contacts.services.task_notifications import send_task_reminder_to_contacts
+                        contact_message_ids = send_task_reminder_to_contacts(task, is_15min_before=False)
+                        if contact_message_ids:
+                            contacts_notified = True
+                            logger.info(f'✅ [TASK NOTIFICATIONS] {len(contact_message_ids)} notificação(ões) de compromisso enviada(s) para contatos relacionados da tarefa {task.id}')
+                    except Exception as e:
+                        logger.error(f'❌ [TASK NOTIFICATIONS] Erro ao enviar notificações de compromisso para contatos: {e}', exc_info=True)
+                
+                if notification_sent or contacts_notified:
                     count_exact += 1
                 
             except Exception as e:
