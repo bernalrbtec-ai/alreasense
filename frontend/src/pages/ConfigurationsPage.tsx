@@ -26,7 +26,8 @@ import {
   Bell,
   Clock,
   MessageSquare,
-  Calendar
+  Calendar,
+  Lock
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -98,6 +99,7 @@ interface EvolutionConfig {
 interface Department {
   id: string
   name: string
+  color?: string
 }
 
 interface User {
@@ -185,7 +187,7 @@ const TIMEZONES = [
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -196,7 +198,7 @@ export default function ConfigurationsPage() {
     friendly_name: '',
     default_department: null as string | null
   })
-  const [departments, setDepartments] = useState<Array<{id: string, name: string}>>([])
+  const [departments, setDepartments] = useState<Array<{id: string, name: string, color?: string}>>([])
   const [qrCodeInstance, setQrCodeInstance] = useState<WhatsAppInstance | null>(null)
   const [showApiKeys, setShowApiKeys] = useState(false)
   const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
@@ -231,19 +233,33 @@ export default function ConfigurationsPage() {
   const [afterHoursMessage, setAfterHoursMessage] = useState<AfterHoursMessage | null>(null)
   const [taskConfig, setTaskConfig] = useState<AfterHoursTaskConfig | null>(null)
 
+  // Estados para Menu de Boas-Vindas
+  const [welcomeMenuConfig, setWelcomeMenuConfig] = useState<any>(null)
+  const [welcomeMenuSaving, setWelcomeMenuSaving] = useState(false)
+  const [welcomeMenuPreview, setWelcomeMenuPreview] = useState<string>('')
+  const [showWelcomeMenuPreview, setShowWelcomeMenuPreview] = useState(false)
+
   useEffect(() => {
     fetchData()
     fetchDepartments()
     if (activeTab === 'business-hours') {
       fetchBusinessHoursData()
     }
-  }, [activeTab, selectedBusinessHoursDept])
+    if (activeTab === 'welcome-menu' && user?.is_admin) {
+      fetchWelcomeMenuConfig()
+    }
+  }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
   
   const fetchDepartments = async () => {
     try {
       const response = await api.get('/auth/departments/')
       const depts = Array.isArray(response.data) ? response.data : (response.data?.results || [])
-      setDepartments(depts.map((d: any) => ({ id: d.id, name: d.name })))
+      // ✅ CORREÇÃO: Incluir color dos departamentos (necessário para o menu)
+      setDepartments(depts.map((d: any) => ({ 
+        id: d.id, 
+        name: d.name,
+        color: d.color || '#3b82f6'  // Cor padrão se não tiver
+      })))
     } catch (error) {
       console.error('Erro ao buscar departamentos:', error)
     }
@@ -744,6 +760,89 @@ export default function ConfigurationsPage() {
     }
   }
 
+  // Funções para Menu de Boas-Vindas
+  const fetchWelcomeMenuConfig = async () => {
+    try {
+      const response = await api.get('/chat/welcome-menu-config/')
+      setWelcomeMenuConfig(response.data)
+      generateWelcomeMenuPreview(response.data)
+    } catch (error: any) {
+      console.error('Erro ao carregar configuração do menu:', error)
+      if (error.response?.status === 403) {
+        showErrorToast('Apenas administradores podem acessar esta configuração')
+      }
+    }
+  }
+
+  const generateWelcomeMenuPreview = (config: any) => {
+    if (!config) return
+    
+    const welcome = config.welcome_message || `Bem-vindo a ${config.tenant_name || 'nossa empresa'}!`
+    // ✅ CORREÇÃO: Usar department_ids para buscar departamentos selecionados
+    const deptList = departments.filter((d: any) => (config.department_ids || []).includes(d.id))
+    const lines = [welcome, '', 'Escolha uma opção para atendimento:', '']
+    
+    deptList.forEach((dept: any, idx: number) => {
+      lines.push(`${idx + 1} - ${dept.name}`)
+    })
+    
+    if (config.show_close_option) {
+      lines.push(`${deptList.length + 1} - ${config.close_option_text || 'Encerrar'}`)
+    }
+    
+    setWelcomeMenuPreview(lines.join('\n'))
+  }
+
+  const handleSaveWelcomeMenu = async () => {
+    if (!welcomeMenuConfig) return
+    
+    // Validação
+    if (welcomeMenuConfig.enabled && (!welcomeMenuConfig.department_ids || welcomeMenuConfig.department_ids.length === 0)) {
+      showErrorToast('Selecione pelo menos um departamento quando o menu estiver habilitado')
+      return
+    }
+    
+    const toastId = showLoadingToast('salvar', 'Configuração do Menu')
+    try {
+      setWelcomeMenuSaving(true)
+      await api.post('/chat/welcome-menu-config/', {
+        enabled: welcomeMenuConfig.enabled,
+        welcome_message: welcomeMenuConfig.welcome_message,
+        department_ids: welcomeMenuConfig.department_ids || [],
+        show_close_option: welcomeMenuConfig.show_close_option,
+        close_option_text: welcomeMenuConfig.close_option_text,
+        send_to_new_conversations: welcomeMenuConfig.send_to_new_conversations,
+        send_to_closed_conversations: welcomeMenuConfig.send_to_closed_conversations
+      })
+      
+      updateToastSuccess(toastId, 'salvar', 'Configuração do Menu')
+      await fetchWelcomeMenuConfig()
+    } catch (error: any) {
+      console.error('Erro ao salvar configuração:', error)
+      const errorMsg = error.response?.data?.error || error.response?.data?.detail || 'Erro ao salvar configuração'
+      updateToastError(toastId, 'salvar', 'Configuração do Menu', error)
+    } finally {
+      setWelcomeMenuSaving(false)
+    }
+  }
+
+  const toggleWelcomeMenuDepartment = (deptId: string) => {
+    if (!welcomeMenuConfig) return
+    
+    const currentIds = welcomeMenuConfig.department_ids || []
+    const newIds = currentIds.includes(deptId)
+      ? currentIds.filter((id: string) => id !== deptId)
+      : [...currentIds, deptId]
+    
+    const updatedConfig = {
+      ...welcomeMenuConfig,
+      department_ids: newIds
+    }
+    
+    setWelcomeMenuConfig(updatedConfig)
+    generateWelcomeMenuPreview(updatedConfig)
+  }
+
   const updateDayHours = (day: string, field: 'enabled' | 'start' | 'end', value: boolean | string) => {
     if (!businessHours) return
     setBusinessHours({ ...businessHours, [`${day}_${field}`]: value })
@@ -836,6 +935,19 @@ export default function ConfigurationsPage() {
             <Clock className="h-4 w-4 inline mr-2" />
             Horários de Atendimento
           </button>
+          {user?.is_admin && (
+            <button
+              onClick={() => setActiveTab('welcome-menu')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'welcome-menu'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <MessageSquare className="h-4 w-4 inline mr-2" />
+              Menu de Boas-Vindas
+            </button>
+          )}
         </nav>
       </div>
 
@@ -1855,6 +1967,247 @@ export default function ConfigurationsPage() {
                   <Button onClick={handleSaveTaskConfig} disabled={isLoading} className="flex items-center gap-2">
                     <Save className="h-4 w-4" />
                     {isLoading ? 'Salvando...' : 'Salvar Configuração'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Tab Content - Menu de Boas-Vindas (Apenas Admin) */}
+      {activeTab === 'welcome-menu' && user?.is_admin && (
+        <div className="space-y-6">
+          {!welcomeMenuConfig ? (
+            <div className="flex items-center justify-center h-64">
+              <LoadingSpinner />
+            </div>
+          ) : (
+            <Card className="p-6">
+              <div className="space-y-6">
+                {/* Habilitar/Desabilitar Menu */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">Habilitar Menu Estático</Label>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Quando habilitado, o menu será enviado automaticamente para conversas novas ou fechadas
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={welcomeMenuConfig.enabled || false}
+                      onChange={(e) => {
+                        const updated = { ...welcomeMenuConfig, enabled: e.target.checked }
+                        setWelcomeMenuConfig(updated)
+                        generateWelcomeMenuPreview(updated)
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {/* Mensagem de Boas-Vindas */}
+                <div>
+                  <Label htmlFor="welcome_message">Mensagem de Boas-Vindas</Label>
+                  <Input
+                    id="welcome_message"
+                    value={welcomeMenuConfig.welcome_message || ''}
+                    onChange={(e) => {
+                      const updated = { ...welcomeMenuConfig, welcome_message: e.target.value }
+                      setWelcomeMenuConfig(updated)
+                      generateWelcomeMenuPreview(updated)
+                    }}
+                    placeholder={`Bem-vindo a ${user?.tenant_name || 'nossa empresa'}!`}
+                    maxLength={500}
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Mensagem exibida antes do menu.
+                  </p>
+                </div>
+
+                {/* Departamentos */}
+                <div>
+                  <Label>Departamentos no Menu</Label>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                    Selecione os departamentos que aparecerão no menu (em ordem)
+                  </p>
+                  {departments.length === 0 ? (
+                    <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                      <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200">
+                        <AlertCircle className="w-5 h-5" />
+                        <p className="text-sm">Nenhum departamento disponível. Crie departamentos primeiro.</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
+                      {departments.map((dept: any) => {
+                        const isSelected = welcomeMenuConfig.department_ids?.includes(dept.id) || false
+                        return (
+                          <label
+                            key={dept.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                              isSelected
+                                ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
+                                : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => toggleWelcomeMenuDepartment(dept.id)}
+                              className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                            />
+                            <span className="flex-1 font-medium">{dept.name}</span>
+                            {isSelected && (
+                              <span className="text-xs text-blue-600 dark:text-blue-400">
+                                #{welcomeMenuConfig.department_ids?.indexOf(dept.id)! + 1}
+                              </span>
+                            )}
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* Opção Encerrar */}
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label>Mostrar Opção Encerrar</Label>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      Adiciona uma opção no menu para o cliente encerrar a conversa
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={welcomeMenuConfig.show_close_option || false}
+                      onChange={(e) => {
+                        const updated = { ...welcomeMenuConfig, show_close_option: e.target.checked }
+                        setWelcomeMenuConfig(updated)
+                        generateWelcomeMenuPreview(updated)
+                      }}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                {welcomeMenuConfig.show_close_option && (
+                  <div>
+                    <Label htmlFor="close_option_text">Texto da Opção Encerrar</Label>
+                    <Input
+                      id="close_option_text"
+                      value={welcomeMenuConfig.close_option_text || 'Encerrar'}
+                      onChange={(e) => {
+                        const updated = { ...welcomeMenuConfig, close_option_text: e.target.value }
+                        setWelcomeMenuConfig(updated)
+                        generateWelcomeMenuPreview(updated)
+                      }}
+                      placeholder="Encerrar"
+                      maxLength={50}
+                      className="mt-1"
+                    />
+                  </div>
+                )}
+
+                {/* Quando Enviar */}
+                <div className="space-y-4">
+                  <Label>Quando Enviar o Menu</Label>
+                  
+                  <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={welcomeMenuConfig.send_to_new_conversations !== false}
+                      onChange={(e) => setWelcomeMenuConfig({ ...welcomeMenuConfig, send_to_new_conversations: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <div>
+                      <p className="font-medium">Conversas Novas</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Enviar menu quando uma nova conversa é criada (status=pending)
+                      </p>
+                    </div>
+                  </label>
+
+                  <label className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <input
+                      type="checkbox"
+                      checked={welcomeMenuConfig.send_to_closed_conversations !== false}
+                      onChange={(e) => setWelcomeMenuConfig({ ...welcomeMenuConfig, send_to_closed_conversations: e.target.checked })}
+                      className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                    />
+                    <div>
+                      <p className="font-medium">Conversas Fechadas</p>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Enviar menu quando uma conversa fechada recebe uma nova mensagem
+                      </p>
+                    </div>
+                  </label>
+                </div>
+
+                {/* IA (Bloqueado) */}
+                <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                  <div className="flex items-start gap-3">
+                    <Lock className="w-5 h-5 text-gray-400 mt-0.5" />
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Label className="text-base font-semibold">IA para Atendimento</Label>
+                        <span className="px-2 py-0.5 text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 rounded">
+                          Addon Futuro
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-600 dark:text-gray-400">
+                        Esta funcionalidade será disponibilizada como addon cobrado separadamente.
+                        Use o menu estático acima para roteamento básico.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Preview */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <Label>Preview do Menu</Label>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowWelcomeMenuPreview(!showWelcomeMenuPreview)}
+                    >
+                      {showWelcomeMenuPreview ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showWelcomeMenuPreview ? 'Ocultar' : 'Mostrar'}
+                    </Button>
+                  </div>
+                  {showWelcomeMenuPreview && (
+                    <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                      <pre className="whitespace-pre-wrap text-sm font-mono text-gray-700 dark:text-gray-300">
+                        {welcomeMenuPreview}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+
+                {/* Botão Salvar */}
+                <div className="flex justify-end">
+                  <Button
+                    onClick={handleSaveWelcomeMenu}
+                    disabled={welcomeMenuSaving || (welcomeMenuConfig.enabled && (!welcomeMenuConfig.department_ids || welcomeMenuConfig.department_ids.length === 0))}
+                    className="flex items-center gap-2"
+                  >
+                    {welcomeMenuSaving ? (
+                      <>
+                        <LoadingSpinner size="sm" />
+                        Salvando...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-4 h-4" />
+                        Salvar Configuração
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

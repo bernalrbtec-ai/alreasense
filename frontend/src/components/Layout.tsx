@@ -54,7 +54,6 @@ const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Planos', href: '/billing', icon: CreditCard },
   { name: 'Configurações', href: '/configurations', icon: Settings },
-  { name: 'Menu de Boas-Vindas', href: '/welcome-menu', icon: MessageSquare },
 ]
 
 const adminNavigation = [

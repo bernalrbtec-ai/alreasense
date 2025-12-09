@@ -6,6 +6,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from apps.authn.permissions import IsAdmin
 from apps.chat.models_welcome_menu import WelcomeMenuConfig
 from apps.chat.api.serializers_welcome_menu import WelcomeMenuConfigSerializer
 from apps.authn.models import Department
@@ -24,7 +25,7 @@ class WelcomeMenuConfigViewSet(viewsets.ModelViewSet):
     """
     
     serializer_class = WelcomeMenuConfigSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdmin]  # ✅ Apenas admin do tenant
     
     def get_queryset(self):
         """Retorna apenas configuração do tenant do usuário"""
@@ -94,4 +95,5 @@ class WelcomeMenuConfigViewSet(viewsets.ModelViewSet):
         
         serializer = WelcomeMenuConfigSerializer.DepartmentOptionSerializer(departments, many=True)
         return Response(serializer.data)
+
 

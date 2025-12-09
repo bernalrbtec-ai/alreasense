@@ -24,7 +24,6 @@ const EvolutionConfigPage = lazy(() => import('./pages/EvolutionConfigPage'))
 const ProfilePage = lazy(() => import('./pages/ProfilePage'))
 const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const ConfigurationsPage = lazy(() => import('./pages/ConfigurationsPage'))
-const WelcomeMenuPage = lazy(() => import('./pages/WelcomeMenuPage'))
 const ContactsPage = lazy(() => import('./pages/ContactsPage'))
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'))
 const WebhookMonitoringPage = lazy(() => import('./pages/WebhookMonitoringPage'))
@@ -157,11 +156,6 @@ function App() {
               <Route path="configurations" element={
                 <Suspense fallback={<LoadingSpinner size="lg" />}>
                   <ConfigurationsPage />
-                </Suspense>
-              } />
-              <Route path="welcome-menu" element={
-                <Suspense fallback={<LoadingSpinner size="lg" />}>
-                  <WelcomeMenuPage />
                 </Suspense>
               } />
               
