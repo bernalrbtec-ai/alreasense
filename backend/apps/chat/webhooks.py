@@ -12,7 +12,7 @@ from django.db import transaction
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-from apps.chat.models import Conversation, Message, MessageAttachment
+from apps.chat.models import Conversation, Message, MessageAttachment, MessageEditHistory
 # download_attachment removido - agora usa process_incoming_media diretamente (S3 + cache Redis)
 from apps.tenancy.models import Tenant
 from apps.connections.models import EvolutionConnection
@@ -618,6 +618,8 @@ def evolution_webhook(request):
             handle_message_update(data, tenant)
         elif event_type == 'messages.delete':
             handle_message_delete(data, tenant, connection=connection, wa_instance=wa_instance)
+        elif event_type == 'messages.edited':
+            handle_message_edited(data, tenant)
         else:
             logger.info(f"ℹ️ [WEBHOOK] Evento não tratado: {event_type}")
         
@@ -2901,6 +2903,168 @@ def handle_message_update(data, tenant):
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.update: {e}", exc_info=True)
+
+
+@transaction.atomic
+def handle_message_edited(data, tenant):
+    """
+    Processa evento de mensagem editada (messages.edited).
+    Atualiza conteúdo da mensagem e cria histórico de edição.
+    """
+    logger.info(f"✏️ [WEBHOOK EDITED] Iniciando processamento...")
+    
+    try:
+        # 🔧 Evolution API pode enviar 'data' como LISTA ou DICT
+        raw_data = data.get('data', {})
+        
+        # Se for lista, pegar o primeiro item
+        if isinstance(raw_data, list):
+            if len(raw_data) == 0:
+                logger.warning(f"⚠️ [WEBHOOK EDITED] data está vazio")
+                return
+            message_data = raw_data[0]
+            logger.info(f"📋 [WEBHOOK EDITED] data é LISTA, usando primeiro item")
+        else:
+            message_data = raw_data
+            logger.info(f"📋 [WEBHOOK EDITED] data é DICT")
+        
+        # Extrair dados da mensagem editada
+        key = message_data.get('key', {}) if isinstance(message_data, dict) else {}
+        message_id_evo = key.get('id') if isinstance(key, dict) else None
+        
+        # Novo conteúdo da mensagem
+        message_info = message_data.get('message', {})
+        new_content = None
+        
+        # Tentar extrair conteúdo de diferentes formatos
+        if isinstance(message_info, dict):
+            # Pode estar em conversation, extendedTextMessage, etc.
+            new_content = (
+                message_info.get('conversation') or
+                message_info.get('extendedTextMessage', {}).get('text') or
+                message_info.get('text')
+            )
+        
+        if not message_id_evo:
+            logger.warning(f"⚠️ [WEBHOOK EDITED] Payload sem message_id. Dados (mascados): %s", mask_sensitive_data(message_data))
+            return
+        
+        if not new_content:
+            logger.warning(f"⚠️ [WEBHOOK EDITED] Payload sem novo conteúdo. Dados (mascados): %s", mask_sensitive_data(message_data))
+            return
+        
+        logger.info(f"🔍 [WEBHOOK EDITED] Buscando mensagem...")
+        logger.info(f"   message_id (evo): {_mask_digits(message_id_evo)}")
+        logger.info(f"   Novo conteúdo (primeiros 50 chars): {new_content[:50]}...")
+        
+        # Buscar mensagem no banco
+        message = None
+        max_retries = 5
+        retry_delay = 0.2  # 200ms entre tentativas
+        
+        for attempt in range(max_retries):
+            try:
+                message = Message.objects.select_related('conversation').get(
+                    message_id=message_id_evo,
+                    conversation__tenant=tenant
+                )
+                logger.info(f"✅ [WEBHOOK EDITED] Mensagem encontrada (tentativa {attempt + 1})!")
+                break
+            except Message.DoesNotExist:
+                if attempt < max_retries - 1:
+                    import time
+                    time.sleep(retry_delay)
+                    logger.debug(f"⏳ [WEBHOOK EDITED] Aguardando message_id ser salvo (tentativa {attempt + 1}/{max_retries})...")
+        
+        if not message:
+            logger.warning(f"⚠️ [WEBHOOK EDITED] Mensagem não encontrada no banco após {max_retries} tentativas!")
+            logger.warning(f"   message_id: {_mask_digits(message_id_evo)}")
+            return
+        
+        logger.info(f"✅ [WEBHOOK EDITED] Mensagem encontrada!")
+        logger.info(f"   ID no banco: {message.id}")
+        logger.info(f"   Conversa: {message.conversation.contact_phone}")
+        logger.info(f"   Conteúdo antigo (primeiros 50 chars): {message.content[:50] if message.content else 'N/A'}...")
+        
+        # Verificar se o conteúdo realmente mudou
+        old_content = message.content or ''
+        if old_content == new_content:
+            logger.info(f"ℹ️ [WEBHOOK EDITED] Conteúdo não mudou, ignorando")
+            return
+        
+        # Salvar conteúdo antigo antes de atualizar
+        old_content_for_history = old_content
+        
+        # Atualizar mensagem
+        message.content = new_content
+        message.is_edited = True
+        message.save(update_fields=['content', 'is_edited', 'updated_at'])
+        
+        logger.info(f"✅ [WEBHOOK EDITED] Mensagem atualizada!")
+        logger.info(f"   Novo conteúdo (primeiros 50 chars): {new_content[:50]}...")
+        
+        # Criar histórico de edição
+        try:
+            MessageEditHistory.objects.create(
+                message=message,
+                old_content=old_content_for_history,
+                new_content=new_content,
+                metadata={
+                    'source': 'webhook',
+                    'evolution_message_id': message_id_evo,
+                    'edited_at': message.updated_at.isoformat() if message.updated_at else None
+                }
+            )
+            logger.info(f"✅ [WEBHOOK EDITED] Histórico de edição criado")
+        except Exception as e:
+            logger.error(f"⚠️ [WEBHOOK EDITED] Erro ao criar histórico: {e}", exc_info=True)
+        
+        # Broadcast via WebSocket
+        logger.info(f"📡 [WEBHOOK EDITED] Enviando atualização via WebSocket...")
+        broadcast_message_edited(message)
+        
+    except Exception as e:
+        logger.error(f"❌ [WEBHOOK] Erro ao processar messages.edited: {e}", exc_info=True)
+
+
+def broadcast_message_edited(message):
+    """Envia atualização de mensagem editada via WebSocket."""
+    try:
+        from apps.chat.utils.serialization import serialize_message_for_ws
+        channel_layer = get_channel_layer()
+        conversation = message.conversation
+        room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+        
+        message_data_serializable = serialize_message_for_ws(message)
+        
+        logger.info(f"📡 [WEBSOCKET EDITED] Enviando message_edited para room: {room_group_name}")
+        logger.info(f"   Message ID: {message.id}")
+        logger.info(f"   Conversation ID: {conversation.id}")
+        
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {
+                'type': 'message_edited',
+                'message': message_data_serializable,
+                'conversation_id': str(conversation.id)
+            }
+        )
+        
+        # Também enviar para grupo do tenant
+        tenant_group = f"chat_tenant_{conversation.tenant_id}"
+        async_to_sync(channel_layer.group_send)(
+            tenant_group,
+            {
+                'type': 'message_edited',
+                'message': message_data_serializable,
+                'conversation_id': str(conversation.id)
+            }
+        )
+        
+        logger.info(f"✅ [WEBSOCKET EDITED] Mensagem editada broadcast com sucesso!")
+    
+    except Exception as e:
+        logger.error(f"❌ [WEBSOCKET EDITED] Erro ao enviar broadcast: {e}", exc_info=True)
 
 
 def broadcast_message_to_websocket(message, conversation):
