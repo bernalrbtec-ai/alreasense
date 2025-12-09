@@ -1940,6 +1940,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 logger.info(f"   Número final: {_mask_remote_jid(final_number)}")
                 logger.info(f"   Tamanho do texto: {len(content)} caracteres")
                 logger.info("   Text (primeiros 100 chars): %s", _truncate_text(content, 100))
+                
+                # ✅ DEBUG: Verificar se payload tem menções
+                if 'mentions' in payload:
+                    logger.critical(f"✅ [CHAT ENVIO] Payload TEM menções:")
+                    logger.critical(f"   mentions: {json.dumps(payload['mentions'], ensure_ascii=False)}")
+                else:
+                    logger.warning(f"⚠️ [CHAT ENVIO] Payload NÃO TEM menções (pode estar correto se não houver menções)")
+                
                 logger.info("   Payload (mascado): %s", mask_sensitive_data(payload))
                 logger.info("   Payload (JSON formatado): %s", json.dumps(mask_sensitive_data(payload), indent=2, ensure_ascii=False))
                 
