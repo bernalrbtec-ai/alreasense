@@ -921,11 +921,15 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # ✍️ ASSINATURA AUTOMÁTICA: Adicionar nome do usuário no início da mensagem
         # Formato: *Nome Sobrenome:*\n\n{mensagem}
         # ✅ Só adiciona se include_signature=True no metadata
-        # ✅ IMPORTANTE: Assinatura deve ser adicionada ANTES de montar o payload (incluindo replies)
+        # ✅ IMPORTANTE: Assinatura deve ser adicionada APENAS para envio (Evolution API)
+        # ✅ CRÍTICO: NÃO modificar message.content - manter conteúdo original sem assinatura no banco
         logger.critical(f"✍️ [CHAT ENVIO] ====== VERIFICANDO ASSINATURA ======")
         logger.critical(f"   include_signature: {include_signature}")
-        logger.critical(f"   content antes: {content[:50] if content else 'VAZIO'}...")
+        logger.critical(f"   content original (primeiros 50 chars): {content[:50] if content else 'VAZIO'}...")
         logger.critical(f"   É reply? {bool(reply_to_uuid)}")
+        
+        # ✅ CORREÇÃO: Criar variável separada para conteúdo com assinatura (apenas para envio)
+        content_for_send = content  # Conteúdo que será enviado (pode ter assinatura)
         
         if include_signature:
             sender = message.sender  # ✅ Já carregado via select_related
@@ -937,15 +941,19 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     # Montar assinatura com nome completo em negrito
                     full_name = f"{first_name} {last_name}".strip()
                     signature = f"*{full_name}:*\n\n"
-                    content = signature + content
-                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada: {full_name}")
-                    logger.critical(f"   content depois: {content[:100] if content else 'VAZIO'}...")
+                    # ✅ CORREÇÃO: Adicionar assinatura apenas em content_for_send (não em content)
+                    content_for_send = signature + content
+                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada para envio: {full_name}")
+                    logger.critical(f"   content original (sem assinatura): {content[:50] if content else 'VAZIO'}...")
+                    logger.critical(f"   content_for_send (com assinatura): {content_for_send[:100] if content_for_send else 'VAZIO'}...")
                 else:
                     logger.warning(f"⚠️ [CHAT ENVIO] Sender sem nome (first_name='{first_name}', last_name='{last_name}')")
             else:
                 logger.warning(f"⚠️ [CHAT ENVIO] Sender ou content ausente (sender={bool(sender)}, content={bool(content)})")
         else:
             logger.info(f"✍️ [CHAT ENVIO] Assinatura desabilitada pelo usuário")
+        
+        # ✅ CORREÇÃO: Usar content_for_send daqui em diante para envio, mas manter content original no banco
         
         logger.info("📱 [CHAT ENVIO] Destino=%s | tipo=%s", phone, conversation.conversation_type)
         
@@ -1401,9 +1409,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         raise ValueError(f"Conversa é individual mas destinatário é grupo: {_mask_remote_jid(final_number)}")
                     logger.critical(f"✅ [SEGURANÇA] Destinatário INDIVIDUAL validado: {_mask_remote_jid(final_number)}")
                 
+                # ✅ CORREÇÃO: Usar content_for_send (com assinatura) para envio, mas manter content original no banco
                 payload = {
                     'number': final_number,
-                    'text': content.strip()
+                    'text': content_for_send.strip()  # ✅ Usar content_for_send (pode ter assinatura)
                 }
                 
                 logger.critical(f"✅ [SEGURANÇA] Payload criado com destinatário validado:")
