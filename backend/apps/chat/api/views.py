@@ -3013,16 +3013,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         stats = filtered_queryset.aggregate(
             # Conversas abertas (status='open')
             open_conversations=Count('id', filter=Q(status='open')),
-            # Conversas pendentes (status='pending')
-            pending_conversations=Count('id', filter=Q(status='pending')),
+            # Conversas pendentes (status='pending' E department=NULL) - apenas Inbox
+            pending_conversations=Count('id', filter=Q(status='pending', department__isnull=True)),
         )
         
-        # ✅ PERFORMANCE: Contar mensagens não lidas em uma query separada otimizada
-        # Usar subquery para evitar N+1
+        # ✅ CORREÇÃO: Contar mensagens não lidas corretamente
+        # Mensagens não lidas = incoming com status 'sent' ou 'delivered' (não 'seen')
+        # Usar a mesma lógica do property unread_count do modelo Conversation
         unread_messages = Message.objects.filter(
             conversation__in=filtered_queryset,
             direction='incoming',
-            status__in=['sent', 'delivered']
+            status__in=['sent', 'delivered']  # Não incluir 'seen' (já foi lida)
         ).count()
         
         stats['total_unread_messages'] = unread_messages
