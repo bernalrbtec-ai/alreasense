@@ -52,8 +52,7 @@ export default function DashboardPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [newConversations, setNewConversations] = useState(0) // ✅ CORREÇÃO: Novas conversas (pending), não mensagens
-  const [openConversations, setOpenConversations] = useState(0)
+  const [unreadMessages, setUnreadMessages] = useState(0) // ✅ Novas mensagens não lidas
   const [selectedDateForTask, setSelectedDateForTask] = useState<Date | null>(null)
 
   // WebSocket para atualização em tempo real
@@ -67,24 +66,16 @@ export default function DashboardPage() {
   // ✅ SEGURANÇA: conversations já vem filtrado por tenant do backend (linha 282 de views.py)
   // O backend SEMPRE filtra por tenant=user.tenant, garantindo isolamento multi-tenant
   useEffect(() => {
-    // ✅ CORREÇÃO: Contar conversas baseado no status
-    // Novas conversas = status='pending' E department=NULL (Inbox)
-    const pendingConvs = conversations.filter((conv: any) => 
-      conv.status === 'pending' && !conv.department
-    )
-    setNewConversations(pendingConvs.length)
-    
-    // Conversas abertas = status='open'
-    const openConvs = conversations.filter((conv: any) => 
-      conv.status === 'open'
-    )
-    setOpenConversations(openConvs.length)
+    // ✅ Contar mensagens não lidas somando unread_count de todas as conversas
+    const totalUnread = conversations.reduce((sum: number, conv: any) => {
+      return sum + (conv.unread_count || 0)
+    }, 0)
+    setUnreadMessages(totalUnread)
     
     // ✅ DEBUG: Log para verificar atualização em tempo real
-    console.log('🔄 [DASHBOARD] Estatísticas atualizadas via WebSocket:', {
-      total: conversations.length,
-      open: openConvs.length,
-      pending: pendingConvs.length
+    console.log('🔄 [DASHBOARD] Mensagens não lidas atualizadas via WebSocket:', {
+      total: totalUnread,
+      conversations: conversations.length
     })
   }, [conversations])
 
@@ -158,18 +149,12 @@ export default function DashboardPage() {
       // ✅ DEBUG: Log para verificar o que está sendo recebido
       console.log('📊 [DASHBOARD] Stats recebidas:', stats)
       
-      // ✅ CORREÇÃO: Atualizar estatísticas corretamente
-      // Novas conversas = conversas pendentes (status='pending')
-      const pendingCount = stats.pending_conversations || 0
-      setNewConversations(pendingCount)
+      // ✅ CORREÇÃO: Atualizar estatísticas de mensagens não lidas
+      const unreadCount = stats.total_unread_messages || 0
+      setUnreadMessages(unreadCount)
       
-      // Conversas abertas = conversas abertas (status='open')
-      const openCount = stats.open_conversations || 0
-      setOpenConversations(openCount)
-      
-      console.log('📊 [DASHBOARD] Contadores atualizados:', {
-        newConversations: pendingCount,
-        openConversations: openCount
+      console.log('📊 [DASHBOARD] Mensagens não lidas atualizadas:', {
+        unreadMessages: unreadCount
       })
       
       // ✅ NOTA: Não atualizamos o store de conversas aqui porque:
