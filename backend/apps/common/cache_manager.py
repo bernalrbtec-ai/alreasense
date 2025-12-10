@@ -31,6 +31,9 @@ class CacheManager:
     PREFIX_INSTANCE = 'instance'
     PREFIX_RATE_LIMIT = 'ratelimit'
     PREFIX_QUERY = 'query'
+    PREFIX_PRODUCT = 'product'
+    PREFIX_PLAN = 'plan'
+    PREFIX_TENANT_PRODUCT = 'tenant_product'
     
     @classmethod
     def make_key(cls, prefix: str, *args, **kwargs) -> str:

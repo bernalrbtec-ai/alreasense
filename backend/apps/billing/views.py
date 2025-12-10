@@ -18,6 +18,7 @@ from .serializers import (
     TenantBillingInfoSerializer
 )
 from apps.common.permissions import IsTenantMember, IsAdminUser
+from apps.common.cache_manager import CacheManager
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -32,45 +33,66 @@ class ProductViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filtrar produtos baseado no usuário (COM CACHE)"""
-        from django.core.cache import cache
-        
         user = self.request.user
         
-        # Cache key baseado no tipo de usuário
-        cache_key = f"products:{'all' if (user.is_superuser or user.is_staff) else 'active'}"
+        # Cache key baseado no tipo de usuário usando CacheManager
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_PRODUCT,
+            'all' if (user.is_superuser or user.is_staff) else 'active'
+        )
         
-        # Tentar buscar do cache
-        products = cache.get(cache_key)
-        
-        if products is None:
-            # Cache MISS - buscar do banco
+        def fetch_products():
+            """Função para buscar produtos do banco"""
             if user.is_superuser or user.is_staff:
-                products = list(Product.objects.all())
+                return list(Product.objects.all().values_list('id', flat=True))
             else:
-                products = list(Product.objects.filter(is_active=True))
-            
-            # Cachear por 24 horas (86400 segundos)
-            cache.set(cache_key, products, timeout=86400)
+                return list(Product.objects.filter(is_active=True).values_list('id', flat=True))
         
-        # Retornar como queryset para compatibilidade
-        return Product.objects.filter(id__in=[p.id for p in products])
+        # Usar CacheManager para get_or_set (TTL de 24 horas)
+        product_ids = CacheManager.get_or_set(
+            cache_key,
+            fetch_products,
+            ttl=CacheManager.TTL_DAY
+        )
+        
+        # Retornar queryset completo
+        return Product.objects.filter(id__in=product_ids)
     
     @action(detail=False, methods=['get'])
     def available(self, request):
-        """Lista produtos disponíveis para o tenant como add-on"""
+        """Lista produtos disponíveis para o tenant como add-on (COM CACHE)"""
         tenant = request.user.tenant
         
-        # Produtos já ativos
-        active_product_ids = tenant.active_products.values_list('product_id', flat=True)
+        # Cache key por tenant
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_PRODUCT,
+            'available',
+            tenant_id=tenant.id
+        )
         
-        # Produtos disponíveis como add-on (têm addon_price definido)
-        available_products = Product.objects.filter(
-            is_active=True,
-            addon_price__isnull=False
-        ).exclude(id__in=active_product_ids)
+        def fetch_available_products():
+            """Função para buscar produtos disponíveis do banco"""
+            # Produtos já ativos
+            active_product_ids = tenant.active_products.values_list('product_id', flat=True)
+            
+            # Produtos disponíveis como add-on (têm addon_price definido)
+            available_products = Product.objects.filter(
+                is_active=True,
+                addon_price__isnull=False
+            ).exclude(id__in=active_product_ids)
+            
+            # Serializar dados para cache
+            serializer = self.get_serializer(available_products, many=True)
+            return serializer.data
         
-        serializer = self.get_serializer(available_products, many=True)
-        return Response(serializer.data)
+        # Usar CacheManager para get_or_set (TTL de 5 minutos - dados podem mudar quando add-on é adicionado)
+        data = CacheManager.get_or_set(
+            cache_key,
+            fetch_available_products,
+            ttl=CacheManager.TTL_MINUTE * 5
+        )
+        
+        return Response(data)
 
 
 class PlanViewSet(viewsets.ModelViewSet):
@@ -87,28 +109,30 @@ class PlanViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filtrar planos baseado no usuário (COM CACHE)"""
-        from django.core.cache import cache
-        
         user = self.request.user
         
-        # Cache key baseado no tipo de usuário
-        cache_key = f"plans:{'all' if (user.is_superuser or user.is_staff) else 'active'}"
+        # Cache key baseado no tipo de usuário usando CacheManager
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_PLAN,
+            'all' if (user.is_superuser or user.is_staff) else 'active'
+        )
         
-        # Tentar buscar do cache
-        plans = cache.get(cache_key)
-        
-        if plans is None:
-            # Cache MISS - buscar do banco
+        def fetch_plans():
+            """Função para buscar planos do banco"""
             if user.is_superuser or user.is_staff:
-                plans = list(Plan.objects.all().order_by('sort_order'))
+                return list(Plan.objects.all().order_by('sort_order').values_list('id', flat=True))
             else:
-                plans = list(Plan.objects.filter(is_active=True).order_by('sort_order'))
-            
-            # Cachear por 12 horas (43200 segundos)
-            cache.set(cache_key, plans, timeout=43200)
+                return list(Plan.objects.filter(is_active=True).order_by('sort_order').values_list('id', flat=True))
         
-        # Retornar como queryset para compatibilidade
-        return Plan.objects.filter(id__in=[p.id for p in plans]).order_by('sort_order')
+        # Usar CacheManager para get_or_set (TTL de 12 horas)
+        plan_ids = CacheManager.get_or_set(
+            cache_key,
+            fetch_plans,
+            ttl=CacheManager.TTL_HOUR * 12
+        )
+        
+        # Retornar queryset completo
+        return Plan.objects.filter(id__in=plan_ids).order_by('sort_order')
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTenantMember, IsAdminUser])
     def select(self, request, pk=None):
@@ -139,6 +163,11 @@ class PlanViewSet(viewsets.ModelViewSet):
         
         # Sincronizar produtos do plano
         self._sync_plan_products(tenant, plan)
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de produtos do tenant e planos
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_TENANT_PRODUCT}:*")
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_TENANT}:billing_summary:*")
         
         return Response({
             'success': True,
@@ -172,30 +201,31 @@ class TenantProductViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Get tenant products (COM CACHE)"""
-        from django.core.cache import cache
-        
         tenant = self.request.user.tenant
         if not tenant:
             return TenantProduct.objects.none()
         
-        # Cache key por tenant
-        cache_key = f"tenant_products:{tenant.id}"
+        # Cache key por tenant usando CacheManager
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_TENANT_PRODUCT,
+            tenant_id=tenant.id
+        )
         
-        # Tentar buscar do cache
-        tenant_product_ids = cache.get(cache_key)
-        
-        if tenant_product_ids is None:
-            # Cache MISS - buscar do banco
-            tenant_products = list(
+        def fetch_tenant_products():
+            """Função para buscar produtos do tenant do banco"""
+            return list(
                 TenantProduct.objects.filter(
                     tenant=tenant,
                     is_active=True
                 ).select_related('product').values_list('id', flat=True)
             )
-            
-            # Cachear por 5 minutos (300 segundos)
-            cache.set(cache_key, tenant_products, timeout=300)
-            tenant_product_ids = tenant_products
+        
+        # Usar CacheManager para get_or_set (TTL de 5 minutos)
+        tenant_product_ids = CacheManager.get_or_set(
+            cache_key,
+            fetch_tenant_products,
+            ttl=CacheManager.TTL_MINUTE * 5
+        )
         
         # Retornar queryset completo
         return TenantProduct.objects.filter(
@@ -204,12 +234,14 @@ class TenantProductViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Adiciona um produto (add-on) ao tenant"""
+        from rest_framework import serializers as drf_serializers
+        
         tenant = self.request.user.tenant
         product = serializer.validated_data['product']
         
         # Validar se o produto pode ser add-on
         if not product.is_addon_available:
-            raise serializers.ValidationError('Este produto não está disponível como add-on')
+            raise drf_serializers.ValidationError('Este produto não está disponível como add-on')
         
         # Criar tenant_product
         tenant_product = serializer.save(
@@ -225,6 +257,10 @@ class TenantProductViewSet(viewsets.ModelViewSet):
             amount=product.addon_price or 0,
             description=f'Add-on adicionado: {product.name}'
         )
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de produtos do tenant e produtos disponíveis
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_TENANT_PRODUCT}:*")
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PRODUCT}:available:*")
     
     @action(detail=True, methods=['post'])
     def deactivate(self, request, pk=None):
@@ -247,6 +283,10 @@ class TenantProductViewSet(viewsets.ModelViewSet):
             amount=0,
             description=f'Add-on removido: {tenant_product.product.name}'
         )
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de produtos do tenant e produtos disponíveis
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_TENANT_PRODUCT}:*")
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PRODUCT}:available:*")
         
         return Response({'success': True, 'message': 'Produto desativado'})
 
@@ -276,27 +316,45 @@ class TenantBillingViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['get'])
     def summary(self, request):
-        """Resumo de billing"""
+        """Resumo de billing (COM CACHE)"""
         tenant = request.user.tenant
         
-        # Contar produtos ativos
-        active_products_count = tenant.active_products.count()
+        # Cache key por tenant
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_TENANT,
+            'billing_summary',
+            tenant_id=tenant.id
+        )
         
-        # Calcular total mensal
-        monthly_total = tenant.monthly_total
+        def fetch_summary():
+            """Função para buscar resumo do banco"""
+            # Contar produtos ativos
+            active_products_count = tenant.active_products.count()
+            
+            # Calcular total mensal
+            monthly_total = tenant.monthly_total
+            
+            # Histórico recente
+            recent_history = BillingHistory.objects.filter(
+                tenant=tenant
+            ).order_by('-created_at')[:5]
+            
+            return {
+                'plan': {
+                    'name': tenant.current_plan.name if tenant.current_plan else 'Nenhum',
+                    'price': tenant.current_plan.price if tenant.current_plan else 0
+                },
+                'active_products_count': active_products_count,
+                'monthly_total': monthly_total,
+                'next_billing_date': tenant.next_billing_date,
+                'recent_history': BillingHistorySerializer(recent_history, many=True).data
+            }
         
-        # Histórico recente
-        recent_history = BillingHistory.objects.filter(
-            tenant=tenant
-        ).order_by('-created_at')[:5]
+        # Usar CacheManager para get_or_set (TTL de 1 minuto - dados podem mudar frequentemente)
+        data = CacheManager.get_or_set(
+            cache_key,
+            fetch_summary,
+            ttl=CacheManager.TTL_MINUTE
+        )
         
-        return Response({
-            'plan': {
-                'name': tenant.current_plan.name if tenant.current_plan else 'Nenhum',
-                'price': tenant.current_plan.price if tenant.current_plan else 0
-            },
-            'active_products_count': active_products_count,
-            'monthly_total': monthly_total,
-            'next_billing_date': tenant.next_billing_date,
-            'recent_history': BillingHistorySerializer(recent_history, many=True).data
-        })
+        return Response(data)

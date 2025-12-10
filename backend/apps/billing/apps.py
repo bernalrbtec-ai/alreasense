@@ -8,5 +8,5 @@ class BillingConfig(AppConfig):
     
     def ready(self):
         """Configurações iniciais do app"""
-        # Importar signals se necessário
-        pass
+        # ✅ Importar signals para invalidar cache automaticamente
+        import apps.billing.signals  # noqa
