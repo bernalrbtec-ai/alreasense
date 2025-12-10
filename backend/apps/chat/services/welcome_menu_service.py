@@ -243,13 +243,32 @@ class WelcomeMenuService:
         """
         Fecha conversa.
         
+        ✅ NOVO: Marca todas as mensagens não lidas como lidas ao fechar conversa.
+        Isso evita que conversas fechadas apareçam no contador de "conversas novas".
+        
         Args:
             conversation: Conversa a fechar
         
         Returns:
             True se fechou com sucesso
         """
+        from django.db import transaction
+        from apps.chat.models import Message
+        
         try:
+            # ✅ NOVO: Marcar todas as mensagens não lidas como lidas antes de fechar
+            unread_messages = Message.objects.filter(
+                conversation=conversation,
+                direction='incoming',
+                status__in=['sent', 'delivered']  # Mensagens não lidas
+            )
+            
+            marked_count = unread_messages.count()
+            if marked_count > 0:
+                with transaction.atomic():
+                    unread_messages.update(status='seen')
+                logger.info(f"✅ [WELCOME MENU] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
+            
             conversation.status = 'closed'
             conversation.save(update_fields=['status'])
             

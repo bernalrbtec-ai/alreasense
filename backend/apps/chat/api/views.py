@@ -2476,8 +2476,27 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         ✅ CORREÇÃO CRÍTICA: Remove departamento ao fechar para que quando
         uma nova mensagem chegar, a conversa volte para o Inbox (sem departamento).
+        
+        ✅ NOVO: Marca todas as mensagens não lidas como lidas ao fechar conversa.
+        Isso evita que conversas fechadas apareçam no contador de "conversas novas".
         """
+        from django.db import transaction
+        
         conversation = self.get_object()
+        
+        # ✅ NOVO: Marcar todas as mensagens não lidas como lidas antes de fechar
+        unread_messages = Message.objects.filter(
+            conversation=conversation,
+            direction='incoming',
+            status__in=['sent', 'delivered']  # Mensagens não lidas
+        )
+        
+        marked_count = unread_messages.count()
+        if marked_count > 0:
+            with transaction.atomic():
+                unread_messages.update(status='seen')
+            logger.info(f"✅ [CONVERSA] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
+        
         conversation.status = 'closed'
         conversation.department = None  # ✅ Remover departamento para voltar ao Inbox quando reabrir
         conversation.save(update_fields=['status', 'department'])

@@ -562,6 +562,46 @@ def media_proxy(request):
 
 ### Regra de Ouro: SEMPRE TESTAR ANTES DE COMMIT
 
+**⚠️ CRÍTICO: Verificação de Compatibilidade**
+
+**ANTES de fazer commit/push, SEMPRE verificar:**
+
+1. **✅ Compatibilidade com código existente**
+   - Verificar se alterações não quebram funcionalidades existentes
+   - Testar fluxos relacionados que podem ser afetados
+   - Verificar se campos novos são nullable ou têm defaults seguros
+   - Confirmar que migrations não vão quebrar dados existentes
+
+2. **✅ Verificação de dependências**
+   - Verificar se imports estão corretos
+   - Confirmar que modelos/serializers não foram quebrados
+   - Verificar se endpoints de API mantêm compatibilidade
+   - Checar se frontend não quebra com mudanças no backend
+
+3. **✅ Validação de dados**
+   - Campos novos devem ser nullable ou ter defaults seguros
+   - Migrations SQL devem usar `IF NOT EXISTS` e `IF EXISTS`
+   - Verificar se queries não vão retornar erros com dados existentes
+   - Confirmar que filtros por tenant continuam funcionando
+
+4. **✅ Testes funcionais**
+   - Testar funcionalidade modificada
+   - Testar funcionalidades relacionadas que podem ser afetadas
+   - Verificar logs para erros inesperados
+   - Confirmar que WebSocket/real-time continua funcionando
+
+**Checklist antes de commit:**
+- [ ] Alterações não quebram código existente?
+- [ ] Campos novos são nullable ou têm defaults?
+- [ ] Migrations são seguras (IF NOT EXISTS)?
+- [ ] Imports estão corretos?
+- [ ] Endpoints mantêm compatibilidade?
+- [ ] Filtros por tenant continuam funcionando?
+- [ ] Funcionalidades relacionadas foram testadas?
+- [ ] Logs não mostram erros inesperados?
+
+### Regra de Ouro: SEMPRE TESTAR ANTES DE COMMIT
+
 ```bash
 # [[memory:9724794]]
 # CRÍTICO: Sempre criar scripts de teste ANTES de push!
