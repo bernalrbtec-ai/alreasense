@@ -845,10 +845,16 @@ class TaskViewSet(viewsets.ModelViewSet):
         # Base: tarefas do tenant
         queryset = Task.objects.filter(tenant=user.tenant)
         
-        # Filtrar por departamentos do usuário (exceto admin/superuser)
-        if not user.is_superuser and user.role != 'admin':
-            user_departments = user.departments.all()
-            queryset = queryset.filter(department__in=user_departments)
+        # ✅ CORREÇÃO: Usar is_admin ao invés de role != 'admin' para consistência
+        # Admin vê tudo do tenant, Gerente/Agente vê apenas dos seus departamentos
+        if not user.is_admin:
+            # Filtrar por departamentos do usuário
+            department_ids = user.departments.values_list('id', flat=True)
+            if department_ids:
+                queryset = queryset.filter(department__in=department_ids)
+            else:
+                # Se usuário não tem departamentos, não vê nenhuma tarefa
+                queryset = queryset.none()
         
         # Filtros adicionais
         my_tasks = self.request.query_params.get('my_tasks', '').lower() == 'true'
