@@ -1,8 +1,11 @@
 from rest_framework import serializers
+import logging
 from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
 # CampaignNotification reativado
 from apps.notifications.models import WhatsAppInstance
 from apps.contacts.models import Contact, ContactList
+
+logger = logging.getLogger(__name__)
 
 
 class CampaignMessageSerializer(serializers.ModelSerializer):
@@ -39,12 +42,12 @@ class CampaignSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validação personalizada do serializer"""
-        print(f"🔍 [VALIDATE] Dados recebidos para validação: {data}")
+        logger.debug(f"🔍 [VALIDATE] Dados recebidos para validação: {data}")
         
         # Verificar se name está presente e não é vazio
         name = data.get('name')
         if not name or (isinstance(name, str) and name.strip() == ''):
-            print(f"❌ [VALIDATE] Nome inválido: {name}")
+            logger.warning(f"❌ [VALIDATE] Nome inválido: {name}")
             raise serializers.ValidationError({
                 'name': 'Nome da campanha é obrigatório e não pode estar vazio.'
             })
@@ -52,7 +55,7 @@ class CampaignSerializer(serializers.ModelSerializer):
         # Verificar se há mensagens
         messages = data.get('messages', [])
         if not messages or len(messages) == 0:
-            print(f"❌ [VALIDATE] Nenhuma mensagem encontrada: {messages}")
+            logger.warning(f"❌ [VALIDATE] Nenhuma mensagem encontrada: {messages}")
             raise serializers.ValidationError({
                 'messages': 'Pelo menos uma mensagem é obrigatória.'
             })
@@ -60,14 +63,14 @@ class CampaignSerializer(serializers.ModelSerializer):
         # Verificar se as mensagens têm conteúdo
         for i, msg in enumerate(messages):
             if not isinstance(msg, dict):
-                print(f"❌ [VALIDATE] Mensagem {i} não é um dict: {msg}")
+                logger.warning(f"❌ [VALIDATE] Mensagem {i} não é um dict: {msg}")
                 raise serializers.ValidationError({
                     'messages': f'Mensagem {i+1} tem formato inválido.'
                 })
             
             content = msg.get('content', '')
             if not content or (isinstance(content, str) and content.strip() == ''):
-                print(f"❌ [VALIDATE] Mensagem {i} está vazia: {content}")
+                logger.warning(f"❌ [VALIDATE] Mensagem {i} está vazia: {content}")
                 raise serializers.ValidationError({
                     'messages': f'Mensagem {i+1} não pode estar vazia.'
                 })
@@ -87,7 +90,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                     'interval_max': 'Intervalo máximo deve ser no máximo 420 segundos para evitar timeouts.'
                 })
         
-        print(f"✅ [VALIDATE] Validação passou com sucesso")
+        logger.debug(f"✅ [VALIDATE] Validação passou com sucesso")
         return data
 
     class Meta:
@@ -209,16 +212,16 @@ class CampaignSerializer(serializers.ModelSerializer):
         # Adicionar contatos
         contacts_to_add = []
         
-        print(f"🔍 [CAMPANHA] Dados recebidos:")
-        print(f"   - tag_id: {tag_id}")
-        print(f"   - contact_ids: {contact_ids}")
-        print(f"   - tenant: {campaign.tenant}")
-        print(f"   - messages_data: {messages_data}")
-        print(f"   - validated_data: {validated_data}")
+        logger.debug(f"🔍 [CAMPANHA] Dados recebidos:")
+        logger.debug(f"   - tag_id: {tag_id}")
+        logger.debug(f"   - contact_ids: {contact_ids}")
+        logger.debug(f"   - tenant: {campaign.tenant}")
+        logger.debug(f"   - messages_data: {messages_data}")
+        logger.debug(f"   - validated_data: {validated_data}")
         
         # Priorizar contact_ids se fornecidos (permite seleção manual mesmo com tag)
         if contact_ids:
-            print(f"✅ [CAMPANHA] Usando contact_ids específicos: {len(contact_ids)} contatos")
+            logger.info(f"✅ [CAMPANHA] Usando contact_ids específicos: {len(contact_ids)} contatos")
             # Usar contatos específicos (podem vir de uma tag ou avulsos)
             contacts_to_add = Contact.objects.filter(
                 tenant=campaign.tenant,
@@ -227,7 +230,7 @@ class CampaignSerializer(serializers.ModelSerializer):
                 opted_out=False
             )
         elif tag_id:
-            print(f"✅ [CAMPANHA] Buscando contatos por tag_id: {tag_id}")
+            logger.info(f"✅ [CAMPANHA] Buscando contatos por tag_id: {tag_id}")
             # ✅ CORREÇÃO: Buscar TODOS os contatos por tag usando iterator() para evitar problemas de memória
             # Usar .all() para garantir que não há limite de paginação aplicado
             contacts_to_add = Contact.objects.filter(
@@ -242,11 +245,11 @@ class CampaignSerializer(serializers.ModelSerializer):
             contacts_list = list(contacts_to_add)
             contacts_to_add = contacts_list
             
-            print(f"✅ [CAMPANHA] Encontrados {len(contacts_to_add)} contatos com a tag")
+            logger.info(f"✅ [CAMPANHA] Encontrados {len(contacts_to_add)} contatos com a tag")
         else:
-            print(f"⚠️ [CAMPANHA] Nenhum tag_id ou contact_ids fornecido!")
+            logger.warning(f"⚠️ [CAMPANHA] Nenhum tag_id ou contact_ids fornecido!")
         
-        print(f"📊 [CAMPANHA] Total de contatos a adicionar: {len(contacts_to_add)}")
+        logger.info(f"📊 [CAMPANHA] Total de contatos a adicionar: {len(contacts_to_add)}")
         
         # Criar CampaignContact para cada contato
         campaign_contacts = []

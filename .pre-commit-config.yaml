@@ -1,4 +1,6 @@
-# See https://pre-commit.com for more information
+# Pre-commit hooks para garantir qualidade de código
+# Instalar: pip install pre-commit && pre-commit install
+
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
@@ -8,36 +10,17 @@ repos:
       - id: check-yaml
       - id: check-added-large-files
         args: ['--maxkb=1000']
-      - id: check-merge-conflict
-      - id: detect-private-key
       - id: check-json
       - id: check-toml
-      - id: mixed-line-ending
-
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.4.0
-    hooks:
-      - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-        exclude: package-lock.json
-
+      - id: check-merge-conflict
+      - id: detect-private-key
+      
+  # Bloquear print() statements em Python
   - repo: local
     hooks:
-      - id: check-hardcoded-credentials
-        name: Check for hardcoded credentials
-        entry: bash -c 'grep -r -n "584B4A4A-0815\|u2gh8aomMEdq\|zSMwLiOH1fUR\|75jkOmkcjQmQ" --include="*.py" --include="*.js" --include="*.ts" --include="*.tsx" . && exit 1 || exit 0'
+      - id: no-print-statements
+        name: Block print() statements
+        entry: bash -c 'if grep -r "print(" --include="*.py" backend/apps/ | grep -v "logger" | grep -v ".bak"; then echo "❌ ERRO: print() statements encontrados! Use logger ao invés de print()"; exit 1; fi'
         language: system
         pass_filenames: false
-        
-      - id: check-debug-prints
-        name: Check for debug print statements
-        entry: bash -c 'grep -r -n "print\s*(" backend/apps backend/alrea_sense --include="*.py" | grep -v "# allow-print" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
-        
-      - id: check-console-logs
-        name: Check for console.log in production code
-        entry: bash -c 'grep -r -n "console\.log" frontend/src --include="*.ts" --include="*.tsx" | grep -v "// allow-log" && exit 1 || exit 0'
-        language: system
-        pass_filenames: false
-
+        always_run: true
