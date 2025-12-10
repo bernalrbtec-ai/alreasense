@@ -722,13 +722,19 @@ def create_task_status_history(sender, instance, created, **kwargs):
             
             # 4. Mudança de Prioridade
             if old_priority and old_priority != instance.priority:
+                # ✅ CORREÇÃO: PRIORITY_CHOICES é uma lista de tuplas, não um dicionário
+                # Converter para dict primeiro, depois pegar o display name
+                priority_dict = dict(Task.PRIORITY_CHOICES)
+                old_priority_display = priority_dict.get(old_priority, old_priority)
+                new_priority_display = instance.get_priority_display()
+                
                 TaskHistory.objects.create(
                     task=instance,
                     change_type='priority_change',
                     old_priority=old_priority,
                     new_priority=instance.priority,
                     changed_by=changed_by,
-                    description=f"Prioridade alterada de '{Task.PRIORITY_CHOICES[dict(Task.PRIORITY_CHOICES)[old_priority]][1] if old_priority in dict(Task.PRIORITY_CHOICES) else old_priority}' para '{instance.get_priority_display()}'"
+                    description=f"Prioridade alterada de '{old_priority_display}' para '{new_priority_display}'"
                 )
                 logger.info(f"✅ [TASK HISTORY] Mudança de prioridade registrada: {instance.title}")
     

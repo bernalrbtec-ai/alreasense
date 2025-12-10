@@ -2954,11 +2954,23 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         from django.db.models import Count, Q
         
         user = request.user
-        queryset = self.get_queryset()
+        
+        # ✅ CORREÇÃO: Para estatísticas, usar queryset base sem filtros de departamento
+        # Isso garante que contamos TODAS as conversas do tenant, não apenas as visíveis ao usuário
+        # O get_queryset() aplica filtros de departamento que podem esconder conversas
+        if not user.is_authenticated or not user.tenant:
+            return Response({
+                'open_conversations': 0,
+                'pending_conversations': 0,
+                'total_unread_messages': 0
+            })
+        
+        # Base queryset: todas as conversas do tenant (sem filtros de departamento)
+        base_queryset = Conversation.objects.filter(tenant=user.tenant)
         
         # ✅ PERFORMANCE: Usar aggregate ao invés de buscar todas as conversas
         # Isso faz queries diretas no banco sem carregar objetos em memória
-        stats = queryset.aggregate(
+        stats = base_queryset.aggregate(
             # Conversas abertas (status='open')
             open_conversations=Count('id', filter=Q(status='open')),
             # Conversas pendentes (status='pending')
@@ -2968,7 +2980,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ PERFORMANCE: Contar mensagens não lidas em uma query separada otimizada
         # Usar subquery para evitar N+1
         unread_messages = Message.objects.filter(
-            conversation__in=queryset,
+            conversation__in=base_queryset,
             direction='incoming',
             status__in=['sent', 'delivered']
         ).count()
