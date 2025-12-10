@@ -11,10 +11,13 @@ interface Task {
   id: string
   title: string
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled'
+  status_display?: string
   priority: 'low' | 'medium' | 'high' | 'urgent'
   due_date?: string
   created_at: string
   is_overdue?: boolean
+  department_name?: string
+  assigned_to_name?: string
 }
 
 interface PendingTasksListProps {
@@ -155,7 +158,7 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
                     : 'border-gray-200 bg-white hover:border-blue-300'
                 }`}
               >
-                <div className="flex items-start justify-between gap-2 mb-1">
+                <div className="flex items-start justify-between gap-2 mb-2">
                   <h4 className="font-medium text-sm text-gray-900 line-clamp-2 flex-1">
                     {task.title}
                   </h4>
@@ -163,19 +166,52 @@ export default function PendingTasksList({ tasks, onTaskClick }: PendingTasksLis
                     <AlertTriangle className="h-4 w-4 text-red-600 flex-shrink-0 mt-0.5" />
                   )}
                 </div>
-                <div className="flex items-center gap-3 text-xs text-gray-500">
-                  {task.is_overdue && (
-                    <span className="text-red-600 font-medium">Atrasada</span>
-                  )}
-                  {task.priority === 'urgent' && !task.is_overdue && (
-                    <span className="text-orange-600 font-medium">Urgente</span>
-                  )}
-                  <span>
-                    {task.due_date 
-                      ? `Vencimento: ${format(new Date(task.due_date), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`
-                      : `Criada em ${format(new Date(task.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`
-                    }
-                  </span>
+                
+                {/* Informações adicionais */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-3 text-xs text-gray-600 flex-wrap">
+                    {/* Departamento */}
+                    {task.department_name && (
+                      <span className="font-medium text-gray-700">
+                        {task.department_name}
+                      </span>
+                    )}
+                    
+                    {/* Status */}
+                    {task.status_display && (
+                      <span className={`px-2 py-0.5 rounded ${
+                        task.status === 'pending' 
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : task.status === 'in_progress'
+                          ? 'bg-blue-100 text-blue-700'
+                          : task.status === 'completed'
+                          ? 'bg-green-100 text-green-700'
+                          : 'bg-gray-100 text-gray-700'
+                      }`}>
+                        {task.status_display}
+                      </span>
+                    )}
+                    
+                    {/* Atribuído a */}
+                    {task.assigned_to_name && (
+                      <span className="text-gray-500">
+                        Atribuída a: <span className="font-medium text-gray-700">{task.assigned_to_name}</span>
+                      </span>
+                    )}
+                  </div>
+                  
+                  {/* Data e prioridade */}
+                  <div className="flex items-center gap-3 text-xs text-gray-500">
+                    {task.is_overdue && (
+                      <span className="text-red-600 font-medium">Atrasada</span>
+                    )}
+                    {task.priority === 'urgent' && !task.is_overdue && (
+                      <span className="text-orange-600 font-medium">Urgente</span>
+                    )}
+                    <span>
+                      Criada em {format(new Date(task.created_at), "dd/MM/yyyy", { locale: ptBR })}
+                    </span>
+                  </div>
                 </div>
               </div>
             )
