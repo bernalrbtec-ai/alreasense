@@ -2968,6 +2968,18 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Base queryset: todas as conversas do tenant (sem filtros de departamento)
         base_queryset = Conversation.objects.filter(tenant=user.tenant)
         
+        # ✅ DEBUG: Log para verificar o que está sendo contado
+        total_conversations = base_queryset.count()
+        open_count = base_queryset.filter(status='open').count()
+        pending_count = base_queryset.filter(status='pending').count()
+        closed_count = base_queryset.filter(status='closed').count()
+        
+        logger.debug(
+            f"📊 [STATS] Tenant {user.tenant.id}: "
+            f"Total={total_conversations}, Open={open_count}, "
+            f"Pending={pending_count}, Closed={closed_count}"
+        )
+        
         # ✅ PERFORMANCE: Usar aggregate ao invés de buscar todas as conversas
         # Isso faz queries diretas no banco sem carregar objetos em memória
         stats = base_queryset.aggregate(
@@ -2986,6 +2998,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         ).count()
         
         stats['total_unread_messages'] = unread_messages
+        
+        # ✅ DEBUG: Log do resultado final
+        logger.debug(f"📊 [STATS] Resultado final: {stats}")
         
         return Response(stats)
     

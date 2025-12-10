@@ -148,11 +148,22 @@ export default function DashboardPage() {
       const statsRes = await api.get('/chat/conversations/stats/')
       const stats = statsRes.data
       
+      // ✅ DEBUG: Log para verificar o que está sendo recebido
+      console.log('📊 [DASHBOARD] Stats recebidas:', stats)
+      
       // ✅ CORREÇÃO: Atualizar estatísticas corretamente
       // Novas conversas = conversas pendentes (status='pending')
-      setNewConversations(stats.pending_conversations || 0)
+      const pendingCount = stats.pending_conversations || 0
+      setNewConversations(pendingCount)
+      
       // Conversas abertas = conversas abertas (status='open')
-      setOpenConversations(stats.open_conversations || 0)
+      const openCount = stats.open_conversations || 0
+      setOpenConversations(openCount)
+      
+      console.log('📊 [DASHBOARD] Contadores atualizados:', {
+        newConversations: pendingCount,
+        openConversations: openCount
+      })
       
       // ✅ NOTA: Não atualizamos o store de conversas aqui porque:
       // 1. Se WebSocket está conectado, ele já atualiza o store
