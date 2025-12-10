@@ -68,6 +68,7 @@ class AfterHoursTaskConfigSerializer(serializers.ModelSerializer):
     
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True, allow_null=True)
+    task_department_name = serializers.CharField(source='task_department.name', read_only=True, allow_null=True)
     auto_assign_to_agent_name = serializers.CharField(
         source='auto_assign_to_agent.email',
         read_only=True,
@@ -89,6 +90,8 @@ class AfterHoursTaskConfigSerializer(serializers.ModelSerializer):
             'task_due_date_offset_hours',
             'task_type',
             'auto_assign_to_department',
+            'task_department',
+            'task_department_name',
             'auto_assign_to_agent',
             'auto_assign_to_agent_name',
             'include_message_preview',

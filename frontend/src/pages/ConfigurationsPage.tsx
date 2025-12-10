@@ -161,6 +161,8 @@ interface AfterHoursTaskConfig {
   task_due_date_offset_hours: number
   task_type: 'task' | 'agenda'
   auto_assign_to_department: boolean
+  task_department?: string | null
+  task_department_name?: string
   auto_assign_to_agent?: string | null
   auto_assign_to_agent_name?: string
   include_message_preview: boolean
@@ -700,6 +702,7 @@ export default function ConfigurationsPage() {
           task_due_date_offset_hours: 2,
           task_type: 'task',
           auto_assign_to_department: true,
+          task_department: null,
           include_message_preview: true,
           is_active: true,
         })
@@ -1939,6 +1942,28 @@ export default function ConfigurationsPage() {
                         Atribuir ao Departamento
                       </Label>
                     </div>
+
+                    {taskConfig.auto_assign_to_department && (
+                      <div>
+                        <Label htmlFor="task_department">Departamento onde a Tarefa será Criada</Label>
+                        <select
+                          id="task_department"
+                          value={taskConfig.task_department || ''}
+                          onChange={(e) => setTaskConfig({ ...taskConfig, task_department: e.target.value || null })}
+                          className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          <option value="">Usar departamento da conversa</option>
+                          {businessHoursDepts.map((dept) => (
+                            <option key={dept.id} value={dept.id}>
+                              {dept.name}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="mt-1 text-sm text-gray-500">
+                          Se não selecionar, a tarefa será criada no departamento da conversa
+                        </p>
+                      </div>
+                    )}
 
                     <div>
                       <Label htmlFor="auto_assign_to_agent">Atribuir a Agente Específico (opcional)</Label>

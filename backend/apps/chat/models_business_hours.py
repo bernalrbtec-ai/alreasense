@@ -259,6 +259,16 @@ class AfterHoursTaskConfig(models.Model):
         verbose_name='Atribuir ao Departamento'
     )
     
+    task_department = models.ForeignKey(
+        'authn.Department',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='after_hours_tasks',
+        verbose_name='Departamento da Tarefa',
+        help_text='Departamento onde a tarefa será criada. Se não preenchido, usa o departamento da conversa.'
+    )
+    
     auto_assign_to_agent = models.ForeignKey(
         'authn.User',
         on_delete=models.SET_NULL,

@@ -579,8 +579,21 @@ class BusinessHoursService:
         
         # ✅ CRIAÇÃO: Tarefa automática
         # ✅ CORREÇÃO: department é obrigatório no modelo Task
-        # Se auto_assign_to_department for False, usar department da conversa como fallback
-        task_department = department if task_config.auto_assign_to_department else (department or conversation.department)
+        # Prioridade: task_department configurado > department da conversa > department do config > Inbox
+        if task_config.task_department:
+            # Se há um departamento específico configurado, usar ele
+            task_department = task_config.task_department
+            logger.info(f"✅ [BUSINESS HOURS TASK] Usando departamento configurado: {task_department.name} (ID: {task_department.id})")
+        elif task_config.auto_assign_to_department:
+            # Se auto_assign_to_department está True, usar department da conversa
+            task_department = department or conversation.department
+            if task_department:
+                logger.info(f"✅ [BUSINESS HOURS TASK] Usando departamento da conversa: {task_department.name if task_department else 'None'} (ID: {task_department.id if task_department else 'None'})")
+        else:
+            # Se auto_assign_to_department está False, usar department do config ou conversa como fallback
+            task_department = department or conversation.department
+            if task_department:
+                logger.info(f"✅ [BUSINESS HOURS TASK] Usando departamento da conversa/config: {task_department.name if task_department else 'None'}")
         
         # ✅ VALIDAÇÃO FINAL: Se não tiver department, usar department "Inbox"
         # ✅ CORREÇÃO: Inbox é criado automaticamente quando o tenant é criado
