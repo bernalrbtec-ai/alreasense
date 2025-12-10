@@ -263,7 +263,6 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         """Retorna apenas departamentos do tenant do usuário (COM CACHE)."""
         from apps.common.cache_manager import CacheManager
-        from apps.chat.models import Conversation
         from django.db.models import Count, Q
         
         user = self.request.user
@@ -275,36 +274,25 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             tenant_id=user.tenant.id if user.tenant else 'none'
         )
         
-        def fetch_departments():
-            """Função para buscar departamentos do banco"""
+        def fetch_department_ids():
+            """Função para buscar IDs de departamentos do banco (sem anotações)"""
             if user.is_superuser:
                 queryset = Department.objects.select_related('tenant').all()
             else:
                 queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
             
-            # ✅ Anotar contador de conversas pendentes para otimizar performance
-            queryset = queryset.annotate(
-                pending_count_annotated=Count(
-                    'conversations',
-                    filter=Q(
-                        conversations__status='pending',
-                        conversations__tenant=user.tenant
-                    ),
-                    distinct=True
-                )
-            )
-            
-            # Retornar IDs para cache (mais eficiente)
+            # Retornar apenas IDs para cache (anotações mudam frequentemente)
             return list(queryset.values_list('id', flat=True))
         
-        # Usar CacheManager para get_or_set (TTL de 5 minutos - dados podem mudar quando conversas são transferidas)
+        # ✅ OTIMIZAÇÃO: Cachear apenas IDs (anotações mudam quando conversas são transferidas)
+        # TTL de 5 minutos - dados podem mudar quando conversas são transferidas
         department_ids = CacheManager.get_or_set(
             cache_key,
-            fetch_departments,
+            fetch_department_ids,
             ttl=CacheManager.TTL_MINUTE * 5
         )
         
-        # Reconstruir queryset completo com anotações
+        # ✅ OTIMIZAÇÃO: Construir queryset completo com anotações em uma única query
         if user.is_superuser:
             queryset = Department.objects.filter(id__in=department_ids).select_related('tenant')
         else:
@@ -313,7 +301,8 @@ class DepartmentViewSet(viewsets.ModelViewSet):
                 tenant=user.tenant
             ).select_related('tenant')
         
-        # Re-aplicar anotação de contador (necessário para serializer)
+        # ✅ OTIMIZAÇÃO: Anotar contador de conversas pendentes (sempre necessário para serializer)
+        # Esta anotação não é cacheada porque muda quando conversas são transferidas
         queryset = queryset.annotate(
             pending_count_annotated=Count(
                 'conversations',
