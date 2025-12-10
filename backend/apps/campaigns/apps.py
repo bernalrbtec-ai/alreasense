@@ -1105,8 +1105,17 @@ class CampaignsConfig(AppConfig):
             
             # Filtrar tarefas do dia (hoje no timezone local)
             local_now = timezone.localtime(timezone.now())
+            
+            # ✅ CORREÇÃO: Incluir tanto tarefas agendadas (com due_date) quanto pendências (sem due_date)
+            # Tarefas agendadas para hoje
             tasks_today = tasks.filter(
                 due_date__date=current_date
+            )
+            
+            # ✅ NOVO: Pendências sem data agendada (sempre incluir no resumo diário)
+            pending_tasks_no_date = tasks.filter(
+                due_date__isnull=True,
+                status__in=['pending', 'in_progress']
             )
             
             # Tarefas atrasadas (independente da data)
@@ -1115,16 +1124,26 @@ class CampaignsConfig(AppConfig):
                 status__in=['pending', 'in_progress']
             )
             
-            # Agrupar por status
+            # ✅ NOVO: Agrupar pendências por departamento
+            from collections import defaultdict
+            pending_by_department = defaultdict(list)
+            for task in pending_tasks_no_date:
+                dept_name = task.department.name if task.department else 'Sem Departamento'
+                pending_by_department[dept_name].append(task)
+            
+            # Agrupar por status (incluindo pendências sem data)
             tasks_by_status = {
                 'pending': list(tasks_today.filter(status='pending')[:10]),  # Limitar para não sobrecarregar
                 'in_progress': list(tasks_today.filter(status='in_progress')[:10]),
                 'completed': list(tasks_today.filter(status='completed')[:10]),
                 'overdue': list(overdue_tasks[:10]),
+                'pending_no_date': dict(pending_by_department),  # ✅ NOVO: Pendências agrupadas por departamento
             }
             
             # ✅ VALIDAÇÃO: Verificar se há tarefas para notificar
-            total_tasks = sum(len(tasks) for tasks in tasks_by_status.values())
+            # Contar pendências sem data também
+            pending_no_date_count = sum(len(tasks) for tasks in tasks_by_status.get('pending_no_date', {}).values())
+            total_tasks = sum(len(tasks) for tasks in tasks_by_status.values() if isinstance(tasks, list)) + pending_no_date_count
             if total_tasks == 0:
                 logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Nenhuma tarefa para {user.email} hoje')
                 return
@@ -1258,8 +1277,27 @@ class CampaignsConfig(AppConfig):
                     message += f"  ... e mais {len(completed) - 5} tarefa(s)\n"
                 message += "\n"
             
+            # ✅ NOVO: Pendências sem data agendada (agrupadas por departamento)
+            pending_no_date = tasks_by_status.get('pending_no_date', {})
+            if pending_no_date:
+                total_pending_no_date = sum(len(tasks) for tasks in pending_no_date.values())
+                message += f"📋 *Pendências (sem data agendada): {total_pending_no_date}*\n"
+                # Agrupar por departamento
+                for dept_name, dept_tasks in sorted(pending_no_date.items()):
+                    message += f"\n  🏢 *{dept_name}: {len(dept_tasks)}*\n"
+                    for task in dept_tasks[:5]:  # Máximo 5 por departamento
+                        message += f"    • {task.title}"
+                        if task.assigned_to:
+                            assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                            message += f" - {assigned_name}"
+                        message += "\n"
+                    if len(dept_tasks) > 5:
+                        message += f"    ... e mais {len(dept_tasks) - 5} tarefa(s)\n"
+                message += "\n"
+            
             # ✅ UX: Mensagem motivacional baseada no progresso
-            total = len(overdue) + len(pending) + len(in_progress) + len(completed)
+            total_pending_no_date_count = sum(len(tasks) for tasks in pending_no_date.values())
+            total = len(overdue) + len(pending) + len(in_progress) + len(completed) + total_pending_no_date_count
             completed_count = len(completed)
             
             if completed_count > 0 and total > 0:
@@ -1448,7 +1486,15 @@ class CampaignsConfig(AppConfig):
                 logger.warning(f'⚠️ [DAILY NOTIFICATIONS] Data futura recebida: {current_date}')
                 return
             
+            # ✅ CORREÇÃO: Incluir tanto tarefas agendadas (com due_date) quanto pendências (sem due_date)
+            # Tarefas agendadas para hoje
             tasks_today = tasks.filter(due_date__date=current_date)
+            
+            # ✅ NOVO: Pendências sem data agendada (sempre incluir no resumo diário do departamento)
+            pending_tasks_no_date = tasks.filter(
+                due_date__isnull=True,
+                status__in=['pending', 'in_progress']
+            )
             
             # Tarefas atrasadas (independente da data, mas apenas se notify_overdue estiver habilitado)
             overdue_tasks = Task.objects.none()  # Inicializar como QuerySet vazio
@@ -1461,16 +1507,26 @@ class CampaignsConfig(AppConfig):
             # Limitar quantidade de tarefas do dia
             tasks_today = tasks_today[:preferences.max_tasks_per_notification]
             
-            # Agrupar por status (converter para lista para evitar problemas com QuerySet)
+            # ✅ NOVO: Agrupar pendências por departamento
+            from collections import defaultdict
+            pending_by_department = defaultdict(list)
+            for task in pending_tasks_no_date:
+                dept_name = task.department.name if task.department else 'Sem Departamento'
+                pending_by_department[dept_name].append(task)
+            
+            # Agrupar por status (incluindo pendências sem data)
             tasks_by_status = {
                 'pending': list(tasks_today.filter(status='pending')[:10]),
                 'in_progress': list(tasks_today.filter(status='in_progress')[:10]),
                 'completed': list(tasks_today.filter(status='completed')[:10]),
                 'overdue': list(overdue_tasks[:10]),
+                'pending_no_date': dict(pending_by_department),  # ✅ NOVO: Pendências agrupadas por departamento
             }
             
             # ✅ VALIDAÇÃO: Verificar se há tarefas para notificar
-            total_tasks = sum(len(tasks) for tasks in tasks_by_status.values())
+            # Contar pendências sem data também
+            pending_no_date_count = sum(len(tasks) for tasks in tasks_by_status.get('pending_no_date', {}).values())
+            total_tasks = sum(len(tasks) for tasks in tasks_by_status.values() if isinstance(tasks, list)) + pending_no_date_count
             if total_tasks == 0:
                 logger.debug(f'⏭️ [DAILY NOTIFICATIONS] Nenhuma tarefa para departamento {department.name} hoje')
                 return
@@ -1606,8 +1662,27 @@ class CampaignsConfig(AppConfig):
                     message += f"  ... e mais {len(completed) - 5} tarefa(s)\n"
                 message += "\n"
             
+            # ✅ NOVO: Pendências sem data agendada (agrupadas por departamento)
+            pending_no_date = tasks_by_status.get('pending_no_date', {})
+            if pending_no_date:
+                total_pending_no_date = sum(len(tasks) for tasks in pending_no_date.values())
+                message += f"📋 *Pendências (sem data agendada): {total_pending_no_date}*\n"
+                # Agrupar por departamento
+                for dept_name, dept_tasks in sorted(pending_no_date.items()):
+                    message += f"\n  🏢 *{dept_name}: {len(dept_tasks)}*\n"
+                    for task in dept_tasks[:5]:  # Máximo 5 por departamento
+                        message += f"    • {task.title}"
+                        if task.assigned_to:
+                            assigned_name = f"{task.assigned_to.first_name} {task.assigned_to.last_name}".strip() or task.assigned_to.email
+                            message += f" - {assigned_name}"
+                        message += "\n"
+                    if len(dept_tasks) > 5:
+                        message += f"    ... e mais {len(dept_tasks) - 5} tarefa(s)\n"
+                message += "\n"
+            
             # ✅ UX: Mensagem motivacional baseada no progresso
-            total = len(overdue) + len(pending) + len(in_progress) + len(completed)
+            total_pending_no_date_count = sum(len(tasks) for tasks in pending_no_date.values())
+            total = len(overdue) + len(pending) + len(in_progress) + len(completed) + total_pending_no_date_count
             completed_count = len(completed)
             
             if completed_count > 0 and total > 0:
