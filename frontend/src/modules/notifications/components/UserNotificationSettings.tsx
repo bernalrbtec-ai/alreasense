@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Bell, Clock, CheckCircle, AlertCircle, Loader2 } from 'lucide-react';
+import { Bell, Clock, CheckCircle, AlertCircle, Loader2, Send } from 'lucide-react';
 import { api } from '../../../lib/api';
 import { showSuccessToast, showErrorToast } from '../../../lib/toastHelper';
+import { toast } from 'sonner';
 import { Card } from '../../../components/ui/Card';
 import { Button } from '../../../components/ui/Button';
 
@@ -28,6 +29,7 @@ export const UserNotificationSettings: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     fetchPreferences();
@@ -56,7 +58,7 @@ export const UserNotificationSettings: React.FC = () => {
         };
         setPreferences(defaultPrefs);
       } else {
-        showErrorToast('Erro ao carregar preferências de notificação');
+        showErrorToast('carregar', 'preferências de notificação', error);
         console.error('Error fetching preferences:', error);
       }
     } finally {
@@ -72,9 +74,9 @@ export const UserNotificationSettings: React.FC = () => {
       const response = await api.patch('/notifications/user-preferences/mine/', preferences);
       setPreferences(response.data);
       setHasChanges(false);
-      showSuccessToast('Preferências salvas com sucesso!');
+      showSuccessToast('salvar', 'preferências');
     } catch (error: any) {
-      showErrorToast('Erro ao salvar preferências');
+      showErrorToast('salvar', 'preferências', error);
       console.error('Error saving preferences:', error);
     } finally {
       setIsSaving(false);
@@ -85,6 +87,30 @@ export const UserNotificationSettings: React.FC = () => {
     if (!preferences) return;
     setPreferences({ ...preferences, [field]: value });
     setHasChanges(true);
+  };
+
+  const sendDailySummaryNow = async () => {
+    if (!preferences?.daily_summary_enabled) {
+      toast.error('Ative o resumo diário primeiro');
+      return;
+    }
+
+    try {
+      setIsSending(true);
+      const response = await api.post('/notifications/user-preferences/send_daily_summary_now/');
+      
+      if (response.data.success) {
+        toast.success(response.data.message || '✅ Resumo diário enviado com sucesso!');
+      } else {
+        toast.error(response.data.message || '❌ Erro ao enviar resumo diário');
+      }
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.message || 'Erro ao enviar resumo diário';
+      toast.error(`❌ ${errorMessage}`);
+      console.error('Error sending daily summary:', error);
+    } finally {
+      setIsSending(false);
+    }
   };
 
   useEffect(() => {
@@ -185,6 +211,29 @@ export const UserNotificationSettings: React.FC = () => {
                   Você receberá o resumo todos os dias às {preferences.daily_summary_time}
                 </p>
               )}
+            </div>
+            <div className="pt-2 border-t border-gray-200">
+              <Button
+                onClick={sendDailySummaryNow}
+                disabled={isSending}
+                variant="outline"
+                className="w-full sm:w-auto"
+              >
+                {isSending ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Enviar Resumo Agora
+                  </>
+                )}
+              </Button>
+              <p className="mt-2 text-xs text-gray-500">
+                Envie o resumo diário manualmente para testar ou quando necessário
+              </p>
             </div>
           </div>
         )}

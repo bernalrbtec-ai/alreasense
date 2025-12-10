@@ -1,5 +1,6 @@
 from django.apps import AppConfig
 from django.utils import timezone
+from django.db.models import Q
 import logging
 import threading
 import time
@@ -1022,9 +1023,12 @@ class CampaignsConfig(AppConfig):
                     # Mesma lógica do lembrete de agenda
                     with transaction.atomic():
                         # Primeiro: adquirir lock sem select_related (evita LEFT OUTER JOIN)
+                        # ✅ CORREÇÃO: Usar Q objects para permitir None OU data menor que hoje
+                        # Isso corrige o problema onde NULL não passa na condição __lt
                         locked_pref_id = UserNotificationPreferences.objects.select_for_update(skip_locked=True).filter(
-                            id=pref.id,
-                            last_daily_summary_sent_date__lt=current_date  # Só processar se não foi enviado hoje
+                            id=pref.id
+                        ).filter(
+                            Q(last_daily_summary_sent_date__isnull=True) | Q(last_daily_summary_sent_date__lt=current_date)
                         ).values_list('id', flat=True).first()
                         
                         if not locked_pref_id:
@@ -1375,9 +1379,12 @@ class CampaignsConfig(AppConfig):
                     # Mesma lógica do lembrete de agenda e resumo de usuários
                     with transaction.atomic():
                         # Primeiro: adquirir lock sem select_related (evita LEFT OUTER JOIN)
+                        # ✅ CORREÇÃO: Usar Q objects para permitir None OU data menor que hoje
+                        # Isso corrige o problema onde NULL não passa na condição __lt
                         locked_pref_id = DepartmentNotificationPreferences.objects.select_for_update(skip_locked=True).filter(
-                            id=pref.id,
-                            last_daily_summary_sent_date__lt=current_date  # Só processar se não foi enviado hoje
+                            id=pref.id
+                        ).filter(
+                            Q(last_daily_summary_sent_date__isnull=True) | Q(last_daily_summary_sent_date__lt=current_date)
                         ).values_list('id', flat=True).first()
                         
                         if not locked_pref_id:

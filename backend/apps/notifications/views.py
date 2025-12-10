@@ -583,6 +583,69 @@ class UserNotificationPreferencesViewSet(viewsets.ModelViewSet):
         
         serializer = self.get_serializer(obj)
         return Response(serializer.data)
+    
+    @action(detail=False, methods=['post'])
+    def send_daily_summary_now(self, request):
+        """
+        Força o envio manual do resumo diário para o usuário atual.
+        Útil para testes e disparos manuais.
+        """
+        import logging
+        from django.utils import timezone
+        from apps.campaigns.apps import CampaignsConfig
+        
+        logger = logging.getLogger(__name__)
+        
+        try:
+            # Buscar preferências do usuário
+            obj, created = UserNotificationPreferences.objects.get_or_create(
+                user=request.user,
+                tenant=request.user.tenant,
+                defaults={
+                    'daily_summary_enabled': False,
+                    'agenda_reminder_enabled': False,
+                }
+            )
+            
+            # Verificar se resumo diário está habilitado
+            if not obj.daily_summary_enabled:
+                return Response({
+                    'success': False,
+                    'message': 'Resumo diário não está habilitado. Ative nas configurações primeiro.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Verificar se há canais habilitados
+            from apps.notifications.services import check_channels_enabled
+            _, _, _, has_any = check_channels_enabled(obj, request.user)
+            
+            if not has_any:
+                return Response({
+                    'success': False,
+                    'message': 'Nenhum canal de notificação está habilitado. Configure pelo menos um canal nas preferências.'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Obter data atual no timezone local
+            local_now = timezone.localtime(timezone.now())
+            current_date = local_now.date()
+            
+            # Criar instância temporária do CampaignsConfig para acessar métodos
+            config = CampaignsConfig('campaigns', None)
+            
+            # Chamar função de envio diretamente
+            logger.info(f'📤 [MANUAL SEND] Enviando resumo diário manual para {request.user.email}')
+            config.send_user_daily_summary(request.user, obj, current_date)
+            
+            return Response({
+                'success': True,
+                'message': 'Resumo diário enviado com sucesso! Verifique seu WhatsApp.'
+            }, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f'❌ [MANUAL SEND] Erro ao enviar resumo diário manual: {e}', exc_info=True)
+            return Response({
+                'success': False,
+                'message': f'Erro ao enviar resumo diário: {str(e)}'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DepartmentNotificationPreferencesViewSet(viewsets.ModelViewSet):
