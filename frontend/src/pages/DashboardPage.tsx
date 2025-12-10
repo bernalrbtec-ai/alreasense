@@ -173,7 +173,7 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const pending = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length
     const overdue = tasks.filter(t => t.is_overdue && t.status !== 'completed').length
-    const inProgress = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length
+    const inProgress = tasks.filter(t => t.status === 'in_progress').length
 
     return {
       pending,
