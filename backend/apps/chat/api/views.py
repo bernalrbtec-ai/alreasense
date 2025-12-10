@@ -347,16 +347,23 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # Gerente e Agente vêem:
         # 1. Conversas dos seus departamentos
-        # 2. Conversas pending (sem departamento) do tenant
-        if user.is_gerente or user.is_agente:
-            department_ids = user.departments.values_list('id', flat=True)
-            
-            return queryset.filter(
-                Q(department__in=department_ids) |  # Suas conversas
-                Q(department__isnull=True, status='pending')  # Inbox do tenant
-            )
+        # 2. Conversas atribuídas diretamente a eles
+        # 3. Conversas pending (sem departamento) do tenant
+        department_ids = list(user.departments.values_list('id', flat=True))
         
-        return queryset.none()
+        if department_ids:
+            # ✅ Usuário tem departamentos: ver conversas dos departamentos OU atribuídas a ele
+            return queryset.filter(
+                Q(department__in=department_ids) |  # Conversas dos departamentos
+                Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
+                Q(department__isnull=True, status='pending')  # Inbox do tenant
+            ).distinct()
+        else:
+            # ✅ Usuário SEM departamentos: ver apenas conversas atribuídas diretamente a ele OU inbox
+            return queryset.filter(
+                Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
+                Q(department__isnull=True, status='pending')  # Inbox do tenant
+            ).distinct()
     
     def perform_create(self, serializer):
         """Associa conversa ao tenant do usuário."""
