@@ -173,10 +173,12 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const pending = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length
     const overdue = tasks.filter(t => t.is_overdue && t.status !== 'completed').length
+    const inProgress = tasks.filter(t => t.status === 'pending' || t.status === 'in_progress').length
 
     return {
       pending,
       overdue,
+      inProgress,
     }
   }, [tasks])
 
@@ -198,6 +200,7 @@ export default function DashboardPage() {
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* 1. Pendentes (tarefas/agenda) */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -210,6 +213,7 @@ export default function DashboardPage() {
           </div>
         </Card>
 
+        {/* 2. Atrasadas (tarefas/agenda) */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -222,6 +226,20 @@ export default function DashboardPage() {
           </div>
         </Card>
 
+        {/* 3. Pendências em Andamento (tarefas/agenda) */}
+        <Card className="p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-gray-600 mb-1">Pendências em Andamento</p>
+              <p className="text-2xl font-bold text-purple-600">{stats.inProgress}</p>
+            </div>
+            <div className="p-3 bg-purple-100 rounded-lg">
+              <Clock className="h-6 w-6 text-purple-600" />
+            </div>
+          </div>
+        </Card>
+
+        {/* 4. Novas Mensagens (conversas) */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
@@ -235,18 +253,6 @@ export default function DashboardPage() {
             </div>
             <div className="p-3 bg-blue-100 rounded-lg">
               <MessageSquare className="h-6 w-6 text-blue-600" />
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Pendências em Andamento</p>
-              <p className="text-2xl font-bold text-purple-600">{openConversations}</p>
-            </div>
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <Clock className="h-6 w-6 text-purple-600" />
             </div>
           </div>
         </Card>
