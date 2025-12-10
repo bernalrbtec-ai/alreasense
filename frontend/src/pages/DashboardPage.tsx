@@ -59,6 +59,10 @@ export default function DashboardPage() {
   // WebSocket para atualização em tempo real
   useTenantSocket()
   
+  // ✅ PERFORMANCE: Usar connectionStatus do store para verificar se WebSocket está conectado
+  const connectionStatus = useChatStore((state) => state.connectionStatus)
+  const isWebSocketConnected = connectionStatus === 'connected'
+  
   // ✅ CORREÇÃO: Atualizar estatísticas quando conversations mudar (via WebSocket)
   // ✅ SEGURANÇA: conversations já vem filtrado por tenant do backend (linha 282 de views.py)
   // O backend SEMPRE filtra por tenant=user.tenant, garantindo isolamento multi-tenant
@@ -135,39 +139,59 @@ export default function DashboardPage() {
     fetchTasks()
   }, [refreshTrigger])
 
-  // Buscar estatísticas do chat
+  // ✅ PERFORMANCE: Buscar estatísticas do chat usando endpoint otimizado
   // ✅ SEGURANÇA: Backend SEMPRE filtra por tenant (views.py linha 282: queryset.filter(tenant=user.tenant))
   // Isso garante que apenas conversas do tenant atual são retornadas
   const fetchChatStats = async () => {
     try {
-      // Buscar todas as conversas para contar abertas e mensagens não lidas
-      // O backend filtra automaticamente por tenant do usuário autenticado
-      const conversationsRes = await api.get('/chat/conversations/', {
-        params: {
-          page_size: 1000 // Buscar todas para contar
-        }
-      })
-      const fetchedConversations = conversationsRes.data.results || conversationsRes.data || []
+      // ✅ PERFORMANCE: Usar endpoint de estatísticas ao invés de buscar todas as conversas
+      // Isso é muito mais rápido (1 query agregada vs 1000+ objetos)
+      const statsRes = await api.get('/chat/conversations/stats/')
+      const stats = statsRes.data
       
-      // ✅ CORREÇÃO: Atualizar store com conversas buscadas (para sincronizar com API)
-      // ✅ SEGURANÇA: fetchedConversations já contém apenas conversas do tenant atual
-      const { setConversations } = useChatStore.getState()
-      setConversations(fetchedConversations)
+      // Atualizar estatísticas diretamente (sem precisar buscar todas as conversas)
+      setOpenConversations(stats.pending_conversations || 0)
+      setUnreadMessages(stats.total_unread_messages || 0)
       
-      // As estatísticas serão atualizadas automaticamente pelo useEffect que escuta o store
+      // ✅ NOTA: Não atualizamos o store de conversas aqui porque:
+      // 1. Se WebSocket está conectado, ele já atualiza o store
+      // 2. Este endpoint é apenas para estatísticas (não retorna conversas completas)
+      // 3. Se precisar das conversas, deve buscar separadamente
     } catch (error) {
       console.error('Erro ao buscar estatísticas do chat:', error)
+      // Em caso de erro, tentar método antigo como fallback
+      try {
+        const conversationsRes = await api.get('/chat/conversations/', {
+          params: { page_size: 100 }
+        })
+        const fetchedConversations = conversationsRes.data.results || conversationsRes.data || []
+        const { setConversations } = useChatStore.getState()
+        setConversations(fetchedConversations)
+      } catch (fallbackError) {
+        console.error('Erro no fallback de estatísticas:', fallbackError)
+      }
     }
   }
 
-  // Carregar estatísticas do chat ao montar (polling inicial)
-  // Depois disso, as estatísticas são atualizadas em tempo real via WebSocket (useEffect acima)
+  // ✅ PERFORMANCE: Carregar estatísticas do chat apenas uma vez ao montar
+  // Depois disso, as estatísticas são atualizadas em tempo real via WebSocket
+  // Polling apenas como fallback se WebSocket não estiver conectado
   useEffect(() => {
+    // Busca inicial sempre (para garantir dados iniciais)
     fetchChatStats()
-    // Manter polling como fallback (a cada 30 segundos) caso WebSocket falhe
-    const interval = setInterval(fetchChatStats, 30000)
-    return () => clearInterval(interval)
-  }, [])
+    
+    // ✅ PERFORMANCE: Polling apenas se WebSocket NÃO estiver conectado
+    // Se WebSocket estiver conectado, não precisa de polling (dados vêm em tempo real)
+    if (!isWebSocketConnected) {
+      // Polling como fallback a cada 30 segundos apenas se WebSocket desconectado
+      const interval = setInterval(fetchChatStats, 30000)
+      return () => clearInterval(interval)
+    }
+    
+    // Se WebSocket conectado, não precisa de polling
+    // Retornar função vazia (não há nada para limpar)
+    return () => {}
+  }, [isWebSocketConnected]) // ✅ Re-executar quando status do WebSocket mudar
 
   // Calcular estatísticas de tarefas
   const stats = useMemo(() => {

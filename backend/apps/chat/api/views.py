@@ -2936,6 +2936,47 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(conversations, many=True)
         return Response(serializer.data)
     
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats(self, request):
+        """
+        ✅ PERFORMANCE: Retorna estatísticas agregadas sem buscar todas as conversas.
+        Muito mais rápido que buscar 1000+ conversas apenas para contar.
+        
+        GET /chat/conversations/stats/
+        
+        Retorna:
+        {
+            "open_conversations": 5,
+            "pending_conversations": 3,
+            "total_unread_messages": 12
+        }
+        """
+        from django.db.models import Count, Q
+        
+        user = request.user
+        queryset = self.get_queryset()
+        
+        # ✅ PERFORMANCE: Usar aggregate ao invés de buscar todas as conversas
+        # Isso faz queries diretas no banco sem carregar objetos em memória
+        stats = queryset.aggregate(
+            # Conversas abertas (status='open')
+            open_conversations=Count('id', filter=Q(status='open')),
+            # Conversas pendentes (status='pending')
+            pending_conversations=Count('id', filter=Q(status='pending')),
+        )
+        
+        # ✅ PERFORMANCE: Contar mensagens não lidas em uma query separada otimizada
+        # Usar subquery para evitar N+1
+        unread_messages = Message.objects.filter(
+            conversation__in=queryset,
+            direction='incoming',
+            status__in=['sent', 'delivered']
+        ).count()
+        
+        stats['total_unread_messages'] = unread_messages
+        
+        return Response(stats)
+    
     @action(detail=True, methods=['get'])
     def messages(self, request, pk=None):
         """
