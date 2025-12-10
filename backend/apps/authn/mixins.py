@@ -22,17 +22,32 @@ class DepartmentFilterMixin:
         if user.is_admin:
             return queryset
         
-        # Gerente e Agente vêem apenas dos seus departamentos
-        if user.is_gerente or user.is_agente:
-            # Pegar IDs dos departamentos do usuário
-            department_ids = user.departments.values_list('id', flat=True)
-            
-            # Filtrar pelo campo de department
-            filter_kwargs = {f'{self.department_field}__in': department_ids}
-            return queryset.filter(**filter_kwargs)
+        # Pegar IDs dos departamentos do usuário
+        department_ids = list(user.departments.values_list('id', flat=True))
         
-        # Caso não tenha role definida, retorna vazio
-        return queryset.none()
+        # Verificar se o modelo tem campo assigned_to
+        has_assigned_to = hasattr(queryset.model, 'assigned_to')
+        
+        if department_ids:
+            # ✅ Usuário tem departamentos: ver dados dos departamentos OU atribuídos diretamente a ele
+            if has_assigned_to:
+                # Incluir também itens atribuídos diretamente ao usuário
+                return queryset.filter(
+                    Q(**{f'{self.department_field}__in': department_ids}) |
+                    Q(assigned_to=user)
+                ).distinct()
+            else:
+                # Modelo não tem assigned_to, apenas filtrar por departamento
+                filter_kwargs = {f'{self.department_field}__in': department_ids}
+                return queryset.filter(**filter_kwargs)
+        else:
+            # ✅ Usuário SEM departamentos: ver apenas dados atribuídos diretamente a ele
+            if has_assigned_to:
+                return queryset.filter(assigned_to=user)
+            else:
+                # Se não tem departamentos e modelo não tem assigned_to, retornar vazio
+                # (usuário não tem como ver nada)
+                return queryset.none()
 
 
 class MultiDepartmentFilterMixin:

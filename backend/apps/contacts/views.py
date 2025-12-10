@@ -846,15 +846,21 @@ class TaskViewSet(viewsets.ModelViewSet):
         queryset = Task.objects.filter(tenant=user.tenant)
         
         # ✅ CORREÇÃO: Usar is_admin ao invés de role != 'admin' para consistência
-        # Admin vê tudo do tenant, Gerente/Agente vê apenas dos seus departamentos
+        # Admin vê tudo do tenant, outros usuários vêem baseado em departamento OU atribuição
         if not user.is_admin:
-            # Filtrar por departamentos do usuário
-            department_ids = user.departments.values_list('id', flat=True)
+            # Pegar IDs dos departamentos do usuário
+            department_ids = list(user.departments.values_list('id', flat=True))
+            
             if department_ids:
-                queryset = queryset.filter(department__in=department_ids)
+                # ✅ Usuário tem departamentos: ver tarefas dos departamentos OU atribuídas diretamente a ele
+                queryset = queryset.filter(
+                    Q(department__in=department_ids) | 
+                    Q(assigned_to=user)  # Sempre mostrar tarefas atribuídas diretamente ao usuário
+                ).distinct()
             else:
-                # Se usuário não tem departamentos, não vê nenhuma tarefa
-                queryset = queryset.none()
+                # ✅ Usuário SEM departamentos: ver apenas tarefas atribuídas diretamente a ele
+                # Isso garante que usuários sem departamentos vejam suas próprias tarefas
+                queryset = queryset.filter(assigned_to=user)
         
         # Filtros adicionais
         my_tasks = self.request.query_params.get('my_tasks', '').lower() == 'true'
