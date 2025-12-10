@@ -67,18 +67,25 @@ export default function DashboardPage() {
   // ✅ SEGURANÇA: conversations já vem filtrado por tenant do backend (linha 282 de views.py)
   // O backend SEMPRE filtra por tenant=user.tenant, garantindo isolamento multi-tenant
   useEffect(() => {
-    // Contar apenas pendências em andamento (status 'pending') - EXCLUIR open e closed
-    // Todas as conversas aqui são do tenant atual (garantido pelo backend)
+    // ✅ CORREÇÃO: Contar conversas baseado no status
+    // Novas conversas = status='pending' E department=NULL (Inbox)
     const pendingConvs = conversations.filter((conv: any) => 
-      conv.status === 'pending'
+      conv.status === 'pending' && !conv.department
     )
-    setNewConversations(pendingConvs.length) // ✅ CORREÇÃO: Novas conversas (pending)
+    setNewConversations(pendingConvs.length)
     
-    // Contar conversas abertas (status 'open')
+    // Conversas abertas = status='open'
     const openConvs = conversations.filter((conv: any) => 
       conv.status === 'open'
     )
     setOpenConversations(openConvs.length)
+    
+    // ✅ DEBUG: Log para verificar atualização em tempo real
+    console.log('🔄 [DASHBOARD] Estatísticas atualizadas via WebSocket:', {
+      total: conversations.length,
+      open: openConvs.length,
+      pending: pendingConvs.length
+    })
   }, [conversations])
 
   // Carregar departamentos e usuários para o modal (mesmos endpoints do TaskList)
