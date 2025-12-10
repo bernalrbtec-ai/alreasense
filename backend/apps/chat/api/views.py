@@ -2996,16 +2996,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     Q(department__isnull=True, status='pending')  # Inbox do tenant
                 ).distinct()
         
-        # ✅ DEBUG: Log para verificar o que está sendo contado
+        # ✅ DEBUG: Log detalhado para verificar o que está sendo contado
         total_conversations = filtered_queryset.count()
         open_count = filtered_queryset.filter(status='open').count()
-        pending_count = filtered_queryset.filter(status='pending').count()
+        pending_count = filtered_queryset.filter(status='pending', department__isnull=True).count()
         closed_count = filtered_queryset.filter(status='closed').count()
+        
+        # ✅ DEBUG: Listar IDs das conversas abertas para diagnóstico
+        open_conversation_ids = list(filtered_queryset.filter(status='open').values_list('id', flat=True))
         
         logger.debug(
             f"📊 [STATS] User {user.email} (Admin: {user.is_admin}): "
             f"Total={total_conversations}, Open={open_count}, "
             f"Pending={pending_count}, Closed={closed_count}"
+        )
+        logger.debug(
+            f"📊 [STATS] IDs das conversas abertas: {open_conversation_ids}"
         )
         
         # ✅ PERFORMANCE: Usar aggregate ao invés de buscar todas as conversas
