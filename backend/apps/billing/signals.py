@@ -37,6 +37,11 @@ def invalidate_plan_cache(sender, instance, **kwargs):
 @receiver(post_delete, sender=TenantProduct)
 def invalidate_tenant_product_cache(sender, instance, **kwargs):
     """Invalidar cache de produtos do tenant quando tenant_product é salvo ou deletado"""
+    # ✅ CORREÇÃO: Verificar se tenant existe antes de acessar (pode ser null temporariamente)
+    if not instance.tenant:
+        logger.debug(f"🔄 [CACHE] TenantProduct sem tenant, pulando invalidação de cache")
+        return
+    
     logger.info(f"🔄 [CACHE] Invalidando cache de produtos do tenant {instance.tenant.id}")
     
     # Invalidar cache de produtos do tenant específico
