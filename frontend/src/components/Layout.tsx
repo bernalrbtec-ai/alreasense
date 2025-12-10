@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { Link, useLocation, Outlet } from 'react-router-dom'
 import { 
   LayoutDashboard, 
@@ -18,7 +18,8 @@ import {
   Settings,
   Database,
   Calendar,
-  Lock
+  Lock,
+  ChevronDown
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
@@ -69,6 +70,8 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false)
+  const userDropdownRef = useRef<HTMLDivElement>(null)
   const location = useLocation()
   const { user, logout } = useAuthStore()
   const { activeProductSlugs } = useTenantProducts()
@@ -79,6 +82,22 @@ export default function Layout() {
   
   const isSuperAdmin = user?.is_superuser || user?.is_staff
   const { isAdmin, isGerente, isAgente } = usePermissions()
+  
+  // Fechar dropdown quando clicar fora
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (userDropdownRef.current && !userDropdownRef.current.contains(event.target as Node)) {
+        setUserDropdownOpen(false)
+      }
+    }
+
+    if (userDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+  }, [userDropdownOpen])
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
@@ -244,49 +263,64 @@ export default function Layout() {
           
           {/* User info - Mobile */}
           <div className="border-t border-gray-200 p-4">
-            <div className="space-y-2">
-              {/* User info */}
-              <div className="flex items-center">
+            <div className="relative" ref={userDropdownRef}>
+              {/* User info - Clickable */}
+              <button
+                onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                className="flex items-center w-full hover:bg-brand-50 rounded-md px-2 py-2 transition-colors"
+              >
                 <Avatar 
                   name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
                   size="md" 
                 />
-                <div className="ml-3 flex-1">
+                <div className="ml-3 flex-1 text-left">
                   <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
                   <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
                 </div>
-              </div>
+                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
               
-              {/* User options */}
-              <div className="space-y-1">
-                <Link
-                  to="/profile"
-                  className="flex items-center px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <User className="h-4 w-4 mr-3 text-gray-400" />
-                  Meu Perfil
-                </Link>
-                
-                <button
-                  onClick={() => {
-                    setShowPasswordModal(true)
-                    setSidebarOpen(false)
-                  }}
-                  className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
-                >
-                  <Lock className="h-4 w-4 mr-3 text-gray-400" />
-                  Alterar Senha
-                </button>
-                
-                <button
-                  onClick={logout}
-                  className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-red-50 rounded-md transition-colors"
-                >
-                  <LogOut className="h-4 w-4 mr-3 text-red-500" />
-                  <span className="text-gray-700">Sair</span>
-                </button>
-              </div>
+              {/* User dropdown menu */}
+              {userDropdownOpen && (
+                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <Link
+                    to="/profile"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                    onClick={() => {
+                      setUserDropdownOpen(false)
+                      setSidebarOpen(false)
+                    }}
+                  >
+                    <User className="h-4 w-4 mr-3 text-gray-400" />
+                    Meu Perfil
+                  </Link>
+                  
+                  <button
+                    onClick={() => {
+                      setShowPasswordModal(true)
+                      setUserDropdownOpen(false)
+                      setSidebarOpen(false)
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                  >
+                    <Lock className="h-4 w-4 mr-3 text-gray-400" />
+                    Alterar Senha
+                  </button>
+                  
+                  <div className="border-t border-gray-100 my-1" />
+                  
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false)
+                      logout()
+                    }}
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 mr-3 text-red-500" />
+                    <span className="text-gray-700">Sair</span>
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -383,45 +417,60 @@ export default function Layout() {
                 </Button>
               </div>
             ) : (
-              <div className="space-y-2">
-                {/* User info */}
-                <div className="flex items-center">
+              <div className="relative" ref={userDropdownRef}>
+                {/* User info - Clickable */}
+                <button
+                  onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+                  className="flex items-center w-full hover:bg-brand-50 rounded-md px-2 py-2 transition-colors"
+                >
                   <Avatar 
                     name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
                     size="md" 
                   />
-                  <div className="ml-3 flex-1">
+                  <div className="ml-3 flex-1 text-left">
                     <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
                     <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
                   </div>
-                </div>
+                  <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
                 
-                {/* User options */}
-                <div className="space-y-1">
-                  <Link
-                    to="/profile"
-                    className="flex items-center px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
-                  >
-                    <User className="h-4 w-4 mr-3 text-gray-400" />
-                    Meu Perfil
-                  </Link>
-                  
-                  <button
-                    onClick={() => setShowPasswordModal(true)}
-                    className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
-                  >
-                    <Lock className="h-4 w-4 mr-3 text-gray-400" />
-                    Alterar Senha
-                  </button>
-                  
-                  <button
-                    onClick={logout}
-                    className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-red-50 rounded-md transition-colors"
-                  >
-                    <LogOut className="h-4 w-4 mr-3 text-red-500" />
-                    <span className="text-gray-700">Sair</span>
-                  </button>
-                </div>
+                {/* User dropdown menu */}
+                {userDropdownOpen && (
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                    <Link
+                      to="/profile"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                      onClick={() => setUserDropdownOpen(false)}
+                    >
+                      <User className="h-4 w-4 mr-3 text-gray-400" />
+                      Meu Perfil
+                    </Link>
+                    
+                    <button
+                      onClick={() => {
+                        setShowPasswordModal(true)
+                        setUserDropdownOpen(false)
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                    >
+                      <Lock className="h-4 w-4 mr-3 text-gray-400" />
+                      Alterar Senha
+                    </button>
+                    
+                    <div className="border-t border-gray-100 my-1" />
+                    
+                    <button
+                      onClick={() => {
+                        setUserDropdownOpen(false)
+                        logout()
+                      }}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4 mr-3 text-red-500" />
+                      <span className="text-gray-700">Sair</span>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
           </div>
