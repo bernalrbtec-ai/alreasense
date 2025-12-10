@@ -61,14 +61,18 @@ export default function DashboardPage() {
   useTenantSocket()
   
   // ✅ CORREÇÃO: Atualizar estatísticas quando conversations mudar (via WebSocket)
+  // ✅ SEGURANÇA: conversations já vem filtrado por tenant do backend (linha 282 de views.py)
+  // O backend SEMPRE filtra por tenant=user.tenant, garantindo isolamento multi-tenant
   useEffect(() => {
-    // Contar conversas abertas (open + pending) - EXCLUIR closed
-    const openConvs = conversations.filter((conv: any) => 
-      conv.status === 'open' || conv.status === 'pending'
+    // Contar apenas pendências em andamento (status 'pending') - EXCLUIR open e closed
+    // Todas as conversas aqui são do tenant atual (garantido pelo backend)
+    const pendingConvs = conversations.filter((conv: any) => 
+      conv.status === 'pending'
     )
-    setOpenConversations(openConvs.length)
+    setOpenConversations(pendingConvs.length)
 
     // Somar mensagens não lidas
+    // Todas as mensagens não lidas são do tenant atual (garantido pelo backend)
     const totalUnread = conversations.reduce((sum: number, conv: any) => {
       return sum + (conv.unread_count || 0)
     }, 0)
@@ -133,9 +137,12 @@ export default function DashboardPage() {
   }, [refreshTrigger])
 
   // Buscar estatísticas do chat
+  // ✅ SEGURANÇA: Backend SEMPRE filtra por tenant (views.py linha 282: queryset.filter(tenant=user.tenant))
+  // Isso garante que apenas conversas do tenant atual são retornadas
   const fetchChatStats = async () => {
     try {
       // Buscar todas as conversas para contar abertas e mensagens não lidas
+      // O backend filtra automaticamente por tenant do usuário autenticado
       const conversationsRes = await api.get('/chat/conversations/', {
         params: {
           page_size: 1000 // Buscar todas para contar
@@ -144,6 +151,7 @@ export default function DashboardPage() {
       const fetchedConversations = conversationsRes.data.results || conversationsRes.data || []
       
       // ✅ CORREÇÃO: Atualizar store com conversas buscadas (para sincronizar com API)
+      // ✅ SEGURANÇA: fetchedConversations já contém apenas conversas do tenant atual
       const { setConversations } = useChatStore.getState()
       setConversations(fetchedConversations)
       
@@ -235,11 +243,11 @@ export default function DashboardPage() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Conversas Abertas</p>
+              <p className="text-sm text-gray-600 mb-1">Pendências em Andamento</p>
               <p className="text-2xl font-bold text-purple-600">{openConversations}</p>
             </div>
             <div className="p-3 bg-purple-100 rounded-lg">
-              <Users className="h-6 w-6 text-purple-600" />
+              <Clock className="h-6 w-6 text-purple-600" />
             </div>
           </div>
         </Card>
