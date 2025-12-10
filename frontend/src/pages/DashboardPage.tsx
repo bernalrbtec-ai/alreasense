@@ -275,16 +275,16 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* 4. Novas Conversas (pendentes) */}
+        {/* 4. Conversas Abertas */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Novas Conversas</p>
-              <p className={`text-2xl font-bold ${newConversations > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                {newConversations > 0 ? newConversations : '0'}
+              <p className="text-sm text-gray-600 mb-1">Conversas Abertas</p>
+              <p className={`text-2xl font-bold ${openConversations > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
+                {openConversations > 0 ? openConversations : '0'}
               </p>
-              {newConversations === 0 && (
-                <p className="text-xs text-gray-400 mt-1">Nenhuma nova</p>
+              {openConversations === 0 && (
+                <p className="text-xs text-gray-400 mt-1">Nenhuma aberta</p>
               )}
             </div>
             <div className="p-3 bg-blue-100 rounded-lg">
