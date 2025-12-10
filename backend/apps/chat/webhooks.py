@@ -808,6 +808,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 sender_phone = '+' + sender_phone
             sender_name = message_data.get('pushName', '')  # Nome de quem enviou
             logger.info(f"👥 [GRUPO] Enviado por: {sender_name} ({sender_phone})")
+        elif is_group and not participant:
+            # ✅ DEBUG: Log quando é grupo mas não tem participant (pode acontecer em alguns casos)
+            logger.warning(f"⚠️ [GRUPO] Mensagem de grupo sem participant no key. RemoteJid: {remote_jid}")
+            logger.warning(f"   Key keys: {list(key.keys()) if isinstance(key, dict) else 'not dict'}")
+            logger.warning(f"   MessageType: {message_data.get('messageType', 'unknown')}")
         
         # Tipo de mensagem
         message_type = message_data.get('messageType', 'text')
@@ -2274,9 +2279,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.debug(f"🔍 [WEBHOOK REPLY] Mensagem NÃO é reply (quoted_message_id_evolution é None)")
         
         # Para grupos, adicionar quem enviou
+        # ✅ CORREÇÃO: Adicionar sender_name e sender_phone para TODAS as mensagens de grupo (texto e mídia)
         if is_group and sender_phone:
             message_defaults['sender_name'] = sender_name
             message_defaults['sender_phone'] = sender_phone
+            logger.info(f"✅ [GRUPO] sender_name e sender_phone adicionados à mensagem: {sender_name} ({sender_phone})")
+        elif is_group and not sender_phone:
+            # ✅ DEBUG: Log quando é grupo mas não tem sender_phone (pode indicar problema)
+            logger.warning(f"⚠️ [GRUPO] Mensagem de grupo sem sender_phone. Participant: {participant if 'participant' in locals() else 'N/A'}")
+            logger.warning(f"   MessageType: {message_data.get('messageType', 'unknown')}")
+            logger.warning(f"   Key: {mask_sensitive_data(key) if isinstance(key, dict) else key}")
         
         # ✅ CORREÇÃO: Reprocessar menções com a conversa disponível (para buscar nomes dos participantes)
         if mentioned_jids_raw and conversation:
