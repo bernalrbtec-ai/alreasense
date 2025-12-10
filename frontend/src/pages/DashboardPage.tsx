@@ -192,18 +192,44 @@ export default function DashboardPage() {
     }
   }
 
-  // ✅ PERFORMANCE: Carregar estatísticas do chat apenas uma vez ao montar
-  // Depois disso, as estatísticas são atualizadas em tempo real via WebSocket
-  // Polling apenas como fallback se WebSocket não estiver conectado
+  // ✅ PERFORMANCE: Carregar conversas e estatísticas do chat ao montar
+  // Isso garante que o store esteja populado para atualização em tempo real
   useEffect(() => {
-    // Busca inicial sempre (para garantir dados iniciais)
+    const loadConversations = async () => {
+      try {
+        // ✅ Carregar conversas para popular o store (necessário para atualização em tempo real)
+        const conversationsRes = await api.get('/chat/conversations/', {
+          params: { page_size: 100 }
+        })
+        const fetchedConversations = conversationsRes.data.results || conversationsRes.data || []
+        const { setConversations } = useChatStore.getState()
+        setConversations(fetchedConversations)
+        
+        // ✅ DEBUG: Log para verificar carregamento
+        console.log('📊 [DASHBOARD] Conversas carregadas no store:', fetchedConversations.length)
+      } catch (error) {
+        console.error('Erro ao carregar conversas:', error)
+      }
+    }
+    
+    // ✅ Carregar conversas apenas se o store estiver vazio (evita sobrescrever WebSocket)
+    const { conversations: currentConversations } = useChatStore.getState()
+    if (currentConversations.length === 0) {
+      loadConversations()
+    }
+    
+    // Busca inicial de estatísticas sempre (para garantir dados iniciais)
     fetchChatStats()
     
     // ✅ PERFORMANCE: Polling apenas se WebSocket NÃO estiver conectado
     // Se WebSocket estiver conectado, não precisa de polling (dados vêm em tempo real)
     if (!isWebSocketConnected) {
       // Polling como fallback a cada 30 segundos apenas se WebSocket desconectado
-      const interval = setInterval(fetchChatStats, 30000)
+      const interval = setInterval(() => {
+        fetchChatStats()
+        // ✅ Também recarregar conversas se WebSocket desconectado
+        loadConversations()
+      }, 30000)
       return () => clearInterval(interval)
     }
     
