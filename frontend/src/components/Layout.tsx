@@ -3,7 +3,6 @@ import { Link, useLocation, Outlet } from 'react-router-dom'
 import { 
   LayoutDashboard, 
   MessageSquare, 
-  Wifi, 
   FlaskConical, 
   CreditCard,
   Menu,
@@ -18,7 +17,8 @@ import {
   ChevronRight,
   Settings,
   Database,
-  Calendar
+  Calendar,
+  Lock
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
@@ -28,7 +28,7 @@ import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
 import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
-import UserDropdown from './UserDropdown'
+import ChangePasswordModal from './modals/ChangePasswordModal'
 import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
@@ -68,9 +68,10 @@ const adminNavigation = [
 export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
   const location = useLocation()
   const { user, logout } = useAuthStore()
-  const { activeProductSlugs, loading: productsLoading } = useTenantProducts()
+  const { activeProductSlugs } = useTenantProducts()
   const { hasProductAccess, canAccessAgenda, canAccessChat, canAccessContacts } = useUserAccess()
   
   // 🔔 WebSocket global do tenant - fica sempre conectado para receber notificações
@@ -240,6 +241,54 @@ export default function Layout() {
               </>
             )}
           </nav>
+          
+          {/* User info - Mobile */}
+          <div className="border-t border-gray-200 p-4">
+            <div className="space-y-2">
+              {/* User info */}
+              <div className="flex items-center">
+                <Avatar 
+                  name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
+                  size="md" 
+                />
+                <div className="ml-3 flex-1">
+                  <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
+                  <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
+                </div>
+              </div>
+              
+              {/* User options */}
+              <div className="space-y-1">
+                <Link
+                  to="/profile"
+                  className="flex items-center px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <User className="h-4 w-4 mr-3 text-gray-400" />
+                  Meu Perfil
+                </Link>
+                
+                <button
+                  onClick={() => {
+                    setShowPasswordModal(true)
+                    setSidebarOpen(false)
+                  }}
+                  className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
+                >
+                  <Lock className="h-4 w-4 mr-3 text-gray-400" />
+                  Alterar Senha
+                </button>
+                
+                <button
+                  onClick={logout}
+                  className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-red-50 rounded-md transition-colors"
+                >
+                  <LogOut className="h-4 w-4 mr-3 text-red-500" />
+                  <span className="text-gray-700">Sair</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -334,7 +383,8 @@ export default function Layout() {
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center justify-between">
+              <div className="space-y-2">
+                {/* User info */}
                 <div className="flex items-center">
                   <Avatar 
                     name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
@@ -345,14 +395,33 @@ export default function Layout() {
                     <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
                   </div>
                 </div>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={logout}
-                  className="ml-2"
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
+                
+                {/* User options */}
+                <div className="space-y-1">
+                  <Link
+                    to="/profile"
+                    className="flex items-center px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
+                  >
+                    <User className="h-4 w-4 mr-3 text-gray-400" />
+                    Meu Perfil
+                  </Link>
+                  
+                  <button
+                    onClick={() => setShowPasswordModal(true)}
+                    className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-brand-50 rounded-md transition-colors"
+                  >
+                    <Lock className="h-4 w-4 mr-3 text-gray-400" />
+                    Alterar Senha
+                  </button>
+                  
+                  <button
+                    onClick={logout}
+                    className="flex items-center w-full px-2 py-2 text-sm text-gray-700 hover:bg-red-50 rounded-md transition-colors"
+                  >
+                    <LogOut className="h-4 w-4 mr-3 text-red-500" />
+                    <span className="text-gray-700">Sair</span>
+                  </button>
+                </div>
               </div>
             )}
           </div>
@@ -364,31 +433,20 @@ export default function Layout() {
         "transition-all duration-300",
         sidebarCollapsed ? "md:pl-16" : "md:pl-64"
       )}>
-        {/* Top bar */}
-        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-3 shadow-sm sm:gap-x-6 sm:px-4 md:px-6 lg:px-8">
+        {/* Mobile menu button */}
+        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-3 shadow-sm sm:gap-x-6 sm:px-4 md:px-6 lg:px-8 md:hidden">
           <Button
             variant="ghost"
             size="icon"
-            className="md:hidden"
             onClick={() => setSidebarOpen(true)}
           >
             <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
-          
-          <div className="flex flex-1 gap-x-4 self-stretch lg:gap-x-6">
-            <div className="flex flex-1" />
-            <div className="flex items-center gap-x-4 lg:gap-x-6">
-              <div className="hidden lg:block lg:h-6 lg:w-px lg:bg-gray-200" />
-              <div className="flex items-center gap-x-2">
-                <UserDropdown />
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* Page content */}
         {location.pathname === '/chat' ? (
-          <main className="p-0 h-[calc(100vh-64px)] overflow-hidden">
+          <main className="p-0 h-[calc(100vh-64px)] md:h-screen overflow-hidden">
             <Outlet />
           </main>
         ) : (
@@ -399,6 +457,12 @@ export default function Layout() {
           </main>
         )}
       </div>
+      
+      {/* Change Password Modal */}
+      <ChangePasswordModal
+        isOpen={showPasswordModal}
+        onClose={() => setShowPasswordModal(false)}
+      />
     </div>
   )
 }
