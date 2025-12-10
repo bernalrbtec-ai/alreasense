@@ -275,19 +275,34 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* 4. Conversas Abertas */}
+        {/* 4. Conversas (Abertas + Novas) */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600 mb-1">Conversas Abertas</p>
-              <p className={`text-2xl font-bold ${openConversations > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                {openConversations > 0 ? openConversations : '0'}
-              </p>
-              {openConversations === 0 && (
-                <p className="text-xs text-gray-400 mt-1">Nenhuma aberta</p>
+            <div className="flex-1">
+              <p className="text-sm text-gray-600 mb-2">Conversas</p>
+              <div className="space-y-1">
+                {/* Total de conversas abertas */}
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-gray-500">Abertas:</span>
+                  <span className={`text-lg font-semibold ${openConversations > 0 ? 'text-blue-600' : 'text-gray-400'}`}>
+                    {openConversations}
+                  </span>
+                </div>
+                {/* Novas conversas (pending) */}
+                {newConversations > 0 && (
+                  <div className="flex items-center justify-between pt-1 border-t border-gray-100">
+                    <span className="text-xs text-gray-500">Novas:</span>
+                    <span className="text-lg font-semibold text-orange-600">
+                      {newConversations}
+                    </span>
+                  </div>
+                )}
+              </div>
+              {openConversations === 0 && newConversations === 0 && (
+                <p className="text-xs text-gray-400 mt-2">Nenhuma conversa</p>
               )}
             </div>
-            <div className="p-3 bg-blue-100 rounded-lg">
+            <div className="p-3 bg-blue-100 rounded-lg ml-4">
               <MessageSquare className="h-6 w-6 text-blue-600" />
             </div>
           </div>
