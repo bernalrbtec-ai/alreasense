@@ -34,6 +34,7 @@ class CacheManager:
     PREFIX_PRODUCT = 'product'
     PREFIX_PLAN = 'plan'
     PREFIX_TENANT_PRODUCT = 'tenant_product'
+    PREFIX_DEPARTMENT = 'department'
     
     @classmethod
     def make_key(cls, prefix: str, *args, **kwargs) -> str:

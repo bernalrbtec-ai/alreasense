@@ -255,27 +255,70 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciar Departamentos.
     Filtrado automaticamente por tenant do usuário autenticado.
+    COM CACHE para otimizar performance.
     """
     serializer_class = DepartmentSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
-        """Retorna apenas departamentos do tenant do usuário."""
-        user = self.request.user
-        if user.is_superuser:
-            queryset = Department.objects.select_related('tenant').all()
-        else:
-            queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
-        
-        # ✅ NOVO: Anotar contador de conversas pendentes para otimizar performance
+        """Retorna apenas departamentos do tenant do usuário (COM CACHE)."""
+        from apps.common.cache_manager import CacheManager
         from apps.chat.models import Conversation
         from django.db.models import Count, Q
         
+        user = self.request.user
+        
+        # Cache key por tenant e tipo de usuário
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_DEPARTMENT,
+            'all' if user.is_superuser else 'tenant',
+            tenant_id=user.tenant.id if user.tenant else 'none'
+        )
+        
+        def fetch_departments():
+            """Função para buscar departamentos do banco"""
+            if user.is_superuser:
+                queryset = Department.objects.select_related('tenant').all()
+            else:
+                queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
+            
+            # ✅ Anotar contador de conversas pendentes para otimizar performance
+            queryset = queryset.annotate(
+                pending_count_annotated=Count(
+                    'conversations',
+                    filter=Q(
+                        conversations__status='pending',
+                        conversations__tenant=user.tenant
+                    ),
+                    distinct=True
+                )
+            )
+            
+            # Retornar IDs para cache (mais eficiente)
+            return list(queryset.values_list('id', flat=True))
+        
+        # Usar CacheManager para get_or_set (TTL de 5 minutos - dados podem mudar quando conversas são transferidas)
+        department_ids = CacheManager.get_or_set(
+            cache_key,
+            fetch_departments,
+            ttl=CacheManager.TTL_MINUTE * 5
+        )
+        
+        # Reconstruir queryset completo com anotações
+        if user.is_superuser:
+            queryset = Department.objects.filter(id__in=department_ids).select_related('tenant')
+        else:
+            queryset = Department.objects.filter(
+                id__in=department_ids,
+                tenant=user.tenant
+            ).select_related('tenant')
+        
+        # Re-aplicar anotação de contador (necessário para serializer)
         queryset = queryset.annotate(
             pending_count_annotated=Count(
-                'conversations',  # ✅ FIX: related_name é 'conversations' (plural), não 'conversation'
+                'conversations',
                 filter=Q(
-                    conversations__status='pending',  # ✅ FIX: usar 'conversations' (plural)
+                    conversations__status='pending',
                     conversations__tenant=user.tenant
                 ),
                 distinct=True
@@ -286,6 +329,8 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     
     def perform_create(self, serializer):
         """Ao criar, associa automaticamente ao tenant do usuário."""
+        from apps.common.cache_manager import CacheManager
+        
         tenant = self.request.user.tenant
         name = serializer.validated_data.get('name')
         
@@ -295,6 +340,27 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             raise ValidationError({'name': f'Já existe um departamento "{name}" neste tenant.'})
         
         serializer.save(tenant=tenant)
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de departamentos do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+    
+    def perform_update(self, serializer):
+        """Ao atualizar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        serializer.save()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de departamentos do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+    
+    def perform_destroy(self, instance):
+        """Ao deletar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        instance.delete()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de departamentos do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
 
 
 class UserViewSet(viewsets.ModelViewSet):
