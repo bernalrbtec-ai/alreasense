@@ -52,7 +52,7 @@ export default function DashboardPage() {
   const [departments, setDepartments] = useState<Department[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [refreshTrigger, setRefreshTrigger] = useState(0)
-  const [unreadMessages, setUnreadMessages] = useState(0)
+  const [newConversations, setNewConversations] = useState(0) // ✅ CORREÇÃO: Novas conversas (pending), não mensagens
   const [openConversations, setOpenConversations] = useState(0)
   const [selectedDateForTask, setSelectedDateForTask] = useState<Date | null>(null)
 
@@ -72,14 +72,13 @@ export default function DashboardPage() {
     const pendingConvs = conversations.filter((conv: any) => 
       conv.status === 'pending'
     )
-    setOpenConversations(pendingConvs.length)
-
-    // Somar mensagens não lidas
-    // Todas as mensagens não lidas são do tenant atual (garantido pelo backend)
-    const totalUnread = conversations.reduce((sum: number, conv: any) => {
-      return sum + (conv.unread_count || 0)
-    }, 0)
-    setUnreadMessages(totalUnread)
+    setNewConversations(pendingConvs.length) // ✅ CORREÇÃO: Novas conversas (pending)
+    
+    // Contar conversas abertas (status 'open')
+    const openConvs = conversations.filter((conv: any) => 
+      conv.status === 'open'
+    )
+    setOpenConversations(openConvs.length)
   }, [conversations])
 
   // Carregar departamentos e usuários para o modal (mesmos endpoints do TaskList)
@@ -149,9 +148,11 @@ export default function DashboardPage() {
       const statsRes = await api.get('/chat/conversations/stats/')
       const stats = statsRes.data
       
-      // Atualizar estatísticas diretamente (sem precisar buscar todas as conversas)
-      setOpenConversations(stats.pending_conversations || 0)
-      setUnreadMessages(stats.total_unread_messages || 0)
+      // ✅ CORREÇÃO: Atualizar estatísticas corretamente
+      // Novas conversas = conversas pendentes (status='pending')
+      setNewConversations(stats.pending_conversations || 0)
+      // Conversas abertas = conversas abertas (status='open')
+      setOpenConversations(stats.open_conversations || 0)
       
       // ✅ NOTA: Não atualizamos o store de conversas aqui porque:
       // 1. Se WebSocket está conectado, ele já atualiza o store
@@ -263,15 +264,15 @@ export default function DashboardPage() {
           </div>
         </Card>
 
-        {/* 4. Novas Mensagens (conversas) */}
+        {/* 4. Novas Conversas (pendentes) */}
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Novas Mensagens</p>
-              <p className={`text-2xl font-bold ${unreadMessages > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
-                {unreadMessages > 0 ? unreadMessages : '0'}
+              <p className="text-sm text-gray-600 mb-1">Novas Conversas</p>
+              <p className={`text-2xl font-bold ${newConversations > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
+                {newConversations > 0 ? newConversations : '0'}
               </p>
-              {unreadMessages === 0 && (
+              {newConversations === 0 && (
                 <p className="text-xs text-gray-400 mt-1">Nenhuma nova</p>
               )}
             </div>
