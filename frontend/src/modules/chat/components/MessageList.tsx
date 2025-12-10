@@ -858,6 +858,7 @@ export function MessageList() {
               >
                 {/* Nome do remetente (apenas para GRUPOS e mensagens RECEBIDAS) */}
                 {/* ✅ CORREÇÃO CRÍTICA: Usar optional chaining para evitar erro de inicialização */}
+                {/* ✅ NOVO: Cabeçalho aparece também para mensagens de mídia (vídeo/áudio/imagem) */}
                 {activeConversation?.conversation_type === 'group' && messageItem.direction === 'incoming' && (messageItem.sender_name || messageItem.sender_phone) && (
                   <p className="text-xs font-semibold text-green-600 mb-1">
                     {messageItem.sender_name || messageItem.sender_phone}
@@ -901,6 +902,7 @@ export function MessageList() {
                 
                 {/* Anexos - renderizar ANTES do texto (apenas se não estiver apagada) */}
                 {/* ✅ CORREÇÃO: Renomear attachment para attachmentItem para evitar conflito de minificação */}
+                {/* ✅ NOVO: Cabeçalho já aparece antes dos anexos (linha 861), então mídia terá cabeçalho igual ao texto */}
                 {!messageItem.is_deleted && messageItem.attachments && messageItem.attachments.length > 0 && (
                   <div className="message-attachments mb-2 space-y-2">
                     {messageItem.attachments.map((attachmentItem) => (
