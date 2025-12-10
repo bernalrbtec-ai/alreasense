@@ -6,8 +6,7 @@ import WeekSchedule from '../components/tasks/WeekSchedule'
 import TaskModal from '../components/tasks/TaskModal'
 import { api } from '../lib/api'
 import { Card } from '../components/ui/Card'
-import { CheckCircle, Clock, AlertCircle, Calendar, MessageSquare, Users } from 'lucide-react'
-import { isToday, isPast, isFuture } from 'date-fns'
+import { Clock, AlertCircle, MessageSquare } from 'lucide-react'
 import { useTenantSocket } from '../modules/chat/hooks/useTenantSocket'
 
 interface Task {
