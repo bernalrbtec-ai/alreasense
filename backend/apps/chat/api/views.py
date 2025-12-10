@@ -2942,6 +2942,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         ✅ PERFORMANCE: Retorna estatísticas agregadas sem buscar todas as conversas.
         Muito mais rápido que buscar 1000+ conversas apenas para contar.
         
+        ✅ CORREÇÃO: Usa a mesma lógica de filtros do get_queryset() para contar apenas
+        as conversas que o usuário pode ver (baseado em departamentos e permissões).
+        
         GET /chat/conversations/stats/
         
         Retorna:
@@ -2955,9 +2958,6 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         user = request.user
         
-        # ✅ CORREÇÃO: Para estatísticas, usar queryset base sem filtros de departamento
-        # Isso garante que contamos TODAS as conversas do tenant, não apenas as visíveis ao usuário
-        # O get_queryset() aplica filtros de departamento que podem esconder conversas
         if not user.is_authenticated or not user.tenant:
             return Response({
                 'open_conversations': 0,
@@ -2965,24 +2965,52 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 'total_unread_messages': 0
             })
         
-        # Base queryset: todas as conversas do tenant (sem filtros de departamento)
+        # ✅ CORREÇÃO: Usar a mesma lógica de filtros do get_queryset()
+        # Isso garante que contamos apenas as conversas que o usuário pode ver
+        # Base queryset: filtrar por tenant primeiro (segurança)
         base_queryset = Conversation.objects.filter(tenant=user.tenant)
         
+        # Aplicar os mesmos filtros do get_queryset()
+        # Admin vê tudo (incluindo pending)
+        if user.is_admin:
+            # Admin vê todas as conversas do tenant
+            filtered_queryset = base_queryset
+        else:
+            # Gerente e Agente vêem:
+            # 1. Conversas dos seus departamentos
+            # 2. Conversas atribuídas diretamente a eles
+            # 3. Conversas pending (sem departamento) do tenant
+            department_ids = list(user.departments.values_list('id', flat=True))
+            
+            if department_ids:
+                # ✅ Usuário tem departamentos: ver conversas dos departamentos OU atribuídas a ele
+                filtered_queryset = base_queryset.filter(
+                    Q(department__in=department_ids) |  # Conversas dos departamentos
+                    Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
+                    Q(department__isnull=True, status='pending')  # Inbox do tenant
+                ).distinct()
+            else:
+                # ✅ Usuário SEM departamentos: ver apenas conversas atribuídas diretamente a ele OU inbox
+                filtered_queryset = base_queryset.filter(
+                    Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
+                    Q(department__isnull=True, status='pending')  # Inbox do tenant
+                ).distinct()
+        
         # ✅ DEBUG: Log para verificar o que está sendo contado
-        total_conversations = base_queryset.count()
-        open_count = base_queryset.filter(status='open').count()
-        pending_count = base_queryset.filter(status='pending').count()
-        closed_count = base_queryset.filter(status='closed').count()
+        total_conversations = filtered_queryset.count()
+        open_count = filtered_queryset.filter(status='open').count()
+        pending_count = filtered_queryset.filter(status='pending').count()
+        closed_count = filtered_queryset.filter(status='closed').count()
         
         logger.debug(
-            f"📊 [STATS] Tenant {user.tenant.id}: "
+            f"📊 [STATS] User {user.email} (Admin: {user.is_admin}): "
             f"Total={total_conversations}, Open={open_count}, "
             f"Pending={pending_count}, Closed={closed_count}"
         )
         
         # ✅ PERFORMANCE: Usar aggregate ao invés de buscar todas as conversas
         # Isso faz queries diretas no banco sem carregar objetos em memória
-        stats = base_queryset.aggregate(
+        stats = filtered_queryset.aggregate(
             # Conversas abertas (status='open')
             open_conversations=Count('id', filter=Q(status='open')),
             # Conversas pendentes (status='pending')
@@ -2992,7 +3020,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ PERFORMANCE: Contar mensagens não lidas em uma query separada otimizada
         # Usar subquery para evitar N+1
         unread_messages = Message.objects.filter(
-            conversation__in=base_queryset,
+            conversation__in=filtered_queryset,
             direction='incoming',
             status__in=['sent', 'delivered']
         ).count()
