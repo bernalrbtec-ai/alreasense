@@ -179,6 +179,9 @@ class ContactSerializer(serializers.ModelSerializer):
         tag_ids = validated_data.pop('tag_ids', [])
         
         # 🆕 Inferir estado pelo DDD se não fornecido
+        import logging
+        logger = logging.getLogger(__name__)
+        
         if not validated_data.get('state'):
             phone = validated_data.get('phone')
             if phone:
@@ -186,7 +189,7 @@ class ContactSerializer(serializers.ModelSerializer):
                 if state:
                     validated_data['state'] = state
                     ddd = extract_ddd_from_phone(phone)
-                    print(f"  ℹ️  Estado '{state}' inferido pelo DDD {ddd} (cadastro individual via API)")
+                    logger.info(f"Estado '{state}' inferido pelo DDD {ddd} (cadastro individual via API)")
         
         # Criar contato
         contact = Contact.objects.create(**validated_data)

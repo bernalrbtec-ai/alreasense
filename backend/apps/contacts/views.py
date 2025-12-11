@@ -302,22 +302,27 @@ class ContactViewSet(viewsets.ModelViewSet):
         )
         
         # Extrair column_mapping se fornecido
+        import logging
+        logger = logging.getLogger(__name__)
+        
         column_mapping = None
         if request.data.get('column_mapping'):
             import json
             try:
                 column_mapping = json.loads(request.data.get('column_mapping'))
-                print(f"📋 Column mapping recebido: {column_mapping}")
+                logger.debug("Column mapping recebido", extra={'column_mapping': column_mapping})
             except Exception as e:
-                print(f"❌ Erro ao parsear column_mapping: {e}")
+                logger.warning("Erro ao parsear column_mapping", exc_info=True, extra={'error': str(e)})
                 pass
         else:
-            print(f"⚠️ Nenhum column_mapping recebido do frontend")
+            logger.debug("Nenhum column_mapping recebido do frontend")
         
         delimiter = request.data.get('delimiter')
-        print(f"📋 Delimiter recebido: {delimiter}")
-        print(f"📋 Auto tag ID: {request.data.get('auto_tag_id')}")
-        print(f"📋 Update existing: {request.data.get('update_existing')}")
+        logger.debug("Parâmetros de importação", extra={
+            'delimiter': delimiter,
+            'auto_tag_id': request.data.get('auto_tag_id'),
+            'update_existing': request.data.get('update_existing')
+        })
         
         result = service.process_csv(
             file=file,
@@ -328,11 +333,12 @@ class ContactViewSet(viewsets.ModelViewSet):
         )
         
         # Log detalhado da resposta para debug
-        print(f"📤 RESPOSTA do process_csv:")
-        print(f"   Status: {result.get('status')}")
-        print(f"   Total rows: {result.get('total_rows', 0)}")
-        print(f"   Created: {result.get('created', 0)}")
-        print(f"   Errors: {result.get('errors', 0)}")
+        logger.info("Importação CSV processada", extra={
+            'status': result.get('status'),
+            'total_rows': result.get('total_rows', 0),
+            'created': result.get('created', 0),
+            'errors': result.get('errors', 0)
+        })
         
         return Response(result)
     
@@ -465,9 +471,22 @@ class ContactViewSet(viewsets.ModelViewSet):
         leads = stats['leads']
         customers = stats['customers']
         
-        # Aniversariantes próximos (7 dias)
+        # ✅ PERFORMANCE: Aniversariantes próximos (7 dias) - otimizado
+        # Calcular aniversariantes usando queryset ao invés de loop Python
+        from datetime import timedelta
+        today = timezone.now().date()
+        seven_days_later = today + timedelta(days=7)
+        
+        # Filtrar contatos com aniversário nos próximos 7 dias
+        upcoming_birthdays_qs = contacts.exclude(birth_date__isnull=True).filter(
+            birth_date__month__in=[
+                today.month if today.month <= 12 else 1,
+                (today.month + 1) if today.month < 12 else 1
+            ]
+        )[:10]  # Limitar a 10 resultados
+        
         upcoming_birthdays = []
-        for contact in contacts.exclude(birth_date__isnull=True)[:100]:  # Limitar para performance
+        for contact in upcoming_birthdays_qs:
             if contact.is_birthday_soon(7):
                 upcoming_birthdays.append({
                     'id': str(contact.id),
@@ -673,25 +692,28 @@ class TagViewSet(viewsets.ModelViewSet):
         if not user.tenant:
             return Response({'tags': []})
         
-        tags = Tag.objects.filter(tenant=user.tenant)
+        # ✅ PERFORMANCE: Usar annotate para calcular contagens em uma query
+        from django.db.models import Count, Q
         
-        # Calcular contagem real de contatos para cada tag
-        tags_stats = []
-        for tag in tags:
-            # Contagem real sem paginação
-            total_contacts = tag.contacts.filter(is_active=True).count()
-            opted_out_contacts = tag.contacts.filter(is_active=True, opted_out=True).count()
-            
-            tags_stats.append({
+        tags = Tag.objects.filter(tenant=user.tenant).annotate(
+            total_contacts=Count('contacts', filter=Q(contacts__is_active=True), distinct=True),
+            opted_out_contacts=Count('contacts', filter=Q(contacts__is_active=True, contacts__opted_out=True), distinct=True)
+        )
+        
+        # Converter para lista de dicionários
+        tags_stats = [
+            {
                 'id': str(tag.id),
                 'name': tag.name,
                 'color': tag.color,
                 'description': tag.description,
-                'contact_count': total_contacts,
-                'opted_out_count': opted_out_contacts,
-                'active_count': total_contacts - opted_out_contacts,
+                'contact_count': tag.total_contacts,
+                'opted_out_count': tag.opted_out_contacts,
+                'active_count': tag.total_contacts - tag.opted_out_contacts,
                 'created_at': tag.created_at
-            })
+            }
+            for tag in tags
+        ]
         
         return Response({
             'tags': tags_stats,

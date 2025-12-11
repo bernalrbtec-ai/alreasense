@@ -2,7 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from django.db.models import Count, Q, Avg
+from django.db.models import Count, Q, Avg, Prefetch
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from .models import Campaign, CampaignMessage, CampaignContact, CampaignLog, CampaignNotification
@@ -27,7 +27,16 @@ class CampaignViewSet(viewsets.ModelViewSet):
         if user.is_superuser and not user.tenant:
             return Campaign.objects.none()  # Superadmin não vê campanhas individuais
         
-        queryset = Campaign.objects.filter(tenant=user.tenant).prefetch_related('instances', 'messages')
+        # ✅ PERFORMANCE: Otimizar queries com select_related e prefetch_related
+        queryset = Campaign.objects.filter(tenant=user.tenant).select_related(
+            'tenant', 'created_by', 'contact_list'
+        ).prefetch_related(
+            'instances',
+            'messages',
+            'contacts',
+            Prefetch('campaigncontact_set', queryset=CampaignContact.objects.select_related('contact', 'instance_used', 'message_used')),
+            Prefetch('campaignlog_set', queryset=CampaignLog.objects.select_related('instance', 'contact', 'campaign_contact'))
+        )
         
         # Suporte a filtro de status: ?status=active,paused
         status_param = self.request.query_params.get('status')
