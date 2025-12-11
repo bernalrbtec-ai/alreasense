@@ -10,6 +10,72 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def invalidate_stats_cache(tenant_id, user_id=None, dept_ids=None):
+    """Invalidar cache de estatísticas"""
+    from apps.common.cache_manager import CacheManager
+    
+    # Invalidar cache de contact_stats
+    CacheManager.invalidate_pattern(f'contact_stats:{tenant_id}:*')
+    
+    # Invalidar cache de tag_stats
+    CacheManager.invalidate_pattern(f'tag_stats:{tenant_id}:*')
+    
+    # Invalidar cache de task_stats
+    if user_id:
+        CacheManager.invalidate_pattern(f'task_stats:{tenant_id}:{user_id}:*')
+    else:
+        CacheManager.invalidate_pattern(f'task_stats:{tenant_id}:*')
+    
+    # Invalidar cache de conversation_stats
+    if user_id:
+        CacheManager.invalidate_pattern(f'conversation_stats:{tenant_id}:{user_id}:*')
+    else:
+        CacheManager.invalidate_pattern(f'conversation_stats:{tenant_id}:*')
+    
+    logger.debug(f"🗑️ [CACHE] Estatísticas invalidadas para tenant {tenant_id}")
+
+
+# ==================== SIGNALS PARA INVALIDAÇÃO DE CACHE ====================
+
+@receiver(post_save)
+@receiver(post_delete)
+def invalidate_tag_stats_cache(sender, instance, **kwargs):
+    """Invalidar cache de estatísticas quando Tag é criada/atualizada/deletada"""
+    from apps.contacts.models import Tag
+    
+    if isinstance(instance, Tag) and instance.tenant_id:
+        invalidate_stats_cache(instance.tenant_id)
+        logger.debug(f"🗑️ [CACHE] Cache de tag_stats invalidado para tenant {instance.tenant_id}")
+
+
+@receiver(post_save)
+@receiver(post_delete)
+def invalidate_task_stats_cache(sender, instance, **kwargs):
+    """Invalidar cache de estatísticas quando Task é criada/atualizada/deletada"""
+    from apps.contacts.models import Task
+    
+    if isinstance(instance, Task) and instance.tenant_id:
+        invalidate_stats_cache(
+            instance.tenant_id,
+            user_id=instance.assigned_to_id if instance.assigned_to_id else None
+        )
+        logger.debug(f"🗑️ [CACHE] Cache de task_stats invalidado para tenant {instance.tenant_id}")
+
+
+@receiver(post_save)
+@receiver(post_delete)
+def invalidate_conversation_stats_cache(sender, instance, **kwargs):
+    """Invalidar cache de estatísticas quando Conversation é criada/atualizada/deletada"""
+    from apps.chat.models import Conversation
+    
+    if isinstance(instance, Conversation) and instance.tenant_id:
+        invalidate_stats_cache(
+            instance.tenant_id,
+            user_id=instance.assigned_to_id if instance.assigned_to_id else None
+        )
+        logger.debug(f"🗑️ [CACHE] Cache de conversation_stats invalidado para tenant {instance.tenant_id}")
+
+
 def get_contact_model():
     """Lazy import para evitar circular imports"""
     from apps.contacts.models import Contact
@@ -71,6 +137,9 @@ def update_conversations_on_contact_change(sender, instance, created, **kwargs):
     if cache_key_original != cache_key_normalized:
         cache.delete(cache_key_original)
         logger.info(f"🗑️ [CONTACT SIGNAL] Cache invalidado (original): {cache_key_original}")
+    
+    # ✅ PERFORMANCE: Invalidar cache de estatísticas
+    invalidate_stats_cache(instance.tenant_id)
     
     # Normalizar telefone do contato para busca
     normalized_contact_phone = normalize_phone_for_search(instance.phone)
@@ -154,6 +223,9 @@ def update_conversations_on_contact_delete(sender, instance, **kwargs):
     cache_key = f"contact_tags:{instance.tenant_id}:{instance.phone}"
     cache.delete(cache_key)
     logger.info(f"🗑️ [CONTACT SIGNAL] Cache invalidado após deleção: {cache_key}")
+    
+    # ✅ PERFORMANCE: Invalidar cache de estatísticas
+    invalidate_stats_cache(instance.tenant_id)
     
     # Buscar conversas relacionadas
     conversations = Conversation.objects.filter(
@@ -510,6 +582,10 @@ def create_task_history_events(sender, instance, created, **kwargs):
     
     except Exception as e:
         logger.error(f"❌ [TASK HISTORY] Erro ao criar histórico de tarefa: {e}", exc_info=True)
+    
+    # ✅ PERFORMANCE: Invalidar cache de estatísticas quando tarefa é criada/atualizada
+    if instance.tenant_id:
+        invalidate_stats_cache(instance.tenant_id, user_id=instance.assigned_to_id if instance.assigned_to_id else None)
 
 
 @receiver(m2m_changed)
@@ -740,3 +816,7 @@ def create_task_status_history(sender, instance, created, **kwargs):
     
     except Exception as e:
         logger.error(f"❌ [TASK HISTORY] Erro ao criar histórico de tarefa: {e}", exc_info=True)
+    
+    # ✅ PERFORMANCE: Invalidar cache de estatísticas quando tarefa é modificada
+    if instance.tenant_id:
+        invalidate_stats_cache(instance.tenant_id, user_id=instance.assigned_to_id if instance.assigned_to_id else None)

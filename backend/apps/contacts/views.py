@@ -367,80 +367,106 @@ class ContactViewSet(viewsets.ModelViewSet):
         GET /api/contacts/contacts/stats/
         Query params: mesmos filtros do list (tags, state, search, etc.)
         """
+        from apps.common.cache_manager import CacheManager
+        import hashlib
+        
         user = request.user
         
-        # Aplicar mesmos filtros do get_queryset
-        contacts = self.filter_queryset(self.get_queryset())
+        # ✅ PERFORMANCE: Gerar chave de cache baseada nos filtros
+        filter_params = {
+            'tags': request.query_params.get('tags'),
+            'lists': request.query_params.get('lists'),
+            'search': request.query_params.get('search'),
+            'lifecycle_stage': request.query_params.get('lifecycle_stage'),
+            'state': request.query_params.get('state'),
+            'opted_out': request.query_params.get('opted_out'),
+            'is_active': request.query_params.get('is_active'),
+        }
+        filter_hash = hashlib.md5(str(filter_params).encode()).hexdigest()
+        cache_key = CacheManager.make_key('contact_stats', user.tenant_id, filter_hash)
         
-        # ✅ FIX: Usar queries separadas para evitar conflitos com aggregates
-        # Isso evita o erro "opted_out is an aggregate" que pode ocorrer
-        # quando há annotations ou aggregates pré-existentes no queryset
-        from django.db.models import Q
+        def calculate_stats():
+            # Aplicar mesmos filtros do get_queryset
+            contacts = self.filter_queryset(self.get_queryset())
+            
+            # ✅ FIX: Usar queries separadas para evitar conflitos com aggregates
+            # Isso evita o erro "opted_out is an aggregate" que pode ocorrer
+            # quando há annotations ou aggregates pré-existentes no queryset
+            from django.db.models import Q
+            
+            # Criar queryset base limpo (sem annotations)
+            base_queryset = Contact.objects.filter(
+                tenant=user.tenant
+            )
+            
+            # Aplicar mesmos filtros do get_queryset manualmente
+            tags = request.query_params.get('tags')
+            if tags:
+                tag_ids = tags.split(',')
+                base_queryset = base_queryset.filter(tags__id__in=tag_ids).distinct()
+            
+            lists = request.query_params.get('lists')
+            if lists:
+                list_ids = lists.split(',')
+                base_queryset = base_queryset.filter(lists__id__in=list_ids).distinct()
+            
+            search = request.query_params.get('search')
+            if search:
+                base_queryset = base_queryset.filter(
+                    Q(name__icontains=search) |
+                    Q(phone__icontains=search) |
+                    Q(email__icontains=search)
+                )
+            
+            lifecycle_stage = request.query_params.get('lifecycle_stage')
+            if lifecycle_stage:
+                base_queryset = base_queryset.filter(lifecycle_stage=lifecycle_stage)
+            
+            state = request.query_params.get('state')
+            if state:
+                base_queryset = base_queryset.filter(state=state)
+            
+            opted_out_param = request.query_params.get('opted_out')
+            if opted_out_param is not None:
+                base_queryset = base_queryset.filter(opted_out=opted_out_param.lower() == 'true')
+            
+            is_active_param = request.query_params.get('is_active')
+            if is_active_param is not None:
+                base_queryset = base_queryset.filter(is_active=is_active_param.lower() == 'true')
+            
+            # ✅ PERFORMANCE: Calcular estatísticas com queryset limpo
+            total = base_queryset.count()
+            opted_out = base_queryset.filter(opted_out=True).count()
+            active = base_queryset.filter(is_active=True).count()
+            leads = base_queryset.filter(total_purchases=0).count()
+            customers = base_queryset.filter(total_purchases__gte=1).count()
+            delivery_problems = base_queryset.filter(opted_out=True).count()  # Usando opted_out como proxy
+            
+            return {
+                'total': total,
+                'active': active,
+                'opted_out': opted_out,
+                'leads': leads,
+                'customers': customers,
+                'delivery_problems': delivery_problems,
+                'filters_applied': {
+                    'search': bool(request.query_params.get('search')),
+                    'tags': bool(request.query_params.get('tags')),
+                    'state': bool(request.query_params.get('state')),
+                    'lifecycle_stage': bool(request.query_params.get('lifecycle_stage')),
+                    'opted_out': bool(request.query_params.get('opted_out')),
+                    'is_active': bool(request.query_params.get('is_active'))
+                }
+            }
         
-        # Criar queryset base limpo (sem annotations)
-        base_queryset = Contact.objects.filter(
-            tenant=user.tenant
+        # ✅ PERFORMANCE: Cache por 2 minutos (stats podem mudar rapidamente)
+        stats_data = CacheManager.get_or_set(
+            cache_key,
+            calculate_stats,
+            ttl=CacheManager.TTL_MINUTE * 2
         )
         
-        # Aplicar mesmos filtros do get_queryset manualmente
-        tags = request.query_params.get('tags')
-        if tags:
-            tag_ids = tags.split(',')
-            base_queryset = base_queryset.filter(tags__id__in=tag_ids).distinct()
-        
-        lists = request.query_params.get('lists')
-        if lists:
-            list_ids = lists.split(',')
-            base_queryset = base_queryset.filter(lists__id__in=list_ids).distinct()
-        
-        search = request.query_params.get('search')
-        if search:
-            base_queryset = base_queryset.filter(
-                Q(name__icontains=search) |
-                Q(phone__icontains=search) |
-                Q(email__icontains=search)
-            )
-        
-        lifecycle_stage = request.query_params.get('lifecycle_stage')
-        if lifecycle_stage:
-            base_queryset = base_queryset.filter(lifecycle_stage=lifecycle_stage)
-        
-        state = request.query_params.get('state')
-        if state:
-            base_queryset = base_queryset.filter(state=state)
-        
-        opted_out_param = request.query_params.get('opted_out')
-        if opted_out_param is not None:
-            base_queryset = base_queryset.filter(opted_out=opted_out_param.lower() == 'true')
-        
-        is_active_param = request.query_params.get('is_active')
-        if is_active_param is not None:
-            base_queryset = base_queryset.filter(is_active=is_active_param.lower() == 'true')
-        
-        # ✅ PERFORMANCE: Calcular estatísticas com queryset limpo
-        total = base_queryset.count()
-        opted_out = base_queryset.filter(opted_out=True).count()
-        active = base_queryset.filter(is_active=True).count()
-        leads = base_queryset.filter(total_purchases=0).count()
-        customers = base_queryset.filter(total_purchases__gte=1).count()
-        delivery_problems = base_queryset.filter(opted_out=True).count()  # Usando opted_out como proxy
-        
-        return Response({
-            'total': total,
-            'active': active,
-            'opted_out': opted_out,
-            'leads': leads,
-            'customers': customers,
-            'delivery_problems': delivery_problems,
-            'filters_applied': {
-                'search': bool(request.query_params.get('search')),
-                'tags': bool(request.query_params.get('tags')),
-                'state': bool(request.query_params.get('state')),
-                'lifecycle_stage': bool(request.query_params.get('lifecycle_stage')),
-                'opted_out': bool(request.query_params.get('opted_out')),
-                'is_active': bool(request.query_params.get('is_active'))
-            }
-        })
+        return Response(stats_data)
     
     @action(detail=False, methods=['get'])
     def insights(self, request):
@@ -687,38 +713,52 @@ class TagViewSet(viewsets.ModelViewSet):
         
         GET /api/contacts/tags/stats/
         """
+        from apps.common.cache_manager import CacheManager
+        
         user = request.user
         
         if not user.tenant:
             return Response({'tags': []})
         
-        # ✅ PERFORMANCE: Usar annotate para calcular contagens em uma query
-        from django.db.models import Count, Q
+        cache_key = CacheManager.make_key('tag_stats', user.tenant_id)
         
-        tags = Tag.objects.filter(tenant=user.tenant).annotate(
-            total_contacts=Count('contacts', filter=Q(contacts__is_active=True), distinct=True),
-            opted_out_contacts=Count('contacts', filter=Q(contacts__is_active=True, contacts__opted_out=True), distinct=True)
+        def calculate_stats():
+            # ✅ PERFORMANCE: Usar annotate para calcular contagens em uma query
+            from django.db.models import Count, Q
+            
+            tags = Tag.objects.filter(tenant=user.tenant).annotate(
+                total_contacts=Count('contacts', filter=Q(contacts__is_active=True), distinct=True),
+                opted_out_contacts=Count('contacts', filter=Q(contacts__is_active=True, contacts__opted_out=True), distinct=True)
+            )
+            
+            # Converter para lista de dicionários
+            tags_stats = [
+                {
+                    'id': str(tag.id),
+                    'name': tag.name,
+                    'color': tag.color,
+                    'description': tag.description,
+                    'contact_count': tag.total_contacts,
+                    'opted_out_count': tag.opted_out_contacts,
+                    'active_count': tag.total_contacts - tag.opted_out_contacts,
+                    'created_at': tag.created_at
+                }
+                for tag in tags
+            ]
+            
+            return {
+                'tags': tags_stats,
+                'total_tags': len(tags_stats)
+            }
+        
+        # ✅ PERFORMANCE: Cache por 5 minutos (tags mudam menos frequentemente)
+        stats_data = CacheManager.get_or_set(
+            cache_key,
+            calculate_stats,
+            ttl=CacheManager.TTL_MINUTE * 5
         )
         
-        # Converter para lista de dicionários
-        tags_stats = [
-            {
-                'id': str(tag.id),
-                'name': tag.name,
-                'color': tag.color,
-                'description': tag.description,
-                'contact_count': tag.total_contacts,
-                'opted_out_count': tag.opted_out_contacts,
-                'active_count': tag.total_contacts - tag.opted_out_contacts,
-                'created_at': tag.created_at
-            }
-            for tag in tags
-        ]
-        
-        return Response({
-            'tags': tags_stats,
-            'total_tags': len(tags_stats)
-        })
+        return Response(stats_data)
 
 
 class ContactListViewSet(viewsets.ModelViewSet):
@@ -965,40 +1005,54 @@ class TaskViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=['get'])
     def stats(self, request):
         """Estatísticas de tarefas do usuário"""
+        from apps.common.cache_manager import CacheManager
+        
         user = request.user
         
-        # Base: tarefas dos departamentos do usuário
-        queryset = Task.objects.filter(tenant=user.tenant)
+        # ✅ PERFORMANCE: Gerar chave de cache baseada no usuário e departamentos
+        dept_ids = list(user.departments.values_list('id', flat=True))
+        cache_key = CacheManager.make_key('task_stats', user.tenant_id, user.id, dept_ids=dept_ids)
         
-        if not user.is_superuser and user.role != 'admin':
-            user_departments = user.departments.all()
-            queryset = queryset.filter(department__in=user_departments)
+        def calculate_stats():
+            # Base: tarefas dos departamentos do usuário
+            queryset = Task.objects.filter(tenant=user.tenant)
+            
+            if not user.is_superuser and user.role != 'admin':
+                user_departments = user.departments.all()
+                queryset = queryset.filter(department__in=user_departments)
+            
+            # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
+            from django.db.models import Count, Q
+            from django.utils import timezone
+            now = timezone.now()
+            
+            stats_dict = queryset.aggregate(
+                total=Count('id'),
+                pending=Count('id', filter=Q(status='pending')),
+                in_progress=Count('id', filter=Q(status='in_progress')),
+                completed=Count('id', filter=Q(status='completed')),
+                cancelled=Count('id', filter=Q(status='cancelled')),
+                my_assigned=Count('id', filter=Q(assigned_to=user, status__in=['pending', 'in_progress'])),
+                overdue=Count('id', filter=Q(due_date__lt=now, status__in=['pending', 'in_progress'])),
+                with_due_date=Count('id', filter=~Q(due_date__isnull=True))
+            )
+            
+            return {
+                'total': stats_dict['total'],
+                'pending': stats_dict['pending'],
+                'in_progress': stats_dict['in_progress'],
+                'completed': stats_dict['completed'],
+                'cancelled': stats_dict['cancelled'],
+                'my_assigned': stats_dict['my_assigned'],
+                'overdue': stats_dict['overdue'],
+                'with_due_date': stats_dict['with_due_date'],
+            }
         
-        # ✅ PERFORMANCE: Usar aggregate em vez de múltiplos count() separados
-        from django.db.models import Count, Q
-        from django.utils import timezone
-        now = timezone.now()
-        
-        stats_dict = queryset.aggregate(
-            total=Count('id'),
-            pending=Count('id', filter=Q(status='pending')),
-            in_progress=Count('id', filter=Q(status='in_progress')),
-            completed=Count('id', filter=Q(status='completed')),
-            cancelled=Count('id', filter=Q(status='cancelled')),
-            my_assigned=Count('id', filter=Q(assigned_to=user, status__in=['pending', 'in_progress'])),
-            overdue=Count('id', filter=Q(due_date__lt=now, status__in=['pending', 'in_progress'])),
-            with_due_date=Count('id', filter=~Q(due_date__isnull=True))
+        # ✅ PERFORMANCE: Cache por 2 minutos (tarefas mudam frequentemente)
+        stats_data = CacheManager.get_or_set(
+            cache_key,
+            calculate_stats,
+            ttl=CacheManager.TTL_MINUTE * 2
         )
         
-        stats = {
-            'total': stats_dict['total'],
-            'pending': stats_dict['pending'],
-            'in_progress': stats_dict['in_progress'],
-            'completed': stats_dict['completed'],
-            'cancelled': stats_dict['cancelled'],
-            'my_assigned': stats_dict['my_assigned'],
-            'overdue': stats_dict['overdue'],
-            'with_due_date': stats_dict['with_due_date'],
-        }
-        
-        return Response(stats)
+        return Response(stats_data)
