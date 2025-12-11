@@ -118,33 +118,9 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         ).select_related('tenant', 'created_by')
     
     def perform_create(self, serializer):
-        """Ao criar, invalidar cache."""
+        """Ao criar, verificar limites, logar e invalidar cache."""
         from apps.common.cache_manager import CacheManager
         
-        serializer.save(created_by=self.request.user)
-        
-        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
-    
-    def perform_update(self, serializer):
-        """Ao atualizar, invalidar cache."""
-        from apps.common.cache_manager import CacheManager
-        
-        serializer.save()
-        
-        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
-    
-    def perform_destroy(self, instance):
-        """Ao deletar, invalidar cache."""
-        from apps.common.cache_manager import CacheManager
-        
-        instance.delete()
-        
-        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
-    
-    def perform_create(self, serializer):
         # Verificar limite de instâncias antes de criar
         tenant = self.request.tenant
         if tenant:
@@ -165,7 +141,28 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             user=self.request.user
         )
         
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+        
         return instance
+    
+    def perform_update(self, serializer):
+        """Ao atualizar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        serializer.save()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+    
+    def perform_destroy(self, instance):
+        """Ao deletar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        instance.delete()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
     
     def perform_destroy(self, instance):
         """
