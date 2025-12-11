@@ -76,6 +76,19 @@ export default {
           700: '#15803d',  // Verde mais escuro
           800: '#166534',  // Verde muito escuro
           900: '#14532d',  // Verde mais escuro ainda
+          // Dark mode variants
+          dark: {
+            50: '#0a1f0e',
+            100: '#0f2e14',
+            200: '#143d1a',
+            300: '#194c20',
+            400: '#1e5b26',
+            500: '#26BC6D',  // Mantém cor principal
+            600: '#2dd47e',
+            700: '#4ade80',
+            800: '#86efac',
+            900: '#dcfce7',
+          },
         },
         accent: {
           50: '#eff6ff',   // Azul muito claro

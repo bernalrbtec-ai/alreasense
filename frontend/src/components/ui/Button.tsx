@@ -14,12 +14,12 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           "inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
           {
-            "bg-accent-500 text-white hover:bg-accent-600 shadow-lg": variant === "default",
-            "bg-accent-600 text-white hover:bg-accent-700 shadow-lg": variant === "accent",
-            "bg-destructive text-destructive-foreground hover:bg-destructive/90": variant === "destructive",
-            "border border-accent-200 bg-background hover:bg-accent-50 hover:text-accent-700 hover:border-accent-300": variant === "outline",
-            "bg-secondary text-secondary-foreground hover:bg-secondary/80": variant === "secondary",
-            "hover:bg-accent-50 hover:text-accent-700": variant === "ghost",
+            "bg-accent-500 dark:bg-accent-600 text-white hover:bg-accent-600 dark:hover:bg-accent-700 shadow-lg": variant === "default",
+            "bg-accent-600 dark:bg-accent-700 text-white hover:bg-accent-700 dark:hover:bg-accent-800 shadow-lg": variant === "accent",
+            "bg-destructive text-destructive-foreground hover:bg-destructive/90 dark:hover:bg-destructive/80": variant === "destructive",
+            "border border-accent-200 dark:border-accent-700 bg-background hover:bg-accent-50 dark:hover:bg-accent-900/50 hover:text-accent-700 dark:hover:text-accent-300 hover:border-accent-300 dark:hover:border-accent-600": variant === "outline",
+            "bg-secondary text-secondary-foreground hover:bg-secondary/80 dark:hover:bg-secondary/70": variant === "secondary",
+            "hover:bg-accent-50 dark:hover:bg-gray-700 hover:text-accent-700 dark:hover:text-accent-300": variant === "ghost",
             "text-primary underline-offset-4 hover:underline": variant === "link",
           },
           {

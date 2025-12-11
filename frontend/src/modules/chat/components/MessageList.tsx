@@ -844,8 +844,8 @@ export function MessageList() {
                   max-w-[65%] md:max-w-md rounded-2xl px-4 py-2.5 shadow-md
                   transform transition-all duration-200 hover:shadow-lg cursor-pointer
                   ${messageItem.direction === 'outgoing'
-                    ? 'bg-[#d9fdd3] text-gray-900'
-                    : 'bg-white text-gray-900'
+                    ? 'bg-[#d9fdd3] dark:bg-green-900/30 text-gray-900 dark:text-gray-100'
+                    : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
                   }
                 `}
                 onContextMenu={(e) => {
@@ -1003,15 +1003,15 @@ export function MessageList() {
           {/* Indicador de digitando - Melhorado */}
           {typing && (
             <div className="flex justify-start animate-fade-in">
-              <div className="bg-white rounded-2xl px-4 py-3 shadow-md">
+              <div className="bg-white dark:bg-gray-800 rounded-2xl px-4 py-3 shadow-md">
                 <div className="flex items-center gap-2">
                   <div className="flex gap-1 px-1">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></span>
+                    <span className="w-2 h-2 bg-gray-400 dark:bg-gray-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></span>
                   </div>
                   {typingUser && (
-                    <span className="text-xs text-gray-500">{typingUser} está digitando...</span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">{typingUser} está digitando...</span>
                   )}
                 </div>
               </div>
@@ -1067,7 +1067,7 @@ export function MessageList() {
           style={{ zIndex: 10000 }}
         >
           <div 
-            className="bg-white rounded-lg shadow-lg border border-gray-300 overflow-hidden"
+            className="bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-300 dark:border-gray-700 overflow-hidden"
             onClick={(e) => e.stopPropagation()}
             style={{
               width: '320px',

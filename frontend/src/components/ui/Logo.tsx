@@ -70,7 +70,7 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
           </svg>
         </div>
         {showText && (
-          <div className={`font-sans font-semibold text-gray-900 ${sizeClasses.text} tracking-wide`}>
+          <div className={`font-sans font-semibold text-gray-900 dark:text-gray-100 ${sizeClasses.text} tracking-wide`}>
             Alrea Flow
           </div>
         )}

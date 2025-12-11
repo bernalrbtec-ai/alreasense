@@ -246,8 +246,8 @@ export default function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Dashboard</h1>
-        <p className="text-sm sm:text-base text-gray-600">
+        <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+        <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400">
           Visão geral de tarefas e compromissos de {user?.tenant?.name}
         </p>
       </div>
@@ -258,11 +258,11 @@ export default function DashboardPage() {
         <Card className="p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm text-gray-600 mb-1">Pendentes</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Pendentes</p>
               <p className="text-2xl font-bold text-orange-600">{stats.pending}</p>
             </div>
-            <div className="p-3 bg-orange-100 rounded-lg">
-              <Clock className="h-6 w-6 text-orange-600" />
+            <div className="p-3 bg-orange-100 dark:bg-orange-900/30 rounded-lg">
+              <Clock className="h-6 w-6 text-orange-600 dark:text-orange-400" />
             </div>
           </div>
         </Card>
@@ -274,8 +274,8 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-600 mb-1">Atrasadas</p>
               <p className="text-2xl font-bold text-red-600">{stats.overdue}</p>
             </div>
-            <div className="p-3 bg-red-100 rounded-lg">
-              <AlertCircle className="h-6 w-6 text-red-600" />
+            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-lg">
+              <AlertCircle className="h-6 w-6 text-red-600 dark:text-red-400" />
             </div>
           </div>
         </Card>
@@ -287,8 +287,8 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-600 mb-1">Pendências em Andamento</p>
               <p className="text-2xl font-bold text-purple-600">{stats.inProgress}</p>
             </div>
-            <div className="p-3 bg-purple-100 rounded-lg">
-              <Clock className="h-6 w-6 text-purple-600" />
+            <div className="p-3 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+              <Clock className="h-6 w-6 text-purple-600 dark:text-purple-400" />
             </div>
           </div>
         </Card>
@@ -298,15 +298,15 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm text-gray-600 mb-1">Novas Mensagens</p>
-              <p className={`text-2xl font-bold ${unreadMessages > 0 ? 'text-blue-600' : 'text-gray-600'}`}>
+              <p className={`text-2xl font-bold ${unreadMessages > 0 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'}`}>
                 {unreadMessages > 0 ? unreadMessages : '0'}
               </p>
               {unreadMessages === 0 && (
-                <p className="text-xs text-gray-400 mt-1">Nenhuma mensagem nova</p>
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Nenhuma mensagem nova</p>
               )}
             </div>
-            <div className="p-3 bg-blue-100 rounded-lg">
-              <MessageSquare className="h-6 w-6 text-blue-600" />
+            <div className="p-3 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
+              <MessageSquare className="h-6 w-6 text-blue-600 dark:text-blue-400" />
             </div>
           </div>
         </Card>

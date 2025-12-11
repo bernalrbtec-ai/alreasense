@@ -30,6 +30,7 @@ import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import ChangePasswordModal from './modals/ChangePasswordModal'
+import { ThemeToggle } from './ThemeToggle'
 import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
@@ -191,14 +192,14 @@ export default function Layout() {
   }, [activeProductSlugs, hasProductAccess, canAccessAgenda, canAccessChat, canAccessContacts, isAdmin, isGerente, isAgente, user])
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar */}
       <div className={cn(
         "fixed inset-0 z-modal lg:hidden",
         sidebarOpen ? "block" : "hidden"
       )}>
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-75" onClick={() => setSidebarOpen(false)} />
-        <div className="relative flex w-full max-w-xs flex-1 flex-col bg-white">
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-75 dark:bg-gray-900 dark:bg-opacity-75" onClick={() => setSidebarOpen(false)} />
+        <div className="relative flex w-full max-w-xs flex-1 flex-col bg-white dark:bg-gray-800">
           <div className="flex h-16 items-center justify-between px-4">
             <Logo size="sm" />
             <Button
@@ -219,8 +220,8 @@ export default function Layout() {
                   className={cn(
                     "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
                     isActive
-                      ? "bg-brand-100 text-brand-700"
-                      : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
+                      ? "bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-brand-50 dark:hover:bg-gray-700 hover:text-brand-900 dark:hover:text-white"
                   )}
                   onClick={() => setSidebarOpen(false)}
                 >
@@ -234,7 +235,7 @@ export default function Layout() {
             {isSuperAdmin && !isAgente && (
               <>
                 <div className="pt-4 pb-2">
-                  <div className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  <div className="px-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                     Administração
                   </div>
                 </div>
@@ -262,36 +263,36 @@ export default function Layout() {
           </nav>
           
           {/* User info - Mobile */}
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 p-4">
             <div className="relative" ref={userDropdownRef}>
               {/* User info - Clickable */}
               <button
                 onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                className="flex items-center w-full hover:bg-brand-50 rounded-md px-2 py-2 transition-colors"
+                className="flex items-center w-full hover:bg-brand-50 dark:hover:bg-gray-700 rounded-md px-2 py-2 transition-colors"
               >
                 <Avatar 
                   name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
                   size="md" 
                 />
                 <div className="ml-3 flex-1 text-left">
-                  <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
-                  <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400">{user?.tenant?.name}</p>
                 </div>
-                <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
               </button>
               
               {/* User dropdown menu */}
               {userDropdownOpen && (
-                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                   <Link
                     to="/profile"
-                    className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                    className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-brand-50 dark:hover:bg-gray-700 transition-colors"
                     onClick={() => {
                       setUserDropdownOpen(false)
                       setSidebarOpen(false)
                     }}
                   >
-                    <User className="h-4 w-4 mr-3 text-gray-400" />
+                    <User className="h-4 w-4 mr-3 text-gray-400 dark:text-gray-500" />
                     Meu Perfil
                   </Link>
                   
@@ -301,23 +302,23 @@ export default function Layout() {
                       setUserDropdownOpen(false)
                       setSidebarOpen(false)
                     }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-brand-50 dark:hover:bg-gray-700 transition-colors"
                   >
-                    <Lock className="h-4 w-4 mr-3 text-gray-400" />
+                    <Lock className="h-4 w-4 mr-3 text-gray-400 dark:text-gray-500" />
                     Alterar Senha
                   </button>
                   
-                  <div className="border-t border-gray-100 my-1" />
+                  <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                   
                   <button
                     onClick={() => {
                       setUserDropdownOpen(false)
                       logout()
                     }}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                   >
-                    <LogOut className="h-4 w-4 mr-3 text-red-500" />
-                    <span className="text-gray-700">Sair</span>
+                    <LogOut className="h-4 w-4 mr-3 text-red-500 dark:text-red-400" />
+                    <span className="text-gray-700 dark:text-gray-200">Sair</span>
                   </button>
                 </div>
               )}
@@ -331,21 +332,23 @@ export default function Layout() {
         "hidden md:fixed md:inset-y-0 md:flex md:flex-col transition-all duration-300 z-sidebar",
         sidebarCollapsed ? "md:w-16" : "md:w-64"
       )}>
-        <div className="flex flex-col flex-grow bg-white border-r border-gray-200">
+        <div className="flex flex-col flex-grow bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700">
           <div className="flex h-16 items-center justify-between px-4">
             {!sidebarCollapsed && <Logo size="sm" />}
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-              className="ml-auto"
-            >
-              {sidebarCollapsed ? (
-                <ChevronRight className="h-5 w-5" />
-              ) : (
-                <ChevronLeft className="h-5 w-5" />
-              )}
-            </Button>
+            <div className="flex items-center gap-2 ml-auto">
+              {!sidebarCollapsed && <ThemeToggle size="sm" />}
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+              >
+                {sidebarCollapsed ? (
+                  <ChevronRight className="h-5 w-5" />
+                ) : (
+                  <ChevronLeft className="h-5 w-5" />
+                )}
+              </Button>
+            </div>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4 overflow-y-auto">
             {navigation.map((item) => {
@@ -357,8 +360,8 @@ export default function Layout() {
                   className={cn(
                     "group flex items-center px-2 py-2 text-sm font-medium rounded-md",
                     isActive
-                      ? "bg-brand-100 text-brand-700"
-                      : "text-gray-600 hover:bg-brand-50 hover:text-brand-900"
+                      ? "bg-brand-100 dark:bg-brand-900 text-brand-700 dark:text-brand-300"
+                      : "text-gray-600 dark:text-gray-300 hover:bg-brand-50 dark:hover:bg-gray-700 hover:text-brand-900 dark:hover:text-white"
                   )}
                   title={sidebarCollapsed ? item.name : undefined}
                 >
@@ -372,7 +375,7 @@ export default function Layout() {
             {isSuperAdmin && !sidebarCollapsed && !isAgente && (
               <>
                 <div className="pt-4 pb-2">
-                  <div className="px-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                  <div className="px-2 text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wider">
                     ADMIN
                   </div>
                 </div>
@@ -400,7 +403,7 @@ export default function Layout() {
           </nav>
           
           {/* User info */}
-          <div className="border-t border-gray-200 p-4">
+          <div className="border-t border-gray-200 dark:border-gray-700 p-4">
             {sidebarCollapsed ? (
               <div className="flex flex-col items-center space-y-2">
                 <Avatar 
@@ -421,28 +424,28 @@ export default function Layout() {
                 {/* User info - Clickable */}
                 <button
                   onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-                  className="flex items-center w-full hover:bg-brand-50 rounded-md px-2 py-2 transition-colors"
+                  className="flex items-center w-full hover:bg-brand-50 dark:hover:bg-gray-700 rounded-md px-2 py-2 transition-colors"
                 >
                   <Avatar 
                     name={`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username || 'Usuário'} 
                     size="md" 
                   />
                   <div className="ml-3 flex-1 text-left">
-                    <p className="text-sm font-medium text-gray-700">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
-                    <p className="text-xs text-gray-500">{user?.tenant?.name}</p>
+                    <p className="text-sm font-medium text-gray-700 dark:text-gray-200">{`${user?.first_name || ''} ${user?.last_name || ''}`.trim() || user?.username}</p>
+                    <p className="text-xs text-gray-500 dark:text-gray-400">{user?.tenant?.name}</p>
                   </div>
-                  <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
+                  <ChevronDown className={`h-4 w-4 text-gray-400 dark:text-gray-500 transition-transform ${userDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 
                 {/* User dropdown menu */}
                 {userDropdownOpen && (
-                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-50">
+                  <div className="absolute bottom-full left-0 right-0 mb-2 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-50">
                     <Link
                       to="/profile"
-                      className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                      className="flex items-center px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-brand-50 dark:hover:bg-gray-700 transition-colors"
                       onClick={() => setUserDropdownOpen(false)}
                     >
-                      <User className="h-4 w-4 mr-3 text-gray-400" />
+                      <User className="h-4 w-4 mr-3 text-gray-400 dark:text-gray-500" />
                       Meu Perfil
                     </Link>
                     
@@ -451,23 +454,23 @@ export default function Layout() {
                         setShowPasswordModal(true)
                         setUserDropdownOpen(false)
                       }}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-brand-50 transition-colors"
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-brand-50 dark:hover:bg-gray-700 transition-colors"
                     >
-                      <Lock className="h-4 w-4 mr-3 text-gray-400" />
+                      <Lock className="h-4 w-4 mr-3 text-gray-400 dark:text-gray-500" />
                       Alterar Senha
                     </button>
                     
-                    <div className="border-t border-gray-100 my-1" />
+                    <div className="border-t border-gray-100 dark:border-gray-700 my-1" />
                     
                     <button
                       onClick={() => {
                         setUserDropdownOpen(false)
                         logout()
                       }}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 hover:bg-red-50 transition-colors"
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                     >
-                      <LogOut className="h-4 w-4 mr-3 text-red-500" />
-                      <span className="text-gray-700">Sair</span>
+                      <LogOut className="h-4 w-4 mr-3 text-red-500 dark:text-red-400" />
+                      <span className="text-gray-700 dark:text-gray-200">Sair</span>
                     </button>
                   </div>
                 )}
@@ -483,7 +486,7 @@ export default function Layout() {
         sidebarCollapsed ? "md:pl-16" : "md:pl-64"
       )}>
         {/* Mobile menu button */}
-        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 bg-white px-3 shadow-sm sm:gap-x-6 sm:px-4 md:px-6 lg:px-8 md:hidden">
+        <div className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-x-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-3 shadow-sm sm:gap-x-6 sm:px-4 md:px-6 lg:px-8 md:hidden">
           <Button
             variant="ghost"
             size="icon"
@@ -491,6 +494,9 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
+          <div className="ml-auto">
+            <ThemeToggle size="sm" />
+          </div>
         </div>
 
         {/* Page content */}

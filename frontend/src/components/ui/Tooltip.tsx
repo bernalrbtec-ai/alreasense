@@ -23,7 +23,7 @@ const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
         {isVisible && (
           <div
             className={cn(
-              "absolute z-50 px-2 py-1 text-xs text-white bg-gray-900 rounded shadow-lg whitespace-nowrap",
+              "absolute z-50 px-2 py-1 text-xs text-white dark:text-gray-100 bg-gray-900 dark:bg-gray-700 rounded shadow-lg whitespace-nowrap",
               {
                 "bottom-full left-1/2 transform -translate-x-1/2 mb-2": side === "top",
                 "top-full left-1/2 transform -translate-x-1/2 mt-2": side === "bottom",
@@ -38,10 +38,10 @@ const Tooltip = React.forwardRef<HTMLDivElement, TooltipProps>(
               className={cn(
                 "absolute w-0 h-0 border-4 border-transparent",
                 {
-                  "top-full left-1/2 transform -translate-x-1/2 border-t-gray-900": side === "top",
-                  "bottom-full left-1/2 transform -translate-x-1/2 border-b-gray-900": side === "bottom",
-                  "left-full top-1/2 transform -translate-y-1/2 border-l-gray-900": side === "left",
-                  "right-full top-1/2 transform -translate-y-1/2 border-r-gray-900": side === "right",
+                  "top-full left-1/2 transform -translate-x-1/2 border-t-gray-900 dark:border-t-gray-700": side === "top",
+                  "bottom-full left-1/2 transform -translate-x-1/2 border-b-gray-900 dark:border-b-gray-700": side === "bottom",
+                  "left-full top-1/2 transform -translate-y-1/2 border-l-gray-900 dark:border-l-gray-700": side === "left",
+                  "right-full top-1/2 transform -translate-y-1/2 border-r-gray-900 dark:border-r-gray-700": side === "right",
                 }
               )}
             />

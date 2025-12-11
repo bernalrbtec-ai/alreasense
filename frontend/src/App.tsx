@@ -41,9 +41,13 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { ProtectedAgendaRoute } from './components/ProtectedAgendaRoute'
 import { ProtectedChatRoute } from './components/ProtectedChatRoute'
 import { ProtectedContactsRoute } from './components/ProtectedContactsRoute'
+import { useTheme } from './hooks/useTheme'
 
 function App() {
   const { user, token, isLoading, checkAuth } = useAuthStore()
+  
+  // ✅ Inicializar tema (aplica classe dark no HTML)
+  useTheme()
 
   useEffect(() => {
     // ✅ FIX: Sempre verificar autenticação ao montar o componente
