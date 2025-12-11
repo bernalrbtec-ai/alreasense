@@ -238,17 +238,27 @@ class TenantViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciar Tenants.
     Acesso restrito a superadmins.
+    COM OTIMIZAÇÕES de performance.
     """
     queryset = Tenant.objects.all()
     serializer_class = TenantSerializer
     permission_classes = [IsAuthenticated, IsAdminUser]
     
     def get_queryset(self):
-        """Superadmins veem todos, outros só o próprio tenant."""
+        """Superadmins veem todos, outros só o próprio tenant (COM OTIMIZAÇÕES)."""
         user = self.request.user
+        
+        # ✅ OTIMIZAÇÃO: select_related para current_plan (ForeignKey)
+        # ✅ OTIMIZAÇÃO: prefetch_related para tenant_products (usado em active_products)
+        # ✅ OTIMIZAÇÃO: prefetch_related para users (usado em get_admin_user)
+        base_queryset = Tenant.objects.select_related('current_plan').prefetch_related(
+            'tenant_products__product',  # Para active_products
+            'users'  # Para get_admin_user
+        )
+        
         if user.is_superuser:
-            return Tenant.objects.all()
-        return Tenant.objects.filter(id=user.tenant.id)
+            return base_queryset.all()
+        return base_queryset.filter(id=user.tenant.id)
 
 
 class DepartmentViewSet(viewsets.ModelViewSet):
@@ -356,6 +366,7 @@ class UserViewSet(viewsets.ModelViewSet):
     """
     ViewSet para gerenciar Usuários.
     Filtrado automaticamente por tenant do usuário autenticado.
+    COM CACHE para otimizar performance.
     """
     permission_classes = [IsAuthenticated]
     
@@ -370,8 +381,69 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
     
     def get_queryset(self):
-        """Retorna apenas usuários do tenant do usuário."""
+        """Retorna apenas usuários do tenant do usuário (COM CACHE)."""
+        from apps.common.cache_manager import CacheManager
+        
         user = self.request.user
+        
+        # Cache key por tenant
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_USER,
+            'all' if user.is_superuser else 'tenant',
+            tenant_id=user.tenant.id if user.tenant else 'none'
+        )
+        
+        def fetch_user_ids():
+            """Função para buscar IDs de usuários do banco"""
+            if user.is_superuser:
+                queryset = User.objects.select_related('tenant').prefetch_related('departments').all()
+            else:
+                queryset = User.objects.filter(tenant=user.tenant).select_related('tenant').prefetch_related('departments')
+            
+            # Retornar apenas IDs para cache
+            return list(queryset.values_list('id', flat=True))
+        
+        # ✅ OTIMIZAÇÃO: Cachear IDs (TTL de 5 minutos - dados podem mudar)
+        user_ids = CacheManager.get_or_set(
+            cache_key,
+            fetch_user_ids,
+            ttl=CacheManager.TTL_MINUTE * 5
+        )
+        
+        # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related/prefetch_related
         if user.is_superuser:
-            return User.objects.select_related('tenant').prefetch_related('departments').all()
-        return User.objects.filter(tenant=user.tenant).select_related('tenant').prefetch_related('departments')
+            queryset = User.objects.filter(id__in=user_ids).select_related('tenant').prefetch_related('departments')
+        else:
+            queryset = User.objects.filter(
+                id__in=user_ids,
+                tenant=user.tenant
+            ).select_related('tenant').prefetch_related('departments')
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Ao criar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        serializer.save()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de usuários do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
+    
+    def perform_update(self, serializer):
+        """Ao atualizar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        serializer.save()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de usuários do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
+    
+    def perform_destroy(self, instance):
+        """Ao deletar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        instance.delete()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de usuários do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")

@@ -43,9 +43,10 @@ class TenantSerializer(serializers.ModelSerializer):
         ]
     
     def get_admin_user(self, obj):
-        """Retorna dados do usuário admin do tenant"""
-        from apps.authn.models import User
-        admin = User.objects.filter(tenant=obj, role='admin').first()
+        """Retorna dados do usuário admin do tenant (OTIMIZADO com prefetch_related)"""
+        # ✅ OTIMIZAÇÃO: Usar prefetch_related ao invés de query separada
+        # obj.users já está prefetchado no ViewSet
+        admin = next((u for u in obj.users.all() if u.role == 'admin'), None)
         if admin:
             return {
                 'id': admin.id,

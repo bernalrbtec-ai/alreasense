@@ -76,12 +76,14 @@ class NotificationTemplateViewSet(viewsets.ModelViewSet):
 
 
 class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
-    """ViewSet for WhatsAppInstance."""
+    """ViewSet for WhatsAppInstance (COM CACHE)."""
     
     serializer_class = WhatsAppInstanceSerializer
     permission_classes = [IsAuthenticated]
     
     def get_queryset(self):
+        from apps.common.cache_manager import CacheManager
+        
         user = self.request.user
         
         # REGRA: Cada cliente vê APENAS seus dados
@@ -90,8 +92,57 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             # Superadmin sem tenant = sem acesso a dados de clientes
             return WhatsAppInstance.objects.none()
         
-        # Todos (incluindo admin de cliente) veem apenas do seu tenant
-        return WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+        # Cache key por tenant
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_INSTANCE,
+            'tenant',
+            tenant_id=user.tenant.id
+        )
+        
+        def fetch_instance_ids():
+            """Função para buscar IDs de instâncias do banco"""
+            queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+            return list(queryset.values_list('id', flat=True))
+        
+        # ✅ OTIMIZAÇÃO: Cachear IDs (TTL de 2 minutos - dados podem mudar frequentemente)
+        instance_ids = CacheManager.get_or_set(
+            cache_key,
+            fetch_instance_ids,
+            ttl=CacheManager.TTL_MINUTE * 2
+        )
+        
+        # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related
+        return WhatsAppInstance.objects.filter(
+            id__in=instance_ids,
+            tenant=user.tenant
+        ).select_related('tenant', 'created_by')
+    
+    def perform_create(self, serializer):
+        """Ao criar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        serializer.save(created_by=self.request.user)
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+    
+    def perform_update(self, serializer):
+        """Ao atualizar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        serializer.save()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+    
+    def perform_destroy(self, instance):
+        """Ao deletar, invalidar cache."""
+        from apps.common.cache_manager import CacheManager
+        
+        instance.delete()
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
     
     def perform_create(self, serializer):
         # Verificar limite de instâncias antes de criar
