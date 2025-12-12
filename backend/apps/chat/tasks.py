@@ -196,6 +196,19 @@ class send_message_to_evolution:
     @staticmethod
     def delay(message_id: str):
         """Enfileira mensagem para envio (Redis)."""
+        from apps.chat.models import Message
+        
+        # ✅ VALIDAÇÃO: Verificar se mensagem existe antes de enfileirar
+        try:
+            message = Message.objects.get(id=message_id)
+            logger.debug(f"✅ [CHAT TASKS] Mensagem {message_id} existe no banco - enfileirando")
+        except Message.DoesNotExist:
+            logger.error(
+                f"❌ [CHAT TASKS] Mensagem {message_id} não existe no banco - NÃO enfileirando. "
+                f"Isso pode indicar que a mensagem foi deletada ou nunca foi criada."
+            )
+            return  # Não enfileirar mensagem que não existe
+        
         # ✅ LOG CRÍTICO: Confirmar que send_message_to_evolution.delay foi chamado
         logger.critical(f"📤 [CHAT TASKS] send_message_to_evolution.delay chamado para: {message_id}")
         enqueue_send_stream_message(message_id)
@@ -566,17 +579,41 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
 
     try:
         # Busca mensagem com todos os relacionamentos necessários para serialização
-        message = await sync_to_async(
-            Message.objects.select_related(
-                'conversation', 
-                'conversation__tenant', 
-                'sender',
-                'sender__tenant'  # ✅ Necessário para UserSerializer
-            ).prefetch_related(
-                'attachments',
-                'sender__departments'  # ✅ Necessário para UserSerializer.get_department_ids
-            ).get
-        )(id=message_id)
+        try:
+            message = await sync_to_async(
+                Message.objects.select_related(
+                    'conversation', 
+                    'conversation__tenant', 
+                    'sender',
+                    'sender__tenant'  # ✅ Necessário para UserSerializer
+                ).prefetch_related(
+                    'attachments',
+                    'sender__departments'  # ✅ Necessário para UserSerializer.get_department_ids
+                ).get
+            )(id=message_id)
+        except Message.DoesNotExist:
+            # ✅ CORREÇÃO: Mensagem não existe - pode ter sido deletada ou nunca criada
+            log.error(
+                "❌ [CHAT ENVIO] Mensagem não encontrada no banco | message_id=%s retry=%s",
+                message_id,
+                retry_count
+            )
+            # Verificar se mensagem foi deletada recentemente (pode ser race condition)
+            from django.utils import timezone
+            from datetime import timedelta
+            # Se for primeira tentativa, pode ser race condition - não fazer nada
+            # Se for retry, mensagem realmente não existe
+            if retry_count > 0:
+                log.warning(
+                    "⚠️ [CHAT ENVIO] Mensagem não encontrada após retry - abortando | message_id=%s",
+                    message_id
+                )
+            else:
+                log.warning(
+                    "⚠️ [CHAT ENVIO] Mensagem não encontrada na primeira tentativa - pode ser race condition | message_id=%s",
+                    message_id
+                )
+            return  # Abortar processamento
         
         log.debug(
             "✅ Mensagem carregada | conversation=%s tenant=%s content_preview=%s",
