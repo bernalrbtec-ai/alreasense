@@ -34,8 +34,8 @@ class CampaignViewSet(viewsets.ModelViewSet):
             'instances',
             'messages',
             'contacts',
-            Prefetch('campaigncontact_set', queryset=CampaignContact.objects.select_related('contact', 'instance_used', 'message_used')),
-            Prefetch('campaignlog_set', queryset=CampaignLog.objects.select_related('instance', 'contact', 'campaign_contact'))
+            Prefetch('campaign_contacts', queryset=CampaignContact.objects.select_related('contact', 'instance_used', 'message_used')),
+            Prefetch('logs', queryset=CampaignLog.objects.select_related('instance', 'contact', 'campaign_contact'))
         )
         
         # Suporte a filtro de status: ?status=active,paused
