@@ -32,24 +32,29 @@ class BusinessHoursService:
         1. Horário específico do departamento (se department fornecido)
         2. Horário geral do tenant
         3. None (sem horário configurado)
+        
+        ✅ CORREÇÃO: Buscar o mais recente (updated_at) mesmo se is_active não estiver definido.
+        Isso garante que alterações recentes sejam refletidas.
         """
         if department:
-            # Tenta buscar horário específico do departamento
+            # Tenta buscar horário específico do departamento (mais recente primeiro)
             business_hours = BusinessHours.objects.filter(
                 tenant=tenant,
-                department=department,
-                is_active=True
-            ).first()
+                department=department
+            ).order_by('-updated_at', '-created_at').first()
             
             if business_hours:
+                logger.debug(f"⏰ [BUSINESS HOURS] Encontrado horário do departamento: {business_hours.id} (is_active={business_hours.is_active})")
                 return business_hours
         
-        # Busca horário geral do tenant
+        # Busca horário geral do tenant (mais recente primeiro)
         business_hours = BusinessHours.objects.filter(
             tenant=tenant,
-            department__isnull=True,
-            is_active=True
-        ).first()
+            department__isnull=True
+        ).order_by('-updated_at', '-created_at').first()
+        
+        if business_hours:
+            logger.debug(f"⏰ [BUSINESS HOURS] Encontrado horário geral: {business_hours.id} (is_active={business_hours.is_active})")
         
         return business_hours
     

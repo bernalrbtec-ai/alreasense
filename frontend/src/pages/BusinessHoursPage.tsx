@@ -287,6 +287,8 @@ export default function BusinessHoursPage() {
       }
 
       updateToastSuccess(toastId, 'salvar', 'Horários de Atendimento')
+      // ✅ CORREÇÃO: Aguardar um pouco antes de recarregar para garantir que o banco foi atualizado
+      await new Promise(resolve => setTimeout(resolve, 300))
       await fetchBusinessHours()
     } catch (error: any) {
       console.error('❌ Error saving business hours:', error)

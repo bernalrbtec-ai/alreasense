@@ -73,10 +73,26 @@ class BusinessHoursViewSet(viewsets.ModelViewSet):
             serializer.validated_data.pop('tenant', None)
             serializer.validated_data.pop('department', None)
             serializer.save()
+            # ✅ CORREÇÃO CRÍTICA: Recarregar do banco para garantir dados atualizados
+            serializer.instance.refresh_from_db()
+            logger.info(f"✅ [BUSINESS HOURS] Registro atualizado e recarregado: ID={serializer.instance.id}")
         else:
             # ✅ Criar novo registro
             logger.info(f"➕ [BUSINESS HOURS] Criando novo registro para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
             serializer.save(tenant=tenant)
+            # ✅ CORREÇÃO CRÍTICA: Recarregar do banco para garantir dados atualizados
+            serializer.instance.refresh_from_db()
+            logger.info(f"✅ [BUSINESS HOURS] Registro criado e recarregado: ID={serializer.instance.id}")
+    
+    def perform_update(self, serializer):
+        """
+        ✅ CORREÇÃO: Garantir que objeto seja recarregado após atualização.
+        """
+        logger.info(f"🔄 [BUSINESS HOURS] PATCH - Atualizando registro (ID: {serializer.instance.id})")
+        serializer.save()
+        # ✅ CORREÇÃO CRÍTICA: Recarregar do banco para garantir dados atualizados
+        serializer.instance.refresh_from_db()
+        logger.info(f"✅ [BUSINESS HOURS] Registro atualizado e recarregado: ID={serializer.instance.id}")
     
     @action(detail=False, methods=['get'])
     def current(self, request):
