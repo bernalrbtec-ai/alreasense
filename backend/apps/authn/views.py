@@ -274,8 +274,15 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         """Retorna apenas departamentos do tenant do usuário (COM CACHE)."""
         from apps.common.cache_manager import CacheManager
         from django.db.models import Count, Q
+        import logging
         
+        logger = logging.getLogger(__name__)
         user = self.request.user
+        
+        # ✅ CORREÇÃO URGENTE: Se não tem tenant, retornar vazio
+        if not user.tenant:
+            logger.warning(f"⚠️ [DEPARTMENTS] Usuário {user.email} sem tenant, retornando queryset vazio")
+            return Department.objects.none()
         
         # Cache key por tenant e tipo de usuário
         cache_key = CacheManager.make_key(
@@ -292,7 +299,9 @@ class DepartmentViewSet(viewsets.ModelViewSet):
                 queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
             
             # Retornar apenas IDs para cache (anotações mudam frequentemente)
-            return list(queryset.values_list('id', flat=True))
+            ids = list(queryset.values_list('id', flat=True))
+            logger.info(f"📋 [DEPARTMENTS] Buscados {len(ids)} departamentos do banco para tenant {user.tenant.id}")
+            return ids
         
         # ✅ OTIMIZAÇÃO: Cachear apenas IDs (anotações mudam quando conversas são transferidas)
         # TTL de 5 minutos - dados podem mudar quando conversas são transferidas
@@ -302,14 +311,30 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             ttl=CacheManager.TTL_MINUTE * 5
         )
         
-        # ✅ OTIMIZAÇÃO: Construir queryset completo com anotações em uma única query
-        if user.is_superuser:
-            queryset = Department.objects.filter(id__in=department_ids).select_related('tenant')
+        # ✅ CORREÇÃO URGENTE: Se cache retornou vazio ou None, buscar diretamente do banco
+        # Isso evita que departamentos sumam se o cache estiver corrompido
+        if not department_ids or len(department_ids) == 0:
+            logger.warning(f"⚠️ [DEPARTMENTS] Cache retornou vazio para tenant {user.tenant.id}, buscando diretamente do banco")
+            # Invalidar cache corrompido
+            try:
+                CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+            except Exception as e:
+                logger.error(f"❌ [DEPARTMENTS] Erro ao invalidar cache: {e}")
+            
+            # Buscar diretamente do banco (bypass do cache)
+            if user.is_superuser:
+                queryset = Department.objects.select_related('tenant').all()
+            else:
+                queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
         else:
-            queryset = Department.objects.filter(
-                id__in=department_ids,
-                tenant=user.tenant
-            ).select_related('tenant')
+            # ✅ OTIMIZAÇÃO: Construir queryset completo com anotações em uma única query
+            if user.is_superuser:
+                queryset = Department.objects.filter(id__in=department_ids).select_related('tenant')
+            else:
+                queryset = Department.objects.filter(
+                    id__in=department_ids,
+                    tenant=user.tenant
+                ).select_related('tenant')
         
         # ✅ OTIMIZAÇÃO: Anotar contador de conversas pendentes (sempre necessário para serializer)
         # Esta anotação não é cacheada porque muda quando conversas são transferidas
@@ -324,6 +349,7 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             )
         )
         
+        logger.info(f"✅ [DEPARTMENTS] Retornando {queryset.count()} departamentos para usuário {user.email}")
         return queryset
     
     def perform_create(self, serializer):
