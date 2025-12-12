@@ -2495,6 +2495,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         file_url='',  # Será preenchido com URL proxy após processamento
                         storage_type='s3',  # Direto para S3 (sem storage local)
                         size_bytes=0,  # Será preenchido após download
+                        processing_status='processing',  # ✅ CORREÇÃO CRÍTICA: Marcar como processando
                         metadata={
                             'processing': True,
                             'media_type': incoming_media_type,

@@ -681,12 +681,14 @@ async def handle_process_incoming_media(
                             file_url='',
                             file_path=''
                         ).first())()
-                        if existing:
-                            metadata = normalize_metadata(existing.metadata)
-                            metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
-                            metadata.pop('processing', None)
-                            existing.metadata = metadata
-                            await sync_to_async(existing.save)(update_fields=['metadata'])
+            if existing:
+                metadata = normalize_metadata(existing.metadata)
+                metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
+                metadata.pop('processing', None)
+                existing.metadata = metadata
+                # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                existing.processing_status = 'failed'
+                await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
                     except Exception:
                         pass
                     return  # Não processar arquivo muito grande
@@ -746,7 +748,9 @@ async def handle_process_incoming_media(
                             metadata['error'] = f'Arquivo muito grande ({len(media_data) / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
                             metadata.pop('processing', None)
                             existing.metadata = metadata
-                            await sync_to_async(existing.save)(update_fields=['metadata'])
+                            # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                            existing.processing_status = 'failed'
+                            await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
                     except Exception:
                         pass
                     return  # Não processar arquivo muito grande
@@ -804,7 +808,9 @@ async def handle_process_incoming_media(
                 metadata['error'] = f'Falha ao baixar mídia após {max_retries} tentativas'
                 metadata.pop('processing', None)
                 existing.metadata = metadata
-                await sync_to_async(existing.save)(update_fields=['metadata'])
+                # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                existing.processing_status = 'failed'
+                await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
         except Exception:
             pass
         return
@@ -842,7 +848,9 @@ async def handle_process_incoming_media(
                         metadata['error'] = f'Validação falhou: {validation_error}'
                         metadata.pop('processing', None)
                         existing.metadata = metadata
-                        await sync_to_async(existing.save)(update_fields=['metadata'])
+                        # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                        existing.processing_status = 'failed'
+                        await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
                 except Exception:
                     pass
                 return  # Não processar arquivo inválido
@@ -1060,6 +1068,9 @@ async def handle_process_incoming_media(
             existing.original_filename = filename
             existing.expires_at = timezone.now() + timedelta(days=365)  # ✅ Mesmo do ENVIO
             existing.metadata = metadata
+            # ✅ CORREÇÃO CRÍTICA: Atualizar processing_status para 'completed' quando processamento terminar
+            existing.processing_status = 'completed'
+            existing.processed_at = timezone.now()
             
             # ✅ IMPORTANTE: Usar save() para gerar media_hash e short_url (mesmo do ENVIO)
             await sync_to_async(existing.save)()
@@ -1068,6 +1079,7 @@ async def handle_process_incoming_media(
             logger.info(f"   📌 file_url: {public_url[:60]}...")
             logger.info(f"   📌 file_path: {s3_path}")
             logger.info(f"   📌 media_hash: {attachment.media_hash}")
+            logger.info(f"   📌 processing_status: {attachment.processing_status}")
             logger.info(f"   📌 metadata.processing: {metadata.get('processing', 'N/A')}")
         else:
             # ✅ Se não encontrou placeholder, criar novo (não deveria acontecer)
@@ -1086,7 +1098,9 @@ async def handle_process_incoming_media(
                 storage_type='s3',
                 size_bytes=len(processed_data),
                 expires_at=timezone.now() + timedelta(days=365),
-                metadata={'media_type': media_type}  # ✅ Sem flag processing
+                metadata={'media_type': media_type},  # ✅ Sem flag processing
+                processing_status='completed',  # ✅ CORREÇÃO CRÍTICA: Marcar como concluído
+                processed_at=timezone.now()
             )
             logger.info(f"✅ [INCOMING MEDIA] Novo attachment criado: {attachment.id}")
         
@@ -1159,7 +1173,9 @@ async def handle_process_incoming_media(
                 metadata['error'] = 'Timeout ao processar mídia. Tente novamente mais tarde.'
                 metadata.pop('processing', None)
                 existing.metadata = metadata
-                await sync_to_async(existing.save)(update_fields=['metadata'])
+                # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                existing.processing_status = 'failed'
+                await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
         except Exception:
             pass  # Don't break if metadata update fails
     except Exception as e:
@@ -1180,7 +1196,9 @@ async def handle_process_incoming_media(
                 metadata['error'] = str(e)[:100]  # Limitar tamanho
                 metadata.pop('processing', None)
                 existing.metadata = metadata
-                await sync_to_async(existing.save)(update_fields=['metadata'])
+                # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                existing.processing_status = 'failed'
+                await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
         except Exception:
             pass  # Não quebrar se falhar ao atualizar metadata
 
