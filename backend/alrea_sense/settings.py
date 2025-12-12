@@ -310,6 +310,31 @@ print(f"🔧 [SETTINGS] REDIS_PORT: {REDIS_PORT}")
 print(f"🔧 [SETTINGS] REDIS_USER: {REDIS_USER}")
 print(f"🔧 [SETTINGS] REDIS_PASSWORD: {'Set' if REDIS_PASSWORD else 'Not set'}")
 
+# ✅ IMPROVEMENT: Django Cache Configuration (Redis)
+# Usa database /2 para não conflitar com Channels (/1) e Chat Streams (/3)
+if REDIS_URL:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': REDIS_URL.replace('/0', '/2').replace('/1', '/2').replace('/3', '/2'),
+            'OPTIONS': {
+                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
+            },
+            'KEY_PREFIX': 'alrea_cache',
+            'TIMEOUT': 300,  # 5 minutos default
+        }
+    }
+    print(f"✅ [CACHE] Configurado com Redis: {CACHES['default']['LOCATION'][:50]}...")
+else:
+    # Fallback para cache local em desenvolvimento (sem Redis)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'unique-snowflake',
+        }
+    }
+    print("⚠️ [CACHE] Redis não configurado, usando cache local (LocMemCache)")
+
 # Redis Streams (Chat Send Pipeline)
 CHAT_STREAM_REDIS_URL = config(
     'CHAT_STREAM_REDIS_URL',

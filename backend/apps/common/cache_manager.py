@@ -102,20 +102,56 @@ class CacheManager:
         Returns:
             Number of keys deleted
         """
-        # Note: This requires Redis backend
+        # ✅ IMPROVEMENT: Suporta múltiplos backends Redis
         try:
-            from django.core.cache.backends.redis import RedisCache
             backend = cache._cache
+            backend_type = type(backend).__name__
+            backend_module = type(backend).__module__
             
-            if isinstance(backend, RedisCache):
-                keys = backend.keys(pattern)
-                if keys:
-                    return backend.delete_many(keys)
+            # Verificar se é backend Redis (django.core.cache.backends.redis ou django_redis)
+            is_redis = (
+                'redis' in backend_module.lower() or 
+                'RedisCache' in backend_type or
+                hasattr(backend, 'keys') and hasattr(backend, 'delete_many')
+            )
             
-            logger.warning(f"Pattern invalidation not supported for cache backend")
+            if is_redis:
+                try:
+                    # Tentar usar método keys() e delete_many() se disponível
+                    if hasattr(backend, 'keys') and hasattr(backend, 'delete_many'):
+                        # Adicionar KEY_PREFIX se configurado
+                        from django.conf import settings
+                        key_prefix = getattr(settings, 'CACHES', {}).get('default', {}).get('KEY_PREFIX', '')
+                        if key_prefix:
+                            pattern = f"{key_prefix}:{pattern}" if not pattern.startswith(key_prefix) else pattern
+                        
+                        keys = backend.keys(pattern)
+                        if keys:
+                            deleted = backend.delete_many(keys)
+                            logger.debug(f"🗑️ [CACHE] Invalidados {deleted} keys com padrão: {pattern}")
+                            return deleted
+                        else:
+                            logger.debug(f"ℹ️ [CACHE] Nenhuma key encontrada com padrão: {pattern}")
+                            return 0
+                    else:
+                        # Fallback: tentar acessar cliente Redis diretamente
+                        if hasattr(backend, 'client'):
+                            client = backend.client
+                            if hasattr(client, 'keys') and hasattr(client, 'delete'):
+                                keys = client.keys(pattern)
+                                if keys:
+                                    deleted = client.delete(*keys)
+                                    logger.debug(f"🗑️ [CACHE] Invalidados {deleted} keys via cliente Redis: {pattern}")
+                                    return deleted
+                except Exception as redis_error:
+                    logger.warning(f"⚠️ [CACHE] Erro ao invalidar padrão Redis {pattern}: {redis_error}")
+                    return 0
+            
+            # Backend não suporta pattern invalidation
+            logger.debug(f"ℹ️ [CACHE] Pattern invalidation não suportado para backend: {backend_module}.{backend_type}")
             return 0
         except Exception as e:
-            logger.error(f"Error invalidating cache pattern {pattern}: {e}")
+            logger.error(f"❌ [CACHE] Erro ao invalidar padrão de cache {pattern}: {e}", exc_info=True)
             return 0
     
     @classmethod
@@ -127,22 +163,46 @@ class CacheManager:
             Dictionary with cache stats
         """
         try:
-            # Redis-specific stats
-            from django.core.cache.backends.redis import RedisCache
             backend = cache._cache
+            backend_type = type(backend).__name__
+            backend_module = type(backend).__module__
             
-            if isinstance(backend, RedisCache):
-                info = backend.client.info('stats')
-                return {
-                    'total_keys': backend.client.dbsize(),
-                    'hits': info.get('keyspace_hits', 0),
-                    'misses': info.get('keyspace_misses', 0),
-                    'memory_used': backend.client.info('memory').get('used_memory_human'),
-                }
+            # ✅ IMPROVEMENT: Suporta múltiplos backends Redis
+            is_redis = (
+                'redis' in backend_module.lower() or 
+                'RedisCache' in backend_type or
+                hasattr(backend, 'client')
+            )
             
-            return {'message': 'Stats not available for this cache backend'}
+            if is_redis:
+                try:
+                    # Tentar acessar cliente Redis
+                    client = None
+                    if hasattr(backend, 'client'):
+                        client = backend.client
+                    elif hasattr(backend, '_client'):
+                        client = backend._client
+                    
+                    if client and hasattr(client, 'info'):
+                        info = client.info('stats')
+                        memory_info = client.info('memory')
+                        return {
+                            'total_keys': client.dbsize() if hasattr(client, 'dbsize') else 0,
+                            'hits': info.get('keyspace_hits', 0),
+                            'misses': info.get('keyspace_misses', 0),
+                            'memory_used': memory_info.get('used_memory_human', 'N/A'),
+                            'backend': f"{backend_module}.{backend_type}",
+                        }
+                except Exception as redis_error:
+                    logger.warning(f"⚠️ [CACHE] Erro ao obter estatísticas Redis: {redis_error}")
+                    return {'error': str(redis_error), 'backend': f"{backend_module}.{backend_type}"}
+            
+            return {
+                'message': 'Stats not available for this cache backend',
+                'backend': f"{backend_module}.{backend_type}"
+            }
         except Exception as e:
-            logger.error(f"Error getting cache stats: {e}")
+            logger.error(f"❌ [CACHE] Erro ao obter estatísticas de cache: {e}", exc_info=True)
             return {'error': str(e)}
 
 
