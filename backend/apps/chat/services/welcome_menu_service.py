@@ -147,12 +147,22 @@ class WelcomeMenuService:
                     }
                 )
                 
-                # ✅ CORREÇÃO: Usar send_message_to_evolution.delay() (mesmo método usado pelo resto do sistema)
-                # Isso enfileira no Redis Stream correto que é processado pelo stream_consumer
-                from apps.chat.tasks import send_message_to_evolution
-                send_message_to_evolution.delay(str(message.id))
+                logger.info(f"✅ [WELCOME MENU] Mensagem criada: {message.id}")
                 
-                logger.info(f"✅ [WELCOME MENU] Menu enfileirado para envio - conversa {conversation.id}, mensagem {message.id}")
+                # ✅ CORREÇÃO CRÍTICA: Enfileira mensagem APENAS após commit da transação
+                # Isso garante que a mensagem esteja no banco quando o worker tentar buscá-la
+                # Evita race condition onde worker tenta buscar mensagem que ainda não foi commitada
+                def enqueue_message_after_commit():
+                    try:
+                        from apps.chat.tasks import send_message_to_evolution
+                        send_message_to_evolution.delay(str(message.id))
+                        logger.info(f"✅ [WELCOME MENU] Menu enfileirado para envio - conversa {conversation.id}, mensagem {message.id}")
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar mensagem: {e}", exc_info=True)
+                        # Não re-raise - mensagem já foi criada, pode ser enviada manualmente depois
+                
+                transaction.on_commit(enqueue_message_after_commit)
+                
                 return message
                 
         except Exception as e:
