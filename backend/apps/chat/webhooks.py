@@ -1925,6 +1925,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 old_status = conversation.status
                 old_department = conversation.department.name if conversation.department else 'Nenhum'
                 
+                # ✅ CORREÇÃO CRÍTICA: Verificar se deve enviar menu ANTES de mudar o status
+                # Isso garante que a verificação de 'closed' funcione corretamente
+                should_send_menu_for_closed = False
+                if not from_me:  # Apenas para mensagens recebidas
+                    try:
+                        from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                        # ✅ CORREÇÃO: Verificar ANTES de mudar o status (conversation ainda está 'closed')
+                        if WelcomeMenuService.should_send_menu(conversation):
+                            should_send_menu_for_closed = True
+                            logger.info(f"📋 [WELCOME MENU] Menu será enviado para conversa fechada reaberta: {conversation.id}")
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
+                
                 # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, respeitar default_department
                 # Se instância tem default_department, usar ele. Senão, remover para voltar ao Inbox
                 if default_department:
@@ -1945,13 +1958,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status}")
                 logger.info(f"   📋 Departamento: {old_department} → {status_str}")
                 
-                # ✅ NOVO: Enviar menu de boas-vindas para conversa fechada que recebeu mensagem (se configurado)
-                if not from_me:  # Apenas para mensagens recebidas
+                # ✅ CORREÇÃO: Enviar menu APÓS salvar (já verificamos antes de mudar o status)
+                if should_send_menu_for_closed:
                     try:
                         from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                        if WelcomeMenuService.should_send_menu(conversation):
-                            logger.info(f"📋 [WELCOME MENU] Enviando menu para conversa reaberta: {conversation.id}")
-                            WelcomeMenuService.send_welcome_menu(conversation)
+                        logger.info(f"📋 [WELCOME MENU] Enviando menu para conversa reaberta: {conversation.id}")
+                        WelcomeMenuService.send_welcome_menu(conversation)
                     except Exception as e:
                         logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para conversa reaberta: {e}", exc_info=True)
             
