@@ -317,9 +317,8 @@ if REDIS_URL:
         'default': {
             'BACKEND': 'django.core.cache.backends.redis.RedisCache',
             'LOCATION': REDIS_URL.replace('/0', '/2').replace('/1', '/2').replace('/3', '/2'),
-            'OPTIONS': {
-                'CLIENT_CLASS': 'django_redis.client.DefaultClient',
-            },
+            # ✅ CORREÇÃO: Remover OPTIONS com CLIENT_CLASS (não suportado pelo backend nativo)
+            # O backend nativo do Django já gerencia conexões Redis automaticamente
             'KEY_PREFIX': 'alrea_cache',
             'TIMEOUT': 300,  # 5 minutos default
         }
