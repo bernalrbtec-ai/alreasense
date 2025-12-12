@@ -75,7 +75,13 @@ class BusinessHoursService:
             logger.info(f"⏰ [BUSINESS HOURS] Nenhum horário configurado para tenant={tenant.name}, department={department.name if department else 'None'} - considerando sempre aberto")
             return True, None
         
-        logger.info(f"⏰ [BUSINESS HOURS] Verificando horário: tenant={tenant.name}, department={department.name if department else 'None'}, config_id={business_hours.id}")
+        # ✅ CORREÇÃO CRÍTICA: Se horário está desativado (is_active=False), considerar sempre aberto
+        # Isso evita enviar mensagens automáticas quando o usuário desativou os horários
+        if not business_hours.is_active:
+            logger.info(f"⏰ [BUSINESS HOURS] Horário de atendimento DESATIVADO (is_active=False) para tenant={tenant.name}, department={department.name if department else 'Geral'} - considerando sempre aberto (não enviará mensagem automática)")
+            return True, None
+        
+        logger.info(f"⏰ [BUSINESS HOURS] Verificando horário: tenant={tenant.name}, department={department.name if department else 'None'}, config_id={business_hours.id}, is_active={business_hours.is_active}")
         
         # Usa datetime fornecido ou agora
         if check_datetime is None:
