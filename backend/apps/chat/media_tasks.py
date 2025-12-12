@@ -681,14 +681,14 @@ async def handle_process_incoming_media(
                             file_url='',
                             file_path=''
                         ).first())()
-            if existing:
-                metadata = normalize_metadata(existing.metadata)
-                metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
-                metadata.pop('processing', None)
-                existing.metadata = metadata
-                # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
-                existing.processing_status = 'failed'
-                await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
+                        if existing:
+                            metadata = normalize_metadata(existing.metadata)
+                            metadata['error'] = f'Arquivo muito grande ({content_length / 1024 / 1024:.2f}MB). Máximo: {MAX_SIZE / 1024 / 1024}MB'
+                            metadata.pop('processing', None)
+                            existing.metadata = metadata
+                            # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
+                            existing.processing_status = 'failed'
+                            await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
                     except Exception:
                         pass
                     return  # Não processar arquivo muito grande
