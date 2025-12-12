@@ -687,12 +687,17 @@ class BusinessHoursService:
         """
         Calcula a data de vencimento da tarefa.
         
-        Regra: até 1h após o início do próximo dia de atendimento.
+        Regras:
+        1. Se mensagem foi recebida ANTES do início do expediente do mesmo dia:
+           → Vence no MESMO DIA, 1h após o início do expediente
+        2. Se mensagem foi recebida DEPOIS do fim do expediente:
+           → Vence no PRÓXIMO DIA de atendimento, 1h após o início do expediente
         
-        Exemplo:
-        - Mensagem: Sexta 22h
-        - Próximo atendimento: Segunda 09:00
-        - Vencimento: Segunda 10:00 (09:00 + 1h)
+        Exemplos:
+        - Mensagem: Segunda 7h (atendimento começa 9h)
+          → Vencimento: Segunda 10h (9h + 1h)
+        - Mensagem: Sexta 22h (atendimento termina 18h)
+          → Vencimento: Segunda 10h (próximo dia 9h + 1h)
         """
         if message_datetime is None:
             message_datetime = django_timezone.now()
@@ -707,10 +712,68 @@ class BusinessHoursService:
         # Converte para timezone configurado
         tz = ZoneInfo(business_hours.timezone)
         local_datetime = message_datetime.astimezone(tz)
+        current_date = local_datetime.date()
+        current_time = local_datetime.time()
+        current_weekday = current_date.weekday()
         
-        # Procura o próximo dia de atendimento (até 7 dias à frente)
+        # Mapeia weekday para campos
+        day_configs = {
+            0: ('monday_enabled', 'monday_start', 'monday_end', 'Segunda-feira'),
+            1: ('tuesday_enabled', 'tuesday_start', 'tuesday_end', 'Terça-feira'),
+            2: ('wednesday_enabled', 'wednesday_start', 'wednesday_end', 'Quarta-feira'),
+            3: ('thursday_enabled', 'thursday_start', 'thursday_end', 'Quinta-feira'),
+            4: ('friday_enabled', 'friday_start', 'friday_end', 'Sexta-feira'),
+            5: ('saturday_enabled', 'saturday_start', 'saturday_end', 'Sábado'),
+            6: ('sunday_enabled', 'sunday_start', 'sunday_end', 'Domingo'),
+        }
+        
+        enabled_field, start_field, end_field, day_name = day_configs[current_weekday]
+        is_enabled = getattr(business_hours, enabled_field)
+        start_time = getattr(business_hours, start_field)
+        end_time = getattr(business_hours, end_field)
+        
+        # ✅ NOVA LÓGICA: Verificar se mensagem foi recebida ANTES do início do expediente do mesmo dia
+        if is_enabled and start_time and end_time:
+            # Verifica se é feriado
+            holidays = business_hours.holidays or []
+            date_str = current_date.strftime('%Y-%m-%d')
+            is_holiday = date_str in holidays
+            
+            if not is_holiday:
+                # Se a mensagem foi recebida ANTES do início do expediente (ex: 7h, atendimento começa 9h)
+                if current_time < start_time:
+                    # ✅ CASO 1: Vence no mesmo dia, 1h após o início do expediente
+                    due_datetime_local = datetime.combine(current_date, start_time) + timedelta(hours=1)
+                    due_datetime_aware = due_datetime_local.replace(tzinfo=tz)
+                    due_datetime_utc = due_datetime_aware.astimezone(ZoneInfo('UTC'))
+                    
+                    logger.info(
+                        f"📅 [TASK DUE DATE] Mensagem recebida ANTES do expediente ({current_time.strftime('%H:%M')} < {start_time.strftime('%H:%M')})"
+                    )
+                    logger.info(
+                        f"   Vencimento: {day_name} {start_time} + 1h = {due_datetime_local.strftime('%d/%m/%Y %H:%M')} "
+                        f"(UTC: {due_datetime_utc.strftime('%d/%m/%Y %H:%M')})"
+                    )
+                    
+                    return due_datetime_utc
+                
+                # Se a mensagem foi recebida DEPOIS do fim do expediente (ex: 22h, atendimento termina 18h)
+                # ou durante o expediente mas fora de horário válido, buscar próximo dia
+                if current_time >= end_time:
+                    logger.info(
+                        f"📅 [TASK DUE DATE] Mensagem recebida DEPOIS do expediente ({current_time.strftime('%H:%M')} >= {end_time.strftime('%H:%M')})"
+                    )
+                    logger.info(f"   Buscando próximo dia de atendimento...")
+                else:
+                    # Mensagem durante o expediente (não deveria criar tarefa, mas se criar, usar próximo dia)
+                    logger.info(
+                        f"📅 [TASK DUE DATE] Mensagem recebida DURANTE o expediente ({current_time.strftime('%H:%M')})"
+                    )
+                    logger.info(f"   Buscando próximo dia de atendimento...")
+        
+        # ✅ CASO 2: Buscar próximo dia de atendimento (até 7 dias à frente)
         for days_ahead in range(1, 8):
-            check_date = local_datetime.date() + timedelta(days=days_ahead)
+            check_date = current_date + timedelta(days=days_ahead)
             check_weekday = check_date.weekday()
             
             # Verifica se é feriado
@@ -719,22 +782,11 @@ class BusinessHoursService:
             if date_str in holidays:
                 continue
             
-            # Mapeia weekday para campos
-            day_configs = {
-                0: ('monday_enabled', 'monday_start', 'Segunda-feira'),
-                1: ('tuesday_enabled', 'tuesday_start', 'Terça-feira'),
-                2: ('wednesday_enabled', 'wednesday_start', 'Quarta-feira'),
-                3: ('thursday_enabled', 'thursday_start', 'Quinta-feira'),
-                4: ('friday_enabled', 'friday_start', 'Sexta-feira'),
-                5: ('saturday_enabled', 'saturday_start', 'Sábado'),
-                6: ('sunday_enabled', 'sunday_start', 'Domingo'),
-            }
-            
-            enabled_field, start_field, day_name = day_configs[check_weekday]
+            enabled_field, start_field, end_field, day_name = day_configs[check_weekday]
             is_enabled = getattr(business_hours, enabled_field)
             start_time = getattr(business_hours, start_field)
             
-            if is_enabled:
+            if is_enabled and start_time:
                 # Encontrou próximo dia de atendimento
                 # Combina data + horário de início + 1 hora
                 due_datetime_local = datetime.combine(check_date, start_time) + timedelta(hours=1)
@@ -745,7 +797,7 @@ class BusinessHoursService:
                 due_datetime_utc = due_datetime_aware.astimezone(ZoneInfo('UTC'))
                 
                 logger.info(
-                    f"Vencimento calculado: {day_name} {start_time} + 1h = {due_datetime_local.strftime('%d/%m/%Y %H:%M')} "
+                    f"📅 [TASK DUE DATE] Vencimento calculado: {day_name} {start_time} + 1h = {due_datetime_local.strftime('%d/%m/%Y %H:%M')} "
                     f"(UTC: {due_datetime_utc.strftime('%d/%m/%Y %H:%M')})"
                 )
                 
@@ -755,6 +807,6 @@ class BusinessHoursService:
         # Se não encontrou nenhum dia de atendimento nos próximos 7 dias, vence em 7 dias
         fallback_date = local_datetime + timedelta(days=7)
         fallback_utc = fallback_date.astimezone(ZoneInfo('UTC'))
-        logger.warning(f"Nenhum dia de atendimento encontrado nos próximos 7 dias, usando fallback: {fallback_utc}")
+        logger.warning(f"⚠️ [TASK DUE DATE] Nenhum dia de atendimento encontrado nos próximos 7 dias, usando fallback: {fallback_utc}")
         return fallback_utc
 

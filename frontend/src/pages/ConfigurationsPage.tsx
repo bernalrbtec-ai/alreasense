@@ -1924,8 +1924,11 @@ export default function ConfigurationsPage() {
                         <Info className="h-5 w-5 text-blue-600 mt-0.5" />
                         <div className="text-sm text-blue-800">
                           <p className="font-medium mb-1">Vencimento Automático:</p>
-                          <p>A tarefa vencerá automaticamente <strong>1 hora após o início</strong> do próximo dia de atendimento.</p>
-                          <p className="mt-1 text-xs">Exemplo: Mensagem recebida sexta 22h → Vence segunda 10h (se atendimento começa 9h)</p>
+                          <p>A tarefa vencerá automaticamente <strong>1 hora após o início</strong> do expediente:</p>
+                          <ul className="mt-1 text-xs list-disc list-inside space-y-1">
+                            <li><strong>Antes do expediente:</strong> Vence no mesmo dia (ex: mensagem 7h, atendimento 9h → vence 10h do mesmo dia)</li>
+                            <li><strong>Depois do expediente:</strong> Vence no próximo dia de atendimento (ex: mensagem sexta 22h → vence segunda 10h se atendimento começa 9h)</li>
+                          </ul>
                         </div>
                       </div>
                     </div>
