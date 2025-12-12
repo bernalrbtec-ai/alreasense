@@ -26,12 +26,19 @@ class WelcomeMenuService:
         Returns:
             True se deve enviar menu, False caso contrário
         """
+        logger.info(f"🔍 [WELCOME MENU] Verificando se deve enviar menu para conversa {conversation.id}")
+        logger.info(f"   📊 Status: {conversation.status}")
+        logger.info(f"   📋 Departamento: {conversation.department.name if conversation.department else 'None'}")
+        
         try:
             config = WelcomeMenuConfig.objects.get(tenant=conversation.tenant)
+            logger.info(f"   ✅ Config encontrada: enabled={config.enabled}, send_to_new={config.send_to_new_conversations}, send_to_closed={config.send_to_closed_conversations}")
         except WelcomeMenuConfig.DoesNotExist:
+            logger.warning(f"   ⚠️ [WELCOME MENU] Config não encontrada para tenant {conversation.tenant.id}")
             return False
         
         if not config.enabled:
+            logger.debug(f"   ⏭️ [WELCOME MENU] Menu desabilitado na configuração")
             return False
         
         # Verificar se já foi enviado menu recentemente (evitar spam)
@@ -46,17 +53,26 @@ class WelcomeMenuService:
             # Se menu foi enviado há menos de 1 hora, não enviar novamente
             from django.utils import timezone
             from datetime import timedelta
-            if timezone.now() - last_menu_message.created_at < timedelta(hours=1):
-                logger.debug(f"⏭️ [WELCOME MENU] Menu já enviado recentemente para {conversation.id}")
+            time_since_last = timezone.now() - last_menu_message.created_at
+            if time_since_last < timedelta(hours=1):
+                logger.debug(f"   ⏭️ [WELCOME MENU] Menu já enviado recentemente ({time_since_last.total_seconds() / 60:.1f} minutos atrás) para {conversation.id}")
                 return False
+            else:
+                logger.info(f"   ✅ Menu anterior foi enviado há mais de 1 hora ({time_since_last.total_seconds() / 3600:.1f} horas atrás), pode enviar novamente")
         
         # Verificar condições
         if conversation.status == 'pending' and config.send_to_new_conversations:
+            logger.info(f"   ✅ [WELCOME MENU] Condição atendida: status=pending e send_to_new_conversations=True")
             return True
         
         if conversation.status == 'closed' and config.send_to_closed_conversations:
+            logger.info(f"   ✅ [WELCOME MENU] Condição atendida: status=closed e send_to_closed_conversations=True")
             return True
         
+        logger.info(f"   ⏭️ [WELCOME MENU] Nenhuma condição atendida para enviar menu")
+        logger.info(f"      Status: {conversation.status}")
+        logger.info(f"      send_to_new_conversations: {config.send_to_new_conversations}")
+        logger.info(f"      send_to_closed_conversations: {config.send_to_closed_conversations}")
         return False
     
     @staticmethod
