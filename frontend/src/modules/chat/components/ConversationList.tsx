@@ -305,7 +305,7 @@ export function ConversationList() {
               setSearchTerm(e.target.value);
               // ✅ PERFORMANCE: Debounce é feito no useEffect acima
             }}
-            className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white transition-colors"
+            className="w-full pl-8 sm:pl-10 pr-3 py-2 bg-[#f0f2f5] dark:bg-gray-800 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:bg-white dark:focus:bg-gray-700 transition-colors text-gray-900 dark:text-white"
           />
         </div>
         <button
@@ -314,10 +314,10 @@ export function ConversationList() {
             setShowNewConversation(true);
             console.log('🆕 [CONVERSATION LIST] showNewConversation setado para true');
           }}
-          className="flex-shrink-0 p-2 hover:bg-gray-100 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
+          className="flex-shrink-0 p-2 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
           title="Nova conversa"
         >
-          <Plus className="w-5 h-5 text-gray-600" />
+          <Plus className="w-5 h-5 text-gray-600 dark:text-gray-400" />
         </button>
       </div>
 
@@ -330,7 +330,7 @@ export function ConversationList() {
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
               <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
             </div>
-            <p className="text-sm text-gray-500">Carregando conversas...</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Carregando conversas...</p>
           </div>
         ) : filteredConversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12 px-4">
@@ -339,8 +339,8 @@ export function ConversationList() {
                 <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.33-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
               </svg>
             </div>
-            <h3 className="text-base font-medium text-gray-700 mb-2">Nenhuma conversa</h3>
-            <p className="text-sm text-gray-500 text-center max-w-xs">
+            <h3 className="text-base font-medium text-gray-700 dark:text-gray-300 mb-2">Nenhuma conversa</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 text-center max-w-xs">
               Inicie uma nova conversa para começar!
             </p>
           </div>
@@ -360,10 +360,10 @@ export function ConversationList() {
               }}
               className={`
                 w-full flex items-start gap-2 sm:gap-3 px-3 sm:px-4 py-3 
-                hover:bg-[#f0f2f5] active:scale-[0.98] 
-                transition-all duration-150 border-b border-gray-100
+                hover:bg-[#f0f2f5] dark:hover:bg-gray-700 active:scale-[0.98] 
+                transition-all duration-150 border-b border-gray-100 dark:border-gray-700
                 animate-fade-in
-                ${activeConversation?.id === conversationItem.id ? 'bg-[#f0f2f5] shadow-sm' : ''}
+                ${activeConversation?.id === conversationItem.id ? 'bg-[#f0f2f5] dark:bg-gray-700 shadow-sm' : ''}
               `}
               style={{ animationDelay: `${index * 30}ms` }}
             >

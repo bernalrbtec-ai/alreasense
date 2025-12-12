@@ -18,7 +18,7 @@ export function ChatPage() {
   // Não precisa chamar useTenantSocket() aqui novamente
   
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden bg-[#f0f2f5]">
+    <div className="flex flex-col h-full w-full overflow-hidden bg-[#f0f2f5] dark:bg-gray-900">
       {/* Tabs de departamento */}
       <DepartmentTabs />
 
@@ -30,7 +30,7 @@ export function ChatPage() {
             ? 'hidden md:flex md:w-[280px] lg:w-[300px]' 
             : 'flex w-full md:w-[340px] lg:w-[360px]'
           }
-          flex-shrink-0 border-r border-gray-200 transition-all duration-300 ease-in-out
+          flex-shrink-0 border-r border-gray-200 dark:border-gray-700 transition-all duration-300 ease-in-out
         `}>
           <ConversationList />
         </div>

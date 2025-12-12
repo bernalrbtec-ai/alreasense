@@ -431,8 +431,8 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
     <div className="relative">
       {/* ✅ NOVO: Preview de mensagem respondida */}
       {replyToMessage && (
-        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] border-t border-gray-300">
-          <div className="bg-white rounded-lg border-l-4 border-l-blue-500 shadow-sm p-2.5 flex items-start justify-between gap-2">
+        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700">
+          <div className="bg-white dark:bg-gray-700 rounded-lg border-l-4 border-l-blue-500 shadow-sm p-2.5 flex items-start justify-between gap-2">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 mb-1">
                 <Reply className="w-3.5 h-3.5 text-blue-500 flex-shrink-0" />
@@ -442,7 +442,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
                     : 'Você'}
                 </span>
               </div>
-              <p className="text-xs text-gray-600 line-clamp-2 break-words">
+              <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">
                 {replyToMessage.content 
                   ? (replyToMessage.content.length > 100 
                       ? replyToMessage.content.substring(0, 100) + '...' 
@@ -454,7 +454,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             </div>
             <button
               onClick={clearReply}
-              className="p-1 hover:bg-gray-100 rounded-full transition-colors flex-shrink-0"
+              className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded-full transition-colors flex-shrink-0"
               title="Cancelar resposta"
             >
               <X className="w-4 h-4 text-gray-500" />
@@ -465,7 +465,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
 
       {/* Thumbnail preview acima do input */}
       {selectedFile && (
-        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] border-t border-gray-300">
+        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700">
           <AttachmentThumbnail
             file={selectedFile}
             onRemove={handleRemoveFile}
@@ -476,7 +476,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       )}
 
       {/* Input area */}
-      <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] border-t border-gray-300 relative shadow-sm">
+      <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 relative shadow-sm">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
         onClick={() => setIncludeSignature(!includeSignature)}

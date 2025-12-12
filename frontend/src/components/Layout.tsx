@@ -30,7 +30,6 @@ import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import ChangePasswordModal from './modals/ChangePasswordModal'
-import { ThemeToggle } from './ThemeToggle'
 import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
@@ -336,7 +335,6 @@ export default function Layout() {
           <div className="flex h-16 items-center justify-between px-4">
             {!sidebarCollapsed && <Logo size="sm" />}
             <div className="flex items-center gap-2 ml-auto">
-              {!sidebarCollapsed && <ThemeToggle size="sm" />}
               <Button
                 variant="ghost"
                 size="icon"
@@ -494,9 +492,6 @@ export default function Layout() {
           >
             <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
           </Button>
-          <div className="ml-auto">
-            <ThemeToggle size="sm" />
-          </div>
         </div>
 
         {/* Page content */}

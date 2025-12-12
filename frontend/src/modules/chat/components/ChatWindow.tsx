@@ -669,10 +669,10 @@ export function ChatWindow() {
     // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
     if (activeConversation && activeConversation.id && conversationId) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
-            <p className="text-sm text-gray-500">Carregando conversa...</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">Carregando conversa...</p>
           </div>
         </div>
       );
@@ -686,8 +686,8 @@ export function ChatWindow() {
               <path d="M229.003 146.214c-18.832-35.882-34.954-69.436-38.857-96.056-4.154-28.35 4.915-49.117 35.368-59.544 30.453-10.426 60.904 4.154 71.33 34.607 10.427 30.453-4.154 60.904-34.607 71.33-15.615 5.346-32.123 4.58-47.234-.337zM3.917 63.734C14.344 33.281 44.795 18.7 75.248 29.127c30.453 10.426 45.034 40.877 34.607 71.30-10.426 30.453-40.877 45.034-71.33 34.607C7.972 124.638-6.61 94.187 3.917 63.734z"/>
             </svg>
           </div>
-          <h2 className="text-2xl font-light text-gray-700 mb-2">Flow Chat Web</h2>
-          <p className="text-gray-500 text-sm">
+          <h2 className="text-2xl font-light text-gray-700 dark:text-gray-300 mb-2">Flow Chat Web</h2>
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
             Envie e receba mensagens sem manter seu celular conectado.<br/>
             Selecione uma conversa para começar.
           </p>
@@ -697,13 +697,13 @@ export function ChatWindow() {
   }
 
   return (
-    <div className="flex h-full w-full bg-[#efeae2] animate-fade-in overflow-hidden">
+    <div className="flex h-full w-full bg-[#efeae2] dark:bg-gray-900 animate-fade-in overflow-hidden">
       {/* Main Chat Area */}
       {/* ✅ CORREÇÃO: Ocultar chat quando histórico estiver aberto */}
       {!showHistory && (
       <div className="flex flex-col flex-1 min-w-0 transition-all duration-300">
         {/* Header */}
-        <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] border-b border-gray-300 shadow-sm flex-shrink-0">
+        <div className="flex items-center justify-between px-4 py-2 bg-[#f0f2f5] dark:bg-gray-800 border-b border-gray-300 dark:border-gray-700 shadow-sm flex-shrink-0">
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* Botão Voltar (mobile) */}
           <button
