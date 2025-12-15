@@ -2409,58 +2409,58 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Isso garante que tarefas sejam criadas mesmo se mensagem foi recebida anteriormente
         # mas a tarefa não foi criada (por erro, por exemplo)
         if direction == 'incoming':
-                logger.info(f"🔍 [BUSINESS HOURS] Verificando horário de atendimento para mensagem recebida...")
-                logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
-                logger.info(f"   Department: {conversation.department.name if conversation.department else 'None'}")
-                logger.info(f"   Message created_at: {message.created_at}")
-                try:
-                    from apps.chat.services.business_hours_service import BusinessHoursService
+            logger.info(f"🔍 [BUSINESS HOURS] Verificando horário de atendimento para mensagem recebida...")
+            logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
+            logger.info(f"   Department: {conversation.department.name if conversation.department else 'None'}")
+            logger.info(f"   Message created_at: {message.created_at}")
+            try:
+                from apps.chat.services.business_hours_service import BusinessHoursService
+                
+                # Processa mensagem fora de horário (cria mensagem automática se configurado)
+                was_after_hours, auto_message = BusinessHoursService.handle_after_hours_message(
+                    conversation=conversation,
+                    message=message,
+                    tenant=tenant,
+                    department=conversation.department
+                )
+                
+                logger.info(f"🔍 [BUSINESS HOURS] Resultado da verificação: was_after_hours={was_after_hours}")
+                
+                if was_after_hours:
+                    logger.info(f"⏰ [BUSINESS HOURS] Mensagem recebida fora de horário")
+                    if auto_message:
+                        logger.info(f"   📨 Mensagem automática criada: {auto_message.id}")
+                    else:
+                        logger.info(f"   ⚠️ Mensagem automática não foi criada (pode não estar configurada)")
                     
-                    # Processa mensagem fora de horário (cria mensagem automática se configurado)
-                    was_after_hours, auto_message = BusinessHoursService.handle_after_hours_message(
+                    # Cria tarefa automática se configurado
+                    logger.info(f"🔍 [BUSINESS HOURS] Tentando criar tarefa automática...")
+                    task = BusinessHoursService.create_after_hours_task(
                         conversation=conversation,
                         message=message,
                         tenant=tenant,
                         department=conversation.department
                     )
                     
-                    logger.info(f"🔍 [BUSINESS HOURS] Resultado da verificação: was_after_hours={was_after_hours}")
-                    
-                    if was_after_hours:
-                        logger.info(f"⏰ [BUSINESS HOURS] Mensagem recebida fora de horário")
-                        if auto_message:
-                            logger.info(f"   📨 Mensagem automática criada: {auto_message.id}")
-                        else:
-                            logger.info(f"   ⚠️ Mensagem automática não foi criada (pode não estar configurada)")
-                        
-                        # Cria tarefa automática se configurado
-                        logger.info(f"🔍 [BUSINESS HOURS] Tentando criar tarefa automática...")
-                        task = BusinessHoursService.create_after_hours_task(
-                            conversation=conversation,
-                            message=message,
-                            tenant=tenant,
-                            department=conversation.department
-                        )
-                        
-                        if task:
-                            logger.info(f"   ✅ Tarefa automática criada: {task.id} - {task.title}")
-                        else:
-                            logger.warning(f"   ⚠️ Tarefa automática não foi criada - verifique os logs acima para detalhes")
+                    if task:
+                        logger.info(f"   ✅ Tarefa automática criada: {task.id} - {task.title}")
                     else:
-                        logger.info(f"✅ [BUSINESS HOURS] Mensagem recebida dentro do horário de atendimento")
-                except Exception as e:
-                    logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
-                
-                # ✅ NOVO: Processar resposta do menu de boas-vindas (apenas mensagens recebidas)
-                try:
-                    from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                    processed = WelcomeMenuService.process_menu_response(conversation, message)
-                    if processed:
-                        logger.info(f"✅ [WELCOME MENU] Resposta do menu processada com sucesso")
-                        # Recarregar conversa para obter status atualizado
-                        conversation.refresh_from_db()
-                except Exception as e:
-                    logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
+                        logger.warning(f"   ⚠️ Tarefa automática não foi criada - verifique os logs acima para detalhes")
+                else:
+                    logger.info(f"✅ [BUSINESS HOURS] Mensagem recebida dentro do horário de atendimento")
+            except Exception as e:
+                logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
+            
+            # ✅ NOVO: Processar resposta do menu de boas-vindas (apenas mensagens recebidas)
+            try:
+                from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                processed = WelcomeMenuService.process_menu_response(conversation, message)
+                if processed:
+                    logger.info(f"✅ [WELCOME MENU] Resposta do menu processada com sucesso")
+                    # Recarregar conversa para obter status atualizado
+                    conversation.refresh_from_db()
+            except Exception as e:
+                logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
         else:
             logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
         
