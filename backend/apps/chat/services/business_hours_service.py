@@ -432,62 +432,79 @@ class BusinessHoursService:
             )
             return None
         
-        # ✅ VALIDAÇÃO 4: Verifica se já existe tarefa para esta mensagem (evita duplicatas)
-        existing_task_by_message = Task.objects.filter(
-            tenant=tenant,
-            metadata__is_after_hours_auto=True,
-            metadata__original_message_id=str(message.id),
-            status__in=['pending', 'in_progress']
-        ).first()
-        
-        if existing_task_by_message:
-            logger.warning(
-                f"⚠️ [BUSINESS HOURS TASK] Tarefa já existe para esta mensagem! "
-                f"Task ID: {existing_task_by_message.id}, Title: {existing_task_by_message.title}"
-            )
-            logger.info(
-                f"   ⏭️ Pulando criação de tarefa duplicada para mensagem {message.id}"
-            )
-            return existing_task_by_message
-        
-        # ✅ NOVO: Buscar tarefa existente para consolidação (mesmo contato/conversa)
-        # Janela: até o próximo horário de atendimento
-        # Limite: máximo 20 mensagens por tarefa
-        logger.info(f"🔍 [BUSINESS HOURS TASK] Buscando tarefa existente para consolidação...")
-        logger.info(f"   Conversation ID: {conversation.id}")
-        logger.info(f"   Contact Phone: {conversation.contact_phone}")
-        logger.info(f"   Next Open Time: {next_open_time}")
-        
-        # Buscar tarefas do mesmo contato/conversa que ainda estão dentro da janela
-        # Janela: até o próximo horário de atendimento (next_open_time)
+        # ✅ MELHORIA 1: Validar e converter next_open_time ANTES de usar
         # Converter next_open_time para datetime se for string
         if isinstance(next_open_time, str):
             try:
                 # Tentar parsear formato ISO
                 next_open_dt = datetime.fromisoformat(next_open_time.replace('Z', '+00:00'))
-            except:
+            except (ValueError, AttributeError) as e:
+                logger.warning(
+                    f"⚠️ [BUSINESS HOURS TASK] Erro ao parsear next_open_time '{next_open_time}': {e}. "
+                    f"Usando fallback: agora + 24h"
+                )
                 # Fallback: usar agora + 24h
                 next_open_dt = django_timezone.now() + timedelta(hours=24)
+        elif next_open_time is None:
+            logger.warning(
+                f"⚠️ [BUSINESS HOURS TASK] next_open_time é None. Usando fallback: agora + 24h"
+            )
+            next_open_dt = django_timezone.now() + timedelta(hours=24)
         else:
             # Se já é datetime, usar direto
-            next_open_dt = next_open_time if next_open_time else django_timezone.now() + timedelta(hours=24)
+            next_open_dt = next_open_time
         
         # Garantir timezone aware
         if django_timezone.is_naive(next_open_dt):
             next_open_dt = django_timezone.make_aware(next_open_dt, ZoneInfo('UTC'))
         
-        logger.info(f"   Next Open Time (datetime): {next_open_dt}")
-        logger.info(f"   Message Created At: {message.created_at}")
-        logger.info(f"   Dentro da janela? {message.created_at <= next_open_dt}")
-        
-        # Buscar tarefa existente do mesmo contato/conversa dentro da janela
-        existing_task_for_consolidation = Task.objects.filter(
-            tenant=tenant,
-            metadata__is_after_hours_auto=True,
-            metadata__conversation_id=str(conversation.id),
-            status__in=['pending', 'in_progress'],
-            created_at__lte=next_open_dt  # Criada antes do próximo horário de atendimento
-        ).order_by('-created_at').first()  # Pegar a mais recente
+        # ✅ MELHORIA 2: Validar se mensagem está dentro da janela de tempo
+        if message.created_at > next_open_dt:
+            logger.warning(
+                f"⚠️ [BUSINESS HOURS TASK] Mensagem está FORA da janela de consolidação! "
+                f"Message: {message.created_at}, Next Open: {next_open_dt}. Criando nova tarefa."
+            )
+            # Mensagem fora da janela, não consolidar
+            existing_task_for_consolidation = None
+        else:
+            logger.info(f"🔍 [BUSINESS HOURS TASK] Buscando tarefa existente para consolidação...")
+            logger.info(f"   Conversation ID: {conversation.id}")
+            logger.info(f"   Contact Phone: {conversation.contact_phone}")
+            logger.info(f"   Next Open Time: {next_open_dt}")
+            logger.info(f"   Message Created At: {message.created_at}")
+            logger.info(f"   Dentro da janela? {message.created_at <= next_open_dt}")
+            
+            # ✅ MELHORIA 3: Combinar queries (otimização de performance)
+            # Buscar tarefa existente que pode ser:
+            # 1. Tarefa para esta mensagem específica (evita duplicatas)
+            # 2. Tarefa do mesmo contato/conversa dentro da janela (consolidação)
+            existing_task_for_consolidation = Task.objects.filter(
+                Q(
+                    tenant=tenant,
+                    metadata__is_after_hours_auto=True,
+                    metadata__original_message_id=str(message.id),
+                    status__in=['pending', 'in_progress']
+                ) | Q(
+                    tenant=tenant,
+                    metadata__is_after_hours_auto=True,
+                    metadata__conversation_id=str(conversation.id),
+                    status__in=['pending', 'in_progress'],
+                    created_at__lte=next_open_dt  # Criada antes do próximo horário de atendimento
+                )
+            ).order_by('-created_at').first()  # Pegar a mais recente
+            
+            # Verificar se é tarefa duplicada (mesma mensagem)
+            if existing_task_for_consolidation:
+                task_metadata_check = existing_task_for_consolidation.metadata or {}
+                if task_metadata_check.get('original_message_id') == str(message.id):
+                    logger.warning(
+                        f"⚠️ [BUSINESS HOURS TASK] Tarefa já existe para esta mensagem! "
+                        f"Task ID: {existing_task_for_consolidation.id}, Title: {existing_task_for_consolidation.title}"
+                    )
+                    logger.info(
+                        f"   ⏭️ Pulando criação de tarefa duplicada para mensagem {message.id}"
+                    )
+                    return existing_task_for_consolidation
         
         if existing_task_for_consolidation:
             logger.info(f"✅ [BUSINESS HOURS TASK] Tarefa existente encontrada para consolidação!")
@@ -498,13 +515,14 @@ class BusinessHoursService:
             task_metadata = existing_task_for_consolidation.metadata or {}
             messages_list = task_metadata.get('messages', [])
             
+            # ✅ MELHORIA 4: Otimizar busca de primeira mensagem (usar select_related se necessário)
             # Se não tem lista de mensagens, criar com a primeira mensagem
             if not messages_list:
                 # Buscar primeira mensagem do metadata original
                 first_message_id = task_metadata.get('original_message_id') or task_metadata.get('first_message_id')
                 if first_message_id:
                     try:
-                        first_message = Message.objects.get(id=first_message_id)
+                        first_message = Message.objects.only('id', 'created_at', 'content').get(id=first_message_id)
                         messages_list = [{
                             'message_id': str(first_message.id),
                             'created_at': first_message.created_at.isoformat(),
@@ -516,6 +534,17 @@ class BusinessHoursService:
             
             current_message_count = len(messages_list)
             logger.info(f"   Mensagens já consolidadas: {current_message_count}")
+            
+            # ✅ MELHORIA 5: Verificar duplicata ANTES de adicionar
+            message_id_str = str(message.id)
+            is_duplicate = any(m.get('message_id') == message_id_str for m in messages_list)
+            
+            if is_duplicate:
+                logger.warning(
+                    f"⚠️ [BUSINESS HOURS TASK] Mensagem {message.id} já está consolidada nesta tarefa! "
+                    f"Task ID: {existing_task_for_consolidation.id}"
+                )
+                return existing_task_for_consolidation
             
             # Verificar limite de 20 mensagens
             MAX_MESSAGES_PER_TASK = 20
@@ -532,7 +561,7 @@ class BusinessHoursService:
                 
                 # Adicionar nova mensagem à lista
                 new_message_entry = {
-                    'message_id': str(message.id),
+                    'message_id': message_id_str,
                     'created_at': message.created_at.isoformat(),
                     'content': (message.content or '')[:500]  # Limitar tamanho
                 }
@@ -548,19 +577,29 @@ class BusinessHoursService:
                 if 'first_message_id' not in updated_metadata:
                     updated_metadata['first_message_id'] = messages_list[0]['message_id'] if messages_list else str(message.id)
                 
-                # Atualizar descrição da tarefa com todas as mensagens
+                # ✅ MELHORIA 6: Cachear timezone conversion e otimizar formatação
                 # Formatar descrição consolidada
-                sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
+                sao_paulo_tz = ZoneInfo('America/Sao_Paulo')  # Cachear fora do loop
                 description_parts = [
                     f"Mensagens recebidas fora de horário ({len(messages_list)} mensagem{'s' if len(messages_list) > 1 else ''}):\n"
                 ]
                 
-                for idx, msg_entry in enumerate(messages_list, 1):
+                # ✅ MELHORIA 7: Limitar tamanho da descrição (últimas 20 mensagens se muito longa)
+                MAX_DESCRIPTION_MESSAGES = 20
+                messages_to_show = messages_list[-MAX_DESCRIPTION_MESSAGES:] if len(messages_list) > MAX_DESCRIPTION_MESSAGES else messages_list
+                
+                if len(messages_list) > MAX_DESCRIPTION_MESSAGES:
+                    description_parts.append(f"... ({len(messages_list) - MAX_DESCRIPTION_MESSAGES} mensagens anteriores ocultas)\n")
+                
+                for idx, msg_entry in enumerate(messages_to_show, 1):
                     try:
-                        msg_time = datetime.fromisoformat(msg_entry['created_at'].replace('Z', '+00:00'))
+                        # ✅ MELHORIA: Exception específica e otimização de parse
+                        msg_time_str = msg_entry['created_at'].replace('Z', '+00:00')
+                        msg_time = datetime.fromisoformat(msg_time_str)
                         msg_time_local = msg_time.astimezone(sao_paulo_tz)
                         time_str = msg_time_local.strftime('%H:%M')
-                    except:
+                    except (ValueError, KeyError, AttributeError) as e:
+                        logger.debug(f"⚠️ [BUSINESS HOURS TASK] Erro ao formatar horário da mensagem: {e}")
                         time_str = '--:--'
                     
                     content_preview = msg_entry.get('content', '')[:200]  # Limitar preview
@@ -569,9 +608,30 @@ class BusinessHoursService:
                     
                     description_parts.append(f"[{time_str}] {content_preview}")
                 
-                description_parts.append(f"\nPróximo horário de atendimento: {next_open_time}")
+                # Formatar next_open_time para exibição
+                next_open_display = next_open_time
+                if isinstance(next_open_time, datetime):
+                    try:
+                        next_open_local = next_open_time.astimezone(sao_paulo_tz)
+                        next_open_display = next_open_local.strftime('%d/%m/%Y às %H:%M')
+                    except:
+                        next_open_display = str(next_open_time)
+                elif isinstance(next_open_time, str):
+                    next_open_display = next_open_time
+                else:
+                    next_open_display = 'Em breve'
+                
+                description_parts.append(f"\nPróximo horário de atendimento: {next_open_display}")
                 
                 updated_description = '\n'.join(description_parts)
+                
+                # ✅ MELHORIA 8: Limitar tamanho total da descrição (máximo 5000 caracteres)
+                MAX_DESCRIPTION_LENGTH = 5000
+                if len(updated_description) > MAX_DESCRIPTION_LENGTH:
+                    updated_description = updated_description[:MAX_DESCRIPTION_LENGTH] + "\n... (descrição truncada)"
+                    logger.warning(
+                        f"⚠️ [BUSINESS HOURS TASK] Descrição truncada (tamanho: {len(updated_description)} caracteres)"
+                    )
                 
                 # Atualizar tarefa
                 existing_task_for_consolidation.metadata = updated_metadata
