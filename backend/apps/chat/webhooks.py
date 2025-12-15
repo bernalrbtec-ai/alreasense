@@ -2398,9 +2398,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   Message ID: {message_id}")
             logger.info(f"   Direction: {direction}")
             logger.info(f"   Conversa: {conversation.id} | Phone: {conversation.contact_phone}")
-            
-            # ✅ NOVO: Verificar horário de atendimento e criar tarefa/mensagem automática
-            if direction == 'incoming':
+        else:
+            logger.info(f"ℹ️ [WEBHOOK] Mensagem já existia no banco (message_id={message_id})")
+            logger.info(f"   ID interno: {message.id}")
+            logger.info(f"   Direction: {direction}")
+            logger.info(f"   Conversa: {conversation.id} | Phone: {conversation.contact_phone}")
+        
+        # ✅ CORREÇÃO CRÍTICA: Verificar horário de atendimento e criar tarefa/mensagem automática
+        # SEMPRE que for mensagem incoming, mesmo se já existia no banco
+        # Isso garante que tarefas sejam criadas mesmo se mensagem foi recebida anteriormente
+        # mas a tarefa não foi criada (por erro, por exemplo)
+        if direction == 'incoming':
                 logger.info(f"🔍 [BUSINESS HOURS] Verificando horário de atendimento para mensagem recebida...")
                 logger.info(f"   Tenant: {tenant.name} (ID: {tenant.id})")
                 logger.info(f"   Department: {conversation.department.name if conversation.department else 'None'}")
@@ -2453,10 +2461,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         conversation.refresh_from_db()
                 except Exception as e:
                     logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
-            else:
-                logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
-            
-            # Se tiver anexo, processa
+        else:
+            logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
+        
+        # Se tiver anexo, processa
             attachment_url = None
             mime_type = None
             filename = ''
