@@ -433,22 +433,157 @@ class BusinessHoursService:
             return None
         
         # ✅ VALIDAÇÃO 4: Verifica se já existe tarefa para esta mensagem (evita duplicatas)
-        existing_task = Task.objects.filter(
+        existing_task_by_message = Task.objects.filter(
             tenant=tenant,
             metadata__is_after_hours_auto=True,
             metadata__original_message_id=str(message.id),
             status__in=['pending', 'in_progress']
         ).first()
         
-        if existing_task:
+        if existing_task_by_message:
             logger.warning(
                 f"⚠️ [BUSINESS HOURS TASK] Tarefa já existe para esta mensagem! "
-                f"Task ID: {existing_task.id}, Title: {existing_task.title}"
+                f"Task ID: {existing_task_by_message.id}, Title: {existing_task_by_message.title}"
             )
             logger.info(
                 f"   ⏭️ Pulando criação de tarefa duplicada para mensagem {message.id}"
             )
-            return existing_task
+            return existing_task_by_message
+        
+        # ✅ NOVO: Buscar tarefa existente para consolidação (mesmo contato/conversa)
+        # Janela: até o próximo horário de atendimento
+        # Limite: máximo 20 mensagens por tarefa
+        logger.info(f"🔍 [BUSINESS HOURS TASK] Buscando tarefa existente para consolidação...")
+        logger.info(f"   Conversation ID: {conversation.id}")
+        logger.info(f"   Contact Phone: {conversation.contact_phone}")
+        logger.info(f"   Next Open Time: {next_open_time}")
+        
+        # Buscar tarefas do mesmo contato/conversa que ainda estão dentro da janela
+        # Janela: até o próximo horário de atendimento (next_open_time)
+        # Converter next_open_time para datetime se for string
+        if isinstance(next_open_time, str):
+            try:
+                # Tentar parsear formato ISO
+                next_open_dt = datetime.fromisoformat(next_open_time.replace('Z', '+00:00'))
+            except:
+                # Fallback: usar agora + 24h
+                next_open_dt = django_timezone.now() + timedelta(hours=24)
+        else:
+            # Se já é datetime, usar direto
+            next_open_dt = next_open_time if next_open_time else django_timezone.now() + timedelta(hours=24)
+        
+        # Garantir timezone aware
+        if django_timezone.is_naive(next_open_dt):
+            next_open_dt = django_timezone.make_aware(next_open_dt, ZoneInfo('UTC'))
+        
+        logger.info(f"   Next Open Time (datetime): {next_open_dt}")
+        logger.info(f"   Message Created At: {message.created_at}")
+        logger.info(f"   Dentro da janela? {message.created_at <= next_open_dt}")
+        
+        # Buscar tarefa existente do mesmo contato/conversa dentro da janela
+        existing_task_for_consolidation = Task.objects.filter(
+            tenant=tenant,
+            metadata__is_after_hours_auto=True,
+            metadata__conversation_id=str(conversation.id),
+            status__in=['pending', 'in_progress'],
+            created_at__lte=next_open_dt  # Criada antes do próximo horário de atendimento
+        ).order_by('-created_at').first()  # Pegar a mais recente
+        
+        if existing_task_for_consolidation:
+            logger.info(f"✅ [BUSINESS HOURS TASK] Tarefa existente encontrada para consolidação!")
+            logger.info(f"   Task ID: {existing_task_for_consolidation.id}")
+            logger.info(f"   Created At: {existing_task_for_consolidation.created_at}")
+            
+            # Verificar quantidade de mensagens já consolidadas
+            task_metadata = existing_task_for_consolidation.metadata or {}
+            messages_list = task_metadata.get('messages', [])
+            
+            # Se não tem lista de mensagens, criar com a primeira mensagem
+            if not messages_list:
+                # Buscar primeira mensagem do metadata original
+                first_message_id = task_metadata.get('original_message_id') or task_metadata.get('first_message_id')
+                if first_message_id:
+                    try:
+                        first_message = Message.objects.get(id=first_message_id)
+                        messages_list = [{
+                            'message_id': str(first_message.id),
+                            'created_at': first_message.created_at.isoformat(),
+                            'content': (first_message.content or '')[:500]
+                        }]
+                    except Message.DoesNotExist:
+                        logger.warning(f"⚠️ [BUSINESS HOURS TASK] Primeira mensagem não encontrada: {first_message_id}")
+                        messages_list = []
+            
+            current_message_count = len(messages_list)
+            logger.info(f"   Mensagens já consolidadas: {current_message_count}")
+            
+            # Verificar limite de 20 mensagens
+            MAX_MESSAGES_PER_TASK = 20
+            if current_message_count >= MAX_MESSAGES_PER_TASK:
+                logger.warning(
+                    f"⚠️ [BUSINESS HOURS TASK] Tarefa já tem {current_message_count} mensagens "
+                    f"(limite: {MAX_MESSAGES_PER_TASK}). Criando nova tarefa."
+                )
+                # Não consolidar, criar nova tarefa
+                existing_task_for_consolidation = None
+            else:
+                # ✅ CONSOLIDAR: Adicionar nova mensagem à tarefa existente
+                logger.info(f"📝 [BUSINESS HOURS TASK] Consolidando mensagem na tarefa existente...")
+                
+                # Adicionar nova mensagem à lista
+                new_message_entry = {
+                    'message_id': str(message.id),
+                    'created_at': message.created_at.isoformat(),
+                    'content': (message.content or '')[:500]  # Limitar tamanho
+                }
+                messages_list.append(new_message_entry)
+                
+                # Atualizar metadata
+                updated_metadata = task_metadata.copy()
+                updated_metadata['messages'] = messages_list
+                updated_metadata['last_message_id'] = str(message.id)
+                updated_metadata['last_message_at'] = message.created_at.isoformat()
+                
+                # Se não tinha first_message_id, adicionar agora
+                if 'first_message_id' not in updated_metadata:
+                    updated_metadata['first_message_id'] = messages_list[0]['message_id'] if messages_list else str(message.id)
+                
+                # Atualizar descrição da tarefa com todas as mensagens
+                # Formatar descrição consolidada
+                sao_paulo_tz = ZoneInfo('America/Sao_Paulo')
+                description_parts = [
+                    f"Mensagens recebidas fora de horário ({len(messages_list)} mensagem{'s' if len(messages_list) > 1 else ''}):\n"
+                ]
+                
+                for idx, msg_entry in enumerate(messages_list, 1):
+                    try:
+                        msg_time = datetime.fromisoformat(msg_entry['created_at'].replace('Z', '+00:00'))
+                        msg_time_local = msg_time.astimezone(sao_paulo_tz)
+                        time_str = msg_time_local.strftime('%H:%M')
+                    except:
+                        time_str = '--:--'
+                    
+                    content_preview = msg_entry.get('content', '')[:200]  # Limitar preview
+                    if len(msg_entry.get('content', '')) > 200:
+                        content_preview += '...'
+                    
+                    description_parts.append(f"[{time_str}] {content_preview}")
+                
+                description_parts.append(f"\nPróximo horário de atendimento: {next_open_time}")
+                
+                updated_description = '\n'.join(description_parts)
+                
+                # Atualizar tarefa
+                existing_task_for_consolidation.metadata = updated_metadata
+                existing_task_for_consolidation.description = updated_description
+                # ✅ MANTER vencimento original (não recalcular)
+                existing_task_for_consolidation.save(update_fields=['metadata', 'description'])
+                
+                logger.info(f"✅ [BUSINESS HOURS TASK] Mensagem consolidada com sucesso!")
+                logger.info(f"   Total de mensagens na tarefa: {len(messages_list)}")
+                logger.info(f"   Task ID: {existing_task_for_consolidation.id}")
+                
+                return existing_task_for_consolidation
         
         # ✅ VALIDAÇÃO 5: Busca ou cria contato
         try:
@@ -644,6 +779,25 @@ class BusinessHoursService:
                     return None
         
         try:
+            # ✅ NOVO: Criar metadata com lista de mensagens (iniciando com a primeira)
+            task_metadata = {
+                'is_after_hours_auto': True,
+                'original_message_id': str(message.id),
+                'first_message_id': str(message.id),  # ✅ NOVO: ID da primeira mensagem
+                'conversation_id': str(conversation.id),
+                'next_open_time': next_open_time,
+                'created_at': message.created_at.isoformat(),
+                'messages': [  # ✅ NOVO: Lista de mensagens consolidadas
+                    {
+                        'message_id': str(message.id),
+                        'created_at': message.created_at.isoformat(),
+                        'content': (message.content or '')[:500]  # Limitar tamanho
+                    }
+                ],
+                'last_message_id': str(message.id),  # ✅ NOVO: ID da última mensagem
+                'last_message_at': message.created_at.isoformat(),  # ✅ NOVO: Timestamp da última mensagem
+            }
+            
             task = Task.objects.create(
                 tenant=tenant,
                 department=task_department,
@@ -654,13 +808,7 @@ class BusinessHoursService:
                 due_date=due_date,
                 status='pending',
                 created_by=None,  # Sistema
-                metadata={
-                    'is_after_hours_auto': True,
-                    'original_message_id': str(message.id),
-                    'conversation_id': str(conversation.id),
-                    'next_open_time': next_open_time,
-                    'created_at': message.created_at.isoformat(),
-                }
+                metadata=task_metadata
             )
             
             # Relaciona com contato (se existir)

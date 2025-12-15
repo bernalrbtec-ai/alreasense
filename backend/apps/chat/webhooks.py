@@ -2465,48 +2465,48 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
         
         # Se tiver anexo, processa
-            attachment_url = None
-            mime_type = None
-            filename = ''
+        attachment_url = None
+        mime_type = None
+        filename = ''
+        
+        if message_type == 'imageMessage':
+            attachment_url = message_info.get('imageMessage', {}).get('url')
+            mime_type = message_info.get('imageMessage', {}).get('mimetype', 'image/jpeg')
+            filename = f"{message.id}.jpg"
+        elif message_type == 'videoMessage':
+            attachment_url = message_info.get('videoMessage', {}).get('url')
+            mime_type = message_info.get('videoMessage', {}).get('mimetype', 'video/mp4')
+            filename = f"{message.id}.mp4"
+        elif message_type == 'documentMessage':
+            attachment_url = message_info.get('documentMessage', {}).get('url')
+            mime_type = message_info.get('documentMessage', {}).get('mimetype', 'application/octet-stream')
+            raw_filename = message_info.get('documentMessage', {}).get('fileName', f"{message.id}.bin")
             
+            # ✅ CORREÇÃO: Limpar nome de arquivo inválido (ex: .enc, nomes muito longos)
+            filename = clean_filename(raw_filename, message_id=message_id, mime_type=mime_type)
+        elif message_type == 'audioMessage':
+            attachment_url = message_info.get('audioMessage', {}).get('url')
+            mime_type = message_info.get('audioMessage', {}).get('mimetype', 'audio/ogg')
+            filename = f"{message.id}.ogg"
+        
+        if attachment_url:
+            # Determinar media_type baseado no message_type
             if message_type == 'imageMessage':
-                attachment_url = message_info.get('imageMessage', {}).get('url')
-                mime_type = message_info.get('imageMessage', {}).get('mimetype', 'image/jpeg')
-                filename = f"{message.id}.jpg"
+                incoming_media_type = 'image'
             elif message_type == 'videoMessage':
-                attachment_url = message_info.get('videoMessage', {}).get('url')
-                mime_type = message_info.get('videoMessage', {}).get('mimetype', 'video/mp4')
-                filename = f"{message.id}.mp4"
-            elif message_type == 'documentMessage':
-                attachment_url = message_info.get('documentMessage', {}).get('url')
-                mime_type = message_info.get('documentMessage', {}).get('mimetype', 'application/octet-stream')
-                raw_filename = message_info.get('documentMessage', {}).get('fileName', f"{message.id}.bin")
-                
-                # ✅ CORREÇÃO: Limpar nome de arquivo inválido (ex: .enc, nomes muito longos)
-                filename = clean_filename(raw_filename, message_id=message_id, mime_type=mime_type)
+                incoming_media_type = 'video'
             elif message_type == 'audioMessage':
-                attachment_url = message_info.get('audioMessage', {}).get('url')
-                mime_type = message_info.get('audioMessage', {}).get('mimetype', 'audio/ogg')
-                filename = f"{message.id}.ogg"
+                incoming_media_type = 'audio'
+            elif message_type == 'documentMessage':
+                incoming_media_type = 'document'
+            else:
+                incoming_media_type = 'document'
             
-            if attachment_url:
-                # Determinar media_type baseado no message_type
-                if message_type == 'imageMessage':
-                    incoming_media_type = 'image'
-                elif message_type == 'videoMessage':
-                    incoming_media_type = 'video'
-                elif message_type == 'audioMessage':
-                    incoming_media_type = 'audio'
-                elif message_type == 'documentMessage':
-                    incoming_media_type = 'document'
-                else:
-                    incoming_media_type = 'document'
-                
-                # Usar transaction para garantir que o anexo seja salvo antes de enfileirar
-                from django.db import transaction
-                with transaction.atomic():
-                    # Criar placeholder (sem file_url ainda, será preenchido após processamento)
-                    attachment = MessageAttachment.objects.create(
+            # Usar transaction para garantir que o anexo seja salvo antes de enfileirar
+            from django.db import transaction
+            with transaction.atomic():
+                # Criar placeholder (sem file_url ainda, será preenchido após processamento)
+                attachment = MessageAttachment.objects.create(
                         message=message,
                         tenant=tenant,
                         original_filename=filename,
@@ -2521,217 +2521,217 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             'media_type': incoming_media_type,
                             'mime_type': mime_type
                         }  # Flag para frontend mostrar loading + mime original
-                    )
-                    
-                    attachment_id_str = str(attachment.id)
-                    message_id_str = str(message.id)
-                    tenant_id_str = str(tenant.id)
-                    
-                    logger.info(f"📎 [WEBHOOK] Criado anexo placeholder ID={attachment_id_str}, mime={mime_type}, type={incoming_media_type}")
-                    logger.info(f"📎 [WEBHOOK] URL temporária: {attachment_url[:100]}...")
-                    
-                    # Força commit antes de enfileirar processamento direto (S3 direto - sem cache)
-                    # ✅ MELHORIA: Usar conexão Evolution já encontrada no webhook para descriptografar arquivos
-                    instance_name_for_media = None
-                    api_key_for_media = None
-                    evolution_api_url_for_media = None
-                    
-                    # ✅ CORREÇÃO: Usar WhatsAppInstance (tem instance_name UUID) ou EvolutionConnection
-                    # Prioridade: wa_instance > connection > fallback
-                    instance_name_for_media = None
-                    api_key_for_media = None
-                    evolution_api_url_for_media = None
-                    
-                    # ✅ OPÇÃO 1: Usar WhatsAppInstance (tem instance_name UUID do webhook)
-                    if wa_instance:
-                        instance_name_for_media = wa_instance.instance_name  # UUID da instância
-                        api_key_for_media = wa_instance.api_key or (connection.api_key if connection else None)
-                        evolution_api_url_for_media = wa_instance.api_url or (connection.base_url if connection else None)
-                        
-                        logger.info(f"✅ [WEBHOOK] Usando WhatsAppInstance para descriptografar mídia:")
-                        logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
-                        logger.info(f"   📌 Friendly Name: {wa_instance.friendly_name}")
-                        logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
-                        logger.info(f"   📌 API Key: {'Configurada' if api_key_for_media else 'Não configurada'}")
-                    
-                    # ✅ OPÇÃO 2: Usar EvolutionConnection (fallback)
-                    elif connection:
-                        instance_name_for_media = instance_name  # Usar instance_name do webhook (pode ser UUID ou nome)
-                        api_key_for_media = connection.api_key
-                        evolution_api_url_for_media = connection.api_url or connection.base_url
-                        
-                        logger.info(f"✅ [WEBHOOK] Usando EvolutionConnection para descriptografar mídia:")
-                        logger.info(f"   📌 Instance: {instance_name_for_media}")
-                        logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
-                        logger.info(f"   📌 Connection: {connection.name}")
-                    
-                    # ✅ OPÇÃO 3: Fallback - buscar conexão diretamente
-                    else:
-                        logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão disponível, tentando buscar diretamente...")
-                        
-                        try:
-                            # Tentar buscar WhatsAppInstance pelo instance_name (UUID)
-                            from apps.notifications.models import WhatsAppInstance
-                            from apps.connections.models import EvolutionConnection
-                            
-                            fallback_wa_instance = WhatsAppInstance.objects.filter(
-                                instance_name=instance_name,
-                                tenant=tenant,
-                                is_active=True,
-                                status='active'
-                            ).first()
-                            
-                            if fallback_wa_instance:
-                                instance_name_for_media = fallback_wa_instance.instance_name
-                                api_key_for_media = fallback_wa_instance.api_key
-                                evolution_api_url_for_media = fallback_wa_instance.api_url
-                                
-                                # Se não tem api_url/api_key próprios, buscar EvolutionConnection
-                                if not evolution_api_url_for_media or not api_key_for_media:
-                                    fallback_connection = EvolutionConnection.objects.filter(
-                                        is_active=True
-                                    ).first()
-                                    if fallback_connection:
-                                        evolution_api_url_for_media = evolution_api_url_for_media or fallback_connection.base_url
-                                        api_key_for_media = api_key_for_media or fallback_connection.api_key
-                                
-                                logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada via fallback:")
-                                logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
-                                logger.info(f"   📌 Friendly Name: {fallback_wa_instance.friendly_name}")
-                                logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
-                            else:
-                                # Último fallback: buscar EvolutionConnection
-                                fallback_connection = EvolutionConnection.objects.filter(
-                                    tenant=tenant,
-                                    is_active=True
-                                ).first()
-                                
-                                if fallback_connection:
-                                    instance_name_for_media = instance_name
-                                    api_key_for_media = fallback_connection.api_key
-                                    evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
-                                    
-                                    logger.info(f"✅ [WEBHOOK] EvolutionConnection encontrada via fallback:")
-                                    logger.info(f"   📌 Instance: {instance_name_for_media}")
-                                    logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
-                                    logger.info(f"   📌 Connection: {fallback_connection.name}")
-                                else:
-                                    logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão encontrada via fallback")
-                                    logger.warning(f"   🔍 [WEBHOOK] Tentou buscar por: instance_name={instance_name}, tenant={tenant.name}")
-                        except Exception as e:
-                            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão via fallback: {e}", exc_info=True)
-                    
-                    def enqueue_process():
-                        logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
-                        logger.info(f"   📌 tenant_id: {tenant_id_str}")
-                        logger.info(f"   📌 message_id: {message_id_str}")
-                        logger.info(f"   📌 media_url: {attachment_url[:100]}...")
-                        logger.info(f"   📌 media_type: {incoming_media_type}")
-                        
-                        # ✅ MELHORIA: Passar message_key completo para getBase64FromMediaMessage
-                        # O endpoint pode precisar do key completo (remoteJid, fromMe, id)
-                        # ✅ IMPORTANTE: Usar 'key' já extraído acima (linha 162) para garantir consistência
-                        message_key_data = None
-                        try:
-                            # ✅ CORREÇÃO: Usar 'key' já extraído acima (linha 162) ao invés de extrair novamente
-                            # Isso garante que estamos usando o mesmo objeto que foi usado para message_id
-                            if key and key.get('id'):
-                                message_key_data = {
-                                    'remoteJid': key.get('remoteJid'),
-                                    'fromMe': key.get('fromMe', False),
-                                    'id': key.get('id')
-                                }
-                                logger.info(f"✅ [WEBHOOK] message_key extraído com sucesso!")
-                                logger.info(f"   📌 message_key.id: {message_key_data.get('id')}")
-                                logger.info(f"   📌 message_key.remoteJid: {message_key_data.get('remoteJid')}")
-                                logger.info(f"   📌 message_key.fromMe: {message_key_data.get('fromMe')}")
-                            else:
-                                logger.warning(f"⚠️ [WEBHOOK] key não disponível ou sem id!")
-                                logger.warning(f"   📌 key disponível: {key is not None}")
-                                if key:
-                                    logger.warning(f"   📌 key.id: {key.get('id')}")
-                        except Exception as e:
-                            logger.error(f"❌ [WEBHOOK] Erro ao extrair message_key: {e}", exc_info=True)
-                        
-                        try:
-                            from apps.chat.tasks import process_incoming_media
-                            process_incoming_media.delay(
-                                tenant_id=tenant_id_str,
-                                message_id=message_id_str,
-                                media_url=attachment_url,
-                                media_type=incoming_media_type,
-                                instance_name=instance_name_for_media,
-                                api_key=api_key_for_media,
-                                evolution_api_url=evolution_api_url_for_media,
-                                message_key=message_key_data,
-                                mime_type=mime_type
-                            )
-                            logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso na fila chat_process_incoming_media!")
-                        except Exception as e:
-                            logger.error(f"❌ [WEBHOOK] ERRO ao enfileirar processamento: {e}", exc_info=True)
-                            raise  # ✅ Re-raise para não silenciar erro
-                    
-                    transaction.on_commit(enqueue_process)
-                
-                logger.info(f"📎 [WEBHOOK] Anexo {filename} preparado para processamento direto (S3+cache)")
-            
-            # ✅ FIX CRÍTICO: Broadcast via WebSocket (mensagem específica)
-            # IMPORTANTE: Enviar para o grupo da conversa E para o grupo do tenant
-            logger.info(f"📡 [WEBHOOK] Enviando mensagem para WebSocket...")
-            broadcast_message_to_websocket(message, conversation)
-            
-            # ✅ FIX: Também enviar para o grupo do tenant para atualizar lista de conversas
-            try:
-                from apps.chat.utils.serialization import serialize_message_for_ws
-                from apps.chat.utils.websocket import broadcast_conversation_updated
-                from django.db import transaction
-                
-                # ✅ CORREÇÃO CRÍTICA: Garantir que broadcast acontece após commit da mensagem
-                # Passar message.id para garantir que a mensagem seja incluída no last_message
-                def do_broadcast():
-                    try:
-                # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
-                        # Passar message_id para garantir que a mensagem recém-criada seja incluída
-                        broadcast_conversation_updated(conversation, message_id=str(message.id))
-                    except Exception as e:
-                        logger.error(f"❌ [WEBSOCKET] Erro no broadcast após commit: {e}", exc_info=True)
-                
-                # ✅ CORREÇÃO CRÍTICA: Executar broadcast após commit da transação
-                # Isso garante que a mensagem está disponível no banco quando buscamos last_message
-                # Se não estamos em uma transação ativa, executar imediatamente
-                if transaction.get_connection().in_atomic_block:
-                    transaction.on_commit(do_broadcast)
-                else:
-                    # Não estamos em transação, executar imediatamente
-                    do_broadcast()
-                
-                # ✅ FIX: Também enviar message_received para adicionar mensagem na conversa ativa
-                msg_data_serializable = serialize_message_for_ws(message)
-                
-                channel_layer = get_channel_layer()
-                tenant_group = f"chat_tenant_{tenant.id}"
-                
-                # Broadcast message_received (para adicionar mensagem na conversa ativa)
-                logger.info(f"📡 [WEBSOCKET] Enviando message_received para grupo do tenant: {tenant_group}")
-                logger.info(f"   Message ID: {message.id}")
-                logger.info(f"   Conversation ID: {conversation.id}")
-                logger.info(f"   Message content (primeiros 50 chars): {message.content[:50] if message.content else 'N/A'}...")
-                
-                async_to_sync(channel_layer.group_send)(
-                    tenant_group,
-                    {
-                        'type': 'message_received',
-                        'message': msg_data_serializable,
-                        'conversation_id': str(conversation.id)
-                    }
                 )
                 
-                logger.info(f"✅ [WEBSOCKET] message_received enviado para grupo do tenant: {tenant_group}")
-            except Exception as e:
-                logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
+                attachment_id_str = str(attachment.id)
+                message_id_str = str(message.id)
+                tenant_id_str = str(tenant.id)
+                
+                logger.info(f"📎 [WEBHOOK] Criado anexo placeholder ID={attachment_id_str}, mime={mime_type}, type={incoming_media_type}")
+                logger.info(f"📎 [WEBHOOK] URL temporária: {attachment_url[:100]}...")
+                
+                # Força commit antes de enfileirar processamento direto (S3 direto - sem cache)
+                # ✅ MELHORIA: Usar conexão Evolution já encontrada no webhook para descriptografar arquivos
+                instance_name_for_media = None
+                api_key_for_media = None
+                evolution_api_url_for_media = None
+                
+                # ✅ CORREÇÃO: Usar WhatsAppInstance (tem instance_name UUID) ou EvolutionConnection
+                # Prioridade: wa_instance > connection > fallback
+                instance_name_for_media = None
+                api_key_for_media = None
+                evolution_api_url_for_media = None
+                
+                # ✅ OPÇÃO 1: Usar WhatsAppInstance (tem instance_name UUID do webhook)
+                if wa_instance:
+                    instance_name_for_media = wa_instance.instance_name  # UUID da instância
+                    api_key_for_media = wa_instance.api_key or (connection.api_key if connection else None)
+                    evolution_api_url_for_media = wa_instance.api_url or (connection.base_url if connection else None)
+                    
+                    logger.info(f"✅ [WEBHOOK] Usando WhatsAppInstance para descriptografar mídia:")
+                    logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
+                    logger.info(f"   📌 Friendly Name: {wa_instance.friendly_name}")
+                    logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                    logger.info(f"   📌 API Key: {'Configurada' if api_key_for_media else 'Não configurada'}")
+                
+                # ✅ OPÇÃO 2: Usar EvolutionConnection (fallback)
+                elif connection:
+                    instance_name_for_media = instance_name  # Usar instance_name do webhook (pode ser UUID ou nome)
+                    api_key_for_media = connection.api_key
+                    evolution_api_url_for_media = connection.api_url or connection.base_url
+                    
+                    logger.info(f"✅ [WEBHOOK] Usando EvolutionConnection para descriptografar mídia:")
+                    logger.info(f"   📌 Instance: {instance_name_for_media}")
+                    logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                    logger.info(f"   📌 Connection: {connection.name}")
+                
+                # ✅ OPÇÃO 3: Fallback - buscar conexão diretamente
+                else:
+                    logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão disponível, tentando buscar diretamente...")
+                    
+                    try:
+                        # Tentar buscar WhatsAppInstance pelo instance_name (UUID)
+                        from apps.notifications.models import WhatsAppInstance
+                        from apps.connections.models import EvolutionConnection
+                        
+                        fallback_wa_instance = WhatsAppInstance.objects.filter(
+                            instance_name=instance_name,
+                            tenant=tenant,
+                            is_active=True,
+                            status='active'
+                        ).first()
+                        
+                        if fallback_wa_instance:
+                            instance_name_for_media = fallback_wa_instance.instance_name
+                            api_key_for_media = fallback_wa_instance.api_key
+                            evolution_api_url_for_media = fallback_wa_instance.api_url
+                            
+                            # Se não tem api_url/api_key próprios, buscar EvolutionConnection
+                            if not evolution_api_url_for_media or not api_key_for_media:
+                                fallback_connection = EvolutionConnection.objects.filter(
+                                    is_active=True
+                                ).first()
+                                if fallback_connection:
+                                    evolution_api_url_for_media = evolution_api_url_for_media or fallback_connection.base_url
+                                    api_key_for_media = api_key_for_media or fallback_connection.api_key
+                            
+                            logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada via fallback:")
+                            logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
+                            logger.info(f"   📌 Friendly Name: {fallback_wa_instance.friendly_name}")
+                            logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                        else:
+                            # Último fallback: buscar EvolutionConnection
+                            fallback_connection = EvolutionConnection.objects.filter(
+                                tenant=tenant,
+                                is_active=True
+                            ).first()
+                            
+                            if fallback_connection:
+                                instance_name_for_media = instance_name
+                                api_key_for_media = fallback_connection.api_key
+                                evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
+                                
+                                logger.info(f"✅ [WEBHOOK] EvolutionConnection encontrada via fallback:")
+                                logger.info(f"   📌 Instance: {instance_name_for_media}")
+                                logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
+                                logger.info(f"   📌 Connection: {fallback_connection.name}")
+                            else:
+                                logger.warning(f"⚠️ [WEBHOOK] Nenhuma conexão encontrada via fallback")
+                                logger.warning(f"   🔍 [WEBHOOK] Tentou buscar por: instance_name={instance_name}, tenant={tenant.name}")
+                    except Exception as e:
+                        logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar conexão via fallback: {e}", exc_info=True)
+                
+                def enqueue_process():
+                    logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
+                    logger.info(f"   📌 tenant_id: {tenant_id_str}")
+                    logger.info(f"   📌 message_id: {message_id_str}")
+                    logger.info(f"   📌 media_url: {attachment_url[:100]}...")
+                    logger.info(f"   📌 media_type: {incoming_media_type}")
+                    
+                    # ✅ MELHORIA: Passar message_key completo para getBase64FromMediaMessage
+                    # O endpoint pode precisar do key completo (remoteJid, fromMe, id)
+                    # ✅ IMPORTANTE: Usar 'key' já extraído acima (linha 162) para garantir consistência
+                    message_key_data = None
+                    try:
+                        # ✅ CORREÇÃO: Usar 'key' já extraído acima (linha 162) ao invés de extrair novamente
+                        # Isso garante que estamos usando o mesmo objeto que foi usado para message_id
+                        if key and key.get('id'):
+                            message_key_data = {
+                                'remoteJid': key.get('remoteJid'),
+                                'fromMe': key.get('fromMe', False),
+                                'id': key.get('id')
+                            }
+                            logger.info(f"✅ [WEBHOOK] message_key extraído com sucesso!")
+                            logger.info(f"   📌 message_key.id: {message_key_data.get('id')}")
+                            logger.info(f"   📌 message_key.remoteJid: {message_key_data.get('remoteJid')}")
+                            logger.info(f"   📌 message_key.fromMe: {message_key_data.get('fromMe')}")
+                        else:
+                            logger.warning(f"⚠️ [WEBHOOK] key não disponível ou sem id!")
+                            logger.warning(f"   📌 key disponível: {key is not None}")
+                            if key:
+                                logger.warning(f"   📌 key.id: {key.get('id')}")
+                    except Exception as e:
+                        logger.error(f"❌ [WEBHOOK] Erro ao extrair message_key: {e}", exc_info=True)
+                    
+                    try:
+                        from apps.chat.tasks import process_incoming_media
+                        process_incoming_media.delay(
+                            tenant_id=tenant_id_str,
+                            message_id=message_id_str,
+                            media_url=attachment_url,
+                            media_type=incoming_media_type,
+                            instance_name=instance_name_for_media,
+                            api_key=api_key_for_media,
+                            evolution_api_url=evolution_api_url_for_media,
+                            message_key=message_key_data,
+                            mime_type=mime_type
+                        )
+                        logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso na fila chat_process_incoming_media!")
+                    except Exception as e:
+                        logger.error(f"❌ [WEBHOOK] ERRO ao enfileirar processamento: {e}", exc_info=True)
+                        raise  # ✅ Re-raise para não silenciar erro
+                
+                transaction.on_commit(enqueue_process)
             
-            # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós)
-            if not from_me:
+            logger.info(f"📎 [WEBHOOK] Anexo {filename} preparado para processamento direto (S3+cache)")
+        
+        # ✅ FIX CRÍTICO: Broadcast via WebSocket (mensagem específica)
+        # IMPORTANTE: Enviar para o grupo da conversa E para o grupo do tenant
+        logger.info(f"📡 [WEBHOOK] Enviando mensagem para WebSocket...")
+        broadcast_message_to_websocket(message, conversation)
+        
+        # ✅ FIX: Também enviar para o grupo do tenant para atualizar lista de conversas
+        try:
+            from apps.chat.utils.serialization import serialize_message_for_ws
+            from apps.chat.utils.websocket import broadcast_conversation_updated
+            from django.db import transaction
+            
+            # ✅ CORREÇÃO CRÍTICA: Garantir que broadcast acontece após commit da mensagem
+            # Passar message.id para garantir que a mensagem seja incluída no last_message
+            def do_broadcast():
+                try:
+                    # ✅ FIX CRÍTICO: Usar broadcast_conversation_updated que já faz prefetch de last_message
+                    # Passar message_id para garantir que a mensagem recém-criada seja incluída
+                    broadcast_conversation_updated(conversation, message_id=str(message.id))
+                except Exception as e:
+                    logger.error(f"❌ [WEBSOCKET] Erro no broadcast após commit: {e}", exc_info=True)
+            
+            # ✅ CORREÇÃO CRÍTICA: Executar broadcast após commit da transação
+            # Isso garante que a mensagem está disponível no banco quando buscamos last_message
+            # Se não estamos em uma transação ativa, executar imediatamente
+            if transaction.get_connection().in_atomic_block:
+                transaction.on_commit(do_broadcast)
+            else:
+                # Não estamos em transação, executar imediatamente
+                do_broadcast()
+            
+            # ✅ FIX: Também enviar message_received para adicionar mensagem na conversa ativa
+            msg_data_serializable = serialize_message_for_ws(message)
+            
+            channel_layer = get_channel_layer()
+            tenant_group = f"chat_tenant_{tenant.id}"
+            
+            # Broadcast message_received (para adicionar mensagem na conversa ativa)
+            logger.info(f"📡 [WEBSOCKET] Enviando message_received para grupo do tenant: {tenant_group}")
+            logger.info(f"   Message ID: {message.id}")
+            logger.info(f"   Conversation ID: {conversation.id}")
+            logger.info(f"   Message content (primeiros 50 chars): {message.content[:50] if message.content else 'N/A'}...")
+            
+            async_to_sync(channel_layer.group_send)(
+                tenant_group,
+                {
+                    'type': 'message_received',
+                    'message': msg_data_serializable,
+                    'conversation_id': str(conversation.id)
+                }
+            )
+            
+            logger.info(f"✅ [WEBSOCKET] message_received enviado para grupo do tenant: {tenant_group}")
+        except Exception as e:
+            logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
+        
+        # 🔔 IMPORTANTE: Se for mensagem recebida (não enviada por nós)
+        if not from_me:
                 # ❌ REMOVIDO: Não marcar como lida automaticamente
                 # O read receipt só deve ser enviado quando usuário REALMENTE abrir a conversa
                 # Isso é feito via /mark_as_read/ quando frontend abre a conversa (após 2.5s)
@@ -2803,9 +2803,6 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"📡 [WEBSOCKET] Notificação de nova mensagem broadcast para tenant {tenant.name}")
                 except Exception as e:
                     logger.error(f"❌ [WEBSOCKET] Error broadcasting notification: {e}", exc_info=True)
-        
-        else:
-            logger.info(f"ℹ️ [WEBHOOK] Mensagem já existe no banco: {message_id}")
     
     except Exception as e:
         logger.error(f"❌ [WEBHOOK] Erro ao processar messages.upsert: {e}", exc_info=True)
