@@ -87,6 +87,25 @@ class WelcomeMenuConfig(models.Model):
         help_text='⚠️ BLOQUEADO: Usar IA para processar respostas (addon futuro)'
     )
     
+    # ✅ NOVO: Configurações de timeout de inatividade
+    inactivity_timeout_enabled = models.BooleanField(
+        default=True,
+        verbose_name='Timeout de Inatividade',
+        help_text='Fecha conversa automaticamente se cliente não responde'
+    )
+    
+    first_reminder_minutes = models.IntegerField(
+        default=5,
+        verbose_name='Primeiro Lembrete (minutos)',
+        help_text='Minutos até enviar primeiro lembrete'
+    )
+    
+    auto_close_minutes = models.IntegerField(
+        default=10,
+        verbose_name='Fechamento Automático (minutos)',
+        help_text='Minutos até fechar conversa automaticamente'
+    )
+    
     # Metadados
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
@@ -166,4 +185,59 @@ class WelcomeMenuConfig(models.Model):
         
         departments_count = self.departments.count()
         return number == departments_count + 1
+
+
+class WelcomeMenuTimeout(models.Model):
+    """
+    Rastreia timeouts ativos do menu de boas-vindas.
+    Usado para enviar lembretes e fechar conversas automaticamente.
+    """
+    
+    id = models.UUIDField(
+        primary_key=True,
+        default=uuid.uuid4,
+        editable=False
+    )
+    conversation = models.OneToOneField(
+        'Conversation',
+        on_delete=models.CASCADE,
+        related_name='welcome_menu_timeout',
+        verbose_name='Conversa'
+    )
+    menu_sent_at = models.DateTimeField(
+        verbose_name='Menu Enviado Em',
+        help_text='Quando o menu foi enviado pela última vez'
+    )
+    reminder_sent = models.BooleanField(
+        default=False,
+        verbose_name='Lembrete Enviado',
+        help_text='Se já enviou o lembrete de 5 minutos'
+    )
+    reminder_sent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Lembrete Enviado Em',
+        help_text='Quando o lembrete foi enviado'
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name='Ativo',
+        help_text='Se o timeout ainda está ativo (desativa se cliente responder)'
+    )
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
+    updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
+    
+    class Meta:
+        db_table = 'chat_welcome_menu_timeout'
+        verbose_name = 'Timeout do Menu de Boas-Vindas'
+        verbose_name_plural = 'Timeouts dos Menus de Boas-Vindas'
+        indexes = [
+            models.Index(fields=['is_active', 'menu_sent_at'], name='idx_timeout_active_sent'),
+            models.Index(fields=['reminder_sent', 'reminder_sent_at'], name='idx_timeout_reminder'),
+        ]
+    
+    def __str__(self):
+        status = "Ativo" if self.is_active else "Inativo"
+        return f"Timeout {self.conversation.contact_name or self.conversation.contact_phone} ({status})"
 

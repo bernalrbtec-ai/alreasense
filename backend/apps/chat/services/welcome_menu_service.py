@@ -4,8 +4,9 @@ Serviço para gerenciar Menu de Boas-Vindas Automático
 import logging
 from typing import Optional
 from django.db import transaction
+from django.utils import timezone
 from apps.chat.models import Conversation, Message
-from apps.chat.models_welcome_menu import WelcomeMenuConfig
+from apps.chat.models_welcome_menu import WelcomeMenuConfig, WelcomeMenuTimeout
 from apps.authn.models import Department
 from apps.notifications.models import WhatsAppInstance
 
@@ -163,6 +164,27 @@ class WelcomeMenuService:
                 
                 transaction.on_commit(enqueue_message_after_commit)
                 
+                # ✅ NOVO: Criar timeout de inatividade (se habilitado)
+                if config.inactivity_timeout_enabled:
+                    try:
+                        # Deletar timeout anterior se existir
+                        WelcomeMenuTimeout.objects.filter(
+                            conversation=conversation,
+                            is_active=True
+                        ).delete()
+                        
+                        # Criar novo timeout
+                        WelcomeMenuTimeout.objects.create(
+                            conversation=conversation,
+                            menu_sent_at=timezone.now(),
+                            reminder_sent=False,
+                            is_active=True
+                        )
+                        logger.info(f"⏰ [WELCOME MENU] Timeout criado para conversa {conversation.id}")
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao criar timeout: {e}", exc_info=True)
+                        # Não falhar o envio do menu por causa do timeout
+                
                 return message
                 
         except Exception as e:
@@ -222,6 +244,19 @@ class WelcomeMenuService:
         except (ValueError, IndexError):
             return False
         
+        # ✅ NOVO: Cancelar timeout ativo (cliente respondeu)
+        try:
+            timeout = WelcomeMenuTimeout.objects.filter(
+                conversation=conversation,
+                is_active=True
+            ).first()
+            if timeout:
+                timeout.is_active = False
+                timeout.save(update_fields=['is_active', 'updated_at'])
+                logger.info(f"✅ [WELCOME MENU] Timeout cancelado - cliente respondeu")
+        except Exception as e:
+            logger.error(f"❌ [WELCOME MENU] Erro ao cancelar timeout: {e}", exc_info=True)
+        
         # Processar escolha
         if config.is_close_option(chosen_number):
             # Encerrar conversa
@@ -232,8 +267,9 @@ class WelcomeMenuService:
             if department:
                 return WelcomeMenuService._transfer_to_department(conversation, department)
             else:
+                # ✅ NOVO: Enviar mensagem de opção inválida
                 logger.warning(f"⚠️ [WELCOME MENU] Número inválido escolhido: {chosen_number}")
-                return False
+                return WelcomeMenuService._send_invalid_option_message(conversation, chosen_number, config)
     
     @staticmethod
     def _transfer_to_department(conversation: Conversation, department: Department) -> bool:
@@ -303,5 +339,118 @@ class WelcomeMenuService:
             
         except Exception as e:
             logger.error(f"❌ [WELCOME MENU] Erro ao fechar conversa: {e}", exc_info=True)
+            return False
+    
+    @staticmethod
+    def _send_invalid_option_message(conversation: Conversation, invalid_number: int, config: WelcomeMenuConfig) -> bool:
+        """
+        Envia mensagem avisando que a opção é inválida e reenvia o menu.
+        
+        Args:
+            conversation: Conversa que recebeu opção inválida
+            invalid_number: Número inválido escolhido
+            config: Configuração do menu
+        
+        Returns:
+            True se enviou com sucesso
+        """
+        try:
+            # Mensagem de erro + menu novamente
+            error_text = (
+                f"❌ Opção *{invalid_number}* inválida.\n\n"
+                f"Por favor, escolha uma das opções abaixo:\n\n"
+            )
+            
+            # Adicionar opções do menu
+            menu_text = config.get_menu_text()
+            # Remover mensagem de boas-vindas (já foi enviada)
+            menu_lines = menu_text.split('\n')
+            # Pegar apenas as opções (linhas que começam com número)
+            options_only = [line for line in menu_lines if line.strip() and (line[0].isdigit() or line.startswith('Escolha'))]
+            
+            full_message = error_text + '\n'.join(options_only)
+            
+            # Criar e enfileirar mensagem
+            with transaction.atomic():
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=None,
+                    content=full_message,
+                    direction='outgoing',
+                    status='pending',
+                    is_internal=False,
+                    metadata={
+                        'welcome_menu_invalid_option': True,
+                        'invalid_number': invalid_number,
+                        'auto_sent': True
+                    }
+                )
+                
+                def enqueue_after_commit():
+                    try:
+                        from apps.chat.tasks import send_message_to_evolution
+                        send_message_to_evolution.delay(str(message.id))
+                        logger.info(f"✅ [WELCOME MENU] Mensagem de opção inválida enfileirada")
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar mensagem de erro: {e}", exc_info=True)
+                
+                transaction.on_commit(enqueue_after_commit)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [WELCOME MENU] Erro ao enviar mensagem de opção inválida: {e}", exc_info=True)
+            return False
+    
+    @staticmethod
+    def _send_inactivity_reminder(conversation: Conversation, config: WelcomeMenuConfig) -> bool:
+        """
+        Envia mensagem perguntando se cliente ainda está presente.
+        
+        Args:
+            conversation: Conversa inativa
+            config: Configuração do menu
+        
+        Returns:
+            True se enviou com sucesso
+        """
+        try:
+            remaining_minutes = config.auto_close_minutes - config.first_reminder_minutes
+            
+            reminder_text = (
+                f"⏰ Você ainda está aí?\n\n"
+                f"Digite *1* para continuar o atendimento ou aguarde que "
+                f"encerraremos em *{remaining_minutes} minutos*."
+            )
+            
+            # Criar e enfileirar mensagem
+            with transaction.atomic():
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=None,
+                    content=reminder_text,
+                    direction='outgoing',
+                    status='pending',
+                    is_internal=False,
+                    metadata={
+                        'welcome_menu_reminder': True,
+                        'auto_sent': True
+                    }
+                )
+                
+                def enqueue_after_commit():
+                    try:
+                        from apps.chat.tasks import send_message_to_evolution
+                        send_message_to_evolution.delay(str(message.id))
+                        logger.info(f"✅ [WELCOME MENU] Lembrete de inatividade enfileirado")
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar lembrete: {e}", exc_info=True)
+                
+                transaction.on_commit(enqueue_after_commit)
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ [WELCOME MENU] Erro ao enviar lembrete de inatividade: {e}", exc_info=True)
             return False
 
