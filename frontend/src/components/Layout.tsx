@@ -40,6 +40,7 @@ const productMenuItems = {
   ],
   workflow: [
     { name: 'Chat', href: '/chat', icon: MessageSquare, requiredProduct: 'workflow' },
+    { name: 'Respostas Rápidas', href: '/quick-replies', icon: Zap, requiredProduct: 'workflow' },
     { name: 'Agenda', href: '/agenda', icon: Calendar, requiredProduct: 'workflow' },
   ],
   sense: [

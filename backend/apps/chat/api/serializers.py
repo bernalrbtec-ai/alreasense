@@ -5,7 +5,7 @@ import logging
 from rest_framework import serializers
 from django.db import models
 from django.db.models import Q
-from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
+from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction, QuickReply
 from apps.authn.serializers import UserSerializer
 from apps.contacts.models import Contact
 
@@ -751,4 +751,27 @@ class ConversationDetailSerializer(ConversationSerializer):
     
     class Meta(ConversationSerializer.Meta):
         fields = ConversationSerializer.Meta.fields + ['messages']
+
+
+class QuickReplySerializer(serializers.ModelSerializer):
+    """Serializer para respostas rápidas."""
+    
+    class Meta:
+        model = QuickReply
+        fields = ['id', 'title', 'content', 'category', 'use_count', 'created_at', 'updated_at']
+        read_only_fields = ['use_count', 'created_at', 'updated_at']
+    
+    def validate_content(self, value):
+        """Validação: conteúdo não pode estar vazio."""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Conteúdo não pode estar vazio.")
+        if len(value) > 4000:  # Limite do WhatsApp
+            raise serializers.ValidationError("Conteúdo muito longo (máximo 4000 caracteres).")
+        return value.strip()
+    
+    def validate_title(self, value):
+        """Validação: título não pode estar vazio."""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Título não pode estar vazio.")
+        return value.strip()
 

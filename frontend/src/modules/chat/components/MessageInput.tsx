@@ -10,6 +10,7 @@ import { EmojiPicker } from './EmojiPicker';
 import { FileUploader } from './FileUploader';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { MentionInput } from './MentionInput';
+import { QuickRepliesButton } from './QuickRepliesButton';
 import { api } from '@/lib/api';
 
 interface MessageInputProps {
@@ -332,6 +333,34 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
     setShowEmojiPicker(false);
   };
 
+  // ✅ Handler para respostas rápidas
+  const handleQuickReplySelect = useCallback((content: string) => {
+    setMessage(prev => prev + (prev ? ' ' : '') + content);
+    // Focar no input após inserir
+    setTimeout(() => {
+      const textarea = document.querySelector('textarea');
+      textarea?.focus();
+    }, 0);
+  }, []);
+
+  // ✅ Atalho de teclado "/" para abrir respostas rápidas
+  useEffect(() => {
+    const handleSlashKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      const isInInput = target.tagName === 'TEXTAREA' || target.closest('[data-mention-input]');
+      // Só funciona se estiver no input, não tiver texto e não estiver desabilitado
+      if (e.key === '/' && isInInput && !message.trim() && !sending && isConnected) {
+        e.preventDefault();
+        // Abrir dropdown de respostas rápidas (via evento customizado)
+        const event = new CustomEvent('openQuickReplies');
+        document.dispatchEvent(event);
+      }
+    };
+    
+    document.addEventListener('keydown', handleSlashKey);
+    return () => document.removeEventListener('keydown', handleSlashKey);
+  }, [message, sending, isConnected]);
+
   const handleFileUpload = async (file: File) => {
     if (!file || !activeConversation || uploadingFile) return;
 
@@ -492,6 +521,12 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       >
         <PenTool className="w-5 h-5" />
       </button>
+
+      {/* Quick Replies button - ao lado da assinatura */}
+      <QuickRepliesButton 
+        onSelect={handleQuickReplySelect}
+        disabled={sending || !isConnected}
+      />
 
       {/* File Uploader */}
       <div className="relative">

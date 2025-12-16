@@ -29,6 +29,7 @@ const CampaignsPage = lazy(() => import('./pages/CampaignsPage'))
 const WebhookMonitoringPage = lazy(() => import('./pages/WebhookMonitoringPage'))
 const TestPresencePage = lazy(() => import('./pages/TestPresencePage'))
 const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage'))
+const QuickRepliesPage = lazy(() => import('./pages/QuickRepliesPage'))
 // AgendaPage com retry para resolver problemas de carregamento em produção
 const AgendaPage = lazyLoadWithRetry(() => import('./pages/AgendaPage'), 3, 1000)
 const ChatPage = lazy(() => import('./modules/chat').then(module => ({ default: module.ChatPage })))
@@ -177,6 +178,13 @@ function App() {
                     <AgendaPage />
                   </Suspense>
                 </ProtectedAgendaRoute>
+              } />
+              <Route path="quick-replies" element={
+                <ProtectedChatRoute>
+                  <Suspense fallback={<LoadingSpinner size="lg" />}>
+                    <QuickRepliesPage />
+                  </Suspense>
+                </ProtectedChatRoute>
               } />
               
               {/* Rotas Protegidas por Produto */}

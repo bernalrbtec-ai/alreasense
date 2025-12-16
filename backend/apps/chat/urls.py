@@ -19,6 +19,7 @@ from apps.chat.api.views_business_hours import (
     AfterHoursTaskConfigViewSet,
 )
 from apps.chat.api.views_welcome_menu import WelcomeMenuConfigViewSet
+from apps.chat.api.views_quick_replies import QuickReplyViewSet
 from apps.chat.views import media_proxy
 from apps.chat.webhooks import evolution_webhook
 from apps.chat.api.media_views import serve_media
@@ -33,6 +34,7 @@ router.register(r'business-hours', BusinessHoursViewSet, basename='business-hour
 router.register(r'after-hours-messages', AfterHoursMessageViewSet, basename='after-hours-message')
 router.register(r'after-hours-task-configs', AfterHoursTaskConfigViewSet, basename='after-hours-task-config')
 router.register(r'welcome-menu-config', WelcomeMenuConfigViewSet, basename='welcome-menu-config')
+router.register(r'quick-replies', QuickReplyViewSet, basename='quick-reply')
 
 urlpatterns = [
     # ✅ FIX: Rotas customizadas (URLs diferentes para evitar conflito com router)

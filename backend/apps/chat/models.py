@@ -786,3 +786,70 @@ class MessageEditHistory(models.Model):
     def __str__(self):
         return f"Edição de {self.message.id} em {self.edited_at}"
 
+
+class QuickReply(models.Model):
+    """
+    Respostas rápidas para uso no chat.
+    Multi-tenant, isolado por tenant.
+    """
+    tenant = models.ForeignKey(
+        'tenancy.Tenant',
+        on_delete=models.CASCADE,
+        related_name='quick_replies',
+        verbose_name='Tenant'
+    )
+    title = models.CharField(
+        max_length=100,
+        verbose_name='Título',
+        help_text="Título curto (ex: 'Boa tarde')"
+    )
+    content = models.TextField(
+        verbose_name='Conteúdo',
+        help_text="Conteúdo da resposta"
+    )
+    category = models.CharField(
+        max_length=50,
+        blank=True,
+        verbose_name='Categoria',
+        help_text="Categoria opcional"
+    )
+    use_count = models.IntegerField(
+        default=0,
+        db_index=True,
+        verbose_name='Contador de Uso',
+        help_text="Quantas vezes foi usada"
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name='Ativa'
+    )
+    created_by = models.ForeignKey(
+        'authn.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_quick_replies',
+        verbose_name='Criado por'
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name='Criado em'
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name='Atualizado em'
+    )
+    
+    class Meta:
+        verbose_name = "Resposta Rápida"
+        verbose_name_plural = "Respostas Rápidas"
+        ordering = ['-use_count', 'title']  # Padrão: mais usadas primeiro, depois alfabética
+        indexes = [
+            models.Index(fields=['tenant', 'is_active']),
+            models.Index(fields=['tenant', 'category', 'is_active']),
+        ]
+    
+    def __str__(self):
+        return f"{self.title} ({self.tenant.name})"
+
