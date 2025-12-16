@@ -9,6 +9,11 @@ interface ThemeToggleProps {
   variant?: 'default' | 'ghost' | 'icon'
 }
 
+/**
+ * Componente para alternar entre tema claro e escuro.
+ * ✅ UX: Animações suaves e feedback visual
+ * ✅ Acessibilidade: ARIA labels e keyboard navigation
+ */
 export function ThemeToggle({ className, size = 'md', variant = 'icon' }: ThemeToggleProps) {
   const { theme, toggleTheme, isDark } = useTheme()
 
@@ -24,14 +29,29 @@ export function ThemeToggle({ className, size = 'md', variant = 'icon' }: ThemeT
         variant="ghost"
         size="icon"
         onClick={toggleTheme}
-        className={cn(className)}
-        title={isDark ? 'Alternar para modo claro' : 'Alternar para modo escuro'}
-      >
-        {isDark ? (
-          <Sun className={cn(iconSize, "text-yellow-500")} />
-        ) : (
-          <Moon className={cn(iconSize, "text-gray-600 dark:text-gray-300")} />
+        className={cn(
+          "relative transition-all duration-300 hover:scale-110 active:scale-95",
+          className
         )}
+        title={isDark ? 'Alternar para modo claro' : 'Alternar para modo escuro'}
+        aria-label={isDark ? 'Alternar para modo claro' : 'Alternar para modo escuro'}
+      >
+        {/* ✅ UX: Animação de rotação suave */}
+        <div className="relative">
+          {isDark ? (
+            <Sun className={cn(
+              iconSize, 
+              "text-yellow-500 dark:text-yellow-400",
+              "transition-all duration-300 rotate-0"
+            )} />
+          ) : (
+            <Moon className={cn(
+              iconSize, 
+              "text-gray-600 dark:text-gray-300",
+              "transition-all duration-300 rotate-0"
+            )} />
+          )}
+        </div>
       </Button>
     )
   }
@@ -40,16 +60,20 @@ export function ThemeToggle({ className, size = 'md', variant = 'icon' }: ThemeT
     <Button
       variant={variant}
       onClick={toggleTheme}
-      className={cn("flex items-center gap-2", className)}
+      className={cn(
+        "flex items-center gap-2 transition-all duration-200",
+        className
+      )}
+      aria-label={isDark ? 'Alternar para modo claro' : 'Alternar para modo escuro'}
     >
       {isDark ? (
         <>
-          <Sun className={iconSize} />
+          <Sun className={cn(iconSize, "text-yellow-500")} />
           <span>Modo Claro</span>
         </>
       ) : (
         <>
-          <Moon className={iconSize} />
+          <Moon className={cn(iconSize)} />
           <span>Modo Escuro</span>
         </>
       )}

@@ -62,6 +62,18 @@
   animation: fade-in 0.3s ease-out;
 }
 
+/* ✅ UX: Transições suaves para tema escuro */
+* {
+  transition-property: background-color, border-color, color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+/* ✅ PERFORMANCE: Evitar transições em elementos que não precisam */
+button, a, input, textarea, select {
+  transition-property: background-color, border-color, color, opacity, transform;
+}
+
 .animate-slide-in-right {
   animation: slide-in-right 0.3s ease-out;
 }

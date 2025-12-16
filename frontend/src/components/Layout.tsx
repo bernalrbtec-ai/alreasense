@@ -31,6 +31,7 @@ import { Button } from './ui/Button'
 import Logo from './ui/Logo'
 import Avatar from './ui/Avatar'
 import ChangePasswordModal from './modals/ChangePasswordModal'
+import { ThemeToggle } from './ThemeToggle'
 import { cn } from '../lib/utils'
 
 // Mapeamento de produtos para itens do menu
@@ -204,13 +205,17 @@ export default function Layout() {
         <div className="relative flex w-full max-w-xs flex-1 flex-col bg-white dark:bg-gray-800">
           <div className="flex h-16 items-center justify-between px-4">
             <Logo size="sm" />
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setSidebarOpen(false)}
-            >
-              <X className="h-6 w-6" />
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* ✅ Tema escuro/claro toggle */}
+              <ThemeToggle size="sm" />
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setSidebarOpen(false)}
+              >
+                <X className="h-6 w-6" />
+              </Button>
+            </div>
           </div>
           <nav className="flex-1 space-y-1 px-2 py-4">
             {navigation.map((item) => {
@@ -338,10 +343,13 @@ export default function Layout() {
           <div className="flex h-16 items-center justify-between px-4">
             {!sidebarCollapsed && <Logo size="sm" />}
             <div className="flex items-center gap-2 ml-auto">
+              {/* ✅ Tema escuro/claro toggle */}
+              <ThemeToggle size="sm" />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+                title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}
               >
                 {sidebarCollapsed ? (
                   <ChevronRight className="h-5 w-5" />
