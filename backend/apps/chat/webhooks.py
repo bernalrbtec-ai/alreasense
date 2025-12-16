@@ -1938,6 +1938,31 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 old_status = conversation.status
                 old_department = conversation.department.name if conversation.department else 'Nenhum'
                 
+                # ✅ NOVO: Verificar se conversa foi fechada recentemente (janela de despedida)
+                # Se fechou há menos de 2 minutos, não reabrir (permite mensagens de despedida)
+                from django.utils import timezone as django_timezone
+                from datetime import timedelta
+                
+                # Buscar última mensagem de fechamento do menu
+                last_close_message = Message.objects.filter(
+                    conversation=conversation,
+                    direction='outgoing',
+                    metadata__welcome_menu_close_confirmation=True
+                ).order_by('-created_at').first()
+                
+                time_since_closure = None
+                if last_close_message:
+                    time_since_closure = (django_timezone.now() - last_close_message.created_at).total_seconds() / 60  # minutos
+                    logger.info(f"⏰ [WELCOME MENU] Conversa foi fechada há {time_since_closure:.1f} minutos")
+                
+                # ✅ Se fechou há menos de 2 minutos, NÃO reabrir (janela de despedida)
+                if time_since_closure and time_since_closure < 2:
+                    logger.info(f"💬 [WELCOME MENU] Janela de despedida ativa ({time_since_closure:.1f}min < 2min) - mensagem ignorada")
+                    logger.info(f"   Conversa permanece fechada. Mensagem: {content[:50] if content else 'N/A'}...")
+                    # NÃO reabrir, NÃO enviar menu, apenas registrar a mensagem
+                    # A mensagem já foi criada no banco, mas conversa permanece closed
+                    continue  # Pular o resto do processamento (não reabrir)
+                
                 # ✅ CORREÇÃO CRÍTICA: Verificar se deve enviar menu ANTES de mudar o status
                 # Isso garante que a verificação de 'closed' funcione corretamente
                 should_send_menu_for_closed = False
