@@ -100,11 +100,16 @@ DATABASES = {
 }
 
 # ✅ IMPROVEMENT: Database connection pooling and performance
-DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=600, cast=int)  # 10 minutes
+# ✅ FIX: Reduzir CONN_MAX_AGE para ASGI (Daphne) - conexões persistentes causam "too many clients"
+# Em ASGI, cada thread mantém sua própria conexão, então precisamos fechar mais rapidamente
+DATABASES['default']['CONN_MAX_AGE'] = config('DB_CONN_MAX_AGE', default=60, cast=int)  # 1 minuto (reduzido de 10min)
 DATABASES['default']['OPTIONS'] = {
     'connect_timeout': 10,
     'options': '-c statement_timeout=30000'  # 30 seconds query timeout
 }
+# ✅ FIX: Forçar fechamento de conexões antigas
+DATABASES['default']['AUTOCOMMIT'] = True
+DATABASES['default']['ATOMIC_REQUESTS'] = False
 
 # Custom User Model
 AUTH_USER_MODEL = 'authn.User'
