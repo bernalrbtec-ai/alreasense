@@ -449,14 +449,18 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         Valida data/hora agendada:
         - Na criação: não pode ser no passado
         - Na atualização: não pode ser anterior à data de criação da tarefa
-        - ✅ CORREÇÃO: Se status é 'completed', due_date não é obrigatório
+        - ✅ CORREÇÃO: Se status é 'completed', não validar due_date (pode ser None ou qualquer valor)
         """
         from django.utils import timezone
         
         # ✅ CORREÇÃO: Se status é 'completed', não validar due_date
+        # O backend vai atualizar due_date automaticamente para tarefas fora de horário
+        # ou manter o valor existente para tarefas normais
         status = self.initial_data.get('status') if hasattr(self, 'initial_data') else None
-        if status == 'completed' and not value:
-            return value  # Permitir None quando concluindo
+        if status == 'completed':
+            # Permitir qualquer valor (None ou valor existente) quando concluindo
+            # O método mark_completed vai atualizar automaticamente se necessário
+            return value
         
         if not value:
             return value
@@ -547,7 +551,19 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         if request and request.user:
             instance._changed_by = request.user
         
-        # ✅ CORREÇÃO: Se due_date foi alterado, resetar notification_sent para False
+        # ✅ NOVO: Se status está mudando para 'completed', usar mark_completed
+        # Isso garante que tarefas fora de horário tenham due_date atualizado automaticamente
+        old_status = instance.status
+        new_status = validated_data.get('status')
+        is_completing = old_status != 'completed' and new_status == 'completed'
+        
+        # ✅ CORREÇÃO: Se está concluindo, remover due_date do validated_data
+        # O método mark_completed vai atualizar automaticamente se necessário
+        if is_completing:
+            validated_data.pop('due_date', None)  # Remover se foi enviado
+            logger.info(f'✅ [TASK UPDATE] Status mudando para completed - usando mark_completed para atualização automática')
+        
+        # ✅ CORREÇÃO: Se due_date foi alterado (e não está concluindo), resetar notification_sent para False
         # Isso permite que a tarefa seja notificada novamente na nova data/hora
         import logging
         logger = logging.getLogger(__name__)
@@ -560,7 +576,7 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         from django.utils import timezone
         
         due_date_changed = False
-        if 'due_date' in validated_data:
+        if 'due_date' in validated_data and not is_completing:
             if old_due_date is None and new_due_date is not None:
                 # Mudou de None para uma data
                 due_date_changed = True
@@ -576,7 +592,8 @@ class TaskCreateSerializer(serializers.ModelSerializer):
                 new_minute = new_utc.replace(second=0, microsecond=0)
                 due_date_changed = old_minute != new_minute
         
-        logger.info(f'🔍 [TASK UPDATE] Verificando mudança de due_date: old={old_due_date}, new={new_due_date}, changed={due_date_changed}')
+        if not is_completing:
+            logger.info(f'🔍 [TASK UPDATE] Verificando mudança de due_date: old={old_due_date}, new={new_due_date}, changed={due_date_changed}')
         
         # ✅ NOVO: Atualizar metadata se fornecido
         if metadata is not None:
@@ -587,16 +604,27 @@ class TaskCreateSerializer(serializers.ModelSerializer):
             current_metadata.update(metadata)
             instance.metadata = current_metadata
         
+        # Atualizar campos (exceto status se está concluindo - será feito por mark_completed)
+        if is_completing:
+            # Remover status do validated_data temporariamente
+            validated_data.pop('status', None)
+        
         # Atualizar campos
         for attr, value in validated_data.items():
             setattr(instance, attr, value)
         
-        # ✅ CORREÇÃO: Resetar notification_sent se due_date foi alterado
-        if due_date_changed:
-            instance.notification_sent = False
-            logger.info(f'🔄 [TASK UPDATE] Data/hora alterada de {old_due_date} para {instance.due_date} - resetando notification_sent para False')
+        # ✅ NOVO: Se está concluindo, usar mark_completed para garantir lógica correta
+        if is_completing:
+            user = request.user if request else None
+            instance.mark_completed(user=user)
+            logger.info(f'✅ [TASK UPDATE] Tarefa concluída usando mark_completed - due_date atualizado automaticamente se necessário')
         else:
-            logger.debug(f'ℹ️ [TASK UPDATE] Data/hora não foi alterada (ou é a mesma) - mantendo notification_sent={instance.notification_sent}')
+            # ✅ CORREÇÃO: Resetar notification_sent se due_date foi alterado (apenas se não está concluindo)
+            if due_date_changed:
+                instance.notification_sent = False
+                logger.info(f'🔄 [TASK UPDATE] Data/hora alterada de {old_due_date} para {instance.due_date} - resetando notification_sent para False')
+            else:
+                logger.debug(f'ℹ️ [TASK UPDATE] Data/hora não foi alterada (ou é a mesma) - mantendo notification_sent={instance.notification_sent}')
         
         # Atualizar contatos relacionados se fornecido
         if related_contact_ids is not None:
