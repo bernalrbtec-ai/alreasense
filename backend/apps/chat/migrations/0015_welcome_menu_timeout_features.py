@@ -8,7 +8,7 @@ import uuid
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('chat', '0011_quickreply'),  # Ajustar conforme última migration
+        ('chat', '0014_add_message_deleted_fields'),
     ]
 
     operations = [
