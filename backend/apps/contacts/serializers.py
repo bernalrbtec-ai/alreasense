@@ -616,8 +616,19 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         # ✅ NOVO: Se está concluindo, usar mark_completed para garantir lógica correta
         if is_completing:
             user = request.user if request else None
+            # ✅ IMPORTANTE: mark_completed já salva a instância, então não precisamos salvar novamente
+            # Mas precisamos atualizar contatos relacionados antes de chamar mark_completed
+            if related_contact_ids is not None:
+                contacts = Contact.objects.filter(
+                    id__in=related_contact_ids,
+                    tenant=request.user.tenant
+                )
+                instance.related_contacts.set(contacts)
+            
             instance.mark_completed(user=user)
             logger.info(f'✅ [TASK UPDATE] Tarefa concluída usando mark_completed - due_date atualizado automaticamente se necessário')
+            # ✅ mark_completed já salvou, então retornar aqui
+            return instance
         else:
             # ✅ CORREÇÃO: Resetar notification_sent se due_date foi alterado (apenas se não está concluindo)
             if due_date_changed:
