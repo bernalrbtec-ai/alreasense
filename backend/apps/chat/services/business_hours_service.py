@@ -220,11 +220,20 @@ class BusinessHoursService:
         return "Em breve"
     
     @staticmethod
-    def get_after_hours_message(tenant, department=None) -> Optional[AfterHoursMessage]:
+    def get_after_hours_message(tenant, department=None, sync_status=True) -> Optional[AfterHoursMessage]:
         """
         Busca mensagem automática para fora de horário.
         
         ✅ NOVO: Sincroniza is_active com BusinessHours antes de retornar.
+        
+        Args:
+            tenant: Tenant para buscar mensagem
+            department: Departamento (opcional)
+            sync_status: Se True, sincroniza is_active com BusinessHours (padrão: True)
+        
+        Returns:
+            AfterHoursMessage se encontrada, None caso contrário
+            NOTA: Retorna a mensagem mesmo se is_active=False (para exibição no frontend)
         """
         # Buscar mensagem (sem filtrar por is_active primeiro)
         message = None
@@ -241,7 +250,7 @@ class BusinessHoursService:
                 department__isnull=True
             ).first()
         
-        if message:
+        if message and sync_status:
             # ✅ NOVO: Sincronizar is_active com BusinessHours correspondente
             business_hours = BusinessHoursService.get_business_hours(tenant, department)
             if business_hours:
@@ -252,11 +261,20 @@ class BusinessHoursService:
                     )
                     message.is_active = business_hours.is_active
                     message.save(update_fields=['is_active'])
-            
-            # Retornar apenas se estiver ativa
-            if message.is_active:
-                return message
         
+        return message
+    
+    @staticmethod
+    def get_active_after_hours_message(tenant, department=None) -> Optional[AfterHoursMessage]:
+        """
+        Busca mensagem automática ATIVA para fora de horário.
+        
+        Usado pelo webhook para verificar se deve enviar mensagem automática.
+        Retorna apenas se a mensagem estiver ativa.
+        """
+        message = BusinessHoursService.get_after_hours_message(tenant, department, sync_status=True)
+        if message and message.is_active:
+            return message
         return None
     
     @staticmethod
@@ -353,8 +371,8 @@ class BusinessHoursService:
             # Dentro do horário = não faz nada
             return False, None
         
-        # Fora de horário - busca mensagem automática
-        after_hours_msg = BusinessHoursService.get_after_hours_message(tenant, department)
+        # Fora de horário - busca mensagem automática ATIVA
+        after_hours_msg = BusinessHoursService.get_active_after_hours_message(tenant, department)
         
         if not after_hours_msg:
             # Sem mensagem configurada = não envia nada

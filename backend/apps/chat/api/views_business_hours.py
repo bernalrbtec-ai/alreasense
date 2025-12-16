@@ -111,32 +111,57 @@ class BusinessHoursViewSet(viewsets.ModelViewSet):
     def _sync_after_hours_message_status(self, tenant, department, is_active):
         """
         Sincroniza o is_active da mensagem automática com o BusinessHours.
+        
+        ✅ MELHORIA: Sincroniza tanto mensagem específica do departamento quanto geral.
+        Se department=None, sincroniza apenas a geral.
+        Se department preenchido, sincroniza a específica E a geral (se existir).
         """
         try:
-            after_hours_message = AfterHoursMessage.objects.filter(
-                tenant=tenant,
-                department=department
-            ).first()
-            
-            if after_hours_message:
-                if after_hours_message.is_active != is_active:
+            # 1. Sincronizar mensagem específica do departamento (se department fornecido)
+            if department:
+                dept_message = AfterHoursMessage.objects.filter(
+                    tenant=tenant,
+                    department=department
+                ).first()
+                if dept_message and dept_message.is_active != is_active:
                     logger.info(
-                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática: "
-                        f"is_active={after_hours_message.is_active} → {is_active} "
-                        f"(tenant={tenant.name}, department={department.name if department else 'Geral'})"
+                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática (departamento específico): "
+                        f"is_active={dept_message.is_active} → {is_active} "
+                        f"(tenant={tenant.name}, department={department.name})"
                     )
-                    after_hours_message.is_active = is_active
-                    after_hours_message.save(update_fields=['is_active'])
-                    logger.info(f"✅ [BUSINESS HOURS] Mensagem automática sincronizada com sucesso")
+                    dept_message.is_active = is_active
+                    dept_message.save(update_fields=['is_active'])
+                    logger.info(f"✅ [BUSINESS HOURS] Mensagem automática (departamento específico) sincronizada")
+            
+            # 2. Sincronizar mensagem geral do tenant (sempre verificar)
+            general_message = AfterHoursMessage.objects.filter(
+                tenant=tenant,
+                department__isnull=True
+            ).first()
+            if general_message:
+                # Para mensagem geral, usar BusinessHours geral (não específico do departamento)
+                general_bh = BusinessHoursService.get_business_hours(tenant, None)
+                target_is_active = general_bh.is_active if general_bh else is_active
+                
+                if general_message.is_active != target_is_active:
+                    logger.info(
+                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática (geral): "
+                        f"is_active={general_message.is_active} → {target_is_active} "
+                        f"(tenant={tenant.name})"
+                    )
+                    general_message.is_active = target_is_active
+                    general_message.save(update_fields=['is_active'])
+                    logger.info(f"✅ [BUSINESS HOURS] Mensagem automática (geral) sincronizada")
                 else:
                     logger.debug(
-                        f"ℹ️ [BUSINESS HOURS] Mensagem automática já está sincronizada "
-                        f"(is_active={is_active})"
+                        f"ℹ️ [BUSINESS HOURS] Mensagem automática (geral) já está sincronizada "
+                        f"(is_active={target_is_active})"
                     )
-            else:
+            
+            if not department and not general_message:
                 logger.debug(
                     f"ℹ️ [BUSINESS HOURS] Nenhuma mensagem automática encontrada para sincronizar "
-                    f"(tenant={tenant.name}, department={department.name if department else 'Geral'})"
+                    f"(tenant={tenant.name}, department=Geral)"
                 )
         except Exception as e:
             logger.error(
@@ -252,9 +277,12 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
         department = serializer.validated_data.get('department')
         
         # ✅ NOVO: Buscar BusinessHours correspondente para sincronizar is_active
+        # Remover is_active do validated_data se foi enviado (não deve ser editável)
+        serializer.validated_data.pop('is_active', None)
+        
+        # Sincronizar is_active com BusinessHours correspondente
         business_hours = BusinessHoursService.get_business_hours(tenant, department)
         if business_hours:
-            # Sincronizar is_active com BusinessHours
             serializer.validated_data['is_active'] = business_hours.is_active
             logger.info(
                 f"🔄 [AFTER HOURS MESSAGE] Sincronizando is_active com BusinessHours: "
@@ -266,11 +294,6 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
             logger.warning(
                 f"⚠️ [AFTER HOURS MESSAGE] BusinessHours não encontrado, usando is_active=True como padrão"
             )
-        
-        # Remover is_active do validated_data se foi enviado (não deve ser editável)
-        serializer.validated_data.pop('is_active', None)
-        # Re-adicionar o valor sincronizado
-        serializer.validated_data['is_active'] = business_hours.is_active if business_hours else True
         
         # Buscar registro existente
         existing = AfterHoursMessage.objects.filter(
@@ -333,6 +356,9 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
     def current(self, request):
         """
         Retorna mensagem atual (departamento específico ou geral do tenant).
+        
+        ✅ MELHORIA: Sempre sincroniza is_active com BusinessHours antes de retornar.
+        Retorna mensagem mesmo se inativa (para exibição no frontend).
         """
         user = request.user
         department_id = request.query_params.get('department')
@@ -344,9 +370,11 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
             except:
                 pass
         
+        # ✅ Buscar mensagem com sincronização automática
         message = BusinessHoursService.get_after_hours_message(
             user.tenant,
-            department
+            department,
+            sync_status=True  # Sincronizar is_active antes de retornar
         )
         
         if not message:
@@ -354,6 +382,9 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
                 'has_config': False,
                 'message': 'Nenhuma mensagem configurada'
             })
+        
+        # ✅ Recarregar do banco para garantir dados atualizados após sincronização
+        message.refresh_from_db()
         
         serializer = AfterHoursMessageSerializer(message)
         return Response({

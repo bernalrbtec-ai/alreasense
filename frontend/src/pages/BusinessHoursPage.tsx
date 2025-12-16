@@ -205,12 +205,12 @@ export default function BusinessHoursPage() {
           const messageData = response.data.after_hours_message || {}
           console.log('📥 [BUSINESS HOURS] Dados recebidos da API:', messageData)
           console.log('🔍 [BUSINESS HOURS] reply_to_groups no messageData:', messageData.reply_to_groups)
-          // ✅ is_active agora sincroniza com BusinessHours - usar valor do BusinessHours atual
+          // ✅ is_active vem sincronizado do backend - usar valor da API diretamente
           const finalData = {
             ...messageData,
             reply_to_groups: messageData.reply_to_groups ?? false,
-            // Sincronizar is_active com BusinessHours (se disponível)
-            is_active: businessHours?.is_active ?? (messageData.is_active ?? true),
+            // is_active já vem sincronizado do backend
+            is_active: messageData.is_active ?? true,
           }
         console.log('✅ [BUSINESS HOURS] Dados finais:', finalData)
         console.log('✅ [BUSINESS HOURS] is_active final:', finalData.is_active, '(tipo:', typeof finalData.is_active, ')')
@@ -218,13 +218,29 @@ export default function BusinessHoursPage() {
         setAfterHoursMessage(finalData)
       } else {
         console.log('⚠️ [BUSINESS HOURS] Nenhuma configuração encontrada, criando padrão')
-        // ✅ is_active será sincronizado automaticamente com BusinessHours pelo backend
+        // ✅ Buscar BusinessHours para sincronizar is_active inicial
+        // Se businessHours ainda não foi carregado, buscar agora
+        let initialIsActive = true
+        if (businessHours) {
+          initialIsActive = businessHours.is_active
+        } else {
+          // Tentar buscar BusinessHours para sincronizar
+          try {
+            const bhResponse = await api.get('/chat/business-hours/current/', { params })
+            if (bhResponse.data.has_config) {
+              initialIsActive = bhResponse.data.business_hours.is_active
+            }
+          } catch (e) {
+            console.warn('⚠️ [BUSINESS HOURS] Não foi possível buscar BusinessHours para sincronizar:', e)
+          }
+        }
+        
         setAfterHoursMessage({
           tenant: user?.tenant_id || '',
           department: selectedDepartment || null,
           message_template: 'Olá {contact_name}! Recebemos sua mensagem fora do horário de atendimento.\n\nNosso horário de funcionamento é:\n{next_open_time}\n\nRetornaremos em breve!',
           reply_to_groups: false,
-          is_active: businessHours?.is_active ?? true, // Sincronizar com BusinessHours se disponível
+          is_active: initialIsActive, // Sincronizar com BusinessHours
         })
       }
     } catch (error: any) {
@@ -625,20 +641,25 @@ export default function BusinessHoursPage() {
 
             <div className="space-y-3">
               {/* ✅ REMOVIDO: Toggle is_active - agora sincroniza automaticamente com Business Hours */}
-              {businessHours && (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                  <div className="flex items-center gap-2">
-                    <Info className="h-4 w-4 text-gray-600" />
-                    <p className="text-sm text-gray-700">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-center gap-2">
+                  <Info className="h-4 w-4 text-gray-600" />
+                  <div className="text-sm text-gray-700">
+                    <p>
                       <strong>Status:</strong> A mensagem automática está{' '}
-                      <span className={businessHours.is_active ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                        {businessHours.is_active ? 'ATIVA' : 'INATIVA'}
+                      <span className={afterHoursMessage.is_active ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                        {afterHoursMessage.is_active ? 'ATIVA' : 'INATIVA'}
                       </span>
                       {' '}e sincroniza automaticamente com os Horários de Atendimento.
                     </p>
+                    {businessHours && (
+                      <p className="mt-1 text-xs text-gray-500">
+                        Horários de Atendimento: {businessHours.is_active ? 'Ativo' : 'Inativo'}
+                      </p>
+                    )}
                   </div>
                 </div>
-              )}
+              </div>
 
               {/* ✅ CHECKBOX: Responder em Grupos - FORÇAR VISIBILIDADE */}
               <div className="flex items-center gap-2" style={{ visibility: 'visible', display: 'flex' }}>
