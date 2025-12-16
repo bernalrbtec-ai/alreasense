@@ -116,19 +116,25 @@ class CanAccessChat(permissions.BasePermission):
         if user.is_admin:
             return True
         
-        # Extrair department do chat/mensagem
+        # Extrair department do chat/mensagem/conversa
         department = None
         if hasattr(obj, 'department'):
+            # Conversation tem department diretamente
             department = obj.department
+        elif hasattr(obj, 'conversation') and hasattr(obj.conversation, 'department'):
+            # Message tem conversation.department
+            department = obj.conversation.department
         elif hasattr(obj, 'chat') and hasattr(obj.chat, 'department'):
+            # Outros objetos podem ter chat.department (legacy)
             department = obj.chat.department
         
         # Verifica se user pertence ao departamento
         if department:
             return user.departments.filter(id=department.id).exists()
         
-        # Se não tem departamento definido, apenas admin pode acessar
-        return False
+        # ✅ CORREÇÃO: Se não tem departamento (Inbox/pending), gerente e agente também podem acessar
+        # Conversas sem departamento são consideradas "Inbox" e devem ser acessíveis
+        return user.is_gerente or user.is_agente
 
 
 class CanAccessAgenda(permissions.BasePermission):
