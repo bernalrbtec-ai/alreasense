@@ -42,8 +42,8 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
   // ✅ Buscar ao abrir (com cache) e calcular posição
   useEffect(() => {
     if (isOpen) {
-      refetch();
-      // Calcular posição do dropdown baseado no botão
+      // ✅ FIX: Não fazer refetch automático - o hook já busca ao montar
+      // Apenas calcular posição do dropdown baseado no botão
       if (buttonRef.current) {
         const rect = buttonRef.current.getBoundingClientRect();
         setPosition({
@@ -54,7 +54,7 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
     } else {
       setPosition(null);
     }
-  }, [isOpen, refetch]);
+  }, [isOpen]); // ✅ FIX: Remover refetch das dependências para evitar loops
 
   // ✅ Fechar ao clicar fora
   useEffect(() => {

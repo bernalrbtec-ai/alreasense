@@ -90,9 +90,11 @@ export function useQuickReplies(search: string = '', ordering: string = '-use_co
     }
   }, [search, ordering]);
 
+  // ✅ FIX: Usar search e ordering diretamente no useEffect para evitar loops
   useEffect(() => {
     fetchQuickReplies();
-  }, [fetchQuickReplies]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, ordering]); // Não incluir fetchQuickReplies nas dependências
 
   return {
     quickReplies,
