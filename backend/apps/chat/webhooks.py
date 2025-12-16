@@ -1333,6 +1333,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             if quoted_id:
                 quoted_message_id_evolution = quoted_id
                 logger.info(f"💬 [WEBHOOK] Mensagem de áudio é resposta de: {quoted_id}")
+        elif message_type == 'stickerMessage':
+            # ✅ NOVO: Suporte para stickers (figurinhas)
+            sticker_msg = message_info.get('stickerMessage', {})
+            content = '🎨 Figurinha'  # Conteúdo padrão para stickers
+            
+            # ✅ NOVO: Extrair quotedMessage (mensagem sendo respondida)
+            context_info = sticker_msg.get('contextInfo', {})
+            quoted_id = extract_quoted_message(context_info)
+            if quoted_id:
+                quoted_message_id_evolution = quoted_id
+                logger.info(f"💬 [WEBHOOK] Mensagem de sticker é resposta de: {quoted_id}")
+            
+            logger.info(f"🎨 [WEBHOOK] Sticker recebido - processando como imagem")
         elif message_type == 'contactMessage':
             # ✅ NOVO: Extrair dados do contato compartilhado
             contact_data = message_info.get('contactMessage', {})
@@ -2488,6 +2501,21 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             attachment_url = message_info.get('audioMessage', {}).get('url')
             mime_type = message_info.get('audioMessage', {}).get('mimetype', 'audio/ogg')
             filename = f"{message.id}.ogg"
+        elif message_type == 'stickerMessage':
+            # ✅ NOVO: Processar sticker como imagem (WebP)
+            sticker_msg = message_info.get('stickerMessage', {})
+            attachment_url = sticker_msg.get('url')
+            mime_type = sticker_msg.get('mimetype', 'image/webp')
+            # Stickers geralmente são WebP, mas podem ter outros formatos
+            if mime_type == 'image/webp':
+                filename = f"{message.id}.webp"
+            elif 'image' in mime_type:
+                # Extrair extensão do mimetype
+                ext = mime_type.split('/')[-1]
+                filename = f"{message.id}.{ext}"
+            else:
+                filename = f"{message.id}.webp"  # Fallback para WebP
+            logger.info(f"🎨 [WEBHOOK] Sticker detectado - URL: {attachment_url[:100] if attachment_url else 'N/A'}, MIME: {mime_type}")
         
         if attachment_url:
             # Determinar media_type baseado no message_type
@@ -2497,6 +2525,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 incoming_media_type = 'video'
             elif message_type == 'audioMessage':
                 incoming_media_type = 'audio'
+            elif message_type == 'stickerMessage':
+                incoming_media_type = 'sticker'  # ✅ NOVO: Tipo específico para stickers
             elif message_type == 'documentMessage':
                 incoming_media_type = 'document'
             else:

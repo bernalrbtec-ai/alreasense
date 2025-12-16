@@ -650,6 +650,9 @@ async def handle_process_incoming_media(
             # Inferir do media_type
             if media_type == 'image':
                 content_type = original_mime_type or 'image/jpeg'
+            elif media_type == 'sticker':
+                # ✅ NOVO: Stickers são geralmente WebP, mas podem ter outros formatos
+                content_type = original_mime_type or 'image/webp'
             elif media_type == 'video':
                 content_type = original_mime_type or 'video/mp4'
             elif media_type == 'audio':
@@ -1256,11 +1259,12 @@ async def handle_process_uploaded_file(
         else:
             media_type = 'document'
         
-        # 4. Processar se for imagem
+        # 4. Processar se for imagem ou sticker
         processed_data = binary_data
         thumbnail_data = None
         
-        if media_type == 'image' and is_valid_image(binary_data):
+        # ✅ NOVO: Processar stickers como imagens (geralmente WebP)
+        if (media_type == 'image' or media_type == 'sticker') and is_valid_image(binary_data):
             result = process_image(binary_data, create_thumb=True, resize=True, optimize=True)
             if result['success']:
                 processed_data = result['processed_data']
