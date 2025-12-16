@@ -55,6 +55,7 @@ class BusinessHoursViewSet(viewsets.ModelViewSet):
         """
         ✅ CORREÇÃO: Faz upsert (update ou create) ao invés de sempre criar.
         Evita erro de constraint única quando já existe registro para o tenant/department.
+        ✅ NOVO: Sincroniza is_active da mensagem automática após salvar BusinessHours.
         """
         tenant = self.request.user.tenant
         department = serializer.validated_data.get('department')
@@ -83,16 +84,65 @@ class BusinessHoursViewSet(viewsets.ModelViewSet):
             # ✅ CORREÇÃO CRÍTICA: Recarregar do banco para garantir dados atualizados
             serializer.instance.refresh_from_db()
             logger.info(f"✅ [BUSINESS HOURS] Registro criado e recarregado: ID={serializer.instance.id}")
+        
+        # ✅ NOVO: Sincronizar is_active da mensagem automática com BusinessHours
+        self._sync_after_hours_message_status(tenant, department, serializer.instance.is_active)
     
     def perform_update(self, serializer):
         """
         ✅ CORREÇÃO: Garantir que objeto seja recarregado após atualização.
+        ✅ NOVO: Sincroniza is_active da mensagem automática após atualizar BusinessHours.
         """
         logger.info(f"🔄 [BUSINESS HOURS] PATCH - Atualizando registro (ID: {serializer.instance.id})")
+        old_is_active = serializer.instance.is_active
         serializer.save()
         # ✅ CORREÇÃO CRÍTICA: Recarregar do banco para garantir dados atualizados
         serializer.instance.refresh_from_db()
         logger.info(f"✅ [BUSINESS HOURS] Registro atualizado e recarregado: ID={serializer.instance.id}")
+        
+        # ✅ NOVO: Sincronizar is_active da mensagem automática se mudou
+        if old_is_active != serializer.instance.is_active:
+            self._sync_after_hours_message_status(
+                serializer.instance.tenant,
+                serializer.instance.department,
+                serializer.instance.is_active
+            )
+    
+    def _sync_after_hours_message_status(self, tenant, department, is_active):
+        """
+        Sincroniza o is_active da mensagem automática com o BusinessHours.
+        """
+        try:
+            after_hours_message = AfterHoursMessage.objects.filter(
+                tenant=tenant,
+                department=department
+            ).first()
+            
+            if after_hours_message:
+                if after_hours_message.is_active != is_active:
+                    logger.info(
+                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática: "
+                        f"is_active={after_hours_message.is_active} → {is_active} "
+                        f"(tenant={tenant.name}, department={department.name if department else 'Geral'})"
+                    )
+                    after_hours_message.is_active = is_active
+                    after_hours_message.save(update_fields=['is_active'])
+                    logger.info(f"✅ [BUSINESS HOURS] Mensagem automática sincronizada com sucesso")
+                else:
+                    logger.debug(
+                        f"ℹ️ [BUSINESS HOURS] Mensagem automática já está sincronizada "
+                        f"(is_active={is_active})"
+                    )
+            else:
+                logger.debug(
+                    f"ℹ️ [BUSINESS HOURS] Nenhuma mensagem automática encontrada para sincronizar "
+                    f"(tenant={tenant.name}, department={department.name if department else 'Geral'})"
+                )
+        except Exception as e:
+            logger.error(
+                f"❌ [BUSINESS HOURS] Erro ao sincronizar mensagem automática: {e}",
+                exc_info=True
+            )
     
     @action(detail=False, methods=['get'])
     def current(self, request):
@@ -196,9 +246,31 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
         """
         ✅ CORREÇÃO: Faz upsert (update ou create) ao invés de sempre criar.
         Evita erro de constraint única quando já existe registro para o tenant/department.
+        ✅ NOVO: Sincroniza is_active com BusinessHours correspondente.
         """
         tenant = self.request.user.tenant
         department = serializer.validated_data.get('department')
+        
+        # ✅ NOVO: Buscar BusinessHours correspondente para sincronizar is_active
+        business_hours = BusinessHoursService.get_business_hours(tenant, department)
+        if business_hours:
+            # Sincronizar is_active com BusinessHours
+            serializer.validated_data['is_active'] = business_hours.is_active
+            logger.info(
+                f"🔄 [AFTER HOURS MESSAGE] Sincronizando is_active com BusinessHours: "
+                f"is_active={business_hours.is_active}"
+            )
+        else:
+            # Se não há BusinessHours, usar True como padrão
+            serializer.validated_data['is_active'] = True
+            logger.warning(
+                f"⚠️ [AFTER HOURS MESSAGE] BusinessHours não encontrado, usando is_active=True como padrão"
+            )
+        
+        # Remover is_active do validated_data se foi enviado (não deve ser editável)
+        serializer.validated_data.pop('is_active', None)
+        # Re-adicionar o valor sincronizado
+        serializer.validated_data['is_active'] = business_hours.is_active if business_hours else True
         
         # Buscar registro existente
         existing = AfterHoursMessage.objects.filter(
@@ -209,29 +281,53 @@ class AfterHoursMessageViewSet(viewsets.ModelViewSet):
         if existing:
             # ✅ Atualizar registro existente (não atualizar tenant/department)
             logger.info(f"🔄 [AFTER HOURS MESSAGE] Atualizando registro existente (ID: {existing.id}) para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
-            logger.info(f"   📝 Dados recebidos: is_active={serializer.validated_data.get('is_active')}, reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
+            logger.info(f"   📝 Dados recebidos: reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
             serializer.instance = existing
             # Remover tenant e department do validated_data para não atualizar (já estão corretos)
             serializer.validated_data.pop('tenant', None)
             serializer.validated_data.pop('department', None)
             serializer.save()
-            logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active}, reply_to_groups={serializer.instance.reply_to_groups}")
+            logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active} (sincronizado), reply_to_groups={serializer.instance.reply_to_groups}")
         else:
             # ✅ Criar novo registro
             logger.info(f"➕ [AFTER HOURS MESSAGE] Criando novo registro para tenant {tenant.name}, department: {department.name if department else 'Geral'}")
-            logger.info(f"   📝 Dados recebidos: is_active={serializer.validated_data.get('is_active')}, reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
+            logger.info(f"   📝 Dados recebidos: reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
             serializer.save(tenant=tenant)
-            logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active}, reply_to_groups={serializer.instance.reply_to_groups}")
+            logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active} (sincronizado), reply_to_groups={serializer.instance.reply_to_groups}")
     
     def perform_update(self, serializer):
         """
-        ✅ CORREÇÃO: Garantir que is_active seja salvo corretamente no PATCH.
+        ✅ CORREÇÃO: Garantir que is_active seja sincronizado com BusinessHours.
+        ✅ NOVO: is_active não é mais editável - sempre sincroniza com BusinessHours.
         """
         logger.info(f"🔄 [AFTER HOURS MESSAGE] PATCH - Atualizando registro (ID: {serializer.instance.id})")
-        logger.info(f"   📝 Dados recebidos: is_active={serializer.validated_data.get('is_active')}, reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
+        logger.info(f"   📝 Dados recebidos: reply_to_groups={serializer.validated_data.get('reply_to_groups')}")
+        
+        # ✅ NOVO: Sincronizar is_active com BusinessHours (ignorar se foi enviado)
+        business_hours = BusinessHoursService.get_business_hours(
+            serializer.instance.tenant,
+            serializer.instance.department
+        )
+        if business_hours:
+            serializer.validated_data['is_active'] = business_hours.is_active
+            logger.info(
+                f"   🔄 Sincronizando is_active com BusinessHours: {business_hours.is_active}"
+            )
+        else:
+            # Se não há BusinessHours, manter o valor atual ou usar True
+            serializer.validated_data['is_active'] = serializer.instance.is_active if serializer.instance.is_active else True
+            logger.warning(
+                f"   ⚠️ BusinessHours não encontrado, mantendo is_active atual: {serializer.instance.is_active}"
+            )
+        
+        # Remover is_active se foi enviado no request (não deve ser editável)
+        if 'is_active' in serializer.validated_data:
+            # Já foi definido acima com valor sincronizado
+            pass
+        
         logger.info(f"   📝 Estado atual no banco: is_active={serializer.instance.is_active}, reply_to_groups={getattr(serializer.instance, 'reply_to_groups', 'N/A')}")
         serializer.save()
-        logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active}, reply_to_groups={getattr(serializer.instance, 'reply_to_groups', 'N/A')}")
+        logger.info(f"   ✅ Após salvar: is_active={serializer.instance.is_active} (sincronizado), reply_to_groups={getattr(serializer.instance, 'reply_to_groups', 'N/A')}")
     
     @action(detail=False, methods=['get'])
     def current(self, request):

@@ -221,24 +221,43 @@ class BusinessHoursService:
     
     @staticmethod
     def get_after_hours_message(tenant, department=None) -> Optional[AfterHoursMessage]:
-        """Busca mensagem automática para fora de horário."""
+        """
+        Busca mensagem automática para fora de horário.
+        
+        ✅ NOVO: Sincroniza is_active com BusinessHours antes de retornar.
+        """
+        # Buscar mensagem (sem filtrar por is_active primeiro)
+        message = None
         if department:
             message = AfterHoursMessage.objects.filter(
                 tenant=tenant,
-                department=department,
-                is_active=True
+                department=department
             ).first()
-            if message:
+        
+        if not message:
+            # Busca mensagem geral do tenant
+            message = AfterHoursMessage.objects.filter(
+                tenant=tenant,
+                department__isnull=True
+            ).first()
+        
+        if message:
+            # ✅ NOVO: Sincronizar is_active com BusinessHours correspondente
+            business_hours = BusinessHoursService.get_business_hours(tenant, department)
+            if business_hours:
+                if message.is_active != business_hours.is_active:
+                    logger.debug(
+                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática: "
+                        f"is_active={message.is_active} → {business_hours.is_active}"
+                    )
+                    message.is_active = business_hours.is_active
+                    message.save(update_fields=['is_active'])
+            
+            # Retornar apenas se estiver ativa
+            if message.is_active:
                 return message
         
-        # Busca mensagem geral do tenant
-        message = AfterHoursMessage.objects.filter(
-            tenant=tenant,
-            department__isnull=True,
-            is_active=True
-        ).first()
-        
-        return message
+        return None
     
     @staticmethod
     def get_after_hours_task_config(tenant, department=None) -> Optional[AfterHoursTaskConfig]:
