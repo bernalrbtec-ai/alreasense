@@ -8,6 +8,9 @@ from django.core.validators import RegexValidator
 from django.utils import timezone
 from decimal import Decimal
 import uuid
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Contact(models.Model):
@@ -1122,13 +1125,29 @@ class Task(models.Model):
         ✅ CORREÇÃO: O signal create_task_status_history já cria o histórico
         automaticamente quando status muda para 'completed', então não precisa
         criar manualmente aqui. Apenas salvar a mudança de status.
+        
+        ✅ NOVO: Se a tarefa foi criada fora de horário (is_after_hours_auto=True),
+        atualiza due_date para o timestamp atual ao concluir (não usa regra de agendamento).
         """
         old_status = self.status
         self.status = 'completed'
         self.completed_at = timezone.now()
-        # ✅ CORREÇÃO: Salvar apenas status e completed_at
+        
+        # ✅ NOVO: Se é tarefa criada fora de horário, atualizar due_date para agora
+        update_fields = ['status', 'completed_at']
+        is_after_hours = (self.metadata or {}).get('is_after_hours_auto', False)
+        
+        if is_after_hours:
+            # Tarefa criada fora de horário: atualizar due_date para timestamp atual
+            self.due_date = timezone.now()
+            update_fields.append('due_date')
+            logger.info(
+                f"✅ [TASK COMPLETE] Tarefa fora de horário concluída - "
+                f"due_date atualizado para timestamp atual: {self.due_date}"
+            )
+        
         # O signal vai detectar a mudança e criar o histórico automaticamente
-        self.save(update_fields=['status', 'completed_at'])
+        self.save(update_fields=update_fields)
 
 
 class TaskHistory(models.Model):
