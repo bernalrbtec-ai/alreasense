@@ -627,7 +627,7 @@ export function MentionInput({
       {showSuggestions && suggestions.length > 0 && (
         <div
           ref={suggestionsRef}
-          className="absolute bottom-full left-0 mb-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 min-w-[200px]"
+          className="absolute bottom-full left-0 mb-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50 min-w-[200px]"
         >
           {suggestions.map((participant, index) => {
             // ✅ NOVO: Prioridade: contact_name (contato cadastrado) > pushname > name > telefone formatado

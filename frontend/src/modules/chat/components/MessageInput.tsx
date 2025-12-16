@@ -514,7 +514,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
           shadow-sm hover:shadow-md active:scale-95
           ${includeSignature 
             ? 'text-green-600 hover:bg-green-100 bg-green-50' 
-            : 'text-gray-500 hover:bg-gray-200'
+            : 'text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
           }
         `}
         title={includeSignature ? 'Assinatura ativada - clique para desativar' : 'Assinatura desativada - clique para ativar'}
@@ -554,7 +554,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
           `}
           title="Emoji"
         >
-          <Smile className="w-6 h-6 text-gray-600" />
+          <Smile className="w-6 h-6 text-gray-600 dark:text-gray-400" />
         </button>
         
         {/* Emoji Picker */}
@@ -569,7 +569,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       </div>
 
       {/* Input */}
-      <div className="flex-1 bg-white rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg focus-within:shadow-lg focus-within:ring-2 focus-within:ring-[#00a884]/20">
+      <div className="flex-1 bg-white dark:bg-gray-700 rounded-2xl shadow-md transition-all duration-200 hover:shadow-lg focus-within:shadow-lg focus-within:ring-2 focus-within:ring-[#00a884]/20">
         {conversationType === 'group' ? (
           <MentionInput
             value={message}
@@ -591,7 +591,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             onPaste={handlePaste}
             placeholder="Digite uma mensagem (Enter para enviar, Shift+Enter para nova linha)"
             rows={1}
-            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
+            className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
             style={{
               maxHeight: '120px',
               minHeight: '44px',
@@ -632,7 +632,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             : "Digite uma mensagem ou selecione um arquivo"
         }
       >
-        <Send className={`w-6 h-6 ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected ? 'text-white' : 'text-gray-500'}`} />
+        <Send className={`w-6 h-6 ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
       </button>
       </div>
     </div>

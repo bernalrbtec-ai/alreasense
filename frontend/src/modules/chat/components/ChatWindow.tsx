@@ -669,7 +669,7 @@ export function ChatWindow() {
     // ✅ CORREÇÃO: Se está carregando uma conversa mas ainda não está pronto, mostrar loading
     if (activeConversation && activeConversation.id && conversationId) {
       return (
-        <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8">
+        <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
           <div className="flex flex-col items-center gap-3">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-600 rounded-full animate-spin" />
             <p className="text-sm text-gray-500 dark:text-gray-400">Carregando conversa...</p>
@@ -679,7 +679,7 @@ export function ChatWindow() {
     }
     
     return (
-      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] p-8">
+      <div className="flex-1 flex flex-col items-center justify-center bg-[#f0f2f5] dark:bg-gray-900 p-8 text-gray-500 dark:text-gray-400">
         <div className="max-w-md text-center">
           <div className="w-64 h-64 mx-auto mb-8 opacity-20">
             <svg viewBox="0 0 303 172" fill="currentColor" className="text-gray-400">
@@ -708,14 +708,14 @@ export function ChatWindow() {
           {/* Botão Voltar (mobile) */}
           <button
             onClick={() => setActiveConversation(null)}
-            className="md:hidden p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
+            className="md:hidden p-2 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
             title="Voltar"
           >
-            <ArrowLeft className="w-5 h-5 text-gray-600" />
+            <ArrowLeft className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
 
           {/* Avatar */}
-          <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex-shrink-0 relative">
+          <div className="w-10 h-10 rounded-full bg-gray-300 dark:bg-gray-600 overflow-hidden flex-shrink-0 relative">
             {profilePicUrl ? (
               <>
                 <img 
@@ -738,7 +738,7 @@ export function ChatWindow() {
                 )}
               </>
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
+              <div className="w-full h-full flex items-center justify-center bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium text-lg">
                 {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
                 {(activeConversation?.conversation_type || conversationType) === 'group' ? '👥' : (displayName[0] || '?').toUpperCase()}
               </div>
@@ -749,7 +749,7 @@ export function ChatWindow() {
           <div className="flex-1 min-w-0">
             {/* Nome com botão de contato */}
             <div className="flex items-center gap-2">
-              <h2 className="text-base font-medium text-gray-900 truncate flex items-center gap-1.5">
+              <h2 className="text-base font-medium text-gray-900 dark:text-gray-100 truncate flex items-center gap-1.5">
                 {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
                 {(activeConversation?.conversation_type || conversationType) === 'group' && <span>👥</span>}
                 {displayName}
@@ -840,7 +840,7 @@ export function ChatWindow() {
             className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md" 
             title="Buscar"
           >
-            <Search className="w-5 h-5 text-gray-600" />
+            <Search className="w-5 h-5 text-gray-600 dark:text-gray-400" />
           </button>
           
           {/* Menu 3 pontos */}
@@ -850,11 +850,11 @@ export function ChatWindow() {
               className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
               title="Menu"
             >
-              <MoreVertical className="w-5 h-5 text-gray-600" />
+              <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
             </button>
 
             {showMenu && (
-              <div className="absolute right-0 top-full mt-1 w-56 bg-white rounded-lg shadow-xl border border-gray-200 py-1 z-50 animate-scale-in">
+              <div className="absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 py-1 z-50 animate-scale-in">
                 {/* Informações do Grupo - apenas para grupos */}
                 {/* ✅ CORREÇÃO: Usar activeConversation diretamente para evitar problema de inicialização */}
                 {(activeConversation?.conversation_type || conversationType) === 'group' && (
@@ -957,14 +957,14 @@ export function ChatWindow() {
 
       {/* ✅ CORREÇÃO: Histórico ocupa toda a tela quando aberto */}
       {showHistory && existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
-        <div className="flex flex-col flex-1 min-w-0 bg-white h-full overflow-hidden">
+        <div className="flex flex-col flex-1 min-w-0 bg-white dark:bg-gray-900 h-full overflow-hidden">
           <div className="p-4 border-b border-gray-200 flex items-center justify-between bg-gray-50 flex-shrink-0">
-            <h3 className="font-semibold text-gray-900">Histórico</h3>
+            <h3 className="font-semibold text-gray-900 dark:text-gray-100">Histórico</h3>
             <button
               onClick={() => setShowHistory(false)}
               className="p-1 hover:bg-gray-200 rounded transition-colors"
             >
-              <X className="w-4 h-4 text-gray-600" />
+              <X className="w-4 h-4 text-gray-600 dark:text-gray-400" />
             </button>
           </div>
           <div className="flex-1 overflow-y-auto p-4">
@@ -1005,9 +1005,9 @@ export function ChatWindow() {
       {/* Modal de Informações do Grupo */}
       {showGroupInfo && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[90vh] flex flex-col">
             <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900">Informações do Grupo</h2>
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Informações do Grupo</h2>
               <button
                 onClick={() => {
                   setShowGroupInfo(false);
@@ -1015,7 +1015,7 @@ export function ChatWindow() {
                 }}
                 className="p-1 hover:bg-gray-200 rounded transition-colors"
               >
-                <X className="w-5 h-5 text-gray-600" />
+                <X className="w-5 h-5 text-gray-600 dark:text-gray-400" />
               </button>
             </div>
             
@@ -1028,7 +1028,7 @@ export function ChatWindow() {
                 <div className="space-y-6">
                   {/* Informações Básicas */}
                   <div>
-                    <h3 className="text-sm font-semibold text-gray-700 mb-3">Informações Básicas</h3>
+                    <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Informações Básicas</h3>
                     <div className="space-y-2">
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-600 w-24">Nome:</span>

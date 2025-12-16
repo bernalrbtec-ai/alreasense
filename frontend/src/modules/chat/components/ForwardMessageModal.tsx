@@ -75,7 +75,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
-        className="bg-white rounded-lg shadow-xl border border-gray-200 w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
+        className="bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 w-full max-w-md mx-4 max-h-[80vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -92,7 +92,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
         {/* Preview da mensagem */}
         <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
           <p className="text-xs text-gray-600 mb-1">Mensagem a encaminhar:</p>
-          <div className="bg-white rounded p-2 border border-gray-200">
+          <div className="bg-white dark:bg-gray-700 rounded p-2 border border-gray-200 dark:border-gray-600">
             <p className="text-sm text-gray-700 line-clamp-2">
               {message.content || (message.attachments && message.attachments.length > 0 ? '📎 Anexo' : 'Mensagem')}
             </p>

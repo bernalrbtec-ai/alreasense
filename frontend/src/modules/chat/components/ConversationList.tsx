@@ -292,9 +292,9 @@ export function ConversationList() {
   }, []);
 
   return (
-    <div className="flex flex-col h-full w-full bg-white">
+    <div className="flex flex-col h-full w-full bg-white dark:bg-gray-800">
       {/* Search + New - Responsivo */}
-      <div className="flex-shrink-0 flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200">
+      <div className="flex-shrink-0 flex items-center gap-2 p-2 sm:p-3 border-b border-gray-200 dark:border-gray-700">
         <div className="flex-1 relative min-w-0">
           <Search className="absolute left-2 sm:left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
@@ -368,7 +368,7 @@ export function ConversationList() {
               style={{ animationDelay: `${index * 30}ms` }}
             >
               {/* Avatar com foto - responsivo */}
-              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 overflow-hidden relative">
+              <div className="flex-shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-gray-200 dark:bg-gray-700 overflow-hidden relative">
                 {conversationItem.profile_pic_url ? (
                     <img
                       src={getMediaProxyUrl(conversationItem.profile_pic_url)}
@@ -387,7 +387,7 @@ export function ConversationList() {
                     }}
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-gray-300 text-gray-600 font-medium text-lg">
+                  <div className="w-full h-full flex items-center justify-center bg-gray-300 dark:bg-gray-600 text-gray-600 dark:text-gray-300 font-medium text-lg">
                     {conversationItem.conversation_type === 'group' ? '👥' : getDisplayName(conversationItem)[0].toUpperCase()}
                   </div>
                 )}
@@ -404,14 +404,14 @@ export function ConversationList() {
               <div className="flex-1 min-w-0 text-left">
                 {/* Nome + Hora */}
                 <div className="flex items-baseline justify-between mb-1">
-                  <h3 className="font-medium text-gray-900 truncate text-sm flex items-center gap-1">
+                  <h3 className="font-medium text-gray-900 dark:text-gray-100 truncate text-sm flex items-center gap-1">
                     {conversationItem.conversation_type === 'group' && <span>👥</span>}
                     {conversationItem.conversation_type === 'group' 
                       ? (conversationItem.group_metadata?.group_name || conversationItem.contact_name || 'Grupo WhatsApp')
                       : getDisplayName(conversationItem)
                     }
                   </h3>
-                  <span className="text-xs text-gray-500 ml-2 flex-shrink-0">
+                  <span className="text-xs text-gray-500 dark:text-gray-400 ml-2 flex-shrink-0">
                     {formatTime(conversationItem.last_message_at)}
                   </span>
                 </div>
@@ -446,7 +446,7 @@ export function ConversationList() {
                 <div className="flex items-center justify-between">
                   {/* ✅ MELHORIA UX: Loading state para última mensagem */}
                   {conversationItem.last_message ? (
-                    <p className="text-sm text-gray-600 truncate">
+                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate">
                       {/* Para grupos, mostrar "Nome: mensagem" */}
                       {conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
                         ? `${conversationItem.last_message.sender_name}: ${conversationItem.last_message.content || ''}`
@@ -456,7 +456,7 @@ export function ConversationList() {
                   ) : (
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                       <div className="w-3 h-3 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
-                      <span className="text-xs text-gray-400 truncate">Carregando última mensagem...</span>
+                      <span className="text-xs text-gray-400 dark:text-gray-500 truncate">Carregando última mensagem...</span>
                     </div>
                   )}
                   {conversationItem.unread_count > 0 && (

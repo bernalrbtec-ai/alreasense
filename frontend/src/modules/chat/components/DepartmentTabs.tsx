@@ -108,7 +108,7 @@ export function DepartmentTabs() {
             flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
             ${activeDepartment?.id === 'inbox'
               ? 'bg-[#ea580c] text-white'
-              : 'text-gray-600 hover:bg-gray-100 active:scale-95'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95'
             }
           `}
         >
@@ -139,7 +139,7 @@ export function DepartmentTabs() {
                 flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
                 ${activeDepartment?.id === dept.id
                   ? 'bg-[#00a884] text-white'
-                  : 'text-gray-600 hover:bg-gray-100 active:scale-95'
+                  : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95'
                 }
               `}
             >
@@ -147,7 +147,7 @@ export function DepartmentTabs() {
                 {dept.name}
                 {pendingCount > 0 && (
                   <span className={`ml-1.5 px-1.5 py-0.5 rounded-full text-xs font-semibold ${
-                    activeDepartment?.id === dept.id ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
+                    activeDepartment?.id === dept.id ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
                   }`}>
                     {pendingCount}
                   </span>
@@ -156,7 +156,7 @@ export function DepartmentTabs() {
               <span className="sm:hidden">{dept.name}</span>
               {pendingCount > 0 && (
                 <span className={`sm:hidden px-1.5 py-0.5 rounded-full text-xs font-semibold ${
-                  activeDepartment?.id === dept.id ? 'bg-white/20' : 'bg-gray-200 text-gray-700'
+                  activeDepartment?.id === dept.id ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300'
                 }`}>
                   {pendingCount}
                 </span>
