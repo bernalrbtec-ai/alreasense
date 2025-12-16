@@ -19,7 +19,8 @@ import {
   Database,
   Calendar,
   Lock,
-  ChevronDown
+  ChevronDown,
+  Zap
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
