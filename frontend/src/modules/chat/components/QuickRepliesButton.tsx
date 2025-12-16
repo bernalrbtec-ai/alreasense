@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { Zap, Search, X } from 'lucide-react';
 import { useQuickReplies, QuickReply } from '../hooks/useQuickReplies';
 import { api } from '@/lib/api';
@@ -11,6 +12,8 @@ interface QuickRepliesButtonProps {
 export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [position, setPosition] = useState<{ top: number; right: number } | null>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   // ✅ Usar hook com cache
@@ -36,10 +39,20 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
     return () => document.removeEventListener('openQuickReplies', handleOpenEvent);
   }, [disabled]);
 
-  // ✅ Buscar ao abrir (com cache)
+  // ✅ Buscar ao abrir (com cache) e calcular posição
   useEffect(() => {
     if (isOpen) {
       refetch();
+      // Calcular posição do dropdown baseado no botão
+      if (buttonRef.current) {
+        const rect = buttonRef.current.getBoundingClientRect();
+        setPosition({
+          top: rect.top - 8, // 8px acima do botão
+          right: window.innerWidth - rect.right
+        });
+      }
+    } else {
+      setPosition(null);
     }
   }, [isOpen, refetch]);
 
@@ -100,23 +113,33 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
   }, [quickReplies, search]);
 
   return (
-    <div className="relative" ref={dropdownRef}>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        disabled={disabled}
-        className={`
-          p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 
-          flex-shrink-0 shadow-sm hover:shadow-md
-          ${isOpen ? 'bg-gray-200 shadow-md' : ''}
-          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
-        `}
-        title="Respostas rápidas (/)"
-      >
-        <Zap className="w-6 h-6 text-gray-600" />
-      </button>
+    <>
+      <div className="relative">
+        <button
+          ref={buttonRef}
+          onClick={() => setIsOpen(!isOpen)}
+          disabled={disabled}
+          className={`
+            p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 
+            flex-shrink-0 shadow-sm hover:shadow-md
+            ${isOpen ? 'bg-gray-200 shadow-md' : ''}
+            ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          `}
+          title="Respostas rápidas (/)"
+        >
+          <Zap className="w-6 h-6 text-gray-600" />
+        </button>
+      </div>
       
-      {isOpen && (
-        <div className="absolute bottom-full right-0 mb-2 w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-50 max-h-96 flex flex-col">
+      {isOpen && position && createPortal(
+        <div 
+          ref={dropdownRef}
+          className="fixed w-80 bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 z-[10000] max-h-96 flex flex-col"
+          style={{
+            top: `${position.top}px`,
+            right: `${position.right}px`,
+            transform: 'translateY(-100%)'
+          }}>
           {/* Busca */}
           <div className="p-3 border-b border-gray-200 dark:border-gray-700">
             <div className="relative">
@@ -171,9 +194,10 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }
 
