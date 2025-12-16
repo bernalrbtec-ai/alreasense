@@ -774,13 +774,35 @@ def create_task_status_history(sender, instance, created, **kwargs):
             
             # 2. Reagendamento (mudança de due_date)
             if old_due_date != instance.due_date:
+                # ✅ MELHORIA: Verificar se foi atualização automática ao concluir tarefa fora de horário
+                is_auto_update_on_completion = (
+                    instance.metadata and 
+                    instance.metadata.get('due_date_updated_on_completion', False) and
+                    instance.status == 'completed'
+                )
+                
+                if is_auto_update_on_completion:
+                    # Atualização automática ao concluir tarefa fora de horário
+                    description = (
+                        f"Data atualizada automaticamente ao concluir tarefa fora de horário: "
+                        f"{old_due_date.strftime('%d/%m/%Y %H:%M') if old_due_date else 'sem data'} → "
+                        f"{instance.due_date.strftime('%d/%m/%Y %H:%M') if instance.due_date else 'sem data'}"
+                    )
+                else:
+                    # Reagendamento manual normal
+                    description = (
+                        f"Tarefa reagendada de "
+                        f"{old_due_date.strftime('%d/%m/%Y %H:%M') if old_due_date else 'sem data'} para "
+                        f"{instance.due_date.strftime('%d/%m/%Y %H:%M') if instance.due_date else 'sem data'}"
+                    )
+                
                 TaskHistory.objects.create(
                     task=instance,
                     change_type='reschedule',
                     old_due_date=old_due_date,
                     new_due_date=instance.due_date,
                     changed_by=changed_by,
-                    description=f"Tarefa reagendada de {old_due_date.strftime('%d/%m/%Y %H:%M') if old_due_date else 'sem data'} para {instance.due_date.strftime('%d/%m/%Y %H:%M') if instance.due_date else 'sem data'}"
+                    description=description
                 )
                 logger.info(f"✅ [TASK HISTORY] Reagendamento registrado: {instance.title}")
             

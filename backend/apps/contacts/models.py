@@ -1128,25 +1128,71 @@ class Task(models.Model):
         
         ✅ NOVO: Se a tarefa foi criada fora de horário (is_after_hours_auto=True),
         atualiza due_date para o timestamp atual ao concluir (não usa regra de agendamento).
-        """
-        old_status = self.status
-        self.status = 'completed'
-        self.completed_at = timezone.now()
+        Isso garante que tarefas criadas fora de horário sejam encerradas com o timestamp
+        atual quando concluídas, não pedindo para atualizar usando regra de agendamento.
         
-        # ✅ NOVO: Se é tarefa criada fora de horário, atualizar due_date para agora
+        Args:
+            user: Usuário que está concluindo a tarefa (opcional, usado para histórico)
+        
+        Returns:
+            None
+        """
+        # ✅ VALIDAÇÃO 1: Verificar se já está concluída (idempotência)
+        if self.status == 'completed':
+            logger.warning(
+                f"⚠️ [TASK COMPLETE] Tarefa {self.id} já está concluída - ignorando mark_completed"
+            )
+            return
+        
+        # ✅ VALIDAÇÃO 2: Capturar valores antigos para logs e histórico
+        old_status = self.status
+        old_due_date = self.due_date
+        now = timezone.now()
+        
+        # ✅ ATUALIZAÇÃO: Status e completed_at
+        self.status = 'completed'
+        self.completed_at = now
         update_fields = ['status', 'completed_at']
+        
+        # ✅ NOVO: Se é tarefa criada fora de horário, atualizar due_date para timestamp atual
         is_after_hours = (self.metadata or {}).get('is_after_hours_auto', False)
         
         if is_after_hours:
             # Tarefa criada fora de horário: atualizar due_date para timestamp atual
-            self.due_date = timezone.now()
+            # Isso garante que a tarefa seja encerrada com o timestamp atual,
+            # não pedindo para atualizar usando regra de agendamento
+            self.due_date = now
             update_fields.append('due_date')
+            
+            # ✅ MELHORIA: Adicionar flag no metadata para indicar que due_date foi atualizado ao concluir
+            # Isso pode ser útil para auditoria e evitar confusão com reagendamentos manuais
+            if not self.metadata:
+                self.metadata = {}
+            self.metadata['due_date_updated_on_completion'] = True
+            self.metadata['due_date_updated_at'] = now.isoformat()
+            update_fields.append('metadata')
+            
             logger.info(
                 f"✅ [TASK COMPLETE] Tarefa fora de horário concluída - "
-                f"due_date atualizado para timestamp atual: {self.due_date}"
+                f"Task ID: {self.id}, "
+                f"Old due_date: {old_due_date}, "
+                f"New due_date: {self.due_date}, "
+                f"Completed at: {self.completed_at}"
+            )
+        else:
+            logger.debug(
+                f"ℹ️ [TASK COMPLETE] Tarefa normal concluída - "
+                f"Task ID: {self.id}, Status: {old_status} → completed"
             )
         
+        # ✅ NOVO: Passar usuário para o signal (se fornecido)
+        # O signal vai usar isso para criar o histórico com changed_by correto
+        if user:
+            self._changed_by = user
+        
         # O signal vai detectar a mudança e criar o histórico automaticamente
+        # Nota: Se due_date mudou, o signal também criará um registro de "reschedule"
+        # no histórico, o que é útil para auditoria
         self.save(update_fields=update_fields)
 
 
