@@ -653,7 +653,7 @@ class BusinessHoursService:
                 # Formatar descrição consolidada
                 sao_paulo_tz = ZoneInfo('America/Sao_Paulo')  # Cachear fora do loop
                 description_parts = [
-                    f"Mensagens recebidas fora de horário ({len(messages_list)} mensagem{'s' if len(messages_list) > 1 else ''}):\n"
+                    f"Mensagens recebidas fora de horário:\n"
                 ]
                 
                 # ✅ MELHORIA 7: Limitar tamanho da descrição (últimas 20 mensagens se muito longa)
@@ -666,13 +666,14 @@ class BusinessHoursService:
                 for idx, msg_entry in enumerate(messages_to_show, 1):
                     try:
                         # ✅ MELHORIA: Exception específica e otimização de parse
+                        # ✅ NOVO: Formatar data/hora completa (DD/MM/YYYY às HH:MM)
                         msg_time_str = msg_entry['created_at'].replace('Z', '+00:00')
                         msg_time = datetime.fromisoformat(msg_time_str)
                         msg_time_local = msg_time.astimezone(sao_paulo_tz)
-                        time_str = msg_time_local.strftime('%H:%M')
+                        time_str = msg_time_local.strftime('%d/%m/%Y às %H:%M')
                     except (ValueError, KeyError, AttributeError) as e:
                         logger.debug(f"⚠️ [BUSINESS HOURS TASK] Erro ao formatar horário da mensagem: {e}")
-                        time_str = '--:--'
+                        time_str = '--/--/---- às --:--'
                     
                     content_preview = msg_entry.get('content', '')[:200]  # Limitar preview
                     if len(msg_entry.get('content', '')) > 200:
