@@ -1951,59 +1951,60 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 ).order_by('-created_at').first()
                 
                 time_since_closure = None
+                in_farewell_window = False
                 if last_close_message:
                     time_since_closure = (django_timezone.now() - last_close_message.created_at).total_seconds() / 60  # minutos
                     logger.info(f"⏰ [WELCOME MENU] Conversa foi fechada há {time_since_closure:.1f} minutos")
+                    
+                    # ✅ Se fechou há menos de 2 minutos, NÃO reabrir (janela de despedida)
+                    if time_since_closure < 2:
+                        in_farewell_window = True
+                        logger.info(f"💬 [WELCOME MENU] Janela de despedida ativa ({time_since_closure:.1f}min < 2min) - conversa permanece fechada")
+                        logger.info(f"   Mensagem registrada mas não reabre: {content[:50] if content else 'N/A'}...")
                 
-                # ✅ Se fechou há menos de 2 minutos, NÃO reabrir (janela de despedida)
-                if time_since_closure and time_since_closure < 2:
-                    logger.info(f"💬 [WELCOME MENU] Janela de despedida ativa ({time_since_closure:.1f}min < 2min) - mensagem ignorada")
-                    logger.info(f"   Conversa permanece fechada. Mensagem: {content[:50] if content else 'N/A'}...")
-                    # NÃO reabrir, NÃO enviar menu, apenas registrar a mensagem
-                    # A mensagem já foi criada no banco, mas conversa permanece closed
-                    continue  # Pular o resto do processamento (não reabrir)
-                
-                # ✅ CORREÇÃO CRÍTICA: Verificar se deve enviar menu ANTES de mudar o status
-                # Isso garante que a verificação de 'closed' funcione corretamente
+                # Só processar reabertura se NÃO estiver na janela de despedida
                 should_send_menu_for_closed = False
-                if not from_me:  # Apenas para mensagens recebidas
-                    try:
-                        from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                        # ✅ CORREÇÃO: Verificar ANTES de mudar o status (conversation ainda está 'closed')
-                        if WelcomeMenuService.should_send_menu(conversation):
-                            should_send_menu_for_closed = True
-                            logger.info(f"📋 [WELCOME MENU] Menu será enviado para conversa fechada reaberta: {conversation.id}")
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
+                if not in_farewell_window:
+                    # ✅ CORREÇÃO CRÍTICA: Verificar se deve enviar menu ANTES de mudar o status
+                    # Isso garante que a verificação de 'closed' funcione corretamente
+                    if not from_me:  # Apenas para mensagens recebidas
+                        try:
+                            from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                            # ✅ CORREÇÃO: Verificar ANTES de mudar o status (conversation ainda está 'closed')
+                            if WelcomeMenuService.should_send_menu(conversation):
+                                should_send_menu_for_closed = True
+                                logger.info(f"📋 [WELCOME MENU] Menu será enviado para conversa fechada reaberta: {conversation.id}")
+                        except Exception as e:
+                            logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
                 
-                # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, respeitar default_department
-                # Se instância tem default_department, usar ele. Senão, remover para voltar ao Inbox
-                if default_department:
-                    # ✅ CORREÇÃO: Se tem default_department, usar ele ao invés de remover
-                    conversation.department = default_department
-                    conversation.status = 'open'
-                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta com default_department: {default_department.name}")
-                else:
-                    # Sem default_department, remover departamento para voltar ao Inbox
-                    conversation.status = 'pending' if not from_me else 'open'
-                    conversation.department = None
-                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta sem departamento (Inbox)")
-                
-                conversation.save(update_fields=['status', 'department'])
-                
-                status_str = conversation.department.name if conversation.department else "Inbox"
-                status_changed = True
-                logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status}")
-                logger.info(f"   📋 Departamento: {old_department} → {status_str}")
-                
-                # ✅ CORREÇÃO: Enviar menu APÓS salvar (já verificamos antes de mudar o status)
-                if should_send_menu_for_closed:
-                    try:
-                        from apps.chat.services.welcome_menu_service import WelcomeMenuService
-                        logger.info(f"📋 [WELCOME MENU] Enviando menu para conversa reaberta: {conversation.id}")
-                        WelcomeMenuService.send_welcome_menu(conversation)
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para conversa reaberta: {e}", exc_info=True)
+                    # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, respeitar default_department
+                    # Se instância tem default_department, usar ele. Senão, remover para voltar ao Inbox
+                    if default_department:
+                        # ✅ CORREÇÃO: Se tem default_department, usar ele ao invés de remover
+                        conversation.department = default_department
+                        conversation.status = 'open'
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta com default_department: {default_department.name}")
+                    else:
+                        # Sem default_department, remover departamento para voltar ao Inbox
+                        conversation.status = 'pending' if not from_me else 'open'
+                        conversation.department = None
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta sem departamento (Inbox)")
+                    
+                    conversation.save(update_fields=['status', 'department'])
+                    
+                    status_str = conversation.department.name if conversation.department else "Inbox"
+                    status_changed = True
+                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta automaticamente: {old_status} → {conversation.status}")
+                    logger.info(f"   📋 Departamento: {old_department} → {status_str}")
+                    
+                    # ✅ CORREÇÃO: Enviar menu APÓS salvar (já verificamos antes de mudar o status)
+                    if should_send_menu_for_closed:
+                        try:
+                            from apps.chat.services.welcome_menu_service import WelcomeMenuService
+                            logger.info(f"📋 [WELCOME MENU] Enviando menu para conversa reaberta: {conversation.id}")
+                            WelcomeMenuService.send_welcome_menu(conversation)
+                        except Exception as e:
+                            logger.error(f"❌ [WELCOME MENU] Erro ao enviar menu para conversa reaberta: {e}", exc_info=True)
             
             # ✅ IMPORTANTE: Para conversas existentes, ainda precisamos atualizar last_message_at
             # Isso garante que a conversa aparece no topo da lista
