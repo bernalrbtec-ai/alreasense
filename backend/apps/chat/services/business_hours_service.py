@@ -141,12 +141,12 @@ class BusinessHoursService:
         return False, next_open
     
     @staticmethod
-    def _get_next_open_time(business_hours: BusinessHours, current_datetime: datetime) -> str:
+    def _get_next_open_datetime(business_hours: BusinessHours, current_datetime: datetime) -> Optional[datetime]:
         """
-        Calcula o próximo horário de abertura.
+        Calcula o próximo horário de abertura como datetime.
         
         Returns:
-            str: Próximo horário formatado (ex: "Segunda-feira, 09:00")
+            Optional[datetime]: Próximo horário de abertura (timezone-aware) ou None se não encontrado
         """
         tz = ZoneInfo(business_hours.timezone)
         local_datetime = current_datetime.astimezone(tz)
@@ -177,10 +177,45 @@ class BusinessHoursService:
             is_enabled = getattr(business_hours, enabled_field)
             start_time = getattr(business_hours, start_field)
             
-            if is_enabled:
-                # Formata: "Segunda-feira, 09:00"
-                time_str = start_time.strftime('%H:%M')
-                return f"{day_name}, {time_str}"
+            if is_enabled and start_time:
+                # Combina data + horário de início
+                next_open_local = datetime.combine(check_date, start_time)
+                # Adiciona timezone
+                next_open_aware = next_open_local.replace(tzinfo=tz)
+                # Converte para UTC (padrão Django)
+                next_open_utc = next_open_aware.astimezone(ZoneInfo('UTC'))
+                return next_open_utc
+        
+        return None
+    
+    @staticmethod
+    def _get_next_open_time(business_hours: BusinessHours, current_datetime: datetime) -> str:
+        """
+        Calcula o próximo horário de abertura.
+        
+        Returns:
+            str: Próximo horário formatado (ex: "Segunda-feira, 09:00")
+        """
+        next_open_dt = BusinessHoursService._get_next_open_datetime(business_hours, current_datetime)
+        
+        if next_open_dt:
+            tz = ZoneInfo(business_hours.timezone)
+            local_dt = next_open_dt.astimezone(tz)
+            
+            # Mapeia weekday para nome do dia
+            day_names = {
+                0: 'Segunda-feira',
+                1: 'Terça-feira',
+                2: 'Quarta-feira',
+                3: 'Quinta-feira',
+                4: 'Sexta-feira',
+                5: 'Sábado',
+                6: 'Domingo',
+            }
+            
+            day_name = day_names[local_dt.weekday()]
+            time_str = local_dt.strftime('%H:%M')
+            return f"{day_name}, {time_str}"
         
         return "Em breve"
     
@@ -416,13 +451,13 @@ class BusinessHoursService:
             return None
         
         # ✅ VALIDAÇÃO 3: Verifica se está realmente fora de horário
-        is_open, next_open_time = BusinessHoursService.is_business_hours(
+        is_open, next_open_time_str = BusinessHoursService.is_business_hours(
             tenant, department, message.created_at
         )
         
         logger.info(
             f"⏰ [BUSINESS HOURS TASK] Verificação de horário: "
-            f"is_open={is_open}, next_open_time={next_open_time}"
+            f"is_open={is_open}, next_open_time={next_open_time_str}"
         )
         
         if is_open:
@@ -432,29 +467,29 @@ class BusinessHoursService:
             )
             return None
         
-        # ✅ MELHORIA 1: Validar e converter next_open_time ANTES de usar
-        # Converter next_open_time para datetime se for string
-        if isinstance(next_open_time, str):
-            try:
-                # Tentar parsear formato ISO
-                next_open_dt = datetime.fromisoformat(next_open_time.replace('Z', '+00:00'))
-            except (ValueError, AttributeError) as e:
+        # ✅ MELHORIA 1: Calcular datetime do próximo horário de abertura diretamente
+        # Buscar business_hours para calcular datetime
+        business_hours = BusinessHoursService.get_business_hours(tenant, department)
+        if business_hours:
+            next_open_dt = BusinessHoursService._get_next_open_datetime(business_hours, message.created_at)
+            if next_open_dt is None:
                 logger.warning(
-                    f"⚠️ [BUSINESS HOURS TASK] Erro ao parsear next_open_time '{next_open_time}': {e}. "
+                    f"⚠️ [BUSINESS HOURS TASK] Não foi possível calcular próximo horário de abertura. "
                     f"Usando fallback: agora + 24h"
                 )
-                # Fallback: usar agora + 24h
                 next_open_dt = django_timezone.now() + timedelta(hours=24)
-        elif next_open_time is None:
+            else:
+                logger.info(
+                    f"✅ [BUSINESS HOURS TASK] Próximo horário de abertura calculado: {next_open_dt} "
+                    f"(string formatada: {next_open_time_str})"
+                )
+        else:
             logger.warning(
-                f"⚠️ [BUSINESS HOURS TASK] next_open_time é None. Usando fallback: agora + 24h"
+                f"⚠️ [BUSINESS HOURS TASK] Business hours não encontrado. Usando fallback: agora + 24h"
             )
             next_open_dt = django_timezone.now() + timedelta(hours=24)
-        else:
-            # Se já é datetime, usar direto
-            next_open_dt = next_open_time
         
-        # Garantir timezone aware
+        # Garantir timezone aware (já deve estar, mas por segurança)
         if django_timezone.is_naive(next_open_dt):
             next_open_dt = django_timezone.make_aware(next_open_dt, ZoneInfo('UTC'))
         
@@ -608,16 +643,16 @@ class BusinessHoursService:
                     
                     description_parts.append(f"[{time_str}] {content_preview}")
                 
-                # Formatar next_open_time para exibição
-                next_open_display = next_open_time
-                if isinstance(next_open_time, datetime):
+                # Formatar next_open_time para exibição (usar string formatada ou datetime)
+                if next_open_time_str:
+                    next_open_display = next_open_time_str
+                elif next_open_dt:
                     try:
-                        next_open_local = next_open_time.astimezone(sao_paulo_tz)
+                        next_open_local = next_open_dt.astimezone(sao_paulo_tz)
                         next_open_display = next_open_local.strftime('%d/%m/%Y às %H:%M')
-                    except:
-                        next_open_display = str(next_open_time)
-                elif isinstance(next_open_time, str):
-                    next_open_display = next_open_time
+                    except Exception as e:
+                        logger.debug(f"⚠️ [BUSINESS HOURS TASK] Erro ao formatar next_open_dt: {e}")
+                        next_open_display = 'Em breve'
                 else:
                     next_open_display = 'Em breve'
                 
@@ -741,7 +776,7 @@ class BusinessHoursService:
             'department_name': department.name if department else 'Atendimento',
             'message_time': message_time_local.strftime('%d/%m/%Y às %H:%M'),
             'message_content': (message.content or '')[:500] if task_config.include_message_preview else '',
-            'next_open_time': next_open_time or 'Em breve',
+            'next_open_time': next_open_time_str or 'Em breve',
             'contact_phone': conversation.contact_phone,
             'is_group': is_group,
             'group_name': group_name or '',
@@ -779,7 +814,6 @@ class BusinessHoursService:
                 exc_info=True
             )
             # Fallback: vence em 24h
-            from datetime import timedelta
             due_date = message.created_at + timedelta(hours=24)
             logger.warning(f"⚠️ [BUSINESS HOURS TASK] Usando vencimento fallback: {due_date}")
         
@@ -845,7 +879,8 @@ class BusinessHoursService:
                 'original_message_id': str(message.id),
                 'first_message_id': str(message.id),  # ✅ NOVO: ID da primeira mensagem
                 'conversation_id': str(conversation.id),
-                'next_open_time': next_open_time,
+                'next_open_time': next_open_time_str or (next_open_dt.isoformat() if next_open_dt else None),
+                'next_open_datetime': next_open_dt.isoformat() if next_open_dt else None,  # ✅ NOVO: datetime para cálculos
                 'created_at': message.created_at.isoformat(),
                 'messages': [  # ✅ NOVO: Lista de mensagens consolidadas
                     {
