@@ -543,6 +543,9 @@ class TaskCreateSerializer(serializers.ModelSerializer):
     
     def update(self, instance, validated_data):
         """Atualiza tarefa com contatos relacionados"""
+        import logging
+        logger = logging.getLogger(__name__)
+        
         related_contact_ids = validated_data.pop('related_contact_ids', None)
         metadata = validated_data.pop('metadata', None)  # ✅ NOVO: Extrair metadata
         request = self.context.get('request')
@@ -565,8 +568,6 @@ class TaskCreateSerializer(serializers.ModelSerializer):
         
         # ✅ CORREÇÃO: Se due_date foi alterado (e não está concluindo), resetar notification_sent para False
         # Isso permite que a tarefa seja notificada novamente na nova data/hora
-        import logging
-        logger = logging.getLogger(__name__)
         
         old_due_date = instance.due_date
         new_due_date = validated_data.get('due_date')
