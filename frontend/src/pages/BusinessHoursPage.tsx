@@ -201,31 +201,30 @@ export default function BusinessHoursPage() {
       console.log('📥 [BUSINESS HOURS] Resposta da API:', response.data)
       
       if (response.data.has_config) {
-        // ✅ Garantir que reply_to_groups sempre tenha valor (default: false)
-        const messageData = response.data.after_hours_message || {}
-        console.log('📥 [BUSINESS HOURS] Dados recebidos da API:', messageData)
-        console.log('🔍 [BUSINESS HOURS] reply_to_groups no messageData:', messageData.reply_to_groups)
-        const finalData = {
-          ...messageData,
-          reply_to_groups: messageData.reply_to_groups ?? false,
-          // ✅ GARANTIR que is_active seja um booleano explícito - usar valor real da API
-          // Se vier como string "false", converter para boolean false
-          is_active: messageData.is_active === false || messageData.is_active === 'false' 
-            ? false 
-            : (messageData.is_active === true || messageData.is_active === 'true' ? true : true),
-        }
+          // ✅ Garantir que reply_to_groups sempre tenha valor (default: false)
+          const messageData = response.data.after_hours_message || {}
+          console.log('📥 [BUSINESS HOURS] Dados recebidos da API:', messageData)
+          console.log('🔍 [BUSINESS HOURS] reply_to_groups no messageData:', messageData.reply_to_groups)
+          // ✅ is_active agora sincroniza com BusinessHours - usar valor do BusinessHours atual
+          const finalData = {
+            ...messageData,
+            reply_to_groups: messageData.reply_to_groups ?? false,
+            // Sincronizar is_active com BusinessHours (se disponível)
+            is_active: businessHours?.is_active ?? (messageData.is_active ?? true),
+          }
         console.log('✅ [BUSINESS HOURS] Dados finais:', finalData)
         console.log('✅ [BUSINESS HOURS] is_active final:', finalData.is_active, '(tipo:', typeof finalData.is_active, ')')
         console.log('✅ [BUSINESS HOURS] reply_to_groups final:', finalData.reply_to_groups)
         setAfterHoursMessage(finalData)
       } else {
         console.log('⚠️ [BUSINESS HOURS] Nenhuma configuração encontrada, criando padrão')
+        // ✅ is_active será sincronizado automaticamente com BusinessHours pelo backend
         setAfterHoursMessage({
           tenant: user?.tenant_id || '',
           department: selectedDepartment || null,
           message_template: 'Olá {contact_name}! Recebemos sua mensagem fora do horário de atendimento.\n\nNosso horário de funcionamento é:\n{next_open_time}\n\nRetornaremos em breve!',
           reply_to_groups: false,
-          is_active: true,
+          is_active: businessHours?.is_active ?? true, // Sincronizar com BusinessHours se disponível
         })
       }
     } catch (error: any) {
@@ -319,13 +318,16 @@ export default function BusinessHoursPage() {
     try {
       setIsSaving(true)
 
-      // ✅ GARANTIR que is_active seja boolean explícito antes de enviar
+      // ✅ REMOVIDO: is_active não é mais editável - sincroniza com BusinessHours
+      // ✅ GARANTIR que reply_to_groups seja boolean explícito antes de enviar
       const data = {
         ...afterHoursMessage,
         department: selectedDepartment || null,
-        is_active: Boolean(afterHoursMessage.is_active),
+        // is_active será sincronizado automaticamente pelo backend com BusinessHours
         reply_to_groups: Boolean(afterHoursMessage.reply_to_groups ?? false),
       }
+      // Remover is_active do payload (não deve ser enviado)
+      delete data.is_active
 
       console.log('💾 [SAVE MESSAGE] Dados que serão enviados:', JSON.stringify(data, null, 2))
       console.log('💾 [SAVE MESSAGE] is_active (tipo):', typeof data.is_active, 'valor:', data.is_active)
@@ -622,21 +624,21 @@ export default function BusinessHoursPage() {
             </div>
 
             <div className="space-y-3">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="message_is_active"
-                  checked={Boolean(afterHoursMessage?.is_active)}
-                  onChange={(e) => {
-                    console.log('🔄 [CHECKBOX] is_active alterado:', e.target.checked)
-                    setAfterHoursMessage({ ...afterHoursMessage, is_active: e.target.checked })
-                  }}
-                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                />
-                <Label htmlFor="message_is_active" className="cursor-pointer">
-                  Ativo
-                </Label>
-              </div>
+              {/* ✅ REMOVIDO: Toggle is_active - agora sincroniza automaticamente com Business Hours */}
+              {businessHours && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-gray-600" />
+                    <p className="text-sm text-gray-700">
+                      <strong>Status:</strong> A mensagem automática está{' '}
+                      <span className={businessHours.is_active ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                        {businessHours.is_active ? 'ATIVA' : 'INATIVA'}
+                      </span>
+                      {' '}e sincroniza automaticamente com os Horários de Atendimento.
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {/* ✅ CHECKBOX: Responder em Grupos - FORÇAR VISIBILIDADE */}
               <div className="flex items-center gap-2" style={{ visibility: 'visible', display: 'flex' }}>
