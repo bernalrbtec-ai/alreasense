@@ -54,9 +54,18 @@ class QuickReplyViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         """Filtra por tenant automaticamente."""
+        # ✅ OTIMIZAÇÃO: Usar select_related para evitar queries adicionais
+        # ✅ SEGURANÇA: Verificar se usuário está autenticado antes de acessar tenant
+        if not hasattr(self.request, 'user') or not self.request.user.is_authenticated:
+            return QuickReply.objects.none()
+        
         return QuickReply.objects.filter(
             tenant=self.request.user.tenant,
             is_active=True
+        ).select_related('tenant', 'created_by').only(
+            'id', 'title', 'content', 'category', 'use_count', 
+            'is_active', 'created_at', 'updated_at',
+            'tenant_id', 'created_by_id'
         )
     
     def list(self, request, *args, **kwargs):
@@ -65,6 +74,10 @@ class QuickReplyViewSet(viewsets.ModelViewSet):
         ✅ Cache: 5 minutos
         ✅ Invalidação: Automática após criar/editar/deletar
         """
+        # ✅ SEGURANÇA: Verificar autenticação antes de acessar tenant
+        if not request.user.is_authenticated:
+            return Response({'results': [], 'count': 0}, status=status.HTTP_401_UNAUTHORIZED)
+        
         tenant_id = str(request.user.tenant.id)
         search = request.query_params.get('search', '').strip()
         ordering = request.query_params.get('ordering', '-use_count,title')
@@ -80,10 +93,28 @@ class QuickReplyViewSet(viewsets.ModelViewSet):
         
         # ✅ Cache MISS: buscar do banco
         logger.debug(f"❌ [QUICK REPLIES] Cache MISS: {cache_key}")
-        queryset = self.filter_queryset(self.get_queryset())
+        
+        # ✅ OTIMIZAÇÃO: Usar apenas() para limitar campos buscados
+        queryset = self.get_queryset()
+        
+        # Aplicar filtros de busca manualmente (mais eficiente que filter_backends)
+        if search:
+            from django.db.models import Q
+            queryset = queryset.filter(
+                Q(title__icontains=search) | Q(content__icontains=search)
+            )
+        
+        # Aplicar ordenação
+        if ordering:
+            queryset = queryset.order_by(*ordering.split(','))
+        else:
+            queryset = queryset.order_by('-use_count', 'title')
+        
+        # ✅ OTIMIZAÇÃO: Usar list() para avaliar queryset uma vez
+        queryset_list = list(queryset)
         
         # Serializar dados
-        serializer = self.get_serializer(queryset, many=True)
+        serializer = self.get_serializer(queryset_list, many=True)
         response_data = {
             'results': serializer.data,
             'count': len(serializer.data)
