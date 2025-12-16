@@ -236,13 +236,37 @@ class WelcomeMenuService:
             # Remover espaços e caracteres não numéricos, pegar primeiro número
             import re
             content = message.content or ''
-            numbers = re.findall(r'\d+', content.strip())
-            if not numbers:
+            content_stripped = content.strip()
+            
+            # ✅ NOVO: Se não houver conteúdo, ignorar
+            if not content_stripped:
                 return False
+            
+            # Tentar extrair número
+            numbers = re.findall(r'\d+', content_stripped)
+            
+            # ✅ NOVO: Se não encontrou número OU não é APENAS número, é inválido
+            # Exemplo: "oi" → inválido, "ajuda" → inválido, "999" → válido se no menu
+            is_pure_number = content_stripped.isdigit()
+            
+            if not numbers or not is_pure_number:
+                # Não é um número válido, enviar mensagem de opção inválida
+                logger.warning(f"⚠️ [WELCOME MENU] Resposta não numérica recebida: '{content_stripped}'")
+                return WelcomeMenuService._send_invalid_option_message(
+                    conversation, 
+                    content_stripped,  # Passar o texto original
+                    config
+                )
             
             chosen_number = int(numbers[0])
         except (ValueError, IndexError):
-            return False
+            # Erro ao parsear, enviar mensagem de opção inválida
+            logger.warning(f"⚠️ [WELCOME MENU] Erro ao parsear resposta: '{content}'")
+            return WelcomeMenuService._send_invalid_option_message(
+                conversation,
+                content.strip() if content else "resposta vazia",
+                config
+            )
         
         # ✅ NOVO: Cancelar timeout ativo (cliente respondeu)
         try:
@@ -259,17 +283,24 @@ class WelcomeMenuService:
         
         # Processar escolha
         if config.is_close_option(chosen_number):
-            # Encerrar conversa
-            return WelcomeMenuService._close_conversation(conversation)
+            # ✅ CORREÇÃO: Encerrar conversa e retornar True
+            logger.info(f"🔒 [WELCOME MENU] Cliente escolheu encerrar conversa {conversation.id}")
+            success = WelcomeMenuService._close_conversation(conversation)
+            if success:
+                logger.info(f"✅ [WELCOME MENU] Conversa {conversation.id} encerrada com sucesso")
+            else:
+                logger.error(f"❌ [WELCOME MENU] Falha ao encerrar conversa {conversation.id}")
+            return success
         else:
             # Transferir para departamento
             department = config.get_department_by_number(chosen_number)
             if department:
+                logger.info(f"📋 [WELCOME MENU] Transferindo para departamento: {department.name}")
                 return WelcomeMenuService._transfer_to_department(conversation, department)
             else:
-                # ✅ NOVO: Enviar mensagem de opção inválida
-                logger.warning(f"⚠️ [WELCOME MENU] Número inválido escolhido: {chosen_number}")
-                return WelcomeMenuService._send_invalid_option_message(conversation, chosen_number, config)
+                # ✅ Número inválido (fora do range de departamentos)
+                logger.warning(f"⚠️ [WELCOME MENU] Número {chosen_number} inválido (fora do range)")
+                return WelcomeMenuService._send_invalid_option_message(conversation, str(chosen_number), config)
     
     @staticmethod
     def _transfer_to_department(conversation: Conversation, department: Department) -> bool:
@@ -308,6 +339,8 @@ class WelcomeMenuService:
         ✅ NOVO: Marca todas as mensagens não lidas como lidas ao fechar conversa.
         Isso evita que conversas fechadas apareçam no contador de "conversas novas".
         
+        ✅ CORREÇÃO: Envia mensagem de confirmação antes de fechar.
+        
         Args:
             conversation: Conversa a fechar
         
@@ -318,37 +351,69 @@ class WelcomeMenuService:
         from apps.chat.models import Message
         
         try:
-            # ✅ NOVO: Marcar todas as mensagens não lidas como lidas antes de fechar
-            unread_messages = Message.objects.filter(
-                conversation=conversation,
-                direction='incoming',
-                status__in=['sent', 'delivered']  # Mensagens não lidas
+            # ✅ NOVO: Enviar mensagem de confirmação de encerramento
+            confirmation_text = (
+                "✅ Conversa encerrada.\n\n"
+                "Obrigado pelo contato! Se precisar de algo, é só enviar uma nova mensagem."
             )
             
-            marked_count = unread_messages.count()
-            if marked_count > 0:
-                with transaction.atomic():
+            with transaction.atomic():
+                # Criar mensagem de confirmação
+                confirmation_message = Message.objects.create(
+                    conversation=conversation,
+                    sender=None,
+                    content=confirmation_text,
+                    direction='outgoing',
+                    status='pending',
+                    is_internal=False,
+                    metadata={
+                        'welcome_menu_close_confirmation': True,
+                        'auto_sent': True
+                    }
+                )
+                
+                # Enfileirar para envio
+                def enqueue_confirmation():
+                    try:
+                        from apps.chat.tasks import send_message_to_evolution
+                        send_message_to_evolution.delay(str(confirmation_message.id))
+                        logger.info(f"✅ [WELCOME MENU] Mensagem de confirmação de encerramento enfileirada")
+                    except Exception as e:
+                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar confirmação: {e}", exc_info=True)
+                
+                transaction.on_commit(enqueue_confirmation)
+                
+                # ✅ Marcar todas as mensagens não lidas como lidas antes de fechar
+                unread_messages = Message.objects.filter(
+                    conversation=conversation,
+                    direction='incoming',
+                    status__in=['sent', 'delivered']  # Mensagens não lidas
+                )
+                
+                marked_count = unread_messages.count()
+                if marked_count > 0:
                     unread_messages.update(status='seen')
-                logger.info(f"✅ [WELCOME MENU] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
-            
-            conversation.status = 'closed'
-            conversation.save(update_fields=['status'])
-            
-            logger.info(f"✅ [WELCOME MENU] Conversa {conversation.id} fechada pelo cliente")
-            return True
+                    logger.info(f"✅ [WELCOME MENU] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
+                
+                # ✅ CORREÇÃO: Fechar conversa
+                conversation.status = 'closed'
+                conversation.save(update_fields=['status'])
+                
+                logger.info(f"✅ [WELCOME MENU] Conversa {conversation.id} fechada pelo cliente")
+                return True
             
         except Exception as e:
             logger.error(f"❌ [WELCOME MENU] Erro ao fechar conversa: {e}", exc_info=True)
             return False
     
     @staticmethod
-    def _send_invalid_option_message(conversation: Conversation, invalid_number: int, config: WelcomeMenuConfig) -> bool:
+    def _send_invalid_option_message(conversation: Conversation, invalid_input: str, config: WelcomeMenuConfig) -> bool:
         """
         Envia mensagem avisando que a opção é inválida e reenvia o menu.
         
         Args:
             conversation: Conversa que recebeu opção inválida
-            invalid_number: Número inválido escolhido
+            invalid_input: Texto/número inválido recebido
             config: Configuração do menu
         
         Returns:
@@ -357,8 +422,8 @@ class WelcomeMenuService:
         try:
             # Mensagem de erro + menu novamente
             error_text = (
-                f"❌ Opção *{invalid_number}* inválida.\n\n"
-                f"Por favor, escolha uma das opções abaixo:\n\n"
+                f"❌ Opção *\"{invalid_input}\"* inválida.\n\n"
+                f"Por favor, escolha uma das opções abaixo digitando *apenas o número*:\n\n"
             )
             
             # Adicionar opções do menu
@@ -381,7 +446,7 @@ class WelcomeMenuService:
                     is_internal=False,
                     metadata={
                         'welcome_menu_invalid_option': True,
-                        'invalid_number': invalid_number,
+                        'invalid_input': invalid_input,
                         'auto_sent': True
                     }
                 )
