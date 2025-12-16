@@ -93,8 +93,8 @@ export function QuickRepliesButton({ onSelect, disabled }: QuickRepliesButtonPro
       .then(() => {
         // ✅ Invalidar cache local para atualizar ordenação
         invalidateCache();
-        // ✅ Refetch silencioso em background
-        setTimeout(() => refetch(true), 500);
+        // ✅ Refetch silencioso em background (sem parâmetros)
+        setTimeout(() => refetch(), 500);
       })
       .catch(console.error);
     
