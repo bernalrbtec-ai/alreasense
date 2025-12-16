@@ -421,7 +421,7 @@ export function ConversationList() {
                   <div className="flex items-center gap-1 flex-wrap mb-1">
                     {/* Tag da Instância (azul) - Exibe nome amigável, não UUID */}
                     {(conversationItem.instance_friendly_name || conversationItem.instance_name) && (
-                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-medium">
+                      <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-[10px] font-medium">
                         📱 {conversationItem.instance_friendly_name || conversationItem.instance_name}
                       </span>
                     )}
@@ -446,7 +446,7 @@ export function ConversationList() {
                 <div className="flex items-center justify-between">
                   {/* ✅ MELHORIA UX: Loading state para última mensagem */}
                   {conversationItem.last_message ? (
-                    <p className="text-sm text-gray-600 dark:text-gray-300 truncate">
+                    <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
                       {/* Para grupos, mostrar "Nome: mensagem" */}
                       {conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
                         ? `${conversationItem.last_message.sender_name}: ${conversationItem.last_message.content || ''}`

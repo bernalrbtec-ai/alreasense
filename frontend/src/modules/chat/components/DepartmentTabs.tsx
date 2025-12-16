@@ -99,7 +99,7 @@ export function DepartmentTabs() {
   }, [can_access_all_departments, departmentIds, setDepartments, setActiveDepartment, activeDepartment]);
 
   return (
-    <div className="flex-shrink-0 flex items-center justify-between gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-white border-b border-gray-200 overflow-x-auto scrollbar-hide">
+    <div className="flex-shrink-0 flex items-center justify-between gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 overflow-x-auto scrollbar-hide">
       <div className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto scrollbar-hide">
         {/* Tab Inbox - Responsivo */}
         <button

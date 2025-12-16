@@ -827,8 +827,8 @@ export function ChatWindow() {
           {existingContact && (activeConversation?.conversation_type || conversationType) !== 'group' && (
             <button
               onClick={() => setShowHistory(!showHistory)}
-              className={`p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md ${
-                showHistory ? 'bg-gray-200' : ''
+              className={`p-2 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md ${
+                showHistory ? 'bg-gray-200 dark:bg-gray-700' : ''
               }`}
               title="Histórico do Contato"
             >
@@ -847,7 +847,7 @@ export function ChatWindow() {
           <div className="relative" ref={menuRef}>
             <button
               onClick={() => setShowMenu(!showMenu)}
-              className="p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
+              className="p-2 hover:bg-gray-200 dark:hover:bg-gray-700 active:scale-95 rounded-full transition-all duration-150 shadow-sm hover:shadow-md"
               title="Menu"
             >
               <MoreVertical className="w-5 h-5 text-gray-600 dark:text-gray-400" />
