@@ -222,7 +222,14 @@ export default function TaskModal({
 
       // ✅ CORREÇÃO: Se status é 'completed', não exigir due_date
       // Se tem data agendada, combinar data + hora (apenas se não estiver concluindo)
-      if (formData.status !== 'completed' && formData.has_due_date && formData.due_date) {
+      if (formData.status === 'completed') {
+        // ✅ CORREÇÃO: Ao concluir, não enviar due_date (não é necessário)
+        // O backend vai atualizar due_date automaticamente para tarefas fora de horário
+        // ou manter o completed_at para tarefas normais
+        delete payload.due_date
+        // Também remover has_due_date do payload para evitar confusão
+        delete payload.has_due_date
+      } else if (formData.has_due_date && formData.due_date) {
         const dateTime = formData.due_time
           ? `${formData.due_date}T${formData.due_time}:00`
           : `${formData.due_date}T00:00:00`
@@ -236,10 +243,6 @@ export default function TaskModal({
         }
         
         payload.due_date = scheduledDate.toISOString()
-      } else if (formData.status === 'completed') {
-        // ✅ CORREÇÃO: Ao concluir, não enviar due_date (não é necessário)
-        // O backend vai definir completed_at automaticamente
-        delete payload.due_date
       }
 
       if (task) {
@@ -462,6 +465,7 @@ export default function TaskModal({
               <input
                 type="checkbox"
                 checked={formData.has_due_date}
+                disabled={formData.status === 'completed'}
                 onChange={(e) => {
                   const checked = e.target.checked
                   if (checked) {
@@ -483,11 +487,14 @@ export default function TaskModal({
                     setFormData({ ...formData, has_due_date: checked })
                   }
                 }}
-                className="rounded border-gray-300"
+                className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
               />
-              <span>Agendar para data/hora específica</span>
+              <span className={formData.status === 'completed' ? 'text-gray-500' : ''}>
+                Agendar para data/hora específica
+                {formData.status === 'completed' && ' (desabilitado ao concluir)'}
+              </span>
             </label>
-            {formData.has_due_date && (
+            {formData.has_due_date && formData.status !== 'completed' && (
               <div className="grid grid-cols-2 gap-4 mt-2">
                 <div>
                   <label className="block text-xs text-gray-600 mb-1">Data</label>
