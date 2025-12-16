@@ -103,11 +103,12 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
-    // ✅ Admin/Gerente/Agente: Chat, Agenda e Contatos sempre visíveis
-    // (esses roles sempre têm acesso ao chat, então sempre têm acesso à agenda e contatos)
+    // ✅ Admin/Gerente/Agente: Chat, Agenda, Contatos e Respostas Rápidas sempre visíveis
+    // (esses roles sempre têm acesso ao chat, então sempre têm acesso à agenda, contatos e respostas rápidas)
     if (isAdmin || isGerente || isAgente) {
       const items = [
         { name: 'Chat', href: '/chat', icon: MessageSquare },
+        { name: 'Respostas Rápidas', href: '/quick-replies', icon: Zap },
         { name: 'Agenda', href: '/agenda', icon: Calendar },
         { name: 'Contatos', href: '/contacts', icon: Users }
       ]
@@ -124,8 +125,8 @@ export default function Layout() {
           if (productItems) {
             // Filtrar itens baseado no acesso do usuário
             const accessibleItems = productItems.filter(item => {
-              // Pular Chat, Agenda e Contatos (já adicionados acima para admin/gerente/agente)
-              if (item.href === '/chat' || item.href === '/agenda' || item.href === '/contacts') {
+              // Pular Chat, Respostas Rápidas, Agenda e Contatos (já adicionados acima para admin/gerente/agente)
+              if (item.href === '/chat' || item.href === '/quick-replies' || item.href === '/agenda' || item.href === '/contacts') {
                 return false
               }
               
