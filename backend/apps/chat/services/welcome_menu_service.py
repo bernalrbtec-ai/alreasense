@@ -1,10 +1,15 @@
 """
-Serviço para gerenciar Menu de Boas-Vindas Automático
+Serviço para gerenciar Menu de Boas-Vindas Automático - VERSÃO OTIMIZADA
 """
 import logging
-from typing import Optional
+import re
+from typing import Optional, Dict, Any
+from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone
+from django.core.cache import cache
+from django.conf import settings
+
 from apps.chat.models import Conversation, Message
 from apps.chat.models_welcome_menu import WelcomeMenuConfig, WelcomeMenuTimeout
 from apps.authn.models import Department
@@ -14,16 +19,23 @@ logger = logging.getLogger(__name__)
 
 
 class WelcomeMenuService:
-    """Serviço para gerenciar menu de boas-vindas automático"""
+    """Serviço otimizado para gerenciar menu de boas-vindas automático"""
+    
+    # Constantes
+    CACHE_TIMEOUT_CONFIG = 300  # 5 minutos para cache da config
+    MENU_SPAM_THRESHOLD = timedelta(hours=1)  # Intervalo mínimo entre menus
+    MENU_RESPONSE_TIMEOUT = timedelta(hours=1)  # Tempo válido para resposta ao menu
     
     @staticmethod
     def should_send_menu(conversation: Conversation) -> bool:
         """
-        Verifica se deve enviar menu para uma conversa.
+        Verifica se deve enviar menu (VERSÃO OTIMIZADA).
         
-        ✅ CORREÇÃO CRÍTICA: Agora verifica horário de funcionamento.
-        Menu só é enviado DENTRO do horário de atendimento.
-        Fora do horário: apenas mensagem automática (sem menu).
+        ✅ MELHORIAS:
+        - Verificações em ordem de custo (rápido → lento)
+        - Cache da configuração
+        - Métodos auxiliares para clareza
+        - Horário de funcionamento respeitado
         
         Args:
             conversation: Conversa a verificar
@@ -31,193 +43,244 @@ class WelcomeMenuService:
         Returns:
             True se deve enviar menu, False caso contrário
         """
-        logger.info(f"🔍 [WELCOME MENU] Verificando se deve enviar menu para conversa {conversation.id}")
-        logger.info(f"   📊 Status: {conversation.status}")
-        logger.info(f"   📋 Departamento: {conversation.department.name if conversation.department else 'None'}")
+        logger.info(f"🔍 [WELCOME MENU] Verificando menu para conversa {conversation.id}")
+        logger.debug(f"   Status: {conversation.status}, Dept: {conversation.department.name if conversation.department else 'None'}")
         
-        try:
-            config = WelcomeMenuConfig.objects.get(tenant=conversation.tenant)
-            logger.info(f"   ✅ Config encontrada: enabled={config.enabled}, send_to_new={config.send_to_new_conversations}, send_to_closed={config.send_to_closed_conversations}")
-        except WelcomeMenuConfig.DoesNotExist:
-            logger.warning(f"   ⚠️ [WELCOME MENU] Config não encontrada para tenant {conversation.tenant.id}")
+        # 1. Buscar config (com cache) - Rápido
+        config = WelcomeMenuService._get_menu_config(conversation.tenant)
+        if not config or not config.enabled:
+            logger.debug("⏭️ Menu desabilitado ou config não encontrada")
             return False
         
-        if not config.enabled:
-            logger.debug(f"   ⏭️ [WELCOME MENU] Menu desabilitado na configuração")
+        # 2. Verificar status (sem query) - Rápido
+        if not WelcomeMenuService._should_send_for_status(conversation, config):
             return False
         
-        # ✅ NOVO: Verificar horário de funcionamento PRIMEIRO
-        # Menu só deve ser enviado DENTRO do horário de atendimento
-        # Fora do horário: cliente recebe apenas mensagem automática (via BusinessHoursService)
+        # 3. Verificar spam (1 query) - Médio
+        if WelcomeMenuService._was_menu_sent_recently(conversation):
+            return False
+        
+        # 4. Verificar horário (múltiplas queries) - Lento
+        if not WelcomeMenuService._is_within_business_hours(conversation):
+            return False
+        
+        logger.info("✅ Todas as condições atendidas - enviará menu")
+        return True
+    
+    @staticmethod
+    def _get_menu_config(tenant) -> Optional[WelcomeMenuConfig]:
+        """
+        Busca config do menu com cache (NOVO).
+        Cache de 5 minutos para reduzir queries.
+        """
+        cache_key = f"welcome_menu_config:{tenant.id}"
+        config = cache.get(cache_key)
+        
+        if config is None:
+            try:
+                config = WelcomeMenuConfig.objects.get(tenant=tenant)
+                cache.set(cache_key, config, WelcomeMenuService.CACHE_TIMEOUT_CONFIG)
+                logger.debug(f"✅ Config carregada do DB e cacheada")
+            except WelcomeMenuConfig.DoesNotExist:
+                logger.warning(f"⚠️ Config não encontrada para tenant {tenant.id}")
+                return None
+        else:
+            logger.debug("✅ Config carregada do cache")
+        
+        return config
+    
+    @staticmethod
+    def _should_send_for_status(conversation: Conversation, config: WelcomeMenuConfig) -> bool:
+        """
+        Verifica se status da conversa permite envio (NOVO).
+        Sem queries, apenas verificação de atributos.
+        """
+        if conversation.status == 'pending' and config.send_to_new_conversations:
+            logger.info("✅ Status pending + send_to_new=True")
+            return True
+        
+        if conversation.status == 'closed' and config.send_to_closed_conversations:
+            logger.info("✅ Status closed + send_to_closed=True")
+            return True
+        
+        logger.debug(f"⏭️ Status '{conversation.status}' não atende condições")
+        return False
+    
+    @staticmethod
+    def _was_menu_sent_recently(conversation: Conversation) -> bool:
+        """
+        Verifica se menu foi enviado recentemente - anti-spam (NOVO).
+        1 query otimizada.
+        """
+        last_menu = Message.objects.filter(
+            conversation=conversation,
+            is_internal=False,
+            metadata__welcome_menu=True
+        ).order_by('-created_at').values('created_at').first()
+        
+        if not last_menu:
+            return False
+        
+        time_since = timezone.now() - last_menu['created_at']
+        if time_since < WelcomeMenuService.MENU_SPAM_THRESHOLD:
+            logger.debug(f"⏭️ Menu enviado há {time_since.total_seconds() / 60:.1f}min (< 1h)")
+            return True
+        
+        logger.debug(f"✅ Menu enviado há {time_since.total_seconds() / 3600:.1f}h (> 1h)")
+        return False
+    
+    @staticmethod
+    def _is_within_business_hours(conversation: Conversation) -> bool:
+        """
+        Verifica horário de funcionamento (NOVO).
+        Múltiplas queries internas, por isso é feito por último.
+        """
         try:
             from apps.chat.services.business_hours_service import BusinessHoursService
             
-            is_open, next_open_time = BusinessHoursService.is_business_hours(
+            is_open, next_open = BusinessHoursService.is_business_hours(
                 tenant=conversation.tenant,
                 department=conversation.department
             )
             
             if not is_open:
-                logger.info(f"   ⏰ [WELCOME MENU] FORA DO HORÁRIO DE ATENDIMENTO - menu NÃO será enviado")
-                logger.info(f"      Próximo horário de atendimento: {next_open_time}")
-                logger.info(f"      Cliente receberá mensagem automática ao invés do menu")
+                logger.info(f"⏰ FORA do horário - próximo: {next_open}")
+                logger.info("   Cliente receberá mensagem automática ao invés do menu")
                 return False
             
-            logger.info(f"   ✅ [WELCOME MENU] DENTRO DO HORÁRIO DE ATENDIMENTO - menu pode ser enviado")
+            logger.info("✅ DENTRO do horário de atendimento")
+            return True
+            
         except Exception as e:
-            # Se houver erro na verificação de horário, logar mas permitir envio do menu
-            # (comportamento fail-safe: melhor enviar menu do que deixar cliente sem resposta)
-            logger.error(f"   ❌ [WELCOME MENU] Erro ao verificar horário de atendimento: {e}", exc_info=True)
-            logger.warning(f"   ⚠️ [WELCOME MENU] Continuando com envio do menu (fail-safe)")
-        
-        # Verificar se já foi enviado menu recentemente (evitar spam)
-        # Buscar última mensagem do sistema com menu
-        last_menu_message = Message.objects.filter(
-            conversation=conversation,
-            is_internal=False,
-            metadata__welcome_menu=True
-        ).order_by('-created_at').first()
-        
-        if last_menu_message:
-            # Se menu foi enviado há menos de 1 hora, não enviar novamente
-            from django.utils import timezone
-            from datetime import timedelta
-            time_since_last = timezone.now() - last_menu_message.created_at
-            if time_since_last < timedelta(hours=1):
-                logger.debug(f"   ⏭️ [WELCOME MENU] Menu já enviado recentemente ({time_since_last.total_seconds() / 60:.1f} minutos atrás) para {conversation.id}")
-                return False
-            else:
-                logger.info(f"   ✅ Menu anterior foi enviado há mais de 1 hora ({time_since_last.total_seconds() / 3600:.1f} horas atrás), pode enviar novamente")
-        
-        # Verificar condições
-        if conversation.status == 'pending' and config.send_to_new_conversations:
-            logger.info(f"   ✅ [WELCOME MENU] Condição atendida: status=pending e send_to_new_conversations=True")
+            # Fail-safe: se erro na verificação, permite enviar menu
+            # Melhor enviar menu do que deixar cliente sem resposta
+            logger.error(f"❌ Erro ao verificar horário: {e}", exc_info=True)
+            logger.warning("⚠️ Fail-safe: permitindo envio do menu")
             return True
-        
-        if conversation.status == 'closed' and config.send_to_closed_conversations:
-            logger.info(f"   ✅ [WELCOME MENU] Condição atendida: status=closed e send_to_closed_conversations=True")
-            return True
-        
-        logger.info(f"   ⏭️ [WELCOME MENU] Nenhuma condição atendida para enviar menu")
-        logger.info(f"      Status: {conversation.status}")
-        logger.info(f"      send_to_new_conversations: {config.send_to_new_conversations}")
-        logger.info(f"      send_to_closed_conversations: {config.send_to_closed_conversations}")
-        return False
     
     @staticmethod
-    def send_welcome_menu(conversation: Conversation) -> Optional[Message]:
+    def _create_and_send_message(
+        conversation: Conversation,
+        content: str,
+        metadata: Dict[str, Any],
+        log_prefix: str = "MESSAGE"
+    ) -> Optional[Message]:
         """
-        Envia menu de boas-vindas para uma conversa.
+        Método auxiliar DRY para criar e enfileirar mensagens (NOVO).
+        Elimina duplicação de código entre os métodos de envio.
         
         Args:
-            conversation: Conversa para enviar menu
+            conversation: Conversa destino
+            content: Conteúdo da mensagem
+            metadata: Metadados da mensagem (será adicionado auto_sent=True)
+            log_prefix: Prefixo para logs
         
         Returns:
             Message criada ou None se erro
         """
         try:
-            config = WelcomeMenuConfig.objects.select_related('tenant').prefetch_related('departments').get(
-                tenant=conversation.tenant
-            )
-        except WelcomeMenuConfig.DoesNotExist:
-            logger.warning(f"⚠️ [WELCOME MENU] Config não encontrada para tenant {conversation.tenant.id}")
+            with transaction.atomic():
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=None,  # Mensagem automática do sistema
+                    content=content,
+                    direction='outgoing',
+                    status='pending',
+                    is_internal=False,
+                    metadata={**metadata, 'auto_sent': True}
+                )
+                
+                logger.debug(f"✅ [{log_prefix}] Mensagem criada: {message.id}")
+                
+                # Enfileirar após commit (evita race condition)
+                def enqueue_after_commit():
+                    try:
+                        from apps.chat.tasks import send_message_to_evolution
+                        send_message_to_evolution.delay(str(message.id))
+                        logger.info(f"✅ [{log_prefix}] Mensagem enfileirada: {message.id}")
+                    except Exception as e:
+                        logger.error(f"❌ [{log_prefix}] Erro ao enfileirar: {e}", exc_info=True)
+                
+                transaction.on_commit(enqueue_after_commit)
+                return message
+                
+        except Exception as e:
+            logger.error(f"❌ [{log_prefix}] Erro ao criar mensagem: {e}", exc_info=True)
+            return None
+    
+    @staticmethod
+    def send_welcome_menu(conversation: Conversation) -> Optional[Message]:
+        """
+        Envia menu de boas-vindas (VERSÃO OTIMIZADA).
+        
+        ✅ MELHORIAS:
+        - Usa _create_and_send_message() (DRY)
+        - Validações mais robustas
+        """
+        # Buscar config (com cache)
+        config = WelcomeMenuService._get_menu_config(conversation.tenant)
+        if not config or not config.enabled:
+            logger.warning(f"⚠️ Menu desabilitado ou config não encontrada")
             return None
         
-        if not config.enabled:
-            logger.debug(f"⏭️ [WELCOME MENU] Menu desabilitado para tenant {conversation.tenant.id}")
+        # Validar instância WhatsApp
+        wa_instance = WhatsAppInstance.objects.filter(
+            tenant=conversation.tenant,
+            is_active=True,
+            status='active'
+        ).first()
+        
+        if not wa_instance:
+            logger.warning(f"⚠️ Instância WhatsApp não encontrada")
+            return None
+        
+        # Validar configurações Evolution API
+        evolution_api_url = getattr(settings, 'EVOLUTION_API_URL', None)
+        evolution_api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
+        
+        if not evolution_api_url or not evolution_api_key:
+            logger.warning("⚠️ Configurações Evolution API não encontradas no .env")
             return None
         
         # Gerar texto do menu
         menu_text = config.get_menu_text()
         
-        # Buscar instância WhatsApp ativa
-        # ✅ CORREÇÃO: Não precisa de EvolutionConnection - usa configurações do .env
-        try:
-            wa_instance = WhatsAppInstance.objects.filter(
-                tenant=conversation.tenant,
-                is_active=True,
-                status='active'
-            ).first()
-            
-            if not wa_instance:
-                logger.warning(f"⚠️ [WELCOME MENU] Instância WhatsApp não encontrada para tenant {conversation.tenant.id}")
-                return None
-            
-            # ✅ CORREÇÃO: Verificar se configurações do .env estão disponíveis
-            from django.conf import settings
-            evolution_api_url = getattr(settings, 'EVOLUTION_API_URL', None)
-            evolution_api_key = getattr(settings, 'EVOLUTION_API_KEY', None)
-            
-            if not evolution_api_url or not evolution_api_key:
-                logger.warning(
-                    f"⚠️ [WELCOME MENU] Configurações Evolution API não encontradas no .env "
-                    f"(EVOLUTION_API_URL ou EVOLUTION_API_KEY) para tenant {conversation.tenant.id}"
-                )
-                return None
-            
-        except Exception as e:
-            logger.error(f"❌ [WELCOME MENU] Erro ao buscar instância: {e}", exc_info=True)
+        # Criar e enviar mensagem usando método auxiliar DRY
+        message = WelcomeMenuService._create_and_send_message(
+            conversation=conversation,
+            content=menu_text,
+            metadata={
+                'welcome_menu': True,
+                'welcome_menu_config_id': str(config.id)
+            },
+            log_prefix="WELCOME MENU"
+        )
+        
+        if not message:
             return None
         
-        # Criar mensagem no banco
-        try:
-            with transaction.atomic():
-                message = Message.objects.create(
+        # Criar timeout de inatividade (se habilitado)
+        if config.inactivity_timeout_enabled:
+            try:
+                # Deletar timeout anterior se existir
+                WelcomeMenuTimeout.objects.filter(
                     conversation=conversation,
-                    sender=None,  # Mensagem automática do sistema
-                    content=menu_text,
-                    direction='outgoing',
-                    status='pending',
-                    is_internal=False,
-                    metadata={
-                        'welcome_menu': True,
-                        'welcome_menu_config_id': str(config.id),
-                        'auto_sent': True
-                    }
+                    is_active=True
+                ).delete()
+                
+                # Criar novo timeout
+                WelcomeMenuTimeout.objects.create(
+                    conversation=conversation,
+                    menu_sent_at=timezone.now(),
+                    reminder_sent=False,
+                    is_active=True
                 )
-                
-                logger.info(f"✅ [WELCOME MENU] Mensagem criada: {message.id}")
-                
-                # ✅ CORREÇÃO CRÍTICA: Enfileira mensagem APENAS após commit da transação
-                # Isso garante que a mensagem esteja no banco quando o worker tentar buscá-la
-                # Evita race condition onde worker tenta buscar mensagem que ainda não foi commitada
-                def enqueue_message_after_commit():
-                    try:
-                        from apps.chat.tasks import send_message_to_evolution
-                        send_message_to_evolution.delay(str(message.id))
-                        logger.info(f"✅ [WELCOME MENU] Menu enfileirado para envio - conversa {conversation.id}, mensagem {message.id}")
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar mensagem: {e}", exc_info=True)
-                        # Não re-raise - mensagem já foi criada, pode ser enviada manualmente depois
-                
-                transaction.on_commit(enqueue_message_after_commit)
-                
-                # ✅ NOVO: Criar timeout de inatividade (se habilitado)
-                if config.inactivity_timeout_enabled:
-                    try:
-                        # Deletar timeout anterior se existir
-                        WelcomeMenuTimeout.objects.filter(
-                            conversation=conversation,
-                            is_active=True
-                        ).delete()
-                        
-                        # Criar novo timeout
-                        WelcomeMenuTimeout.objects.create(
-                            conversation=conversation,
-                            menu_sent_at=timezone.now(),
-                            reminder_sent=False,
-                            is_active=True
-                        )
-                        logger.info(f"⏰ [WELCOME MENU] Timeout criado para conversa {conversation.id}")
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao criar timeout: {e}", exc_info=True)
-                        # Não falhar o envio do menu por causa do timeout
-                
-                return message
-                
-        except Exception as e:
-            logger.error(f"❌ [WELCOME MENU] Erro ao criar/enviar mensagem: {e}", exc_info=True)
-            return None
+                logger.debug("⏰ Timeout de inatividade criado")
+            except Exception as e:
+                logger.error(f"❌ Erro ao criar timeout: {e}", exc_info=True)
+                # Não falhar o envio do menu por causa do timeout
+        
+        return message
     
     @staticmethod
     def process_menu_response(conversation: Conversation, message: Message) -> bool:
@@ -259,41 +322,25 @@ class WelcomeMenuService:
             # Resposta muito antiga, não processar
             return False
         
-        # Extrair número da resposta
-        try:
-            # Remover espaços e caracteres não numéricos, pegar primeiro número
-            import re
-            content = message.content or ''
-            content_stripped = content.strip()
-            
-            # ✅ NOVO: Se não houver conteúdo, ignorar
-            if not content_stripped:
-                return False
-            
-            # Tentar extrair número
-            numbers = re.findall(r'\d+', content_stripped)
-            
-            # ✅ NOVO: Se não encontrou número OU não é APENAS número, é inválido
-            # Exemplo: "oi" → inválido, "ajuda" → inválido, "999" → válido se no menu
-            is_pure_number = content_stripped.isdigit()
-            
-            if not numbers or not is_pure_number:
-                # Não é um número válido, enviar mensagem de opção inválida
-                logger.warning(f"⚠️ [WELCOME MENU] Resposta não numérica recebida: '{content_stripped}'")
-                return WelcomeMenuService._send_invalid_option_message(
-                    conversation, 
-                    content_stripped,  # Passar o texto original
-                    config
-                )
-            
-            chosen_number = int(numbers[0])
-        except (ValueError, IndexError):
-            # Erro ao parsear, enviar mensagem de opção inválida
-            logger.warning(f"⚠️ [WELCOME MENU] Erro ao parsear resposta: '{content}'")
+        # Validar e extrair número da resposta (VERSÃO SIMPLIFICADA)
+        content = (message.content or '').strip()
+        
+        if not content:
+            return False
+        
+        # Validação simples: deve ser apenas dígitos
+        if not content.isdigit():
+            logger.warning(f"⚠️ Resposta não numérica: '{content}'")
             return WelcomeMenuService._send_invalid_option_message(
-                conversation,
-                content.strip() if content else "resposta vazia",
-                config
+                conversation, content, config
+            )
+        
+        try:
+            chosen_number = int(content)
+        except ValueError:
+            logger.warning(f"⚠️ Erro ao parsear número: '{content}'")
+            return WelcomeMenuService._send_invalid_option_message(
+                conversation, content, config
             )
         
         # ✅ NOVO: Cancelar timeout ativo (cliente respondeu)
@@ -362,150 +409,103 @@ class WelcomeMenuService:
     @staticmethod
     def _close_conversation(conversation: Conversation) -> bool:
         """
-        Fecha conversa.
+        Fecha conversa (VERSÃO OTIMIZADA).
         
-        ✅ NOVO: Marca todas as mensagens não lidas como lidas ao fechar conversa.
-        Isso evita que conversas fechadas apareçam no contador de "conversas novas".
-        
-        ✅ CORREÇÃO: Envia mensagem de confirmação antes de fechar.
-        
-        Args:
-            conversation: Conversa a fechar
-        
-        Returns:
-            True se fechou com sucesso
+        ✅ MELHORIAS:
+        - Usa _create_and_send_message() (DRY)
+        - Marca mensagens não lidas como lidas
+        - Envia confirmação de encerramento
         """
-        from django.db import transaction
-        from apps.chat.models import Message
-        
         try:
-            # ✅ NOVO: Enviar mensagem de confirmação de encerramento
+            # Texto de confirmação
             confirmation_text = (
                 "✅ Conversa encerrada.\n\n"
                 "Obrigado pelo contato! Se precisar de algo, é só enviar uma nova mensagem."
             )
             
-            with transaction.atomic():
-                # Criar mensagem de confirmação
-                confirmation_message = Message.objects.create(
-                    conversation=conversation,
-                    sender=None,
-                    content=confirmation_text,
-                    direction='outgoing',
-                    status='pending',
-                    is_internal=False,
-                    metadata={
-                        'welcome_menu_close_confirmation': True,
-                        'auto_sent': True
-                    }
-                )
-                
-                # Enfileirar para envio
-                def enqueue_confirmation():
-                    try:
-                        from apps.chat.tasks import send_message_to_evolution
-                        send_message_to_evolution.delay(str(confirmation_message.id))
-                        logger.info(f"✅ [WELCOME MENU] Mensagem de confirmação de encerramento enfileirada")
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar confirmação: {e}", exc_info=True)
-                
-                transaction.on_commit(enqueue_confirmation)
-                
-                # ✅ Marcar todas as mensagens não lidas como lidas antes de fechar
-                unread_messages = Message.objects.filter(
-                    conversation=conversation,
-                    direction='incoming',
-                    status__in=['sent', 'delivered']  # Mensagens não lidas
-                )
-                
-                marked_count = unread_messages.count()
-                if marked_count > 0:
-                    unread_messages.update(status='seen')
-                    logger.info(f"✅ [WELCOME MENU] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
-                
-                # ✅ CORREÇÃO: Fechar conversa
-                conversation.status = 'closed'
-                conversation.save(update_fields=['status'])
-                
-                logger.info(f"✅ [WELCOME MENU] Conversa {conversation.id} fechada pelo cliente")
-                return True
+            # Enviar mensagem de confirmação usando método auxiliar
+            message = WelcomeMenuService._create_and_send_message(
+                conversation=conversation,
+                content=confirmation_text,
+                metadata={'welcome_menu_close_confirmation': True},
+                log_prefix="CLOSE"
+            )
+            
+            if not message:
+                logger.error("❌ Falha ao criar mensagem de encerramento")
+                return False
+            
+            # Marcar mensagens não lidas como lidas
+            unread_count = Message.objects.filter(
+                conversation=conversation,
+                direction='incoming',
+                status__in=['sent', 'delivered']
+            ).update(status='seen')
+            
+            if unread_count > 0:
+                logger.debug(f"✅ {unread_count} mensagens marcadas como lidas")
+            
+            # Fechar conversa
+            conversation.status = 'closed'
+            conversation.save(update_fields=['status'])
+            
+            logger.info(f"✅ Conversa {conversation.id} fechada pelo cliente")
+            return True
             
         except Exception as e:
-            logger.error(f"❌ [WELCOME MENU] Erro ao fechar conversa: {e}", exc_info=True)
+            logger.error(f"❌ Erro ao fechar conversa: {e}", exc_info=True)
             return False
     
     @staticmethod
     def _send_invalid_option_message(conversation: Conversation, invalid_input: str, config: WelcomeMenuConfig) -> bool:
         """
-        Envia mensagem avisando que a opção é inválida e reenvia o menu.
+        Envia mensagem de opção inválida (VERSÃO OTIMIZADA).
         
-        Args:
-            conversation: Conversa que recebeu opção inválida
-            invalid_input: Texto/número inválido recebido
-            config: Configuração do menu
-        
-        Returns:
-            True se enviou com sucesso
+        ✅ MELHORIAS:
+        - Usa _create_and_send_message() (DRY)
+        - Extração de opções melhorada
         """
         try:
-            # Mensagem de erro + menu novamente
+            # Mensagem de erro
             error_text = (
                 f"❌ Opção *\"{invalid_input}\"* inválida.\n\n"
                 f"Por favor, escolha uma das opções abaixo digitando *apenas o número*:\n\n"
             )
             
-            # Adicionar opções do menu
+            # Extrair apenas as opções do menu (sem boas-vindas)
             menu_text = config.get_menu_text()
-            # Remover mensagem de boas-vindas (já foi enviada)
             menu_lines = menu_text.split('\n')
-            # Pegar apenas as opções (linhas que começam com número)
-            options_only = [line for line in menu_lines if line.strip() and (line[0].isdigit() or line.startswith('Escolha'))]
+            options_only = [
+                line for line in menu_lines 
+                if line.strip() and (line[0].isdigit() or line.startswith('Escolha'))
+            ]
             
             full_message = error_text + '\n'.join(options_only)
             
-            # Criar e enfileirar mensagem
-            with transaction.atomic():
-                message = Message.objects.create(
-                    conversation=conversation,
-                    sender=None,
-                    content=full_message,
-                    direction='outgoing',
-                    status='pending',
-                    is_internal=False,
-                    metadata={
-                        'welcome_menu_invalid_option': True,
-                        'invalid_input': invalid_input,
-                        'auto_sent': True
-                    }
-                )
-                
-                def enqueue_after_commit():
-                    try:
-                        from apps.chat.tasks import send_message_to_evolution
-                        send_message_to_evolution.delay(str(message.id))
-                        logger.info(f"✅ [WELCOME MENU] Mensagem de opção inválida enfileirada")
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar mensagem de erro: {e}", exc_info=True)
-                
-                transaction.on_commit(enqueue_after_commit)
+            # Enviar mensagem usando método auxiliar
+            message = WelcomeMenuService._create_and_send_message(
+                conversation=conversation,
+                content=full_message,
+                metadata={
+                    'welcome_menu_invalid_option': True,
+                    'invalid_input': invalid_input
+                },
+                log_prefix="INVALID OPTION"
+            )
             
-            return True
+            return message is not None
             
         except Exception as e:
-            logger.error(f"❌ [WELCOME MENU] Erro ao enviar mensagem de opção inválida: {e}", exc_info=True)
+            logger.error(f"❌ Erro ao enviar mensagem de opção inválida: {e}", exc_info=True)
             return False
     
     @staticmethod
     def _send_inactivity_reminder(conversation: Conversation, config: WelcomeMenuConfig) -> bool:
         """
-        Envia mensagem perguntando se cliente ainda está presente.
+        Envia lembrete de inatividade (VERSÃO OTIMIZADA).
         
-        Args:
-            conversation: Conversa inativa
-            config: Configuração do menu
-        
-        Returns:
-            True se enviou com sucesso
+        ✅ MELHORIAS:
+        - Usa _create_and_send_message() (DRY)
         """
         try:
             remaining_minutes = config.auto_close_minutes - config.first_reminder_minutes
@@ -516,34 +516,17 @@ class WelcomeMenuService:
                 f"encerraremos em *{remaining_minutes} minutos*."
             )
             
-            # Criar e enfileirar mensagem
-            with transaction.atomic():
-                message = Message.objects.create(
-                    conversation=conversation,
-                    sender=None,
-                    content=reminder_text,
-                    direction='outgoing',
-                    status='pending',
-                    is_internal=False,
-                    metadata={
-                        'welcome_menu_reminder': True,
-                        'auto_sent': True
-                    }
-                )
-                
-                def enqueue_after_commit():
-                    try:
-                        from apps.chat.tasks import send_message_to_evolution
-                        send_message_to_evolution.delay(str(message.id))
-                        logger.info(f"✅ [WELCOME MENU] Lembrete de inatividade enfileirado")
-                    except Exception as e:
-                        logger.error(f"❌ [WELCOME MENU] Erro ao enfileirar lembrete: {e}", exc_info=True)
-                
-                transaction.on_commit(enqueue_after_commit)
+            # Enviar mensagem usando método auxiliar
+            message = WelcomeMenuService._create_and_send_message(
+                conversation=conversation,
+                content=reminder_text,
+                metadata={'welcome_menu_reminder': True},
+                log_prefix="INACTIVITY REMINDER"
+            )
             
-            return True
+            return message is not None
             
         except Exception as e:
-            logger.error(f"❌ [WELCOME MENU] Erro ao enviar lembrete de inatividade: {e}", exc_info=True)
+            logger.error(f"❌ Erro ao enviar lembrete de inatividade: {e}", exc_info=True)
             return False
 
