@@ -21,6 +21,10 @@ class WelcomeMenuService:
         """
         Verifica se deve enviar menu para uma conversa.
         
+        ✅ CORREÇÃO CRÍTICA: Agora verifica horário de funcionamento.
+        Menu só é enviado DENTRO do horário de atendimento.
+        Fora do horário: apenas mensagem automática (sem menu).
+        
         Args:
             conversation: Conversa a verificar
         
@@ -41,6 +45,30 @@ class WelcomeMenuService:
         if not config.enabled:
             logger.debug(f"   ⏭️ [WELCOME MENU] Menu desabilitado na configuração")
             return False
+        
+        # ✅ NOVO: Verificar horário de funcionamento PRIMEIRO
+        # Menu só deve ser enviado DENTRO do horário de atendimento
+        # Fora do horário: cliente recebe apenas mensagem automática (via BusinessHoursService)
+        try:
+            from apps.chat.services.business_hours_service import BusinessHoursService
+            
+            is_open, next_open_time = BusinessHoursService.is_business_hours(
+                tenant=conversation.tenant,
+                department=conversation.department
+            )
+            
+            if not is_open:
+                logger.info(f"   ⏰ [WELCOME MENU] FORA DO HORÁRIO DE ATENDIMENTO - menu NÃO será enviado")
+                logger.info(f"      Próximo horário de atendimento: {next_open_time}")
+                logger.info(f"      Cliente receberá mensagem automática ao invés do menu")
+                return False
+            
+            logger.info(f"   ✅ [WELCOME MENU] DENTRO DO HORÁRIO DE ATENDIMENTO - menu pode ser enviado")
+        except Exception as e:
+            # Se houver erro na verificação de horário, logar mas permitir envio do menu
+            # (comportamento fail-safe: melhor enviar menu do que deixar cliente sem resposta)
+            logger.error(f"   ❌ [WELCOME MENU] Erro ao verificar horário de atendimento: {e}", exc_info=True)
+            logger.warning(f"   ⚠️ [WELCOME MENU] Continuando com envio do menu (fail-safe)")
         
         # Verificar se já foi enviado menu recentemente (evitar spam)
         # Buscar última mensagem do sistema com menu
