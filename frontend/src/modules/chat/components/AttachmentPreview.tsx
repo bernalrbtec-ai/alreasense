@@ -2,7 +2,7 @@
  * AttachmentPreview - Visualiza diferentes tipos de anexos
  * 
  * Suporta:
- * - Imagens: Preview inline + lightbox
+ * - Imagens: Preview inline + lightbox com ZOOM 🔍
  * - Vídeos: Player HTML5
  * - Áudios: Player customizado estilo WhatsApp
  * - Documentos: Ícone + download
@@ -10,7 +10,8 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, FileText, X, Play, Pause, AlertCircle } from 'lucide-react';
+import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { showWarningToast } from '@/lib/toastHelper';
 // Removed unused imports: Image, Video, Music
 
@@ -291,16 +292,10 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           }}
         />
         
-        {/* Lightbox - Fullscreen usando Portal para renderizar direto no body */}
+        {/* Lightbox - Fullscreen com ZOOM usando Portal */}
         {lightboxOpen && typeof document !== 'undefined' && createPortal(
           <div 
             className="fixed inset-0 bg-black bg-opacity-95 z-[9999] flex items-center justify-center animate-fade-in"
-            onClick={(e) => {
-              // Fechar apenas se clicar no fundo (não na imagem ou botões)
-              if (e.target === e.currentTarget) {
-                setLightboxOpen(false);
-              }
-            }}
             style={{
               backdropFilter: 'blur(4px)',
               width: '100vw',
@@ -314,104 +309,179 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
               bottom: 0,
             }}
           >
-            {/* Botão Fechar */}
-            <button
-              className="absolute top-4 right-4 z-10 p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
-              onClick={(e) => {
-                e.stopPropagation();
-                setLightboxOpen(false);
-              }}
-              title="Fechar (ESC)"
-              aria-label="Fechar modal"
+            <TransformWrapper
+              initialScale={1}
+              minScale={0.5}
+              maxScale={5}
+              doubleClick={{ mode: "toggle", step: 0.5 }}
+              wheel={{ step: 0.1 }}
+              panning={{ disabled: false }}
+              centerOnInit={true}
+              limitToBounds={false}
             >
-              <X size={24} />
-            </button>
+              {({ zoomIn, zoomOut, resetTransform, instance }) => (
+                <>
+                  {/* Botão Fechar */}
+                  <button
+                    className="absolute top-4 right-4 z-[10000] p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setLightboxOpen(false);
+                    }}
+                    title="Fechar (ESC)"
+                    aria-label="Fechar modal"
+                  >
+                    <X size={24} />
+                  </button>
 
-            {/* Botão Download */}
-            <button
-              className="absolute top-4 right-20 z-10 p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
-              onClick={async (e) => {
-                e.stopPropagation();
-                
-                // ✅ NOVO: Verificar se arquivo existe antes de baixar
-                try {
-                  // Tentar HEAD primeiro (mais rápido), se falhar, tentar GET com range
-                  let response = await fetch(fileUrl, { method: 'HEAD' }).catch(() => null);
-                  
-                  // Se HEAD não funcionar, tentar GET com range (primeiros bytes)
-                  if (!response || !response.ok) {
-                    response = await fetch(fileUrl, { 
-                      method: 'GET',
-                      headers: { 'Range': 'bytes=0-0' } // Apenas primeiro byte
-                    }).catch(() => null);
-                  }
-                  
-                  if (!response || !response.ok) {
-                    // Tentar verificar se é resposta JSON de erro
-                    try {
-                      const errorResponse = await fetch(fileUrl, { method: 'GET' });
-                      const contentType = errorResponse.headers.get('content-type');
-                      if (contentType?.includes('application/json')) {
-                        const errorData = await errorResponse.json();
-                        if (errorData.error === 'Arquivo indisponível') {
-                          showWarningToast('Anexo indisponível', errorData.message || 'O arquivo não está mais disponível no servidor');
+                  {/* Botão Download */}
+                  <button
+                    className="absolute top-4 right-20 z-[10000] p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      
+                      // ✅ Verificar se arquivo existe antes de baixar
+                      try {
+                        let response = await fetch(fileUrl, { method: 'HEAD' }).catch(() => null);
+                        
+                        if (!response || !response.ok) {
+                          response = await fetch(fileUrl, { 
+                            method: 'GET',
+                            headers: { 'Range': 'bytes=0-0' }
+                          }).catch(() => null);
+                        }
+                        
+                        if (!response || !response.ok) {
+                          try {
+                            const errorResponse = await fetch(fileUrl, { method: 'GET' });
+                            const contentType = errorResponse.headers.get('content-type');
+                            if (contentType?.includes('application/json')) {
+                              const errorData = await errorResponse.json();
+                              if (errorData.error === 'Arquivo indisponível') {
+                                showWarningToast('Anexo indisponível', errorData.message || 'O arquivo não está mais disponível no servidor');
+                                return;
+                              }
+                            }
+                          } catch {
+                            // Ignorar erro ao tentar ler JSON
+                          }
+                          showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
                           return;
                         }
+                        
+                        // Arquivo existe, fazer download
+                        const link = document.createElement('a');
+                        link.href = fileUrl;
+                        link.download = attachment.original_filename || 'image.jpg';
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                      } catch (error) {
+                        console.error('Erro ao verificar/download arquivo:', error);
+                        showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
                       }
-                    } catch {
-                      // Ignorar erro ao tentar ler JSON
-                    }
-                    showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
-                    return;
-                  }
-                  
-                  // Arquivo existe, fazer download
-                  const link = document.createElement('a');
-                  link.href = fileUrl;
-                  link.download = attachment.original_filename || 'image.jpg';
-                  link.target = '_blank';
-                  link.rel = 'noopener noreferrer';
-                  document.body.appendChild(link);
-                  link.click();
-                  document.body.removeChild(link);
-                } catch (error) {
-                  console.error('Erro ao verificar/download arquivo:', error);
-                  showWarningToast('Anexo indisponível', 'Não foi possível acessar o arquivo');
-                }
-              }}
-              title="Baixar imagem"
-              aria-label="Baixar imagem"
-            >
-              <Download size={24} />
-            </button>
+                    }}
+                    title="Baixar imagem"
+                    aria-label="Baixar imagem"
+                  >
+                    <Download size={24} />
+                  </button>
 
-            {/* Imagem Fullscreen - Ocupa toda a janela */}
-            <img
-              src={fileUrl}
-              alt={attachment.original_filename}
-              className="object-contain cursor-zoom-out select-none"
-              onClick={(e) => {
-                e.stopPropagation();
-                // Não fechar ao clicar na imagem, apenas no fundo
-              }}
-              onError={(e) => {
-                console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
-                  fileUrl: fileUrl.substring(0, 100),
-                  filename: attachment.original_filename
-                });
-              }}
-              draggable={false}
-              style={{
-                userSelect: 'none',
-                WebkitUserSelect: 'none',
-                maxWidth: '100vw',
-                maxHeight: '100vh',
-                width: 'auto',
-                height: 'auto',
-                display: 'block',
-                margin: 'auto',
-              }}
-            />
+                  {/* 🔍 CONTROLES DE ZOOM - Canto inferior direito */}
+                  <div className="absolute bottom-6 right-6 z-[10000] flex flex-col gap-2">
+                    {/* Zoom In */}
+                    <button
+                      className="p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
+                      onClick={() => {
+                        zoomIn();
+                      }}
+                      title="Aumentar zoom (scroll up)"
+                      aria-label="Aumentar zoom"
+                    >
+                      <ZoomIn size={20} />
+                    </button>
+
+                    {/* Zoom Out */}
+                    <button
+                      className="p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
+                      onClick={() => {
+                        zoomOut();
+                      }}
+                      title="Diminuir zoom (scroll down)"
+                      aria-label="Diminuir zoom"
+                    >
+                      <ZoomOut size={20} />
+                    </button>
+
+                    {/* Reset Zoom */}
+                    <button
+                      className="p-3 bg-black/60 hover:bg-black/80 rounded-full text-white transition-all hover:scale-110 shadow-lg"
+                      onClick={() => {
+                        resetTransform();
+                      }}
+                      title="Resetar zoom (double-click)"
+                      aria-label="Resetar zoom"
+                    >
+                      <Maximize2 size={20} />
+                    </button>
+                  </div>
+
+                  {/* 📊 INDICADOR DE ZOOM - Canto inferior esquerdo */}
+                  {instance.transformState.scale !== 1 && (
+                    <div className="absolute bottom-6 left-6 z-[10000] px-4 py-2 bg-black/60 rounded-full text-white text-sm font-medium shadow-lg">
+                      {(instance.transformState.scale * 100).toFixed(0)}%
+                    </div>
+                  )}
+
+                  {/* 💡 DICA DE USO - Aparece brevemente */}
+                  {instance.transformState.scale === 1 && (
+                    <div className="absolute bottom-6 left-1/2 transform -translate-x-1/2 z-[10000] px-4 py-2 bg-black/60 rounded-full text-white text-xs opacity-70 animate-pulse">
+                      🖱️ Scroll para zoom • 🖐️ Arraste para mover • 👆 Double-click para resetar
+                    </div>
+                  )}
+
+                  {/* 🖼️ Imagem com Zoom/Pan */}
+                  <TransformComponent
+                    wrapperStyle={{
+                      width: '100vw',
+                      height: '100vh',
+                      cursor: instance.transformState.scale > 1 ? 'grab' : 'default',
+                    }}
+                    contentStyle={{
+                      width: '100%',
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <img
+                      src={fileUrl}
+                      alt={attachment.original_filename}
+                      className="object-contain select-none"
+                      onError={(e) => {
+                        console.error('❌ [AttachmentPreview] Erro ao carregar imagem no lightbox:', {
+                          fileUrl: fileUrl.substring(0, 100),
+                          filename: attachment.original_filename
+                        });
+                      }}
+                      draggable={false}
+                      style={{
+                        userSelect: 'none',
+                        WebkitUserSelect: 'none',
+                        maxWidth: '90vw',
+                        maxHeight: '90vh',
+                        width: 'auto',
+                        height: 'auto',
+                        display: 'block',
+                      }}
+                    />
+                  </TransformComponent>
+                </>
+              )}
+            </TransformWrapper>
           </div>,
           document.body
         )}
