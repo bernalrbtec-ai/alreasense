@@ -271,10 +271,13 @@ pending_messages = BillingContact.objects.filter(
 ```
 
 **Processamento:**
-1. Busca `BillingCycle` por `external_billing_id`
-2. Atualiza `BillingCycle.status = 'cancelled'` (ou 'paid')
-3. Cancela todos os `BillingContact` pendentes do ciclo
-4. Scheduler não processa mais mensagens deste ciclo
+1. Busca `BillingCycle` por `external_billing_id` e `tenant_id`
+2. Valida que ciclo existe e está ativo
+3. Atualiza `BillingCycle.status = reason` ('cancelled' ou 'paid')
+4. Atualiza `BillingCycle.cancelled_at = now()`
+5. Cancela apenas `BillingContact` com `status = 'pending'` (não mexe nas enviadas)
+6. Atualiza contadores (`sent_messages`, `failed_messages`)
+7. Scheduler não processa mais mensagens deste ciclo
 
 ---
 
@@ -288,18 +291,26 @@ CREATE TABLE billing_api_cycle (
     external_billing_id VARCHAR(255) NOT NULL,
     contact_phone VARCHAR(20) NOT NULL,
     contact_name VARCHAR(255),
+    contact_id UUID, -- FK para Contact (cadastrado automaticamente)
     billing_data JSONB,
     due_date DATE NOT NULL,
     status VARCHAR(20) NOT NULL, -- active, cancelled, paid, completed
     notify_before_due BOOLEAN DEFAULT false,
     notify_after_due BOOLEAN DEFAULT true,
+    total_messages INTEGER DEFAULT 0, -- Total de mensagens do ciclo (6 se ambos ativos)
+    sent_messages INTEGER DEFAULT 0,  -- Mensagens enviadas com sucesso
+    failed_messages INTEGER DEFAULT 0, -- Mensagens falhadas
     created_at TIMESTAMP,
     updated_at TIMESTAMP,
     cancelled_at TIMESTAMP,
+    completed_at TIMESTAMP, -- Quando ciclo foi completado
     
     UNIQUE(tenant_id, external_billing_id),
     INDEX idx_cycle_tenant_status (tenant_id, status),
-    INDEX idx_cycle_external_id (external_billing_id)
+    INDEX idx_cycle_external_id (external_billing_id),
+    INDEX idx_cycle_due_date (due_date),
+    INDEX idx_cycle_status_created (status, created_at),
+    FOREIGN KEY (contact_id) REFERENCES contacts_contact(id)
 );
 ```
 
@@ -307,12 +318,18 @@ CREATE TABLE billing_api_cycle (
 ```sql
 ALTER TABLE billing_api_contact
 ADD COLUMN billing_cycle_id UUID REFERENCES billing_api_cycle(id),
-ADD COLUMN cycle_message_type VARCHAR(20), -- upcoming_5d, upcoming_3d, etc
-ADD COLUMN scheduled_date DATE,
-ADD COLUMN billing_status VARCHAR(20) DEFAULT 'active'; -- active, cancelled, paid
+ADD COLUMN cycle_message_type VARCHAR(20), -- upcoming_5d, upcoming_3d, overdue_1d, etc
+ADD COLUMN cycle_index INTEGER, -- 1, 2, 3, 4, 5, 6 (posição no ciclo)
+ADD COLUMN scheduled_date DATE, -- Data agendada (já recalculada para dia útil)
+ADD COLUMN billing_status VARCHAR(20) DEFAULT 'active', -- active, cancelled, paid
+ADD COLUMN template_variation_index INTEGER, -- Índice da variação usada (para rotação)
+ADD COLUMN retry_count INTEGER DEFAULT 0, -- Contador de tentativas
+ADD COLUMN last_retry_at TIMESTAMP; -- Última tentativa de retry
 
 CREATE INDEX idx_contact_cycle (billing_cycle_id);
 CREATE INDEX idx_contact_scheduled (scheduled_date, status) WHERE status = 'pending';
+CREATE INDEX idx_contact_cycle_type (billing_cycle_id, cycle_message_type);
+CREATE INDEX idx_contact_scheduled_status_cycle (scheduled_date, status, billing_cycle_id) WHERE status = 'pending';
 ```
 
 ---
@@ -375,7 +392,11 @@ scheduled_date_3d = due_date + timedelta(days=3)  # 2025-01-18
 scheduled_date_5d = due_date + timedelta(days=5)  # 2025-01-20
 ```
 
-**⚠️ IMPORTANTE:** Para "vencidos", só criar mensagens se `due_date < hoje`. Se `due_date >= hoje`, não criar mensagens de "vencido" ainda.
+**⚠️ IMPORTANTE:** 
+- Para "vencidos", só criar mensagens se `due_date < hoje`. Se `due_date >= hoje`, não criar mensagens de "vencido" ainda.
+- **Regra de Antecipação/Postergação:**
+  - **Upcoming (A Vencer):** Se `scheduled_date` cair em fim de semana → **ANTECIPAR** para último dia útil ANTES
+  - **Overdue (Vencido):** Se `scheduled_date` cair em fim de semana → **POSTERGAR** para próximo dia útil DEPOIS
 
 ---
 
