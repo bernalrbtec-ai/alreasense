@@ -31,84 +31,44 @@ interface Stats {
 
 export default function BillingApiPage() {
   const { user } = useAuthStore()
-  const hasExecutedRef = useRef(false)
   const [stats, setStats] = useState<Stats>({
     total_campaigns: 0,
     total_sent: 0,
     total_failed: 0,
     active_queues: 0
   })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false) // ✅ INICIA COMO FALSE - sem loading inicial
 
+  // ✅ SOLUÇÃO SIMPLES: Busca stats apenas uma vez, sem dependências
   useEffect(() => {
-    // ✅ CRÍTICO: Previne múltiplas execuções - SEMPRE retorna se já executou
-    if (hasExecutedRef.current) {
-      return
-    }
-    
-    // Marca como executado IMEDIATAMENTE para prevenir qualquer re-execução
-    hasExecutedRef.current = true
-
-    let isMounted = true
-    let timeoutId: NodeJS.Timeout | null = null
-    let loadingFinished = false
-
-    const finishLoading = () => {
-      if (!loadingFinished && isMounted) {
-        loadingFinished = true
-        setLoading(false)
-        if (timeoutId) {
-          clearTimeout(timeoutId)
-        }
-      }
-    }
-
-    // Calcula isAdmin diretamente do user (evita problemas com hook)
-    const isAdmin = user?.is_admin || user?.role === 'admin' || user?.is_superuser
-
-    // Função para buscar stats
     const fetchStats = async () => {
+      // Calcula isAdmin diretamente do user
+      const isAdmin = user?.is_admin || user?.role === 'admin' || user?.is_superuser
+      
+      if (!isAdmin) {
+        // Se não for admin, não busca stats
+        return
+      }
+
       try {
-        console.log('🔍 [BILLING_API] Buscando stats (usuário é admin)...')
+        console.log('🔍 [BILLING_API] Buscando stats...')
         const response = await api.get('/billing/v1/billing/stats/')
         console.log('✅ [BILLING_API] Stats recebidos:', response.data)
         
-        if (!isMounted || loadingFinished) return
-        
-        // A resposta vem como { success: true, stats: {...} }
         if (response.data.success && response.data.stats) {
           setStats(response.data.stats)
         }
       } catch (error: any) {
         console.error('❌ [BILLING_API] Erro ao buscar stats:', error)
-        console.error('❌ [BILLING_API] Status:', error.response?.status)
         // Não faz nada, já tem valores padrão
-      } finally {
-        finishLoading()
       }
     }
 
-    // Timeout de segurança: sempre finaliza loading após 500ms (mais rápido)
-    timeoutId = setTimeout(() => {
-      console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
-      finishLoading()
-    }, 500)
-
-    // Verifica se é admin e busca stats
-    if (isAdmin === true) {
+    // Executa apenas se tiver user
+    if (user) {
       fetchStats()
-    } else {
-      // Se não for admin, finaliza loading imediatamente
-      finishLoading()
     }
-
-    return () => {
-      isMounted = false
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
-    }
-  }, []) // ✅ ARRAY VAZIO - executa APENAS UMA VEZ ao montar o componente
+  }, [user?.id]) // ✅ Apenas quando user.id mudar (login/logout)
 
   if (loading) {
     return (
