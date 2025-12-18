@@ -40,65 +40,58 @@ export default function BillingApiPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Timeout de segurança: se após 2 segundos ainda não soubermos se é admin, finaliza loading
-    const timeoutId = setTimeout(() => {
-      console.warn('⚠️ [BILLING_API] Timeout ao verificar permissões, finalizando loading...')
-      setLoading(false)
-    }, 2000)
+    let isMounted = true
+    let timeoutId: NodeJS.Timeout | null = null
 
-    // Só busca stats se o usuário for admin
+    // Função para buscar stats
+    const fetchStats = async () => {
+      try {
+        console.log('🔍 [BILLING_API] Buscando stats (usuário é admin)...')
+        const response = await api.get('/billing/v1/billing/stats/')
+        console.log('✅ [BILLING_API] Stats recebidos:', response.data)
+        
+        if (!isMounted) return
+        
+        // A resposta vem como { success: true, stats: {...} }
+        if (response.data.success && response.data.stats) {
+          setStats(response.data.stats)
+        }
+      } catch (error: any) {
+        console.error('❌ [BILLING_API] Erro ao buscar stats:', error)
+        console.error('❌ [BILLING_API] Status:', error.response?.status)
+        // Não faz nada, já tem valores padrão
+      } finally {
+        if (isMounted) {
+          setLoading(false)
+        }
+      }
+    }
+
+    // Timeout de segurança: sempre finaliza loading após 1 segundo
+    timeoutId = setTimeout(() => {
+      if (isMounted) {
+        console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
+        setLoading(false)
+      }
+    }, 1000)
+
+    // Verifica se é admin e busca stats
     if (isAdmin === true) {
-      clearTimeout(timeoutId)
       fetchStats()
     } else if (isAdmin === false) {
-      // Se não for admin, apenas finaliza o loading sem buscar stats
-      clearTimeout(timeoutId)
+      // Se não for admin, apenas finaliza o loading
+      if (timeoutId) clearTimeout(timeoutId)
       setLoading(false)
     }
     // Se isAdmin for undefined/null, aguarda timeout acima
 
     return () => {
-      clearTimeout(timeoutId)
-    }
-  }, [isAdmin])
-
-  const fetchStats = async () => {
-    try {
-      console.log('🔍 [BILLING_API] Buscando stats (usuário é admin)...')
-      const response = await api.get('/billing/v1/billing/stats/')
-      console.log('✅ [BILLING_API] Stats recebidos:', response.data)
-      
-      // A resposta vem como { success: true, stats: {...} }
-      if (response.data.success && response.data.stats) {
-        setStats(response.data.stats)
-      } else {
-        console.warn('⚠️ [BILLING_API] Resposta sem stats válidos:', response.data)
-        // Se não houver stats, usa valores padrão
-        setStats({
-          total_campaigns: 0,
-          total_sent: 0,
-          total_failed: 0,
-          active_queues: 0
-        })
+      isMounted = false
+      if (timeoutId) {
+        clearTimeout(timeoutId)
       }
-    } catch (error: any) {
-      console.error('❌ [BILLING_API] Erro ao buscar stats:', error)
-      console.error('❌ [BILLING_API] Status:', error.response?.status)
-      console.error('❌ [BILLING_API] Data:', error.response?.data)
-      console.error('❌ [BILLING_API] Message:', error.message)
-      
-      // Em caso de erro (403, 401, 500, etc), usa valores padrão para não bloquear a página
-      setStats({
-        total_campaigns: 0,
-        total_sent: 0,
-        total_failed: 0,
-        active_queues: 0
-      })
-    } finally {
-      console.log('✅ [BILLING_API] Finalizando loading...')
-      setLoading(false)
     }
-  }
+  }, []) // ✅ CRÍTICO: Array vazio = executa apenas uma vez ao montar
 
   if (loading) {
     return (
