@@ -20,7 +20,8 @@ import {
   Calendar,
   Lock,
   ChevronDown,
-  Zap
+  Zap,
+  Plug
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
@@ -52,11 +53,15 @@ const productMenuItems = {
   api_public: [
     { name: 'API Docs', href: '/api-docs', icon: Server, requiredProduct: 'api_public' },
   ],
+  integracao: [
+    { name: 'Integração', href: '/integracao', icon: Plug, requiredProduct: 'integracao' },
+  ],
 }
 
 const baseNavigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
   { name: 'Planos', href: '/billing', icon: CreditCard },
+  { name: 'Billing API', href: '/billing-api', icon: CreditCard },
   { name: 'Configurações', href: '/configurations', icon: Settings },
 ]
 

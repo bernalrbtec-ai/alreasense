@@ -57,10 +57,24 @@ class QuickReplyViewSet(viewsets.ModelViewSet):
         # ✅ OTIMIZAÇÃO: Usar select_related para evitar queries adicionais
         # ✅ SEGURANÇA: Verificar se usuário está autenticado antes de acessar tenant
         if not hasattr(self.request, 'user') or not self.request.user.is_authenticated:
+            logger.warning("⚠️ [QUICK REPLIES] Usuário não autenticado")
             return QuickReply.objects.none()
         
+        tenant = self.request.user.tenant
+        
+        # ✅ DEBUG: Verificar total de mensagens rápidas do tenant (antes do filtro is_active)
+        total_all = QuickReply.objects.filter(tenant=tenant).count()
+        total_active = QuickReply.objects.filter(tenant=tenant, is_active=True).count()
+        total_inactive = QuickReply.objects.filter(tenant=tenant, is_active=False).count()
+        
+        logger.info(f"🔍 [QUICK REPLIES] Tenant {tenant.name} (ID: {tenant.id}): Total={total_all}, Ativas={total_active}, Inativas={total_inactive}")
+        
+        # ✅ Se não há mensagens ativas mas há inativas, logar aviso
+        if total_active == 0 and total_inactive > 0:
+            logger.warning(f"⚠️ [QUICK REPLIES] Tenant {tenant.name} tem {total_inactive} mensagens rápidas INATIVAS que não serão retornadas!")
+        
         return QuickReply.objects.filter(
-            tenant=self.request.user.tenant,
+            tenant=tenant,
             is_active=True
         ).select_related('tenant', 'created_by').only(
             'id', 'title', 'content', 'category', 'use_count', 
@@ -97,12 +111,17 @@ class QuickReplyViewSet(viewsets.ModelViewSet):
         # ✅ OTIMIZAÇÃO: Usar apenas() para limitar campos buscados
         queryset = self.get_queryset()
         
+        # ✅ DEBUG: Log para diagnóstico
+        total_before_filters = queryset.count()
+        logger.info(f"🔍 [QUICK REPLIES] Total antes de filtros: {total_before_filters} (tenant: {tenant_id})")
+        
         # Aplicar filtros de busca manualmente (mais eficiente que filter_backends)
         if search:
             from django.db.models import Q
             queryset = queryset.filter(
                 Q(title__icontains=search) | Q(content__icontains=search)
             )
+            logger.debug(f"🔍 [QUICK REPLIES] Após busca '{search}': {queryset.count()}")
         
         # Aplicar ordenação
         if ordering:
@@ -112,6 +131,9 @@ class QuickReplyViewSet(viewsets.ModelViewSet):
         
         # ✅ OTIMIZAÇÃO: Usar list() para avaliar queryset uma vez
         queryset_list = list(queryset)
+        
+        # ✅ DEBUG: Log final
+        logger.info(f"📊 [QUICK REPLIES] Total retornado: {len(queryset_list)} (tenant: {tenant_id})")
         
         # Serializar dados
         serializer = self.get_serializer(queryset_list, many=True)

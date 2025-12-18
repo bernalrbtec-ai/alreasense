@@ -22,4 +22,6 @@ router.register(r'billing', TenantBillingViewSet, basename='tenant-billing')
 
 urlpatterns = [
     path('', include(router.urls)),
+    # Billing API (v1) - Endpoints públicos com autenticação via API Key
+    path('v1/billing/', include('apps.billing.billing_api.urls')),
 ]

@@ -34,6 +34,11 @@ const QuickRepliesPage = lazy(() => import('./pages/QuickRepliesPage'))
 // AgendaPage com retry para resolver problemas de carregamento em produção
 const AgendaPage = lazyLoadWithRetry(() => import('./pages/AgendaPage'), 3, 1000)
 const ChatPage = lazy(() => import('./modules/chat').then(module => ({ default: module.ChatPage })))
+// Billing API Pages
+const BillingApiPage = lazy(() => import('./pages/BillingApiPage'))
+const BillingApiKeysPage = lazy(() => import('./pages/BillingApiKeysPage'))
+const BillingApiCampaignsPage = lazy(() => import('./pages/BillingApiCampaignsPage'))
+const IntegracaoPage = lazy(() => import('./pages/IntegracaoPage'))
 
 // Components
 import Layout from './components/Layout'
@@ -239,6 +244,30 @@ function App() {
                     <NotificationsPage />
                   </Suspense>
                 </ProtectedRoute>
+              } />
+              
+              {/* Billing API Routes */}
+              <Route path="billing-api" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <BillingApiPage />
+                </Suspense>
+              } />
+              <Route path="billing-api/keys" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <BillingApiKeysPage />
+                </Suspense>
+              } />
+              <Route path="billing-api/campaigns" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <BillingApiCampaignsPage />
+                </Suspense>
+              } />
+              
+              {/* Integração Routes */}
+              <Route path="integracao" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <IntegracaoPage />
+                </Suspense>
               } />
               
               {/* Super Admin Routes */}
