@@ -66,6 +66,7 @@ class BillingTemplate(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_template'
         verbose_name = 'Template de Billing'
         verbose_name_plural = 'Templates de Billing'
@@ -137,6 +138,7 @@ class BillingTemplateVariation(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_template_variation'
         verbose_name = 'Variação de Template'
         verbose_name_plural = 'Variações de Template'

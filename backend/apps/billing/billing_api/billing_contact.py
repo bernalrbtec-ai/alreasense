@@ -26,7 +26,7 @@ class BillingContact(models.Model):
     
     # Relacionamento com BillingCampaign
     billing_campaign = models.ForeignKey(
-        'billing_api.BillingCampaign',
+        'billing.BillingCampaign',
         on_delete=models.CASCADE,
         related_name='billing_contacts',
         verbose_name='Campanha de Billing'
@@ -42,7 +42,7 @@ class BillingContact(models.Model):
     
     # Variação de template usada
     template_variation = models.ForeignKey(
-        'billing_api.BillingTemplateVariation',
+        'billing.BillingTemplateVariation',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
@@ -85,6 +85,7 @@ class BillingContact(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_contact'
         verbose_name = 'Contato de Billing'
         verbose_name_plural = 'Contatos de Billing'

@@ -76,6 +76,7 @@ class BillingAPIKey(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_key'
         verbose_name = 'API Key de Billing'
         verbose_name_plural = 'API Keys de Billing'

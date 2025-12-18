@@ -30,7 +30,7 @@ class BillingCampaign(models.Model):
     
     # Template usado
     template = models.ForeignKey(
-        'billing_api.BillingTemplate',
+        'billing.BillingTemplate',
         on_delete=models.PROTECT,
         related_name='campaigns',
         verbose_name='Template'
@@ -60,6 +60,7 @@ class BillingCampaign(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_campaign'
         verbose_name = 'Campanha de Billing'
         verbose_name_plural = 'Campanhas de Billing'

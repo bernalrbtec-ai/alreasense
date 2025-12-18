@@ -107,6 +107,7 @@ class BillingConfig(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_config'
         verbose_name = 'Configuração de Billing'
         verbose_name_plural = 'Configurações de Billing'

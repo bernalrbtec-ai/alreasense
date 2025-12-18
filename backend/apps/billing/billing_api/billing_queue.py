@@ -28,7 +28,7 @@ class BillingQueue(models.Model):
     
     # Relacionamento com BillingCampaign (OneToOne)
     billing_campaign = models.OneToOneField(
-        'billing_api.BillingCampaign',
+        'billing.BillingCampaign',
         on_delete=models.CASCADE,
         related_name='queue',
         verbose_name='Campanha de Billing'
@@ -96,6 +96,7 @@ class BillingQueue(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
+        app_label = 'billing'
         db_table = 'billing_api_queue'
         verbose_name = 'Fila de Billing'
         verbose_name_plural = 'Filas de Billing'
