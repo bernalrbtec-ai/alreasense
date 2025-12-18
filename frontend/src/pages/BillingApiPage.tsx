@@ -40,12 +40,25 @@ export default function BillingApiPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // Só busca stats se o usuário for admin
-    if (isAdmin) {
-      fetchStats()
-    } else {
-      // Se não for admin, apenas finaliza o loading sem buscar stats
+    // Timeout de segurança: se após 2 segundos ainda não soubermos se é admin, finaliza loading
+    const timeoutId = setTimeout(() => {
+      console.warn('⚠️ [BILLING_API] Timeout ao verificar permissões, finalizando loading...')
       setLoading(false)
+    }, 2000)
+
+    // Só busca stats se o usuário for admin
+    if (isAdmin === true) {
+      clearTimeout(timeoutId)
+      fetchStats()
+    } else if (isAdmin === false) {
+      // Se não for admin, apenas finaliza o loading sem buscar stats
+      clearTimeout(timeoutId)
+      setLoading(false)
+    }
+    // Se isAdmin for undefined/null, aguarda timeout acima
+
+    return () => {
+      clearTimeout(timeoutId)
     }
   }, [isAdmin])
 
