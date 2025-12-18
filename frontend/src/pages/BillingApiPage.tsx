@@ -20,6 +20,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
+import { usePermissions } from '../hooks/usePermissions'
 
 interface Stats {
   total_campaigns: number
@@ -29,6 +30,7 @@ interface Stats {
 }
 
 export default function BillingApiPage() {
+  const { isAdmin } = usePermissions()
   const [stats, setStats] = useState<Stats>({
     total_campaigns: 0,
     total_sent: 0,
@@ -38,16 +40,26 @@ export default function BillingApiPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetchStats()
-  }, [])
+    // Só busca stats se o usuário for admin
+    if (isAdmin) {
+      fetchStats()
+    } else {
+      // Se não for admin, apenas finaliza o loading sem buscar stats
+      setLoading(false)
+    }
+  }, [isAdmin])
 
   const fetchStats = async () => {
     try {
+      console.log('🔍 [BILLING_API] Buscando stats (usuário é admin)...')
       const response = await api.get('/billing/v1/billing/stats/')
+      console.log('✅ [BILLING_API] Stats recebidos:', response.data)
+      
       // A resposta vem como { success: true, stats: {...} }
       if (response.data.success && response.data.stats) {
         setStats(response.data.stats)
       } else {
+        console.warn('⚠️ [BILLING_API] Resposta sem stats válidos:', response.data)
         // Se não houver stats, usa valores padrão
         setStats({
           total_campaigns: 0,
@@ -57,8 +69,12 @@ export default function BillingApiPage() {
         })
       }
     } catch (error: any) {
-      console.error('Erro ao buscar stats:', error)
-      // Em caso de erro, usa valores padrão para não bloquear a página
+      console.error('❌ [BILLING_API] Erro ao buscar stats:', error)
+      console.error('❌ [BILLING_API] Status:', error.response?.status)
+      console.error('❌ [BILLING_API] Data:', error.response?.data)
+      console.error('❌ [BILLING_API] Message:', error.message)
+      
+      // Em caso de erro (403, 401, 500, etc), usa valores padrão para não bloquear a página
       setStats({
         total_campaigns: 0,
         total_sent: 0,
@@ -66,6 +82,7 @@ export default function BillingApiPage() {
         active_queues: 0
       })
     } finally {
+      console.log('✅ [BILLING_API] Finalizando loading...')
       setLoading(false)
     }
   }
