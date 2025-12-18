@@ -2,7 +2,7 @@
  * Página principal da Billing API
  * Dashboard com visão geral e acesso rápido às funcionalidades
  */
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Key, 
@@ -20,7 +20,7 @@ import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
-import { usePermissions } from '../hooks/usePermissions'
+import { useAuthStore } from '../stores/authStore'
 
 interface Stats {
   total_campaigns: number
@@ -30,7 +30,8 @@ interface Stats {
 }
 
 export default function BillingApiPage() {
-  const { isAdmin } = usePermissions()
+  const { user } = useAuthStore()
+  const hasExecutedRef = useRef(false)
   const [stats, setStats] = useState<Stats>({
     total_campaigns: 0,
     total_sent: 0,
@@ -40,19 +41,16 @@ export default function BillingApiPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    // ✅ CRÍTICO: Previne múltiplas execuções
+    if (hasExecutedRef.current) {
+      return
+    }
+
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
-    let hasFinished = false
 
-    const finishLoading = () => {
-      if (!hasFinished && isMounted) {
-        hasFinished = true
-        setLoading(false)
-        if (timeoutId) {
-          clearTimeout(timeoutId)
-        }
-      }
-    }
+    // Calcula isAdmin diretamente do user (evita problemas com hook)
+    const isAdmin = user?.is_admin || user?.role === 'admin' || user?.is_superuser
 
     // Função para buscar stats
     const fetchStats = async () => {
@@ -72,24 +70,36 @@ export default function BillingApiPage() {
         console.error('❌ [BILLING_API] Status:', error.response?.status)
         // Não faz nada, já tem valores padrão
       } finally {
-        finishLoading()
+        if (isMounted) {
+          hasExecutedRef.current = true
+          setLoading(false)
+          if (timeoutId) {
+            clearTimeout(timeoutId)
+          }
+        }
       }
     }
 
     // Timeout de segurança: sempre finaliza loading após 1 segundo
     timeoutId = setTimeout(() => {
-      console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
-      finishLoading()
+      if (isMounted && !hasExecutedRef.current) {
+        console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
+        hasExecutedRef.current = true
+        setLoading(false)
+      }
     }, 1000)
 
     // Verifica se é admin e busca stats
     if (isAdmin === true) {
       fetchStats()
-    } else if (isAdmin === false) {
-      // Se não for admin, apenas finaliza o loading
-      finishLoading()
+    } else {
+      // Se não for admin ou ainda não sabemos, apenas finaliza o loading
+      hasExecutedRef.current = true
+      setLoading(false)
+      if (timeoutId) {
+        clearTimeout(timeoutId)
+      }
     }
-    // Se isAdmin for undefined/null, aguarda timeout acima
 
     return () => {
       isMounted = false
@@ -97,7 +107,7 @@ export default function BillingApiPage() {
         clearTimeout(timeoutId)
       }
     }
-  }, [isAdmin]) // ✅ Executa quando isAdmin muda, mas com proteção contra loops
+  }, [user?.id, user?.is_admin, user?.role, user?.is_superuser]) // ✅ Dependências específicas do user
 
   if (loading) {
     return (
