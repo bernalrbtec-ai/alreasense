@@ -28,6 +28,66 @@ class BillingQueuePublisher:
     EXCHANGE_NAME = 'billing'
     
     @staticmethod
+    def publish_queue_sync(queue_id: str, template_type: str) -> bool:
+        """
+        Versão síncrona de publish_queue para uso em código síncrono.
+        
+        Args:
+            queue_id: ID da BillingQueue (UUID string)
+            template_type: Tipo de template ('overdue', 'upcoming', 'notification')
+        
+        Returns:
+            True se publicado com sucesso, False caso contrário
+        """
+        import asyncio
+        import threading
+        import queue as thread_queue
+        
+        result_queue = thread_queue.Queue()
+        
+        def run_async():
+            """Executa função assíncrona em novo event loop"""
+            try:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    result = new_loop.run_until_complete(
+                        BillingQueuePublisher.publish_queue(queue_id, template_type)
+                    )
+                    result_queue.put(('success', result))
+                finally:
+                    new_loop.close()
+            except Exception as e:
+                result_queue.put(('error', e))
+        
+        # Verifica se já há um event loop rodando
+        try:
+            loop = asyncio.get_running_loop()
+            # Se há loop rodando, executa em thread separada
+            thread = threading.Thread(target=run_async, daemon=True)
+            thread.start()
+            thread.join(timeout=5)  # Timeout de 5 segundos
+            
+            if not result_queue.empty():
+                status, result = result_queue.get()
+                if status == 'error':
+                    logger.error(f"Erro ao publicar queue: {result}", exc_info=True)
+                    return False
+                return result
+            else:
+                logger.warning("Timeout ao publicar no RabbitMQ (será processado depois)")
+                return False
+        except RuntimeError:
+            # Não há loop rodando, pode usar asyncio.run() normalmente
+            try:
+                return asyncio.run(
+                    BillingQueuePublisher.publish_queue(queue_id, template_type)
+                )
+            except Exception as e:
+                logger.error(f"Erro ao publicar queue: {e}", exc_info=True)
+                return False
+    
+    @staticmethod
     async def publish_queue(queue_id: str, template_type: str) -> bool:
         """
         Publica uma queue de billing no RabbitMQ para processamento.

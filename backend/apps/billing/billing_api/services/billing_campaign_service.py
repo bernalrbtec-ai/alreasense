@@ -100,17 +100,17 @@ class BillingCampaignService:
             # 7. Publica no RabbitMQ para processamento assíncrono
             try:
                 from apps.billing.billing_api.rabbitmq.billing_publisher import BillingQueuePublisher
-                import asyncio
                 
-                # Publica a queue no RabbitMQ
-                asyncio.run(
-                    BillingQueuePublisher.publish_queue(
-                        str(queue.id),
-                        template_type
-                    )
+                # ✅ CORREÇÃO: Usa método síncrono wrapper que lida com event loops
+                success = BillingQueuePublisher.publish_queue_sync(
+                    str(queue.id),
+                    template_type
                 )
                 
-                logger.info(f"📤 Queue {queue.id} publicada no RabbitMQ para processamento")
+                if success:
+                    logger.info(f"📤 Queue {queue.id} publicada no RabbitMQ para processamento")
+                else:
+                    logger.warning(f"⚠️ Falha ao publicar queue {queue.id} no RabbitMQ (será processada depois)")
                 
             except Exception as e:
                 logger.error(
@@ -137,16 +137,43 @@ class BillingCampaignService:
         contacts_data: List[Dict],
         external_id: Optional[str]
     ) -> Tuple[bool, str]:
-        """Validações gerais"""
+        """
+        Validações gerais da requisição
         
-        # Verifica template_type
+        Returns:
+            (is_valid, error_message)
+        """
+        # Valida template_type
         valid_types = ['overdue', 'upcoming', 'notification']
         if template_type not in valid_types:
-            return False, f"template_type inválido. Use: {', '.join(valid_types)}"
+            return False, f"template_type inválido: {template_type}. Use: {', '.join(valid_types)}"
         
-        # Verifica contatos
-        if not contacts_data or len(contacts_data) == 0:
-            return False, "Lista de contatos vazia"
+        # Valida contacts_data
+        if not contacts_data or not isinstance(contacts_data, list):
+            return False, "contacts deve ser uma lista não vazia"
+        
+        if len(contacts_data) == 0:
+            return False, "contacts não pode estar vazio"
+        
+        # ✅ VALIDAÇÃO: Limite máximo de contatos por campanha
+        MAX_CONTACTS_PER_CAMPAIGN = getattr(self.config, 'max_batch_size', 10000) if self.config else 10000
+        if len(contacts_data) > MAX_CONTACTS_PER_CAMPAIGN:
+            return False, f"Máximo de {MAX_CONTACTS_PER_CAMPAIGN} contatos por campanha. Recebido: {len(contacts_data)}"
+        
+        # Valida cada contato
+        for idx, contact in enumerate(contacts_data):
+            if not isinstance(contact, dict):
+                return False, f"Contato {idx} deve ser um objeto/dict"
+            
+            # Valida telefone
+            phone = contact.get('telefone') or contact.get('phone')
+            if not phone:
+                return False, f"Contato {idx} deve ter 'telefone' ou 'phone'"
+            
+            # Valida nome (opcional mas recomendado)
+            nome = contact.get('nome') or contact.get('name')
+            if not nome:
+                logger.warning(f"Contato {idx} sem nome, usando 'Cliente' como padrão")
         
         # Verifica external_id duplicado (se fornecido)
         if external_id:
@@ -256,6 +283,15 @@ class BillingCampaignService:
                     variables,
                     strict=False
                 )
+                
+                # ✅ VALIDAÇÃO: Verifica tamanho máximo da mensagem (4096 caracteres WhatsApp)
+                MAX_MESSAGE_LENGTH = 4096
+                if len(rendered_message) > MAX_MESSAGE_LENGTH:
+                    logger.warning(
+                        f"Mensagem renderizada muito longa ({len(rendered_message)} chars) "
+                        f"para contato {idx}. Truncando para {MAX_MESSAGE_LENGTH} caracteres."
+                    )
+                    rendered_message = rendered_message[:MAX_MESSAGE_LENGTH]
                 
                 # Cria CampaignContact (reutiliza)
                 campaign_contact = CampaignContact(
