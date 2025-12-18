@@ -42,6 +42,17 @@ export default function BillingApiPage() {
   useEffect(() => {
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
+    let hasFinished = false
+
+    const finishLoading = () => {
+      if (!hasFinished && isMounted) {
+        hasFinished = true
+        setLoading(false)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+      }
+    }
 
     // Função para buscar stats
     const fetchStats = async () => {
@@ -61,18 +72,14 @@ export default function BillingApiPage() {
         console.error('❌ [BILLING_API] Status:', error.response?.status)
         // Não faz nada, já tem valores padrão
       } finally {
-        if (isMounted) {
-          setLoading(false)
-        }
+        finishLoading()
       }
     }
 
     // Timeout de segurança: sempre finaliza loading após 1 segundo
     timeoutId = setTimeout(() => {
-      if (isMounted) {
-        console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
-        setLoading(false)
-      }
+      console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
+      finishLoading()
     }, 1000)
 
     // Verifica se é admin e busca stats
@@ -80,8 +87,7 @@ export default function BillingApiPage() {
       fetchStats()
     } else if (isAdmin === false) {
       // Se não for admin, apenas finaliza o loading
-      if (timeoutId) clearTimeout(timeoutId)
-      setLoading(false)
+      finishLoading()
     }
     // Se isAdmin for undefined/null, aguarda timeout acima
 
@@ -91,7 +97,7 @@ export default function BillingApiPage() {
         clearTimeout(timeoutId)
       }
     }
-  }, []) // ✅ CRÍTICO: Array vazio = executa apenas uma vez ao montar
+  }, [isAdmin]) // ✅ Executa quando isAdmin muda, mas com proteção contra loops
 
   if (loading) {
     return (
