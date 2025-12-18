@@ -2,7 +2,7 @@
  * Página principal da Billing API
  * Dashboard com visão geral e acesso rápido às funcionalidades
  */
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Key, 
@@ -18,7 +18,6 @@ import {
 } from 'lucide-react'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 
@@ -37,8 +36,6 @@ export default function BillingApiPage() {
     total_failed: 0,
     active_queues: 0
   })
-  const [loading, setLoading] = useState(false) // ✅ INICIA COMO FALSE - sem loading inicial
-
   // ✅ SOLUÇÃO SIMPLES: Busca stats apenas uma vez, sem dependências
   useEffect(() => {
     const fetchStats = async () => {
@@ -69,14 +66,6 @@ export default function BillingApiPage() {
       fetchStats()
     }
   }, [user?.id]) // ✅ Apenas quando user.id mudar (login/logout)
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <LoadingSpinner size="lg" />
-      </div>
-    )
-  }
 
   return (
     <div className="space-y-6">
