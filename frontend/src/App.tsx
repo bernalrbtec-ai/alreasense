@@ -37,6 +37,7 @@ const ChatPage = lazy(() => import('./modules/chat').then(module => ({ default: 
 // Billing API Pages
 const BillingApiPage = lazy(() => import('./pages/BillingApiPage'))
 const BillingApiKeysPage = lazy(() => import('./pages/BillingApiKeysPage'))
+const BillingApiTemplatesPage = lazy(() => import('./pages/BillingApiTemplatesPage'))
 const BillingApiCampaignsPage = lazy(() => import('./pages/BillingApiCampaignsPage'))
 const IntegracaoPage = lazy(() => import('./pages/IntegracaoPage'))
 
@@ -255,6 +256,11 @@ function App() {
               <Route path="billing-api/keys" element={
                 <Suspense fallback={<LoadingSpinner size="lg" />}>
                   <BillingApiKeysPage />
+                </Suspense>
+              } />
+              <Route path="billing-api/templates" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <BillingApiTemplatesPage />
                 </Suspense>
               } />
               <Route path="billing-api/campaigns" element={

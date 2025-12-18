@@ -29,14 +29,11 @@ export default function BillingApiKeysPage() {
   const fetchKeys = async () => {
     try {
       setLoading(true)
-      // TODO: Criar endpoint admin para listar API Keys
-      // const data = await billingApiService.getAPIKeys()
-      // setKeys(data)
-      
-      // Por enquanto, mock
-      setKeys([])
+      const data = await billingApiService.getAPIKeys()
+      setKeys(data)
     } catch (error: any) {
       showErrorToast('Erro ao buscar API Keys', error.response?.data?.message || error.message)
+      setKeys([])
     } finally {
       setLoading(false)
     }
