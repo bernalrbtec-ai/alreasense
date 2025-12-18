@@ -13,8 +13,21 @@ import logging
 from apps.billing.billing_api.authentication import BillingAPIKeyAuthentication
 from apps.billing.billing_api.throttling import BillingAPIRateThrottle
 from apps.billing.billing_api.serializers import (
-   ?    SendBillingRequestSerializer,
-      authentication_classes = [BillingAPIKeyAuthentication]
+    SendBillingRequestSerializer,
+)
+from apps.billing.billing_api.services.billing_campaign_service import BillingCampaignService
+
+logger = logging.getLogger(__name__)
+
+
+class SendOverdueView(APIView):
+    """
+    Endpoint 1: Envia cobrança atrasada
+    
+    POST /api/v1/billing/send/overdue
+    """
+    
+    authentication_classes = [BillingAPIKeyAuthentication]
     throttle_classes = [BillingAPIRateThrottle]
     permission_classes = [AllowAny]  # Autenticação via API Key
     
