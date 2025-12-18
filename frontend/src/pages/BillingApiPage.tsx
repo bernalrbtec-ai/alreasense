@@ -41,13 +41,27 @@ export default function BillingApiPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    // ✅ CRÍTICO: Previne múltiplas execuções
+    // ✅ CRÍTICO: Previne múltiplas execuções - SEMPRE retorna se já executou
     if (hasExecutedRef.current) {
       return
     }
+    
+    // Marca como executado IMEDIATAMENTE para prevenir qualquer re-execução
+    hasExecutedRef.current = true
 
     let isMounted = true
     let timeoutId: NodeJS.Timeout | null = null
+    let loadingFinished = false
+
+    const finishLoading = () => {
+      if (!loadingFinished && isMounted) {
+        loadingFinished = true
+        setLoading(false)
+        if (timeoutId) {
+          clearTimeout(timeoutId)
+        }
+      }
+    }
 
     // Calcula isAdmin diretamente do user (evita problemas com hook)
     const isAdmin = user?.is_admin || user?.role === 'admin' || user?.is_superuser
@@ -59,7 +73,7 @@ export default function BillingApiPage() {
         const response = await api.get('/billing/v1/billing/stats/')
         console.log('✅ [BILLING_API] Stats recebidos:', response.data)
         
-        if (!isMounted) return
+        if (!isMounted || loadingFinished) return
         
         // A resposta vem como { success: true, stats: {...} }
         if (response.data.success && response.data.stats) {
@@ -70,35 +84,22 @@ export default function BillingApiPage() {
         console.error('❌ [BILLING_API] Status:', error.response?.status)
         // Não faz nada, já tem valores padrão
       } finally {
-        if (isMounted) {
-          hasExecutedRef.current = true
-          setLoading(false)
-          if (timeoutId) {
-            clearTimeout(timeoutId)
-          }
-        }
+        finishLoading()
       }
     }
 
-    // Timeout de segurança: sempre finaliza loading após 1 segundo
+    // Timeout de segurança: sempre finaliza loading após 500ms (mais rápido)
     timeoutId = setTimeout(() => {
-      if (isMounted && !hasExecutedRef.current) {
-        console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
-        hasExecutedRef.current = true
-        setLoading(false)
-      }
-    }, 1000)
+      console.log('⏰ [BILLING_API] Timeout de segurança - finalizando loading')
+      finishLoading()
+    }, 500)
 
     // Verifica se é admin e busca stats
     if (isAdmin === true) {
       fetchStats()
     } else {
-      // Se não for admin ou ainda não sabemos, apenas finaliza o loading
-      hasExecutedRef.current = true
-      setLoading(false)
-      if (timeoutId) {
-        clearTimeout(timeoutId)
-      }
+      // Se não for admin, finaliza loading imediatamente
+      finishLoading()
     }
 
     return () => {
@@ -107,7 +108,7 @@ export default function BillingApiPage() {
         clearTimeout(timeoutId)
       }
     }
-  }, [user?.id, user?.is_admin, user?.role, user?.is_superuser]) // ✅ Dependências específicas do user
+  }, []) // ✅ ARRAY VAZIO - executa APENAS UMA VEZ ao montar o componente
 
   if (loading) {
     return (
