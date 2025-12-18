@@ -32,10 +32,11 @@ export default function BillingApiTemplatesPage() {
   const fetchTemplates = async () => {
     try {
       setLoading(true)
-      const data = await billingApiService.getTemplates()
+      const data = await billingApiService.getTemplates(user?.tenant_id)
       setTemplates(data)
     } catch (error: any) {
       showErrorToast('Erro ao buscar Templates', error.response?.data?.message || error.message)
+      setTemplates([])
     } finally {
       setLoading(false)
     }

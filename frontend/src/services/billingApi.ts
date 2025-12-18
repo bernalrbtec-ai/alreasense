@@ -211,8 +211,9 @@ const billingApiService = {
   /**
    * Lista Templates (admin)
    */
-  getTemplates: async (): Promise<BillingTemplate[]> => {
-    const response = await api.get('/billing/v1/billing/templates/')
+  getTemplates: async (tenantId?: string): Promise<BillingTemplate[]> => {
+    const params = tenantId ? { tenant_id: tenantId } : {}
+    const response = await api.get('/billing/v1/billing/templates/', { params })
     return response.data.results || response.data
   },
 
