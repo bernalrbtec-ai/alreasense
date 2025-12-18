@@ -5,7 +5,8 @@ Endpoints para gerenciar API Keys, Templates e Campanhas (admin only)
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated, IsAdminUser
+from rest_framework.permissions import IsAuthenticated
+from apps.common.permissions import IsAdminUser, IsTenantMember
 from django.shortcuts import get_object_or_404
 from django.db.models import Count, Q
 from django.utils import timezone
@@ -156,20 +157,28 @@ class BillingAPIKeyDeleteView(APIView):
 
 class BillingTemplatesListView(APIView):
     """
-    Lista todos os Templates (admin)
+    Lista Templates (admin vê todos, tenant vê apenas os seus)
     GET /api/billing/v1/billing/templates/
     """
     
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsTenantMember]
     
     def get(self, request):
-        """Lista todos os Templates"""
+        """Lista Templates"""
         try:
             tenant_id = request.query_params.get('tenant_id')
             template_type = request.query_params.get('template_type')
             
-            queryset = BillingTemplate.objects.select_related('tenant').prefetch_related('variations').all()
+            # Admins veem todos, usuários comuns veem apenas do seu tenant
+            if request.user.is_admin or request.user.is_superuser or request.user.is_staff:
+                queryset = BillingTemplate.objects.select_related('tenant').prefetch_related('variations').all()
+            else:
+                # Usuário comum: apenas templates do seu tenant
+                queryset = BillingTemplate.objects.select_related('tenant').prefetch_related('variations').filter(
+                    tenant=request.user.tenant
+                )
             
+            # Filtro opcional por tenant_id (admin pode usar)
             if tenant_id:
                 queryset = queryset.filter(tenant_id=tenant_id)
             
@@ -200,26 +209,30 @@ class BillingTemplatesListView(APIView):
 
 class BillingTemplateCreateView(APIView):
     """
-    Cria novo Template (admin)
+    Cria novo Template (admin ou usuário do tenant)
     POST /api/billing/v1/billing/templates/
     """
     
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsTenantMember]
     
     def post(self, request):
         """Cria novo Template"""
         try:
-            tenant_id = request.data.get('tenant_id')
-            if not tenant_id:
-                return Response(
-                    {
-                        'success': False,
-                        'message': 'tenant_id é obrigatório'
-                    },
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            tenant = get_object_or_404(Tenant, id=tenant_id)
+            # Admin pode especificar tenant_id, usuário comum usa o próprio tenant
+            if request.user.is_admin or request.user.is_superuser or request.user.is_staff:
+                tenant_id = request.data.get('tenant_id')
+                if not tenant_id:
+                    return Response(
+                        {
+                            'success': False,
+                            'message': 'tenant_id é obrigatório para admins'
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                tenant = get_object_or_404(Tenant, id=tenant_id)
+            else:
+                # Usuário comum: usa o tenant dele
+                tenant = request.user.tenant
             
             template = BillingTemplate.objects.create(
                 tenant=tenant,
@@ -262,16 +275,27 @@ class BillingTemplateCreateView(APIView):
 
 class BillingTemplateUpdateView(APIView):
     """
-    Atualiza Template (admin)
+    Atualiza Template (admin ou dono do tenant)
     PATCH /api/billing/v1/billing/templates/{template_id}/
     """
     
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsTenantMember]
     
     def patch(self, request, template_id):
         """Atualiza Template"""
         try:
             template = get_object_or_404(BillingTemplate, id=template_id)
+            
+            # Verifica se usuário tem permissão (admin ou dono do tenant)
+            if not (request.user.is_admin or request.user.is_superuser or request.user.is_staff):
+                if template.tenant != request.user.tenant:
+                    return Response(
+                        {
+                            'success': False,
+                            'message': 'Você não tem permissão para editar este template'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
             
             # Atualiza campos permitidos
             allowed_fields = [
@@ -311,16 +335,27 @@ class BillingTemplateUpdateView(APIView):
 
 class BillingTemplateDeleteView(APIView):
     """
-    Deleta Template (admin)
+    Deleta Template (admin ou dono do tenant)
     DELETE /api/billing/v1/billing/templates/{template_id}/
     """
     
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsTenantMember]
     
     def delete(self, request, template_id):
         """Deleta Template"""
         try:
             template = get_object_or_404(BillingTemplate, id=template_id)
+            
+            # Verifica se usuário tem permissão (admin ou dono do tenant)
+            if not (request.user.is_admin or request.user.is_superuser or request.user.is_staff):
+                if template.tenant != request.user.tenant:
+                    return Response(
+                        {
+                            'success': False,
+                            'message': 'Você não tem permissão para deletar este template'
+                        },
+                        status=status.HTTP_403_FORBIDDEN
+                    )
             template.delete()
             
             logger.info(f"✅ [BILLING_ADMIN] Template deletado: {template_id}")
@@ -415,20 +450,25 @@ class BillingCampaignsListView(APIView):
 
 class BillingStatsView(APIView):
     """
-    Estatísticas gerais (admin)
+    Estatísticas gerais (admin vê todos, tenant vê apenas as suas)
     GET /api/billing/v1/billing/stats/
     """
     
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsTenantMember]
     
     def get(self, request):
         """Retorna estatísticas gerais"""
         try:
-            tenant_id = request.query_params.get('tenant_id')
-            
-            queryset = BillingCampaign.objects.all()
-            if tenant_id:
-                queryset = queryset.filter(tenant_id=tenant_id)
+            # Admins podem ver todos ou filtrar por tenant_id
+            # Usuários comuns veem apenas do seu tenant
+            if request.user.is_admin or request.user.is_superuser or request.user.is_staff:
+                tenant_id = request.query_params.get('tenant_id')
+                queryset = BillingCampaign.objects.all()
+                if tenant_id:
+                    queryset = queryset.filter(tenant_id=tenant_id)
+            else:
+                # Usuário comum: apenas campanhas do seu tenant
+                queryset = BillingCampaign.objects.filter(tenant=request.user.tenant)
             
             # Total de campanhas
             total_campaigns = queryset.count()
