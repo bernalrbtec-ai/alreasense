@@ -2,7 +2,7 @@
  * Página principal da Billing API
  * Dashboard com visão geral e acesso rápido às funcionalidades
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { 
   Key, 
@@ -29,24 +29,46 @@ interface Stats {
 }
 
 export default function BillingApiPage() {
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<Stats>({
+    total_campaigns: 0,
+    total_sent: 0,
+    total_failed: 0,
+    active_queues: 0
+  })
   const [loading, setLoading] = useState(true)
 
-  // TODO: Buscar stats da API quando endpoint estiver disponível
-  // useEffect(() => {
-  //   fetchStats()
-  // }, [])
+  useEffect(() => {
+    fetchStats()
+  }, [])
 
-  // const fetchStats = async () => {
-  //   try {
-  //     const response = await api.get('/billing/v1/billing/stats/')
-  //     setStats(response.data)
-  //   } catch (error) {
-  //     console.error('Erro ao buscar stats:', error)
-  //   } finally {
-  //     setLoading(false)
-  //   }
-  // }
+  const fetchStats = async () => {
+    try {
+      const response = await api.get('/billing/v1/billing/stats/')
+      // A resposta vem como { success: true, stats: {...} }
+      if (response.data.success && response.data.stats) {
+        setStats(response.data.stats)
+      } else {
+        // Se não houver stats, usa valores padrão
+        setStats({
+          total_campaigns: 0,
+          total_sent: 0,
+          total_failed: 0,
+          active_queues: 0
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar stats:', error)
+      // Em caso de erro, usa valores padrão para não bloquear a página
+      setStats({
+        total_campaigns: 0,
+        total_sent: 0,
+        total_failed: 0,
+        active_queues: 0
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -69,8 +91,7 @@ export default function BillingApiPage() {
       </div>
 
       {/* Stats Cards */}
-      {stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <Card>
             <div className="p-4">
               <div className="flex items-center justify-between">
