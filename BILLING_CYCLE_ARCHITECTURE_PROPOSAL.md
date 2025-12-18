@@ -231,12 +231,34 @@ BillingContact (modificado)
 
 **Processamento:**
 1. Para cada cobrança:
-   - Cria `BillingCycle` com `status = 'active'`
+   - **Cadastra destinatário automaticamente:**
+     - Normaliza telefone com `normalize_phone`
+     - Verifica se `Contact` existe (por telefone normalizado)
+     - Se não existir, cria `Contact` com nome e telefone
+     - Associa ao tenant
+     - Garante TAG "COBRANÇA" (cria se não existir)
+     - Se contato já existe, atualiza nome se mudou
+   
+   - Cria `BillingCycle` com `status = 'active'` e `contact_id`
+   
    - Se `notify_before_due = true`:
-     - Cria 3 `BillingContact` com `scheduled_date` = 5 dias antes, 3 dias antes, 1 dia antes
+     - Calcula 3 datas: 5 dias antes, 3 dias antes, 1 dia antes
+     - **RECALCULA cada data** para último dia útil ANTES (se cair em fim de semana)
+     - Cria 3 `BillingContact` com `scheduled_date` calculado
+     - Define `cycle_message_type`: `upcoming_5d`, `upcoming_3d`, `upcoming_1d`
+     - Define `cycle_index`: 1, 2, 3
+   
    - Se `notify_after_due = true`:
-     - Cria 3 `BillingContact` com `scheduled_date` = 1 dia depois, 3 dias depois, 5 dias depois
+     - Só cria se `due_date < hoje` (já venceu)
+     - Calcula 3 datas: 1 dia depois, 3 dias depois, 5 dias depois
+     - **RECALCULA cada data** para próximo dia útil DEPOIS (se cair em fim de semana)
+     - Cria 3 `BillingContact` com `scheduled_date` calculado
+     - Define `cycle_message_type`: `overdue_1d`, `overdue_3d`, `overdue_5d`
+     - Define `cycle_index`: 4, 5, 6
+   
    - Todos os `BillingContact` ficam com `status = 'pending'` e `scheduled_date` futuro
+   - Rotaciona variações de template usando `cycle_index` (round-robin)
+   - Atualiza `BillingCycle.total_messages` com total criado
 
 ### **2. Scheduler Diário (Cron Job)**
 
@@ -244,18 +266,52 @@ BillingContact (modificado)
 
 **Processo:**
 ```python
-# Busca mensagens agendadas para hoje
+# Busca mensagens agendadas para hoje (inclui atrasadas)
 today = timezone.now().date()
 pending_messages = BillingContact.objects.filter(
-    scheduled_date=today,
+    scheduled_date__lte=today,  # <= hoje (inclui atrasadas)
     status='pending',
     billing_cycle__status='active'  # Só ciclos ativos
-)
+).select_related('billing_cycle', 'template_variation').order_by('scheduled_date', 'cycle_index')
 
 # Para cada mensagem:
-# 1. Cria BillingCampaign
-# 2. Envia mensagem
-# 3. Atualiza BillingContact.status = 'sent'
+for message in pending_messages:
+    # 1. Verifica horário comercial
+    is_open, next_open = BusinessHoursService.is_business_hours(message.billing_cycle.tenant, None)
+    if not is_open:
+        logger.info(f"⏰ Fora do horário comercial. Próximo: {next_open}")
+        continue
+    
+    # 2. Seleciona template (genérico ou específico por dia)
+    template = select_template_for_message(
+        tenant=message.billing_cycle.tenant,
+        cycle_message_type=message.cycle_message_type,
+        template_type='upcoming' if 'upcoming' in message.cycle_message_type else 'overdue'
+    )
+    
+    # 3. Seleciona variação (rotaciona usando cycle_index)
+    variation = select_template_variation(template, message.cycle_index)
+    message.template_variation_index = variation.order
+    message.save(update_fields=['template_variation_index'])
+    
+    # 4. Cria BillingCampaign
+    campaign = create_campaign_from_cycle_message(message, variation)
+    
+    # 5. Envia mensagem via RabbitMQ
+    publish_to_rabbitmq(campaign)
+    
+    # 6. Atualiza BillingContact.status = 'sending'
+    message.status = 'sending'
+    message.save(update_fields=['status', 'updated_at'])
+    
+    # 7. Após envio bem-sucedido, atualiza para 'sent'
+    # (isso acontece no consumer)
+
+# 8. Verifica ciclos completados
+check_completed_cycles()
+
+# 9. Processa retry de mensagens falhadas
+process_failed_messages_retry()
 ```
 
 ### **3. Cancelamento de Ciclo**
