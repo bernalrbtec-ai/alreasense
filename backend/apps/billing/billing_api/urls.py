@@ -25,6 +25,12 @@ urlpatterns = [
     # Endpoint 5: Lista contatos de uma campanha
     path('campaign/<uuid:campaign_id>/contacts', views.CampaignContactsView.as_view(), name='campaign-contacts'),
     
+    # Endpoint 6: Envio em lote com ciclo de mensagens
+    path('send/batch', views.SendBatchView.as_view(), name='send-batch'),
+    
+    # Endpoint 7: Cancelar ciclo (pagamento ou cancelamento)
+    path('cancel', views.CancelCycleView.as_view(), name='cancel-cycle'),
+    
     # ========== ENDPOINTS ADMIN ==========
     
     # API Keys (admin)

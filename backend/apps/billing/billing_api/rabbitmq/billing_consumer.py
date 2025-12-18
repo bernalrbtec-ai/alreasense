@@ -448,7 +448,15 @@ class BillingQueueConsumer:
             # Usa EvolutionAPIService (síncrono, executa em executor)
             from asgiref.sync import sync_to_async
             
-            phone = billing_contact.campaign_contact.contact.phone
+            # Para mensagens de ciclo, pode não ter campaign_contact
+            if billing_contact.campaign_contact and billing_contact.campaign_contact.contact:
+                phone = billing_contact.campaign_contact.contact.phone
+            elif billing_contact.billing_cycle:
+                phone = billing_contact.billing_cycle.contact_phone
+            else:
+                logger.error(f"BillingContact {billing_contact.id} sem contato (nem campaign_contact nem billing_cycle)")
+                return False
+            
             message_text = billing_contact.rendered_message
             
             # Executa send_text_message em executor (é síncrono)
@@ -472,13 +480,16 @@ class BillingQueueConsumer:
                     billing_contact.sent_at = timezone.now()
                     billing_contact.save(update_fields=['status', 'sent_at'])
                     
-                    campaign_contact = billing_contact.campaign_contact
-                    campaign_contact.status = 'sent'
-                    campaign_contact.sent_at = timezone.now()
-                    message_id = response.get('key', {}).get('id') or response.get('id')
-                    if message_id:
-                        campaign_contact.whatsapp_message_id = message_id
-                    campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
+                    # Atualiza CampaignContact se existir (mensagens de campanha)
+                    # Mensagens de ciclo não têm CampaignContact
+                    campaign_contact = billing_contact.campaign_contact if billing_contact.campaign_contact else None
+                    if campaign_contact:
+                        campaign_contact.status = 'sent'
+                        campaign_contact.sent_at = timezone.now()
+                        message_id = response.get('key', {}).get('id') or response.get('id')
+                        if message_id:
+                            campaign_contact.whatsapp_message_id = message_id
+                        campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
                 
                 await update_success()
                 
@@ -499,9 +510,12 @@ class BillingQueueConsumer:
                     }
                     billing_contact.save(update_fields=['status', 'billing_data'])
                     
-                    campaign_contact = billing_contact.campaign_contact
-                    campaign_contact.status = 'failed'
-                    campaign_contact.save(update_fields=['status'])
+                    # Atualiza CampaignContact se existir (mensagens de campanha)
+                    # Mensagens de ciclo não têm CampaignContact
+                    campaign_contact = billing_contact.campaign_contact if billing_contact.campaign_contact else None
+                    if campaign_contact:
+                        campaign_contact.status = 'failed'
+                        campaign_contact.save(update_fields=['status'])
                 
                 await update_failure()
                 

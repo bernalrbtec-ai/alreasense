@@ -47,12 +47,24 @@ class BillingSendService:
                 return False, None, f"Status inválido: {billing_contact.status}"
             
             # 2. Busca telefone do contato
-            campaign_contact = billing_contact.campaign_contact
-            contact = campaign_contact.contact
-            phone = contact.phone
+            # Para mensagens de ciclo, pode não ter campaign_contact
+            contact = None
+            if billing_contact.campaign_contact and billing_contact.campaign_contact.contact:
+                contact = billing_contact.campaign_contact.contact
+                phone = contact.phone
+            elif billing_contact.billing_cycle and billing_contact.billing_cycle.contact:
+                contact = billing_contact.billing_cycle.contact
+                phone = contact.phone
+            elif billing_contact.billing_cycle:
+                phone = billing_contact.billing_cycle.contact_phone
+                # Mensagem de ciclo sem contato linkado (não ideal, mas funciona)
+                contact = None
+            else:
+                logger.error(f"BillingContact {billing_contact.id} sem contato válido")
+                return False, None, "BillingContact sem contato válido"
             
             if not phone:
-                logger.error(f"Contato {contact.id} sem telefone")
+                logger.error(f"Telefone vazio para BillingContact {billing_contact.id}")
                 return False, None, "Contato sem telefone"
             
             # 3. Envia via EvolutionAPIService (síncrono)
@@ -87,11 +99,17 @@ class BillingSendService:
             billing_contact.sent_at = timezone.now()
             billing_contact.save(update_fields=['status', 'sent_at'])
             
-            # 7. Atualiza CampaignContact
-            campaign_contact.status = 'sent'
-            campaign_contact.sent_at = timezone.now()
-            campaign_contact.whatsapp_message_id = message_id
-            campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
+            # 7. Atualiza CampaignContact se existir (mensagens de campanha)
+            # Mensagens de ciclo não têm CampaignContact
+            campaign_contact = billing_contact.campaign_contact if billing_contact.campaign_contact else None
+            if campaign_contact:
+                # Atualiza CampaignContact se existir (mensagens de campanha)
+                # Mensagens de ciclo não têm CampaignContact
+                if campaign_contact:
+                    campaign_contact.status = 'sent'
+                    campaign_contact.sent_at = timezone.now()
+                    campaign_contact.whatsapp_message_id = message_id
+                campaign_contact.save(update_fields=['status', 'sent_at', 'whatsapp_message_id'])
             
             # 8. Fecha conversa automaticamente
             if conversation:

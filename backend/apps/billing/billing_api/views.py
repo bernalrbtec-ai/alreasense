@@ -13,35 +13,8 @@ import logging
 from apps.billing.billing_api.authentication import BillingAPIKeyAuthentication
 from apps.billing.billing_api.throttling import BillingAPIRateThrottle
 from apps.billing.billing_api.serializers import (
-    SendBillingRequestSerializer,
-    SendBillingResponseSerializer,
-    BillingCampaignStatusSerializer,
-    BillingContactStatusSerializer,
-    BillingQueueSerializer
-)
-from apps.billing.billing_api.services.billing_campaign_service import BillingCampaignService
-from apps.billing.billing_api import (
-    BillingQueue, BillingCampaign, BillingContact
-)
-
-logger = logging.getLogger(__name__)
-
-
-class SendOverdueView(APIView):
-    """
-    Endpoint 1: Envia cobrança atrasada
-    
-    POST /api/v1/billing/send/overdue
-    Headers: X-Billing-API-Key: <api_key>
-    Body: {
-        "template_type": "overdue",
-        "contacts": [...],
-        "external_id": "fatura-12345",
-        "instance_id": "uuid" (opcional)
-    }
-    """
-    
-    authentication_classes = [BillingAPIKeyAuthentication]
+   ?    SendBillingRequestSerializer,
+      authentication_classes = [BillingAPIKeyAuthentication]
     throttle_classes = [BillingAPIRateThrottle]
     permission_classes = [AllowAny]  # Autenticação via API Key
     
@@ -391,10 +364,22 @@ class CampaignContactsView(APIView):
             # Serializa
             contacts_data = []
             for contact in contacts:
+                # Para mensagens de ciclo, pode não ter campaign_contact
+                if contact.campaign_contact and contact.campaign_contact.contact:
+                    phone = contact.campaign_contact.contact.phone
+                    name = contact.campaign_contact.contact.name
+                elif contact.billing_cycle:
+                    # Mensagem de ciclo: usa dados do ciclo
+                    phone = contact.billing_cycle.contact_phone
+                    name = contact.billing_cycle.contact_name
+                else:
+                    phone = ''
+                    name = ''
+                
                 contacts_data.append({
                     'contact_id': str(contact.id),
-                    'phone': contact.campaign_contact.contact.phone if contact.campaign_contact.contact else '',
-                    'name': contact.campaign_contact.contact.name if contact.campaign_contact.contact else '',
+                    'phone': phone,
+                    'name': name,
                     'status': contact.status,
                     'sent_at': contact.sent_at.isoformat() if contact.sent_at else None,
                     'error_message': contact.billing_data.get('last_error', '') if isinstance(contact.billing_data, dict) else ''
@@ -421,6 +406,319 @@ class CampaignContactsView(APIView):
                 {
                     'success': False,
                     'message': f'Erro ao listar contatos: {str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class SendBatchView(APIView):
+    """
+    Endpoint para envio em lote de cobranças com ciclo de mensagens
+    
+    POST /billing/v1/billing/send/batch
+    {
+        "contacts": [
+            {
+                "external_billing_id": "BILL-001",
+                "contact_phone": "+5511999999999",
+                "contact_name": "João Silva",
+                "due_date": "2025-01-15",
+                "billing_data": {
+                    "value": 100.00,
+                    "link_payment": "https://...",
+                    "pix_code": "..."
+                },
+                "notify_before_due": true,
+                "notify_after_due": true
+            }
+        ]
+    }
+    """
+    authentication_classes = [BillingAPIKeyAuthentication]
+    throttle_classes = [BillingAPIRateThrottle]
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Cria ciclos de mensagens em lote"""
+        try:
+            # Valida request
+            contacts_data = request.data.get('contacts', [])
+            
+            if not contacts_data or not isinstance(contacts_data, list):
+                return Response(
+                    {
+                        'success': False,
+                        'message': 'Lista de contatos é obrigatória'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if len(contacts_data) > 10000:
+                return Response(
+                    {
+                        'success': False,
+                        'message': 'Máximo de 10000 contatos por requisição'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Pega tenant da API Key
+            api_key = request.auth
+            tenant = api_key.tenant
+            
+            # Importa service
+            from apps.billing.billing_api.services.billing_cycle_service import BillingCycleService
+            from datetime import datetime, date
+            
+            # Processa cada contato
+            results = []
+            errors = []
+            
+            for idx, contact_data in enumerate(contacts_data):
+                try:
+                    # Valida campos obrigatórios
+                    external_id = contact_data.get('external_billing_id')
+                    phone = contact_data.get('contact_phone')
+                    name = contact_data.get('contact_name')
+                    due_date_str = contact_data.get('due_date')
+                    billing_data = contact_data.get('billing_data', {})
+                    
+                    # Valida campos obrigatórios
+                    if not external_id or not isinstance(external_id, str) or len(external_id.strip()) == 0:
+                        errors.append({
+                            'index': idx,
+                            'external_billing_id': external_id,
+                            'error': 'external_billing_id é obrigatório e deve ser uma string não vazia'
+                        })
+                        continue
+                    
+                    if not phone or not isinstance(phone, str):
+                        errors.append({
+                            'index': idx,
+                            'external_billing_id': external_id,
+                            'error': 'contact_phone é obrigatório e deve ser uma string'
+                        })
+                        continue
+                    
+                    if not name or not isinstance(name, str) or len(name.strip()) == 0:
+                        errors.append({
+                            'index': idx,
+                            'external_billing_id': external_id,
+                            'error': 'contact_name é obrigatório e deve ser uma string não vazia'
+                        })
+                        continue
+                    
+                    if not due_date_str or not isinstance(due_date_str, str):
+                        errors.append({
+                            'index': idx,
+                            'external_billing_id': external_id,
+                            'error': 'due_date é obrigatório e deve ser uma string no formato YYYY-MM-DD'
+                        })
+                        continue
+                    
+                    # Valida billing_data
+                    if billing_data and not isinstance(billing_data, dict):
+                        errors.append({
+                            'index': idx,
+                            'external_billing_id': external_id,
+                            'error': 'billing_data deve ser um objeto JSON'
+                        })
+                        continue
+                    
+                    if not billing_data:
+                        billing_data = {}
+                    
+                    # Parse data com validação
+                    try:
+                        due_date = datetime.strptime(due_date_str.strip(), '%Y-%m-%d').date()
+                        
+                        # Valida se data não é muito antiga (mais de 1 ano) ou muito futura (mais de 1 ano)
+                        from datetime import date as date_class
+                        today = date_class.today()
+                        one_year_ago = date_class(today.year - 1, today.month, today.day)
+                        one_year_ahead = date_class(today.year + 1, today.month, today.day)
+                        
+                        if due_date < one_year_ago:
+                            errors.append({
+                                'index': idx,
+                                'external_billing_id': external_id,
+                                'error': f'Data de vencimento muito antiga: {due_date_str}'
+                            })
+                            continue
+                        
+                        if due_date > one_year_ahead:
+                            errors.append({
+                                'index': idx,
+                                'external_billing_id': external_id,
+                                'error': f'Data de vencimento muito futura: {due_date_str}'
+                            })
+                            continue
+                            
+                    except ValueError as e:
+                        errors.append({
+                            'index': idx,
+                            'external_billing_id': external_id,
+                            'error': f'Data inválida: {due_date_str}. Use formato YYYY-MM-DD. Erro: {str(e)}'
+                        })
+                        continue
+                    
+                    # Cria ciclo
+                    cycle = BillingCycleService.create_cycle(
+                        tenant=tenant,
+                        external_billing_id=external_id,
+                        contact_phone=phone,
+                        contact_name=name,
+                        due_date=due_date,
+                        billing_data=billing_data,
+                        notify_before_due=contact_data.get('notify_before_due', False),
+                        notify_after_due=contact_data.get('notify_after_due', True)
+                    )
+                    
+                    # Agenda mensagens
+                    BillingCycleService.schedule_cycle_messages(cycle)
+                    
+                    results.append({
+                        'external_billing_id': external_id,
+                        'cycle_id': str(cycle.id),
+                        'status': 'created',
+                        'total_messages': cycle.total_messages
+                    })
+                    
+                except Exception as e:
+                    logger.error(
+                        f"❌ Erro ao processar contato {idx}: {e}",
+                        exc_info=True,
+                        extra={'contact_data': contact_data}
+                    )
+                    errors.append({
+                        'index': idx,
+                        'external_billing_id': contact_data.get('external_billing_id'),
+                        'error': str(e)
+                    })
+            
+            # Resposta
+            response_data = {
+                'success': True,
+                'total_processed': len(contacts_data),
+                'created': len(results),
+                'errors': len(errors),
+                'results': results
+            }
+            
+            if errors:
+                response_data['error_details'] = errors
+            
+            logger.info(
+                f"✅ [BILLING_API] Batch processado: {len(results)} criados, {len(errors)} erros",
+                extra={'tenant_id': str(tenant.id), 'total': len(contacts_data)}
+            )
+            
+            return Response(
+                response_data,
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"❌ [BILLING_API] Erro ao processar batch: {e}",
+                exc_info=True
+            )
+            return Response(
+                {
+                    'success': False,
+                    'message': f'Erro interno: {str(e)}'
+                },
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class CancelCycleView(APIView):
+    """
+    Endpoint para cancelar ciclo de mensagens (pagamento ou cancelamento)
+    
+    POST /billing/v1/billing/cancel
+    {
+        "external_billing_id": "BILL-001",
+        "reason": "paid"  // ou "cancelled"
+    }
+    """
+    authentication_classes = [BillingAPIKeyAuthentication]
+    throttle_classes = [BillingAPIRateThrottle]
+    permission_classes = [AllowAny]
+    
+    def post(self, request):
+        """Cancela ciclo de mensagens"""
+        try:
+            # Valida request
+            external_id = request.data.get('external_billing_id')
+            reason = request.data.get('reason', 'cancelled')
+            
+            if not external_id:
+                return Response(
+                    {
+                        'success': False,
+                        'message': 'external_billing_id é obrigatório'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if reason not in ['paid', 'cancelled']:
+                return Response(
+                    {
+                        'success': False,
+                        'message': 'reason deve ser "paid" ou "cancelled"'
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Pega tenant da API Key
+            api_key = request.auth
+            tenant = api_key.tenant
+            
+            # Importa service
+            from apps.billing.billing_api.services.billing_cycle_service import BillingCycleService
+            
+            # Cancela ciclo
+            cycle = BillingCycleService.cancel_cycle(
+                tenant=tenant,
+                external_billing_id=external_id,
+                reason=reason
+            )
+            
+            if not cycle:
+                return Response(
+                    {
+                        'success': False,
+                        'message': f'Ciclo não encontrado: {external_id}'
+                    },
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            logger.info(
+                f"✅ [BILLING_API] Ciclo cancelado: {external_id} ({reason})",
+                extra={'cycle_id': str(cycle.id), 'tenant_id': str(tenant.id)}
+            )
+            
+            return Response(
+                {
+                    'success': True,
+                    'message': f'Ciclo {reason} com sucesso',
+                    'cycle_id': str(cycle.id),
+                    'external_billing_id': external_id,
+                    'status': cycle.status
+                },
+                status=status.HTTP_200_OK
+            )
+            
+        except Exception as e:
+            logger.error(
+                f"❌ [BILLING_API] Erro ao cancelar ciclo: {e}",
+                exc_info=True
+            )
+            return Response(
+                {
+                    'success': False,
+                    'message': f'Erro interno: {str(e)}'
                 },
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

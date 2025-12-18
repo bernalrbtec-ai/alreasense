@@ -7,6 +7,7 @@ from .billing_template import BillingTemplate, BillingTemplateVariation
 from .billing_campaign import BillingCampaign
 from .billing_queue import BillingQueue
 from .billing_contact import BillingContact
+from .billing_cycle import BillingCycle
 
 __all__ = [
     'BillingConfig',
@@ -16,6 +17,7 @@ __all__ = [
     'BillingCampaign',
     'BillingQueue',
     'BillingContact',
+    'BillingCycle',
 ]
 
 

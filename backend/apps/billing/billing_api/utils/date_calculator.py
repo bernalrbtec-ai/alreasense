@@ -1,12 +1,97 @@
 """
 BillingDateCalculator - Calcula dias de atraso ou até vencimento
 """
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 from typing import Optional
 from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class DateCalculator:
+    """
+    Calcula datas ajustadas para envio (dia útil, horário comercial)
+    """
+    
+    @staticmethod
+    def is_weekend(target_date: date) -> bool:
+        """Verifica se é fim de semana"""
+        return target_date.weekday() >= 5
+    
+    @staticmethod
+    def is_holiday(target_date: date, tenant) -> bool:
+        """Verifica se é feriado (implementar se tiver modelo Holiday)"""
+        # TODO: Implementar verificação de feriados se necessário
+        return False
+    
+    @staticmethod
+    def calculate_send_date(target_date: date, tenant) -> date:
+        """
+        Calcula data de envio ajustada para dia útil
+        
+        Regras:
+        - Se target_date é fim de semana → antecipa para última sexta
+        - Se target_date é feriado → antecipa para último dia útil anterior
+        - Se target_date é dia útil → usa target_date
+        
+        Args:
+            target_date: Data desejada para envio
+            tenant: Tenant para verificar feriados
+        
+        Returns:
+            Data ajustada (sempre dia útil)
+        """
+        current_date = target_date
+        
+        # Máximo 30 dias para trás (proteção contra loop infinito)
+        max_attempts = 30
+        attempts = 0
+        
+        while attempts < max_attempts:
+            # Verifica fim de semana
+            if DateCalculator.is_weekend(current_date):
+                if is_overdue:
+                    # Posterga para próxima segunda
+                    days_forward = 7 - current_date.weekday()  # 5=sábado->2, 6=domingo->1
+                    current_date = current_date + timedelta(days=days_forward)
+                    logger.debug(f"📅 {target_date} é fim de semana (overdue), postergado para {current_date}")
+                else:
+                    # Antecipa para última sexta
+                    days_back = current_date.weekday() - 4  # 5=sábado->1, 6=domingo->2
+                    current_date = current_date - timedelta(days=days_back)
+                    logger.debug(f"📅 {target_date} é fim de semana (upcoming), antecipado para {current_date}")
+                attempts += 1
+                continue
+            
+            # Verifica feriado
+            if DateCalculator.is_holiday(current_date, tenant):
+                if is_overdue:
+                    # Posterga 1 dia
+                    current_date = current_date + timedelta(days=1)
+                    logger.debug(f"📅 {target_date} é feriado (overdue), postergado para {current_date}")
+                else:
+                    # Antecipa 1 dia
+                    current_date = current_date - timedelta(days=1)
+                    logger.debug(f"📅 {target_date} é feriado (upcoming), antecipado para {current_date}")
+                attempts += 1
+                continue
+            
+            # ✅ Dia útil encontrado
+            if current_date != target_date:
+                logger.info(
+                    f"📅 Data ajustada: {target_date} → {current_date}",
+                    extra={'original_date': str(target_date), 'adjusted_date': str(current_date)}
+                )
+            
+            return current_date
+        
+        # Fallback: retorna target_date mesmo se não conseguir ajustar
+        logger.warning(
+            f"⚠️ Não foi possível ajustar data {target_date} após {max_attempts} tentativas",
+            extra={'target_date': str(target_date)}
+        )
+        return target_date
 
 
 class BillingDateCalculator:
