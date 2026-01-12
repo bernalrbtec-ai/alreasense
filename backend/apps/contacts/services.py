@@ -168,8 +168,8 @@ class ContactImportService:
                 
             header_lower = header.lower().strip()
             
-            # Casos especiais
-            if header_lower in ['nome', 'name']:
+            # Casos especiais - Nome (com variações)
+            if header_lower in ['nome', 'name', 'nome completo', 'nome_completo', 'nomecompleto', 'cliente', 'contato']:
                 mapping[header] = 'name'
                 continue
             

@@ -333,11 +333,12 @@ class ContactViewSet(viewsets.ModelViewSet):
         )
         
         # Log detalhado da resposta para debug
+        # ✅ CORREÇÃO: Não usar 'created' no extra (campo reservado do LogRecord)
         logger.info("Importação CSV processada", extra={
             'status': result.get('status'),
             'total_rows': result.get('total_rows', 0),
-            'created': result.get('created', 0),
-            'errors': result.get('errors', 0)
+            'created_count': result.get('created', 0),  # ✅ Mudado de 'created' para 'created_count'
+            'errors_count': result.get('errors', 0)  # ✅ Mudado de 'errors' para 'errors_count'
         })
         
         return Response(result)
