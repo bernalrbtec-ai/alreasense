@@ -758,7 +758,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         logger.critical(f"   Message ID: {message.id}")
         logger.critical(f"   Message Conversation ID (original): {original_conversation_id}")
         
-        conversation = await sync_to_async(
+        # ✅ CORREÇÃO: Fechar conexões antigas antes de operação de banco
+        from django.db import close_old_connections
+        close_old_connections()
+        
+        conversation = await database_sync_to_async(
             Conversation.objects.select_related('tenant').get
         )(id=original_conversation_id)
         
@@ -853,7 +857,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             
             try:
                 logger.critical(f"🔍 [CHAT ENVIO] Executando query no banco...")
-                original_message = await sync_to_async(
+                # ✅ CORREÇÃO: Fechar conexões antigas antes de operação de banco
+                from django.db import close_old_connections
+                close_old_connections()
+                
+                original_message = await database_sync_to_async(
                     Message.objects.select_related('conversation').prefetch_related('attachments').filter(
                         id=reply_to_uuid, 
                         conversation=conversation
@@ -882,7 +890,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.error(f"   Conversation ID: {conversation.id}")
                     
                     # Tentar buscar em qualquer conversa do tenant (pode estar em outra conversa?)
-                    all_messages = await sync_to_async(list)(
+                    close_old_connections()
+                    all_messages = await database_sync_to_async(list)(
                         Message.objects.filter(
                             id=reply_to_uuid
                         ).select_related('conversation', 'conversation__tenant')
@@ -1028,7 +1037,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         attachments_list = []
         if attachment_urls:
             from apps.chat.models import MessageAttachment
-            attachments_list = await sync_to_async(list)(
+            from django.db import close_old_connections
+            close_old_connections()
+            attachments_list = await database_sync_to_async(list)(
                 MessageAttachment.objects.filter(message=message)
             )
         
@@ -1621,7 +1632,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         phone_to_contact = {}
                         # ✅ FIX: Usar tenant_id ao invés de conversation.tenant para evitar erro de contexto assíncrono
                         tenant_id = conversation.tenant_id
-                        all_contacts = await sync_to_async(list)(
+                        from django.db import close_old_connections
+                        close_old_connections()
+                        all_contacts = await database_sync_to_async(list)(
                             Contact.objects.filter(
                                 tenant_id=tenant_id
                             ).exclude(phone__isnull=True).exclude(phone='').values('phone', 'name')
@@ -2799,7 +2812,9 @@ async def handle_fetch_contact_name(
                             from apps.contacts.signals import normalize_phone_for_search
                             
                             normalized_phone = normalize_phone_for_search(clean_phone)
-                            saved_contact = await sync_to_async(
+                            from django.db import close_old_connections
+                            close_old_connections()
+                            saved_contact = await database_sync_to_async(
                                 Contact.objects.filter(
                                     Q(tenant=conversation.tenant) &
                                     (Q(phone=normalized_phone) | Q(phone=clean_phone))
@@ -3066,7 +3081,9 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                     from apps.contacts.signals import normalize_phone_for_search
                     
                     tenant_id = message.conversation.tenant_id
-                    all_contacts = await sync_to_async(list)(
+                    from django.db import close_old_connections
+                    close_old_connections()
+                    all_contacts = await database_sync_to_async(list)(
                         Contact.objects.filter(
                             tenant_id=tenant_id
                         ).exclude(phone__isnull=True).exclude(phone='').values('phone', 'name')
@@ -3346,7 +3363,10 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str, ret
             )
             raise InstanceTemporarilyUnavailable(wa_instance.instance_name, {'state': wa_instance.connection_state}, wait_seconds)
 
-    sent = await sync_to_async(send_read_receipt)(
+    # ✅ CORREÇÃO: send_read_receipt acessa banco de dados, usar database_sync_to_async
+    from django.db import close_old_connections
+    close_old_connections()
+    sent = await database_sync_to_async(send_read_receipt)(
         message.conversation,
         message,
         max_retries=2
