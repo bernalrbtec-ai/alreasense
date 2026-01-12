@@ -1,4 +1,4 @@
-import { Edit, Trash2, Phone, Mail, MapPin } from 'lucide-react'
+import { Edit, Trash2, Phone, Mail, MapPin, Tag } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 
@@ -27,9 +27,10 @@ interface ContactsTableProps {
   availableCustomFields: string[]
   onEdit: (contact: Contact) => void
   onDelete: (id: string) => void
+  onEditTags?: (contact: Contact) => void // ✅ NOVO: Callback para editar tags
 }
 
-export default function ContactsTable({ contacts, availableCustomFields, onEdit, onDelete }: ContactsTableProps) {
+export default function ContactsTable({ contacts, availableCustomFields, onEdit, onDelete, onEditTags }: ContactsTableProps) {
   // Colunas padrão sempre visíveis
   const standardColumns = ['Nome', 'Telefone', 'Email', 'Cidade/Estado', 'Última Compra', 'Tags']
   
@@ -204,14 +205,27 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                       size="sm"
                       onClick={() => onEdit(contact)}
                       className="p-1"
+                      title="Editar contato"
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
+                    {onEditTags && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onEditTags(contact)}
+                        className="p-1 text-blue-600 hover:bg-blue-50"
+                        title="Editar tags"
+                      >
+                        <Tag className="h-4 w-4" />
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => onDelete(contact.id)}
                       className="p-1 text-red-600 hover:bg-red-50"
+                      title="Excluir contato"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

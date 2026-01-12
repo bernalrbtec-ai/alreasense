@@ -446,6 +446,44 @@ export default function ContactsPage() {
     }
   }
 
+  // ✅ NOVO: Handler para editar apenas tags do contato
+  const handleEditTags = async (contact: Contact) => {
+    try {
+      // Buscar contato completo da API
+      const response = await api.get(`/contacts/contacts/${contact.id}/`)
+      const fullContact = response.data
+      
+      setEditingContact(fullContact)
+      setFormData({
+        name: fullContact.name || '',
+        phone: fullContact.phone || '',
+        email: fullContact.email || '',
+        birth_date: fullContact.birth_date || '',
+        gender: fullContact.gender || '',
+        city: fullContact.city || '',
+        state: fullContact.state || '',
+        zipcode: fullContact.zipcode || '',
+        referred_by: fullContact.referred_by || '',
+        notes: fullContact.notes || '',
+        tag_ids: fullContact.tags && Array.isArray(fullContact.tags) 
+          ? fullContact.tags.map((t: any) => typeof t === 'string' ? t : t.id)
+          : []
+      })
+      setIsModalOpen(true)
+      
+      // Scroll automático para seção de tags após modal abrir
+      setTimeout(() => {
+        const tagsSection = document.querySelector('[data-tags-section]')
+        if (tagsSection) {
+          tagsSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }
+      }, 100)
+    } catch (error: any) {
+      console.error('❌ [EDIT TAGS] Erro ao buscar contato:', error)
+      showErrorToast('carregar', 'Contato', error)
+    }
+  }
+
   const handleCloseModal = () => {
     setIsModalOpen(false)
     setEditingContact(null)
@@ -755,6 +793,7 @@ export default function ContactsPage() {
           availableCustomFields={availableCustomFields}
           onEdit={handleEdit}
           onDelete={handleDelete}
+          onEditTags={handleEditTags}
         />
       )}
       
@@ -972,7 +1011,7 @@ export default function ContactsPage() {
                 </div>
 
                 {/* Tags */}
-                <div>
+                <div data-tags-section>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Tags
                   </label>
