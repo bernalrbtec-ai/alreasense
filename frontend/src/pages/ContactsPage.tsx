@@ -61,6 +61,7 @@ export default function ContactsPage() {
   const [newTagColor, setNewTagColor] = useState('#3B82F6')
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [isTagEditModalOpen, setIsTagEditModalOpen] = useState(false)
+  const [showTagsManagerModal, setShowTagsManagerModal] = useState(false)
   
   // Paginação
   const [currentPage, setCurrentPage] = useState(1)
