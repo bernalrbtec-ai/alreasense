@@ -175,8 +175,38 @@ def media_proxy(request):
         logger.info(f'   📌 [MEDIA PROXY] User-Agent: {request.META.get("HTTP_USER_AGENT", "N/A")[:100]}')
         
         try:
+            # ✅ CORREÇÃO CRÍTICA: Headers para URLs do WhatsApp (pps.whatsapp.net)
+            # URLs do WhatsApp exigem headers específicos para evitar 403 Forbidden
+            headers = {}
+            
+            # Detectar se é URL do WhatsApp
+            is_whatsapp_url = 'pps.whatsapp.net' in media_url or 'whatsapp.net' in media_url
+            
+            if is_whatsapp_url:
+                # Headers que simulam um navegador real acessando WhatsApp
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'Referer': 'https://web.whatsapp.com/',
+                    'Origin': 'https://web.whatsapp.com',
+                    'Sec-Fetch-Dest': 'image',
+                    'Sec-Fetch-Mode': 'no-cors',
+                    'Sec-Fetch-Site': 'cross-site',
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache',
+                }
+                logger.info(f'📱 [MEDIA PROXY] Detectada URL do WhatsApp - usando headers específicos')
+            else:
+                # Para outras URLs, usar headers mais simples
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': '*/*',
+                }
+            
             with httpx.Client(timeout=30.0, follow_redirects=True) as client:
-                http_response = client.get(media_url)
+                http_response = client.get(media_url, headers=headers)
                 http_response.raise_for_status()
                 
                 content_type = http_response.headers.get('content-type', 'application/octet-stream')
