@@ -353,7 +353,8 @@ async def send_reaction_to_evolution(message, emoji: str):
     from apps.chat.models import Message
     from apps.notifications.models import WhatsAppInstance
     from apps.connections.models import EvolutionConnection
-    from asgiref.sync import sync_to_async
+    from channels.db import database_sync_to_async
+    from django.db import close_old_connections
     import httpx
     
     logger.info(f"👍 [REACTION] Enviando reação para Evolution API...")
@@ -362,8 +363,11 @@ async def send_reaction_to_evolution(message, emoji: str):
     logger.info(f"   Emoji: {emoji}")
     
     try:
+        # ✅ CORREÇÃO: Fechar conexões antigas antes de operações de banco
+        close_old_connections()
+        
         # Buscar instância WhatsApp ativa
-        instance = await sync_to_async(
+        instance = await database_sync_to_async(
             WhatsAppInstance.objects.filter(
                 tenant=message.conversation.tenant,
                 is_active=True,
@@ -376,7 +380,8 @@ async def send_reaction_to_evolution(message, emoji: str):
             return False
         
         # Buscar servidor Evolution
-        evolution_server = await sync_to_async(
+        close_old_connections()
+        evolution_server = await database_sync_to_async(
             EvolutionConnection.objects.filter(is_active=True).first
         )()
         
@@ -568,7 +573,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
     from apps.notifications.models import WhatsAppInstance
     from channels.layers import get_channel_layer
     from channels.db import database_sync_to_async
-    from asgiref.sync import sync_to_async
+    from django.db import close_old_connections
     import httpx
     
     send_logger.info("📤 [CHAT ENVIO] Iniciando envio | message_id=%s retry=%s", message_id, retry_count)
@@ -578,9 +583,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
     overall_start = time.perf_counter()
 
     try:
+        # ✅ CORREÇÃO CRÍTICA: Fechar conexões antigas antes de operações de banco
+        close_old_connections()
+        
         # Busca mensagem com todos os relacionamentos necessários para serialização
         try:
-            message = await sync_to_async(
+            message = await database_sync_to_async(
                 Message.objects.select_related(
                     'conversation', 
                     'conversation__tenant', 
@@ -625,14 +633,18 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # Se for nota interna, não envia
         if message.is_internal:
             message.status = 'sent'
-            await sync_to_async(message.save)(update_fields=['status'])
+            close_old_connections()
+            await database_sync_to_async(message.save)(update_fields=['status'])
             log.info("📝 Nota interna criada (não enviada ao WhatsApp)")
             return
         
         # Busca instância WhatsApp ativa do tenant (mesmo modelo das campanhas)
         log.debug("🔍 Buscando instância WhatsApp ativa...")
         
-        instance = await sync_to_async(
+        # ✅ CORREÇÃO: Fechar conexões antigas antes de nova operação de banco
+        close_old_connections()
+        
+        instance = await database_sync_to_async(
             WhatsAppInstance.objects.filter(
                 tenant=message.conversation.tenant,
                 is_active=True
@@ -642,7 +654,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         if not instance:
             message.status = 'failed'
             message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
-            await sync_to_async(message.save)(update_fields=['status', 'error_message'])
+            close_old_connections()
+            await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
             log.error("❌ Nenhuma instância WhatsApp ativa | tenant=%s", message.conversation.tenant.name)
             return
         
@@ -707,9 +720,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         
         # Helper para tratar message_id duplicado
         async def handle_duplicate_message_id(evolution_message_id: str):
+            from django.db import close_old_connections
             metadata = message.metadata or {}
             metadata['duplicate_message_id'] = evolution_message_id
-            existing_message = await sync_to_async(
+            close_old_connections()
+            existing_message = await database_sync_to_async(
                 Message.objects.filter(message_id=evolution_message_id).exclude(id=message.id).first
             )()
             if existing_message:
@@ -719,7 +734,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             else:
                 new_status = 'sent'
                 new_evolution_status = 'sent'
-            await sync_to_async(
+            close_old_connections()
+            await database_sync_to_async(
                 Message.objects.filter(id=message.id).update
             )(
                 status=new_status,
@@ -987,8 +1003,10 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     # ✅ CRÍTICO: Atualizar message.content para salvar no banco com formato "disse:"
                     message.content = signature_for_db + content
                     # Salvar imediatamente no banco
-                    from asgiref.sync import sync_to_async
-                    await sync_to_async(message.save)(update_fields=['content'])
+                    from channels.db import database_sync_to_async
+                    from django.db import close_old_connections
+                    close_old_connections()
+                    await database_sync_to_async(message.save)(update_fields=['content'])
                     
                     logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada:")
                     logger.critical(f"   Nome: {full_name}")
@@ -1393,7 +1411,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         message.message_id = evolution_message_id
                         try:
                             # ✅ Salvar message_id ANTES de continuar
-                            await sync_to_async(message.save)(update_fields=['message_id'])
+                            from django.db import close_old_connections
+                            close_old_connections()
+                            await database_sync_to_async(message.save)(update_fields=['message_id'])
                             logger.info(f"💾 [CHAT] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
                         except IntegrityError:
                             logger.warning(
@@ -1423,7 +1443,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     logger.error(f"❌ [CHAT ENVIO] Conteúdo vazio após processamento! message_id={message_id}")
                     message.status = 'failed'
                     message.error_message = 'Conteúdo da mensagem está vazio'
-                    await sync_to_async(message.save)(update_fields=['status', 'error_message'])
+                    from django.db import close_old_connections
+                    close_old_connections()
+                    await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
                     return
                 
                 # ✅ FORMATO CORRETO: Evolution API usa 'text' no root e 'quoted' no root
@@ -1580,9 +1602,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     elif mentions and isinstance(mentions, list) and len(mentions) > 0:
                         # ✅ CORREÇÃO CRÍTICA: Usar informações do grupo para fazer match correto
                         # Buscar participantes do grupo em group_metadata
-                        # ✅ CORREÇÃO: Usar sync_to_async para refresh_from_db em contexto assíncrono
-                        from asgiref.sync import sync_to_async
-                        await sync_to_async(conversation.refresh_from_db)()  # Garantir dados atualizados
+                        # ✅ CORREÇÃO: Usar database_sync_to_async para refresh_from_db em contexto assíncrono
+                        from channels.db import database_sync_to_async
+                        from django.db import close_old_connections
+                        close_old_connections()
+                        await database_sync_to_async(conversation.refresh_from_db)()  # Garantir dados atualizados
                         group_metadata = conversation.group_metadata or {}
                         group_participants = group_metadata.get('participants', [])
                         
@@ -1996,9 +2020,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                             # ✅ CORREÇÃO: Atualizar apenas se conteúdo mudou (substituição de nomes)
                                             # Formato no banco: "Nome disse:\n\n{mensagem com telefones}"
                                             if content_to_save != message.content:
-                                                from asgiref.sync import sync_to_async
+                                                from channels.db import database_sync_to_async
+                                                from django.db import close_old_connections
                                                 message.content = content_to_save  # ✅ Com formato "disse:"
-                                                await sync_to_async(message.save)(update_fields=['content'])
+                                                close_old_connections()
+                                                await database_sync_to_async(message.save)(update_fields=['content'])
                                                 logger.info(f"✅ [CHAT ENVIO] Conteúdo da mensagem atualizado no banco (com formato 'disse:')")
                                                 logger.info(f"   Antes: {message.content[:100] if message.content else 'N/A'}...")
                                                 logger.info(f"   Depois: {content_to_save[:100]}...")
@@ -2142,7 +2168,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     # Número não existe no WhatsApp
                                     message.status = 'failed'
                                     message.error_message = f'Número não está registrado no WhatsApp: {_mask_remote_jid(number)}'
-                                    await sync_to_async(message.save)(update_fields=['status', 'error_message'])
+                                    from django.db import close_old_connections
+                                    close_old_connections()
+                                    await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
                                     logger.error(f"❌ [CHAT ENVIO] Número não existe no WhatsApp: {_mask_remote_jid(number)}")
                                     return  # Não fazer raise, já tratamos o erro
                     except (ValueError, KeyError, TypeError):
@@ -2161,7 +2189,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     try:
                         # ✅ Salvar message_id ANTES de salvar status completo
                         # Isso garante que webhook encontra a mensagem mesmo se chegar muito rápido
-                        await sync_to_async(message.save)(update_fields=['message_id'])
+                        from django.db import close_old_connections
+                        close_old_connections()
+                        await database_sync_to_async(message.save)(update_fields=['message_id'])
                         logger.info(f"💾 [CHAT ENVIO] Message ID salvo IMEDIATAMENTE: {evolution_message_id}")
                     except IntegrityError:
                         logger.warning(
@@ -2177,7 +2207,9 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         message.status = 'sent'
         message.evolution_status = 'sent'
         # ✅ Atualizar apenas status/evolution_status (message_id já foi salvo)
-        await sync_to_async(message.save)(update_fields=['status', 'evolution_status'])
+        from django.db import close_old_connections
+        close_old_connections()
+        await database_sync_to_async(message.save)(update_fields=['status', 'evolution_status'])
         
         logger.info(f"💾 [CHAT ENVIO] Status atualizado no banco para 'sent'")
         
@@ -2287,9 +2319,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         
         # Marca como falha apenas se não for erro temporário
         try:
+            from django.db import close_old_connections
+            close_old_connections()
             message.status = 'failed'
             message.error_message = str(e)
-            await sync_to_async(message.save)(update_fields=['status', 'error_message'])
+            await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
         except:
             pass
 
@@ -2353,7 +2387,8 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     from apps.chat.models import Conversation
     from apps.connections.models import EvolutionConnection
     from channels.layers import get_channel_layer
-    from asgiref.sync import sync_to_async
+    from channels.db import database_sync_to_async
+    from django.db import close_old_connections
     import httpx
     
     logger.critical(f"📸 [PROFILE PIC] Buscando foto de perfil...")
@@ -2361,9 +2396,13 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
     logger.critical(f"   Phone recebido: {phone}")
     
     try:
+        # ✅ CORREÇÃO CRÍTICA: Fechar conexões antigas antes de operações de banco
+        close_old_connections()
+        
         # ✅ CORREÇÃO: Tratar caso de conversa não existir (pode ter sido deletada)
+        # ✅ CORREÇÃO: Usar database_sync_to_async em vez de sync_to_async para gerenciar conexões corretamente
         try:
-            conversation = await sync_to_async(
+            conversation = await database_sync_to_async(
                 Conversation.objects.select_related('tenant').get
             )(id=conversation_id)
         except Conversation.DoesNotExist:
@@ -2404,7 +2443,10 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
         from apps.notifications.models import WhatsAppInstance
         from apps.connections.models import EvolutionConnection
         
-        wa_instance = await sync_to_async(
+        # ✅ CORREÇÃO: Fechar conexões antigas antes de nova operação de banco
+        close_old_connections()
+        
+        wa_instance = await database_sync_to_async(
             WhatsAppInstance.objects.filter(
                 tenant=conversation.tenant,
                 is_active=True,
@@ -2417,7 +2459,10 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
             return
         
         # Buscar servidor Evolution
-        evolution_server = await sync_to_async(
+        # ✅ CORREÇÃO: Fechar conexões antigas antes de nova operação de banco
+        close_old_connections()
+        
+        evolution_server = await database_sync_to_async(
             EvolutionConnection.objects.filter(is_active=True).first
         )()
         
@@ -2547,8 +2592,10 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                         from apps.contacts.signals import normalize_phone_for_search
                         
                         normalized_phone = normalize_phone_for_search(clean_phone)
-                        # ✅ CORREÇÃO: Usar sync_to_async para query em contexto assíncrono
-                        saved_contact = await sync_to_async(
+                        # ✅ CORREÇÃO: Fechar conexões antigas antes de nova operação de banco
+                        close_old_connections()
+                        # ✅ CORREÇÃO: Usar database_sync_to_async para query em contexto assíncrono
+                        saved_contact = await database_sync_to_async(
                             Contact.objects.filter(
                                 Q(tenant=conversation.tenant) &
                                 (Q(phone=normalized_phone) | Q(phone=clean_phone))
@@ -2619,7 +2666,9 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
             
             # Salvar atualizações
             if update_fields:
-                await sync_to_async(conversation.save)(update_fields=update_fields)
+                # ✅ CORREÇÃO: Fechar conexões antigas antes de salvar
+                close_old_connections()
+                await database_sync_to_async(conversation.save)(update_fields=update_fields)
                 logger.info(f"✅ [PROFILE PIC] Atualizações salvas: {', '.join(update_fields)}")
                 
                 # ✅ CRÍTICO: Sempre fazer broadcast se houver atualizações (foto OU nome)
@@ -2628,7 +2677,9 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
                     from apps.chat.utils.serialization import serialize_conversation_for_ws_async
                     
                     # ✅ IMPORTANTE: Recarregar conversa do banco para garantir dados atualizados
-                    await sync_to_async(conversation.refresh_from_db)()
+                    # ✅ CORREÇÃO: Fechar conexões antigas antes de recarregar
+                    close_old_connections()
+                    await database_sync_to_async(conversation.refresh_from_db)()
                     conv_data_serializable = await serialize_conversation_for_ws_async(conversation)
                     
                     channel_layer = get_channel_layer()
@@ -2672,7 +2723,8 @@ async def handle_fetch_contact_name(
     """
     from apps.chat.models import Conversation
     from channels.layers import get_channel_layer
-    from asgiref.sync import sync_to_async
+    from channels.db import database_sync_to_async
+    from django.db import close_old_connections
     import httpx
     
     logger.info(f"👤 [CONTACT NAME] Buscando nome de contato...")
@@ -2680,9 +2732,12 @@ async def handle_fetch_contact_name(
     logger.info(f"   Phone: {phone}")
     
     try:
+        # ✅ CORREÇÃO CRÍTICA: Fechar conexões antigas antes de operações de banco
+        close_old_connections()
+        
         # ✅ CORREÇÃO: Tratar caso de conversa não existir (pode ter sido deletada)
         try:
-            conversation = await sync_to_async(
+            conversation = await database_sync_to_async(
                 Conversation.objects.select_related('tenant').get
             )(id=conversation_id)
         except Conversation.DoesNotExist:
@@ -2767,9 +2822,11 @@ async def handle_fetch_contact_name(
                             
                             # Atualizar se mudou
                             if contact_name and conversation.contact_name != contact_name:
+                                from django.db import close_old_connections
+                                close_old_connections()
                                 old_name = conversation.contact_name
                                 conversation.contact_name = contact_name
-                                await sync_to_async(conversation.save)(update_fields=['contact_name'])
+                                await database_sync_to_async(conversation.save)(update_fields=['contact_name'])
                                 
                                 logger.info(f"✅ [CONTACT NAME] Nome atualizado: '{old_name}' → '{contact_name}'")
                                 
@@ -2870,17 +2927,20 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
     from apps.chat.models import Message, MessageEditHistory
     from apps.notifications.models import WhatsAppInstance
     from apps.connections.models import EvolutionConnection
-    from asgiref.sync import sync_to_async
     from channels.layers import get_channel_layer
     from channels.db import database_sync_to_async
+    from django.db import close_old_connections
     import httpx
     from datetime import timedelta
     
     logger.info(f"✏️ [EDIT MESSAGE] Iniciando edição de mensagem: {message_id}")
     
     try:
+        # ✅ CORREÇÃO CRÍTICA: Fechar conexões antigas antes de operações de banco
+        close_old_connections()
+        
         # Buscar mensagem
-        message = await sync_to_async(
+        message = await database_sync_to_async(
             Message.objects.select_related(
                 'conversation',
                 'conversation__tenant',
@@ -2899,7 +2959,8 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
             raise ValueError("Mensagem não foi enviada com sucesso")
         
         # ✅ VALIDAÇÃO 3: Mensagem deve ser de texto (não mídia)
-        attachments = await sync_to_async(list)(message.attachments.all())
+        close_old_connections()
+        attachments = await database_sync_to_async(list)(message.attachments.all())
         if attachments:
             logger.error(f"❌ [EDIT MESSAGE] Mensagem tem anexos, não pode ser editada")
             raise ValueError("Mensagens com anexos não podem ser editadas")
@@ -2931,7 +2992,8 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
         logger.info(f"   Tempo desde envio: {time_since_sent}")
         
         # Buscar instância WhatsApp
-        instance = await sync_to_async(
+        close_old_connections()
+        instance = await database_sync_to_async(
             WhatsAppInstance.objects.filter(
                 tenant=message.conversation.tenant,
                 is_active=True,
@@ -2944,7 +3006,8 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
             raise ValueError("Nenhuma instância WhatsApp ativa")
         
         # Buscar servidor Evolution
-        evolution_server = await sync_to_async(
+        close_old_connections()
+        evolution_server = await database_sync_to_async(
             EvolutionConnection.objects.filter(is_active=True).first
         )()
         
@@ -2990,7 +3053,9 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                 logger.info(f"   Nomes encontrados: {len(mentioned_names_in_text)}")
                 
                 # Buscar participantes do grupo
-                await sync_to_async(message.conversation.refresh_from_db)()
+                from django.db import close_old_connections
+                close_old_connections()
+                await database_sync_to_async(message.conversation.refresh_from_db)()
                 group_metadata = message.conversation.group_metadata or {}
                 group_participants = group_metadata.get('participants', [])
                 
@@ -3150,7 +3215,8 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                 logger.info(f"✅ [EDIT MESSAGE] Mensagem editada com sucesso!")
                 
                 # Salvar histórico de edição
-                edit_history = await sync_to_async(MessageEditHistory.objects.create)(
+                close_old_connections()
+                edit_history = await database_sync_to_async(MessageEditHistory.objects.create)(
                     message=message,
                     old_content=old_content,
                     new_content=new_content,
@@ -3163,7 +3229,8 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
                 # Isso garante que o frontend mostre o texto correto (com números ao invés de nomes)
                 message.content = processed_content
                 message.is_edited = True
-                await sync_to_async(message.save)(update_fields=['content', 'is_edited'])
+                close_old_connections()
+                await database_sync_to_async(message.save)(update_fields=['content', 'is_edited'])
                 
                 logger.info(f"✅ [EDIT MESSAGE] Histórico de edição salvo: {edit_history.id}")
                 
@@ -3208,10 +3275,14 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str, ret
     Handler: Envia read receipt para mensagens em background.
     """
     from apps.chat.models import Message
-    from asgiref.sync import sync_to_async
+    from channels.db import database_sync_to_async
+    from django.db import close_old_connections
 
     try:
-        message = await sync_to_async(
+        # ✅ CORREÇÃO CRÍTICA: Fechar conexões antigas antes de operações de banco
+        close_old_connections()
+        
+        message = await database_sync_to_async(
             Message.objects.select_related('conversation', 'conversation__tenant').get
         )(id=message_id, conversation_id=conversation_id)
     except Message.DoesNotExist:
@@ -3237,14 +3308,16 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str, ret
 
     # Garantir status 'seen' no banco (caso ainda não atualizado)
     if message.status != 'seen':
-        await sync_to_async(
+        close_old_connections()
+        await database_sync_to_async(
             Message.objects.filter(id=message.id).update
         )(status='seen')
         message.status = 'seen'
 
     from apps.notifications.models import WhatsAppInstance
 
-    wa_instance = await sync_to_async(
+    close_old_connections()
+    wa_instance = await database_sync_to_async(
         WhatsAppInstance.objects.filter(
             tenant=message.conversation.tenant,
             is_active=True
