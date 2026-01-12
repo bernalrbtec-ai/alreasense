@@ -179,7 +179,8 @@ class ContactImportService:
                 continue
             
             # Telefone (pode ser combinado com DDD)
-            if header_lower in ['telefone', 'phone', 'fone', 'celular', 'whatsapp']:
+            # ✅ CORREÇÃO: Adicionar variações com plural e maiúsculas
+            if header_lower in ['telefone', 'telefones', 'phone', 'phones', 'fone', 'fones', 'celular', 'celulares', 'whatsapp']:
                 mapping[header] = 'phone'
                 continue
             
