@@ -9,7 +9,9 @@ from rest_framework.permissions import IsAuthenticated
 from django.http import HttpResponse
 from django.db.models import Q, Avg
 from django.utils import timezone
+from django.db import transaction, ProgrammingError, connection
 from datetime import timedelta
+import logging
 
 from .models import Contact, Tag, ContactList, ContactImport, ContactHistory, Task
 from .serializers import (
@@ -660,10 +662,53 @@ class TagViewSet(viewsets.ModelViewSet):
         
         # Contar contatos antes de deletar
         contact_count = tag.contacts.count()
+        logger = logging.getLogger(__name__)
         
         if delete_contacts:
             # Deletar todos os contatos associados
-            tag.contacts.all().delete()
+            # Tenta deleção normal primeiro, se falhar com ProgrammingError (tabela não existe),
+            # usa SQL direto como fallback
+            try:
+                with transaction.atomic():
+                    tag.contacts.all().delete()
+            except ProgrammingError as e:
+                # Se a tabela billing_api_cycle não existe, usa SQL direto
+                if 'billing_api_cycle' in str(e) or 'does not exist' in str(e).lower():
+                    logger.warning(
+                        f'Tabela billing_api_cycle não existe. Usando deleção direta via SQL como fallback.',
+                        extra={'error': str(e), 'tag_id': str(tag.id), 'contact_count': contact_count}
+                    )
+                    try:
+                        with transaction.atomic():
+                            # Obter IDs dos contatos antes de deletar
+                            contact_ids = list(tag.contacts.values_list('id', flat=True))
+                            
+                            # Remover relacionamentos ManyToMany primeiro
+                            tag.contacts.clear()
+                            
+                            # Deletar contatos usando SQL direto (ignora foreign keys que apontam para tabelas inexistentes)
+                            if contact_ids:
+                                with connection.cursor() as cursor:
+                                    # Deletar usando SQL direto, que não vai tentar atualizar tabelas inexistentes
+                                    placeholders = ','.join(['%s'] * len(contact_ids))
+                                    cursor.execute(
+                                        f"DELETE FROM contacts_contact WHERE id IN ({placeholders})",
+                                        contact_ids
+                                    )
+                    except Exception as sql_error:
+                        logger.error(
+                            f'Erro ao deletar contatos via SQL direto: {str(sql_error)}',
+                            extra={'error': str(sql_error), 'tag_id': str(tag.id)}
+                        )
+                        raise
+                else:
+                    # Outro erro de programação, re-lança
+                    logger.error(
+                        f'Erro de programação ao deletar contatos: {str(e)}',
+                        extra={'error': str(e), 'tag_id': str(tag.id)}
+                    )
+                    raise
+            
             message = f'Tag "{tag.name}" e {contact_count} contatos associados foram deletados.'
             contacts_deleted = contact_count
             contacts_migrated = 0
