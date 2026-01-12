@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Search, Plus, Upload, Download, Filter, X, Users as UsersIcon, Grid, Table as TableIcon, Edit, Trash2 } from 'lucide-react'
+import { Search, Plus, Upload, Download, Filter, X, Users as UsersIcon, Grid, Table as TableIcon, Edit, Trash2, Tag } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -9,6 +9,7 @@ import ContactCard from '../components/contacts/ContactCard'
 import ImportContactsModal from '../components/contacts/ImportContactsModal'
 import ContactsTable from '../components/contacts/ContactsTable'
 import TagEditModal from '../components/contacts/TagEditModal'
+import TagsManagerModal from '../components/contacts/TagsManagerModal'
 import ContactHistory from '../components/contacts/ContactHistory'
 
 interface Contact {
@@ -555,6 +556,11 @@ export default function ContactsPage() {
           <Button variant="outline" onClick={() => setShowImportModal(true)}>
             <Upload className="h-4 w-4 mr-2" />
             Importar CSV
+          </Button>
+          
+          <Button variant="outline" onClick={() => setShowTagsManagerModal(true)}>
+            <Tag className="h-4 w-4 mr-2" />
+            Gerenciar Tags
           </Button>
           
           <Button onClick={() => setIsModalOpen(true)}>
@@ -1128,6 +1134,16 @@ export default function ContactsPage() {
         onSuccess={handleTagEditSuccess}
         onDelete={handleDeleteTag}
         availableTags={tags}
+      />
+
+      {/* Tags Manager Modal */}
+      <TagsManagerModal
+        isOpen={showTagsManagerModal}
+        onClose={() => setShowTagsManagerModal(false)}
+        onSuccess={() => {
+          fetchTags()
+          fetchContacts() // Recarregar contatos para atualizar tags
+        }}
       />
 
       {/* Import Modal */}
