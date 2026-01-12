@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { X, Plus, Edit, Trash2, Tag as TagIcon } from 'lucide-react'
+import { X, Plus, Edit, Trash2, Tag as TagIcon, AlertTriangle } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Card } from '../ui/Card'
 import { api } from '../../lib/api'
@@ -25,6 +25,10 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
   const [isLoading, setIsLoading] = useState(false)
   const [editingTag, setEditingTag] = useState<Tag | null>(null)
   const [isTagEditModalOpen, setIsTagEditModalOpen] = useState(false)
+  const [deletingTag, setDeletingTag] = useState<Tag | null>(null)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteOption, setDeleteOption] = useState<'remove' | 'migrate' | 'delete'>('remove')
+  const [migrateToTagId, setMigrateToTagId] = useState<string>('')
   const [newTagName, setNewTagName] = useState('')
   const [newTagColor, setNewTagColor] = useState('#3B82F6')
 
@@ -72,6 +76,39 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
   const handleEditTag = (tag: Tag) => {
     setEditingTag(tag)
     setIsTagEditModalOpen(true)
+  }
+
+  const handleDeleteClick = (tag: Tag) => {
+    setDeletingTag(tag)
+    setShowDeleteConfirm(true)
+    setDeleteOption('remove')
+    setMigrateToTagId('')
+  }
+
+  const handleConfirmDelete = async () => {
+    if (!deletingTag) return
+
+    const deleteContacts = deleteOption === 'delete'
+    const migrateId = deleteOption === 'migrate' ? migrateToTagId : undefined
+    
+    const toastId = showLoadingToast('excluir', 'Tag')
+    
+    try {
+      let url = `/contacts/tags/${deletingTag.id}/delete_with_options/?delete_contacts=${deleteContacts}`
+      if (migrateId) {
+        url = `/contacts/tags/${deletingTag.id}/delete_with_options/?migrate_to_tag_id=${migrateId}`
+      }
+      
+      await api.delete(url)
+      
+      setTags(prev => prev.filter(t => t.id !== deletingTag.id))
+      updateToastSuccess(toastId, 'excluir', 'Tag')
+      setShowDeleteConfirm(false)
+      setDeletingTag(null)
+      onSuccess?.()
+    } catch (error: any) {
+      updateToastError(toastId, 'excluir', 'Tag', error)
+    }
   }
 
   const handleDeleteTag = async (tag: Tag, deleteContacts: boolean, migrateToTagId?: string) => {
@@ -202,11 +239,7 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
                           <Edit className="h-4 w-4" />
                         </button>
                         <button
-                          onClick={() => {
-                            if (confirm(`Deseja realmente excluir a tag "${tag.name}"?`)) {
-                              handleDeleteTag(tag, false)
-                            }
-                          }}
+                          onClick={() => handleDeleteClick(tag)}
                           className="p-1.5 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Excluir tag"
                         >
@@ -246,6 +279,150 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
         onDelete={handleDeleteTag}
         availableTags={tags}
       />
+
+      {/* Delete Confirmation Modal */}
+      {deletingTag && showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-[60]">
+          <Card className="max-w-md w-full">
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Confirmar Exclusão</h2>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false)
+                    setDeletingTag(null)
+                  }}
+                  className="text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex items-start gap-3 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <AlertTriangle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <h3 className="font-semibold text-red-900 mb-1">
+                      Confirmar Exclusão
+                    </h3>
+                    <p className="text-sm text-red-700">
+                      Você está prestes a excluir a tag <strong>"{deletingTag.name}"</strong>.
+                    </p>
+                  </div>
+                </div>
+
+                {deletingTag.contact_count !== undefined && deletingTag.contact_count > 0 && (
+                  <div className="space-y-3">
+                    <p className="text-sm text-gray-700">
+                      Esta tag está associada a <strong>{deletingTag.contact_count} contato{deletingTag.contact_count !== 1 ? 's' : ''}</strong>.
+                      O que deseja fazer?
+                    </p>
+
+                    <div className="space-y-2">
+                      <label className="flex items-start gap-3 p-3 border rounded-lg cursor-pointer hover:bg-gray-50">
+                        <input
+                          type="radio"
+                          name="deleteOption"
+                          checked={deleteOption === 'remove'}
+                          onChange={() => setDeleteOption('remove')}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            Apenas remover a tag
+                          </div>
+                          <div className="text-sm text-gray-500">
+                            Os contatos serão mantidos, apenas a tag será removida deles
+                          </div>
+                        </div>
+                      </label>
+
+                      {tags.filter(t => t.id !== deletingTag.id).length > 0 && (
+                        <label className="flex items-start gap-3 p-3 border border-blue-300 rounded-lg cursor-pointer hover:bg-blue-50">
+                          <input
+                            type="radio"
+                            name="deleteOption"
+                            checked={deleteOption === 'migrate'}
+                            onChange={() => setDeleteOption('migrate')}
+                            className="mt-1"
+                          />
+                          <div className="flex-1">
+                            <div className="font-medium text-blue-900">
+                              Migrar contatos para outra tag
+                            </div>
+                            <div className="text-sm text-blue-700 mb-2">
+                              Os contatos receberão a tag escolhida antes da exclusão
+                            </div>
+                            {deleteOption === 'migrate' && (
+                              <select
+                                value={migrateToTagId}
+                                onChange={(e) => setMigrateToTagId(e.target.value)}
+                                className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                                required
+                              >
+                                <option value="">Selecione uma tag...</option>
+                                {tags.filter(t => t.id !== deletingTag.id).map((t) => (
+                                  <option key={t.id} value={t.id}>
+                                    {t.name}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </label>
+                      )}
+
+                      <label className="flex items-start gap-3 p-3 border border-red-300 rounded-lg cursor-pointer hover:bg-red-50">
+                        <input
+                          type="radio"
+                          name="deleteOption"
+                          checked={deleteOption === 'delete'}
+                          onChange={() => setDeleteOption('delete')}
+                          className="mt-1"
+                        />
+                        <div>
+                          <div className="font-medium text-red-900">
+                            Excluir tag e todos os contatos
+                          </div>
+                          <div className="text-sm text-red-700">
+                            <strong>{deletingTag.contact_count} contato{deletingTag.contact_count !== 1 ? 's' : ''}</strong> serão excluído{deletingTag.contact_count !== 1 ? 's' : ''} permanentemente
+                          </div>
+                        </div>
+                      </label>
+                    </div>
+                  </div>
+                )}
+
+                {deletingTag.contact_count === 0 && (
+                  <p className="text-sm text-gray-600">
+                    Esta tag não possui contatos associados. A exclusão será permanente.
+                  </p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteConfirm(false)
+                    setDeletingTag(null)
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={handleConfirmDelete}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                  disabled={deleteOption === 'migrate' && !migrateToTagId}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Confirmar Exclusão
+                </Button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
     </>
   )
 }
