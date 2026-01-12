@@ -1,4 +1,4 @@
-import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus, Sparkles, ChevronDown, ChevronUp, Clock } from 'lucide-react'
+import { Phone, Mail, MapPin, Calendar, TrendingUp, Edit, Trash2, Award, UserPlus, Sparkles, ChevronDown, ChevronUp, Clock, Tag } from 'lucide-react'
 import { useState } from 'react'
 import { Card } from '../ui/Card'
 import { Button } from '../ui/Button'
@@ -51,9 +51,10 @@ interface ContactCardProps {
   onEdit: (contact: Contact) => void
   onDelete: (id: string) => void
   onShowHistory?: (contactId: string) => void
+  onEditTags?: (contact: Contact) => void // ✅ NOVO: Callback para editar tags
 }
 
-export default function ContactCard({ contact, onEdit, onDelete, onShowHistory }: ContactCardProps) {
+export default function ContactCard({ contact, onEdit, onDelete, onShowHistory, onEditTags }: ContactCardProps) {
   const [showCustomFields, setShowCustomFields] = useState(false)
   
   const customFields = contact.custom_fields || {}
@@ -137,14 +138,27 @@ export default function ContactCard({ contact, onEdit, onDelete, onShowHistory }
             size="sm"
             onClick={() => onEdit(contact)}
             className="p-1"
+            title="Editar contato"
           >
             <Edit className="h-4 w-4" />
           </Button>
+          {onEditTags && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onEditTags(contact)}
+              className="p-1 text-blue-600 hover:bg-blue-50"
+              title="Editar tags"
+            >
+              <Tag className="h-4 w-4" />
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
             onClick={() => onDelete(contact.id)}
             className="p-1 text-red-600 hover:bg-red-50"
+            title="Excluir contato"
           >
             <Trash2 className="h-4 w-4" />
           </Button>

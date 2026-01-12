@@ -771,6 +771,7 @@ export default function ContactsPage() {
                 contact={contact}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onEditTags={handleEditTags}
                 onShowHistory={(contactId) => {
                   setSelectedContactId(contactId)
                   setShowHistoryModal(true)
