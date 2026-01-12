@@ -3141,12 +3141,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             "new_agent": "uuid" (opcional),
             "reason": "string" (opcional)
         }
+        
+        Permissões:
+        - Admin: pode transferir qualquer conversa
+        - Gerente: pode transferir qualquer conversa
+        - Agente: pode transferir conversas que tem acesso (mesmo sem acesso ao departamento destino)
         """
         conversation = self.get_object()
         user = request.user
         
-        # Validar permissão
-        if not (user.is_admin or user.is_gerente):
+        # ✅ CORREÇÃO: Permitir que agentes transfiram conversas
+        # Qualquer usuário autenticado com acesso ao chat pode transferir conversas
+        # (não precisa ter acesso ao departamento de destino)
+        # A validação de acesso à conversa já é feita pelo get_object() via CanAccessChat
+        if not (user.is_admin or user.is_gerente or user.is_agente):
             return Response(
                 {'error': 'Sem permissão para transferir conversas'},
                 status=status.HTTP_403_FORBIDDEN
