@@ -6,8 +6,9 @@ from rest_framework import viewsets, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.pagination import PageNumberPagination
 from django.http import HttpResponse
-from django.db.models import Q, Avg
+from django.db.models import Q, Avg, Count
 from django.utils import timezone
 from django.db import transaction, ProgrammingError, connection
 from datetime import timedelta
@@ -616,6 +617,7 @@ class TagViewSet(viewsets.ModelViewSet):
     
     permission_classes = [IsAuthenticated]
     serializer_class = TagSerializer
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
         """Retorna apenas tags do tenant do usuário"""
@@ -624,7 +626,13 @@ class TagViewSet(viewsets.ModelViewSet):
         if not user.tenant:
             return Tag.objects.none()
         
-        return Tag.objects.filter(tenant=user.tenant).prefetch_related('contacts')
+        return Tag.objects.filter(tenant=user.tenant).annotate(
+            contact_count=Count(
+                'contacts',
+                filter=Q(contacts__is_active=True),
+                distinct=True
+            )
+        ).select_related('tenant')
     
     def perform_create(self, serializer):
         """Associa tenant na criação com tratamento de duplicação"""
@@ -812,6 +820,7 @@ class ContactListViewSet(viewsets.ModelViewSet):
     
     permission_classes = [IsAuthenticated]
     serializer_class = ContactListSerializer
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
         """Retorna apenas listas do tenant do usuário"""
@@ -820,7 +829,18 @@ class ContactListViewSet(viewsets.ModelViewSet):
         if not user.tenant:
             return ContactList.objects.none()
         
-        return ContactList.objects.filter(tenant=user.tenant)
+        return ContactList.objects.filter(tenant=user.tenant).annotate(
+            contact_count=Count(
+                'contacts',
+                filter=Q(contacts__is_active=True),
+                distinct=True
+            ),
+            opted_out_count=Count(
+                'contacts',
+                filter=Q(contacts__opted_out=True),
+                distinct=True
+            )
+        ).select_related('tenant', 'created_by')
     
     def perform_create(self, serializer):
         """Associa tenant e usuário na criação"""

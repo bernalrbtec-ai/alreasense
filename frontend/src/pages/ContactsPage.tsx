@@ -117,6 +117,16 @@ export default function ContactsPage() {
     fetchTags()
     fetchStats()
   }, [])
+
+  const filteredContacts = contacts.filter(contact => {
+    if (selectedCustomField && customFieldValue) {
+      const fieldValue = contact.custom_fields?.[selectedCustomField]
+      if (!fieldValue || !String(fieldValue).toLowerCase().includes(customFieldValue.toLowerCase())) {
+        return false
+      }
+    }
+    return true
+  })
   
   // Buscar quando filtros mudarem (sempre, mesmo se limpar)
   useEffect(() => {
@@ -571,8 +581,8 @@ export default function ContactsPage() {
         </div>
       </div>
 
-      {/* Toggle de Visualização */}
-      <div className="flex justify-between items-center mb-4">
+      {/* Toggle de Visualização (desktop) */}
+      <div className="hidden md:flex justify-between items-center mb-4">
         <div className="flex gap-2">
           <Button
             variant={viewMode === 'cards' ? 'default' : 'outline'}
@@ -759,20 +769,28 @@ export default function ContactsPage() {
       </div>
 
       {/* Contact Grid ou Tabela */}
-      {viewMode === 'cards' ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {contacts
-            .filter(contact => {
-              // Filtrar por campo customizado se selecionado
-              if (selectedCustomField && customFieldValue) {
-                const fieldValue = contact.custom_fields?.[selectedCustomField]
-                if (!fieldValue || !String(fieldValue).toLowerCase().includes(customFieldValue.toLowerCase())) {
-                  return false
-                }
-              }
-              return true
-            })
-            .map(contact => (
+      <div className="md:hidden">
+        <div className="grid grid-cols-1 gap-4">
+          {filteredContacts.map(contact => (
+            <ContactCard
+              key={contact.id}
+              contact={contact}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+              onEditTags={handleEditTags}
+              onShowHistory={(contactId) => {
+                setSelectedContactId(contactId)
+                setShowHistoryModal(true)
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="hidden md:block">
+        {viewMode === 'cards' ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filteredContacts.map(contact => (
               <ContactCard
                 key={contact.id}
                 contact={contact}
@@ -785,25 +803,17 @@ export default function ContactsPage() {
                 }}
               />
             ))}
-        </div>
-      ) : (
-        <ContactsTable
-          contacts={contacts.filter(contact => {
-            // Filtrar por campo customizado se selecionado
-            if (selectedCustomField && customFieldValue) {
-              const fieldValue = contact.custom_fields?.[selectedCustomField]
-              if (!fieldValue || !String(fieldValue).toLowerCase().includes(customFieldValue.toLowerCase())) {
-                return false
-              }
-            }
-            return true
-          })}
-          availableCustomFields={availableCustomFields}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          onEditTags={handleEditTags}
-        />
-      )}
+          </div>
+        ) : (
+          <ContactsTable
+            contacts={filteredContacts}
+            availableCustomFields={availableCustomFields}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onEditTags={handleEditTags}
+          />
+        )}
+      </div>
       
       {/* Paginação */}
       {totalPages > 1 && (

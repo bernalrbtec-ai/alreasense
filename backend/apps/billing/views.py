@@ -6,7 +6,6 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from django.db.models import Q
 
 from .models import Product, Plan, TenantProduct, BillingHistory
 from .serializers import (
@@ -57,6 +56,52 @@ class ProductViewSet(viewsets.ModelViewSet):
         
         # Retornar queryset completo
         return Product.objects.filter(id__in=product_ids)
+
+    def list(self, request, *args, **kwargs):
+        """Listar produtos com cache de resposta"""
+        user = request.user
+        scope = 'all' if (user.is_superuser or user.is_staff) else 'active'
+        page = request.query_params.get('page', '1')
+        page_size = request.query_params.get('page_size', 'default')
+
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_PRODUCT,
+            'list',
+            scope=scope,
+            page=page,
+            page_size=page_size
+        )
+
+        def fetch_list():
+            queryset = self.filter_queryset(self.get_queryset())
+            page_obj = self.paginate_queryset(queryset)
+            if page_obj is not None:
+                serializer = self.get_serializer(page_obj, many=True)
+                return self.get_paginated_response(serializer.data).data
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = CacheManager.get_or_set(
+            cache_key,
+            fetch_list,
+            ttl=CacheManager.TTL_HOUR
+        )
+
+        return Response(data)
+
+    def perform_create(self, serializer):
+        product = serializer.save()
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PRODUCT}:*")
+        return product
+
+    def perform_update(self, serializer):
+        product = serializer.save()
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PRODUCT}:*")
+        return product
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PRODUCT}:*")
     
     @action(detail=False, methods=['get'])
     def available(self, request):
@@ -133,6 +178,52 @@ class PlanViewSet(viewsets.ModelViewSet):
         
         # Retornar queryset completo
         return Plan.objects.filter(id__in=plan_ids).order_by('sort_order')
+
+    def list(self, request, *args, **kwargs):
+        """Listar planos com cache de resposta"""
+        user = request.user
+        scope = 'all' if (user.is_superuser or user.is_staff) else 'active'
+        page = request.query_params.get('page', '1')
+        page_size = request.query_params.get('page_size', 'default')
+
+        cache_key = CacheManager.make_key(
+            CacheManager.PREFIX_PLAN,
+            'list',
+            scope=scope,
+            page=page,
+            page_size=page_size
+        )
+
+        def fetch_list():
+            queryset = self.filter_queryset(self.get_queryset())
+            page_obj = self.paginate_queryset(queryset)
+            if page_obj is not None:
+                serializer = self.get_serializer(page_obj, many=True)
+                return self.get_paginated_response(serializer.data).data
+            serializer = self.get_serializer(queryset, many=True)
+            return serializer.data
+
+        data = CacheManager.get_or_set(
+            cache_key,
+            fetch_list,
+            ttl=CacheManager.TTL_HOUR
+        )
+
+        return Response(data)
+
+    def perform_create(self, serializer):
+        plan = serializer.save()
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        return plan
+
+    def perform_update(self, serializer):
+        plan = serializer.save()
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
+        return plan
+
+    def perform_destroy(self, instance):
+        instance.delete()
+        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_PLAN}:*")
     
     @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated, IsTenantMember, IsAdminUser])
     def select(self, request, pk=None):

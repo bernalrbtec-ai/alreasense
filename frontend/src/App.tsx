@@ -6,8 +6,7 @@ import { Toaster } from 'sonner'
 import { lazyLoadWithRetry } from './utils/lazyLoadWithRetry'
 
 // ✅ CRITICAL FIX: Lazy loading de páginas para reduzir bundle inicial
-// Login page - sempre carregar (primeira página)
-import LoginPage from './pages/LoginPage'
+const LoginPage = lazy(() => import('./pages/LoginPage'))
 
 // Lazy load de todas as outras páginas
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
@@ -87,7 +86,14 @@ function App() {
   if (!user) {
     return (
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route
+          path="/login"
+          element={
+            <Suspense fallback={<LoadingSpinner size="lg" />}>
+              <LoginPage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )

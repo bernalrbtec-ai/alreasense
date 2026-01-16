@@ -2,6 +2,7 @@ from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
 from django.db import models
 
@@ -37,12 +38,12 @@ class NotificationTemplateViewSet(viewsets.ModelViewSet):
         
         # Superadmin can see all templates
         if user.is_superuser or user.is_staff:
-            return NotificationTemplate.objects.all()
+            return NotificationTemplate.objects.select_related('tenant', 'created_by').all()
         
         # Regular users see only their tenant templates and global templates
         return NotificationTemplate.objects.filter(
             models.Q(tenant=user.tenant) | models.Q(is_global=True)
-        )
+        ).select_related('tenant', 'created_by')
     
     def perform_create(self, serializer):
         serializer.save(created_by=self.request.user)
@@ -80,6 +81,7 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     
     serializer_class = WhatsAppInstanceSerializer
     permission_classes = [IsAuthenticated]
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
         from apps.common.cache_manager import CacheManager
@@ -439,10 +441,22 @@ class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):
         
         # Superadmin can see all logs
         if user.is_superuser or user.is_staff:
-            return NotificationLog.objects.all()
+            return NotificationLog.objects.select_related(
+                'tenant',
+                'template',
+                'whatsapp_instance',
+                'recipient'
+            ).all()
         
         # Regular users see only their tenant logs
-        return NotificationLog.objects.filter(tenant=user.tenant)
+        return NotificationLog.objects.filter(
+            tenant=user.tenant
+        ).select_related(
+            'tenant',
+            'template',
+            'whatsapp_instance',
+            'recipient'
+        )
     
     @action(detail=False, methods=['post'])
     def send(self, request):

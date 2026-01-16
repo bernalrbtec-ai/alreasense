@@ -568,6 +568,9 @@ class Tag(models.Model):
     @property
     def contact_count(self):
         """Número de contatos com esta tag"""
+        cached_count = self.__dict__.get('contact_count')
+        if cached_count is not None:
+            return cached_count
         return self.contacts.filter(is_active=True).count()
 
 
@@ -625,11 +628,17 @@ class ContactList(models.Model):
     @property
     def contact_count(self):
         """Número de contatos na lista"""
+        cached_count = self.__dict__.get('contact_count')
+        if cached_count is not None:
+            return cached_count
         return self.contacts.filter(is_active=True).count()
     
     @property
     def opted_out_count(self):
         """Número de contatos que deram opt-out"""
+        cached_count = self.__dict__.get('opted_out_count')
+        if cached_count is not None:
+            return cached_count
         return self.contacts.filter(opted_out=True).count()
 
 
