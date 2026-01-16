@@ -118,21 +118,13 @@ export default function ContactsPage() {
     fetchStats()
   }, [])
 
-  const filteredContacts = contacts.filter(contact => {
-    if (selectedCustomField && customFieldValue) {
-      const fieldValue = contact.custom_fields?.[selectedCustomField]
-      if (!fieldValue || !String(fieldValue).toLowerCase().includes(customFieldValue.toLowerCase())) {
-        return false
-      }
-    }
-    return true
-  })
+  const filteredContacts = contacts
   
   // Buscar quando filtros mudarem (sempre, mesmo se limpar)
   useEffect(() => {
     fetchContacts(1)
     fetchStats() // Atualizar stats quando filtros mudarem
-  }, [selectedTag, selectedState])
+  }, [selectedTag, selectedState, selectedCustomField, customFieldValue])
   
   // Busca em tempo real (debounced) - aguarda 500ms após parar de digitar
   useEffect(() => {
@@ -155,6 +147,12 @@ export default function ContactsPage() {
       // Filtros
       if (selectedTag) params.append('tags', selectedTag)
       if (selectedState) params.append('state', selectedState)
+
+      // Filtro por campo customizado (server-side)
+      if (selectedCustomField && customFieldValue) {
+        params.append('custom_field', selectedCustomField)
+        params.append('custom_value', customFieldValue)
+      }
       
       // Paginação
       params.append('page', page.toString())
@@ -203,7 +201,9 @@ export default function ContactsPage() {
 
   const fetchTags = async () => {
     try {
-      const response = await api.get('/contacts/tags/')
+      const response = await api.get('/contacts/tags/', {
+        params: { page_size: 1000 }
+      })
       setTags(response.data.results || response.data)
     } catch (error) {
       console.error('Error fetching tags:', error)

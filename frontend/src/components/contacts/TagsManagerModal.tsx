@@ -41,7 +41,9 @@ export default function TagsManagerModal({ isOpen, onClose, onSuccess }: TagsMan
   const fetchTags = async () => {
     setIsLoading(true)
     try {
-      const response = await api.get('/contacts/tags/')
+      const response = await api.get('/contacts/tags/', {
+        params: { page_size: 1000 }
+      })
       setTags(response.data.results || response.data || [])
     } catch (error: any) {
       showErrorToast('carregar', 'Tags', error)

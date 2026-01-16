@@ -145,6 +145,13 @@ class ContactViewSet(viewsets.ModelViewSet):
         if opted_out is not None:
             qs = qs.filter(opted_out=opted_out.lower() == 'true')
         
+        # Filtro por campo customizado (server-side)
+        custom_field = self.request.query_params.get('custom_field')
+        custom_value = self.request.query_params.get('custom_value')
+        if custom_field and custom_value:
+            qs = qs.filter(custom_fields__has_key=custom_field)
+            qs = qs.filter(**{f'custom_fields__{custom_field}__icontains': custom_value})
+
         # Filtro is_active
         is_active = self.request.query_params.get('is_active')
         if is_active is not None:
@@ -837,7 +844,7 @@ class ContactListViewSet(viewsets.ModelViewSet):
             ),
             opted_out_count_agg=Count(
                 'contacts',
-                filter=Q(contacts__opted_out=True),
+                filter=Q(contacts__opted_out=True, contacts__is_active=True),
                 distinct=True
             )
         ).select_related('tenant', 'created_by')
