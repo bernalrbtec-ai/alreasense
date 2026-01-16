@@ -627,7 +627,7 @@ class TagViewSet(viewsets.ModelViewSet):
             return Tag.objects.none()
         
         return Tag.objects.filter(tenant=user.tenant).annotate(
-            contact_count=Count(
+            contact_count_agg=Count(
                 'contacts',
                 filter=Q(contacts__is_active=True),
                 distinct=True
@@ -830,12 +830,12 @@ class ContactListViewSet(viewsets.ModelViewSet):
             return ContactList.objects.none()
         
         return ContactList.objects.filter(tenant=user.tenant).annotate(
-            contact_count=Count(
+            contact_count_agg=Count(
                 'contacts',
                 filter=Q(contacts__is_active=True),
                 distinct=True
             ),
-            opted_out_count=Count(
+            opted_out_count_agg=Count(
                 'contacts',
                 filter=Q(contacts__opted_out=True),
                 distinct=True

@@ -16,17 +16,20 @@ class EmptyStringToNullDateField(serializers.DateField):
 
 
 class TagSerializer(serializers.ModelSerializer):
-    contact_count = serializers.ReadOnlyField()
+    contact_count = serializers.SerializerMethodField()
     
     class Meta:
         model = Tag
         fields = ['id', 'name', 'color', 'description', 'contact_count', 'created_at']
         read_only_fields = ['id', 'created_at']
 
+    def get_contact_count(self, obj):
+        return getattr(obj, 'contact_count_agg', None) or obj.contact_count
+
 
 class ContactListSerializer(serializers.ModelSerializer):
-    contact_count = serializers.ReadOnlyField()
-    opted_out_count = serializers.ReadOnlyField()
+    contact_count = serializers.SerializerMethodField()
+    opted_out_count = serializers.SerializerMethodField()
     
     class Meta:
         model = ContactList
@@ -36,6 +39,12 @@ class ContactListSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def get_contact_count(self, obj):
+        return getattr(obj, 'contact_count_agg', None) or obj.contact_count
+
+    def get_opted_out_count(self, obj):
+        return getattr(obj, 'opted_out_count_agg', None) or obj.opted_out_count
 
 
 class ContactSerializer(serializers.ModelSerializer):
