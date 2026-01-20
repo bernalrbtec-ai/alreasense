@@ -719,6 +719,14 @@ async def handle_process_incoming_media(
                         raise ValueError(f"response.content é {type(media_data)}, esperado bytes")
                 
                 content_type = response.headers.get('content-type', 'application/octet-stream')
+
+                # ✅ NORMALIZAÇÃO: Garantir áudio detectado como audio/*
+                if media_type == 'audio' and not content_type.startswith('audio/'):
+                    # Preferir mime original quando disponível
+                    if original_mime_type and original_mime_type.startswith('audio/'):
+                        content_type = original_mime_type
+                    else:
+                        content_type = 'audio/ogg'
                 
                 # ✅ DEBUG: Log detalhado do que foi baixado
                 logger.info(f"📥 [INCOMING MEDIA] Download concluído:")
