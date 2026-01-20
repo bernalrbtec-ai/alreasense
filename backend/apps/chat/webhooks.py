@@ -1216,6 +1216,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.debug(f"🔍 [WEBHOOK REPLY] quotedMessage não encontrado no contextInfo")
             return None
         
+        # ✅ Ignorar mensagens auxiliares do WhatsApp (não devem aparecer no chat)
+        if message_type == 'associatedChildMessage':
+            logger.info("🧹 [WEBHOOK] associatedChildMessage recebido - ignorando para não exibir no chat")
+            return Response({'status': 'ok'}, status=status.HTTP_200_OK)
+
         if message_type == 'conversation':
             content = message_info.get('conversation', '')
             
