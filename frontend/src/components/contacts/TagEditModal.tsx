@@ -13,6 +13,8 @@ interface Tag {
   contact_count?: number
 }
 
+const normalizeTagName = (value: string) => value.trim().replace(/\s+/g, ' ')
+
 interface TagEditModalProps {
   tag: Tag | null
   isOpen: boolean
@@ -50,12 +52,24 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
       return
     }
 
+    const normalizedName = normalizeTagName(name)
+    const hasDuplicate = availableTags.some(
+      (availableTag) =>
+        availableTag.id !== tag?.id &&
+        normalizeTagName(availableTag.name).toLowerCase() === normalizedName.toLowerCase()
+    )
+
+    if (hasDuplicate) {
+      showErrorToast('salvar', 'Tag', new Error(`A tag "${normalizedName}" já existe. Escolha um nome diferente.`))
+      return
+    }
+
     setIsSaving(true)
     const toastId = showLoadingToast('atualizar', 'Tag')
 
     try {
       await api.put(`/contacts/tags/${tag.id}/`, {
-        name: name.trim(),
+        name: normalizedName,
         color,
         description: description.trim() || ''
       })
@@ -83,7 +97,11 @@ export default function TagEditModal({ tag, isOpen, onClose, onSuccess, onDelete
   }
 
   // Filtrar tags disponíveis (excluir a tag atual)
-  const tagsToMigrate = availableTags.filter(t => t.id !== tag?.id)
+  const tagsToMigrate = availableTags
+    .filter(t => t.id !== tag?.id)
+    .sort((a, b) =>
+      normalizeTagName(a.name).localeCompare(normalizeTagName(b.name), 'pt-BR', { sensitivity: 'base' })
+    )
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

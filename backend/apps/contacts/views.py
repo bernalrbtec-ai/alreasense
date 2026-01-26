@@ -8,7 +8,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.pagination import PageNumberPagination
 from django.http import HttpResponse
-from django.db.models import Q, Avg, Count
+from django.db.models import Q, Avg, Count, Prefetch
 from django.utils import timezone
 from django.db import transaction, ProgrammingError, connection
 from datetime import timedelta
@@ -108,7 +108,10 @@ class ContactViewSet(viewsets.ModelViewSet):
         
         qs = Contact.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
         
-        qs = qs.prefetch_related('tags', 'lists')
+        qs = qs.prefetch_related(
+            Prefetch('tags', queryset=Tag.objects.order_by('name')),
+            'lists'
+        )
         
         # Filtros customizados
         tags = self.request.query_params.get('tags')
@@ -639,7 +642,7 @@ class TagViewSet(viewsets.ModelViewSet):
                 filter=Q(contacts__is_active=True),
                 distinct=True
             )
-        ).select_related('tenant')
+        ).select_related('tenant').order_by('name')
     
     def perform_create(self, serializer):
         """Associa tenant na criação com tratamento de duplicação"""
@@ -659,6 +662,22 @@ class TagViewSet(viewsets.ModelViewSet):
                 raise serializers.ValidationError({
                     'non_field_errors': ['Erro ao criar tag. Tente novamente.']
                 })
+
+    def perform_update(self, serializer):
+        """Atualiza tag com tratamento de duplicação"""
+        from django.db import IntegrityError
+
+        try:
+            serializer.save()
+        except IntegrityError as e:
+            if 'unique constraint' in str(e).lower() and 'tenant_id_name' in str(e):
+                tag_name = serializer.validated_data.get('name', '')
+                raise serializers.ValidationError({
+                    'name': f'A tag "{tag_name}" já existe. Escolha um nome diferente.'
+                })
+            raise serializers.ValidationError({
+                'non_field_errors': ['Erro ao atualizar tag. Tente novamente.']
+            })
     
     @action(detail=True, methods=['delete'])
     def delete_with_options(self, request, pk=None):

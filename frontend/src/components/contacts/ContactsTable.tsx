@@ -8,6 +8,14 @@ interface Tag {
   color: string
 }
 
+const normalizeTagName = (value: string) => value.trim().replace(/\s+/g, ' ')
+
+const sortTagsByName = (list: Tag[]) => (
+  [...list].sort((a, b) =>
+    normalizeTagName(a.name).localeCompare(normalizeTagName(b.name), 'pt-BR', { sensitivity: 'base' })
+  )
+)
+
 interface Contact {
   id: string
   name: string
@@ -164,7 +172,7 @@ export default function ContactsTable({ contacts, availableCustomFields, onEdit,
                 <td className="px-6 py-4">
                   <div className="flex flex-wrap gap-1">
                     {contact.tags && contact.tags.length > 0 ? (
-                      contact.tags.slice(0, 2).map((tag) => (
+                      sortTagsByName(contact.tags).slice(0, 2).map((tag) => (
                         <span
                           key={tag.id}
                           className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"

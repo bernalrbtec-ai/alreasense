@@ -17,6 +17,14 @@ interface Tag {
   color: string
 }
 
+const normalizeTagName = (value: string) => value.trim().replace(/\s+/g, ' ')
+
+const sortTagsByName = (list: Tag[]) => (
+  [...list].sort((a, b) =>
+    normalizeTagName(a.name).localeCompare(normalizeTagName(b.name), 'pt-BR', { sensitivity: 'base' })
+  )
+)
+
 interface Contact {
   id?: string
   name: string
@@ -116,7 +124,8 @@ export default function ContactModal({
   const fetchTags = async () => {
     try {
       const response = await api.get('/contacts/tags/')
-      setTags(response.data.results || response.data || [])
+      const fetchedTags = response.data.results || response.data || []
+      setTags(sortTagsByName(fetchedTags))
     } catch (error) {
       console.error('Erro ao carregar tags:', error)
     }
@@ -125,12 +134,18 @@ export default function ContactModal({
   const createTag = async () => {
     if (!newTagName.trim()) return
 
+    const normalizedName = normalizeTagName(newTagName)
+    if (tags.some(tag => normalizeTagName(tag.name).toLowerCase() === normalizedName.toLowerCase())) {
+      showErrorToast('criar', 'Tag', new Error(`A tag "${normalizedName}" já existe. Escolha um nome diferente.`))
+      return
+    }
+
     try {
       const response = await api.post('/contacts/tags/', {
-        name: newTagName.trim(),
+        name: normalizedName,
         color: newTagColor
       })
-      setTags(prev => [...prev, response.data])
+      setTags(prev => sortTagsByName([...prev, response.data]))
       setNewTagName('')
       setNewTagColor('#3b82f6')
       showSuccessToast('criar', 'Tag')

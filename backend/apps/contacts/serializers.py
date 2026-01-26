@@ -26,6 +26,31 @@ class TagSerializer(serializers.ModelSerializer):
     def get_contact_count(self, obj):
         return getattr(obj, 'contact_count_agg', None) or obj.contact_count
 
+    def validate_name(self, value):
+        """Normaliza e valida duplicidade de tag por tenant"""
+        normalized_name = ' '.join(value.split()).strip()
+        if not normalized_name:
+            raise serializers.ValidationError('Nome da tag é obrigatório')
+
+        request = self.context.get('request')
+        tenant = getattr(request.user, 'tenant', None) if request else None
+        if not tenant:
+            return normalized_name
+
+        existing = Tag.objects.filter(
+            tenant=tenant,
+            name__iexact=normalized_name
+        )
+        if self.instance:
+            existing = existing.exclude(id=self.instance.id)
+
+        if existing.exists():
+            raise serializers.ValidationError(
+                f'A tag "{normalized_name}" já existe. Escolha um nome diferente.'
+            )
+
+        return normalized_name
+
 
 class ContactListSerializer(serializers.ModelSerializer):
     contact_count = serializers.SerializerMethodField()
