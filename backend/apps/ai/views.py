@@ -7,6 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
+from django.conf import settings
 from django.utils import timezone
 
 # from .tasks import analyze_message_async  # Removido - Celery deletado
@@ -36,7 +37,8 @@ def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
         "transcription_max_mb": settings_obj.transcription_max_mb,
         "triage_enabled": settings_obj.triage_enabled,
         "agent_model": settings_obj.agent_model,
-        "n8n_webhook_url": settings_obj.n8n_webhook_url or "",
+        "n8n_audio_webhook_url": settings_obj.n8n_audio_webhook_url or "",
+        "n8n_triage_webhook_url": settings_obj.n8n_triage_webhook_url or "",
     }
 
 
@@ -155,6 +157,14 @@ def ai_stats(request):
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def triage_test(request):
     """Run a triage test prompt via N8N."""
+    settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=request.user.tenant)
+    triage_webhook = settings_obj.n8n_triage_webhook_url or getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
+    if settings_obj.triage_enabled and not triage_webhook:
+        return Response(
+            {"error": "Webhook de triagem obrigatório quando habilitado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
     payload = {
         "message": request.data.get("message", ""),
         "prompt": request.data.get("prompt", ""),
@@ -249,9 +259,22 @@ def ai_settings(request):
     if 'agent_model' in data:
         settings_obj.agent_model = str(data.get('agent_model') or '').strip()
 
-    if 'n8n_webhook_url' in data:
-        url = str(data.get('n8n_webhook_url') or '').strip()
-        settings_obj.n8n_webhook_url = url
+    if 'n8n_audio_webhook_url' in data:
+        url = str(data.get('n8n_audio_webhook_url') or '').strip()
+        settings_obj.n8n_audio_webhook_url = url
+
+    if 'n8n_triage_webhook_url' in data:
+        url = str(data.get('n8n_triage_webhook_url') or '').strip()
+        settings_obj.n8n_triage_webhook_url = url
+
+    audio_webhook = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
+    triage_webhook = settings_obj.n8n_triage_webhook_url or getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
+
+    if settings_obj.audio_transcription_enabled and not audio_webhook:
+        errors['n8n_audio_webhook_url'] = 'Webhook de transcrição obrigatório quando habilitado.'
+
+    if settings_obj.triage_enabled and not triage_webhook:
+        errors['n8n_triage_webhook_url'] = 'Webhook de triagem obrigatório quando habilitado.'
 
     if errors:
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -265,6 +288,12 @@ def ai_settings(request):
 def transcribe_test(request):
     tenant = request.user.tenant
     settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=tenant)
+    audio_webhook = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
+    if settings_obj.audio_transcription_enabled and not audio_webhook:
+        return Response(
+            {"error": "Webhook de transcrição obrigatório quando habilitado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
 
     audio_file = request.FILES.get('file')
     media_url = request.data.get('media_url')

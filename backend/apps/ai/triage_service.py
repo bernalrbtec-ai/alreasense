@@ -23,36 +23,45 @@ def _get_tenant_ai_settings(tenant):
     return settings_obj
 
 
-def _resolve_n8n_url(tenant=None) -> str:
+def _resolve_n8n_audio_url(tenant=None) -> str:
     if tenant:
         try:
             settings_obj = _get_tenant_ai_settings(tenant)
-            if settings_obj.n8n_webhook_url:
-                return settings_obj.n8n_webhook_url
+            if settings_obj.n8n_audio_webhook_url:
+                return settings_obj.n8n_audio_webhook_url
         except Exception:
-            logger.warning("Failed to resolve tenant N8N webhook override", exc_info=True)
-    return getattr(settings, 'N8N_AI_WEBHOOK', '')
+            logger.warning("Failed to resolve tenant N8N audio webhook override", exc_info=True)
+    return getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
 
 
-def _n8n_url() -> str:
-    return _resolve_n8n_url()
+def _resolve_n8n_triage_url(tenant=None) -> str:
+    if tenant:
+        try:
+            settings_obj = _get_tenant_ai_settings(tenant)
+            if settings_obj.n8n_triage_webhook_url:
+                return settings_obj.n8n_triage_webhook_url
+        except Exception:
+            logger.warning("Failed to resolve tenant N8N triage webhook override", exc_info=True)
+    return getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
 
 
 def _post_to_n8n(
     action: str,
     payload: Dict[str, Any],
     timeout: float = 10.0,
-    tenant=None
+    tenant=None,
+    url: Optional[str] = None,
+    error_message: str = "N8N webhook not configured"
 ) -> Dict[str, Any]:
-    url = _resolve_n8n_url(tenant)
-    if not url:
-        raise ValueError("N8N_AI_WEBHOOK not configured")
+    resolved_url = url or ""
+    if not resolved_url:
+        raise ValueError(error_message)
 
     body = {
         "action": action,
         **payload,
     }
-    response = requests.post(url, json=body, timeout=timeout)
+    response = requests.post(resolved_url, json=body, timeout=timeout)
     response.raise_for_status()
     return response.json() if response.content else {}
 
@@ -155,7 +164,13 @@ def _triage_worker(tenant, conversation, message, extra_context: Optional[Dict[s
         if extra_context:
             context.update(extra_context)
 
-        response_data = _post_to_n8n("triage", context, tenant=tenant)
+        response_data = _post_to_n8n(
+            "triage",
+            context,
+            tenant=tenant,
+            url=_resolve_n8n_triage_url(tenant),
+            error_message="N8N triage webhook not configured",
+        )
         latency_ms = int((time.time() - start_time) * 1000)
 
         AiTriageResult.objects.create(
@@ -193,8 +208,12 @@ def _triage_worker(tenant, conversation, message, extra_context: Optional[Dict[s
 
 
 def dispatch_triage_async(conversation, message, extra_context: Optional[Dict[str, Any]] = None) -> None:
-    if not _resolve_n8n_url(conversation.tenant):
-        logger.info("N8N_AI_WEBHOOK not configured; triage skipped.")
+    settings_obj = _get_tenant_ai_settings(conversation.tenant)
+    if not settings_obj.triage_enabled:
+        logger.info("Triage disabled for tenant; triage skipped.")
+        return
+    if not _resolve_n8n_triage_url(conversation.tenant):
+        logger.info("N8N triage webhook not configured; triage skipped.")
         return
 
     thread = threading.Thread(
@@ -206,8 +225,8 @@ def dispatch_triage_async(conversation, message, extra_context: Optional[Dict[st
 
 
 def run_test_prompt(tenant, payload: Dict[str, Any]) -> Dict[str, Any]:
-    if not _resolve_n8n_url(tenant):
-        raise ValueError("N8N_AI_WEBHOOK not configured")
+    if not _resolve_n8n_triage_url(tenant):
+        raise ValueError("N8N triage webhook not configured")
 
     context = {
         "tenant": {
@@ -216,7 +235,13 @@ def run_test_prompt(tenant, payload: Dict[str, Any]) -> Dict[str, Any]:
         },
         **payload,
     }
-    return _post_to_n8n("test_prompt", context, tenant=tenant)
+    return _post_to_n8n(
+        "test_prompt",
+        context,
+        tenant=tenant,
+        url=_resolve_n8n_triage_url(tenant),
+        error_message="N8N triage webhook not configured",
+    )
 
 
 def _extract_duration_ms(metadata: Optional[Dict[str, Any]]) -> Optional[int]:
@@ -299,7 +324,14 @@ def _transcription_worker(
             "source": source,
         }
 
-        response_data = _post_to_n8n("transcribe", payload, timeout=30.0, tenant=tenant)
+        response_data = _post_to_n8n(
+            "transcribe",
+            payload,
+            timeout=30.0,
+            tenant=tenant,
+            url=_resolve_n8n_audio_url(tenant),
+            error_message="N8N audio webhook not configured",
+        )
 
         transcript_text = response_data.get("transcript_text") or response_data.get("text") or ""
         language = response_data.get("language_detected") or response_data.get("language") or ""
@@ -345,8 +377,8 @@ def dispatch_transcription_async(
         if not _can_auto_transcribe(settings_obj, attachment, duration_ms):
             logger.info("Audio transcription auto-disabled for attachment %s", attachment_id)
             return
-        if not _resolve_n8n_url(attachment.tenant):
-            logger.info("N8N_AI_WEBHOOK not configured; transcription skipped.")
+        if not _resolve_n8n_audio_url(attachment.tenant):
+            logger.info("N8N audio webhook not configured; transcription skipped.")
             return
     except Exception as exc:
         logger.error("Unable to enqueue transcription: %s", exc, exc_info=True)
@@ -361,12 +393,19 @@ def dispatch_transcription_async(
 
 
 def run_transcription_test(tenant, payload: Dict[str, Any]) -> Dict[str, Any]:
-    if not _resolve_n8n_url(tenant):
-        raise ValueError("N8N_AI_WEBHOOK not configured")
+    if not _resolve_n8n_audio_url(tenant):
+        raise ValueError("N8N audio webhook not configured")
 
     context = {
         "tenant_id": str(tenant.id),
         "tenant_name": tenant.name,
         **payload,
     }
-    return _post_to_n8n("transcribe", context, timeout=30.0, tenant=tenant)
+    return _post_to_n8n(
+        "transcribe",
+        context,
+        timeout=30.0,
+        tenant=tenant,
+        url=_resolve_n8n_audio_url(tenant),
+        error_message="N8N audio webhook not configured",
+    )

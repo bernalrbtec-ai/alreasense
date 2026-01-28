@@ -178,7 +178,8 @@ interface AiSettings {
   transcription_max_mb: number
   triage_enabled: boolean
   agent_model: string
-  n8n_webhook_url: string
+  n8n_audio_webhook_url: string
+  n8n_triage_webhook_url: string
 }
 
 const DAYS = [
@@ -1442,20 +1443,43 @@ export default function ConfigurationsPage() {
                   </div>
                 </div>
 
-                <div>
-                  <Label htmlFor="n8n_webhook_url">N8N Webhook (opcional)</Label>
-                  <Input
-                    id="n8n_webhook_url"
-                    type="text"
-                    value={aiSettings.n8n_webhook_url}
-                    onChange={(e) => setAiSettings({ ...aiSettings, n8n_webhook_url: e.target.value })}
-                    className="mt-1"
-                    placeholder="https://n8n.exemplo.com/webhook/ai"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Se preenchido, substitui o webhook global apenas para este tenant.
-                  </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="n8n_audio_webhook_url">N8N Webhook (Transcrição)</Label>
+                    <Input
+                      id="n8n_audio_webhook_url"
+                      type="text"
+                      value={aiSettings.n8n_audio_webhook_url}
+                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
+                      className="mt-1"
+                      placeholder="https://n8n.exemplo.com/webhook/audio"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Obrigatório quando a transcrição estiver habilitada.
+                    </p>
+                  </div>
+                  <div>
+                    <Label htmlFor="n8n_triage_webhook_url">N8N Webhook (Triagem)</Label>
+                    <Input
+                      id="n8n_triage_webhook_url"
+                      type="text"
+                      value={aiSettings.n8n_triage_webhook_url}
+                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_triage_webhook_url: e.target.value })}
+                      className="mt-1"
+                      placeholder="https://n8n.exemplo.com/webhook/triage"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Obrigatório quando a triagem estiver habilitada.
+                    </p>
+                  </div>
                 </div>
+
+                {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
+                (aiSettings.triage_enabled && !aiSettings.n8n_triage_webhook_url) ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                    Preencha os webhooks obrigatórios para ativar transcrição e triagem.
+                  </div>
+                ) : null}
 
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
                   A transcrição automática só roda quando <strong>IA</strong> estiver habilitada.
