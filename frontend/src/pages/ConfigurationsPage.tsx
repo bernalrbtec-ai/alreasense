@@ -27,6 +27,7 @@ import {
   Clock,
   MessageSquare,
   Calendar,
+  Activity,
   Lock
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
@@ -169,6 +170,17 @@ interface AfterHoursTaskConfig {
   is_active: boolean
 }
 
+interface AiSettings {
+  ai_enabled: boolean
+  audio_transcription_enabled: boolean
+  transcription_auto: boolean
+  transcription_min_seconds: number
+  transcription_max_mb: number
+  triage_enabled: boolean
+  agent_model: string
+  n8n_webhook_url: string
+}
+
 const DAYS = [
   { key: 'monday', label: 'Segunda-feira', short: 'Seg' },
   { key: 'tuesday', label: 'Terça-feira', short: 'Ter' },
@@ -189,7 +201,7 @@ const TIMEZONES = [
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -240,6 +252,11 @@ export default function ConfigurationsPage() {
   const [welcomeMenuSaving, setWelcomeMenuSaving] = useState(false)
   const [welcomeMenuPreview, setWelcomeMenuPreview] = useState<string>('')
   const [showWelcomeMenuPreview, setShowWelcomeMenuPreview] = useState(false)
+  
+  // Estados para IA / Assistentes
+  const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
+  const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
+  const [aiSettingsSaving, setAiSettingsSaving] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -250,6 +267,9 @@ export default function ConfigurationsPage() {
     if (activeTab === 'welcome-menu' && user?.is_admin) {
       // ✅ CORREÇÃO: Sempre recarregar quando entrar na aba (garantir dados atualizados)
       fetchWelcomeMenuConfig()
+    }
+    if (activeTab === 'ai' && user?.is_admin) {
+      fetchAiSettings()
     }
   }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
   
@@ -793,6 +813,39 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const fetchAiSettings = async () => {
+    try {
+      setAiSettingsLoading(true)
+      const response = await api.get('/ai/settings/')
+      setAiSettings(response.data)
+    } catch (error: any) {
+      console.error('Erro ao carregar configurações de IA:', error)
+      if (error.response?.status === 403) {
+        showErrorToast('Apenas administradores podem acessar esta configuração')
+      } else {
+        showErrorToast('Erro ao carregar configurações de IA')
+      }
+    } finally {
+      setAiSettingsLoading(false)
+    }
+  }
+
+  const handleSaveAiSettings = async () => {
+    if (!aiSettings) return
+    const toastId = showLoadingToast('salvar', 'Configurações de IA')
+    try {
+      setAiSettingsSaving(true)
+      const response = await api.put('/ai/settings/', aiSettings)
+      setAiSettings(response.data)
+      updateToastSuccess(toastId, 'salvar', 'Configurações de IA')
+    } catch (error: any) {
+      console.error('Erro ao salvar configurações de IA:', error)
+      updateToastError(toastId, 'salvar', 'Configurações de IA', error)
+    } finally {
+      setAiSettingsSaving(false)
+    }
+  }
+
   const generateWelcomeMenuPreview = (config: any) => {
     if (!config) return
     
@@ -962,6 +1015,19 @@ export default function ConfigurationsPage() {
             <Clock className="h-4 w-4 inline mr-2" />
             Horários de Atendimento
           </button>
+          {user?.is_admin && (
+            <button
+              onClick={() => setActiveTab('ai')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'ai'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <Activity className="h-4 w-4 inline mr-2" />
+              IA / Assistentes
+            </button>
+          )}
           {user?.is_admin && (
             <button
               onClick={() => setActiveTab('welcome-menu')}
@@ -1260,6 +1326,151 @@ export default function ConfigurationsPage() {
 
       {activeTab === 'notifications' && (
         <NotificationSettings />
+      )}
+
+      {activeTab === 'ai' && user?.is_admin && (
+        <div className="space-y-6">
+          {aiSettingsLoading || !aiSettings ? (
+            <div className="flex items-center justify-center h-64">
+              <LoadingSpinner />
+            </div>
+          ) : (
+            <Card className="p-6">
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">Ativar IA</Label>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Controla o uso de recursos de IA para este tenant.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.ai_enabled}
+                      onChange={(e) => setAiSettings({ ...aiSettings, ai_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">Transcrição automática</Label>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Executa transcrição automaticamente ao receber áudios.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.transcription_auto}
+                      onChange={(e) => setAiSettings({ ...aiSettings, transcription_auto: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">Transcrição de áudio</Label>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Habilita o uso do fluxo de transcrição via N8N.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.audio_transcription_enabled}
+                      onChange={(e) => setAiSettings({ ...aiSettings, audio_transcription_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <Label className="text-base font-semibold">Triagem de mensagens</Label>
+                    <p className="text-sm text-gray-600 mt-1">
+                      Habilita o envio de mensagens para triagem via IA.
+                    </p>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={aiSettings.triage_enabled}
+                      onChange={(e) => setAiSettings({ ...aiSettings, triage_enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="transcription_min_seconds">Min. segundos para transcrição</Label>
+                    <Input
+                      id="transcription_min_seconds"
+                      type="number"
+                      value={aiSettings.transcription_min_seconds}
+                      onChange={(e) => setAiSettings({ ...aiSettings, transcription_min_seconds: Number(e.target.value) })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="transcription_max_mb">Máx. MB por áudio</Label>
+                    <Input
+                      id="transcription_max_mb"
+                      type="number"
+                      value={aiSettings.transcription_max_mb}
+                      onChange={(e) => setAiSettings({ ...aiSettings, transcription_max_mb: Number(e.target.value) })}
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="agent_model">Modelo padrão</Label>
+                    <Input
+                      id="agent_model"
+                      type="text"
+                      value={aiSettings.agent_model}
+                      onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="n8n_webhook_url">N8N Webhook (opcional)</Label>
+                  <Input
+                    id="n8n_webhook_url"
+                    type="text"
+                    value={aiSettings.n8n_webhook_url}
+                    onChange={(e) => setAiSettings({ ...aiSettings, n8n_webhook_url: e.target.value })}
+                    className="mt-1"
+                    placeholder="https://n8n.exemplo.com/webhook/ai"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Se preenchido, substitui o webhook global apenas para este tenant.
+                  </p>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                  A transcrição automática só roda quando <strong>IA</strong> estiver habilitada.
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleSaveAiSettings} disabled={aiSettingsSaving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {aiSettingsSaving ? 'Salvando...' : 'Salvar Configurações'}
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          )}
+        </div>
       )}
 
       {/* Tab Content - Plano */}

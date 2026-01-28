@@ -1117,6 +1117,21 @@ async def handle_process_incoming_media(
         
         # 7. ✅ REMOVIDO: Cache Redis (padronizado com ENVIO - sem cache)
         # O envio não usa cache, então o recebimento também não usa
+
+        # 7.1 IA - Transcrição automática (áudios)
+        try:
+            if media_type == 'audio' and attachment.processing_status == 'completed':
+                from apps.ai.triage_service import dispatch_transcription_async
+                dispatch_transcription_async(
+                    tenant_id=str(tenant_id),
+                    attachment_id=str(attachment.id),
+                    message_id=str(message_id),
+                    conversation_id=str(message.conversation_id),
+                    direction=message.direction,
+                    source="incoming_media",
+                )
+        except Exception as ai_error:
+            logger.error(f"❌ [TRANSCRIPTION] Erro ao disparar transcrição: {ai_error}", exc_info=True)
         
         # 8. Broadcast via WebSocket (padronizado com ENVIO)
         from channels.layers import get_channel_layer

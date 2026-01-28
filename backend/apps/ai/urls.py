@@ -5,4 +5,8 @@ urlpatterns = [
     path('analyze/<int:message_id>/', views.analyze_message, name='analyze-message'),
     path('analyze/batch/', views.analyze_batch, name='analyze-batch'),
     path('stats/', views.ai_stats, name='ai-stats'),
+    path('settings/', views.ai_settings, name='ai-settings'),
+    path('transcribe/test/', views.transcribe_test, name='transcribe-test'),
+    path('triage/test/', views.triage_test, name='triage-test'),
+    path('triage/history/', views.triage_history, name='triage-history'),
 ]
