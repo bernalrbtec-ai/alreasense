@@ -136,8 +136,8 @@ def _save_memory_items(tenant, conversation, message, items: List[Dict[str, Any]
         embedding = embed_text(content)
         AiMemoryItem.objects.create(
             tenant=tenant,
-            conversation=conversation,
-            message=message,
+            conversation_id=conversation.id if conversation else None,
+            message_id=message.id if message else None,
             kind=(item or {}).get('kind', 'fact'),
             content=content,
             metadata=(item or {}).get('metadata', {}),
@@ -160,8 +160,8 @@ def _triage_worker(tenant, conversation, message, extra_context: Optional[Dict[s
 
         AiTriageResult.objects.create(
             tenant=tenant,
-            conversation=conversation,
-            message=message,
+            conversation_id=conversation.id if conversation else None,
+            message_id=message.id if message else None,
             action="triage",
             model_name=response_data.get("model", ""),
             prompt_version=response_data.get("prompt_version", ""),
@@ -180,8 +180,8 @@ def _triage_worker(tenant, conversation, message, extra_context: Optional[Dict[s
         latency_ms = int((time.time() - start_time) * 1000)
         AiTriageResult.objects.create(
             tenant=tenant,
-            conversation=conversation,
-            message=message,
+            conversation_id=conversation.id if conversation else None,
+            message_id=message.id if message else None,
             action="triage",
             latency_ms=latency_ms,
             status="failed",

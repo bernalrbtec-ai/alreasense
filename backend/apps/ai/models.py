@@ -1,7 +1,6 @@
 from django.db import models
 
 from apps.tenancy.models import Tenant
-from apps.chat.models import Conversation, Message
 
 
 class AiKnowledgeDocument(models.Model):
@@ -40,12 +39,8 @@ class AiMemoryItem(models.Model):
     ]
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='ai_memory_items')
-    conversation = models.ForeignKey(
-        Conversation, on_delete=models.CASCADE, related_name='ai_memory_items', null=True, blank=True
-    )
-    message = models.ForeignKey(
-        Message, on_delete=models.SET_NULL, related_name='ai_memory_items', null=True, blank=True
-    )
+    conversation_id = models.UUIDField(null=True, blank=True)
+    message_id = models.UUIDField(null=True, blank=True)
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='fact')
     content = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)
@@ -69,12 +64,8 @@ class AiTriageResult(models.Model):
     """Resultado de triagem vindo do N8N/LLM."""
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='ai_triage_results')
-    conversation = models.ForeignKey(
-        Conversation, on_delete=models.SET_NULL, related_name='ai_triage_results', null=True, blank=True
-    )
-    message = models.ForeignKey(
-        Message, on_delete=models.SET_NULL, related_name='ai_triage_results', null=True, blank=True
-    )
+    conversation_id = models.UUIDField(null=True, blank=True)
+    message_id = models.UUIDField(null=True, blank=True)
     action = models.CharField(max_length=50, default='triage')
     model_name = models.CharField(max_length=100, blank=True)
     prompt_version = models.CharField(max_length=100, blank=True)

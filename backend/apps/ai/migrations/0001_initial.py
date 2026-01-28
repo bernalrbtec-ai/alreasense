@@ -44,8 +44,8 @@ class Migration(migrations.Migration):
                 ('embedding', models.JSONField(blank=True, null=True)),
                 ('expires_at', models.DateTimeField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('conversation', models.ForeignKey(blank=True, null=True, on_delete=models.deletion.CASCADE, related_name='ai_memory_items', to='chat.conversation')),
-                ('message', models.ForeignKey(blank=True, null=True, on_delete=models.deletion.SET_NULL, related_name='ai_memory_items', to='chat.message')),
+                ('conversation_id', models.UUIDField(blank=True, null=True)),
+                ('message_id', models.UUIDField(blank=True, null=True)),
                 ('tenant', models.ForeignKey(on_delete=models.deletion.CASCADE, related_name='ai_memory_items', to='tenancy.tenant')),
             ],
             options={
@@ -70,8 +70,8 @@ class Migration(migrations.Migration):
                 ('raw_request', models.JSONField(blank=True, default=dict)),
                 ('raw_response', models.JSONField(blank=True, default=dict)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
-                ('conversation', models.ForeignKey(blank=True, null=True, on_delete=models.deletion.SET_NULL, related_name='ai_triage_results', to='chat.conversation')),
-                ('message', models.ForeignKey(blank=True, null=True, on_delete=models.deletion.SET_NULL, related_name='ai_triage_results', to='chat.message')),
+                ('conversation_id', models.UUIDField(blank=True, null=True)),
+                ('message_id', models.UUIDField(blank=True, null=True)),
                 ('tenant', models.ForeignKey(on_delete=models.deletion.CASCADE, related_name='ai_triage_results', to='tenancy.tenant')),
             ],
             options={
