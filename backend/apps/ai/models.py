@@ -80,8 +80,8 @@ class AiTriageResult(models.Model):
         db_table = 'ai_triage_result'
         indexes = [
             models.Index(fields=['tenant', 'created_at']),
-            models.Index(fields=['conversation', 'created_at']),
-            models.Index(fields=['message', 'created_at']),
+            models.Index(fields=['conversation_id', 'created_at']),
+            models.Index(fields=['message_id', 'created_at']),
         ]
         ordering = ['-created_at']
 

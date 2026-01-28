@@ -79,8 +79,8 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
                 'indexes': [
                     models.Index(fields=['tenant', 'created_at'], name='ai_triage__tenant__a85b95_idx'),
-                    models.Index(fields=['conversation', 'created_at'], name='ai_triage__conver_92b266_idx'),
-                    models.Index(fields=['message', 'created_at'], name='ai_triage__message_8d6c6b_idx'),
+                    models.Index(fields=['conversation_id', 'created_at'], name='ai_triage__conver_92b266_idx'),
+                    models.Index(fields=['message_id', 'created_at'], name='ai_triage__message_8d6c6b_idx'),
                 ],
             },
         ),
