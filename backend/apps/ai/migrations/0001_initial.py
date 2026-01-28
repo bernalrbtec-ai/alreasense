@@ -1,5 +1,4 @@
 from django.db import migrations, models
-from pgvector.django import VectorField, HnswIndex
 
 
 class Migration(migrations.Migration):
@@ -12,7 +11,6 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunSQL("CREATE EXTENSION IF NOT EXISTS vector"),
         migrations.CreateModel(
             name='AiKnowledgeDocument',
             fields=[
@@ -22,7 +20,7 @@ class Migration(migrations.Migration):
                 ('source', models.CharField(blank=True, max_length=200)),
                 ('tags', models.JSONField(blank=True, default=list)),
                 ('metadata', models.JSONField(blank=True, default=dict)),
-                ('embedding', VectorField(blank=True, dimensions=768, null=True)),
+                ('embedding', models.JSONField(blank=True, null=True)),
                 ('expires_at', models.DateTimeField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('updated_at', models.DateTimeField(auto_now=True)),
@@ -33,7 +31,6 @@ class Migration(migrations.Migration):
                 'ordering': ['-created_at'],
                 'indexes': [
                     models.Index(fields=['tenant', 'created_at'], name='ai_knowledg_tenant__c5e4a0_idx'),
-                    HnswIndex(fields=['embedding'], name='ai_knowledge_embedding_hnsw'),
                 ],
             },
         ),
@@ -44,7 +41,7 @@ class Migration(migrations.Migration):
                 ('kind', models.CharField(choices=[('fact', 'Fato'), ('summary', 'Resumo'), ('action', 'Acao'), ('note', 'Nota')], default='fact', max_length=20)),
                 ('content', models.TextField()),
                 ('metadata', models.JSONField(blank=True, default=dict)),
-                ('embedding', VectorField(blank=True, dimensions=768, null=True)),
+                ('embedding', models.JSONField(blank=True, null=True)),
                 ('expires_at', models.DateTimeField(blank=True, null=True)),
                 ('created_at', models.DateTimeField(auto_now_add=True)),
                 ('conversation', models.ForeignKey(blank=True, null=True, on_delete=models.deletion.CASCADE, related_name='ai_memory_items', to='chat.conversation')),
@@ -57,7 +54,6 @@ class Migration(migrations.Migration):
                 'indexes': [
                     models.Index(fields=['tenant', 'created_at'], name='ai_memory__tenant__c5db2a_idx'),
                     models.Index(fields=['tenant', 'expires_at'], name='ai_memory__tenant__f357e2_idx'),
-                    HnswIndex(fields=['embedding'], name='ai_memory_embedding_hnsw'),
                 ],
             },
         ),

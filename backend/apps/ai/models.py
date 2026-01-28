@@ -1,5 +1,4 @@
 from django.db import models
-from pgvector.django import VectorField, HnswIndex
 
 from apps.tenancy.models import Tenant
 from apps.chat.models import Conversation, Message
@@ -14,7 +13,7 @@ class AiKnowledgeDocument(models.Model):
     source = models.CharField(max_length=200, blank=True)
     tags = models.JSONField(default=list, blank=True)
     metadata = models.JSONField(default=dict, blank=True)
-    embedding = VectorField(dimensions=768, null=True, blank=True)
+    embedding = models.JSONField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -23,7 +22,6 @@ class AiKnowledgeDocument(models.Model):
         db_table = 'ai_knowledge_document'
         indexes = [
             models.Index(fields=['tenant', 'created_at']),
-            HnswIndex(name='ai_knowledge_embedding_hnsw', fields=['embedding']),
         ]
         ordering = ['-created_at']
 
@@ -51,7 +49,7 @@ class AiMemoryItem(models.Model):
     kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='fact')
     content = models.TextField()
     metadata = models.JSONField(default=dict, blank=True)
-    embedding = VectorField(dimensions=768, null=True, blank=True)
+    embedding = models.JSONField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -60,7 +58,6 @@ class AiMemoryItem(models.Model):
         indexes = [
             models.Index(fields=['tenant', 'created_at']),
             models.Index(fields=['tenant', 'expires_at']),
-            HnswIndex(name='ai_memory_embedding_hnsw', fields=['embedding']),
         ]
         ordering = ['-created_at']
 
