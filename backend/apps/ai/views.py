@@ -1,6 +1,7 @@
 import logging
 import re
 import uuid
+import requests
 
 from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
@@ -356,6 +357,55 @@ def transcribe_test(request):
     try:
         response_data = run_transcription_test(tenant, payload)
         return Response({"status": "success", "data": response_data})
+    except Exception as exc:
+        return Response(
+            {"status": "error", "error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def webhook_test(request):
+    tenant = request.user.tenant
+    settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=tenant)
+    webhook_type = str(request.data.get('type') or '').strip().lower()
+
+    if webhook_type not in {'audio', 'triage'}:
+        return Response(
+            {"error": "Tipo de webhook inválido. Use 'audio' ou 'triage'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if webhook_type == 'audio':
+        webhook_url = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
+        if settings_obj.audio_transcription_enabled and not webhook_url:
+            return Response(
+                {"error": "Webhook de transcrição obrigatório quando habilitado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        webhook_url = settings_obj.n8n_triage_webhook_url or getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
+        if settings_obj.triage_enabled and not webhook_url:
+            return Response(
+                {"error": "Webhook de triagem obrigatório quando habilitado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+    if not webhook_url:
+        return Response(
+            {"error": "Webhook não configurado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        response = requests.post(
+            webhook_url,
+            json={"action": "ping"},
+            timeout=5.0,
+        )
+        response.raise_for_status()
+        return Response({"status": "success"})
     except Exception as exc:
         return Response(
             {"status": "error", "error": str(exc)},

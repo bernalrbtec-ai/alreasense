@@ -7,6 +7,7 @@ urlpatterns = [
     path('stats/', views.ai_stats, name='ai-stats'),
     path('settings/', views.ai_settings, name='ai-settings'),
     path('transcribe/test/', views.transcribe_test, name='transcribe-test'),
+    path('webhook/test/', views.webhook_test, name='webhook-test'),
     path('triage/test/', views.triage_test, name='triage-test'),
     path('triage/history/', views.triage_history, name='triage-history'),
 ]

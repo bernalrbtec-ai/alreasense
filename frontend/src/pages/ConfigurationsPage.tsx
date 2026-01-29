@@ -258,6 +258,11 @@ export default function ConfigurationsPage() {
   const [aiSettings, setAiSettings] = useState<AiSettings | null>(null)
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
   const [aiSettingsSaving, setAiSettingsSaving] = useState(false)
+  const [aiSettingsErrors, setAiSettingsErrors] = useState<Record<string, string>>({})
+  const [webhookTesting, setWebhookTesting] = useState<{ audio: boolean; triage: boolean }>({
+    audio: false,
+    triage: false
+  })
 
   useEffect(() => {
     fetchData()
@@ -833,17 +838,60 @@ export default function ConfigurationsPage() {
 
   const handleSaveAiSettings = async () => {
     if (!aiSettings) return
+
+    const errors: Record<string, string> = {}
+    if (aiSettings.ai_enabled) {
+      if (aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) {
+        errors.n8n_audio_webhook_url = 'Webhook de transcrição obrigatório.'
+      }
+      if (aiSettings.triage_enabled && !aiSettings.n8n_triage_webhook_url) {
+        errors.n8n_triage_webhook_url = 'Webhook de triagem obrigatório.'
+      }
+    }
+
+    if (aiSettings.transcription_min_seconds < 0) {
+      errors.transcription_min_seconds = 'Valor inválido.'
+    }
+    if (aiSettings.transcription_max_mb < 0) {
+      errors.transcription_max_mb = 'Valor inválido.'
+    }
+
+    setAiSettingsErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      showErrorToast('Preencha os campos obrigatórios antes de salvar.')
+      return
+    }
+
     const toastId = showLoadingToast('salvar', 'Configurações de IA')
     try {
       setAiSettingsSaving(true)
       const response = await api.put('/ai/settings/', aiSettings)
       setAiSettings(response.data)
+      setAiSettingsErrors({})
       updateToastSuccess(toastId, 'salvar', 'Configurações de IA')
     } catch (error: any) {
       console.error('Erro ao salvar configurações de IA:', error)
+      const apiErrors = error.response?.data?.errors || {}
+      if (apiErrors && typeof apiErrors === 'object') {
+        setAiSettingsErrors(apiErrors)
+      }
       updateToastError(toastId, 'salvar', 'Configurações de IA', error)
     } finally {
       setAiSettingsSaving(false)
+    }
+  }
+
+  const handleTestWebhook = async (type: 'audio' | 'triage') => {
+    if (!aiSettings) return
+    const toastId = showLoadingToast('testar', `Webhook ${type === 'audio' ? 'de transcrição' : 'de triagem'}`)
+    try {
+      setWebhookTesting((prev) => ({ ...prev, [type]: true }))
+      await api.post('/ai/webhook/test/', { type })
+      updateToastSuccess(toastId, 'testar', 'Webhook')
+    } catch (error: any) {
+      updateToastError(toastId, 'testar', 'Webhook', error)
+    } finally {
+      setWebhookTesting((prev) => ({ ...prev, [type]: false }))
     }
   }
 
@@ -1356,6 +1404,12 @@ export default function ConfigurationsPage() {
                   </label>
                 </div>
 
+                {!aiSettings.ai_enabled && (
+                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
+                    Habilite a IA para editar as configurações abaixo.
+                  </div>
+                )}
+
                 <div className="flex items-center justify-between">
                   <div>
                     <Label className="text-base font-semibold">Transcrição automática</Label>
@@ -1366,6 +1420,7 @@ export default function ConfigurationsPage() {
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={!aiSettings.ai_enabled}
                       checked={aiSettings.transcription_auto}
                       onChange={(e) => setAiSettings({ ...aiSettings, transcription_auto: e.target.checked })}
                       className="sr-only peer"
@@ -1384,6 +1439,7 @@ export default function ConfigurationsPage() {
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={!aiSettings.ai_enabled}
                       checked={aiSettings.audio_transcription_enabled}
                       onChange={(e) => setAiSettings({ ...aiSettings, audio_transcription_enabled: e.target.checked })}
                       className="sr-only peer"
@@ -1402,6 +1458,7 @@ export default function ConfigurationsPage() {
                   <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
+                      disabled={!aiSettings.ai_enabled}
                       checked={aiSettings.triage_enabled}
                       onChange={(e) => setAiSettings({ ...aiSettings, triage_enabled: e.target.checked })}
                       className="sr-only peer"
@@ -1418,8 +1475,12 @@ export default function ConfigurationsPage() {
                       type="number"
                       value={aiSettings.transcription_min_seconds}
                       onChange={(e) => setAiSettings({ ...aiSettings, transcription_min_seconds: Number(e.target.value) })}
-                      className="mt-1"
+                      className={`mt-1 ${aiSettingsErrors.transcription_min_seconds ? 'border-red-500' : ''}`}
+                      disabled={!aiSettings.ai_enabled}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Evita transcrever áudios curtos.
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="transcription_max_mb">Máx. MB por áudio</Label>
@@ -1428,46 +1489,93 @@ export default function ConfigurationsPage() {
                       type="number"
                       value={aiSettings.transcription_max_mb}
                       onChange={(e) => setAiSettings({ ...aiSettings, transcription_max_mb: Number(e.target.value) })}
-                      className="mt-1"
+                      className={`mt-1 ${aiSettingsErrors.transcription_max_mb ? 'border-red-500' : ''}`}
+                      disabled={!aiSettings.ai_enabled}
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Limite de tamanho por arquivo de áudio.
+                    </p>
                   </div>
                   <div>
                     <Label htmlFor="agent_model">Modelo padrão</Label>
-                    <Input
+                    <select
                       id="agent_model"
-                      type="text"
-                      value={aiSettings.agent_model}
-                      onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
-                      className="mt-1"
-                    />
+                      value={AI_MODEL_OPTIONS.includes(aiSettings.agent_model) ? aiSettings.agent_model : 'custom'}
+                      onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value === 'custom' ? '' : e.target.value })}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      disabled={!aiSettings.ai_enabled}
+                    >
+                      {AI_MODEL_OPTIONS.map((option) => (
+                        <option key={option} value={option}>
+                          {option === 'custom' ? 'Outro (digitar)' : option}
+                        </option>
+                      ))}
+                    </select>
+                    {!AI_MODEL_OPTIONS.includes(aiSettings.agent_model) || aiSettings.agent_model === '' ? (
+                      <Input
+                        type="text"
+                        value={aiSettings.agent_model}
+                        onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
+                        className="mt-2"
+                        placeholder="Informe um modelo instalado no Ollama"
+                        disabled={!aiSettings.ai_enabled}
+                      />
+                    ) : null}
+                    <p className="text-xs text-gray-500 mt-1">
+                      Use um modelo instalado no Ollama.
+                    </p>
                   </div>
+                </div>
+
+                <div className="text-sm text-gray-600">
+                  Transcrição e triagem usam webhooks diferentes.
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="n8n_audio_webhook_url">N8N Webhook (Transcrição)</Label>
-                    <Input
-                      id="n8n_audio_webhook_url"
-                      type="text"
-                      value={aiSettings.n8n_audio_webhook_url}
-                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
-                      className="mt-1"
-                      placeholder="https://n8n.exemplo.com/webhook/audio"
-                    />
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="n8n_audio_webhook_url"
+                        type="text"
+                        value={aiSettings.n8n_audio_webhook_url}
+                        onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
+                        className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500' : ''}
+                        placeholder="https://n8n.exemplo.com/webhook/audio"
+                        disabled={!aiSettings.ai_enabled}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => handleTestWebhook('audio')}
+                        disabled={webhookTesting.audio || !aiSettings.n8n_audio_webhook_url}
+                      >
+                        {webhookTesting.audio ? 'Testando...' : 'Testar'}
+                      </Button>
+                    </div>
                     <p className="text-xs text-gray-500 mt-1">
                       Obrigatório quando a transcrição estiver habilitada.
                     </p>
                   </div>
                   <div>
                     <Label htmlFor="n8n_triage_webhook_url">N8N Webhook (Triagem)</Label>
-                    <Input
-                      id="n8n_triage_webhook_url"
-                      type="text"
-                      value={aiSettings.n8n_triage_webhook_url}
-                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_triage_webhook_url: e.target.value })}
-                      className="mt-1"
-                      placeholder="https://n8n.exemplo.com/webhook/triage"
-                    />
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="n8n_triage_webhook_url"
+                        type="text"
+                        value={aiSettings.n8n_triage_webhook_url}
+                        onChange={(e) => setAiSettings({ ...aiSettings, n8n_triage_webhook_url: e.target.value })}
+                        className={aiSettingsErrors.n8n_triage_webhook_url ? 'border-red-500' : ''}
+                        placeholder="https://n8n.exemplo.com/webhook/triage"
+                        disabled={!aiSettings.ai_enabled}
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => handleTestWebhook('triage')}
+                        disabled={webhookTesting.triage || !aiSettings.n8n_triage_webhook_url}
+                      >
+                        {webhookTesting.triage ? 'Testando...' : 'Testar'}
+                      </Button>
+                    </div>
                     <p className="text-xs text-gray-500 mt-1">
                       Obrigatório quando a triagem estiver habilitada.
                     </p>
@@ -1763,6 +1871,79 @@ export default function ConfigurationsPage() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Teste de Transcrição */}
+      {isAudioTestModalOpen && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseAudioTestModal} />
+
+            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                <div className="flex items-center mb-4">
+                  <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <TestTube className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <h3 className="ml-3 text-lg font-medium leading-6 text-gray-900">
+                    Teste de Transcrição
+                  </h3>
+                </div>
+
+                <p className="text-sm text-gray-600 mb-4">
+                  Envie um áudio para o webhook de transcrição e visualize o retorno.
+                </p>
+
+                <div>
+                  <label htmlFor="audio_test_file" className="block text-sm font-medium text-gray-700 mb-1">
+                    Arquivo de áudio
+                  </label>
+                  <input
+                    type="file"
+                    id="audio_test_file"
+                    accept="audio/*"
+                    onChange={(e) => setAudioTestFile(e.target.files?.[0] || null)}
+                    className="block w-full text-sm text-gray-700"
+                  />
+                  {audioTestFile && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      Selecionado: {audioTestFile.name}
+                    </p>
+                  )}
+                </div>
+
+                {audioTestError && (
+                  <div className="mt-4 text-sm text-red-600">
+                    {audioTestError}
+                  </div>
+                )}
+
+                {audioTestResult && (
+                  <div className="mt-4 rounded-md bg-gray-50 p-3 text-xs whitespace-pre-wrap">
+                    {audioTestResult}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <Button
+                  onClick={handleAudioWebhookTest}
+                  disabled={!audioTestFile || audioTestLoading}
+                  className="w-full sm:w-auto"
+                >
+                  {audioTestLoading ? 'Enviando...' : 'Enviar para webhook'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleCloseAudioTestModal}
+                  className="w-full sm:w-auto mt-2 sm:mt-0"
+                >
+                  Cancelar
+                </Button>
+              </div>
             </div>
           </div>
         </div>
