@@ -271,6 +271,11 @@ export default function ConfigurationsPage() {
     triage: false
   })
   const [aiModelOptions, setAiModelOptions] = useState<string[]>(DEFAULT_AI_MODELS)
+  const [isAudioTestModalOpen, setIsAudioTestModalOpen] = useState(false)
+  const [audioTestFile, setAudioTestFile] = useState<File | null>(null)
+  const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
+  const [audioTestError, setAudioTestError] = useState<string | null>(null)
+  const [audioTestLoading, setAudioTestLoading] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -610,6 +615,51 @@ export default function ConfigurationsPage() {
       is_active: true,
       is_default: false
     })
+  }
+
+  const handleCloseAudioTestModal = () => {
+    setIsAudioTestModalOpen(false)
+    setAudioTestFile(null)
+    setAudioTestResult(null)
+    setAudioTestError(null)
+    setAudioTestLoading(false)
+  }
+
+  const handleAudioWebhookTest = async () => {
+    if (!aiSettings?.n8n_audio_webhook_url) {
+      setAudioTestError('Informe o webhook de transcrição.')
+      return
+    }
+    if (!audioTestFile) {
+      setAudioTestError('Selecione um arquivo de áudio.')
+      return
+    }
+
+    setAudioTestError(null)
+    setAudioTestResult(null)
+    setAudioTestLoading(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', audioTestFile)
+      formData.append('action', 'transcribe')
+      formData.append('filename', audioTestFile.name)
+
+      const response = await fetch(aiSettings.n8n_audio_webhook_url, {
+        method: 'POST',
+        body: formData,
+      })
+
+      const text = await response.text()
+      if (!response.ok) {
+        throw new Error(text || 'Falha ao chamar webhook.')
+      }
+      setAudioTestResult(text)
+    } catch (error) {
+      setAudioTestError(error instanceof Error ? error.message : 'Erro ao testar webhook.')
+    } finally {
+      setAudioTestLoading(false)
+    }
   }
 
   const getConnectionStatusColor = (state: string) => {
@@ -1567,10 +1617,15 @@ export default function ConfigurationsPage() {
                       />
                       <Button
                         variant="outline"
-                        onClick={() => handleTestWebhook('audio')}
-                        disabled={webhookTesting.audio || !aiSettings.n8n_audio_webhook_url}
+                        onClick={() => {
+                          setAudioTestFile(null)
+                          setAudioTestResult(null)
+                          setAudioTestError(null)
+                          setIsAudioTestModalOpen(true)
+                        }}
+                        disabled={!aiSettings.n8n_audio_webhook_url}
                       >
-                        {webhookTesting.audio ? 'Testando...' : 'Testar'}
+                        Testar
                       </Button>
                     </div>
                     {aiSettingsErrors.n8n_audio_webhook_url && (
