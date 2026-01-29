@@ -411,3 +411,47 @@ def webhook_test(request):
             {"status": "error", "error": str(exc)},
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def models_list(request):
+    tenant = request.user.tenant
+    settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=tenant)
+    audio_webhook = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
+
+    if not audio_webhook:
+        return Response(
+            {"error": "Webhook de transcrição não configurado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if '/' in audio_webhook:
+        base = audio_webhook.rsplit('/', 1)[0]
+        models_url = f"{base}/Models"
+    else:
+        return Response(
+            {"error": "Webhook de transcrição inválido."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        response = requests.get(models_url, timeout=5.0)
+        if response.status_code == 405:
+            response = requests.post(models_url, json={"action": "models"}, timeout=5.0)
+        response.raise_for_status()
+        data = response.json()
+    except Exception as exc:
+        return Response(
+            {"error": f"Falha ao buscar modelos: {exc}"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    models = []
+    if isinstance(data, list):
+        models = data
+    elif isinstance(data, dict):
+        models = data.get('models') or data.get('data') or []
+
+    models = [str(item) for item in models if item]
+    return Response({"models": models})

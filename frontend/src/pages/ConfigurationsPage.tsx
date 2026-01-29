@@ -200,6 +200,13 @@ const TIMEZONES = [
   { value: 'America/Los_Angeles', label: 'Los Angeles (GMT-8/-7)' },
 ]
 
+const DEFAULT_AI_MODELS = [
+  'llama3.1:8b',
+  'llama3:8b',
+  'qwen2.5:7b',
+  'mistral:7b'
+]
+
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
@@ -263,6 +270,7 @@ export default function ConfigurationsPage() {
     audio: false,
     triage: false
   })
+  const [aiModelOptions, setAiModelOptions] = useState<string[]>(DEFAULT_AI_MODELS)
 
   useEffect(() => {
     fetchData()
@@ -824,6 +832,9 @@ export default function ConfigurationsPage() {
       setAiSettingsLoading(true)
       const response = await api.get('/ai/settings/')
       setAiSettings(response.data)
+      if (response.data?.n8n_audio_webhook_url) {
+        fetchAiModels()
+      }
     } catch (error: any) {
       console.error('Erro ao carregar configurações de IA:', error)
       if (error.response?.status === 403) {
@@ -833,6 +844,16 @@ export default function ConfigurationsPage() {
       }
     } finally {
       setAiSettingsLoading(false)
+    }
+  }
+
+  const fetchAiModels = async () => {
+    try {
+      const response = await api.get('/ai/models/')
+      const models = Array.isArray(response.data?.models) ? response.data.models : []
+      setAiModelOptions(models.length > 0 ? models : DEFAULT_AI_MODELS)
+    } catch (error) {
+      setAiModelOptions(DEFAULT_AI_MODELS)
     }
   }
 
@@ -1500,18 +1521,18 @@ export default function ConfigurationsPage() {
                     <Label htmlFor="agent_model">Modelo padrão</Label>
                     <select
                       id="agent_model"
-                      value={AI_MODEL_OPTIONS.includes(aiSettings.agent_model) ? aiSettings.agent_model : 'custom'}
+                      value={(aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : 'custom')}
                       onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value === 'custom' ? '' : e.target.value })}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                       disabled={!aiSettings.ai_enabled}
                     >
-                      {AI_MODEL_OPTIONS.map((option) => (
+                      {[...aiModelOptions, 'custom'].map((option) => (
                         <option key={option} value={option}>
                           {option === 'custom' ? 'Outro (digitar)' : option}
                         </option>
                       ))}
                     </select>
-                    {!AI_MODEL_OPTIONS.includes(aiSettings.agent_model) || aiSettings.agent_model === '' ? (
+                    {!aiModelOptions.includes(aiSettings.agent_model) || aiSettings.agent_model === '' ? (
                       <Input
                         type="text"
                         value={aiSettings.agent_model}
@@ -1552,6 +1573,9 @@ export default function ConfigurationsPage() {
                         {webhookTesting.audio ? 'Testando...' : 'Testar'}
                       </Button>
                     </div>
+                    {aiSettingsErrors.n8n_audio_webhook_url && (
+                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">
                       Obrigatório quando a transcrição estiver habilitada.
                     </p>
@@ -1576,6 +1600,9 @@ export default function ConfigurationsPage() {
                         {webhookTesting.triage ? 'Testando...' : 'Testar'}
                       </Button>
                     </div>
+                    {aiSettingsErrors.n8n_triage_webhook_url && (
+                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_triage_webhook_url}</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">
                       Obrigatório quando a triagem estiver habilitada.
                     </p>
