@@ -538,14 +538,23 @@ class EvolutionWebhookView(APIView):
                 else:
                     normalized_group_jid = f"{normalized_group_jid.rstrip('@')}@g.us"
             
-            conversation = Conversation.objects.filter(
+            # ✅ Buscar conversa do grupo com fallback para LID/metadados
+            conversation_queryset = Conversation.objects.filter(
                 tenant=tenant,
-                contact_phone=normalized_group_jid,
                 conversation_type='group'
+            )
+            conversation = conversation_queryset.filter(
+                Q(contact_phone=normalized_group_jid) |
+                Q(contact_phone=group_jid) |
+                Q(group_metadata__group_id=group_jid) |
+                Q(group_metadata__group_id=normalized_group_jid) |
+                Q(group_metadata__group_id_lid=group_jid)
             ).first()
             
             if not conversation:
-                logger.warning(f"⚠️ [GROUP PARTICIPANTS] Conversa não encontrada: {normalized_group_jid}")
+                logger.warning(f"⚠️ [GROUP PARTICIPANTS] Conversa não encontrada")
+                logger.warning(f"   group_jid: {group_jid}")
+                logger.warning(f"   normalized_group_jid: {normalized_group_jid}")
                 return JsonResponse({'status': 'error', 'message': 'Conversation not found'}, status=404)
             
             logger.info(f"✅ [GROUP PARTICIPANTS] Conversa encontrada: {conversation.id} - {conversation.contact_name}")
