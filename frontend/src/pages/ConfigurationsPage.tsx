@@ -1627,16 +1627,19 @@ export default function ConfigurationsPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <Label htmlFor="agent_model">Modelo padrão</Label>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        onClick={() => fetchAiModels()}
-                        disabled={aiModelsLoading || !aiSettings.n8n_models_webhook_url}
+                        onClick={() => {
+                          setModelsGatewayTested(false)
+                          setModelsGatewayTestError(null)
+                          setIsModelsGatewayModalOpen(true)
+                        }}
                       >
-                        {aiModelsLoading ? 'Consultando...' : 'Consultar modelos'}
+                        Gateways de MODELOS
                       </Button>
                     </div>
                     <select
@@ -1658,24 +1661,10 @@ export default function ConfigurationsPage() {
                     <p className="text-xs text-gray-500 mt-1">
                       Use um modelo instalado no Ollama.
                     </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Gateways de MODELOS define o webhook para listar modelos disponíveis.
+                    </p>
                   </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div className="text-sm text-gray-600">
-                    Gateways de MODELOS (webhook para listar modelos disponíveis).
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => {
-                      setModelsGatewayTested(false)
-                      setModelsGatewayTestError(null)
-                      setIsModelsGatewayModalOpen(true)
-                    }}
-                  >
-                    Gateways de MODELOS
-                  </Button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
