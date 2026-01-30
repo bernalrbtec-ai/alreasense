@@ -1619,6 +1619,13 @@ export default function ConfigurationsPage() {
                       Limite de tamanho por arquivo de áudio.
                     </p>
                   </div>
+                </div>
+
+                <div className="text-sm text-gray-600">
+                  Transcrição e triagem usam webhooks diferentes.
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <div className="flex items-center justify-between">
                       <Label htmlFor="agent_model">Modelo padrão</Label>
@@ -1652,10 +1659,6 @@ export default function ConfigurationsPage() {
                       Use um modelo instalado no Ollama.
                     </p>
                   </div>
-                </div>
-
-                <div className="text-sm text-gray-600">
-                  Transcrição e triagem usam webhooks diferentes.
                 </div>
 
                 <div className="flex items-center justify-between">

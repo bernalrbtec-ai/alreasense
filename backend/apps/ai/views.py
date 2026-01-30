@@ -454,11 +454,28 @@ def models_list(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    models = []
+    raw_models = []
     if isinstance(data, list):
-        models = data
+        raw_models = data
     elif isinstance(data, dict):
-        models = data.get('models') or data.get('data') or []
+        raw_models = data.get('models') or data.get('data') or []
 
-    models = [str(item) for item in models if item]
-    return Response({"models": models})
+    normalized = []
+    for item in raw_models or []:
+        value = None
+        if isinstance(item, dict):
+            value = (
+                item.get('value')
+                or item.get('name')
+                or item.get('model')
+                or item.get('id')
+                or item.get('label')
+            )
+        elif isinstance(item, (list, tuple)) and item:
+            value = item[0]
+        else:
+            value = item
+        if value:
+            normalized.append(str(value))
+
+    return Response({"models": normalized})
