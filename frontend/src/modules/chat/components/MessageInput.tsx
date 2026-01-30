@@ -26,6 +26,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
   const conversationId = propConversationId || activeConversation?.id;
   const conversationType = propConversationType || activeConversation?.conversation_type || 'individual';
+  const isGroupInputBlocked = conversationType === 'group' && !!activeConversation?.group_metadata?.instance_removed;
   const [message, setMessage] = useState('');
   const [mentions, setMentions] = useState<string[]>([]); // ✅ NOVO: Lista de números mencionados
   const [sending, setSending] = useState(false);
@@ -199,6 +200,9 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   }, [selectedFile]);
 
   const handleMessageChange = useCallback((value: string) => {
+    if (isGroupInputBlocked) {
+      return;
+    }
     setMessage(value);
     
     // Enviar "digitando" quando começa a digitar
@@ -221,14 +225,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         clearTimeout(typingTimeoutRef.current);
       }
     }
-  }, [isConnected, sendTyping]);
+  }, [isConnected, sendTyping, isGroupInputBlocked]);
 
   const handleSend = async () => {
     // Validar condições: precisa ter texto OU arquivo selecionado
     const hasText = message.trim().length > 0;
     const hasFile = selectedFile !== null;
     
-    if ((!hasText && !hasFile) || !activeConversation || sending || !isConnected || uploadingFile) {
+    if (isGroupInputBlocked || (!hasText && !hasFile) || !activeConversation || sending || !isConnected || uploadingFile) {
       return;
     }
 
@@ -312,7 +316,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
     const hasText = message.trim().length > 0;
     const hasFile = selectedFile !== null;
     
-    if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFile)) {
+      if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFile)) {
       // Verificar se não está dentro de um MentionInput com sugestões abertas
       const target = e.target as HTMLElement;
       const isMentionInput = target.closest('[data-mention-input]');
@@ -321,7 +325,9 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       // Se não está em MentionInput ou não tem sugestões, enviar mensagem
       if (!isMentionInput || !hasSuggestions) {
         e.preventDefault();
-        handleSend();
+        if (!isGroupInputBlocked) {
+          handleSend();
+        }
       }
       // Se está em MentionInput com sugestões, deixar o MentionInput processar
     }
@@ -508,7 +514,11 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       <div className="flex items-end gap-2 px-4 py-3 bg-[#f0f2f5] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 relative shadow-sm">
       {/* Toggle de Assinatura - ao lado esquerdo */}
       <button
-        onClick={() => setIncludeSignature(!includeSignature)}
+        onClick={() => {
+          if (!isGroupInputBlocked) {
+            setIncludeSignature(!includeSignature);
+          }
+        }}
         className={`
           p-2 rounded-full transition-all duration-150 flex-shrink-0
           shadow-sm hover:shadow-md active:scale-95
@@ -518,6 +528,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
           }
         `}
         title={includeSignature ? 'Assinatura ativada - clique para desativar' : 'Assinatura desativada - clique para ativar'}
+        disabled={isGroupInputBlocked}
       >
         <PenTool className="w-5 h-5" />
       </button>
@@ -525,7 +536,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       {/* Quick Replies button - ao lado da assinatura */}
       <QuickRepliesButton 
         onSelect={handleQuickReplySelect}
-        disabled={sending || !isConnected}
+        disabled={sending || !isConnected || isGroupInputBlocked}
       />
 
       {/* File Uploader */}
@@ -539,7 +550,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             console.log('✅ Arquivo enviado! WebSocket vai atualizar UI');
             setSelectedFile(null);
           }}
-          disabled={sending || !isConnected}
+          disabled={sending || !isConnected || isGroupInputBlocked}
           isUploading={uploadingFile}
         />
       </div>
@@ -547,12 +558,17 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       {/* Emoji button */}
       <div className="relative" ref={emojiPickerRef}>
         <button
-          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+          onClick={() => {
+            if (!isGroupInputBlocked) {
+              setShowEmojiPicker(!showEmojiPicker);
+            }
+          }}
           className={`
             p-2 hover:bg-gray-200 active:scale-95 rounded-full transition-all duration-150 flex-shrink-0 shadow-sm hover:shadow-md
             ${showEmojiPicker ? 'bg-gray-200 shadow-md' : ''}
           `}
           title="Emoji"
+          disabled={isGroupInputBlocked}
         >
           <Smile className="w-6 h-6 text-gray-600 dark:text-gray-400" />
         </button>
@@ -577,9 +593,9 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             onMentionsChange={setMentions}
             conversationId={conversationId}
             conversationType={conversationType as 'individual' | 'group' | 'broadcast'}
-            placeholder="Digite uma mensagem (use @ para mencionar)"
+            placeholder={isGroupInputBlocked ? 'Instância removida do grupo' : 'Digite uma mensagem (use @ para mencionar)'}
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 placeholder-gray-500 transition-all duration-200"
-            disabled={sending}
+            disabled={sending || isGroupInputBlocked}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
           />
@@ -589,7 +605,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             onChange={(e) => handleMessageChange(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder="Digite uma mensagem (Enter para enviar, Shift+Enter para nova linha)"
+            placeholder={isGroupInputBlocked ? 'Instância removida do grupo' : 'Digite uma mensagem (Enter para enviar, Shift+Enter para nova linha)'}
             rows={1}
             className="w-full px-4 py-3 bg-transparent resize-none focus:outline-none text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 transition-all duration-200"
             style={{
@@ -597,33 +613,37 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
               minHeight: '44px',
               transition: 'height 0.2s ease-out'
             }}
-            disabled={sending}
+            disabled={sending || isGroupInputBlocked}
           />
         )}
       </div>
 
       {/* Voice Recorder button - ao lado do Send */}
-      <VoiceRecorder
-        conversationId={activeConversation.id}
-        onRecordingComplete={() => {
-          console.log('✅ Áudio enviado! WebSocket vai atualizar UI');
-        }}
-      />
+      {!isGroupInputBlocked && (
+        <VoiceRecorder
+          conversationId={activeConversation.id}
+          onRecordingComplete={() => {
+            console.log('✅ Áudio enviado! WebSocket vai atualizar UI');
+          }}
+        />
+      )}
 
       {/* Send button */}
       <button
         onClick={handleSend}
-        disabled={(!message.trim() && !selectedFile) || sending || !isConnected || uploadingFile}
+        disabled={isGroupInputBlocked || (!message.trim() && !selectedFile) || sending || !isConnected || uploadingFile}
         className={`
           p-2 rounded-full transition-all duration-150 flex-shrink-0
           shadow-md hover:shadow-lg active:scale-95
-          ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected
+          ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked
             ? 'bg-[#00a884] hover:bg-[#008f6f]'
             : 'bg-gray-300 cursor-not-allowed opacity-50'
           }
         `}
         title={
-          !isConnected 
+          isGroupInputBlocked
+            ? "Instância removida do grupo"
+            : !isConnected 
             ? "Conectando..." 
             : uploadingFile 
             ? "Enviando arquivo..." 
@@ -632,7 +652,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             : "Digite uma mensagem ou selecione um arquivo"
         }
       >
-        <Send className={`w-6 h-6 ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
+        <Send className={`w-6 h-6 ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
       </button>
       </div>
     </div>

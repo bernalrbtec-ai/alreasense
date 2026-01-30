@@ -604,17 +604,62 @@ class EvolutionWebhookView(APIView):
                         # Limpar participantes (remover LIDs)
                         cleaned_participants = clean_participants_for_metadata(participants_list)
                         
-                        # Atualizar conversa com nova lista de participantes
-                        with transaction.atomic():
-                            conversation.group_metadata = {
-                                **conversation.group_metadata,
-                                'participants': cleaned_participants,
-                                'participants_count': len(cleaned_participants),
-                                'participants_updated_at': timezone.now().isoformat(),
-                            }
-                            conversation.save(update_fields=['group_metadata'])
-                            
-                            logger.info(f"✅ [GROUP PARTICIPANTS] Conversa atualizada com {len(cleaned_participants)} participantes")
+            # Helper: verificar se participante corresponde à instância atual
+            def normalize_digits(value: str) -> str:
+                return ''.join(ch for ch in (value or '') if ch.isdigit())
+            
+            def extract_participant_identifiers(participant):
+                identifiers = []
+                if isinstance(participant, dict):
+                    for key in ['jid', 'id', 'phone', 'phoneNumber', 'phone_number', 'participant', 'participantAlt']:
+                        val = participant.get(key)
+                        if val:
+                            identifiers.append(val)
+                elif isinstance(participant, str):
+                    identifiers.append(participant)
+                return identifiers
+            
+            instance_digits = normalize_digits(whatsapp_instance.phone_number)
+            instance_removed = False
+            instance_added = False
+            if instance_digits:
+                for p in participants_removed:
+                    for ident in extract_participant_identifiers(p):
+                        if normalize_digits(ident) == instance_digits:
+                            instance_removed = True
+                            break
+                    if instance_removed:
+                        break
+                
+                for p in participants_added:
+                    for ident in extract_participant_identifiers(p):
+                        if normalize_digits(ident) == instance_digits:
+                            instance_added = True
+                            break
+                    if instance_added:
+                        break
+            
+            # Atualizar conversa com nova lista de participantes
+            with transaction.atomic():
+                updated_metadata = {
+                    **conversation.group_metadata,
+                    'participants': cleaned_participants,
+                    'participants_count': len(cleaned_participants),
+                    'participants_updated_at': timezone.now().isoformat(),
+                }
+                
+                # Se a instância saiu/entrou, atualizar flag no metadata
+                if instance_removed:
+                    updated_metadata['instance_removed'] = True
+                    updated_metadata['instance_removed_at'] = timezone.now().isoformat()
+                elif instance_added:
+                    updated_metadata['instance_removed'] = False
+                    updated_metadata['instance_removed_at'] = None
+                
+                conversation.group_metadata = updated_metadata
+                conversation.save(update_fields=['group_metadata'])
+                
+                logger.info(f"✅ [GROUP PARTICIPANTS] Conversa atualizada com {len(cleaned_participants)} participantes")
                         
                         # Preparar dados para broadcast
                         added_names = []
@@ -636,7 +681,49 @@ class EvolutionWebhookView(APIView):
                             elif isinstance(p, str):
                                 removed_names.append(p)
                         
-                        # Enviar broadcast via WebSocket
+            # ✅ Criar mensagens de sistema (notificações no grupo)
+            try:
+                from apps.chat.models import Message
+                from apps.chat.utils.websocket import broadcast_message_received
+                
+                def create_system_message(content: str, event_type: str):
+                    msg = Message.objects.create(
+                        conversation=conversation,
+                        content=content,
+                        direction='incoming',
+                        status='seen',
+                        is_internal=True,
+                        sender_name='Sistema',
+                        metadata={'system_event': event_type}
+                    )
+                    broadcast_message_received(msg)
+                
+                if added_names:
+                    added_text = ', '.join(added_names[:5])
+                    if len(added_names) > 5:
+                        added_text += f" e mais {len(added_names) - 5}"
+                    create_system_message(f"👥 Entrou no grupo: {added_text}", 'group_participant_added')
+                
+                if removed_names:
+                    removed_text = ', '.join(removed_names[:5])
+                    if len(removed_names) > 5:
+                        removed_text += f" e mais {len(removed_names) - 5}"
+                    create_system_message(f"👥 Saiu do grupo: {removed_text}", 'group_participant_removed')
+                
+                if instance_removed:
+                    create_system_message(
+                        "🚫 Esta instância foi removida do grupo. Envio desativado.",
+                        'group_instance_removed'
+                    )
+                elif instance_added:
+                    create_system_message(
+                        "✅ Esta instância foi adicionada ao grupo. Envio reativado.",
+                        'group_instance_added'
+                    )
+            except Exception as e:
+                logger.error(f"❌ [GROUP PARTICIPANTS] Erro ao criar mensagens de sistema: {e}", exc_info=True)
+            
+            # Enviar broadcast via WebSocket
                         from apps.chat.utils.websocket import broadcast_to_tenant
                         from apps.chat.api.serializers import ConversationSerializer
                         

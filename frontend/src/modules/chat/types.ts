@@ -44,6 +44,8 @@ export interface Conversation {
     group_pic_url?: string;
     participants_count?: number;
     is_group?: boolean;
+    instance_removed?: boolean;
+    instance_removed_at?: string | null;
   };
   last_message_at?: string;
   metadata: Record<string, any>;
