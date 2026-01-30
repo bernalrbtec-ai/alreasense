@@ -40,6 +40,7 @@ def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
         "agent_model": settings_obj.agent_model,
         "n8n_audio_webhook_url": settings_obj.n8n_audio_webhook_url or "",
         "n8n_triage_webhook_url": settings_obj.n8n_triage_webhook_url or "",
+        "n8n_models_webhook_url": settings_obj.n8n_models_webhook_url or "",
     }
 
 
@@ -268,14 +269,22 @@ def ai_settings(request):
         url = str(data.get('n8n_triage_webhook_url') or '').strip()
         settings_obj.n8n_triage_webhook_url = url
 
+    if 'n8n_models_webhook_url' in data:
+        url = str(data.get('n8n_models_webhook_url') or '').strip()
+        settings_obj.n8n_models_webhook_url = url
+
     audio_webhook = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
     triage_webhook = settings_obj.n8n_triage_webhook_url or getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
+    models_webhook = settings_obj.n8n_models_webhook_url or getattr(settings, 'N8N_MODELS_WEBHOOK', '')
 
     if settings_obj.audio_transcription_enabled and not audio_webhook:
         errors['n8n_audio_webhook_url'] = 'Webhook de transcrição obrigatório quando habilitado.'
 
     if settings_obj.triage_enabled and not triage_webhook:
         errors['n8n_triage_webhook_url'] = 'Webhook de triagem obrigatório quando habilitado.'
+
+    if settings_obj.ai_enabled and not models_webhook:
+        errors['n8n_models_webhook_url'] = 'Webhook de modelos obrigatório quando IA estiver habilitada.'
 
     if errors:
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -418,20 +427,11 @@ def webhook_test(request):
 def models_list(request):
     tenant = request.user.tenant
     settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=tenant)
-    audio_webhook = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
+    models_url = settings_obj.n8n_models_webhook_url or getattr(settings, 'N8N_MODELS_WEBHOOK', '')
 
-    if not audio_webhook:
+    if not models_url:
         return Response(
-            {"error": "Webhook de transcrição não configurado."},
-            status=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if '/' in audio_webhook:
-        base = audio_webhook.rsplit('/', 1)[0]
-        models_url = f"{base}/Models"
-    else:
-        return Response(
-            {"error": "Webhook de transcrição inválido."},
+            {"error": "Webhook de modelos não configurado."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 

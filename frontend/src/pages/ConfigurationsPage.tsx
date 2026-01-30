@@ -180,6 +180,7 @@ interface AiSettings {
   agent_model: string
   n8n_audio_webhook_url: string
   n8n_triage_webhook_url: string
+  n8n_models_webhook_url: string
 }
 
 const DAYS = [
@@ -267,6 +268,7 @@ export default function ConfigurationsPage() {
   })
   const [aiModelOptions, setAiModelOptions] = useState<string[]>(DEFAULT_AI_MODELS)
   const [aiModelsLoading, setAiModelsLoading] = useState(false)
+  const [isModelsGatewayModalOpen, setIsModelsGatewayModalOpen] = useState(false)
   const [isAudioTestModalOpen, setIsAudioTestModalOpen] = useState(false)
   const [audioTestFile, setAudioTestFile] = useState<File | null>(null)
   const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
@@ -878,7 +880,7 @@ export default function ConfigurationsPage() {
       setAiSettingsLoading(true)
       const response = await api.get('/ai/settings/')
       setAiSettings(response.data)
-      if (response.data?.n8n_audio_webhook_url) {
+      if (response.data?.n8n_models_webhook_url) {
         fetchAiModels(response.data)
       } else {
         setAiModelOptions([])
@@ -928,6 +930,9 @@ export default function ConfigurationsPage() {
 
     const errors: Record<string, string> = {}
     if (aiSettings.ai_enabled) {
+      if (!aiSettings.n8n_models_webhook_url) {
+        errors.n8n_models_webhook_url = 'Webhook de modelos obrigatório.'
+      }
       if (aiModelOptions.length === 0) {
         errors.agent_model = 'Nenhum modelo disponível.'
       }
@@ -1601,7 +1606,7 @@ export default function ConfigurationsPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => fetchAiModels()}
-                        disabled={aiModelsLoading || !aiSettings.n8n_audio_webhook_url}
+                        disabled={aiModelsLoading || !aiSettings.n8n_models_webhook_url}
                       >
                         {aiModelsLoading ? 'Consultando...' : 'Consultar modelos'}
                       </Button>
@@ -1630,6 +1635,19 @@ export default function ConfigurationsPage() {
 
                 <div className="text-sm text-gray-600">
                   Transcrição e triagem usam webhooks diferentes.
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div className="text-sm text-gray-600">
+                    Gateways de MODELOS (webhook para listar modelos disponíveis).
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsModelsGatewayModalOpen(true)}
+                  >
+                    Gateways de MODELOS
+                  </Button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1700,6 +1718,11 @@ export default function ConfigurationsPage() {
                     Preencha os webhooks obrigatórios para ativar transcrição e triagem.
                   </div>
                 ) : null}
+                {aiSettingsErrors.n8n_models_webhook_url ? (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                    {aiSettingsErrors.n8n_models_webhook_url}
+                  </div>
+                ) : null}
 
                 <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
                   A transcrição automática só roda quando <strong>IA</strong> estiver habilitada.
@@ -1714,6 +1737,60 @@ export default function ConfigurationsPage() {
               </div>
             </Card>
           )}
+        </div>
+      )}
+
+      {isModelsGatewayModalOpen && aiSettings && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div
+              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+              onClick={() => setIsModelsGatewayModalOpen(false)}
+            />
+
+            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
+              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
+                  Gateways de MODELOS
+                </h3>
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="n8n_models_webhook_url">Webhook N8N de modelos</Label>
+                    <Input
+                      id="n8n_models_webhook_url"
+                      type="text"
+                      value={aiSettings.n8n_models_webhook_url}
+                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_models_webhook_url: e.target.value })}
+                      placeholder="https://integrador.alrea.ao/webhook/Models"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Este endpoint retorna a lista de modelos disponíveis.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6">
+                <Button
+                  onClick={() => {
+                    setIsModelsGatewayModalOpen(false)
+                    handleSaveAiSettings()
+                  }}
+                  className="w-full sm:w-auto sm:ml-3"
+                >
+                  Salvar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setIsModelsGatewayModalOpen(false)}
+                  className="mt-3 w-full sm:mt-0 sm:w-auto"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 

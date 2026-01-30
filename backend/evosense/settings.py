@@ -188,6 +188,7 @@ STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 N8N_AI_WEBHOOK = config('N8N_AI_WEBHOOK', default='')
 N8N_AUDIO_WEBHOOK = config('N8N_AUDIO_WEBHOOK', default='')
 N8N_TRIAGE_WEBHOOK = config('N8N_TRIAGE_WEBHOOK', default='')
+N8N_MODELS_WEBHOOK = config('N8N_MODELS_WEBHOOK', default='')
 AI_MODEL_NAME = config('AI_MODEL_NAME', default='qwen-local')
 AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings')
 
