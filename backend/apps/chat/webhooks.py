@@ -1226,7 +1226,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             
             # ✅ NOVO: Verificar contextInfo mesmo em mensagens simples (pode ter reply)
             # ✅ FIX: Verificar contextInfo em message_info E em message_data (pode estar em qualquer lugar)
-            conversation_context = message_info.get('contextInfo', {}) or message_data.get('contextInfo', {})
+            conversation_context = message_info.get('contextInfo', {}) or message_data.get('contextInfo', {}) or {}
             logger.critical(f"🔍 [WEBHOOK REPLY] Verificando contextInfo para mensagem conversation:")
             logger.critical(f"   contextInfo em message_info: {bool(message_info.get('contextInfo'))}")
             logger.critical(f"   contextInfo em message_data: {bool(message_data.get('contextInfo'))}")
