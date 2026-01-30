@@ -1491,9 +1491,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 return f"{clean[0:4]}-{clean[4:8]}"
             return clean[:15] if clean else phone
         
-        # Normalizar telefone para buscar contato
+        # Normalizar telefone para busca/identificação
+        # ✅ IMPORTANTE: Para grupos, manter JID completo (@g.us/@lid) para evitar duplicatas
         from apps.contacts.signals import normalize_phone_for_search
-        normalized_phone = normalize_phone_for_search(phone)
+        if is_group:
+            normalized_phone = phone
+            normalized_phone_for_search = normalize_phone_for_search(phone)
+        else:
+            normalized_phone = normalize_phone_for_search(phone)
+            normalized_phone_for_search = None
         
         # ✅ NOVO: Buscar contato na lista de contatos do tenant
         contact_name_to_save = None
@@ -1591,9 +1597,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # Usar Q() para buscar por telefone normalizado OU telefone original (para compatibilidade)
         # ✅ CORREÇÃO: Usar Q() para tudo para evitar erro de sintaxe (keyword + positional)
         from django.db.models import Q
+        phone_query = Q(contact_phone=normalized_phone) | Q(contact_phone=phone)
+        if is_group and normalized_phone_for_search:
+            # ✅ Compatibilidade: localizar grupos antigos salvos como +55...
+            phone_query |= Q(contact_phone=normalized_phone_for_search)
+        
         existing_conversation = Conversation.objects.filter(
-            Q(tenant=tenant) &
-            (Q(contact_phone=normalized_phone) | Q(contact_phone=phone))
+            Q(tenant=tenant) & phone_query
         ).first()
         
         if existing_conversation:

@@ -2553,6 +2553,13 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         conversation = self.get_object()
         
+        # ✅ REGRA: Conversas de grupo não podem ser fechadas manualmente
+        if conversation.conversation_type == 'group':
+            return Response(
+                {'error': 'Conversas de grupo não podem ser fechadas manualmente.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
         # ✅ NOVO: Marcar todas as mensagens não lidas como lidas antes de fechar
         unread_messages = Message.objects.filter(
             conversation=conversation,
@@ -2576,6 +2583,30 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             ConversationSerializer(conversation).data,
             status=status.HTTP_200_OK
         )
+
+    def _block_group_close(self, request, conversation):
+        """Bloqueia fechamento manual de conversas de grupo via PATCH/PUT."""
+        new_status = request.data.get('status')
+        if new_status == 'closed' and conversation.conversation_type == 'group':
+            return Response(
+                {'error': 'Conversas de grupo não podem ser fechadas manualmente.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return None
+
+    def update(self, request, *args, **kwargs):
+        conversation = self.get_object()
+        blocked = self._block_group_close(request, conversation)
+        if blocked:
+            return blocked
+        return super().update(request, *args, **kwargs)
+
+    def partial_update(self, request, *args, **kwargs):
+        conversation = self.get_object()
+        blocked = self._block_group_close(request, conversation)
+        if blocked:
+            return blocked
+        return super().partial_update(request, *args, **kwargs)
     
     @action(detail=False, methods=['get'])
     def debug_list_groups(self, request):
