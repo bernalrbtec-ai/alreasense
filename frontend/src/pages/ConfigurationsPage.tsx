@@ -266,6 +266,7 @@ export default function ConfigurationsPage() {
     triage: false
   })
   const [aiModelOptions, setAiModelOptions] = useState<string[]>(DEFAULT_AI_MODELS)
+  const [aiModelsLoading, setAiModelsLoading] = useState(false)
   const [isAudioTestModalOpen, setIsAudioTestModalOpen] = useState(false)
   const [audioTestFile, setAudioTestFile] = useState<File | null>(null)
   const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
@@ -896,6 +897,7 @@ export default function ConfigurationsPage() {
 
   const fetchAiModels = async (currentSettings?: AiSettings) => {
     try {
+      setAiModelsLoading(true)
       const response = await api.get('/ai/models/')
       const models = Array.isArray(response.data?.models) ? response.data.models : []
       if (models.length > 0) {
@@ -916,6 +918,8 @@ export default function ConfigurationsPage() {
       if (aiSettings?.ai_enabled) {
         setAiSettings({ ...aiSettings, ai_enabled: false })
       }
+    } finally {
+      setAiModelsLoading(false)
     }
   }
 
@@ -1590,7 +1594,18 @@ export default function ConfigurationsPage() {
                     </p>
                   </div>
                   <div>
-                    <Label htmlFor="agent_model">Modelo padrão</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="agent_model">Modelo padrão</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fetchAiModels()}
+                        disabled={aiModelsLoading || !aiSettings.n8n_audio_webhook_url}
+                      >
+                        {aiModelsLoading ? 'Consultando...' : 'Consultar modelos'}
+                      </Button>
+                    </div>
                     <select
                       id="agent_model"
                       value={aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : ''}
@@ -1604,6 +1619,9 @@ export default function ConfigurationsPage() {
                         </option>
                       ))}
                     </select>
+                    {aiSettingsErrors.agent_model && (
+                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.agent_model}</p>
+                    )}
                     <p className="text-xs text-gray-500 mt-1">
                       Use um modelo instalado no Ollama.
                     </p>
