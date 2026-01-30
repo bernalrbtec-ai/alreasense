@@ -269,6 +269,8 @@ export default function ConfigurationsPage() {
   const [aiModelOptions, setAiModelOptions] = useState<string[]>(DEFAULT_AI_MODELS)
   const [aiModelsLoading, setAiModelsLoading] = useState(false)
   const [isModelsGatewayModalOpen, setIsModelsGatewayModalOpen] = useState(false)
+  const [modelsGatewayTested, setModelsGatewayTested] = useState(false)
+  const [modelsGatewayTestError, setModelsGatewayTestError] = useState<string | null>(null)
   const [isAudioTestModalOpen, setIsAudioTestModalOpen] = useState(false)
   const [audioTestFile, setAudioTestFile] = useState<File | null>(null)
   const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
@@ -915,13 +917,30 @@ export default function ConfigurationsPage() {
           setAiSettings({ ...activeSettings, ai_enabled: false })
         }
       }
+      return true
     } catch (error) {
       setAiModelOptions([])
       if (aiSettings?.ai_enabled) {
         setAiSettings({ ...aiSettings, ai_enabled: false })
       }
+      return false
     } finally {
       setAiModelsLoading(false)
+    }
+  }
+
+  const handleTestModelsGateway = async () => {
+    if (!aiSettings?.n8n_models_webhook_url) {
+      setModelsGatewayTestError('Informe o webhook de modelos para testar.')
+      setModelsGatewayTested(false)
+      return
+    }
+
+    setModelsGatewayTestError(null)
+    const ok = await fetchAiModels(aiSettings)
+    setModelsGatewayTested(ok)
+    if (!ok) {
+      setModelsGatewayTestError('Falha ao consultar modelos.')
     }
   }
 
@@ -1644,7 +1663,11 @@ export default function ConfigurationsPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setIsModelsGatewayModalOpen(true)}
+                    onClick={() => {
+                      setModelsGatewayTested(false)
+                      setModelsGatewayTestError(null)
+                      setIsModelsGatewayModalOpen(true)
+                    }}
                   >
                     Gateways de MODELOS
                   </Button>
@@ -1760,12 +1783,32 @@ export default function ConfigurationsPage() {
                       id="n8n_models_webhook_url"
                       type="text"
                       value={aiSettings.n8n_models_webhook_url}
-                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_models_webhook_url: e.target.value })}
+                      onChange={(e) => {
+                        setAiSettings({ ...aiSettings, n8n_models_webhook_url: e.target.value })
+                        setModelsGatewayTested(false)
+                        setModelsGatewayTestError(null)
+                      }}
                       placeholder="https://integrador.alrea.ao/webhook/Models"
                     />
                     <p className="text-xs text-gray-500 mt-1">
                       Este endpoint retorna a lista de modelos disponíveis.
                     </p>
+                    <div className="flex items-center justify-between mt-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleTestModelsGateway}
+                        disabled={aiModelsLoading}
+                      >
+                        {aiModelsLoading ? 'Testando...' : 'Testar'}
+                      </Button>
+                      {modelsGatewayTested && !modelsGatewayTestError ? (
+                        <span className="text-xs text-green-600">Consulta realizada.</span>
+                      ) : null}
+                    </div>
+                    {modelsGatewayTestError ? (
+                      <p className="text-xs text-red-600 mt-2">{modelsGatewayTestError}</p>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -1776,6 +1819,7 @@ export default function ConfigurationsPage() {
                     setIsModelsGatewayModalOpen(false)
                     handleSaveAiSettings()
                   }}
+                  disabled={!modelsGatewayTested || aiSettingsSaving || aiModelsLoading}
                   className="w-full sm:w-auto sm:ml-3"
                 >
                   Salvar
