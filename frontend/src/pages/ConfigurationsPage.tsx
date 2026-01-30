@@ -200,12 +200,7 @@ const TIMEZONES = [
   { value: 'America/Los_Angeles', label: 'Los Angeles (GMT-8/-7)' },
 ]
 
-const DEFAULT_AI_MODELS = [
-  'llama3.1:8b',
-  'llama3:8b',
-  'qwen2.5:7b',
-  'mistral:7b'
-]
+const DEFAULT_AI_MODELS: string[] = []
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
@@ -883,7 +878,9 @@ export default function ConfigurationsPage() {
       const response = await api.get('/ai/settings/')
       setAiSettings(response.data)
       if (response.data?.n8n_audio_webhook_url) {
-        fetchAiModels()
+        fetchAiModels(response.data)
+      } else {
+        setAiModelOptions([])
       }
     } catch (error: any) {
       console.error('Erro ao carregar configurações de IA:', error)
@@ -897,13 +894,28 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const fetchAiModels = async () => {
+  const fetchAiModels = async (currentSettings?: AiSettings) => {
     try {
       const response = await api.get('/ai/models/')
       const models = Array.isArray(response.data?.models) ? response.data.models : []
-      setAiModelOptions(models.length > 0 ? models : DEFAULT_AI_MODELS)
+      if (models.length > 0) {
+        setAiModelOptions(models)
+        const activeSettings = currentSettings || aiSettings
+        if (activeSettings && !models.includes(activeSettings.agent_model)) {
+          setAiSettings({ ...activeSettings, agent_model: models[0] })
+        }
+      } else {
+        setAiModelOptions([])
+        const activeSettings = currentSettings || aiSettings
+        if (activeSettings?.ai_enabled) {
+          setAiSettings({ ...activeSettings, ai_enabled: false })
+        }
+      }
     } catch (error) {
-      setAiModelOptions(DEFAULT_AI_MODELS)
+      setAiModelOptions([])
+      if (aiSettings?.ai_enabled) {
+        setAiSettings({ ...aiSettings, ai_enabled: false })
+      }
     }
   }
 
@@ -912,6 +924,9 @@ export default function ConfigurationsPage() {
 
     const errors: Record<string, string> = {}
     if (aiSettings.ai_enabled) {
+      if (aiModelOptions.length === 0) {
+        errors.agent_model = 'Nenhum modelo disponível.'
+      }
       if (aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) {
         errors.n8n_audio_webhook_url = 'Webhook de transcrição obrigatório.'
       }
@@ -1464,9 +1479,10 @@ export default function ConfigurationsPage() {
                       Controla o uso de recursos de IA para este tenant.
                     </p>
                   </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
+                    <label className="relative inline-flex items-center cursor-pointer">
                     <input
                       type="checkbox"
+                        disabled={aiModelOptions.length === 0}
                       checked={aiSettings.ai_enabled}
                       onChange={(e) => setAiSettings({ ...aiSettings, ai_enabled: e.target.checked })}
                       className="sr-only peer"
@@ -1474,6 +1490,12 @@ export default function ConfigurationsPage() {
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
+
+                {aiModelOptions.length === 0 && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                    Nenhum modelo listado pelo N8N. A IA fica indisponível até o endpoint de modelos responder.
+                  </div>
+                )}
 
                 {!aiSettings.ai_enabled && (
                   <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
@@ -1571,27 +1593,17 @@ export default function ConfigurationsPage() {
                     <Label htmlFor="agent_model">Modelo padrão</Label>
                     <select
                       id="agent_model"
-                      value={(aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : 'custom')}
-                      onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value === 'custom' ? '' : e.target.value })}
+                      value={aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : ''}
+                      onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
                       className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      disabled={!aiSettings.ai_enabled}
+                      disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
                     >
-                      {[...aiModelOptions, 'custom'].map((option) => (
+                      {aiModelOptions.map((option) => (
                         <option key={option} value={option}>
-                          {option === 'custom' ? 'Outro (digitar)' : option}
+                          {option}
                         </option>
                       ))}
                     </select>
-                    {!aiModelOptions.includes(aiSettings.agent_model) || aiSettings.agent_model === '' ? (
-                      <Input
-                        type="text"
-                        value={aiSettings.agent_model}
-                        onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
-                        className="mt-2"
-                        placeholder="Informe um modelo instalado no Ollama"
-                        disabled={!aiSettings.ai_enabled}
-                      />
-                    ) : null}
                     <p className="text-xs text-gray-500 mt-1">
                       Use um modelo instalado no Ollama.
                     </p>
