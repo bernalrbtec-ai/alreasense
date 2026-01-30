@@ -899,10 +899,12 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const fetchAiModels = async (currentSettings?: AiSettings) => {
+  const fetchAiModels = async (currentSettings?: AiSettings, overrideUrl?: string) => {
     try {
       setAiModelsLoading(true)
-      const response = await api.get('/ai/models/')
+      const response = await api.get('/ai/models/', {
+        params: overrideUrl ? { url: overrideUrl } : undefined
+      })
       const models = Array.isArray(response.data?.models) ? response.data.models : []
       if (models.length > 0) {
         setAiModelOptions(models)
@@ -937,7 +939,7 @@ export default function ConfigurationsPage() {
     }
 
     setModelsGatewayTestError(null)
-    const ok = await fetchAiModels(aiSettings)
+    const ok = await fetchAiModels(aiSettings, aiSettings.n8n_models_webhook_url)
     setModelsGatewayTested(ok)
     if (!ok) {
       setModelsGatewayTestError('Falha ao consultar modelos.')

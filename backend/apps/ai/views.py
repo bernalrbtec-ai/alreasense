@@ -427,11 +427,18 @@ def webhook_test(request):
 def models_list(request):
     tenant = request.user.tenant
     settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=tenant)
-    models_url = settings_obj.n8n_models_webhook_url or getattr(settings, 'N8N_MODELS_WEBHOOK', '')
+    override_url = str(request.query_params.get('url') or '').strip()
+    models_url = override_url or settings_obj.n8n_models_webhook_url or getattr(settings, 'N8N_MODELS_WEBHOOK', '')
 
     if not models_url:
         return Response(
             {"error": "Webhook de modelos não configurado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if not (models_url.startswith('http://') or models_url.startswith('https://')):
+        return Response(
+            {"error": "Webhook de modelos inválido."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
