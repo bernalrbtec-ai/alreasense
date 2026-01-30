@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { 
   Settings, 
   Server, 
@@ -28,7 +28,8 @@ import {
   MessageSquare,
   Calendar,
   Activity,
-  Lock
+  Lock,
+  Mic
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -276,6 +277,13 @@ export default function ConfigurationsPage() {
   const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
   const [audioTestError, setAudioTestError] = useState<string | null>(null)
   const [audioTestLoading, setAudioTestLoading] = useState(false)
+  const [isAudioRecording, setIsAudioRecording] = useState(false)
+  const [audioRecordingTime, setAudioRecordingTime] = useState(0)
+  const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null)
+  const audioRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioStreamRef = useRef<MediaStream | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -617,12 +625,107 @@ export default function ConfigurationsPage() {
     })
   }
 
+  const formatAudioTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
+  const resetAudioRecorder = () => {
+    if (audioTimerRef.current) {
+      clearInterval(audioTimerRef.current)
+      audioTimerRef.current = null
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach((track) => track.stop())
+      audioStreamRef.current = null
+    }
+    audioRecorderRef.current = null
+    audioChunksRef.current = []
+    setIsAudioRecording(false)
+    setAudioRecordingTime(0)
+  }
+
   const handleCloseAudioTestModal = () => {
     setIsAudioTestModalOpen(false)
     setAudioTestFile(null)
     setAudioTestResult(null)
     setAudioTestError(null)
     setAudioTestLoading(false)
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl)
+      setAudioPreviewUrl(null)
+    }
+    resetAudioRecorder()
+  }
+
+  const handleStartAudioRecording = async () => {
+    if (isAudioRecording || audioTestLoading) return
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      })
+      audioStreamRef.current = stream
+
+      let mimeType = 'audio/ogg;codecs=opus'
+      if (!MediaRecorder.isTypeSupported(mimeType)) {
+        mimeType = 'audio/webm;codecs=opus'
+      }
+
+      const recorder = new MediaRecorder(stream, { mimeType })
+      audioRecorderRef.current = recorder
+      audioChunksRef.current = []
+
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data)
+        }
+      }
+
+      recorder.onstop = () => {
+        const blob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/ogg' })
+        const extension = blob.type.includes('ogg') ? 'ogg' : 'webm'
+        const file = new File([blob], `transcription-test.${extension}`, { type: blob.type })
+        setAudioTestFile(file)
+        setAudioTestResult(null)
+        setAudioTestError(null)
+        if (audioPreviewUrl) {
+          URL.revokeObjectURL(audioPreviewUrl)
+        }
+        setAudioPreviewUrl(URL.createObjectURL(blob))
+      }
+
+      recorder.start()
+      setIsAudioRecording(true)
+      setAudioRecordingTime(0)
+      audioTimerRef.current = setInterval(() => {
+        setAudioRecordingTime((prev) => prev + 1)
+      }, 1000)
+    } catch (error) {
+      setAudioTestError('Erro ao acessar o microfone.')
+    }
+  }
+
+  const handleStopAudioRecording = () => {
+    if (!audioRecorderRef.current || !isAudioRecording) return
+    audioRecorderRef.current.stop()
+    resetAudioRecorder()
+  }
+
+  const handleCancelAudioRecording = () => {
+    resetAudioRecorder()
+    setAudioTestFile(null)
+    setAudioTestResult(null)
+    setAudioTestError(null)
+    if (audioPreviewUrl) {
+      URL.revokeObjectURL(audioPreviewUrl)
+      setAudioPreviewUrl(null)
+    }
   }
 
   const handleAudioWebhookTest = async () => {
@@ -2121,24 +2224,37 @@ export default function ConfigurationsPage() {
                 </div>
 
                 <p className="text-sm text-gray-600 mb-4">
-                  Envie um áudio para o webhook de transcrição e visualize o retorno.
+                  Grave um áudio e veja o retorno da transcrição.
                 </p>
 
-                <div>
-                  <label htmlFor="audio_test_file" className="block text-sm font-medium text-gray-700 mb-1">
-                    Arquivo de áudio
-                  </label>
-                  <input
-                    type="file"
-                    id="audio_test_file"
-                    accept="audio/*"
-                    onChange={(e) => setAudioTestFile(e.target.files?.[0] || null)}
-                    className="block w-full text-sm text-gray-700"
-                  />
-                  {audioTestFile && (
-                    <p className="mt-2 text-xs text-gray-500">
-                      Selecionado: {audioTestFile.name}
-                    </p>
+                <div className="space-y-3">
+                  <div className={`flex items-center justify-between rounded-lg border p-3 ${
+                    isAudioRecording ? 'border-red-200 bg-red-50' : 'border-gray-200 bg-gray-50'
+                  }`}>
+                    <button
+                      type="button"
+                      onClick={isAudioRecording ? handleStopAudioRecording : handleStartAudioRecording}
+                      className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                        isAudioRecording ? 'bg-red-500 text-white animate-pulse' : 'bg-white text-gray-700 border border-gray-300'
+                      }`}
+                      title={isAudioRecording ? 'Parar gravação' : 'Gravar áudio'}
+                    >
+                      <Mic className="h-5 w-5" />
+                    </button>
+                    <div className="flex-1 px-3 text-sm text-gray-700">
+                      {isAudioRecording ? `Gravando... ${formatAudioTime(audioRecordingTime)}` : 'Clique no microfone para gravar'}
+                    </div>
+                    {isAudioRecording && (
+                      <Button type="button" variant="outline" size="sm" onClick={handleCancelAudioRecording}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {audioPreviewUrl && (
+                    <div className="rounded-md border border-gray-200 p-3">
+                      <audio controls src={audioPreviewUrl} className="w-full" />
+                    </div>
                   )}
                 </div>
 
@@ -2158,7 +2274,7 @@ export default function ConfigurationsPage() {
               <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
                 <Button
                   onClick={handleAudioWebhookTest}
-                  disabled={!audioTestFile || audioTestLoading}
+                  disabled={!audioTestFile || audioTestLoading || isAudioRecording}
                   className="w-full sm:w-auto"
                 >
                   {audioTestLoading ? 'Enviando...' : 'Enviar para webhook'}
