@@ -57,6 +57,27 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     return clean;
   }, []);
 
+  const isGroupIdentifier = useCallback((value: string): boolean => {
+    if (!value) return false;
+    const lower = value.toLowerCase();
+    if (lower.includes('@g.us') || lower.includes('@broadcast') || lower.includes('@lid')) {
+      return true;
+    }
+    const digits = value.replace(/\D/g, '');
+    // E.164 permite até 15 dígitos; IDs de grupo costumam ser maiores
+    return digits.length > 15;
+  }, []);
+
+  const normalizeGroupId = useCallback((value: string): string => {
+    if (!value) return value;
+    const lower = value.toLowerCase();
+    if (lower.includes('@g.us') || lower.includes('@broadcast')) {
+      return value;
+    }
+    const digits = value.replace(/\D/g, '');
+    return digits ? `${digits}@g.us` : value;
+  }, []);
+
   // Validar telefone
   const validatePhone = useCallback((phone: string): boolean => {
     const normalized = normalizePhone(phone);
@@ -115,7 +136,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const handleStartConversation = async (contact: Contact) => {
     try {
       setIsCreating(true);
-      const normalizedPhone = normalizePhone(contact.phone);
+      const isGroup = isGroupIdentifier(contact.phone);
+      const normalizedPhone = isGroup ? normalizeGroupId(contact.phone) : normalizePhone(contact.phone);
       
       // Verificar se conversa já existe
       const response = await api.get('/chat/conversations/', {
@@ -124,6 +146,13 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       
       const conversations = response.data.results || response.data || [];
       let conversation = conversations.find((conv: any) => {
+        if (isGroup) {
+          const convRaw = conv.contact_phone || '';
+          const convDigits = convRaw.replace(/\D/g, '');
+          const contactDigits = normalizedPhone.replace(/\D/g, '');
+          return convRaw === normalizedPhone || (convDigits && convDigits === contactDigits);
+        }
+        
         const convPhone = conv.contact_phone?.replace(/[^\d]/g, '') || '';
         const contactPhone = contact.phone.replace(/[^\d]/g, '') || '';
         return convPhone === contactPhone || 

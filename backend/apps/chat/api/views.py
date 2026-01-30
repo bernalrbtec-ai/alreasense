@@ -1328,10 +1328,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Normalizar telefone (remover espaços, garantir +)
+        # Normalizar telefone (remover espaços)
         contact_phone = contact_phone.strip()
-        if not contact_phone.startswith('+'):
-            contact_phone = f'+{contact_phone}'
         
         # Selecionar departamento
         # ✅ CORREÇÃO: Se department_id não for fornecido, criar conversa sem departamento (Inbox)
@@ -1354,32 +1352,95 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # ✅ CORREÇÃO: Se não especificado, criar sem departamento (Inbox)
             logger.info(f"📋 [CONVERSATION START] Nenhum departamento especificado - criando no Inbox")
         
-        # ✅ CORREÇÃO: Normalizar telefone antes de buscar/criar para evitar duplicatas
+        # ✅ CORREÇÃO: Normalizar telefone/ID antes de buscar/criar para evitar duplicatas
+        # Para grupos, manter formato @g.us; para individuais, garantir E.164 com +
         from apps.contacts.signals import normalize_phone_for_search
         
-        normalized_phone = normalize_phone_for_search(contact_phone)
+        def extract_digits(value: str) -> str:
+            return ''.join(ch for ch in (value or '') if ch.isdigit())
         
-        # Verificar se já existe conversa (usando telefone normalizado OU original)
+        def detect_conversation_type(value: str) -> str:
+            value_lower = (value or '').lower()
+            if value_lower.endswith('@broadcast'):
+                return 'broadcast'
+            if value_lower.endswith('@g.us'):
+                return 'group'
+            if value_lower.endswith('@lid'):
+                # @lid é usado por grupos/participantes; tratar como grupo aqui para manter ID completo
+                return 'group'
+            
+            digits = extract_digits(value)
+            # ✅ WhatsApp group IDs ultrapassam o limite E.164 (15 dígitos)
+            if digits and len(digits) > 15:
+                return 'group'
+            return 'individual'
+        
+        def normalize_contact_phone(value: str, conversation_type: str) -> str:
+            if conversation_type == 'group':
+                if value.lower().endswith('@g.us'):
+                    return value
+                digits = extract_digits(value)
+                return f"{digits}@g.us" if digits else value
+            if conversation_type == 'broadcast':
+                if value.lower().endswith('@broadcast'):
+                    return value
+                digits = extract_digits(value)
+                return f"{digits}@broadcast" if digits else value
+            
+            # individual
+            normalized = value.strip()
+            if normalized and not normalized.startswith('+'):
+                normalized = f'+{normalized}'
+            return normalized
+        
+        conversation_type = detect_conversation_type(contact_phone)
+        normalized_phone = normalize_contact_phone(contact_phone, conversation_type)
+        
+        # Verificar se já existe conversa (usando variações de telefone/ID)
         # ✅ CORREÇÃO: Usar Q() para tudo para evitar erro de sintaxe (keyword + positional)
+        phone_candidates = {normalized_phone, contact_phone}
+        
+        # Para grupos, também tentar busca pelo formato normalizado de telefone
+        # (caso a conversa tenha sido criada anteriormente de forma incorreta)
+        normalized_for_search = normalize_phone_for_search(contact_phone)
+        if normalized_for_search:
+            phone_candidates.add(normalized_for_search)
+        
+        phone_filters = Q()
+        for candidate in phone_candidates:
+            if candidate:
+                phone_filters |= Q(contact_phone=candidate)
+        
         existing = Conversation.objects.filter(
-            Q(tenant=request.user.tenant) &
-            (Q(contact_phone=normalized_phone) | Q(contact_phone=contact_phone))
+            Q(tenant=request.user.tenant) & phone_filters
         ).first()
         
         if existing:
-            # Se telefone está em formato diferente, atualizar para formato normalizado
+            needs_update = False
+            update_fields_list = []
+            
+            # ✅ CORREÇÃO CRÍTICA: Garantir tipo e telefone normalizados (grupo/individual)
+            if existing.conversation_type != conversation_type:
+                old_type = existing.conversation_type
+                existing.conversation_type = conversation_type
+                update_fields_list.append('conversation_type')
+                needs_update = True
+                logger.info(
+                    f"🔄 [CONVERSATION START] conversation_type atualizado: "
+                    f"{old_type} → {conversation_type}"
+                )
+            
             if existing.contact_phone != normalized_phone:
                 logger.info(
-                    f"🔄 [NORMALIZAÇÃO API] Atualizando telefone da conversa {existing.id}: "
+                    f"🔄 [CONVERSATION START] contact_phone atualizado: "
                     f"{existing.contact_phone} → {normalized_phone}"
                 )
                 existing.contact_phone = normalized_phone
-                existing.save(update_fields=['contact_phone'])
+                update_fields_list.append('contact_phone')
+                needs_update = True
             
             # ✅ CORREÇÃO CRÍTICA: Se conversa estava fechada, reabrir automaticamente
             # Isso garante que conversas fechadas sejam reabertas quando usuário inicia nova conversa
-            needs_update = False
-            update_fields_list = []
             
             if existing.status == 'closed':
                 old_status = existing.status
@@ -1471,7 +1532,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             contact_phone=normalized_phone,  # ✅ Usar telefone normalizado
             contact_name=contact_name,
             assigned_to=request.user,
-            status=initial_status
+            status=initial_status,
+            conversation_type=conversation_type
         )
         
         logger.info(f"✅ [CONVERSATION START] Conversa criada: ID={conversation.id}, Status={initial_status}, Department={department.name if department else 'Inbox'}")
