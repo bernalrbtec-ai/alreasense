@@ -674,22 +674,38 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ⚠️ IMPORTANTE: NÃO confiar apenas em pushName - pode ser nome de quem enviou, não do grupo!
         push_name = message_data.get('pushName', '')
         
-        # ✅ VALIDAÇÃO MAIS RIGOROSA: Apenas considerar grupo se:
-        # 1. remoteJidAlt termina com @lid E
-        # 2. pushName contém explicitamente "grupo" ou "group" (case insensitive)
-        # NÃO usar len(push_name) > 0 pois pushName pode ser de quem enviou, não do grupo!
+        # ✅ VALIDAÇÃO MAIS RIGOROSA: Detectar grupo com LID usando sinais confiáveis
+        # - participant presente
+        # - groupMentions presente no contextInfo/messageContextInfo
+        # - pushName contém explicitamente "grupo" ou "group" (fallback)
         is_group_by_lid = False
         if remote_jid_alt and remote_jid_alt.endswith('@lid'):
+            context_candidates = [
+                message_data.get('contextInfo'),
+                message_info.get('contextInfo'),
+                message_data.get('message', {}).get('contextInfo'),
+                message_data.get('message', {}).get('messageContextInfo'),
+            ]
+            has_group_mentions = any(
+                isinstance(ctx, dict) and ctx.get('groupMentions')
+                for ctx in context_candidates
+            )
+            has_participant = bool(participant)
             push_name_lower = push_name.lower() if push_name else ''
-            # ✅ Apenas considerar grupo se pushName menciona explicitamente "grupo" ou "group"
-            # Isso evita falsos positivos quando pushName é apenas nome de quem enviou
-            if 'grupo' in push_name_lower or 'group' in push_name_lower:
+            has_group_name = 'grupo' in push_name_lower or 'group' in push_name_lower
+            
+            if has_participant or has_group_mentions or has_group_name:
                 is_group_by_lid = True
-                logger.critical(f"✅ [GRUPO LID] Detectado grupo por LID: remoteJid={remote_jid}, remoteJidAlt={remote_jid_alt}, pushName={push_name}")
+                logger.critical(
+                    f"✅ [GRUPO LID] Detectado grupo por LID: remoteJid={remote_jid}, "
+                    f"remoteJidAlt={remote_jid_alt}, participant={bool(participant)}, "
+                    f"groupMentions={has_group_mentions}, pushName={push_name}"
+                )
             else:
-                logger.critical(f"⚠️ [INDIVIDUAL LID] remoteJidAlt é @lid mas pushName não menciona grupo: pushName='{push_name}'")
+                logger.critical(f"⚠️ [INDIVIDUAL LID] remoteJidAlt é @lid sem sinais de grupo")
                 logger.critical(f"   remoteJid: {remote_jid}")
                 logger.critical(f"   remoteJidAlt: {remote_jid_alt}")
+                logger.critical(f"   participant: {participant}")
                 logger.critical(f"   ⚠️ Tratando como INDIVIDUAL para evitar confusão!")
         
         # ✅ CORREÇÃO CRÍTICA: Se remoteJid termina com @lid, usar remoteJidAlt (telefone real)
