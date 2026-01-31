@@ -284,6 +284,10 @@ export default function ConfigurationsPage() {
   const audioStreamRef = useRef<MediaStream | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const audioTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [isModelTestModalOpen, setIsModelTestModalOpen] = useState(false)
+  const [modelTestInput, setModelTestInput] = useState('')
+  const [modelTestMessages, setModelTestMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
+  const [modelTestLoading, setModelTestLoading] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -657,6 +661,54 @@ export default function ConfigurationsPage() {
       setAudioPreviewUrl(null)
     }
     resetAudioRecorder()
+  }
+
+  const handleOpenModelTestModal = () => {
+    setIsModelTestModalOpen(true)
+    setModelTestInput('')
+    setModelTestMessages([])
+  }
+
+  const handleCloseModelTestModal = () => {
+    setIsModelTestModalOpen(false)
+    setModelTestInput('')
+    setModelTestMessages([])
+    setModelTestLoading(false)
+  }
+
+  const handleSendModelTest = async () => {
+    if (!modelTestInput.trim() || !aiSettings) return
+    const message = modelTestInput.trim()
+    setModelTestInput('')
+    setModelTestMessages((prev) => [...prev, { role: 'user', content: message }])
+    setModelTestLoading(true)
+
+    try {
+      const response = await api.post('/ai/triage/test/', {
+        message,
+        context: {
+          action: 'model_test',
+          model: aiSettings.agent_model,
+        },
+      })
+      const data = response.data?.data ?? response.data
+      let content = ''
+      if (typeof data === 'string') {
+        content = data
+      } else if (data?.text) {
+        content = String(data.text)
+      } else if (data?.response) {
+        content = typeof data.response === 'string' ? data.response : JSON.stringify(data.response, null, 2)
+      } else {
+        content = JSON.stringify(data, null, 2)
+      }
+      setModelTestMessages((prev) => [...prev, { role: 'assistant', content }])
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao testar o modelo.'
+      setModelTestMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }])
+    } finally {
+      setModelTestLoading(false)
+    }
   }
 
   const handleStartAudioRecording = async () => {
@@ -1732,18 +1784,29 @@ export default function ConfigurationsPage() {
                   <div>
                     <div className="flex items-center justify-between gap-3">
                       <Label htmlFor="agent_model">Modelo padrão</Label>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setModelsGatewayTested(false)
-                          setModelsGatewayTestError(null)
-                          setIsModelsGatewayModalOpen(true)
-                        }}
-                      >
-                        Gateways de MODELOS
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleOpenModelTestModal}
+                          disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
+                        >
+                          Testar modelo
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setModelsGatewayTested(false)
+                            setModelsGatewayTestError(null)
+                            setIsModelsGatewayModalOpen(true)
+                          }}
+                        >
+                          Gateways de MODELOS
+                        </Button>
+                      </div>
                     </div>
                     <select
                       id="agent_model"
@@ -2285,6 +2348,81 @@ export default function ConfigurationsPage() {
                   className="w-full sm:w-auto mt-2 sm:mt-0"
                 >
                   Cancelar
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isModelTestModalOpen && aiSettings && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+            <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModelTestModal} />
+
+            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
+              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
+                <div className="flex items-center mb-4">
+                  <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
+                    <MessageSquare className="h-6 w-6 text-blue-600" />
+                  </div>
+                  <div className="ml-3">
+                    <h3 className="text-lg font-medium leading-6 text-gray-900">
+                      Testar modelo
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Modelo atual: {aiSettings.agent_model}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">
+                  {modelTestMessages.length === 0 ? (
+                    <p className="text-sm text-gray-500">Envie uma mensagem para testar o modelo.</p>
+                  ) : (
+                    <div className="space-y-3">
+                      {modelTestMessages.map((item, index) => (
+                        <div
+                          key={`${item.role}-${index}`}
+                          className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                            item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800'
+                          }`}>
+                            <pre className="whitespace-pre-wrap font-sans">{item.content}</pre>
+                          </div>
+                        </div>
+                      ))}
+                      {modelTestLoading && (
+                        <div className="text-xs text-gray-500">Consultando modelo...</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mt-4 flex gap-2">
+                  <textarea
+                    value={modelTestInput}
+                    onChange={(e) => setModelTestInput(e.target.value)}
+                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    rows={2}
+                    placeholder="Digite uma mensagem para testar o modelo..."
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSendModelTest}
+                    disabled={!modelTestInput.trim() || modelTestLoading}
+                    className="self-end"
+                  >
+                    <Send className="h-4 w-4 mr-2" />
+                    Enviar
+                  </Button>
+                </div>
+              </div>
+
+              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
+                <Button variant="outline" onClick={handleCloseModelTestModal} className="w-full sm:w-auto">
+                  Fechar
                 </Button>
               </div>
             </div>
