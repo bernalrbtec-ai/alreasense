@@ -369,21 +369,6 @@ def dispatch_transcription_async(
     direction: Optional[str] = None,
     source: Optional[str] = None
 ) -> None:
-    try:
-        from apps.chat.models import MessageAttachment
-        attachment = MessageAttachment.objects.select_related('tenant').get(id=attachment_id)
-        settings_obj = _get_tenant_ai_settings(attachment.tenant)
-        duration_ms = _extract_duration_ms(attachment.metadata or {})
-        if not _can_auto_transcribe(settings_obj, attachment, duration_ms):
-            logger.info("Audio transcription auto-disabled for attachment %s", attachment_id)
-            return
-        if not _resolve_n8n_audio_url(attachment.tenant):
-            logger.info("N8N audio webhook not configured; transcription skipped.")
-            return
-    except Exception as exc:
-        logger.error("Unable to enqueue transcription: %s", exc, exc_info=True)
-        return
-
     thread = threading.Thread(
         target=_transcription_worker,
         args=(tenant_id, attachment_id, message_id, conversation_id, direction, source),

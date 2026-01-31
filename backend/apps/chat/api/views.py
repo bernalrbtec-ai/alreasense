@@ -4977,6 +4977,21 @@ class ConfirmUploadView(APIView):
             logger.info(f"   Attachment ID: {attachment_id}")
             logger.info(f"   📌 media_hash: {attachment.media_hash}")
             logger.info(f"   📌 short_url: {attachment.short_url}")
+
+            # ✅ IA - Transcrição automática (áudios enviados)
+            try:
+                if content_type.startswith('audio/'):
+                    from apps.ai.triage_service import dispatch_transcription_async
+                    dispatch_transcription_async(
+                        tenant_id=str(request.user.tenant.id),
+                        attachment_id=str(attachment.id),
+                        message_id=str(message.id),
+                        conversation_id=str(conversation.id),
+                        direction='outgoing',
+                        source='outgoing_upload',
+                    )
+            except Exception as ai_error:
+                logger.error(f"❌ [TRANSCRIPTION] Erro ao disparar transcrição (outgoing): {ai_error}", exc_info=True)
             
             # Enfileirar para envio Evolution API
             from apps.chat.tasks import send_message_to_evolution
