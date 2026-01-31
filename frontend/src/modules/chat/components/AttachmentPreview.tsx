@@ -36,9 +36,10 @@ interface Attachment {
 interface AttachmentPreviewProps {
   attachment: Attachment;
   showAI?: boolean;  // Se tenant tem addon Flow AI
+  showTranscription?: boolean;
 }
 
-export function AttachmentPreview({ attachment, showAI = false }: AttachmentPreviewProps) {
+export function AttachmentPreview({ attachment, showAI = false, showTranscription = false }: AttachmentPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   
   // 🎵 Estados do player de áudio
@@ -671,10 +672,17 @@ export function AttachmentPreview({ attachment, showAI = false }: AttachmentPrev
           />
         )}
 
-        {/* ✨ TRANSCRIÇÃO IA (se disponível e addon ativo) */}
-        {showAI && attachment.transcription && (
+        {/* ✨ TRANSCRIÇÃO IA (mostrar quando habilitado no tenant) */}
+        {(showTranscription || showAI) && attachment.transcription && (
           <div className="mt-3 p-3 bg-white rounded border border-gray-200">
-            <p className="text-xs font-semibold text-gray-700 mb-1">📝 Transcrição:</p>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-semibold text-gray-700">📝 Transcrição:</p>
+              {attachment.transcription_language && (
+                <span className="text-xs text-gray-500">
+                  {attachment.transcription_language.toUpperCase()}
+                </span>
+              )}
+            </div>
             <p className="text-sm text-gray-600">{attachment.transcription}</p>
           </div>
         )}

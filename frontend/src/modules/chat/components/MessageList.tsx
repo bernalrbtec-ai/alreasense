@@ -319,6 +319,30 @@ export function MessageList() {
     hasFlowAI = false;
   }
 
+  const [aiSettings, setAiSettings] = useState<{ ai_enabled: boolean; audio_transcription_enabled: boolean } | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    api.get('/ai/settings/')
+      .then((response) => {
+        if (!isMounted) return;
+        const data = response.data || {};
+        setAiSettings({
+          ai_enabled: !!data.ai_enabled,
+          audio_transcription_enabled: !!data.audio_transcription_enabled,
+        });
+      })
+      .catch(() => {
+        if (!isMounted) return;
+        setAiSettings(null);
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const showTranscription = !!(aiSettings?.ai_enabled && aiSettings?.audio_transcription_enabled);
+
   useEffect(() => {
     if (!activeConversation?.id) {
       // ✅ CORREÇÃO: Limpar mensagens quando não há conversa ativa
@@ -910,6 +934,7 @@ export function MessageList() {
                         key={attachmentItem.id}
                         attachment={attachmentItem}
                         showAI={hasFlowAI}
+                        showTranscription={showTranscription}
                       />
                     ))}
                   </div>
