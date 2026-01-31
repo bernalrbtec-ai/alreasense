@@ -160,7 +160,7 @@ export function useTenantSocket() {
         console.log('📎 [TENANT WS] Attachment atualizado:', data.data?.attachment_id);
         if (data.data?.attachment_id) {
           // Atualizar attachment via store (mesmo se conversa não estiver aberta)
-          const { updateAttachment, addMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
+          const { updateAttachment, addMessage, updateMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
           const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
           const attachmentId = data.data.attachment_id;
           const messageId = data.data.message_id;
@@ -268,7 +268,19 @@ export function useTenantSocket() {
             addMessage(updatedMessage as any);
             console.log('✅ [TENANT WS] Attachment atualizado via tenant socket');
           } else {
-            console.log('ℹ️ [TENANT WS] Mensagem não encontrada localmente, será atualizada quando conversa for aberta');
+            console.log('ℹ️ [TENANT WS] Mensagem não encontrada localmente, buscando do backend...');
+            if (messageId && currentActiveConversation?.id) {
+              api.get(`/chat/messages/${messageId}/`)
+                .then((response) => {
+                  const freshMessage = response.data;
+                  if (!freshMessage) return;
+                  updateMessage(String(currentActiveConversation.id), freshMessage);
+                  console.log('✅ [TENANT WS] Mensagem atualizada via fetch');
+                })
+                .catch((error) => {
+                  console.warn('⚠️ [TENANT WS] Falha ao buscar mensagem atualizada:', error);
+                });
+            }
           }
         }
         break;

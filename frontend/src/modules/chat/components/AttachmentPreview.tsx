@@ -43,6 +43,7 @@ interface AttachmentPreviewProps {
 
 export function AttachmentPreview({ attachment, showAI = false, showTranscription = false }: AttachmentPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [isTranscriptionCollapsed, setIsTranscriptionCollapsed] = useState(false);
   
   // 🎵 Estados do player de áudio
   const [isPlaying, setIsPlaying] = useState(false);
@@ -678,16 +679,25 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
         {(showTranscription || showAI) && (attachment.transcription || attachment.ai_metadata?.transcription?.status === 'processing') && (
           <div className="mt-3 p-3 bg-white rounded border border-gray-200">
             <div className="flex items-center justify-between mb-1">
-              <p className="text-xs font-semibold text-gray-700">📝 Transcrição:</p>
+              <button
+                type="button"
+                onClick={() => setIsTranscriptionCollapsed((prev) => !prev)}
+                className="text-xs font-semibold text-gray-700 hover:text-gray-900"
+                title="Minimizar/expandir transcrição"
+              >
+                📝 Transcrição:
+              </button>
               {attachment.transcription_language && (
                 <span className="text-xs text-gray-500">
                   {attachment.transcription_language.toUpperCase()}
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-600">
-              {attachment.transcription || 'Transcrevendo...'}
-            </p>
+            {!isTranscriptionCollapsed && (
+              <p className="text-sm text-gray-600">
+                {attachment.transcription || 'Transcrevendo...'}
+              </p>
+            )}
           </div>
         )}
 
