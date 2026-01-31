@@ -678,6 +678,16 @@ export default function ConfigurationsPage() {
 
   const handleSendModelTest = async () => {
     if (!modelTestInput.trim() || !aiSettings) return
+    if (!aiSettings.n8n_triage_webhook_url) {
+      setModelTestMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: 'Configure o webhook de triagem antes de testar o modelo.',
+        },
+      ])
+      return
+    }
     const message = modelTestInput.trim()
     setModelTestInput('')
     setModelTestMessages((prev) => [...prev, { role: 'user', content: message }])
@@ -704,7 +714,9 @@ export default function ConfigurationsPage() {
       }
       setModelTestMessages((prev) => [...prev, { role: 'assistant', content }])
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao testar o modelo.'
+      const errorMessage =
+        (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (error instanceof Error ? error.message : 'Erro ao testar o modelo.')
       setModelTestMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }])
     } finally {
       setModelTestLoading(false)
