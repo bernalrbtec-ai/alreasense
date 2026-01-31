@@ -185,7 +185,8 @@ export function useTenantSocket() {
             const isProcessing = existingAttachment?.metadata?.processing === true;
             
             // ✅ IGNORAR apenas se tem URL válida, é a mesma URL, E não está processando
-            if (existingAttachment && hasValidUrl && isSameUrl && !isProcessing) {
+            const hasTranscriptionUpdate = !!data.data?.transcription || data.data?.ai_metadata?.transcription?.status === 'processing';
+            if (existingAttachment && hasValidUrl && isSameUrl && !isProcessing && !hasTranscriptionUpdate) {
               console.log('ℹ️ [TENANT WS] Attachment já atualizado, ignorando update duplicado:', {
                 attachmentId,
                 oldUrl: existingAttachment?.file_url?.substring(0, 80) || 'VAZIO',
@@ -230,6 +231,9 @@ export function useTenantSocket() {
               size_bytes: sizeBytes,  // ✅ NOVO: Atualizar tamanho
               original_filename: originalFilename,  // ✅ NOVO: Atualizar nome original
               metadata: updatedMetadata,  // ✅ Metadata sem flag processing
+              transcription: data.data.transcription,
+              transcription_language: data.data.transcription_language,
+              ai_metadata: data.data.ai_metadata,
             } as any);
             
             // Forçar re-render da mensagem
@@ -246,6 +250,9 @@ export function useTenantSocket() {
                     size_bytes: sizeBytes,  // ✅ CORREÇÃO: Usar mesmo valor do updateAttachment
                     original_filename: originalFilename,  // ✅ CORREÇÃO: Usar mesmo valor do updateAttachment
                     metadata: updatedMetadata,  // ✅ Metadata sem flag processing
+                    transcription: data.data.transcription,
+                    transcription_language: data.data.transcription_language,
+                    ai_metadata: data.data.ai_metadata,
                   };
                   console.log('🔄 [TENANT WS] Attachment na mensagem atualizado:', {
                     attachmentId,

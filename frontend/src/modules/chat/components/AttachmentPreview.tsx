@@ -28,8 +28,10 @@ interface Attachment {
   metadata?: Record<string, any> | null;  // ✅ Adicionar metadata
   // ✨ Campos IA (podem ser null)
   transcription?: string | null;
+  transcription_language?: string | null;
   ai_summary?: string | null;
   ai_tags?: string[] | null;
+  ai_metadata?: Record<string, any> | null;
   processing_status?: 'pending' | 'processing' | 'completed' | 'failed' | 'skipped';
 }
 
@@ -673,7 +675,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
         )}
 
         {/* ✨ TRANSCRIÇÃO IA (mostrar quando habilitado no tenant) */}
-        {(showTranscription || showAI) && attachment.transcription && (
+        {(showTranscription || showAI) && (attachment.transcription || attachment.ai_metadata?.transcription?.status === 'processing') && (
           <div className="mt-3 p-3 bg-white rounded border border-gray-200">
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs font-semibold text-gray-700">📝 Transcrição:</p>
@@ -683,7 +685,9 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                 </span>
               )}
             </div>
-            <p className="text-sm text-gray-600">{attachment.transcription}</p>
+            <p className="text-sm text-gray-600">
+              {attachment.transcription || 'Transcrevendo...'}
+            </p>
           </div>
         )}
 

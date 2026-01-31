@@ -5,6 +5,8 @@ from datetime import timedelta
 from typing import Any, Dict, List, Optional
 
 import requests
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 from django.conf import settings
 from django.db import close_old_connections
 from django.utils import timezone
@@ -253,6 +255,38 @@ def _extract_duration_ms(metadata: Optional[Dict[str, Any]]) -> Optional[int]:
     return duration_ms
 
 
+def _broadcast_attachment_update(attachment, message, tenant_id: str) -> None:
+    """Send attachment update to tenant websocket."""
+    try:
+        from apps.chat.utils.serialization import normalize_metadata
+
+        channel_layer = get_channel_layer()
+        metadata = normalize_metadata(attachment.metadata)
+        metadata.pop('processing', None)
+
+        payload = {
+            'type': 'attachment_updated',
+            'data': {
+                'message_id': str(message.id) if message else None,
+                'attachment_id': str(attachment.id),
+                'file_url': attachment.file_url,
+                'thumbnail_url': None,
+                'mime_type': attachment.mime_type,
+                'file_type': 'audio' if attachment.mime_type and attachment.mime_type.startswith('audio/') else None,
+                'size_bytes': attachment.size_bytes,
+                'original_filename': attachment.original_filename,
+                'metadata': metadata,
+                'transcription': attachment.transcription,
+                'transcription_language': attachment.transcription_language,
+                'ai_metadata': attachment.ai_metadata,
+            }
+        }
+        tenant_group = f'chat_tenant_{tenant_id}'
+        async_to_sync(channel_layer.group_send)(tenant_group, payload)
+    except Exception:
+        logger.warning("Failed to broadcast attachment update", exc_info=True)
+
+
 def _can_auto_transcribe(settings_obj, attachment, duration_ms: Optional[int]) -> bool:
     if not settings_obj.ai_enabled:
         return False
@@ -312,6 +346,14 @@ def _transcription_worker(
 
         conversation = message.conversation if message else None
 
+        ai_metadata = attachment.ai_metadata or {}
+        ai_metadata["transcription"] = {
+            "status": "processing",
+        }
+        attachment.ai_metadata = ai_metadata
+        attachment.save(update_fields=["ai_metadata"])
+        _broadcast_attachment_update(attachment, message, str(tenant_id))
+
         payload = {
             "tenant_id": str(tenant_id),
             "conversation_id": str(conversation_id or (conversation.id if conversation else "")) or None,
@@ -353,6 +395,7 @@ def _transcription_worker(
             "transcription_language",
             "ai_metadata",
         ])
+        _broadcast_attachment_update(attachment, message, str(tenant_id))
         logger.info("Audio transcription stored for attachment %s", attachment_id)
 
     except Exception as exc:

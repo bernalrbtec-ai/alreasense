@@ -877,7 +877,12 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 'thumbnail_url': data.get('thumbnail_url'),
                 'mime_type': data.get('mime_type'),
                 'file_type': data.get('file_type'),
-                'metadata': data.get('metadata', {})  # ✅ Incluir metadata (sem flag processing)
+                'size_bytes': data.get('size_bytes'),
+                'original_filename': data.get('original_filename'),
+                'metadata': data.get('metadata', {}),  # ✅ Incluir metadata (sem flag processing)
+                'transcription': data.get('transcription'),
+                'transcription_language': data.get('transcription_language'),
+                'ai_metadata': data.get('ai_metadata'),
             }
         }))
         logger.info(f"📡 [CHAT WS V2] Notificação de anexo atualizado enviada (attachment_id: {data.get('attachment_id')})")
