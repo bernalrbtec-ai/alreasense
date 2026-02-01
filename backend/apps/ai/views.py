@@ -225,7 +225,7 @@ def ai_settings(request):
 
     if request.method == 'GET':
         return Response(_serialize_ai_settings(settings_obj))
-    if not request.user.is_staff and not request.user.is_superuser:
+    if not request.user.is_admin and not request.user.is_superuser:
         return Response({"error": "Apenas administradores podem alterar configurações."}, status=status.HTTP_403_FORBIDDEN)
 
     data = request.data or {}
