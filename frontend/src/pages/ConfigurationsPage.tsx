@@ -1807,7 +1807,7 @@ export default function ConfigurationsPage() {
                             setIsModelsGatewayModalOpen(true)
                           }}
                         >
-                          Gateways de MODELOS
+                          Gateways e Webhooks
                         </Button>
                       </div>
                     </div>
