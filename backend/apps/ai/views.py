@@ -196,11 +196,12 @@ def gateway_test(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    selected_model = str(request.data.get("model") or "").strip() or settings_obj.agent_model
     payload = {
         "action": "chat",
         "message": request.data.get("message", ""),
         "context": request.data.get("context", {}),
-        "model": settings_obj.agent_model,
+        "model": selected_model,
     }
 
     try:

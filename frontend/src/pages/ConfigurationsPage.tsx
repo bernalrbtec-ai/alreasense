@@ -290,6 +290,7 @@ export default function ConfigurationsPage() {
   const [modelTestInput, setModelTestInput] = useState('')
   const [modelTestMessages, setModelTestMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [modelTestLoading, setModelTestLoading] = useState(false)
+  const [modelTestSelectedModel, setModelTestSelectedModel] = useState<string>('')
 
   useEffect(() => {
     fetchData()
@@ -669,6 +670,13 @@ export default function ConfigurationsPage() {
     setIsModelTestModalOpen(true)
     setModelTestInput('')
     setModelTestMessages([])
+    if (aiSettings?.agent_model && aiModelOptions.includes(aiSettings.agent_model)) {
+      setModelTestSelectedModel(aiSettings.agent_model)
+    } else if (aiModelOptions.length > 0) {
+      setModelTestSelectedModel(aiModelOptions[0])
+    } else {
+      setModelTestSelectedModel('')
+    }
   }
 
   const handleCloseModelTestModal = () => {
@@ -676,6 +684,7 @@ export default function ConfigurationsPage() {
     setModelTestInput('')
     setModelTestMessages([])
     setModelTestLoading(false)
+    setModelTestSelectedModel('')
   }
 
   const handleSendModelTest = async () => {
@@ -700,8 +709,9 @@ export default function ConfigurationsPage() {
         message,
         context: {
           action: 'model_test',
-          model: aiSettings.agent_model,
+          model: modelTestSelectedModel || aiSettings.agent_model,
         },
+        model: modelTestSelectedModel || aiSettings.agent_model,
       })
       const data = response.data?.data ?? response.data
       let content = ''
@@ -2370,6 +2380,27 @@ export default function ConfigurationsPage() {
                       Modelo atual: {aiSettings.agent_model}
                     </p>
                   </div>
+                </div>
+
+                <div className="mb-4">
+                  <Label htmlFor="model_test_select">Modelo para teste</Label>
+                  <select
+                    id="model_test_select"
+                    value={modelTestSelectedModel}
+                    onChange={(e) => setModelTestSelectedModel(e.target.value)}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
+                  >
+                    {aiModelOptions.length === 0 ? (
+                      <option value="">Nenhum modelo disponível</option>
+                    ) : (
+                      aiModelOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))
+                    )}
+                  </select>
                 </div>
 
                 <div className="border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">
