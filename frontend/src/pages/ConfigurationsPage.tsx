@@ -680,12 +680,12 @@ export default function ConfigurationsPage() {
 
   const handleSendModelTest = async () => {
     if (!modelTestInput.trim() || !aiSettings) return
-    if (!aiSettings.n8n_triage_webhook_url) {
+    if (!aiSettings.n8n_ai_webhook_url) {
       setModelTestMessages((prev) => [
         ...prev,
         {
           role: 'assistant',
-          content: 'Configure o webhook de triagem antes de testar o modelo.',
+          content: 'Configure o webhook do Gateway IA antes de testar.',
         },
       ])
       return
@@ -696,7 +696,7 @@ export default function ConfigurationsPage() {
     setModelTestLoading(true)
 
     try {
-      const response = await api.post('/ai/triage/test/', {
+      const response = await api.post('/ai/gateway/test/', {
         message,
         context: {
           action: 'model_test',
@@ -718,7 +718,7 @@ export default function ConfigurationsPage() {
     } catch (error) {
       const errorMessage =
         (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
-        (error instanceof Error ? error.message : 'Erro ao testar o modelo.')
+        (error instanceof Error ? error.message : 'Erro ao testar a IA.')
       setModelTestMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }])
     } finally {
       setModelTestLoading(false)
@@ -1131,9 +1131,6 @@ export default function ConfigurationsPage() {
       }
       if (aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) {
         errors.n8n_audio_webhook_url = 'Webhook de transcrição obrigatório.'
-      }
-      if (aiSettings.triage_enabled && !aiSettings.n8n_triage_webhook_url) {
-        errors.n8n_triage_webhook_url = 'Webhook de triagem obrigatório.'
       }
     }
 
@@ -1745,25 +1742,6 @@ export default function ConfigurationsPage() {
                   </label>
                 </div>
 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base font-semibold">Triagem de mensagens</Label>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Habilita o envio de mensagens para triagem via IA.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      disabled={!aiSettings.ai_enabled}
-                      checked={aiSettings.triage_enabled}
-                      onChange={(e) => setAiSettings({ ...aiSettings, triage_enabled: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="transcription_min_seconds">Min. segundos para transcrição</Label>
@@ -1796,7 +1774,7 @@ export default function ConfigurationsPage() {
                 </div>
 
                 <div className="text-sm text-gray-600">
-                  Transcrição e triagem usam webhooks diferentes.
+                  Transcrição e IA usam webhooks diferentes.
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1804,15 +1782,15 @@ export default function ConfigurationsPage() {
                     <div className="flex items-center justify-between gap-3">
                       <Label htmlFor="agent_model">Modelo padrão</Label>
                       <div className="flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleOpenModelTestModal}
-                          disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
-                        >
-                          Testar modelo
-                        </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleOpenModelTestModal}
+                        disabled={!aiSettings.ai_enabled}
+                      >
+                        Testar IA
+                      </Button>
                         <Button
                           type="button"
                           variant="outline"
@@ -1852,66 +1830,37 @@ export default function ConfigurationsPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="n8n_audio_webhook_url">N8N Webhook (Transcrição)</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Input
-                        id="n8n_audio_webhook_url"
-                        type="text"
-                        value={aiSettings.n8n_audio_webhook_url}
-                        onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
-                        className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500' : ''}
-                        placeholder="https://n8n.exemplo.com/webhook/audio"
-                        disabled={!aiSettings.ai_enabled}
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setAudioTestFile(null)
-                          setAudioTestResult(null)
-                          setAudioTestError(null)
-                          setIsAudioTestModalOpen(true)
-                        }}
-                        disabled={!aiSettings.n8n_audio_webhook_url}
-                      >
-                        Testar
-                      </Button>
-                    </div>
-                    {aiSettingsErrors.n8n_audio_webhook_url && (
-                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-1">
-                      Obrigatório quando a transcrição estiver habilitada.
-                    </p>
+                <div>
+                  <Label htmlFor="n8n_audio_webhook_url">N8N Webhook (Transcrição)</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="n8n_audio_webhook_url"
+                      type="text"
+                      value={aiSettings.n8n_audio_webhook_url}
+                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
+                      className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500' : ''}
+                      placeholder="https://n8n.exemplo.com/webhook/transcribe"
+                      disabled={!aiSettings.ai_enabled}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setAudioTestFile(null)
+                        setAudioTestResult(null)
+                        setAudioTestError(null)
+                        setIsAudioTestModalOpen(true)
+                      }}
+                      disabled={!aiSettings.n8n_audio_webhook_url}
+                    >
+                      Testar
+                    </Button>
                   </div>
-                  <div>
-                    <Label htmlFor="n8n_triage_webhook_url">N8N Webhook (Triagem)</Label>
-                    <div className="flex gap-2 mt-1">
-                      <Input
-                        id="n8n_triage_webhook_url"
-                        type="text"
-                        value={aiSettings.n8n_triage_webhook_url}
-                        onChange={(e) => setAiSettings({ ...aiSettings, n8n_triage_webhook_url: e.target.value })}
-                        className={aiSettingsErrors.n8n_triage_webhook_url ? 'border-red-500' : ''}
-                        placeholder="https://n8n.exemplo.com/webhook/triage"
-                        disabled={!aiSettings.ai_enabled}
-                      />
-                      <Button
-                        variant="outline"
-                        onClick={() => handleTestWebhook('triage')}
-                        disabled={webhookTesting.triage || !aiSettings.n8n_triage_webhook_url}
-                      >
-                        {webhookTesting.triage ? 'Testando...' : 'Testar'}
-                      </Button>
-                    </div>
-                    {aiSettingsErrors.n8n_triage_webhook_url && (
-                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_triage_webhook_url}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-1">
-                      Obrigatório quando a triagem estiver habilitada.
-                    </p>
-                  </div>
+                  {aiSettingsErrors.n8n_audio_webhook_url && (
+                    <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Obrigatório quando a transcrição estiver habilitada.
+                  </p>
                 </div>
 
                 <div>
@@ -1943,10 +1892,9 @@ export default function ConfigurationsPage() {
                 </div>
 
                 {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
-                (aiSettings.triage_enabled && !aiSettings.n8n_triage_webhook_url) ||
                 (aiSettings.ai_enabled && !aiSettings.n8n_ai_webhook_url) ? (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                    Preencha os webhooks obrigatórios para ativar transcrição, triagem e IA.
+                    Preencha os webhooks obrigatórios para ativar transcrição e IA.
                   </div>
                 ) : null}
                 {aiSettingsErrors.n8n_models_webhook_url ? (
@@ -2416,7 +2364,7 @@ export default function ConfigurationsPage() {
                   </div>
                   <div className="ml-3">
                     <h3 className="text-lg font-medium leading-6 text-gray-900">
-                      Testar modelo
+                      Testar IA
                     </h3>
                     <p className="text-xs text-gray-500">
                       Modelo atual: {aiSettings.agent_model}
@@ -2426,7 +2374,7 @@ export default function ConfigurationsPage() {
 
                 <div className="border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">
                   {modelTestMessages.length === 0 ? (
-                    <p className="text-sm text-gray-500">Envie uma mensagem para testar o modelo.</p>
+                    <p className="text-sm text-gray-500">Envie uma mensagem para testar a IA.</p>
                   ) : (
                     <div className="space-y-3">
                       {modelTestMessages.map((item, index) => (
@@ -2442,7 +2390,7 @@ export default function ConfigurationsPage() {
                         </div>
                       ))}
                       {modelTestLoading && (
-                        <div className="text-xs text-gray-500">Consultando modelo...</div>
+                        <div className="text-xs text-gray-500">Consultando IA...</div>
                       )}
                     </div>
                   )}
@@ -2454,7 +2402,7 @@ export default function ConfigurationsPage() {
                     onChange={(e) => setModelTestInput(e.target.value)}
                     className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
                     rows={2}
-                    placeholder="Digite uma mensagem para testar o modelo..."
+                    placeholder="Digite uma mensagem para testar a IA..."
                   />
                   <Button
                     type="button"

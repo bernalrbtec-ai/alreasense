@@ -184,6 +184,36 @@ def triage_test(request):
         )
 
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def gateway_test(request):
+    """Run a Gateway IA test prompt via N8N."""
+    settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=request.user.tenant)
+    ai_webhook = settings_obj.n8n_ai_webhook_url or getattr(settings, 'N8N_AI_WEBHOOK', '')
+    if settings_obj.ai_enabled and not ai_webhook:
+        return Response(
+            {"error": "Webhook da IA obrigatório quando habilitado."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    payload = {
+        "action": "chat",
+        "message": request.data.get("message", ""),
+        "context": request.data.get("context", {}),
+        "model": settings_obj.agent_model,
+    }
+
+    try:
+        response = requests.post(ai_webhook, json=payload, timeout=10.0)
+        response.raise_for_status()
+        return Response({"status": "success", "data": response.json() if response.content else {}})
+    except Exception as exc:
+        return Response(
+            {"status": "error", "error": str(exc)},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, IsTenantMember])
 def triage_history(request):

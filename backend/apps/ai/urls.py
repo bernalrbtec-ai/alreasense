@@ -10,5 +10,6 @@ urlpatterns = [
     path('models/', views.models_list, name='ai-models'),
     path('webhook/test/', views.webhook_test, name='webhook-test'),
     path('triage/test/', views.triage_test, name='triage-test'),
+    path('gateway/test/', views.gateway_test, name='gateway-test'),
     path('triage/history/', views.triage_history, name='triage-history'),
 ]
