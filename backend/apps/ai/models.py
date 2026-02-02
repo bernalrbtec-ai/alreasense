@@ -106,6 +106,7 @@ class TenantAiSettings(models.Model):
     agent_model = models.CharField(max_length=100, default='llama3.1:8b')
     n8n_audio_webhook_url = models.URLField(blank=True)
     n8n_triage_webhook_url = models.URLField(blank=True)
+    n8n_ai_webhook_url = models.URLField(blank=True)
     n8n_models_webhook_url = models.URLField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

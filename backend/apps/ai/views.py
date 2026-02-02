@@ -40,6 +40,7 @@ def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
         "agent_model": settings_obj.agent_model,
         "n8n_audio_webhook_url": settings_obj.n8n_audio_webhook_url or "",
         "n8n_triage_webhook_url": settings_obj.n8n_triage_webhook_url or "",
+        "n8n_ai_webhook_url": settings_obj.n8n_ai_webhook_url or "",
         "n8n_models_webhook_url": settings_obj.n8n_models_webhook_url or "",
     }
 
@@ -271,12 +272,17 @@ def ai_settings(request):
         url = str(data.get('n8n_triage_webhook_url') or '').strip()
         settings_obj.n8n_triage_webhook_url = url
 
+    if 'n8n_ai_webhook_url' in data:
+        url = str(data.get('n8n_ai_webhook_url') or '').strip()
+        settings_obj.n8n_ai_webhook_url = url
+
     if 'n8n_models_webhook_url' in data:
         url = str(data.get('n8n_models_webhook_url') or '').strip()
         settings_obj.n8n_models_webhook_url = url
 
     audio_webhook = settings_obj.n8n_audio_webhook_url or getattr(settings, 'N8N_AUDIO_WEBHOOK', '')
     triage_webhook = settings_obj.n8n_triage_webhook_url or getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
+    ai_webhook = settings_obj.n8n_ai_webhook_url or getattr(settings, 'N8N_AI_WEBHOOK', '')
     models_webhook = settings_obj.n8n_models_webhook_url or getattr(settings, 'N8N_MODELS_WEBHOOK', '')
 
     if settings_obj.audio_transcription_enabled and not audio_webhook:
@@ -284,6 +290,9 @@ def ai_settings(request):
 
     if settings_obj.triage_enabled and not triage_webhook:
         errors['n8n_triage_webhook_url'] = 'Webhook de triagem obrigatório quando habilitado.'
+
+    if settings_obj.ai_enabled and not ai_webhook:
+        errors['n8n_ai_webhook_url'] = 'Webhook da IA obrigatório quando IA estiver habilitada.'
 
     if settings_obj.ai_enabled and not models_webhook:
         errors['n8n_models_webhook_url'] = 'Webhook de modelos obrigatório quando IA estiver habilitada.'
@@ -382,9 +391,9 @@ def webhook_test(request):
     settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=tenant)
     webhook_type = str(request.data.get('type') or '').strip().lower()
 
-    if webhook_type not in {'audio', 'triage'}:
+    if webhook_type not in {'audio', 'triage', 'ai'}:
         return Response(
-            {"error": "Tipo de webhook inválido. Use 'audio' ou 'triage'."},
+            {"error": "Tipo de webhook inválido. Use 'audio', 'triage' ou 'ai'."},
             status=status.HTTP_400_BAD_REQUEST,
         )
 
@@ -395,11 +404,18 @@ def webhook_test(request):
                 {"error": "Webhook de transcrição obrigatório quando habilitado."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-    else:
+    elif webhook_type == 'triage':
         webhook_url = settings_obj.n8n_triage_webhook_url or getattr(settings, 'N8N_TRIAGE_WEBHOOK', '')
         if settings_obj.triage_enabled and not webhook_url:
             return Response(
                 {"error": "Webhook de triagem obrigatório quando habilitado."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        webhook_url = settings_obj.n8n_ai_webhook_url or getattr(settings, 'N8N_AI_WEBHOOK', '')
+        if settings_obj.ai_enabled and not webhook_url:
+            return Response(
+                {"error": "Webhook da IA obrigatório quando habilitado."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 

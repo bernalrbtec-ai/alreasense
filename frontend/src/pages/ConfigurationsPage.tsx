@@ -181,6 +181,7 @@ interface AiSettings {
   agent_model: string
   n8n_audio_webhook_url: string
   n8n_triage_webhook_url: string
+  n8n_ai_webhook_url: string
   n8n_models_webhook_url: string
 }
 
@@ -263,9 +264,10 @@ export default function ConfigurationsPage() {
   const [aiSettingsLoading, setAiSettingsLoading] = useState(false)
   const [aiSettingsSaving, setAiSettingsSaving] = useState(false)
   const [aiSettingsErrors, setAiSettingsErrors] = useState<Record<string, string>>({})
-  const [webhookTesting, setWebhookTesting] = useState<{ audio: boolean; triage: boolean }>({
+  const [webhookTesting, setWebhookTesting] = useState<{ audio: boolean; triage: boolean; ai: boolean }>({
     audio: false,
-    triage: false
+    triage: false,
+    ai: false
   })
   const [aiModelOptions, setAiModelOptions] = useState<string[]>(DEFAULT_AI_MODELS)
   const [aiModelsLoading, setAiModelsLoading] = useState(false)
@@ -1121,6 +1123,9 @@ export default function ConfigurationsPage() {
       if (!aiSettings.n8n_models_webhook_url) {
         errors.n8n_models_webhook_url = 'Webhook de modelos obrigatório.'
       }
+      if (!aiSettings.n8n_ai_webhook_url) {
+        errors.n8n_ai_webhook_url = 'Webhook da IA obrigatório.'
+      }
       if (aiModelOptions.length === 0) {
         errors.agent_model = 'Nenhum modelo disponível.'
       }
@@ -1164,9 +1169,11 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const handleTestWebhook = async (type: 'audio' | 'triage') => {
+  const handleTestWebhook = async (type: 'audio' | 'triage' | 'ai') => {
     if (!aiSettings) return
-    const toastId = showLoadingToast('testar', `Webhook ${type === 'audio' ? 'de transcrição' : 'de triagem'}`)
+    const toastLabel =
+      type === 'audio' ? 'de transcrição' : type === 'triage' ? 'de triagem' : 'da IA'
+    const toastId = showLoadingToast('testar', `Webhook ${toastLabel}`)
     try {
       setWebhookTesting((prev) => ({ ...prev, [type]: true }))
       await api.post('/ai/webhook/test/', { type })
@@ -1907,10 +1914,39 @@ export default function ConfigurationsPage() {
                   </div>
                 </div>
 
+                <div>
+                  <Label htmlFor="n8n_ai_webhook_url">N8N Webhook (Gateway IA)</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input
+                      id="n8n_ai_webhook_url"
+                      type="text"
+                      value={aiSettings.n8n_ai_webhook_url}
+                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_ai_webhook_url: e.target.value })}
+                      className={aiSettingsErrors.n8n_ai_webhook_url ? 'border-red-500' : ''}
+                      placeholder="https://n8n.exemplo.com/webhook/gateway-ia"
+                      disabled={!aiSettings.ai_enabled}
+                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => handleTestWebhook('ai')}
+                      disabled={webhookTesting.ai || !aiSettings.n8n_ai_webhook_url}
+                    >
+                      {webhookTesting.ai ? 'Testando...' : 'Testar'}
+                    </Button>
+                  </div>
+                  {aiSettingsErrors.n8n_ai_webhook_url && (
+                    <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_ai_webhook_url}</p>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Webhook principal para chamadas da IA (inclui RAG quando habilitado no N8N).
+                  </p>
+                </div>
+
                 {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
-                (aiSettings.triage_enabled && !aiSettings.n8n_triage_webhook_url) ? (
+                (aiSettings.triage_enabled && !aiSettings.n8n_triage_webhook_url) ||
+                (aiSettings.ai_enabled && !aiSettings.n8n_ai_webhook_url) ? (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                    Preencha os webhooks obrigatórios para ativar transcrição e triagem.
+                    Preencha os webhooks obrigatórios para ativar transcrição, triagem e IA.
                   </div>
                 ) : null}
                 {aiSettingsErrors.n8n_models_webhook_url ? (
