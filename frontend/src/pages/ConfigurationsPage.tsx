@@ -1704,7 +1704,7 @@ export default function ConfigurationsPage() {
 
                 {aiModelOptions.length === 0 && (
                   <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                    Nenhum modelo listado pelo N8N. A IA fica indisponível até o endpoint de modelos responder.
+                    Nenhum modelo listado. A IA fica indisponível até o endpoint de modelos responder.
                   </div>
                 )}
 
@@ -1737,7 +1737,7 @@ export default function ConfigurationsPage() {
                   <div>
                     <Label className="text-base font-semibold">Transcrição de áudio</Label>
                     <p className="text-sm text-gray-600 mt-1">
-                      Habilita o uso do fluxo de transcrição via N8N.
+                      Habilita o fluxo de transcrição de áudio.
                     </p>
                   </div>
                   <label className="relative inline-flex items-center cursor-pointer">
@@ -1781,10 +1781,6 @@ export default function ConfigurationsPage() {
                       Limite de tamanho por arquivo de áudio.
                     </p>
                   </div>
-                </div>
-
-                <div className="text-sm text-gray-600">
-                  Transcrição e IA usam webhooks diferentes.
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1834,71 +1830,7 @@ export default function ConfigurationsPage() {
                     <p className="text-xs text-gray-500 mt-1">
                       Use um modelo instalado no Ollama.
                     </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Gateways de MODELOS define o webhook para listar modelos disponíveis.
-                    </p>
                   </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="n8n_audio_webhook_url">N8N Webhook (Transcrição)</Label>
-                  <div className="flex gap-2 mt-1">
-                    <Input
-                      id="n8n_audio_webhook_url"
-                      type="text"
-                      value={aiSettings.n8n_audio_webhook_url}
-                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
-                      className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500' : ''}
-                      placeholder="https://n8n.exemplo.com/webhook/transcribe"
-                      disabled={!aiSettings.ai_enabled}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => {
-                        setAudioTestFile(null)
-                        setAudioTestResult(null)
-                        setAudioTestError(null)
-                        setIsAudioTestModalOpen(true)
-                      }}
-                      disabled={!aiSettings.n8n_audio_webhook_url}
-                    >
-                      Testar
-                    </Button>
-                  </div>
-                  {aiSettingsErrors.n8n_audio_webhook_url && (
-                    <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Obrigatório quando a transcrição estiver habilitada.
-                  </p>
-                </div>
-
-                <div>
-                  <Label htmlFor="n8n_ai_webhook_url">N8N Webhook (Gateway IA)</Label>
-                  <div className="flex gap-2 mt-1">
-                    <Input
-                      id="n8n_ai_webhook_url"
-                      type="text"
-                      value={aiSettings.n8n_ai_webhook_url}
-                      onChange={(e) => setAiSettings({ ...aiSettings, n8n_ai_webhook_url: e.target.value })}
-                      className={aiSettingsErrors.n8n_ai_webhook_url ? 'border-red-500' : ''}
-                      placeholder="https://n8n.exemplo.com/webhook/gateway-ia"
-                      disabled={!aiSettings.ai_enabled}
-                    />
-                    <Button
-                      variant="outline"
-                      onClick={() => handleTestWebhook('ai')}
-                      disabled={webhookTesting.ai || !aiSettings.n8n_ai_webhook_url}
-                    >
-                      {webhookTesting.ai ? 'Testando...' : 'Testar'}
-                    </Button>
-                  </div>
-                  {aiSettingsErrors.n8n_ai_webhook_url && (
-                    <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_ai_webhook_url}</p>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Webhook principal para chamadas da IA (inclui RAG quando habilitado no N8N).
-                  </p>
                 </div>
 
                 {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
@@ -1940,11 +1872,11 @@ export default function ConfigurationsPage() {
             <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg">
               <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
                 <h3 className="text-lg font-medium leading-6 text-gray-900 mb-4">
-                  Gateways de MODELOS
+                  Gateways e Webhooks
                 </h3>
-                <div className="space-y-3">
+                <div className="space-y-5">
                   <div>
-                    <Label htmlFor="n8n_models_webhook_url">Webhook N8N de modelos</Label>
+                    <Label htmlFor="n8n_models_webhook_url">Webhook de modelos</Label>
                     <Input
                       id="n8n_models_webhook_url"
                       type="text"
@@ -1954,11 +1886,8 @@ export default function ConfigurationsPage() {
                         setModelsGatewayTested(false)
                         setModelsGatewayTestError(null)
                       }}
-                      placeholder="https://integrador.alrea.ao/webhook/Models"
+                      placeholder="https://integrador.alrea.ao/webhook/models"
                     />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Este endpoint retorna a lista de modelos disponíveis.
-                    </p>
                     <div className="flex items-center justify-between mt-3">
                       <Button
                         type="button"
@@ -1975,6 +1904,59 @@ export default function ConfigurationsPage() {
                     {modelsGatewayTestError ? (
                       <p className="text-xs text-red-600 mt-2">{modelsGatewayTestError}</p>
                     ) : null}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="n8n_audio_webhook_url">Webhook de transcrição</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="n8n_audio_webhook_url"
+                        type="text"
+                        value={aiSettings.n8n_audio_webhook_url}
+                        onChange={(e) => setAiSettings({ ...aiSettings, n8n_audio_webhook_url: e.target.value })}
+                        className={aiSettingsErrors.n8n_audio_webhook_url ? 'border-red-500' : ''}
+                        placeholder="https://integrador.alrea.ao/webhook/transcribe"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setAudioTestFile(null)
+                          setAudioTestResult(null)
+                          setAudioTestError(null)
+                          setIsAudioTestModalOpen(true)
+                        }}
+                        disabled={!aiSettings.n8n_audio_webhook_url}
+                      >
+                        Testar
+                      </Button>
+                    </div>
+                    {aiSettingsErrors.n8n_audio_webhook_url && (
+                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_audio_webhook_url}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="n8n_ai_webhook_url">Webhook do Gateway IA</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="n8n_ai_webhook_url"
+                        type="text"
+                        value={aiSettings.n8n_ai_webhook_url}
+                        onChange={(e) => setAiSettings({ ...aiSettings, n8n_ai_webhook_url: e.target.value })}
+                        className={aiSettingsErrors.n8n_ai_webhook_url ? 'border-red-500' : ''}
+                        placeholder="https://integrador.alrea.ao/webhook/gateway-ia"
+                      />
+                      <Button
+                        variant="outline"
+                        onClick={() => handleTestWebhook('ai')}
+                        disabled={webhookTesting.ai || !aiSettings.n8n_ai_webhook_url}
+                      >
+                        {webhookTesting.ai ? 'Testando...' : 'Testar'}
+                      </Button>
+                    </div>
+                    {aiSettingsErrors.n8n_ai_webhook_url && (
+                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.n8n_ai_webhook_url}</p>
+                    )}
                   </div>
                 </div>
               </div>
