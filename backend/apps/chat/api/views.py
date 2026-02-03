@@ -5041,6 +5041,32 @@ class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):
             status=status.HTTP_410_GONE
         )
 
+    @action(detail=True, methods=['post'])
+    def transcribe(self, request, pk=None):
+        """Dispara transcrição manual para anexo de áudio."""
+        attachment = self.get_object()
+
+        if not attachment.is_audio:
+            return Response({'error': 'Apenas anexos de áudio podem ser transcritos.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        from apps.ai.triage_service import dispatch_transcription_async
+
+        message = attachment.message
+        conversation = message.conversation if message else None
+
+        dispatch_transcription_async(
+            tenant_id=str(attachment.tenant_id),
+            attachment_id=str(attachment.id),
+            message_id=str(message.id) if message else None,
+            conversation_id=str(conversation.id) if conversation else None,
+            direction=message.direction if message else None,
+            source='manual',
+            force=True,
+            reset_attempts=True,
+        )
+
+        return Response({'status': 'queued'})
+
 
 # ==========================================
 # VIEW FUNCTION PARA PROXY DE FOTOS

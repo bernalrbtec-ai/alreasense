@@ -319,7 +319,9 @@ def _transcription_worker(
     message_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
     direction: Optional[str] = None,
-    source: Optional[str] = None
+    source: Optional[str] = None,
+    force: bool = False,
+    reset_attempts: bool = False,
 ) -> None:
     close_old_connections()
     try:
@@ -334,7 +336,11 @@ def _transcription_worker(
         settings_obj = _get_tenant_ai_settings(tenant)
         duration_ms = _extract_duration_ms(attachment.metadata or {})
 
-        if not _can_auto_transcribe(settings_obj, attachment, duration_ms):
+        if not settings_obj.audio_transcription_enabled:
+            logger.info("Audio transcription disabled for tenant; skipping attachment %s", attachment_id)
+            return
+
+        if not _can_auto_transcribe(settings_obj, attachment, duration_ms) and not force:
             logger.info("Audio transcription skipped for attachment %s", attachment_id)
             return
 
@@ -347,56 +353,90 @@ def _transcription_worker(
         conversation = message.conversation if message else None
 
         ai_metadata = attachment.ai_metadata or {}
-        ai_metadata["transcription"] = {
-            "status": "processing",
-        }
-        attachment.ai_metadata = ai_metadata
-        attachment.save(update_fields=["ai_metadata"])
-        _broadcast_attachment_update(attachment, message, str(tenant_id))
+        transcription_meta = ai_metadata.get("transcription") or {}
+        attempts = int(transcription_meta.get("attempts") or 0)
+        if reset_attempts:
+            attempts = 0
 
-        payload = {
-            "tenant_id": str(tenant_id),
-            "conversation_id": str(conversation_id or (conversation.id if conversation else "")) or None,
-            "message_id": str(message_id or (message.id if message else "")) or None,
-            "media_url": attachment.file_url,
-            "duration_ms": duration_ms,
-            "size_bytes": attachment.size_bytes,
-            "direction": direction or (message.direction if message else None),
-            "agent_model": settings_obj.agent_model,
-            "source": source,
-        }
+        max_attempts = int(getattr(settings, "AI_TRANSCRIPTION_MAX_RETRIES", 3))
+        retry_delay = int(getattr(settings, "AI_TRANSCRIPTION_RETRY_DELAY", 3))
 
-        response_data = _post_to_n8n(
-            "transcribe",
-            payload,
-            timeout=30.0,
-            tenant=tenant,
-            url=_resolve_n8n_audio_url(tenant),
-            error_message="N8N audio webhook not configured",
-        )
+        for attempt_index in range(attempts, max_attempts):
+            current_attempt = attempt_index + 1
+            ai_metadata = attachment.ai_metadata or {}
+            ai_metadata["transcription"] = {
+                "status": "processing",
+                "attempts": current_attempt,
+                "max_attempts": max_attempts,
+            }
+            attachment.ai_metadata = ai_metadata
+            attachment.save(update_fields=["ai_metadata"])
+            _broadcast_attachment_update(attachment, message, str(tenant_id))
 
-        transcript_text = response_data.get("transcript_text") or response_data.get("text") or ""
-        language = response_data.get("language_detected") or response_data.get("language") or ""
+            payload = {
+                "tenant_id": str(tenant_id),
+                "conversation_id": str(conversation_id or (conversation.id if conversation else "")) or None,
+                "message_id": str(message_id or (message.id if message else "")) or None,
+                "media_url": attachment.file_url,
+                "duration_ms": duration_ms,
+                "size_bytes": attachment.size_bytes,
+                "direction": direction or (message.direction if message else None),
+                "agent_model": settings_obj.agent_model,
+                "source": source,
+            }
 
-        ai_metadata = attachment.ai_metadata or {}
-        ai_metadata["transcription"] = {
-            "status": response_data.get("status", "done"),
-            "model_name": response_data.get("model_name") or response_data.get("model"),
-            "processing_time_ms": response_data.get("processing_time_ms"),
-        }
+            try:
+                response_data = _post_to_n8n(
+                    "transcribe",
+                    payload,
+                    timeout=30.0,
+                    tenant=tenant,
+                    url=_resolve_n8n_audio_url(tenant),
+                    error_message="N8N audio webhook not configured",
+                )
 
-        if transcript_text:
-            attachment.transcription = transcript_text
-        if language:
-            attachment.transcription_language = language
-        attachment.ai_metadata = ai_metadata
-        attachment.save(update_fields=[
-            "transcription",
-            "transcription_language",
-            "ai_metadata",
-        ])
-        _broadcast_attachment_update(attachment, message, str(tenant_id))
-        logger.info("Audio transcription stored for attachment %s", attachment_id)
+                transcript_text = response_data.get("transcript_text") or response_data.get("text") or ""
+                language = response_data.get("language_detected") or response_data.get("language") or ""
+
+                ai_metadata = attachment.ai_metadata or {}
+                ai_metadata["transcription"] = {
+                    "status": response_data.get("status", "done"),
+                    "model_name": response_data.get("model_name") or response_data.get("model"),
+                    "processing_time_ms": response_data.get("processing_time_ms"),
+                    "attempts": current_attempt,
+                    "max_attempts": max_attempts,
+                }
+
+                if transcript_text:
+                    attachment.transcription = transcript_text
+                if language:
+                    attachment.transcription_language = language
+                attachment.ai_metadata = ai_metadata
+                attachment.save(update_fields=[
+                    "transcription",
+                    "transcription_language",
+                    "ai_metadata",
+                ])
+                _broadcast_attachment_update(attachment, message, str(tenant_id))
+                logger.info("Audio transcription stored for attachment %s", attachment_id)
+                return
+            except Exception as exc:
+                logger.error("Failed to run audio transcription attempt %s: %s", current_attempt, exc, exc_info=True)
+                ai_metadata = attachment.ai_metadata or {}
+                ai_metadata["transcription"] = {
+                    "status": "retrying" if current_attempt < max_attempts else "failed",
+                    "error": str(exc),
+                    "attempts": current_attempt,
+                    "max_attempts": max_attempts,
+                }
+                attachment.ai_metadata = ai_metadata
+                attachment.save(update_fields=["ai_metadata"])
+                _broadcast_attachment_update(attachment, message, str(tenant_id))
+
+                if current_attempt < max_attempts:
+                    time.sleep(retry_delay)
+                    continue
+                return
 
     except Exception as exc:
         logger.error("Failed to run audio transcription: %s", exc, exc_info=True)
@@ -410,11 +450,13 @@ def dispatch_transcription_async(
     message_id: Optional[str] = None,
     conversation_id: Optional[str] = None,
     direction: Optional[str] = None,
-    source: Optional[str] = None
+    source: Optional[str] = None,
+    force: bool = False,
+    reset_attempts: bool = False,
 ) -> None:
     thread = threading.Thread(
         target=_transcription_worker,
-        args=(tenant_id, attachment_id, message_id, conversation_id, direction, source),
+        args=(tenant_id, attachment_id, message_id, conversation_id, direction, source, force, reset_attempts),
         daemon=True,
     )
     thread.start()

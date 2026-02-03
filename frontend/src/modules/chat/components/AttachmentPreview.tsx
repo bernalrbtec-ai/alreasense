@@ -12,7 +12,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
-import { showWarningToast } from '@/lib/toastHelper';
+import { showWarningToast, showSuccessToast, showErrorToast } from '@/lib/toastHelper';
+import api from '@/lib/api';
 // Removed unused imports: Image, Video, Music
 
 interface Attachment {
@@ -44,6 +45,7 @@ interface AttachmentPreviewProps {
 export function AttachmentPreview({ attachment, showAI = false, showTranscription = false }: AttachmentPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [isTranscriptionCollapsed, setIsTranscriptionCollapsed] = useState(false);
+  const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
   
   // 🎵 Estados do player de áudio
   const [isPlaying, setIsPlaying] = useState(false);
@@ -676,7 +678,9 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
         )}
 
         {/* ✨ TRANSCRIÇÃO IA (mostrar quando habilitado no tenant) */}
-        {(showTranscription || showAI) && (attachment.transcription || attachment.ai_metadata?.transcription?.status === 'processing') && (
+        {(showTranscription || showAI) &&
+          attachment.is_audio &&
+          (attachment.transcription || attachment.ai_metadata?.transcription?.status) && (
           <div className="mt-3 p-3 bg-white rounded border border-gray-200">
             <div className="flex items-center justify-between mb-1">
               <button
@@ -694,9 +698,35 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
               )}
             </div>
             {!isTranscriptionCollapsed && (
-              <p className="text-sm text-gray-600">
-                {attachment.transcription || 'Transcrevendo...'}
-              </p>
+              <div className="text-sm text-gray-600">
+                {attachment.transcription ? (
+                  <p>{attachment.transcription}</p>
+                ) : attachment.ai_metadata?.transcription?.status === 'failed' ? (
+                  <div className="flex items-center justify-between gap-3">
+                    <span>Falha ao transcrever.</span>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (isRetryingTranscription) return;
+                        setIsRetryingTranscription(true);
+                        try {
+                          await api.post(`/chat/attachments/${attachment.id}/transcribe/`);
+                          showSuccessToast('iniciar', 'Transcrição');
+                        } catch (error) {
+                          showErrorToast('iniciar', 'Transcrição', error);
+                        } finally {
+                          setIsRetryingTranscription(false);
+                        }
+                      }}
+                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                    >
+                      {isRetryingTranscription ? 'Transcrevendo...' : 'Transcrever'}
+                    </button>
+                  </div>
+                ) : (
+                  <p>Transcrevendo...</p>
+                )}
+              </div>
             )}
           </div>
         )}
