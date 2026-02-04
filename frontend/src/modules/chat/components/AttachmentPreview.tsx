@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { showWarningToast, showSuccessToast, showErrorToast } from '@/lib/toastHelper';
-import api from '@/lib/api';
+import { api } from '@/lib/api';
 // Removed unused imports: Image, Video, Music
 
 interface Attachment {
