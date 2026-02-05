@@ -104,29 +104,70 @@ def build_transcription_queryset(tenant, created_from, created_to, department_id
     return queryset
 
 
+def _extract_duration_ms_from_attachment(attachment) -> int:
+    """Extrai duration_ms de um attachment usando a mesma lógica do triage_service."""
+    # Tentar metadata primeiro
+    if attachment.metadata:
+        duration_ms = attachment.metadata.get('duration_ms')
+        if duration_ms is not None:
+            return int(duration_ms)
+        duration = attachment.metadata.get('duration')
+        if duration is not None:
+            return int(float(duration) * 1000)
+    
+    # Tentar ai_metadata
+    if attachment.ai_metadata:
+        duration_ms = attachment.ai_metadata.get('duration_ms')
+        if duration_ms is not None:
+            return int(duration_ms)
+        duration = attachment.ai_metadata.get('duration')
+        if duration is not None:
+            return int(float(duration) * 1000)
+    
+    return 0
+
+
 def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timezone.utc):
+    """Agrega métricas processando em Python para garantir extração correta de duration."""
     success_filter = _success_filter()
     failed_filter = _failed_filter()
-    duration_filter = _duration_filter()
-    duration_ms_expression = _duration_ms_expression()
 
+    # Agrupar por dia usando SQL para contagens
     rows = (
         queryset.annotate(day=TruncDate("created_at", tzinfo=tzinfo))
         .values("day")
         .annotate(
             success_count=Count("id", filter=success_filter),
             failed_count=Count("id", filter=failed_filter),
-            duration_ms_total=Sum(
-                Case(
-                    When(success_filter & duration_filter, then=duration_ms_expression),
-                    default=Value(0),
-                    output_field=BigIntegerField(),
-                )
-            ),
         )
     )
 
-    metrics_by_day = {row["day"]: row for row in rows}
+    # Inicializar métricas por dia
+    metrics_by_day = {}
+    for row in rows:
+        day = row["day"]
+        metrics_by_day[day] = {
+            "success_count": row["success_count"],
+            "failed_count": row["failed_count"],
+            "duration_ms_total": 0,
+        }
+    
+    # Buscar todos os attachments com sucesso e calcular duration_ms em Python
+    success_attachments = queryset.filter(success_filter).only(
+        'id', 'metadata', 'ai_metadata', 'created_at'
+    )
+    
+    for attachment in success_attachments:
+        # Converter created_at para o timezone e pegar a data
+        if timezone.is_aware(attachment.created_at):
+            attachment_day = timezone.localtime(attachment.created_at, tzinfo).date()
+        else:
+            attachment_day = attachment.created_at.date()
+        
+        if attachment_day in metrics_by_day:
+            duration_ms = _extract_duration_ms_from_attachment(attachment)
+            metrics_by_day[attachment_day]["duration_ms_total"] += duration_ms
+
     daily = []
     totals = {
         "minutes_total": Decimal("0.00"),
