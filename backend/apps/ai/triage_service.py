@@ -406,6 +406,17 @@ def _transcription_worker(
                     "attempts": current_attempt,
                     "max_attempts": max_attempts,
                 }
+                
+                # ✅ Salvar duration_ms no ai_metadata para uso em métricas
+                # Usar duration_ms extraído ou o que veio na resposta do N8N
+                saved_duration_ms = response_data.get("duration_ms") or duration_ms
+                if saved_duration_ms:
+                    ai_metadata["duration_ms"] = int(saved_duration_ms)
+                    # Também salvar em metadata para compatibilidade
+                    metadata = attachment.metadata or {}
+                    if "duration_ms" not in metadata:
+                        metadata["duration_ms"] = int(saved_duration_ms)
+                        attachment.metadata = metadata
 
                 if transcript_text:
                     attachment.transcription = transcript_text
@@ -416,6 +427,7 @@ def _transcription_worker(
                     "transcription",
                     "transcription_language",
                     "ai_metadata",
+                    "metadata",
                 ])
                 _broadcast_attachment_update(attachment, message, str(tenant_id))
                 logger.info("Audio transcription stored for attachment %s", attachment_id)
