@@ -1,7 +1,6 @@
 from datetime import date as date_type, datetime, time as dt_time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
-from django.contrib.postgres.fields.jsonb import KeyTextTransform
 from django.db.models import (
     BigIntegerField,
     Case,
@@ -13,7 +12,7 @@ from django.db.models import (
     Value,
     When,
 )
-from django.db.models.functions import Cast, Coalesce, TruncDate
+from django.db.models.functions import Cast, Coalesce, KeyTextTransform, TruncDate
 from django.utils import timezone
 
 from apps.ai.models import AiTranscriptionDailyMetric
