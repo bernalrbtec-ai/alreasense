@@ -7,12 +7,14 @@ from django.db.models import (
     Count,
     ExpressionWrapper,
     FloatField,
+    F,
     Q,
     Sum,
     Value,
     When,
 )
-from django.db.models.functions import Cast, Coalesce, KeyTextTransform, TruncDate
+from django.db.models.functions import Cast, Coalesce, TruncDate
+from django.db.models.fields.json import KeyTextTransform
 from django.utils import timezone
 
 from apps.ai.models import AiTranscriptionDailyMetric
