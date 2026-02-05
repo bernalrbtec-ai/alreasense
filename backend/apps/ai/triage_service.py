@@ -408,15 +408,28 @@ def _transcription_worker(
                 }
                 
                 # ✅ Salvar duration_ms no ai_metadata para uso em métricas
-                # Usar duration_ms extraído ou o que veio na resposta do N8N
-                saved_duration_ms = response_data.get("duration_ms") or duration_ms
+                # Prioridade: resposta N8N > extraído antes > tentar extrair novamente
+                saved_duration_ms = (
+                    response_data.get("duration_ms") 
+                    or duration_ms 
+                    or _extract_duration_ms(attachment.metadata or {})
+                )
+                
                 if saved_duration_ms:
                     ai_metadata["duration_ms"] = int(saved_duration_ms)
-                    # Também salvar em metadata para compatibilidade
+                    # Também salvar em metadata para compatibilidade (sempre atualizar)
                     metadata = attachment.metadata or {}
-                    if "duration_ms" not in metadata:
-                        metadata["duration_ms"] = int(saved_duration_ms)
-                        attachment.metadata = metadata
+                    metadata["duration_ms"] = int(saved_duration_ms)
+                    attachment.metadata = metadata
+                    logger.info(
+                        f"✅ [TRANSCRIPTION] Saved duration_ms={saved_duration_ms}ms "
+                        f"for attachment {attachment_id}"
+                    )
+                else:
+                    logger.warning(
+                        f"⚠️ [TRANSCRIPTION] No duration_ms available for attachment {attachment_id}. "
+                        f"metadata={attachment.metadata}, response_data keys={list(response_data.keys())}"
+                    )
 
                 if transcript_text:
                     attachment.transcription = transcript_text
