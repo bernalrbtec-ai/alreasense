@@ -2555,9 +2555,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # ✅ CORREÇÃO: Limpar nome de arquivo inválido (ex: .enc, nomes muito longos)
             filename = clean_filename(raw_filename, message_id=message_id, mime_type=mime_type)
         elif message_type == 'audioMessage':
-            attachment_url = message_info.get('audioMessage', {}).get('url')
-            mime_type = message_info.get('audioMessage', {}).get('mimetype', 'audio/ogg')
+            audio_msg_data = message_info.get('audioMessage', {})
+            attachment_url = audio_msg_data.get('url')
+            mime_type = audio_msg_data.get('mimetype', 'audio/ogg')
             filename = f"{message.id}.ogg"
+            # ✅ Extrair duration_ms do webhook do Evolution API
+            audio_duration_ms = audio_msg_data.get('seconds')  # Evolution API usa 'seconds'
+            audio_duration_seconds = audio_msg_data.get('duration')  # Fallback
         elif message_type == 'stickerMessage':
             # ✅ NOVO: Processar sticker como imagem (WebP)
             sticker_msg = message_info.get('stickerMessage', {})
@@ -2592,6 +2596,24 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             # Usar transaction para garantir que o anexo seja salvo antes de enfileirar
             from django.db import transaction
             with transaction.atomic():
+                # ✅ Preparar metadata com duration_ms se disponível (para áudios)
+                attachment_metadata = {
+                    'processing': True,
+                    'media_type': incoming_media_type,
+                    'mime_type': mime_type
+                }
+                
+                # ✅ Salvar duration_ms no metadata quando attachment é criado (para áudios)
+                if message_type == 'audioMessage':
+                    # Evolution API pode enviar 'seconds' (em segundos) ou 'duration'
+                    if audio_duration_ms is not None:
+                        # Se veio em segundos, converter para ms
+                        attachment_metadata['duration_ms'] = int(float(audio_duration_ms) * 1000)
+                        attachment_metadata['duration'] = float(audio_duration_ms)
+                    elif audio_duration_seconds is not None:
+                        attachment_metadata['duration_ms'] = int(float(audio_duration_seconds) * 1000)
+                        attachment_metadata['duration'] = float(audio_duration_seconds)
+                
                 # Criar placeholder (sem file_url ainda, será preenchido após processamento)
                 attachment = MessageAttachment.objects.create(
                         message=message,
@@ -2603,11 +2625,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         storage_type='s3',  # Direto para S3 (sem storage local)
                         size_bytes=0,  # Será preenchido após download
                         processing_status='processing',  # ✅ CORREÇÃO CRÍTICA: Marcar como processando
-                        metadata={
-                            'processing': True,
-                            'media_type': incoming_media_type,
-                            'mime_type': mime_type
-                        }  # Flag para frontend mostrar loading + mime original
+                        metadata=attachment_metadata
                 )
                 
                 attachment_id_str = str(attachment.id)
