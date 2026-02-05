@@ -901,6 +901,43 @@ def transcription_metrics(request):
     )
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def debug_transcription_attachments(request):
+    """Endpoint temporário para debug - mostra estrutura de attachments com transcrição."""
+    from apps.chat.models import MessageAttachment
+    
+    tenant = request.user.tenant
+    limit = int(request.query_params.get('limit', 5))
+    
+    attachments = MessageAttachment.objects.filter(
+        tenant=tenant,
+        mime_type__startswith='audio/',
+        transcription__isnull=False,
+    ).exclude(transcription='')[:limit]
+    
+    debug_data = []
+    for att in attachments:
+        debug_data.append({
+            'id': str(att.id),
+            'created_at': att.created_at.isoformat(),
+            'has_metadata': bool(att.metadata),
+            'metadata_keys': list(att.metadata.keys()) if att.metadata else [],
+            'has_ai_metadata': bool(att.ai_metadata),
+            'ai_metadata_keys': list(att.ai_metadata.keys()) if att.ai_metadata else [],
+            'metadata_duration_ms': att.metadata.get('duration_ms') if att.metadata else None,
+            'metadata_duration': att.metadata.get('duration') if att.metadata else None,
+            'ai_metadata_duration_ms': att.ai_metadata.get('duration_ms') if att.ai_metadata else None,
+            'ai_metadata_duration': att.ai_metadata.get('duration') if att.ai_metadata else None,
+            'transcription_data': att.ai_metadata.get('transcription') if att.ai_metadata else None,
+        })
+    
+    return Response({
+        'count': len(debug_data),
+        'attachments': debug_data,
+    })
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def rebuild_transcription_metrics_endpoint(request):
