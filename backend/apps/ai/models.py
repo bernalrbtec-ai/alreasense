@@ -89,6 +89,47 @@ class AiTriageResult(models.Model):
         return f"{self.action} ({self.status})"
 
 
+class AiGatewayAudit(models.Model):
+    """Auditoria de chamadas do Gateway IA (inclui testes)."""
+
+    tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name='ai_gateway_audits')
+    conversation_id = models.UUIDField(null=True, blank=True)
+    message_id = models.UUIDField(null=True, blank=True)
+    contact_id = models.UUIDField(null=True, blank=True)
+    department_id = models.UUIDField(null=True, blank=True)
+    agent_id = models.UUIDField(null=True, blank=True)
+    request_id = models.UUIDField()
+    trace_id = models.UUIDField()
+    status = models.CharField(max_length=20, default='success')
+    model_name = models.CharField(max_length=100, blank=True)
+    latency_ms = models.IntegerField(null=True, blank=True)
+    rag_hits = models.IntegerField(null=True, blank=True)
+    prompt_version = models.CharField(max_length=100, blank=True)
+    input_summary = models.TextField(blank=True)
+    output_summary = models.TextField(blank=True)
+    handoff = models.BooleanField(default=False)
+    handoff_reason = models.CharField(max_length=100, blank=True)
+    error_code = models.CharField(max_length=100, blank=True)
+    error_message = models.TextField(blank=True)
+    request_payload_masked = models.JSONField(default=dict, blank=True)
+    response_payload_masked = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = 'ai_gateway_audit'
+        indexes = [
+            models.Index(fields=['tenant', 'created_at']),
+            models.Index(fields=['request_id']),
+            models.Index(fields=['trace_id']),
+            models.Index(fields=['conversation_id', 'created_at']),
+            models.Index(fields=['message_id', 'created_at']),
+        ]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Gateway audit ({self.status})"
+
+
 class TenantAiSettings(models.Model):
     """Configurações de IA por tenant."""
 

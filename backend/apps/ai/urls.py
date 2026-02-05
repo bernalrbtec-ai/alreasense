@@ -12,4 +12,5 @@ urlpatterns = [
     path('triage/test/', views.triage_test, name='triage-test'),
     path('gateway/test/', views.gateway_test, name='gateway-test'),
     path('triage/history/', views.triage_history, name='triage-history'),
+    path('gateway/audit/', views.gateway_audit_history, name='gateway-audit-history'),
 ]

@@ -107,6 +107,21 @@ export function ConversationList() {
     // Buscar conversas apenas na primeira carga
     fetchConversations();
   }, [hasLoaded, setConversations]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const conversationId = params.get('conversation_id');
+    if (!conversationId) return;
+    if (activeConversation?.id === conversationId) return;
+
+    const match = conversations.find((item) => String(item.id) === conversationId);
+    if (match) {
+      setActiveConversation(match);
+      params.delete('conversation_id');
+      const url = `${window.location.pathname}${params.toString() ? `?${params.toString()}` : ''}`;
+      window.history.replaceState({}, '', url);
+    }
+  }, [conversations, activeConversation, setActiveConversation]);
   
   // ✅ NOVO: Refresh inteligente periódico (apenas se necessário)
   // Não muito frequente para não sobrecarregar o servidor

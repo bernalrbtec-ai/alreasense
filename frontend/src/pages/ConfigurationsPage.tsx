@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { 
   Settings, 
   Server, 
@@ -185,6 +186,31 @@ interface AiSettings {
   n8n_models_webhook_url: string
 }
 
+interface GatewayAuditItem {
+  id: number
+  conversation_id: string | null
+  message_id: string | null
+  contact_id: string | null
+  department_id: string | null
+  agent_id: string | null
+  request_id: string
+  trace_id: string
+  status: string
+  model_name: string
+  latency_ms: number | null
+  rag_hits: number | null
+  prompt_version: string
+  input_summary: string
+  output_summary: string
+  handoff: boolean
+  handoff_reason: string
+  error_code: string
+  error_message: string
+  request_payload_masked: Record<string, unknown>
+  response_payload_masked: Record<string, unknown>
+  created_at: string
+}
+
 const DAYS = [
   { key: 'monday', label: 'Segunda-feira', short: 'Seg' },
   { key: 'tuesday', label: 'Terça-feira', short: 'Ter' },
@@ -207,6 +233,7 @@ const DEFAULT_AI_MODELS: string[] = []
 
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
+  const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
@@ -291,6 +318,67 @@ export default function ConfigurationsPage() {
   const [modelTestMessages, setModelTestMessages] = useState<Array<{ role: 'user' | 'assistant'; content: string }>>([])
   const [modelTestLoading, setModelTestLoading] = useState(false)
   const [modelTestSelectedModel, setModelTestSelectedModel] = useState<string>('')
+  const [modelTestRequest, setModelTestRequest] = useState<any | null>(null)
+  const [modelTestResponse, setModelTestResponse] = useState<any | null>(null)
+  const [modelTestRequestId, setModelTestRequestId] = useState<string>('')
+  const [modelTestTraceId, setModelTestTraceId] = useState<string>('')
+  const [modelTestError, setModelTestError] = useState<string | null>(null)
+  const [gatewayAuditItems, setGatewayAuditItems] = useState<GatewayAuditItem[]>([])
+  const [gatewayAuditLoading, setGatewayAuditLoading] = useState(false)
+  const [gatewayAuditError, setGatewayAuditError] = useState<string | null>(null)
+  const [gatewayAuditRequestId, setGatewayAuditRequestId] = useState('')
+  const [gatewayAuditTraceId, setGatewayAuditTraceId] = useState('')
+  const [gatewayAuditStatus, setGatewayAuditStatus] = useState('all')
+  const [gatewayAuditModelName, setGatewayAuditModelName] = useState('')
+  const [gatewayAuditFrom, setGatewayAuditFrom] = useState('')
+  const [gatewayAuditTo, setGatewayAuditTo] = useState('')
+  const [gatewayAuditOffset, setGatewayAuditOffset] = useState(0)
+  const [gatewayAuditCount, setGatewayAuditCount] = useState(0)
+  const gatewayAuditLimit = 20
+
+  const loadGatewayAudit = async (options?: { offset?: number }) => {
+    try {
+      setGatewayAuditLoading(true)
+      setGatewayAuditError(null)
+      const params = new URLSearchParams()
+      const resolvedOffset = options?.offset ?? gatewayAuditOffset
+      params.set('limit', String(gatewayAuditLimit))
+      params.set('offset', String(resolvedOffset))
+      if (gatewayAuditRequestId.trim()) {
+        params.set('request_id', gatewayAuditRequestId.trim())
+      }
+      if (gatewayAuditTraceId.trim()) {
+        params.set('trace_id', gatewayAuditTraceId.trim())
+      }
+      if (gatewayAuditStatus !== 'all') {
+        params.set('status', gatewayAuditStatus)
+      }
+      if (gatewayAuditModelName.trim()) {
+        params.set('model_name', gatewayAuditModelName.trim())
+      }
+      if (gatewayAuditFrom) {
+        const parsed = new Date(gatewayAuditFrom)
+        if (!Number.isNaN(parsed.getTime())) {
+          params.set('created_from', parsed.toISOString())
+        }
+      }
+      if (gatewayAuditTo) {
+        const parsed = new Date(gatewayAuditTo)
+        if (!Number.isNaN(parsed.getTime())) {
+          params.set('created_to', parsed.toISOString())
+        }
+      }
+      const response = await api.get(`/ai/gateway/audit/?${params.toString()}`)
+      setGatewayAuditItems(response.data.results || [])
+      setGatewayAuditCount(response.data.count || 0)
+      setGatewayAuditOffset(resolvedOffset)
+    } catch (error) {
+      console.error('Erro ao carregar auditoria do Gateway IA:', error)
+      setGatewayAuditError('Falha ao carregar auditoria.')
+    } finally {
+      setGatewayAuditLoading(false)
+    }
+  }
 
   useEffect(() => {
     fetchData()
@@ -304,6 +392,8 @@ export default function ConfigurationsPage() {
     }
     if (activeTab === 'ai' && user?.is_admin) {
       fetchAiSettings()
+      setGatewayAuditOffset(0)
+      loadGatewayAudit({ offset: 0 })
     }
   }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
   
@@ -670,6 +760,11 @@ export default function ConfigurationsPage() {
     setIsModelTestModalOpen(true)
     setModelTestInput('')
     setModelTestMessages([])
+    setModelTestRequest(null)
+    setModelTestResponse(null)
+    setModelTestRequestId('')
+    setModelTestTraceId('')
+    setModelTestError(null)
     if (aiSettings?.agent_model && aiModelOptions.includes(aiSettings.agent_model)) {
       setModelTestSelectedModel(aiSettings.agent_model)
     } else if (aiModelOptions.length > 0) {
@@ -685,6 +780,11 @@ export default function ConfigurationsPage() {
     setModelTestMessages([])
     setModelTestLoading(false)
     setModelTestSelectedModel('')
+    setModelTestRequest(null)
+    setModelTestResponse(null)
+    setModelTestRequestId('')
+    setModelTestTraceId('')
+    setModelTestError(null)
   }
 
   const handleSendModelTest = async () => {
@@ -703,6 +803,7 @@ export default function ConfigurationsPage() {
     setModelTestInput('')
     setModelTestMessages((prev) => [...prev, { role: 'user', content: message }])
     setModelTestLoading(true)
+    setModelTestError(null)
 
     try {
       const response = await api.post('/ai/gateway/test/', {
@@ -713,22 +814,39 @@ export default function ConfigurationsPage() {
         },
         model: modelTestSelectedModel || aiSettings.agent_model,
       })
-      const data = response.data?.data ?? response.data
+      const payload = response.data || {}
+      const data = payload.data || {}
+      const requestData = data.request || payload.request || null
+      const responseData = data.response || payload.response || null
+      const requestId = payload.request_id || ''
+      const traceId = payload.trace_id || ''
+
+      setModelTestRequest(requestData)
+      setModelTestResponse(responseData)
+      setModelTestRequestId(requestId)
+      setModelTestTraceId(traceId)
+
       let content = ''
-      if (typeof data === 'string') {
-        content = data
-      } else if (data?.text) {
-        content = String(data.text)
-      } else if (data?.response) {
-        content = typeof data.response === 'string' ? data.response : JSON.stringify(data.response, null, 2)
+      if (responseData?.reply_text) {
+        content = String(responseData.reply_text)
+      } else if (responseData?.text) {
+        content = String(responseData.text)
+      } else if (responseData) {
+        content = typeof responseData === 'string' ? responseData : JSON.stringify(responseData, null, 2)
       } else {
-        content = JSON.stringify(data, null, 2)
+        content = JSON.stringify(payload, null, 2)
       }
       setModelTestMessages((prev) => [...prev, { role: 'assistant', content }])
     } catch (error) {
       const errorMessage =
-        (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        (error as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message ||
         (error instanceof Error ? error.message : 'Erro ao testar a IA.')
+      const errorPayload = (error as { response?: { data?: any } })?.response?.data || null
+      setModelTestRequest(errorPayload?.request || null)
+      setModelTestResponse(errorPayload?.response || null)
+      setModelTestRequestId(errorPayload?.request_id || '')
+      setModelTestTraceId(errorPayload?.trace_id || '')
+      setModelTestError(errorMessage)
       setModelTestMessages((prev) => [...prev, { role: 'assistant', content: errorMessage }])
     } finally {
       setModelTestLoading(false)
@@ -1681,182 +1799,414 @@ export default function ConfigurationsPage() {
               <LoadingSpinner />
             </div>
           ) : (
-            <Card className="p-6">
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base font-semibold">Ativar IA</Label>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Controla o uso de recursos de IA para este tenant.
-                    </p>
+            <>
+              <Card className="p-6">
+                <div className="space-y-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base font-semibold">Ativar IA</Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Controla o uso de recursos de IA para este tenant.
+                      </p>
+                    </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                          disabled={aiModelOptions.length === 0}
+                        checked={aiSettings.ai_enabled}
+                        onChange={(e) => setAiSettings({ ...aiSettings, ai_enabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
                   </div>
+
+                  {aiModelOptions.length === 0 && (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                      Nenhum modelo listado. A IA fica indisponível até o endpoint de modelos responder.
+                    </div>
+                  )}
+
+                  {!aiSettings.ai_enabled && (
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
+                      Habilite a IA para editar as configurações abaixo.
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base font-semibold">Transcrição automática</Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Executa transcrição automaticamente ao receber áudios.
+                      </p>
+                    </div>
                     <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                        disabled={aiModelOptions.length === 0}
-                      checked={aiSettings.ai_enabled}
-                      onChange={(e) => setAiSettings({ ...aiSettings, ai_enabled: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-
-                {aiModelOptions.length === 0 && (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                    Nenhum modelo listado. A IA fica indisponível até o endpoint de modelos responder.
-                  </div>
-                )}
-
-                {!aiSettings.ai_enabled && (
-                  <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-700">
-                    Habilite a IA para editar as configurações abaixo.
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base font-semibold">Transcrição automática</Label>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Executa transcrição automaticamente ao receber áudios.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      disabled={!aiSettings.ai_enabled}
-                      checked={aiSettings.transcription_auto}
-                      onChange={(e) => setAiSettings({ ...aiSettings, transcription_auto: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <Label className="text-base font-semibold">Transcrição de áudio</Label>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Habilita o fluxo de transcrição de áudio.
-                    </p>
-                  </div>
-                  <label className="relative inline-flex items-center cursor-pointer">
-                    <input
-                      type="checkbox"
-                      disabled={!aiSettings.ai_enabled}
-                      checked={aiSettings.audio_transcription_enabled}
-                      onChange={(e) => setAiSettings({ ...aiSettings, audio_transcription_enabled: e.target.checked })}
-                      className="sr-only peer"
-                    />
-                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                  </label>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="transcription_min_seconds">Min. segundos para transcrição</Label>
-                    <Input
-                      id="transcription_min_seconds"
-                      type="number"
-                      value={aiSettings.transcription_min_seconds}
-                      onChange={(e) => setAiSettings({ ...aiSettings, transcription_min_seconds: Number(e.target.value) })}
-                      className={`mt-1 ${aiSettingsErrors.transcription_min_seconds ? 'border-red-500' : ''}`}
-                      disabled={!aiSettings.ai_enabled}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Evita transcrever áudios curtos.
-                    </p>
-                  </div>
-                  <div>
-                    <Label htmlFor="transcription_max_mb">Máx. MB por áudio</Label>
-                    <Input
-                      id="transcription_max_mb"
-                      type="number"
-                      value={aiSettings.transcription_max_mb}
-                      onChange={(e) => setAiSettings({ ...aiSettings, transcription_max_mb: Number(e.target.value) })}
-                      className={`mt-1 ${aiSettingsErrors.transcription_max_mb ? 'border-red-500' : ''}`}
-                      disabled={!aiSettings.ai_enabled}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Limite de tamanho por arquivo de áudio.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex items-center justify-between gap-3">
-                      <Label htmlFor="agent_model">Modelo padrão</Label>
-                      <div className="flex items-center gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleOpenModelTestModal}
+                      <input
+                        type="checkbox"
                         disabled={!aiSettings.ai_enabled}
-                      >
-                        Testar IA
-                      </Button>
+                        checked={aiSettings.transcription_auto}
+                        onChange={(e) => setAiSettings({ ...aiSettings, transcription_auto: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base font-semibold">Transcrição de áudio</Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Habilita o fluxo de transcrição de áudio.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        disabled={!aiSettings.ai_enabled}
+                        checked={aiSettings.audio_transcription_enabled}
+                        onChange={(e) => setAiSettings({ ...aiSettings, audio_transcription_enabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label htmlFor="transcription_min_seconds">Min. segundos para transcrição</Label>
+                      <Input
+                        id="transcription_min_seconds"
+                        type="number"
+                        value={aiSettings.transcription_min_seconds}
+                        onChange={(e) => setAiSettings({ ...aiSettings, transcription_min_seconds: Number(e.target.value) })}
+                        className={`mt-1 ${aiSettingsErrors.transcription_min_seconds ? 'border-red-500' : ''}`}
+                        disabled={!aiSettings.ai_enabled}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Evita transcrever áudios curtos.
+                      </p>
+                    </div>
+                    <div>
+                      <Label htmlFor="transcription_max_mb">Máx. MB por áudio</Label>
+                      <Input
+                        id="transcription_max_mb"
+                        type="number"
+                        value={aiSettings.transcription_max_mb}
+                        onChange={(e) => setAiSettings({ ...aiSettings, transcription_max_mb: Number(e.target.value) })}
+                        className={`mt-1 ${aiSettingsErrors.transcription_max_mb ? 'border-red-500' : ''}`}
+                        disabled={!aiSettings.ai_enabled}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Limite de tamanho por arquivo de áudio.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center justify-between gap-3">
+                        <Label htmlFor="agent_model">Modelo padrão</Label>
+                        <div className="flex items-center gap-2">
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            setModelsGatewayTested(false)
-                            setModelsGatewayTestError(null)
-                            setIsModelsGatewayModalOpen(true)
-                          }}
+                          onClick={handleOpenModelTestModal}
+                          disabled={!aiSettings.ai_enabled}
                         >
-                          Gateways e Webhooks
+                          Testar IA
                         </Button>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              setModelsGatewayTested(false)
+                              setModelsGatewayTestError(null)
+                              setIsModelsGatewayModalOpen(true)
+                            }}
+                          >
+                            Gateways e Webhooks
+                          </Button>
+                        </div>
                       </div>
+                      <select
+                        id="agent_model"
+                        value={aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : ''}
+                        onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
+                      >
+                        {aiModelOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                      {aiSettingsErrors.agent_model && (
+                        <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.agent_model}</p>
+                      )}
+                      <p className="text-xs text-gray-500 mt-1">
+                        Use um modelo instalado no Ollama.
+                      </p>
                     </div>
-                    <select
-                      id="agent_model"
-                      value={aiModelOptions.includes(aiSettings.agent_model) ? aiSettings.agent_model : ''}
-                      onChange={(e) => setAiSettings({ ...aiSettings, agent_model: e.target.value })}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
-                    >
-                      {aiModelOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                    {aiSettingsErrors.agent_model && (
-                      <p className="text-xs text-red-600 mt-1">{aiSettingsErrors.agent_model}</p>
-                    )}
-                    <p className="text-xs text-gray-500 mt-1">
-                      Use um modelo instalado no Ollama.
-                    </p>
+                  </div>
+
+                  {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
+                  (aiSettings.ai_enabled && !aiSettings.n8n_ai_webhook_url) ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                      Preencha os webhooks obrigatórios para ativar transcrição e IA.
+                    </div>
+                  ) : null}
+                  {aiSettingsErrors.n8n_models_webhook_url ? (
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
+                      {aiSettingsErrors.n8n_models_webhook_url}
+                    </div>
+                  ) : null}
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                    A transcrição automática só roda quando <strong>IA</strong> estiver habilitada.
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button onClick={handleSaveAiSettings} disabled={aiSettingsSaving}>
+                      <Save className="h-4 w-4 mr-2" />
+                      {aiSettingsSaving ? 'Salvando...' : 'Salvar Configurações'}
+                    </Button>
                   </div>
                 </div>
+              </Card>
 
-                {(aiSettings.audio_transcription_enabled && !aiSettings.n8n_audio_webhook_url) ||
-                (aiSettings.ai_enabled && !aiSettings.n8n_ai_webhook_url) ? (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                    Preencha os webhooks obrigatórios para ativar transcrição e IA.
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900">Auditoria Gateway IA</h3>
+                    <p className="text-sm text-gray-600">Histórico das chamadas (testes e produção).</p>
                   </div>
-                ) : null}
-                {aiSettingsErrors.n8n_models_webhook_url ? (
-                  <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-sm text-red-700">
-                    {aiSettingsErrors.n8n_models_webhook_url}
-                  </div>
-                ) : null}
-
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
-                  A transcrição automática só roda quando <strong>IA</strong> estiver habilitada.
-                </div>
-
-                <div className="flex justify-end">
-                  <Button onClick={handleSaveAiSettings} disabled={aiSettingsSaving}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {aiSettingsSaving ? 'Salvando...' : 'Salvar Configurações'}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => loadGatewayAudit()}
+                    disabled={gatewayAuditLoading}
+                  >
+                    {gatewayAuditLoading ? 'Atualizando...' : 'Atualizar'}
                   </Button>
                 </div>
-              </div>
-            </Card>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <Label htmlFor="gateway_audit_request_id">Request ID</Label>
+                    <Input
+                      id="gateway_audit_request_id"
+                      value={gatewayAuditRequestId}
+                      onChange={(e) => setGatewayAuditRequestId(e.target.value)}
+                      placeholder="uuid"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gateway_audit_trace_id">Trace ID</Label>
+                    <Input
+                      id="gateway_audit_trace_id"
+                      value={gatewayAuditTraceId}
+                      onChange={(e) => setGatewayAuditTraceId(e.target.value)}
+                      placeholder="uuid"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <Label htmlFor="gateway_audit_status">Status</Label>
+                    <select
+                      id="gateway_audit_status"
+                      value={gatewayAuditStatus}
+                      onChange={(e) => setGatewayAuditStatus(e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    >
+                      <option value="all">Todos</option>
+                      <option value="success">Success</option>
+                      <option value="failed">Failed</option>
+                    </select>
+                  </div>
+                  <div>
+                    <Label htmlFor="gateway_audit_model">Modelo</Label>
+                    <Input
+                      id="gateway_audit_model"
+                      value={gatewayAuditModelName}
+                      onChange={(e) => setGatewayAuditModelName(e.target.value)}
+                      placeholder="Ex: gpt-4o, llama3"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <Label htmlFor="gateway_audit_from">De (data/hora)</Label>
+                    <Input
+                      id="gateway_audit_from"
+                      type="datetime-local"
+                      value={gatewayAuditFrom}
+                      onChange={(e) => setGatewayAuditFrom(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gateway_audit_to">Até (data/hora)</Label>
+                    <Input
+                      id="gateway_audit_to"
+                      type="datetime-local"
+                      value={gatewayAuditTo}
+                      onChange={(e) => setGatewayAuditTo(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2 mb-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => loadGatewayAudit({ offset: 0 })}
+                    disabled={gatewayAuditLoading}
+                  >
+                    Filtrar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setGatewayAuditRequestId('')
+                      setGatewayAuditTraceId('')
+                      setGatewayAuditStatus('all')
+                      setGatewayAuditModelName('')
+                      setGatewayAuditFrom('')
+                      setGatewayAuditTo('')
+                      loadGatewayAudit({ offset: 0 })
+                    }}
+                    disabled={gatewayAuditLoading}
+                  >
+                    Limpar filtros
+                  </Button>
+                </div>
+
+                {gatewayAuditError && (
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+                    {gatewayAuditError}
+                  </div>
+                )}
+
+                {gatewayAuditLoading ? (
+                  <div className="flex items-center justify-center h-32">
+                    <LoadingSpinner />
+                  </div>
+                ) : gatewayAuditItems.length === 0 ? (
+                  <div className="text-sm text-gray-500">Nenhum registro encontrado.</div>
+                ) : (
+                  <div className="space-y-3">
+                    {gatewayAuditItems.map((item) => (
+                      <div key={item.id} className="border border-gray-200 rounded-lg p-4">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <div className="text-sm font-medium text-gray-900">
+                              Request ID: {item.request_id}
+                            </div>
+                            <div className="text-xs text-gray-500">Trace ID: {item.trace_id}</div>
+                          </div>
+                          <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                            item.status === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                          }`}>
+                            {item.status}
+                          </span>
+                        </div>
+
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 text-xs text-gray-600">
+                          <span>Modelo: {item.model_name || '-'}</span>
+                          <span>Latência: {item.latency_ms ?? '-'}</span>
+                          <span>RAG hits: {item.rag_hits ?? '-'}</span>
+                          <span>Handoff: {String(item.handoff)}</span>
+                          <span>Motivo: {item.handoff_reason || '-'}</span>
+                          <span>Data: {item.created_at ? new Date(item.created_at).toLocaleString() : '-'}</span>
+                        </div>
+
+                        {item.conversation_id && (
+                          <div className="mt-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                navigate(`/chat?conversation_id=${item.conversation_id}`)
+                              }}
+                            >
+                              Abrir conversa
+                            </Button>
+                          </div>
+                        )}
+
+                        {(item.input_summary || item.output_summary) && (
+                          <div className="mt-2 text-xs text-gray-600 space-y-1">
+                            <div><span className="font-medium">Input:</span> {item.input_summary || '-'}</div>
+                            <div><span className="font-medium">Output:</span> {item.output_summary || '-'}</div>
+                          </div>
+                        )}
+
+                        {item.error_message && (
+                          <div className="mt-2 text-xs text-red-600">
+                            {item.error_code ? `[${item.error_code}] ` : ''}{item.error_message}
+                          </div>
+                        )}
+
+                        <details className="mt-2 text-xs text-gray-600">
+                          <summary className="cursor-pointer text-blue-600">Ver payloads</summary>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
+                              <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                                {item.request_payload_masked ? JSON.stringify(item.request_payload_masked, null, 2) : 'Sem request.'}
+                              </pre>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
+                              <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                                {item.response_payload_masked ? JSON.stringify(item.response_payload_masked, null, 2) : 'Sem response.'}
+                              </pre>
+                            </div>
+                          </div>
+                        </details>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {gatewayAuditCount > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 mt-4 text-xs text-gray-600">
+                    <span>
+                      Mostrando {gatewayAuditOffset + 1}-
+                      {Math.min(gatewayAuditOffset + gatewayAuditItems.length, gatewayAuditCount)} de {gatewayAuditCount}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadGatewayAudit({ offset: Math.max(0, gatewayAuditOffset - gatewayAuditLimit) })}
+                        disabled={gatewayAuditLoading || gatewayAuditOffset === 0}
+                      >
+                        Anterior
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => loadGatewayAudit({ offset: gatewayAuditOffset + gatewayAuditLimit })}
+                        disabled={gatewayAuditLoading || gatewayAuditOffset + gatewayAuditLimit >= gatewayAuditCount}
+                      >
+                        Próxima
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            </>
           )}
         </div>
       )}
@@ -2408,6 +2758,44 @@ export default function ConfigurationsPage() {
                     </div>
                   )}
                 </div>
+
+                {(modelTestRequest || modelTestResponse || modelTestRequestId || modelTestTraceId) && (
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-lg border border-gray-200 p-3 text-xs text-gray-700 bg-gray-50">
+                      <div className="flex flex-wrap gap-3">
+                        <span>Status: {modelTestResponse?.status || (modelTestError ? 'error' : 'success')}</span>
+                        <span>Request ID: {modelTestRequestId || '-'}</span>
+                        <span>Trace ID: {modelTestTraceId || '-'}</span>
+                        <span>Modelo: {modelTestResponse?.meta?.model || modelTestResponse?.model || '-'}</span>
+                        <span>Latência: {modelTestResponse?.meta?.latency_ms ?? '-'}</span>
+                        <span>RAG hits: {modelTestResponse?.meta?.rag_hits ?? '-'}</span>
+                        <span>Handoff: {String(modelTestResponse?.handoff ?? false)}</span>
+                        <span>Motivo: {modelTestResponse?.handoff_reason || '-'}</span>
+                      </div>
+                    </div>
+
+                    {modelTestError && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
+                        {modelTestError}
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
+                        <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                          {modelTestRequest ? JSON.stringify(modelTestRequest, null, 2) : 'Sem request disponível.'}
+                        </pre>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
+                        <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
+                          {modelTestResponse ? JSON.stringify(modelTestResponse, null, 2) : 'Sem response disponível.'}
+                        </pre>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="mt-4 flex gap-2">
                   <textarea

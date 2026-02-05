@@ -1,5 +1,7 @@
 import logging
 import re
+import time
+from datetime import datetime, time as dt_time
 import uuid
 import requests
 
@@ -10,15 +12,64 @@ from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
 from django.conf import settings
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime, parse_date
 
 # from .tasks import analyze_message_async  # Removido - Celery deletado
 from apps.chat_messages.models import Message
 from apps.common.permissions import IsTenantMember, IsAdminUser
-from apps.ai.models import AiTriageResult, TenantAiSettings
+from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings
 from apps.ai.triage_service import run_test_prompt, run_transcription_test
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
 logger = logging.getLogger(__name__)
+
+
+_MASK_KEYS = {'content', 'reply_text', 'error_message'}
+
+
+def _mask_text(value: str) -> str:
+    if not value:
+        return value
+    masked = re.sub(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', '[email]', value)
+    masked = re.sub(r'\b\d{4,}\b', '****', masked)
+    return masked
+
+
+def _mask_payload(value):
+    if isinstance(value, dict):
+        masked = {}
+        for key, item in value.items():
+            if key in _MASK_KEYS and isinstance(item, str):
+                masked[key] = _mask_text(item)
+            else:
+                masked[key] = _mask_payload(item)
+        return masked
+    if isinstance(value, list):
+        return [_mask_payload(item) for item in value]
+    return value
+
+
+def _safe_summary(value: str, limit: int = 200) -> str:
+    if not value:
+        return ''
+    return _mask_text(value)[:limit]
+
+
+def _parse_uuid(value):
+    if not value:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _ensure_aware(value):
+    if not value:
+        return None
+    if timezone.is_naive(value):
+        return timezone.make_aware(value)
+    return value
 
 
 def _normalize_bool(value):
@@ -197,22 +248,150 @@ def gateway_test(request):
         )
 
     selected_model = str(request.data.get("model") or "").strip() or settings_obj.agent_model
+    message_text = str(request.data.get("message") or "").strip()
+    request_id = uuid.uuid4()
+    trace_id = uuid.uuid4()
+    conversation_id = _parse_uuid(request.data.get("conversation_id")) or uuid.uuid4()
+    message_id = _parse_uuid(request.data.get("message_id")) or uuid.uuid4()
+    contact_id = _parse_uuid(request.data.get("contact_id")) or uuid.uuid4()
+    agent_id = _parse_uuid(request.data.get("agent_id")) or _parse_uuid(request.user.id)
+    department_id = _parse_uuid(request.data.get("department_id"))
+    if not department_id:
+        first_department = request.user.departments.first()
+        if first_department:
+            department_id = first_department.id
+
     payload = {
+        "protocol_version": "v1",
         "action": "chat",
-        "message": request.data.get("message", ""),
-        "context": request.data.get("context", {}),
-        "model": selected_model,
+        "request_id": str(request_id),
+        "trace_id": str(trace_id),
+        "tenant_id": str(request.user.tenant_id),
+        "conversation_id": str(conversation_id),
+        "contact_id": str(contact_id),
+        "department_id": str(department_id) if department_id else None,
+        "agent_id": str(agent_id) if agent_id else None,
+        "message": {
+            "id": str(message_id),
+            "direction": request.data.get("direction", "incoming"),
+            "content": message_text,
+            "created_at": timezone.now().isoformat(),
+        },
+        "metadata": {
+            "source": "test",
+            "model": selected_model,
+        },
     }
+
+    start_time = time.monotonic()
+    status_value = "success"
+    error_code = ""
+    error_message = ""
+    response_payload = {}
 
     try:
         response = requests.post(ai_webhook, json=payload, timeout=10.0)
         response.raise_for_status()
-        return Response({"status": "success", "data": response.json() if response.content else {}})
-    except Exception as exc:
+        response_payload = response.json() if response.content else {}
+    except requests.Timeout as exc:
+        status_value = "failed"
+        error_code = "TIMEOUT"
+        error_message = str(exc)
+        response_payload = {
+            "status": "error",
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+    except requests.RequestException as exc:
+        status_value = "failed"
+        error_code = "UPSTREAM_ERROR"
+        error_message = str(exc)
+        response_payload = {
+            "status": "error",
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+    except ValueError as exc:
+        status_value = "failed"
+        error_code = "INVALID_RESPONSE"
+        error_message = str(exc)
+        response_payload = {
+            "status": "error",
+            "error_code": error_code,
+            "error_message": error_message,
+        }
+
+    latency_ms = int((time.monotonic() - start_time) * 1000)
+    response_status = response_payload.get("status") if isinstance(response_payload, dict) else None
+    if response_status and response_status != "success":
+        status_value = "failed"
+        error_code = str(response_payload.get("error_code") or "UPSTREAM_ERROR")
+        error_message = str(response_payload.get("error_message") or "")
+
+    meta = response_payload.get("meta") if isinstance(response_payload, dict) else {}
+    model_name = (
+        str(meta.get("model") or response_payload.get("model") or selected_model)
+        if isinstance(response_payload, dict)
+        else selected_model
+    )
+    rag_hits = meta.get("rag_hits") if isinstance(meta, dict) else None
+    prompt_version = meta.get("prompt_version") if isinstance(meta, dict) else ""
+    handoff = bool(response_payload.get("handoff")) if isinstance(response_payload, dict) else False
+    handoff_reason = str(response_payload.get("handoff_reason") or "") if isinstance(response_payload, dict) else ""
+    reply_text = str(response_payload.get("reply_text") or response_payload.get("text") or "") if isinstance(response_payload, dict) else ""
+
+    masked_request = _mask_payload(payload)
+    masked_response = _mask_payload(response_payload)
+
+    AiGatewayAudit.objects.create(
+        tenant=request.user.tenant,
+        conversation_id=conversation_id,
+        message_id=message_id,
+        contact_id=contact_id,
+        department_id=department_id,
+        agent_id=agent_id,
+        request_id=request_id,
+        trace_id=trace_id,
+        status=status_value,
+        model_name=model_name or "",
+        latency_ms=meta.get("latency_ms") if isinstance(meta, dict) else latency_ms,
+        rag_hits=rag_hits,
+        prompt_version=prompt_version or "",
+        input_summary=_safe_summary(message_text),
+        output_summary=_safe_summary(reply_text),
+        handoff=handoff,
+        handoff_reason=handoff_reason,
+        error_code=error_code,
+        error_message=error_message,
+        request_payload_masked=masked_request,
+        response_payload_masked=masked_response,
+    )
+
+    if status_value != "success":
         return Response(
-            {"status": "error", "error": str(exc)},
+            {
+                "status": "error",
+                "request_id": str(request_id),
+                "trace_id": str(trace_id),
+                "error_code": error_code,
+                "error_message": error_message or "Falha ao chamar o Gateway IA.",
+                "request": masked_request,
+                "response": masked_response,
+            },
             status=status.HTTP_400_BAD_REQUEST,
         )
+
+    return Response(
+        {
+            "status": "success",
+            "request_id": str(request_id),
+            "trace_id": str(trace_id),
+            "data": {
+                "request": masked_request,
+                "response": masked_response,
+            },
+        }
+    )
 
 
 @api_view(['GET'])
@@ -241,6 +420,94 @@ def triage_history(request):
             "latency_ms": item.latency_ms,
             "status": item.status,
             "result": item.result,
+            "created_at": timezone.localtime(item.created_at).isoformat(),
+        }
+        for item in results
+    ]
+
+    return pagination.get_paginated_response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsTenantMember])
+def gateway_audit_history(request):
+    """List Gateway IA audit entries for the tenant."""
+    tenant = request.user.tenant
+    queryset = AiGatewayAudit.objects.filter(tenant=tenant)
+
+    conversation_id = request.query_params.get("conversation_id")
+    if conversation_id:
+        queryset = queryset.filter(conversation_id=conversation_id)
+
+    message_id = request.query_params.get("message_id")
+    if message_id:
+        queryset = queryset.filter(message_id=message_id)
+
+    status_param = request.query_params.get("status")
+    if status_param:
+        queryset = queryset.filter(status=status_param)
+
+    model_name = request.query_params.get("model_name")
+    if model_name:
+        queryset = queryset.filter(model_name__icontains=model_name)
+
+    request_id = request.query_params.get("request_id")
+    if request_id:
+        queryset = queryset.filter(request_id=request_id)
+
+    trace_id = request.query_params.get("trace_id")
+    if trace_id:
+        queryset = queryset.filter(trace_id=trace_id)
+
+    created_from = request.query_params.get("created_from")
+    if created_from:
+        parsed = parse_datetime(created_from)
+        if not parsed:
+            parsed_date = parse_date(created_from)
+            if parsed_date:
+                parsed = datetime.combine(parsed_date, dt_time.min)
+        aware_value = _ensure_aware(parsed) if parsed else None
+        if aware_value:
+            queryset = queryset.filter(created_at__gte=aware_value)
+
+    created_to = request.query_params.get("created_to")
+    if created_to:
+        parsed = parse_datetime(created_to)
+        if not parsed:
+            parsed_date = parse_date(created_to)
+            if parsed_date:
+                parsed = datetime.combine(parsed_date, dt_time.max)
+        aware_value = _ensure_aware(parsed) if parsed else None
+        if aware_value:
+            queryset = queryset.filter(created_at__lte=aware_value)
+
+    pagination = LimitOffsetPagination()
+    pagination.default_limit = 50
+    results = pagination.paginate_queryset(queryset, request)
+
+    data = [
+        {
+            "id": item.id,
+            "conversation_id": str(item.conversation_id) if item.conversation_id else None,
+            "message_id": str(item.message_id) if item.message_id else None,
+            "contact_id": str(item.contact_id) if item.contact_id else None,
+            "department_id": str(item.department_id) if item.department_id else None,
+            "agent_id": str(item.agent_id) if item.agent_id else None,
+            "request_id": str(item.request_id),
+            "trace_id": str(item.trace_id),
+            "status": item.status,
+            "model_name": item.model_name,
+            "latency_ms": item.latency_ms,
+            "rag_hits": item.rag_hits,
+            "prompt_version": item.prompt_version,
+            "input_summary": item.input_summary,
+            "output_summary": item.output_summary,
+            "handoff": item.handoff,
+            "handoff_reason": item.handoff_reason,
+            "error_code": item.error_code,
+            "error_message": item.error_message,
+            "request_payload_masked": item.request_payload_masked,
+            "response_payload_masked": item.response_payload_masked,
             "created_at": timezone.localtime(item.created_at).isoformat(),
         }
         for item in results
