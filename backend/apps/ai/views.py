@@ -856,10 +856,15 @@ def transcription_metrics(request):
         ]
     else:
         rebuild_transcription_metrics(tenant, start_date, end_date)
+        # ✅ CRÍTICO: Filtrar por tenant para garantir isolamento
         metrics = AiTranscriptionDailyMetric.objects.filter(
-            tenant=tenant,
+            tenant_id=tenant.id,  # Usar tenant_id explicitamente
             date__range=(start_date, end_date),
         ).order_by("date")
+        logger.debug(
+            f"Found {metrics.count()} metrics for tenant {tenant.id} "
+            f"from {start_date} to {end_date}"
+        )
         daily_series = [
             {
                 "date": item.date.isoformat(),
