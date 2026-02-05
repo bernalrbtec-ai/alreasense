@@ -112,24 +112,45 @@ def build_transcription_queryset(tenant, created_from, created_to, department_id
 
 def _extract_duration_ms_from_attachment(attachment) -> int:
     """Extrai duration_ms de um attachment usando a mesma lógica do triage_service."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
     # Tentar metadata primeiro
     if attachment.metadata:
         duration_ms = attachment.metadata.get('duration_ms')
         if duration_ms is not None:
+            logger.debug(f"Found duration_ms in metadata: {duration_ms} for attachment {attachment.id}")
             return int(duration_ms)
         duration = attachment.metadata.get('duration')
         if duration is not None:
+            logger.debug(f"Found duration in metadata: {duration} for attachment {attachment.id}")
             return int(float(duration) * 1000)
     
-    # Tentar ai_metadata
+    # Tentar ai_metadata (pode estar no nível raiz ou aninhado)
     if attachment.ai_metadata:
+        # Tentar nível raiz primeiro
         duration_ms = attachment.ai_metadata.get('duration_ms')
         if duration_ms is not None:
+            logger.debug(f"Found duration_ms in ai_metadata root: {duration_ms} for attachment {attachment.id}")
             return int(duration_ms)
         duration = attachment.ai_metadata.get('duration')
         if duration is not None:
+            logger.debug(f"Found duration in ai_metadata root: {duration} for attachment {attachment.id}")
             return int(float(duration) * 1000)
+        
+        # Tentar dentro de transcription (onde pode estar salvo)
+        transcription_data = attachment.ai_metadata.get('transcription') or {}
+        if isinstance(transcription_data, dict):
+            duration_ms = transcription_data.get('duration_ms')
+            if duration_ms is not None:
+                logger.debug(f"Found duration_ms in ai_metadata.transcription: {duration_ms} for attachment {attachment.id}")
+                return int(duration_ms)
+            duration = transcription_data.get('duration')
+            if duration is not None:
+                logger.debug(f"Found duration in ai_metadata.transcription: {duration} for attachment {attachment.id}")
+                return int(float(duration) * 1000)
     
+    logger.warning(f"No duration found for attachment {attachment.id}. metadata={attachment.metadata}, ai_metadata={attachment.ai_metadata}")
     return 0
 
 
