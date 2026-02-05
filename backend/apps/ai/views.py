@@ -807,6 +807,7 @@ def models_list(request):
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 def transcription_metrics(request):
     tenant = request.user.tenant
+    logger.debug(f"📊 [METRICS] Request from tenant_id={tenant.id} ({tenant.name})")
     created_from = request.query_params.get("created_from")
     created_to = request.query_params.get("created_to")
     department_id = _parse_uuid(request.query_params.get("department_id"))
