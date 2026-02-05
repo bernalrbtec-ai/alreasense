@@ -14,4 +14,5 @@ urlpatterns = [
     path('triage/history/', views.triage_history, name='triage-history'),
     path('gateway/audit/', views.gateway_audit_history, name='gateway-audit-history'),
     path('transcription/metrics/', views.transcription_metrics, name='transcription-metrics'),
+    path('transcription/metrics/rebuild/', views.rebuild_transcription_metrics_endpoint, name='rebuild-transcription-metrics'),
 ]

@@ -6,7 +6,9 @@ import {
   RefreshCcw,
   XCircle,
   CheckCircle,
+  Database,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import {
   ResponsiveContainer,
   LineChart,
@@ -64,6 +66,7 @@ export default function ReportsPage() {
   const [metrics, setMetrics] = useState<MetricsResponse | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [isRebuilding, setIsRebuilding] = useState(false)
 
   const fetchMetrics = async () => {
     setIsLoading(true)
@@ -88,6 +91,37 @@ export default function ReportsPage() {
     fetchMetrics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const handleRebuild = async () => {
+    if (!createdFrom || !createdTo) {
+      toast.error('Selecione um período para rebuild')
+      return
+    }
+
+    setIsRebuilding(true)
+    try {
+      const response = await api.post('/ai/transcription/metrics/rebuild/', {
+        from: createdFrom,
+        to: createdTo,
+      })
+      
+      toast.success(
+        `Rebuild concluído! ${response.data.days_processed} dias processados.`,
+        {
+          description: `${response.data.totals.audio_count} áudios processados`,
+        }
+      )
+      
+      // Recarrega as métricas após rebuild
+      await fetchMetrics()
+    } catch (err: any) {
+      toast.error('Erro ao executar rebuild', {
+        description: err.response?.data?.error || 'Tente novamente',
+      })
+    } finally {
+      setIsRebuilding(false)
+    }
+  }
 
   const chartData = metrics?.series || []
 
@@ -145,6 +179,15 @@ export default function ReportsPage() {
               <Button onClick={fetchMetrics} disabled={isLoading}>
                 <RefreshCcw className="h-4 w-4 mr-2" />
                 Atualizar
+              </Button>
+              <Button
+                onClick={handleRebuild}
+                disabled={isRebuilding || isLoading}
+                variant="outline"
+                className="border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+              >
+                <Database className="h-4 w-4 mr-2" />
+                {isRebuilding ? 'Processando...' : 'Rebuild Métricas'}
               </Button>
             </div>
             {metrics?.range && (

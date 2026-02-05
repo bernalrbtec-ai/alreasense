@@ -899,3 +899,62 @@ def transcription_metrics(request):
             "series": daily_series,
         }
     )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def rebuild_transcription_metrics_endpoint(request):
+    """Endpoint admin para rebuild das métricas de transcrição."""
+    tenant = request.user.tenant
+    created_from = request.data.get("from")
+    created_to = request.data.get("to")
+
+    parsed_from = None
+    if created_from:
+        parsed_from = parse_datetime(created_from)
+        if not parsed_from:
+            parsed_date = parse_date(created_from)
+            if parsed_date:
+                parsed_from = datetime.combine(parsed_date, dt_time.min)
+    
+    parsed_to = None
+    if created_to:
+        parsed_to = parse_datetime(created_to)
+        if not parsed_to:
+            parsed_date = parse_date(created_to)
+            if parsed_date:
+                parsed_to = datetime.combine(parsed_date, dt_time.max)
+
+    parsed_from = _ensure_aware(parsed_from) if parsed_from else None
+    parsed_to = _ensure_aware(parsed_to) if parsed_to else None
+
+    start_date, end_date = resolve_date_range(parsed_from, parsed_to)
+
+    try:
+        daily, totals = rebuild_transcription_metrics(tenant, start_date, end_date)
+        return Response(
+            {
+                "status": "success",
+                "message": f"Métricas rebuildadas de {start_date} até {end_date}",
+                "range": {
+                    "from": start_date.isoformat(),
+                    "to": end_date.isoformat(),
+                },
+                "totals": {
+                    "minutes_total": round(totals["minutes_total"], 2),
+                    "audio_count": totals["audio_count"],
+                    "success_count": totals["success_count"],
+                    "failed_count": totals["failed_count"],
+                },
+                "days_processed": len(daily),
+            }
+        )
+    except Exception as exc:
+        logger.error("Failed to rebuild transcription metrics", exc_info=True)
+        return Response(
+            {
+                "status": "error",
+                "error": str(exc),
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
