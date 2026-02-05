@@ -399,13 +399,6 @@ def _transcription_worker(
                 language = response_data.get("language_detected") or response_data.get("language") or ""
 
                 ai_metadata = attachment.ai_metadata or {}
-                ai_metadata["transcription"] = {
-                    "status": response_data.get("status", "done"),
-                    "model_name": response_data.get("model_name") or response_data.get("model"),
-                    "processing_time_ms": response_data.get("processing_time_ms"),
-                    "attempts": current_attempt,
-                    "max_attempts": max_attempts,
-                }
                 
                 # ✅ Salvar duration_ms no ai_metadata para uso em métricas
                 # Prioridade: resposta N8N > extraído antes > tentar extrair novamente
@@ -415,21 +408,40 @@ def _transcription_worker(
                     or _extract_duration_ms(attachment.metadata or {})
                 )
                 
+                # Preparar objeto transcription com duration_ms incluído
+                transcription_obj = {
+                    "status": response_data.get("status", "done"),
+                    "model_name": response_data.get("model_name") or response_data.get("model"),
+                    "processing_time_ms": response_data.get("processing_time_ms"),
+                    "attempts": current_attempt,
+                    "max_attempts": max_attempts,
+                }
+                
+                # ✅ Salvar duration_ms em múltiplos lugares para garantir disponibilidade
                 if saved_duration_ms:
+                    # 1. Na raiz do ai_metadata
                     ai_metadata["duration_ms"] = int(saved_duration_ms)
-                    # Também salvar em metadata para compatibilidade (sempre atualizar)
+                    # 2. Dentro de transcription também
+                    transcription_obj["duration_ms"] = int(saved_duration_ms)
+                    # 3. Em metadata para compatibilidade
                     metadata = attachment.metadata or {}
                     metadata["duration_ms"] = int(saved_duration_ms)
+                    # Se não tinha duration em segundos, adicionar também
+                    if "duration" not in metadata:
+                        metadata["duration"] = float(saved_duration_ms) / 1000.0
                     attachment.metadata = metadata
                     logger.info(
                         f"✅ [TRANSCRIPTION] Saved duration_ms={saved_duration_ms}ms "
-                        f"for attachment {attachment_id}"
+                        f"for attachment {attachment_id} (in metadata, ai_metadata root, and transcription)"
                     )
                 else:
                     logger.warning(
                         f"⚠️ [TRANSCRIPTION] No duration_ms available for attachment {attachment_id}. "
                         f"metadata={attachment.metadata}, response_data keys={list(response_data.keys())}"
                     )
+                
+                # Salvar objeto transcription completo
+                ai_metadata["transcription"] = transcription_obj
 
                 if transcript_text:
                     attachment.transcription = transcript_text
