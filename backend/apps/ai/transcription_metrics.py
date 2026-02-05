@@ -90,9 +90,18 @@ def build_transcription_queryset(tenant, created_from, created_to, department_id
     Args:
         use_select_related: Se False, não faz select_related (útil quando usar only() depois)
     """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # ✅ CRÍTICO: Filtrar explicitamente por tenant_id para garantir isolamento
     queryset = MessageAttachment.objects.filter(
-        tenant=tenant,
+        tenant_id=tenant.id,  # Usar tenant_id explicitamente
         mime_type__startswith="audio/",
+    )
+    
+    logger.debug(
+        f"Building transcription queryset for tenant_id={tenant.id}, "
+        f"created_from={created_from}, created_to={created_to}"
     )
     
     # Só fazer select_related se necessário e não vamos usar only() depois
@@ -107,6 +116,8 @@ def build_transcription_queryset(tenant, created_from, created_to, department_id
         queryset = queryset.filter(message__conversation__department_id=department_id)
     if agent_id:
         queryset = queryset.filter(message__conversation__assigned_to_id=agent_id)
+    
+    logger.debug(f"Final queryset count: {queryset.count()} attachments")
     return queryset
 
 
@@ -240,6 +251,14 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
 
 
 def rebuild_transcription_metrics(tenant, start_date, end_date):
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(
+        f"Rebuilding transcription metrics for tenant_id={tenant.id} "
+        f"from {start_date} to {end_date}"
+    )
+    
     start_datetime = timezone.make_aware(datetime.combine(start_date, dt_time.min))
     end_datetime = timezone.make_aware(datetime.combine(end_date, dt_time.max))
     queryset = build_transcription_queryset(
@@ -254,9 +273,15 @@ def rebuild_transcription_metrics(tenant, start_date, end_date):
         end_date=end_date,
     )
 
+    logger.info(
+        f"Rebuilt {len(daily)} daily metrics for tenant_id={tenant.id}. "
+        f"Total: {totals['minutes_total']} minutes, {totals['audio_count']} audios"
+    )
+
     for entry in daily:
+        # ✅ CRÍTICO: Usar tenant_id explicitamente no update_or_create
         AiTranscriptionDailyMetric.objects.update_or_create(
-            tenant=tenant,
+            tenant_id=tenant.id,  # Usar tenant_id explicitamente
             date=entry["date"],
             defaults={
                 "minutes_total": entry["minutes_total"],
