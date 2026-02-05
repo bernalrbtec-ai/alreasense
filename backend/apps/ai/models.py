@@ -157,3 +157,29 @@ class TenantAiSettings(models.Model):
 
     def __str__(self):
         return f"AI Settings ({self.tenant_id})"
+
+
+class AiTranscriptionDailyMetric(models.Model):
+    """Métricas diárias de transcrição por tenant (UTC)."""
+
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name="ai_transcription_daily_metrics",
+    )
+    date = models.DateField()
+    minutes_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    audio_count = models.IntegerField(default=0)
+    success_count = models.IntegerField(default=0)
+    failed_count = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "ai_transcription_daily_metrics"
+        constraints = [
+            models.UniqueConstraint(fields=["tenant", "date"], name="uniq_ai_transcription_daily_tenant_date"),
+        ]
+
+    def __str__(self):
+        return f"Transcription metrics ({self.tenant_id}) {self.date}"

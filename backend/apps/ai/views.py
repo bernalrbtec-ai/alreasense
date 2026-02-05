@@ -17,7 +17,13 @@ from django.utils.dateparse import parse_datetime, parse_date
 # from .tasks import analyze_message_async  # Removido - Celery deletado
 from apps.chat_messages.models import Message
 from apps.common.permissions import IsTenantMember, IsAdminUser
-from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings
+from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, AiTranscriptionDailyMetric
+from apps.ai.transcription_metrics import (
+    aggregate_transcription_metrics,
+    build_transcription_queryset,
+    rebuild_transcription_metrics,
+    resolve_date_range,
+)
 from apps.ai.triage_service import run_test_prompt, run_transcription_test
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
@@ -795,3 +801,101 @@ def models_list(request):
             normalized.append(str(value))
 
     return Response({"models": normalized})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def transcription_metrics(request):
+    tenant = request.user.tenant
+    created_from = request.query_params.get("created_from")
+    created_to = request.query_params.get("created_to")
+    department_id = _parse_uuid(request.query_params.get("department_id"))
+    agent_id = _parse_uuid(request.query_params.get("agent_id"))
+
+    parsed_from = None
+    if created_from:
+        parsed_from = parse_datetime(created_from)
+        if not parsed_from:
+            parsed_date = parse_date(created_from)
+            if parsed_date:
+                parsed_from = datetime.combine(parsed_date, dt_time.min)
+    parsed_to = None
+    if created_to:
+        parsed_to = parse_datetime(created_to)
+        if not parsed_to:
+            parsed_date = parse_date(created_to)
+            if parsed_date:
+                parsed_to = datetime.combine(parsed_date, dt_time.max)
+
+    parsed_from = _ensure_aware(parsed_from) if parsed_from else None
+    parsed_to = _ensure_aware(parsed_to) if parsed_to else None
+
+    start_date, end_date = resolve_date_range(parsed_from, parsed_to)
+    start_datetime = timezone.make_aware(datetime.combine(start_date, dt_time.min))
+    end_datetime = timezone.make_aware(datetime.combine(end_date, dt_time.max))
+    total_days = (end_date - start_date).days + 1
+
+    if department_id or agent_id:
+        queryset = build_transcription_queryset(
+            tenant,
+            created_from=start_datetime,
+            created_to=end_datetime,
+            department_id=department_id,
+            agent_id=agent_id,
+        )
+        daily, totals = aggregate_transcription_metrics(queryset, start_date, end_date)
+        daily_series = [
+            {
+                "date": entry["date"].isoformat(),
+                "minutes_total": entry["minutes_total"],
+                "audio_count": entry["audio_count"],
+                "success_count": entry["success_count"],
+                "failed_count": entry["failed_count"],
+            }
+            for entry in daily
+        ]
+    else:
+        rebuild_transcription_metrics(tenant, start_date, end_date)
+        metrics = AiTranscriptionDailyMetric.objects.filter(
+            tenant=tenant,
+            date__range=(start_date, end_date),
+        ).order_by("date")
+        daily_series = [
+            {
+                "date": item.date.isoformat(),
+                "minutes_total": float(item.minutes_total),
+                "audio_count": item.audio_count,
+                "success_count": item.success_count,
+                "failed_count": item.failed_count,
+            }
+            for item in metrics
+        ]
+        totals = {
+            "minutes_total": round(sum(item["minutes_total"] for item in daily_series), 2),
+            "audio_count": sum(item["audio_count"] for item in daily_series),
+            "success_count": sum(item["success_count"] for item in daily_series),
+            "failed_count": sum(item["failed_count"] for item in daily_series),
+        }
+
+    avg_minutes_per_day = (
+        round((totals["minutes_total"] / total_days), 2) if total_days > 0 else 0
+    )
+
+    return Response(
+        {
+            "range": {
+                "from": start_date.isoformat(),
+                "to": end_date.isoformat(),
+                "timezone": "UTC",
+            },
+            "filters": {
+                "department_id": str(department_id) if department_id else None,
+                "agent_id": str(agent_id) if agent_id else None,
+            },
+            "totals": {
+                **totals,
+                "avg_minutes_per_day": avg_minutes_per_day,
+            },
+            "series": daily_series,
+        }
+    )

@@ -13,4 +13,5 @@ urlpatterns = [
     path('gateway/test/', views.gateway_test, name='gateway-test'),
     path('triage/history/', views.triage_history, name='triage-history'),
     path('gateway/audit/', views.gateway_audit_history, name='gateway-audit-history'),
+    path('transcription/metrics/', views.transcription_metrics, name='transcription-metrics'),
 ]

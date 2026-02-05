@@ -21,7 +21,8 @@ import {
   Lock,
   ChevronDown,
   Zap,
-  Plug
+  Plug,
+  BarChart3
 } from 'lucide-react'
 import { useAuthStore } from '../stores/authStore'
 import { useTenantProducts } from '../hooks/useTenantProducts'
@@ -63,6 +64,10 @@ const baseNavigation = [
   { name: 'Planos', href: '/billing', icon: CreditCard },
   { name: 'Billing API', href: '/billing-api', icon: CreditCard },
   { name: 'Configurações', href: '/configurations', icon: Settings },
+]
+
+const reportsNavigation = [
+  { name: 'Relatórios', href: '/reports', icon: BarChart3 },
 ]
 
 const adminNavigation = [
@@ -109,6 +114,7 @@ export default function Layout() {
   
   // Gerar navegação dinâmica baseada nos produtos ativos e acesso do usuário
   const navigation = useMemo(() => {
+    const baseItems = isAdmin ? [...baseNavigation, ...reportsNavigation] : baseNavigation
     // ✅ Admin/Gerente/Agente: Chat, Agenda, Contatos e Respostas Rápidas sempre visíveis
     // (esses roles sempre têm acesso ao chat, então sempre têm acesso à agenda, contatos e respostas rápidas)
     if (isAdmin || isGerente || isAgente) {
@@ -121,7 +127,7 @@ export default function Layout() {
       
       // Adicionar baseNavigation para admin/gerente (agente só vê chat/agenda)
       if (isAdmin || isGerente) {
-        items.unshift(...baseNavigation)
+        items.unshift(...baseItems)
       }
       
       // Adicionar itens de menu dos produtos ativos para admin/gerente
@@ -158,7 +164,7 @@ export default function Layout() {
     }
     
     // Para outros usuários, usar lógica normal baseada em produtos
-    const items = [...baseNavigation]
+    const items = [...baseItems]
     
     // Adicionar itens de menu dos produtos ativos, mas filtrar por acesso
     (activeProductSlugs || []).forEach((productSlug) => {

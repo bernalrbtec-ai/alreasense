@@ -39,6 +39,7 @@ const BillingApiKeysPage = lazy(() => import('./pages/BillingApiKeysPage'))
 const BillingApiTemplatesPage = lazy(() => import('./pages/BillingApiTemplatesPage'))
 const BillingApiCampaignsPage = lazy(() => import('./pages/BillingApiCampaignsPage'))
 const IntegracaoPage = lazy(() => import('./pages/IntegracaoPage'))
+const ReportsPage = lazy(() => import('./pages/ReportsPage'))
 
 // Components
 import Layout from './components/Layout'
@@ -48,6 +49,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { ProtectedAgendaRoute } from './components/ProtectedAgendaRoute'
 import { ProtectedChatRoute } from './components/ProtectedChatRoute'
 import { ProtectedContactsRoute } from './components/ProtectedContactsRoute'
+import { PermissionGuard } from './components/PermissionGuard'
 import { useTheme } from './hooks/useTheme'
 
 function App() {
@@ -279,6 +281,14 @@ function App() {
               <Route path="integracao" element={
                 <Suspense fallback={<LoadingSpinner size="lg" />}>
                   <IntegracaoPage />
+                </Suspense>
+              } />
+
+              <Route path="reports" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <PermissionGuard require="admin">
+                    <ReportsPage />
+                  </PermissionGuard>
                 </Suspense>
               } />
               
