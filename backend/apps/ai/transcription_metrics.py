@@ -84,14 +84,20 @@ def resolve_date_range(created_from=None, created_to=None):
     return start_date, end_date
 
 
-def build_transcription_queryset(tenant, created_from, created_to, department_id=None, agent_id=None):
-    queryset = MessageAttachment.objects.select_related(
-        "message",
-        "message__conversation",
-    ).filter(
+def build_transcription_queryset(tenant, created_from, created_to, department_id=None, agent_id=None, use_select_related=True):
+    """Constrói queryset de attachments de áudio.
+    
+    Args:
+        use_select_related: Se False, não faz select_related (útil quando usar only() depois)
+    """
+    queryset = MessageAttachment.objects.filter(
         tenant=tenant,
         mime_type__startswith="audio/",
     )
+    
+    # Só fazer select_related se necessário e não vamos usar only() depois
+    if use_select_related:
+        queryset = queryset.select_related("message", "message__conversation")
 
     if created_from:
         queryset = queryset.filter(created_at__gte=created_from)
@@ -153,7 +159,8 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
         }
     
     # Buscar todos os attachments com sucesso e calcular duration_ms em Python
-    success_attachments = queryset.filter(success_filter).only(
+    # Remover select_related antes de usar only() para evitar conflito
+    success_attachments = queryset.filter(success_filter).select_related(None).only(
         'id', 'metadata', 'ai_metadata', 'created_at'
     )
     
@@ -218,6 +225,7 @@ def rebuild_transcription_metrics(tenant, start_date, end_date):
         tenant,
         created_from=start_datetime,
         created_to=end_datetime,
+        use_select_related=False,  # Não precisa porque vamos usar defer() depois
     )
     daily, totals = aggregate_transcription_metrics(
         queryset,
