@@ -386,6 +386,9 @@ def _transcription_worker(
             }
 
             try:
+                import time
+                transcription_start_time = time.time()  # ✅ Medir tempo de início
+                
                 response_data = _post_to_n8n(
                     "transcribe",
                     payload,
@@ -394,6 +397,9 @@ def _transcription_worker(
                     url=_resolve_n8n_audio_url(tenant),
                     error_message="N8N audio webhook not configured",
                 )
+
+                transcription_end_time = time.time()  # ✅ Medir tempo de fim
+                processing_time_ms = int((transcription_end_time - transcription_start_time) * 1000)  # ✅ Calcular latência em ms
 
                 transcript_text = response_data.get("transcript_text") or response_data.get("text") or ""
                 language = response_data.get("language_detected") or response_data.get("language") or ""
@@ -408,11 +414,11 @@ def _transcription_worker(
                     or _extract_duration_ms(attachment.metadata or {})
                 )
                 
-                # Preparar objeto transcription com duration_ms incluído
+                # Preparar objeto transcription com duration_ms e processing_time_ms incluídos
                 transcription_obj = {
                     "status": response_data.get("status", "done"),
                     "model_name": response_data.get("model_name") or response_data.get("model"),
-                    "processing_time_ms": response_data.get("processing_time_ms"),
+                    "processing_time_ms": response_data.get("processing_time_ms") or processing_time_ms,  # ✅ Usar calculado se N8N não retornar
                     "attempts": current_attempt,
                     "max_attempts": max_attempts,
                 }
