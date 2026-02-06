@@ -964,21 +964,46 @@ def transcription_quality_feedback(request, attachment_id):
     
     # ✅ Buscar o usuário do banco para garantir que temos o UUID correto
     from apps.authn.models import User
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    # Debug: verificar tipo do request.user.id
+    logger.info(f"DEBUG: request.user.id = {request.user.id}, type = {type(request.user.id)}")
+    logger.info(f"DEBUG: request.user.email = {request.user.email}")
+    
     try:
         # Buscar usuário pelo email para garantir UUID correto
         user = User.objects.get(email=request.user.email, tenant=request.user.tenant)
         user_id = str(user.id)  # UUID como string
-    except User.DoesNotExist:
-        # Fallback: tentar usar request.user.id se for UUID
-        user_id = str(request.user.id) if hasattr(request.user, 'id') else None
-        if not user_id or user_id == '13' or not isinstance(request.user.id, uuid.UUID):
+        logger.info(f"DEBUG: user.id do banco = {user.id}, type = {type(user.id)}, user_id = {user_id}")
+        
+        # Validar que é um UUID válido
+        try:
+            uuid.UUID(user_id)  # Testar se é UUID válido
+        except (ValueError, AttributeError):
+            logger.error(f"ERROR: user_id '{user_id}' não é um UUID válido!")
             return Response(
-                {"error": "Erro ao identificar usuário."},
+                {"error": "Erro ao identificar usuário: ID inválido."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
+            
+    except User.DoesNotExist:
+        logger.error(f"ERROR: Usuário não encontrado: {request.user.email}")
+        return Response(
+            {"error": "Usuário não encontrado."},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+    except Exception as e:
+        logger.error(f"ERROR: Erro ao buscar usuário: {e}")
+        return Response(
+            {"error": f"Erro ao identificar usuário: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     
     # ✅ Usar SQL direto para garantir que o UUID seja salvo corretamente
     from django.db import connection
+    
+    logger.info(f"DEBUG: Executando UPDATE com user_id = {user_id}")
     
     with connection.cursor() as cursor:
         cursor.execute("""
