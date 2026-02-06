@@ -10,7 +10,7 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2, CheckCircle, XCircle } from 'lucide-react';
+import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2, CheckCircle, XCircle, ChevronDown, ChevronUp } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { showWarningToast, showSuccessToast, showErrorToast } from '@/lib/toastHelper';
 import { api } from '@/lib/api';
@@ -45,7 +45,7 @@ interface AttachmentPreviewProps {
 
 export function AttachmentPreview({ attachment, showAI = false, showTranscription = false }: AttachmentPreviewProps) {
   const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [isTranscriptionCollapsed, setIsTranscriptionCollapsed] = useState(false);
+  const [isTranscriptionCollapsed, setIsTranscriptionCollapsed] = useState(true);
   const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
   const [transcriptionQuality, setTranscriptionQuality] = useState<'correct' | 'incorrect' | null>(
     attachment.transcription_quality || null
@@ -686,111 +686,126 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
         {(showTranscription || showAI) &&
           attachment.is_audio &&
           (attachment.transcription || attachment.ai_metadata?.transcription?.status) && (
-          <div className="mt-3 p-3 bg-white rounded border border-gray-200">
-            <div className="flex items-center justify-between mb-1">
-              <button
-                type="button"
-                onClick={() => setIsTranscriptionCollapsed((prev) => !prev)}
-                className="text-xs font-semibold text-gray-700 hover:text-gray-900"
-                title="Minimizar/expandir transcrição"
-              >
-                📝 Transcrição:
-              </button>
-              {attachment.transcription_language && (
-                <span className="text-xs text-gray-500">
-                  {attachment.transcription_language.toUpperCase()}
-                </span>
-              )}
-            </div>
-            {!isTranscriptionCollapsed && (
-              <div className="text-sm text-gray-600">
-                {attachment.transcription ? (
-                  <>
-                    <p className="mb-2">{attachment.transcription}</p>
-                    {/* Feedback de qualidade */}
-                    {transcriptionQuality ? (
-                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200">
-                        <span className="text-xs text-gray-500">
-                          Qualidade: {transcriptionQuality === 'correct' ? '✓ Correta' : '✗ Incorreta'}
-                        </span>
-                      </div>
-                    ) : (
-                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200">
-                        <span className="text-xs text-gray-500">A transcrição está correta?</span>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (isSubmittingQuality) return;
-                            setIsSubmittingQuality(true);
-                            try {
-                              await api.post(`/ai/transcription/quality/${attachment.id}/`, {
-                                quality: 'correct',
-                              });
-                              setTranscriptionQuality('correct');
-                              showSuccessToast('avaliada', 'Transcrição');
-                            } catch (error) {
-                              showErrorToast('avaliar', 'Transcrição', error);
-                            } finally {
-                              setIsSubmittingQuality(false);
-                            }
-                          }}
-                          disabled={isSubmittingQuality}
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
-                        >
-                          <CheckCircle className="h-3 w-3" />
-                          Correta
-                        </button>
-                        <button
-                          type="button"
-                          onClick={async () => {
-                            if (isSubmittingQuality) return;
-                            setIsSubmittingQuality(true);
-                            try {
-                              await api.post(`/ai/transcription/quality/${attachment.id}/`, {
-                                quality: 'incorrect',
-                              });
-                              setTranscriptionQuality('incorrect');
-                              showSuccessToast('avaliada', 'Transcrição');
-                            } catch (error) {
-                              showErrorToast('avaliar', 'Transcrição', error);
-                            } finally {
-                              setIsSubmittingQuality(false);
-                            }
-                          }}
-                          disabled={isSubmittingQuality}
-                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
-                        >
-                          <XCircle className="h-3 w-3" />
-                          Incorreta
-                        </button>
-                      </div>
-                    )}
-                  </>
-                ) : attachment.ai_metadata?.transcription?.status === 'failed' ? (
-                  <div className="flex items-center justify-between gap-3">
-                    <span>Falha ao transcrever.</span>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        if (isRetryingTranscription) return;
-                        setIsRetryingTranscription(true);
-                        try {
-                          await api.post(`/chat/attachments/${attachment.id}/transcribe/`);
-                          showSuccessToast('iniciar', 'Transcrição');
-                        } catch (error) {
-                          showErrorToast('iniciar', 'Transcrição', error);
-                        } finally {
-                          setIsRetryingTranscription(false);
-                        }
-                      }}
-                      className="text-xs font-semibold text-blue-600 hover:text-blue-700"
-                    >
-                      {isRetryingTranscription ? 'Transcrevendo...' : 'Transcrever'}
-                    </button>
-                  </div>
-                ) : (
-                  <p>Transcrevendo...</p>
+          <div className="mt-3 bg-white rounded border border-gray-200 overflow-hidden">
+            {/* Header clicável para expandir/recolher */}
+            <button
+              type="button"
+              onClick={() => setIsTranscriptionCollapsed((prev) => !prev)}
+              className="w-full flex items-center justify-between p-3 hover:bg-gray-50 transition-colors text-left"
+              title={isTranscriptionCollapsed ? "Expandir transcrição" : "Recolher transcrição"}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-700">📝 Transcrição</span>
+                {attachment.transcription_language && (
+                  <span className="text-xs text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
+                    {attachment.transcription_language.toUpperCase()}
+                  </span>
                 )}
+                {attachment.transcription && isTranscriptionCollapsed && (
+                  <span className="text-xs text-gray-400 italic truncate max-w-[200px]">
+                    {attachment.transcription.substring(0, 50)}...
+                  </span>
+                )}
+              </div>
+              {isTranscriptionCollapsed ? (
+                <ChevronDown className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              ) : (
+                <ChevronUp className="h-4 w-4 text-gray-400 flex-shrink-0" />
+              )}
+            </button>
+            
+            {/* Conteúdo da transcrição (expandido) */}
+            {!isTranscriptionCollapsed && (
+              <div className="px-3 pb-3 border-t border-gray-100">
+                <div className="pt-3 text-sm text-gray-600">
+                  {attachment.transcription ? (
+                    <>
+                      <p className="mb-3 leading-relaxed">{attachment.transcription}</p>
+                      {/* Feedback de qualidade */}
+                      {transcriptionQuality ? (
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                          <span className="text-xs text-gray-500">
+                            Qualidade: {transcriptionQuality === 'correct' ? '✓ Correta' : '✗ Incorreta'}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-200">
+                          <span className="text-xs text-gray-500">A transcrição está correta?</span>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (isSubmittingQuality) return;
+                              setIsSubmittingQuality(true);
+                              try {
+                                await api.post(`/ai/transcription/quality/${attachment.id}/`, {
+                                  quality: 'correct',
+                                });
+                                setTranscriptionQuality('correct');
+                                showSuccessToast('avaliada', 'Transcrição');
+                              } catch (error) {
+                                showErrorToast('avaliar', 'Transcrição', error);
+                              } finally {
+                                setIsSubmittingQuality(false);
+                              }
+                            }}
+                            disabled={isSubmittingQuality}
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                            Correta
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              if (isSubmittingQuality) return;
+                              setIsSubmittingQuality(true);
+                              try {
+                                await api.post(`/ai/transcription/quality/${attachment.id}/`, {
+                                  quality: 'incorrect',
+                                });
+                                setTranscriptionQuality('incorrect');
+                                showSuccessToast('avaliada', 'Transcrição');
+                              } catch (error) {
+                                showErrorToast('avaliar', 'Transcrição', error);
+                              } finally {
+                                setIsSubmittingQuality(false);
+                              }
+                            }}
+                            disabled={isSubmittingQuality}
+                            className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                          >
+                            <XCircle className="h-3 w-3" />
+                            Incorreta
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  ) : attachment.ai_metadata?.transcription?.status === 'failed' ? (
+                    <div className="flex items-center justify-between gap-3">
+                      <span>Falha ao transcrever.</span>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (isRetryingTranscription) return;
+                          setIsRetryingTranscription(true);
+                          try {
+                            await api.post(`/chat/attachments/${attachment.id}/transcribe/`);
+                            showSuccessToast('iniciar', 'Transcrição');
+                          } catch (error) {
+                            showErrorToast('iniciar', 'Transcrição', error);
+                          } finally {
+                            setIsRetryingTranscription(false);
+                          }
+                        }}
+                        className="text-xs font-semibold text-blue-600 hover:text-blue-700"
+                      >
+                        {isRetryingTranscription ? 'Transcrevendo...' : 'Transcrever'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p>Transcrevendo...</p>
+                  )}
+                </div>
               </div>
             )}
           </div>
