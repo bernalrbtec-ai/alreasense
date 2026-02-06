@@ -22,53 +22,89 @@
       "typeVersion": 2,
       "position": [420, 300],
       "parameters": {
-        "jsCode": "// Payload enviado pelo Sense (backend)\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\n\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : 'Você é um assistente prestativo.';\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst context = knowledgeItems.map(i => `## ${i.title || 'Documento'}\\n${i.content || ''}`).join('\\n\\n');\nconst userMessage = (body.message && body.message.content) ? String(body.message.content) : '';\nconst fullPrompt = [\n  systemPrompt,\n  context ? `Contexto para consulta:\\n${context}` : '',\n  userMessage ? `Mensagem do usuário: ${userMessage}` : ''\n].filter(Boolean).join('\\n\\n');\n\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\n\nreturn [{ json: { fullPrompt, model, knowledgeItemsCount: knowledgeItems.length } }];\n"
+        "jsCode": "const raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\n\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : 'Você é um assistente prestativo.';\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst context = knowledgeItems.map(i => `## ${i.title || 'Documento'}\\n${i.content || ''}`).join('\\n\\n');\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\nconst knowledgeItemsCount = knowledgeItems.length;\n\nconst useChat = Array.isArray(body.messages) && body.messages.length > 0;\n\nif (useChat) {\n  const systemContent = [systemPrompt, context ? `Contexto para consulta:\\n${context}` : ''].filter(Boolean).join('\\n\\n');\n  const messages = [\n    { role: 'system', content: systemContent },\n    ...body.messages.map(m => ({ role: (m.role || 'user').toLowerCase(), content: String(m.content || '') }))\n  ];\n  return [{ json: { useChat: true, model, messages, knowledgeItemsCount } }];\n}\n\nconst userMessage = (body.message && body.message.content) ? String(body.message.content) : '';\nconst fullPrompt = [\n  systemPrompt,\n  context ? `Contexto para consulta:\\n${context}` : '',\n  userMessage ? `Mensagem do usuário: ${userMessage}` : ''\n].filter(Boolean).join('\\n\\n');\n\nreturn [{ json: { useChat: false, model, fullPrompt, knowledgeItemsCount } }];\n"
       }
     },
     {
-      "id": "http-ollama",
-      "name": "Chamar Ollama",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
+      "id": "if-use-chat",
+      "name": "Usar chat com histórico?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
       "position": [640, 300],
       "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "strict" },
+          "conditions": [{ "id": "cond-chat", "leftValue": "={{ $json.useChat }}", "rightValue": true, "operator": { "type": "boolean", "operation": "equals" } }],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "http-ollama-chat",
+      "name": "Chamar Ollama (chat)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 200],
+      "parameters": {
         "method": "POST",
-        "url": "=http://localhost:11434/api/generate",
+        "url": "http://localhost:11434/api/chat",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model, messages: $json.messages, stream: false } }}"
+      },
+      "notesInFlow": true,
+      "notes": "Use sua credencial Ollama aqui e ajuste a URL (ex.: base da credencial + /api/chat)"
+    },
+    {
+      "id": "http-ollama-generate",
+      "name": "Chamar Ollama (generate)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [860, 400],
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:11434/api/generate",
         "sendBody": true,
         "contentType": "json",
         "specifyBody": "json",
         "jsonBody": "={{ { model: $json.model, prompt: $json.fullPrompt, stream: false } }}"
       },
       "notesInFlow": true,
-      "notes": "Use sua credencial Ollama/API aqui e ajuste a URL (ex.: base da credencial + /api/generate)"
+      "notes": "Use sua credencial Ollama aqui e ajuste a URL (ex.: base da credencial + /api/generate)"
+    },
+    {
+      "id": "merge-ollama",
+      "name": "Merge",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [1080, 300],
+      "parameters": { "mode": "append", "options": {} }
     },
     {
       "id": "code-formatar-resposta",
       "name": "Formatar resposta para o Sense",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [860, 300],
+      "position": [1300, 300],
       "parameters": {
-        "jsCode": "// Resposta do Ollama: { response, model, ... }\nconst ollama = $input.first().json;\nconst prev = $('Montar prompt e modelo').first().json;\nconst replyText = (ollama.response && String(ollama.response).trim()) ? String(ollama.response).trim() : '(Sem resposta do modelo.)';\n\nreturn [{\n  json: {\n    reply_text: replyText,\n    status: 'success',\n    meta: {\n      model: ollama.model || prev.model,\n      latency_ms: ollama.eval_duration ? Math.round(ollama.eval_duration * 1000) : 0,\n      rag_hits: prev.knowledgeItemsCount || 0\n    }\n  }\n}];\n"
+        "jsCode": "const ollama = $input.first().json;\nconst prev = $('Montar prompt e modelo').first().json;\nconst replyText = (ollama.message && ollama.message.content)\n  ? String(ollama.message.content).trim()\n  : (ollama.response && String(ollama.response).trim())\n    ? String(ollama.response).trim()\n    : '(Sem resposta do modelo.)';\nconst evalDurationNs = ollama.eval_duration || 0;\nconst latencyMs = evalDurationNs > 0 ? Math.round(evalDurationNs / 1e6) : 0;\n\nreturn [{\n  json: {\n    reply_text: replyText,\n    status: 'success',\n    meta: {\n      model: ollama.model || prev.model,\n      latency_ms: latencyMs,\n      rag_hits: prev.knowledgeItemsCount || 0\n    }\n  }\n}];\n"
       }
     }
   ],
   "connections": {
-    "Webhook Sense IA": {
+    "Webhook Sense IA": { "main": [[{ "node": "Montar prompt e modelo", "type": "main", "index": 0 }]] },
+    "Montar prompt e modelo": { "main": [[{ "node": "Usar chat com histórico?", "type": "main", "index": 0 }]] },
+    "Usar chat com histórico?": {
       "main": [
-        [{ "node": "Montar prompt e modelo", "type": "main", "index": 0 }]
+        [{ "node": "Chamar Ollama (chat)", "type": "main", "index": 0 }],
+        [{ "node": "Chamar Ollama (generate)", "type": "main", "index": 0 }]
       ]
     },
-    "Montar prompt e modelo": {
-      "main": [
-        [{ "node": "Chamar Ollama", "type": "main", "index": 0 }]
-      ]
-    },
-    "Chamar Ollama": {
-      "main": [
-        [{ "node": "Formatar resposta para o Sense", "type": "main", "index": 0 }]
-      ]
-    }
+    "Chamar Ollama (chat)": { "main": [[{ "node": "Merge", "type": "main", "index": 0 }]] },
+    "Chamar Ollama (generate)": { "main": [[{ "node": "Merge", "type": "main", "index": 1 }]] },
+    "Merge": { "main": [[{ "node": "Formatar resposta para o Sense", "type": "main", "index": 0 }]] }
   },
   "settings": {},
   "staticData": null,

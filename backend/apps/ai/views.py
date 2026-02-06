@@ -309,6 +309,8 @@ def triage_test(request):
 MAX_PROMPT_LENGTH = 10000
 MAX_KNOWLEDGE_ITEMS = 5
 MAX_KNOWLEDGE_CONTENT_LENGTH = 50000
+MAX_CHAT_MESSAGES = 50
+GATEWAY_TEST_WEBHOOK_TIMEOUT = 60
 
 
 @api_view(['POST'])
@@ -372,6 +374,32 @@ def gateway_test(request):
                 "content": content,
                 "source": "test_upload",
             })
+
+    messages_payload = []
+    messages_raw = request.data.get("messages")
+    if messages_raw is not None:
+        if not isinstance(messages_raw, list):
+            return Response(
+                {"error": "messages deve ser uma lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(messages_raw) > MAX_CHAT_MESSAGES:
+            return Response(
+                {"error": f"Máximo de {MAX_CHAT_MESSAGES} mensagens no histórico."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        for i, item in enumerate(messages_raw):
+            if not isinstance(item, dict):
+                return Response(
+                    {"error": f"messages[{i}] deve ser um objeto com role e content."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            role = str(item.get("role") or "user").strip().lower()
+            if role not in ("user", "assistant", "system"):
+                role = "user"
+            content = str(item.get("content") or "")
+            messages_payload.append({"role": role, "content": content})
+
     request_id = uuid.uuid4()
     trace_id = uuid.uuid4()
 
@@ -420,6 +448,8 @@ def gateway_test(request):
         payload["prompt"] = custom_prompt
     if knowledge_items_payload:
         payload["knowledge_items"] = knowledge_items_payload
+    if messages_payload:
+        payload["messages"] = messages_payload
 
     start_time = time.monotonic()
     status_value = "success"
@@ -428,7 +458,7 @@ def gateway_test(request):
     response_payload = {}
 
     try:
-        response = requests.post(ai_webhook, json=payload, timeout=10.0)
+        response = requests.post(ai_webhook, json=payload, timeout=GATEWAY_TEST_WEBHOOK_TIMEOUT)
         response.raise_for_status()
         response_payload = response.json() if response.content else {}
     except requests.Timeout as exc:

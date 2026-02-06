@@ -912,6 +912,10 @@ export default function ConfigurationsPage() {
           source: 'test_upload',
         }))
       }
+      const historyWithCurrent = [...modelTestMessages, { role: 'user' as const, content: message }]
+      if (historyWithCurrent.length > 0) {
+        requestData.messages = historyWithCurrent
+      }
 
       const response = await api.post('/ai/gateway/test/', requestData)
       const payload = response.data || {}

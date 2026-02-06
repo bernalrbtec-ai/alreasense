@@ -33,6 +33,10 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
   "prompt": "Você é um assistente...",  // opcional: prompt de sistema/instrução para o teste
   "knowledge_items": [   // opcional: contexto RAG para o teste (até 5 itens)
     { "title": "Doc.txt", "content": "Texto do documento...", "source": "test_upload" }
+  ],
+  "messages": [          // opcional: histórico da conversa no teste (até 50 itens; mantém contexto entre envios)
+    { "role": "user", "content": "Bom dia" },
+    { "role": "assistant", "content": "Bom dia! Como posso ajudar?" }
   ]
 }
 ```
@@ -130,16 +134,22 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
   "prompt": "Você é um assistente...",
   "knowledge_items": [
     { "title": "Doc.txt", "content": "Texto do documento...", "source": "test_upload" }
+  ],
+  "messages": [
+    { "role": "user", "content": "Bom dia" },
+    { "role": "assistant", "content": "Bom dia! Como posso ajudar?" },
+    { "role": "user", "content": "Quero falar com cobrança." }
   ]
 }
 ```
 
 - **prompt** (string, opcional): quando presente, use como prompt de sistema/instrução no teste.
 - **knowledge_items** (array, opcional): lista de `{ title, content, source }` para contexto RAG no teste; injete no contexto do modelo (ex.: concatenar ao prompt ou usar em passo de RAG).
+- **messages** (array, opcional): histórico da conversa para o teste (até 50 itens). Cada item: `{ role: "user" | "assistant" | "system", content: string }`. Quando presente, use a API de **chat** do modelo (ex.: Ollama `/api/chat`) para manter contexto; quando ausente, use apenas a mensagem única (ex.: `/api/generate`).
 
 ### 2. Resposta obrigatória do webhook
 
-O Sense espera que o n8n **responda à requisição HTTP** (o webhook) com um JSON no corpo da resposta. O timeout do Sense é 10 segundos; responda dentro desse tempo.
+O Sense espera que o n8n **responda à requisição HTTP** (o webhook) com um JSON no corpo da resposta. O timeout do Sense é 60 segundos; responda dentro desse tempo.
 
 **Formato obrigatório da resposta (JSON):**
 
@@ -253,17 +263,20 @@ Quando o Sense quiser enviar a resposta ao chat (ex.: teste com "Enviar resposta
 
 Há um workflow de exemplo que você pode importar no n8n: **[n8n_workflow_ia_gateway.json](n8n_workflow_ia_gateway.json)**.
 
-Ele tem 4 nós:
+Ele tem 7 nós:
 
-1. **Webhook Sense IA** (POST) – recebe o payload do Sense (message, prompt, knowledge_items, metadata). Responde quando o último nó terminar.
-2. **Montar prompt e modelo** (Code) – monta o prompt (system + contexto RAG + mensagem do usuário) e devolve `fullPrompt`, `model` e `knowledgeItemsCount`.
-3. **Chamar Ollama** (HTTP Request) – POST para `/api/generate` no Ollama. **Use aqui a sua credencial já salva no n8n** (Ollama ou HTTP Request com a URL do seu Ollama).
-4. **Formatar resposta para o Sense** (Code) – monta o JSON que o Sense espera: `reply_text`, `status: "success"`, `meta` (model, latency_ms, rag_hits).
+1. **Webhook Sense IA** (POST) – recebe o payload do Sense (message, prompt, knowledge_items, metadata, **messages**). Responde quando o último nó terminar.
+2. **Montar prompt e modelo** (Code) – só prepara os dados (sem chamar HTTP nem acessar env vars). Se existir **messages**, devolve `useChat: true` e `messages`; senão devolve `useChat: false` e `fullPrompt`.
+3. **Usar chat com histórico?** (IF) – encaminha para o nó de chat ou de generate conforme `useChat`.
+4. **Chamar Ollama (chat)** (HTTP Request) – POST para `/api/chat`. **Use aqui a sua credencial Ollama** e ajuste a URL (ex.: base da credencial + `/api/chat`).
+5. **Chamar Ollama (generate)** (HTTP Request) – POST para `/api/generate`. **Use aqui a mesma credencial** e ajuste a URL (ex.: base + `/api/generate`).
+6. **Merge** – junta a saída de um dos dois nós HTTP.
+7. **Formatar resposta para o Sense** (Code) – monta o JSON final (`reply_text`, `status`, `meta`).
 
 **Configuração após importar:**
 
-- No nó **Chamar Ollama**: selecione a sua credencial (ex.: credencial Ollama ou HTTP com URL do Ollama) e ajuste a **URL** para o endpoint do Ollama (ex.: `http://localhost:11434/api/generate` ou a base da credencial + `/api/generate`). Não é necessário usar variável de ambiente; a URL pode vir da própria credencial.
-- O **path do Webhook** (ex.: `sense-ia-gateway`) deve bater com a URL que você configurar no Sense em **Configurações > Agentes IA > Webhook do Gateway IA** (a URL completa que o Sense chama).
+- Nos nós **Chamar Ollama (chat)** e **Chamar Ollama (generate)**: selecione a **sua credencial** (Ollama ou HTTP com URL do Ollama) e ajuste a **URL** em cada um (ex.: `http://seu-ollama:11434/api/chat` e `http://seu-ollama:11434/api/generate`). Não é necessário usar variável de ambiente; o Code não acessa `$env` (evita erro "access to env vars denied").
+- O **path do Webhook** (ex.: `sense-ia-gateway`) deve bater com a URL configurada no Sense em **Configurações > Agentes IA > Webhook do Gateway IA**.
 
 ## Variáveis de Ambiente N8N
 
