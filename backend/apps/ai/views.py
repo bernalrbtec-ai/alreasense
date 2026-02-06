@@ -962,31 +962,17 @@ def transcription_quality_feedback(request, attachment_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
     
-    # ✅ Buscar o usuário do banco para garantir que temos o UUID correto
-    from apps.authn.models import User
+    # ✅ Simplificar: salvar apenas qualidade e timestamp, sem user_id por enquanto
+    # O campo transcription_quality_feedback_by é nullable, então podemos deixá-lo None
+    # Isso evita problemas com conversão de UUID até identificarmos a causa raiz
     import logging
     logger = logging.getLogger(__name__)
     
-    # Buscar usuário pelo email para garantir UUID correto
-    try:
-        user = User.objects.get(email=request.user.email, tenant=request.user.tenant)
-        # Usar o objeto User diretamente - Django ORM vai fazer a conversão correta
-        user_for_feedback = user
-    except User.DoesNotExist:
-        logger.error(f"ERROR: Usuário não encontrado: {request.user.email}")
-        return Response(
-            {"error": "Usuário não encontrado."},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
-    except Exception as e:
-        logger.error(f"ERROR: Erro ao buscar usuário: {e}")
-        # Se não conseguir buscar, usar None (campo é nullable)
-        user_for_feedback = None
-    
-    # ✅ Usar Django ORM diretamente - mais seguro que SQL direto
     attachment.transcription_quality = quality
     attachment.transcription_quality_feedback_at = timezone.now()
-    attachment.transcription_quality_feedback_by = user_for_feedback
+    # ✅ Temporariamente deixar user como None para evitar erro de tipo
+    # TODO: Investigar por que request.user.id retorna inteiro em vez de UUID
+    attachment.transcription_quality_feedback_by = None
     
     try:
         attachment.save(update_fields=[
@@ -994,33 +980,13 @@ def transcription_quality_feedback(request, attachment_id):
             "transcription_quality_feedback_at",
             "transcription_quality_feedback_by",
         ])
+        logger.info(f"✅ Feedback de qualidade salvo: attachment={attachment_id}, quality={quality}")
     except Exception as e:
         logger.error(f"ERROR ao salvar attachment: {e}")
-        # Se falhar, tentar com SQL direto como fallback
-        if user_for_feedback:
-            user_uuid = str(user_for_feedback.id)
-            from django.db import connection
-            with connection.cursor() as cursor:
-                cursor.execute("""
-                    UPDATE chat_attachment 
-                    SET transcription_quality = %s,
-                        transcription_quality_feedback_at = %s,
-                        transcription_quality_feedback_by_id = %s::uuid
-                    WHERE id = %s::uuid 
-                      AND tenant_id = %s::uuid
-                """, [
-                    quality,
-                    timezone.now(),
-                    user_uuid,
-                    str(attachment_id),
-                    str(request.user.tenant.id),
-                ])
-            attachment.refresh_from_db()
-        else:
-            return Response(
-                {"error": f"Erro ao salvar feedback: {str(e)}"},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
+        return Response(
+            {"error": f"Erro ao salvar feedback: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
     
     return Response({
         "status": "success",
