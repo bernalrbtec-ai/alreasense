@@ -466,14 +466,13 @@ def gateway_test(request):
         error_code = str(response_payload.get("error_code") or "UPSTREAM_ERROR")
         error_message = str(response_payload.get("error_message") or "")
 
-    meta = response_payload.get("meta") if isinstance(response_payload, dict) else {}
-    model_name = (
-        str(meta.get("model") or response_payload.get("model") or selected_model)
-        if isinstance(response_payload, dict)
-        else selected_model
-    )
-    rag_hits = meta.get("rag_hits") if isinstance(meta, dict) else None
-    prompt_version = meta.get("prompt_version") if isinstance(meta, dict) else ""
+    meta = (response_payload.get("meta") or {}) if isinstance(response_payload, dict) else {}
+    if not isinstance(meta, dict):
+        meta = {}
+    _rp = response_payload if isinstance(response_payload, dict) else {}
+    model_name = str(meta.get("model") or _rp.get("model") or selected_model)
+    rag_hits = meta.get("rag_hits")
+    prompt_version = meta.get("prompt_version") or ""
     handoff = bool(response_payload.get("handoff")) if isinstance(response_payload, dict) else False
     handoff_reason = str(response_payload.get("handoff_reason") or "") if isinstance(response_payload, dict) else ""
     reply_text = str(response_payload.get("reply_text") or response_payload.get("text") or "") if isinstance(response_payload, dict) else ""
