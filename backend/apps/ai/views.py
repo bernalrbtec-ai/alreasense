@@ -962,6 +962,21 @@ def transcription_quality_feedback(request, attachment_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
     
+    # ✅ Buscar o usuário do banco para garantir que temos o UUID correto
+    from apps.authn.models import User
+    try:
+        # Buscar usuário pelo email para garantir UUID correto
+        user = User.objects.get(email=request.user.email, tenant=request.user.tenant)
+        user_id = str(user.id)  # UUID como string
+    except User.DoesNotExist:
+        # Fallback: tentar usar request.user.id se for UUID
+        user_id = str(request.user.id) if hasattr(request.user, 'id') else None
+        if not user_id or user_id == '13' or not isinstance(request.user.id, uuid.UUID):
+            return Response(
+                {"error": "Erro ao identificar usuário."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+    
     # ✅ Usar SQL direto para garantir que o UUID seja salvo corretamente
     from django.db import connection
     
@@ -976,7 +991,7 @@ def transcription_quality_feedback(request, attachment_id):
         """, [
             quality,
             timezone.now(),
-            str(request.user.id),  # Converter para string primeiro
+            user_id,
             str(attachment_id),
             str(request.user.tenant.id),
         ])
