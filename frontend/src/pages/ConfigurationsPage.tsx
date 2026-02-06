@@ -323,6 +323,9 @@ export default function ConfigurationsPage() {
   const [modelTestRequestId, setModelTestRequestId] = useState<string>('')
   const [modelTestTraceId, setModelTestTraceId] = useState<string>('')
   const [modelTestError, setModelTestError] = useState<string | null>(null)
+  const [modelTestConversationId, setModelTestConversationId] = useState<string>('')
+  const [modelTestConversations, setModelTestConversations] = useState<Array<{ id: string; contact_name: string; contact_phone: string }>>([])
+  const [modelTestSendToChat, setModelTestSendToChat] = useState(false)
   const [gatewayAuditItems, setGatewayAuditItems] = useState<GatewayAuditItem[]>([])
   const [gatewayAuditLoading, setGatewayAuditLoading] = useState(false)
   const [gatewayAuditError, setGatewayAuditError] = useState<string | null>(null)
@@ -756,7 +759,7 @@ export default function ConfigurationsPage() {
     resetAudioRecorder()
   }
 
-  const handleOpenModelTestModal = () => {
+  const handleOpenModelTestModal = async () => {
     setIsModelTestModalOpen(true)
     setModelTestInput('')
     setModelTestMessages([])
@@ -765,12 +768,30 @@ export default function ConfigurationsPage() {
     setModelTestRequestId('')
     setModelTestTraceId('')
     setModelTestError(null)
+    setModelTestConversationId('')
+    setModelTestSendToChat(false)
     if (aiSettings?.agent_model && aiModelOptions.includes(aiSettings.agent_model)) {
       setModelTestSelectedModel(aiSettings.agent_model)
     } else if (aiModelOptions.length > 0) {
       setModelTestSelectedModel(aiModelOptions[0])
     } else {
       setModelTestSelectedModel('')
+    }
+    
+    // Carregar lista de conversas
+    try {
+      const response = await api.get('/chat/conversations/', {
+        params: { limit: 50, ordering: '-last_message_at' }
+      })
+      const conversations = response.data.results || response.data || []
+      setModelTestConversations(conversations.map((conv: any) => ({
+        id: conv.id,
+        contact_name: conv.contact_name || conv.contact_phone || 'Sem nome',
+        contact_phone: conv.contact_phone || ''
+      })))
+    } catch (error) {
+      console.error('Erro ao carregar conversas:', error)
+      setModelTestConversations([])
     }
   }
 
@@ -785,6 +806,8 @@ export default function ConfigurationsPage() {
     setModelTestRequestId('')
     setModelTestTraceId('')
     setModelTestError(null)
+    setModelTestConversationId('')
+    setModelTestSendToChat(false)
   }
 
   const handleSendModelTest = async () => {
@@ -799,6 +822,10 @@ export default function ConfigurationsPage() {
       ])
       return
     }
+    if (modelTestSendToChat && !modelTestConversationId) {
+      setModelTestError('Selecione uma conversa para enviar a resposta ao chat.')
+      return
+    }
     const message = modelTestInput.trim()
     setModelTestInput('')
     setModelTestMessages((prev) => [...prev, { role: 'user', content: message }])
@@ -806,25 +833,51 @@ export default function ConfigurationsPage() {
     setModelTestError(null)
 
     try {
-      const response = await api.post('/ai/gateway/test/', {
+      const requestData: any = {
         message,
         context: {
           action: 'model_test',
           model: modelTestSelectedModel || aiSettings.agent_model,
         },
         model: modelTestSelectedModel || aiSettings.agent_model,
-      })
+      }
+
+      if (modelTestConversationId) {
+        requestData.conversation_id = modelTestConversationId
+      }
+      if (modelTestSendToChat && modelTestConversationId) {
+        requestData.send_to_chat = true
+      }
+
+      const response = await api.post('/ai/gateway/test/', requestData)
       const payload = response.data || {}
       const data = payload.data || {}
-      const requestData = data.request || payload.request || null
+      const requestPayload = data.request || payload.request || null
       const responseData = data.response || payload.response || null
       const requestId = payload.request_id || ''
       const traceId = payload.trace_id || ''
 
-      setModelTestRequest(requestData)
+      setModelTestRequest(requestPayload)
       setModelTestResponse(responseData)
       setModelTestRequestId(requestId)
       setModelTestTraceId(traceId)
+
+      const sendToChatResult = payload.send_to_chat_result
+      if (sendToChatResult) {
+        if (sendToChatResult.success) {
+          showSuccessToast('Resposta enviada ao chat com sucesso.')
+        } else {
+          const msg =
+            sendToChatResult.error === 'CONVERSATION_NOT_FOUND'
+              ? 'Conversa não encontrada.'
+              : sendToChatResult.error === 'SEM_PERMISSÃO_CONVERSA'
+                ? 'Sem permissão para enviar nesta conversa.'
+                : sendToChatResult.error === 'REPLY_VAZIO_OU_CONVERSA_NAO_SELECIONADA'
+                  ? 'Selecione uma conversa e tente novamente.'
+                  : sendToChatResult.detail || 'Não foi possível enviar ao chat.'
+          showErrorToast(msg)
+        }
+      }
 
       let content = ''
       if (responseData?.reply_text) {
@@ -838,9 +891,13 @@ export default function ConfigurationsPage() {
       }
       setModelTestMessages((prev) => [...prev, { role: 'assistant', content }])
     } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
       const errorMessage =
-        (error as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message ||
-        (error instanceof Error ? error.message : 'Erro ao testar a IA.')
+        status === 429
+          ? 'Muitas requisições. Aguarde um minuto e tente novamente.'
+          : (error as { response?: { data?: { error_message?: string } } })?.response?.data?.error_message ||
+            (error as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+            (error instanceof Error ? error.message : 'Erro ao testar a IA.')
       const errorPayload = (error as { response?: { data?: any } })?.response?.data || null
       setModelTestRequest(errorPayload?.request || null)
       setModelTestResponse(errorPayload?.response || null)
@@ -2714,25 +2771,59 @@ export default function ConfigurationsPage() {
                   </div>
                 </div>
 
-                <div className="mb-4">
-                  <Label htmlFor="model_test_select">Modelo para teste</Label>
-                  <select
-                    id="model_test_select"
-                    value={modelTestSelectedModel}
-                    onChange={(e) => setModelTestSelectedModel(e.target.value)}
-                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
-                  >
-                    {aiModelOptions.length === 0 ? (
-                      <option value="">Nenhum modelo disponível</option>
-                    ) : (
-                      aiModelOptions.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
+                <div className="mb-4 space-y-3">
+                  <div>
+                    <Label htmlFor="model_test_select">Modelo para teste</Label>
+                    <select
+                      id="model_test_select"
+                      value={modelTestSelectedModel}
+                      onChange={(e) => setModelTestSelectedModel(e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
+                    >
+                      {aiModelOptions.length === 0 ? (
+                        <option value="">Nenhum modelo disponível</option>
+                      ) : (
+                        aiModelOptions.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))
+                      )}
+                    </select>
+                  </div>
+                  
+                  <div>
+                    <Label htmlFor="model_test_conversation">Conversa (opcional - para enviar resposta ao chat)</Label>
+                    <select
+                      id="model_test_conversation"
+                      value={modelTestConversationId}
+                      onChange={(e) => setModelTestConversationId(e.target.value)}
+                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                    >
+                      <option value="">Selecione uma conversa...</option>
+                      {modelTestConversations.map((conv) => (
+                        <option key={conv.id} value={conv.id}>
+                          {conv.contact_name} ({conv.contact_phone})
                         </option>
-                      ))
-                    )}
-                  </select>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  {modelTestConversationId && (
+                    <div className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id="model_test_send_to_chat"
+                        checked={modelTestSendToChat}
+                        onChange={(e) => setModelTestSendToChat(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <Label htmlFor="model_test_send_to_chat" className="ml-2 text-sm text-gray-700">
+                        Enviar resposta da IA diretamente ao chat
+                      </Label>
+                    </div>
+                  )}
                 </div>
 
                 <div className="border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">

@@ -6,7 +6,7 @@ import uuid
 import requests
 
 from rest_framework import generics, status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.pagination import LimitOffsetPagination
@@ -15,7 +15,7 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime, parse_date
 
 # from .tasks import analyze_message_async  # Removido - Celery deletado
-from apps.chat_messages.models import Message
+from apps.chat.models import Conversation, Message as ChatMessage
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, AiTranscriptionDailyMetric
 from apps.ai.transcription_metrics import (
@@ -25,6 +25,7 @@ from apps.ai.transcription_metrics import (
     resolve_date_range,
 )
 from apps.ai.triage_service import run_test_prompt, run_transcription_test
+from apps.ai.throttling import GatewayReplyThrottle, GatewayTestThrottle
 from apps.chat.utils.s3 import get_s3_manager, get_public_url
 
 logger = logging.getLogger(__name__)
@@ -84,6 +85,70 @@ def _normalize_bool(value):
     if isinstance(value, str):
         return value.strip().lower() in {"true", "1", "yes", "sim", "on"}
     return None
+
+
+# Limite WhatsApp (mensagem de texto)
+MAX_REPLY_TEXT_LENGTH = 4096
+
+
+def _user_can_access_conversation(user, conversation):
+    """Verifica se o usuário pode acessar a conversa (mesma lógica de CanAccessChat)."""
+    if user.is_admin:
+        return True
+    department = getattr(conversation, 'department', None)
+    if department:
+        return user.departments.filter(id=department.id).exists()
+    return user.is_gerente or user.is_agente
+
+
+def _create_and_broadcast_message(conversation, sender, content, is_internal=False):
+    """
+    Cria mensagem no chat, faz broadcast via WebSocket e enfileira envio para Evolution API.
+    Retorna a mensagem criada.
+    """
+    message = ChatMessage.objects.create(
+        conversation=conversation,
+        sender=sender,
+        content=content,
+        direction='outgoing',
+        status='pending',
+        is_internal=is_internal,
+    )
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        from apps.chat.utils.serialization import serialize_message_for_ws, serialize_conversation_for_ws
+
+        channel_layer = get_channel_layer()
+        room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+        tenant_group = f"chat_tenant_{conversation.tenant_id}"
+
+        msg_data_serializable = serialize_message_for_ws(message)
+        conv_data_serializable = serialize_conversation_for_ws(conversation)
+
+        async_to_sync(channel_layer.group_send)(
+            room_group_name,
+            {'type': 'message_received', 'message': msg_data_serializable}
+        )
+        async_to_sync(channel_layer.group_send)(
+            tenant_group,
+            {
+                'type': 'message_received',
+                'message': msg_data_serializable,
+                'conversation': conv_data_serializable
+            }
+        )
+
+        from apps.chat.tasks import send_message_to_evolution
+        send_message_to_evolution.delay(str(message.id))
+
+        logger.info(
+            "✅ [GATEWAY] Mensagem criada e enviada: conversation=%s, message=%s",
+            conversation.id, message.id
+        )
+    except Exception as e:
+        logger.error("❌ [GATEWAY] Erro ao broadcast/enviar mensagem: %s", e, exc_info=True)
+    return message
 
 
 def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
@@ -243,6 +308,7 @@ def triage_test(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+@throttle_classes([GatewayTestThrottle])
 def gateway_test(request):
     """Run a Gateway IA test prompt via N8N."""
     settings_obj, _ = TenantAiSettings.objects.get_or_create(tenant=request.user.tenant)
@@ -257,7 +323,18 @@ def gateway_test(request):
     message_text = str(request.data.get("message") or "").strip()
     request_id = uuid.uuid4()
     trace_id = uuid.uuid4()
-    conversation_id = _parse_uuid(request.data.get("conversation_id")) or uuid.uuid4()
+
+    conversation_id_raw = request.data.get("conversation_id")
+    if conversation_id_raw is not None and str(conversation_id_raw).strip():
+        conversation_id = _parse_uuid(conversation_id_raw)
+        if not conversation_id:
+            return Response(
+                {"error": "conversation_id inválido"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+    else:
+        conversation_id = uuid.uuid4()
+
     message_id = _parse_uuid(request.data.get("message_id")) or uuid.uuid4()
     contact_id = _parse_uuid(request.data.get("contact_id")) or uuid.uuid4()
     agent_id = _parse_uuid(request.data.get("agent_id")) or _parse_uuid(request.user.id)
@@ -387,16 +464,139 @@ def gateway_test(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
+    # Se conversation_id for real e send_to_chat estiver habilitado, criar mensagem no chat
+    send_to_chat_result = None
+    send_to_chat = _normalize_bool(request.data.get("send_to_chat")) or False
+    if send_to_chat and conversation_id and reply_text:
+        try:
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                tenant_id=request.user.tenant_id
+            )
+            if not _user_can_access_conversation(request.user, conversation):
+                send_to_chat_result = {"success": False, "error": "SEM_PERMISSÃO_CONVERSA"}
+            else:
+                _create_and_broadcast_message(conversation, request.user, reply_text, is_internal=False)
+                send_to_chat_result = {"success": True}
+        except Conversation.DoesNotExist:
+            logger.warning("⚠️ [GATEWAY TEST] Conversa não encontrada: %s", conversation_id)
+            send_to_chat_result = {"success": False, "error": "CONVERSATION_NOT_FOUND"}
+        except Exception as e:
+            logger.error("❌ [GATEWAY TEST] Erro ao criar mensagem no chat: %s", e, exc_info=True)
+            send_to_chat_result = {"success": False, "error": "INTERNAL_ERROR", "detail": str(e)}
+    elif send_to_chat and (not conversation_id or not reply_text):
+        send_to_chat_result = {"success": False, "error": "REPLY_VAZIO_OU_CONVERSA_NAO_SELECIONADA"}
+
+    response_body = {
+        "status": "success",
+        "request_id": str(request_id),
+        "trace_id": str(trace_id),
+        "data": {
+            "request": masked_request,
+            "response": masked_response,
+        },
+    }
+    if send_to_chat_result is not None:
+        response_body["send_to_chat_result"] = send_to_chat_result
+
+    return Response(response_body)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember])
+@throttle_classes([GatewayReplyThrottle])
+def gateway_reply(request):
+    """
+    Endpoint para n8n enviar respostas da IA diretamente ao chat.
+    
+    Body esperado:
+    {
+        "conversation_id": "uuid",
+        "request_id": "uuid",  # opcional, para rastreamento
+        "trace_id": "uuid",    # opcional, para rastreamento
+        "reply_text": "texto da resposta",
+        "metadata": {           # opcional
+            "model": "...",
+            "latency_ms": 123,
+            "rag_hits": 5,
+            ...
+        }
+    }
+    """
+    conversation_id = _parse_uuid(request.data.get("conversation_id"))
+    if not conversation_id:
+        return Response(
+            {"error": "conversation_id é obrigatório"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    reply_text = str(request.data.get("reply_text") or "").strip()
+    if not reply_text:
+        return Response(
+            {"error": "reply_text é obrigatório"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if len(reply_text) > MAX_REPLY_TEXT_LENGTH:
+        return Response(
+            {"error": f"reply_text excede o limite de {MAX_REPLY_TEXT_LENGTH} caracteres"},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        conversation = Conversation.objects.select_related('department').get(
+            id=conversation_id,
+            tenant_id=request.user.tenant_id
+        )
+    except Conversation.DoesNotExist:
+        return Response(
+            {"error": "Conversa não encontrada ou não pertence ao seu tenant"},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not _user_can_access_conversation(request.user, conversation):
+        return Response(
+            {"error": "Você não tem permissão para enviar mensagens nesta conversa"},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    try:
+        message = _create_and_broadcast_message(
+            conversation, request.user, reply_text, is_internal=False
+        )
+    except Exception as e:
+        logger.error("❌ [GATEWAY REPLY] Erro ao criar mensagem: %s", e, exc_info=True)
+        return Response(
+            {"error": f"Erro ao criar mensagem: {str(e)}"},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+    request_id = _parse_uuid(request.data.get("request_id"))
+    trace_id = _parse_uuid(request.data.get("trace_id"))
+    metadata = request.data.get("metadata") or {}
+    if request_id or trace_id:
+        try:
+            AiGatewayAudit.objects.create(
+                tenant=request.user.tenant,
+                conversation_id=conversation_id,
+                message_id=message.id,
+                request_id=request_id or uuid.uuid4(),
+                trace_id=trace_id or uuid.uuid4(),
+                status="success",
+                model_name=str(metadata.get("model") or ""),
+                latency_ms=metadata.get("latency_ms"),
+                rag_hits=metadata.get("rag_hits"),
+                output_summary=_safe_summary(reply_text),
+            )
+        except Exception as e:
+            logger.warning("⚠️ [GATEWAY REPLY] Erro ao registrar audit: %s", e, exc_info=True)
+
     return Response(
         {
             "status": "success",
-            "request_id": str(request_id),
-            "trace_id": str(trace_id),
-            "data": {
-                "request": masked_request,
-                "response": masked_response,
-            },
-        }
+            "message_id": str(message.id),
+            "conversation_id": str(conversation_id),
+        },
+        status=status.HTTP_201_CREATED,
     )
 
 
