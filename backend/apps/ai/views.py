@@ -962,12 +962,24 @@ def transcription_quality_feedback(request, attachment_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
     
-    # ✅ Usar update() diretamente para evitar problemas de tipo UUID
-    MessageAttachment.objects.filter(id=attachment_id, tenant=request.user.tenant).update(
-        transcription_quality=quality,
-        transcription_quality_feedback_at=timezone.now(),
-        transcription_quality_feedback_by_id=request.user.id,
-    )
+    # ✅ Usar SQL direto para garantir que o UUID seja salvo corretamente
+    from django.db import connection
+    
+    with connection.cursor() as cursor:
+        cursor.execute("""
+            UPDATE chat_attachment 
+            SET transcription_quality = %s,
+                transcription_quality_feedback_at = %s,
+                transcription_quality_feedback_by_id = %s::uuid
+            WHERE id = %s::uuid 
+              AND tenant_id = %s::uuid
+        """, [
+            quality,
+            timezone.now(),
+            str(request.user.id),  # Converter para string primeiro
+            str(attachment_id),
+            str(request.user.tenant.id),
+        ])
     
     # Recarregar o attachment atualizado
     attachment.refresh_from_db()
