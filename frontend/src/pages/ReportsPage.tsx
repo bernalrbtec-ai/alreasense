@@ -321,11 +321,28 @@ export default function ReportsPage() {
             <div className="p-4 flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-600 dark:text-gray-400">Latência média</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                <p className={`text-2xl font-bold ${
+                  metrics?.totals.avg_latency_ms 
+                    ? (metrics.totals.avg_latency_ms > 10000 
+                        ? 'text-red-600' 
+                        : metrics.totals.avg_latency_ms > 5000 
+                        ? 'text-yellow-600' 
+                        : 'text-gray-900 dark:text-white')
+                    : 'text-gray-900 dark:text-white'
+                }`}>
                   {metrics?.totals.avg_latency_ms 
-                    ? `${metrics.totals.avg_latency_ms.toFixed(0)}ms`
+                    ? (() => {
+                        const seconds = metrics.totals.avg_latency_ms / 1000
+                        if (seconds >= 1) {
+                          return `${seconds.toFixed(1)}s`
+                        }
+                        return `${metrics.totals.avg_latency_ms.toFixed(0)}ms`
+                      })()
                     : 'N/A'}
                 </p>
+                {metrics?.totals.avg_latency_ms && metrics.totals.avg_latency_ms > 10000 && (
+                  <p className="text-xs text-red-500 mt-1">⚠️ Alta latência</p>
+                )}
               </div>
               <Zap className="h-8 w-8 text-blue-500" />
             </div>
@@ -412,8 +429,17 @@ export default function ReportsPage() {
                   <LineChart data={chartData.filter(d => d.avg_latency_ms !== null)}>
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip formatter={(value: number) => `${value.toFixed(0)}ms`} />
+                    <YAxis 
+                      label={{ value: 'Latência (s)', angle: -90, position: 'insideLeft' }}
+                      tickFormatter={(value) => `${(value / 1000).toFixed(1)}s`}
+                    />
+                    <Tooltip 
+                      formatter={(value: number) => {
+                        const seconds = value / 1000
+                        return seconds >= 1 ? `${seconds.toFixed(2)}s` : `${value.toFixed(0)}ms`
+                      }}
+                      labelFormatter={(label) => `Data: ${label}`}
+                    />
                     <Line
                       type="monotone"
                       dataKey="avg_latency_ms"
@@ -424,6 +450,14 @@ export default function ReportsPage() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
+              {metrics?.totals.avg_latency_ms && metrics.totals.avg_latency_ms > 10000 && (
+                <div className="mt-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded">
+                  <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                    ⚠️ <strong>Alta latência detectada:</strong> A latência média está acima de 10 segundos. 
+                    Isso pode indicar problemas de rede ou processamento no N8N.
+                  </p>
+                </div>
+              )}
             </div>
           </Card>
         </div>
