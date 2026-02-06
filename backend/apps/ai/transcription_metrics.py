@@ -165,6 +165,34 @@ def _extract_duration_ms_from_attachment(attachment) -> int:
     return 0
 
 
+def _extract_latency_ms_from_attachment(attachment) -> int | None:
+    """Extrai latency_ms (processing_time_ms) de um attachment."""
+    if not attachment.ai_metadata:
+        return None
+    
+    transcription_data = attachment.ai_metadata.get('transcription') or {}
+    if isinstance(transcription_data, dict):
+        processing_time_ms = transcription_data.get('processing_time_ms')
+        if processing_time_ms is not None:
+            return int(processing_time_ms)
+    
+    return None
+
+
+def _extract_model_name_from_attachment(attachment) -> str | None:
+    """Extrai model_name de um attachment."""
+    if not attachment.ai_metadata:
+        return None
+    
+    transcription_data = attachment.ai_metadata.get('transcription') or {}
+    if isinstance(transcription_data, dict):
+        model_name = transcription_data.get('model_name') or transcription_data.get('model')
+        if model_name:
+            return str(model_name)
+    
+    return None
+
+
 def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timezone.utc):
     """Agrega métricas processando em Python para garantir extração correta de duration."""
     success_filter = _success_filter()
@@ -188,12 +216,17 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
             "success_count": row["success_count"],
             "failed_count": row["failed_count"],
             "duration_ms_total": 0,
+            "quality_correct_count": 0,
+            "quality_incorrect_count": 0,
+            "quality_unrated_count": 0,
+            "latency_ms_list": [],
+            "models_used": {},
         }
     
-    # Buscar todos os attachments com sucesso e calcular duration_ms em Python
+    # Buscar todos os attachments com sucesso e calcular métricas em Python
     # Remover select_related antes de usar only() para evitar conflito
     success_attachments = queryset.filter(success_filter).select_related(None).only(
-        'id', 'metadata', 'ai_metadata', 'created_at'
+        'id', 'metadata', 'ai_metadata', 'created_at', 'transcription_quality'
     )
     
     for attachment in success_attachments:
@@ -204,8 +237,30 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
             attachment_day = attachment.created_at.date()
         
         if attachment_day in metrics_by_day:
+            day_metrics = metrics_by_day[attachment_day]
+            
+            # Duration
             duration_ms = _extract_duration_ms_from_attachment(attachment)
-            metrics_by_day[attachment_day]["duration_ms_total"] += duration_ms
+            day_metrics["duration_ms_total"] += duration_ms
+            
+            # Quality
+            quality = attachment.transcription_quality
+            if quality == 'correct':
+                day_metrics["quality_correct_count"] += 1
+            elif quality == 'incorrect':
+                day_metrics["quality_incorrect_count"] += 1
+            else:
+                day_metrics["quality_unrated_count"] += 1
+            
+            # Latency
+            latency_ms = _extract_latency_ms_from_attachment(attachment)
+            if latency_ms is not None:
+                day_metrics["latency_ms_list"].append(latency_ms)
+            
+            # Model
+            model_name = _extract_model_name_from_attachment(attachment)
+            if model_name:
+                day_metrics["models_used"][model_name] = day_metrics["models_used"].get(model_name, 0) + 1
 
     daily = []
     totals = {
@@ -213,6 +268,11 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
         "audio_count": 0,
         "success_count": 0,
         "failed_count": 0,
+        "quality_correct_count": 0,
+        "quality_incorrect_count": 0,
+        "quality_unrated_count": 0,
+        "latency_ms_list": [],
+        "models_used": {},
     }
 
     day_cursor = start_date
@@ -226,6 +286,17 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
             Decimal("0.01"),
             rounding=ROUND_HALF_UP,
         )
+        
+        quality_correct = int(row.get("quality_correct_count") or 0)
+        quality_incorrect = int(row.get("quality_incorrect_count") or 0)
+        quality_unrated = int(row.get("quality_unrated_count") or 0)
+        
+        latency_ms_list = row.get("latency_ms_list") or []
+        avg_latency_ms = None
+        if latency_ms_list:
+            avg_latency_ms = float(sum(latency_ms_list) / len(latency_ms_list))
+        
+        models_used = row.get("models_used") or {}
 
         daily.append(
             {
@@ -234,6 +305,11 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
                 "audio_count": audio_count,
                 "success_count": success_count,
                 "failed_count": failed_count,
+                "quality_correct_count": quality_correct,
+                "quality_incorrect_count": quality_incorrect,
+                "quality_unrated_count": quality_unrated,
+                "avg_latency_ms": avg_latency_ms,
+                "models_used": models_used,
             }
         )
 
@@ -241,12 +317,27 @@ def aggregate_transcription_metrics(queryset, start_date, end_date, tzinfo=timez
         totals["audio_count"] += audio_count
         totals["success_count"] += success_count
         totals["failed_count"] += failed_count
+        totals["quality_correct_count"] += quality_correct
+        totals["quality_incorrect_count"] += quality_incorrect
+        totals["quality_unrated_count"] += quality_unrated
+        totals["latency_ms_list"].extend(latency_ms_list)
+        
+        # Agregar modelos
+        for model_name, count in models_used.items():
+            totals["models_used"][model_name] = totals["models_used"].get(model_name, 0) + count
 
         day_cursor += timedelta(days=1)
 
     totals["minutes_total"] = float(
         totals["minutes_total"].quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     )
+    
+    # Calcular latência média geral
+    totals["avg_latency_ms"] = None
+    if totals["latency_ms_list"]:
+        totals["avg_latency_ms"] = float(sum(totals["latency_ms_list"]) / len(totals["latency_ms_list"]))
+    del totals["latency_ms_list"]  # Remover lista, manter apenas média
+    
     return daily, totals
 
 
@@ -288,6 +379,11 @@ def rebuild_transcription_metrics(tenant, start_date, end_date):
                 "audio_count": entry["audio_count"],
                 "success_count": entry["success_count"],
                 "failed_count": entry["failed_count"],
+                "quality_correct_count": entry["quality_correct_count"],
+                "quality_incorrect_count": entry["quality_incorrect_count"],
+                "quality_unrated_count": entry["quality_unrated_count"],
+                "avg_latency_ms": Decimal(str(entry["avg_latency_ms"])) if entry["avg_latency_ms"] is not None else None,
+                "models_used": entry["models_used"],
             },
         )
 

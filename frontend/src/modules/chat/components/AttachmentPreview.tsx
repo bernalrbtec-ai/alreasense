@@ -10,7 +10,7 @@
  */
 import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2 } from 'lucide-react';
+import { Download, FileText, X, Play, Pause, AlertCircle, ZoomIn, ZoomOut, Maximize2, CheckCircle, XCircle } from 'lucide-react';
 import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
 import { showWarningToast, showSuccessToast, showErrorToast } from '@/lib/toastHelper';
 import { api } from '@/lib/api';
@@ -30,6 +30,7 @@ interface Attachment {
   // ✨ Campos IA (podem ser null)
   transcription?: string | null;
   transcription_language?: string | null;
+  transcription_quality?: 'correct' | 'incorrect' | null;
   ai_summary?: string | null;
   ai_tags?: string[] | null;
   ai_metadata?: Record<string, any> | null;
@@ -46,6 +47,10 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [isTranscriptionCollapsed, setIsTranscriptionCollapsed] = useState(false);
   const [isRetryingTranscription, setIsRetryingTranscription] = useState(false);
+  const [transcriptionQuality, setTranscriptionQuality] = useState<'correct' | 'incorrect' | null>(
+    attachment.transcription_quality || null
+  );
+  const [isSubmittingQuality, setIsSubmittingQuality] = useState(false);
   
   // 🎵 Estados do player de áudio
   const [isPlaying, setIsPlaying] = useState(false);
@@ -700,7 +705,67 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
             {!isTranscriptionCollapsed && (
               <div className="text-sm text-gray-600">
                 {attachment.transcription ? (
-                  <p>{attachment.transcription}</p>
+                  <>
+                    <p className="mb-2">{attachment.transcription}</p>
+                    {/* Feedback de qualidade */}
+                    {transcriptionQuality ? (
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200">
+                        <span className="text-xs text-gray-500">
+                          Qualidade: {transcriptionQuality === 'correct' ? '✓ Correta' : '✗ Incorreta'}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200">
+                        <span className="text-xs text-gray-500">A transcrição está correta?</span>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (isSubmittingQuality) return;
+                            setIsSubmittingQuality(true);
+                            try {
+                              await api.post(`/ai/transcription/quality/${attachment.id}/`, {
+                                quality: 'correct',
+                              });
+                              setTranscriptionQuality('correct');
+                              showSuccessToast('avaliada', 'Transcrição');
+                            } catch (error) {
+                              showErrorToast('avaliar', 'Transcrição', error);
+                            } finally {
+                              setIsSubmittingQuality(false);
+                            }
+                          }}
+                          disabled={isSubmittingQuality}
+                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-green-600 hover:text-green-700 hover:bg-green-50 rounded transition-colors disabled:opacity-50"
+                        >
+                          <CheckCircle className="h-3 w-3" />
+                          Correta
+                        </button>
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (isSubmittingQuality) return;
+                            setIsSubmittingQuality(true);
+                            try {
+                              await api.post(`/ai/transcription/quality/${attachment.id}/`, {
+                                quality: 'incorrect',
+                              });
+                              setTranscriptionQuality('incorrect');
+                              showSuccessToast('avaliada', 'Transcrição');
+                            } catch (error) {
+                              showErrorToast('avaliar', 'Transcrição', error);
+                            } finally {
+                              setIsSubmittingQuality(false);
+                            }
+                          }}
+                          disabled={isSubmittingQuality}
+                          className="flex items-center gap-1 px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded transition-colors disabled:opacity-50"
+                        >
+                          <XCircle className="h-3 w-3" />
+                          Incorreta
+                        </button>
+                      </div>
+                    )}
+                  </>
                 ) : attachment.ai_metadata?.transcription?.status === 'failed' ? (
                   <div className="flex items-center justify-between gap-3">
                     <span>Falha ao transcrever.</span>

@@ -852,6 +852,11 @@ def transcription_metrics(request):
                 "audio_count": entry["audio_count"],
                 "success_count": entry["success_count"],
                 "failed_count": entry["failed_count"],
+                "quality_correct_count": entry["quality_correct_count"],
+                "quality_incorrect_count": entry["quality_incorrect_count"],
+                "quality_unrated_count": entry["quality_unrated_count"],
+                "avg_latency_ms": entry["avg_latency_ms"],
+                "models_used": entry["models_used"],
             }
             for entry in daily
         ]
@@ -873,6 +878,11 @@ def transcription_metrics(request):
                 "audio_count": item.audio_count,
                 "success_count": item.success_count,
                 "failed_count": item.failed_count,
+                "quality_correct_count": item.quality_correct_count,
+                "quality_incorrect_count": item.quality_incorrect_count,
+                "quality_unrated_count": item.quality_unrated_count,
+                "avg_latency_ms": float(item.avg_latency_ms) if item.avg_latency_ms is not None else None,
+                "models_used": item.models_used or {},
             }
             for item in metrics
         ]
@@ -881,7 +891,22 @@ def transcription_metrics(request):
             "audio_count": sum(item["audio_count"] for item in daily_series),
             "success_count": sum(item["success_count"] for item in daily_series),
             "failed_count": sum(item["failed_count"] for item in daily_series),
+            "quality_correct_count": sum(item["quality_correct_count"] for item in daily_series),
+            "quality_incorrect_count": sum(item["quality_incorrect_count"] for item in daily_series),
+            "quality_unrated_count": sum(item["quality_unrated_count"] for item in daily_series),
+            "avg_latency_ms": None,
+            "models_used": {},
         }
+        
+        # Calcular latência média geral
+        latency_values = [item["avg_latency_ms"] for item in daily_series if item["avg_latency_ms"] is not None]
+        if latency_values:
+            totals["avg_latency_ms"] = round(sum(latency_values) / len(latency_values), 2)
+        
+        # Agregar modelos
+        for item in daily_series:
+            for model_name, count in (item["models_used"] or {}).items():
+                totals["models_used"][model_name] = totals["models_used"].get(model_name, 0) + count
 
     avg_minutes_per_day = (
         round((totals["minutes_total"] / total_days), 2) if total_days > 0 else 0
@@ -905,6 +930,52 @@ def transcription_metrics(request):
             "series": daily_series,
         }
     )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember])
+def transcription_quality_feedback(request, attachment_id):
+    """Endpoint para feedback de qualidade da transcrição."""
+    from apps.chat.models import MessageAttachment
+    
+    try:
+        attachment = MessageAttachment.objects.get(
+            id=attachment_id,
+            tenant=request.user.tenant
+        )
+    except MessageAttachment.DoesNotExist:
+        return Response(
+            {"error": "Attachment não encontrado."},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+    
+    if not attachment.transcription:
+        return Response(
+            {"error": "Este attachment não possui transcrição."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    
+    quality = request.data.get("quality")
+    if quality not in ["correct", "incorrect"]:
+        return Response(
+            {"error": "quality deve ser 'correct' ou 'incorrect'."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    
+    attachment.transcription_quality = quality
+    attachment.transcription_quality_feedback_at = timezone.now()
+    attachment.transcription_quality_feedback_by = request.user
+    attachment.save(update_fields=[
+        "transcription_quality",
+        "transcription_quality_feedback_at",
+        "transcription_quality_feedback_by",
+    ])
+    
+    return Response({
+        "status": "success",
+        "attachment_id": str(attachment.id),
+        "quality": quality,
+    })
 
 
 @api_view(['GET'])

@@ -172,6 +172,11 @@ class AiTranscriptionDailyMetric(models.Model):
     audio_count = models.IntegerField(default=0)
     success_count = models.IntegerField(default=0)
     failed_count = models.IntegerField(default=0)
+    quality_correct_count = models.IntegerField(default=0)
+    quality_incorrect_count = models.IntegerField(default=0)
+    quality_unrated_count = models.IntegerField(default=0)
+    avg_latency_ms = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    models_used = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

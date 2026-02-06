@@ -115,6 +115,7 @@ export interface MessageAttachment {
   // ✨ Campos IA
   transcription?: string | null;
   transcription_language?: string | null;
+  transcription_quality?: 'correct' | 'incorrect' | null;
   ai_summary?: string | null;
   ai_tags?: string[] | null;
   ai_sentiment?: 'positive' | 'neutral' | 'negative' | null;

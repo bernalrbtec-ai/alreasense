@@ -7,16 +7,25 @@ import {
   XCircle,
   CheckCircle,
   Database,
+  TrendingUp,
+  Zap,
+  Cpu,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   ResponsiveContainer,
   LineChart,
   Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
   CartesianGrid,
+  Legend,
+  PieChart,
+  Pie,
+  Cell,
 } from 'recharts'
 import { Card } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -29,6 +38,11 @@ interface MetricSeriesItem {
   audio_count: number
   success_count: number
   failed_count: number
+  quality_correct_count: number
+  quality_incorrect_count: number
+  quality_unrated_count: number
+  avg_latency_ms: number | null
+  models_used: Record<string, number>
 }
 
 interface MetricsResponse {
@@ -43,6 +57,11 @@ interface MetricsResponse {
     audio_count: number
     success_count: number
     failed_count: number
+    quality_correct_count: number
+    quality_incorrect_count: number
+    quality_unrated_count: number
+    avg_latency_ms: number | null
+    models_used: Record<string, number>
   }
   series: MetricSeriesItem[]
 }
@@ -257,6 +276,84 @@ export default function ReportsPage() {
           </Card>
         </div>
 
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">% Correta</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {metrics?.totals
+                    ? (() => {
+                        const total = metrics.totals.quality_correct_count + 
+                                     metrics.totals.quality_incorrect_count + 
+                                     metrics.totals.quality_unrated_count
+                        if (total === 0) return '0%'
+                        const percent = (metrics.totals.quality_correct_count / total) * 100
+                        return `${percent.toFixed(1)}%`
+                      })()
+                    : '0%'}
+                </p>
+              </div>
+              <TrendingUp className="h-8 w-8 text-green-500" />
+            </div>
+          </Card>
+          <Card>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">% Não avaliada</p>
+                <p className="text-2xl font-bold text-yellow-600">
+                  {metrics?.totals
+                    ? (() => {
+                        const total = metrics.totals.quality_correct_count + 
+                                     metrics.totals.quality_incorrect_count + 
+                                     metrics.totals.quality_unrated_count
+                        if (total === 0) return '0%'
+                        const percent = (metrics.totals.quality_unrated_count / total) * 100
+                        return `${percent.toFixed(1)}%`
+                      })()
+                    : '0%'}
+                </p>
+              </div>
+              <Clock className="h-8 w-8 text-yellow-500" />
+            </div>
+          </Card>
+          <Card>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Latência média</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {metrics?.totals.avg_latency_ms 
+                    ? `${metrics.totals.avg_latency_ms.toFixed(0)}ms`
+                    : 'N/A'}
+                </p>
+              </div>
+              <Zap className="h-8 w-8 text-blue-500" />
+            </div>
+          </Card>
+          <Card>
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600 dark:text-gray-400">Modelos usados</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  {metrics?.totals.models_used 
+                    ? Object.keys(metrics.totals.models_used).length
+                    : 0}
+                </p>
+                {metrics?.totals.models_used && Object.keys(metrics.totals.models_used).length > 0 && (
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    {Object.entries(metrics.totals.models_used)
+                      .sort(([, a], [, b]) => b - a)
+                      .slice(0, 2)
+                      .map(([model]) => model)
+                      .join(', ')}
+                  </p>
+                )}
+              </div>
+              <Cpu className="h-8 w-8 text-purple-500" />
+            </div>
+          </Card>
+        </div>
+
         <Card>
           <div className="p-6">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
@@ -281,6 +378,55 @@ export default function ReportsPage() {
             </div>
           </div>
         </Card>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card>
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Qualidade da transcrição por dia
+              </h2>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="quality_correct_count" stackId="quality" fill="#10b981" name="Correta" />
+                    <Bar dataKey="quality_incorrect_count" stackId="quality" fill="#ef4444" name="Incorreta" />
+                    <Bar dataKey="quality_unrated_count" stackId="quality" fill="#f59e0b" name="Não avaliada" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <div className="p-6">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                Latência média por dia
+              </h2>
+              <div className="h-80">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={chartData.filter(d => d.avg_latency_ms !== null)}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="date" />
+                    <YAxis />
+                    <Tooltip formatter={(value: number) => `${value.toFixed(0)}ms`} />
+                    <Line
+                      type="monotone"
+                      dataKey="avg_latency_ms"
+                      stroke="#3b82f6"
+                      strokeWidth={2}
+                      dot={false}
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </Card>
+        </div>
       </div>
     </PermissionGuard>
   )

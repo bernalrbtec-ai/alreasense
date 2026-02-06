@@ -15,5 +15,6 @@ urlpatterns = [
     path('gateway/audit/', views.gateway_audit_history, name='gateway-audit-history'),
     path('transcription/metrics/', views.transcription_metrics, name='transcription-metrics'),
     path('transcription/metrics/rebuild/', views.rebuild_transcription_metrics_endpoint, name='rebuild-transcription-metrics'),
+    path('transcription/quality/<uuid:attachment_id>/', views.transcription_quality_feedback, name='transcription-quality-feedback'),
     path('transcription/debug/', views.debug_transcription_attachments, name='debug-transcription-attachments'),
 ]

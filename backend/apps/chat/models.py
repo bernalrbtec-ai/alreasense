@@ -441,6 +441,32 @@ class MessageAttachment(models.Model):
         verbose_name='Idioma da Transcrição',
         help_text='Código do idioma (pt-BR, en-US, etc)'
     )
+    transcription_quality = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        choices=[
+            ('correct', 'Correta'),
+            ('incorrect', 'Incorreta'),
+        ],
+        verbose_name='Qualidade da Transcrição',
+        help_text='Feedback do usuário sobre a qualidade da transcrição'
+    )
+    transcription_quality_feedback_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Feedback de Qualidade em',
+        help_text='Quando o usuário forneceu feedback de qualidade'
+    )
+    transcription_quality_feedback_by = models.ForeignKey(
+        'authn.User',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='transcription_quality_feedbacks',
+        verbose_name='Feedback de Qualidade por',
+        help_text='Usuário que forneceu feedback de qualidade'
+    )
     ai_summary = models.TextField(
         null=True,
         blank=True,
