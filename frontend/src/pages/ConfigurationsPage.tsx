@@ -2816,215 +2816,182 @@ export default function ConfigurationsPage() {
 
       {isModelTestModalOpen && aiSettings && (
         <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+          <div className="flex min-h-full items-center justify-center p-3">
             <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" onClick={handleCloseModelTestModal} />
 
-            <div className="relative transform overflow-hidden rounded-lg bg-white text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl">
-              <div className="bg-white px-4 pb-4 pt-5 sm:p-6 sm:pb-4">
-                <div className="flex items-center mb-4">
-                  <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <MessageSquare className="h-6 w-6 text-blue-600" />
+            <div className="relative flex flex-col rounded-lg bg-white text-left shadow-xl w-full max-w-6xl max-h-[94vh] overflow-hidden">
+              <div className="flex items-center justify-between shrink-0 px-4 py-3 border-b border-gray-200 bg-white">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-100">
+                    <MessageSquare className="h-5 w-5 text-blue-600" />
                   </div>
-                  <div className="ml-3">
-                    <h3 className="text-lg font-medium leading-6 text-gray-900">
-                      Testar IA
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      Modelo atual: {aiSettings.agent_model}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="mb-4 space-y-3">
                   <div>
-                    <Label htmlFor="model_test_select">Modelo para teste</Label>
-                    <select
-                      id="model_test_select"
-                      value={modelTestSelectedModel}
-                      onChange={(e) => setModelTestSelectedModel(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
-                    >
-                      {aiModelOptions.length === 0 ? (
-                        <option value="">Nenhum modelo disponível</option>
-                      ) : (
-                        aiModelOptions.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))
-                      )}
-                    </select>
+                    <h3 className="text-lg font-medium text-gray-900">Testar IA</h3>
+                    <p className="text-xs text-gray-500">Modelo atual: {aiSettings.agent_model}</p>
                   </div>
-                  
-                  <div>
-                    <Label htmlFor="model_test_conversation">Conversa (opcional - para enviar resposta ao chat)</Label>
-                    <select
-                      id="model_test_conversation"
-                      value={modelTestConversationId}
-                      onChange={(e) => setModelTestConversationId(e.target.value)}
-                      className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                    >
-                      <option value="">Selecione uma conversa...</option>
-                      {modelTestConversations.map((conv) => (
-                        <option key={conv.id} value={conv.id}>
-                          {conv.contact_name} ({conv.contact_phone})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  {modelTestConversationId && (
-                    <div className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id="model_test_send_to_chat"
-                        checked={modelTestSendToChat}
-                        onChange={(e) => setModelTestSendToChat(e.target.checked)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <Label htmlFor="model_test_send_to_chat" className="ml-2 text-sm text-gray-700">
-                        Enviar resposta da IA diretamente ao chat
-                      </Label>
-                    </div>
-                  )}
                 </div>
-
-                <details className="mb-4 rounded-lg border border-gray-200 bg-gray-50/50">
-                  <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-gray-700 select-none">
-                    Prompt do sistema (opcional)
-                  </summary>
-                  <div className="px-3 pb-3 pt-0">
-                    <textarea
-                      id="model_test_prompt"
-                      value={modelTestPrompt}
-                      onChange={(e) => setModelTestPrompt(e.target.value)}
-                      placeholder="Ex.: Você é um assistente... Deixe vazio para usar o prompt padrão do n8n."
-                      maxLength={MAX_PROMPT_LENGTH}
-                      rows={4}
-                      className="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    />
-                    <p className="mt-1 text-xs text-gray-500">
-                      {modelTestPrompt.length} / {MAX_PROMPT_LENGTH} caracteres
-                    </p>
-                  </div>
-                </details>
-
-                <div className="mb-4">
-                  <Label className="text-sm text-gray-700">Conhecimento RAG (opcional)</Label>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <input
-                      ref={modelTestRagInputRef}
-                      type="file"
-                      accept=".txt,.md"
-                      onChange={handleModelTestRagFileChange}
-                      disabled={modelTestRagLoading}
-                      className="block w-full max-w-xs text-sm text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
-                    />
-                    {modelTestRagItems.length > 0 && (
-                      <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700">
-                        {modelTestRagItems[0].title}
-                        <button
-                          type="button"
-                          onClick={handleRemoveModelTestRag}
-                          className="rounded p-0.5 hover:bg-gray-200 text-gray-500 hover:text-gray-700"
-                          title="Remover"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
-                    )}
-                    {modelTestRagLoading && <span className="text-xs text-gray-500">Lendo arquivo...</span>}
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">.txt ou .md, até 2MB. Conteúdo será enviado como contexto no teste.</p>
-                </div>
-
-                <div className="border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">
-                  {modelTestMessages.length === 0 ? (
-                    <p className="text-sm text-gray-500">Envie uma mensagem para testar a IA.</p>
-                  ) : (
-                    <div className="space-y-3">
-                      {modelTestMessages.map((item, index) => (
-                        <div
-                          key={`${item.role}-${index}`}
-                          className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}
-                        >
-                          <div className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                            item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800'
-                          }`}>
-                            <pre className="whitespace-pre-wrap font-sans">{item.content}</pre>
-                          </div>
-                        </div>
-                      ))}
-                      {modelTestLoading && (
-                        <div className="text-xs text-gray-500">Consultando IA...</div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                {(modelTestRequest || modelTestResponse || modelTestRequestId || modelTestTraceId) && (
-                  <div className="mt-4 space-y-3">
-                    <div className="rounded-lg border border-gray-200 p-3 text-xs text-gray-700 bg-gray-50">
-                      <div className="flex flex-wrap gap-3">
-                        <span>Status: {modelTestResponse?.status || (modelTestError ? 'error' : 'success')}</span>
-                        <span>Request ID: {modelTestRequestId || '-'}</span>
-                        <span>Trace ID: {modelTestTraceId || '-'}</span>
-                        <span>Modelo: {modelTestResponse?.meta?.model || modelTestResponse?.model || '-'}</span>
-                        <span>Latência: {modelTestResponse?.meta?.latency_ms ?? '-'}</span>
-                        <span>RAG hits: {modelTestResponse?.meta?.rag_hits ?? '-'}</span>
-                        <span>Handoff: {String(modelTestResponse?.handoff ?? false)}</span>
-                        <span>Motivo: {modelTestResponse?.handoff_reason || '-'}</span>
-                      </div>
-                    </div>
-
-                    {modelTestError && (
-                      <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-700">
-                        {modelTestError}
-                      </div>
-                    )}
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Request (mascarado)</p>
-                        <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
-                          {modelTestRequest ? JSON.stringify(modelTestRequest, null, 2) : 'Sem request disponível.'}
-                        </pre>
-                      </div>
-                      <div>
-                        <p className="text-xs text-gray-500 mb-1">Response (mascarado)</p>
-                        <pre className="rounded-lg border border-gray-200 bg-white p-3 text-xs overflow-auto max-h-56 whitespace-pre-wrap">
-                          {modelTestResponse ? JSON.stringify(modelTestResponse, null, 2) : 'Sem response disponível.'}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <div className="mt-4 flex gap-2">
-                  <textarea
-                    value={modelTestInput}
-                    onChange={(e) => setModelTestInput(e.target.value)}
-                    className="flex-1 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                    rows={2}
-                    placeholder="Digite uma mensagem para testar a IA..."
-                  />
-                  <Button
-                    type="button"
-                    onClick={handleSendModelTest}
-                    disabled={!modelTestInput.trim() || modelTestLoading}
-                    className="self-end"
-                  >
-                    <Send className="h-4 w-4 mr-2" />
-                    Enviar
-                  </Button>
-                </div>
-              </div>
-
-              <div className="bg-gray-50 px-4 py-3 sm:flex sm:flex-row-reverse sm:px-6 gap-2">
-                <Button variant="outline" onClick={handleCloseModelTestModal} className="w-full sm:w-auto">
+                <Button variant="outline" size="sm" onClick={handleCloseModelTestModal}>
                   Fechar
                 </Button>
+              </div>
+
+              <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 min-h-0 overflow-auto">
+                {/* Coluna esquerda: configuração + chat + input */}
+                <div className="flex flex-col gap-3 min-h-0">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <Label htmlFor="model_test_select" className="text-xs">Modelo</Label>
+                      <select
+                        id="model_test_select"
+                        value={modelTestSelectedModel}
+                        onChange={(e) => setModelTestSelectedModel(e.target.value)}
+                        className="mt-0.5 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
+                        disabled={!aiSettings.ai_enabled || aiModelOptions.length === 0}
+                      >
+                        {aiModelOptions.length === 0 ? (
+                          <option value="">Nenhum modelo</option>
+                        ) : (
+                          aiModelOptions.map((option) => (
+                            <option key={option} value={option}>{option}</option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <Label htmlFor="model_test_conversation" className="text-xs">Conversa (opcional)</Label>
+                      <select
+                        id="model_test_conversation"
+                        value={modelTestConversationId}
+                        onChange={(e) => setModelTestConversationId(e.target.value)}
+                        className="mt-0.5 block w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione...</option>
+                        {modelTestConversations.map((conv) => (
+                          <option key={conv.id} value={conv.id}>{conv.contact_name} ({conv.contact_phone})</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {modelTestConversationId && (
+                    <label className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={modelTestSendToChat}
+                        onChange={(e) => setModelTestSendToChat(e.target.checked)}
+                        className="h-3.5 w-3.5 text-blue-600 border-gray-300 rounded"
+                      />
+                      Enviar resposta ao chat
+                    </label>
+                  )}
+
+                  <details className="rounded border border-gray-200 bg-gray-50/50 shrink-0">
+                    <summary className="cursor-pointer px-2 py-1.5 text-sm font-medium text-gray-700">Prompt do sistema (opcional)</summary>
+                    <div className="px-2 pb-2">
+                      <textarea
+                        id="model_test_prompt"
+                        value={modelTestPrompt}
+                        onChange={(e) => setModelTestPrompt(e.target.value)}
+                        placeholder="Ex.: Você é um assistente..."
+                        maxLength={MAX_PROMPT_LENGTH}
+                        rows={2}
+                        className="mt-1 block w-full rounded border border-gray-300 px-2 py-1 text-xs"
+                      />
+                      <p className="text-xs text-gray-500">{modelTestPrompt.length} / {MAX_PROMPT_LENGTH}</p>
+                    </div>
+                  </details>
+
+                  <div className="shrink-0">
+                    <Label className="text-xs text-gray-700">RAG (opcional)</Label>
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                      <input
+                        ref={modelTestRagInputRef}
+                        type="file"
+                        accept=".txt,.md"
+                        onChange={handleModelTestRagFileChange}
+                        disabled={modelTestRagLoading}
+                        className="text-xs file:mr-2 file:rounded file:border-0 file:bg-blue-50 file:px-2 file:py-1 file:text-xs"
+                      />
+                      {modelTestRagItems.length > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs">
+                          {modelTestRagItems[0].title}
+                          <button type="button" onClick={handleRemoveModelTestRag} className="rounded hover:bg-gray-200 p-0.5" title="Remover"><X className="h-3 w-3" /></button>
+                        </span>
+                      )}
+                      {modelTestRagLoading && <span className="text-xs text-gray-500">Lendo...</span>}
+                    </div>
+                  </div>
+
+                  <div className="flex-1 min-h-[140px] border border-gray-200 rounded-lg p-3 overflow-y-auto bg-gray-50 flex flex-col gap-2">
+                    {modelTestMessages.length === 0 ? (
+                      <p className="text-sm text-gray-500">Envie uma mensagem para testar.</p>
+                    ) : (
+                      modelTestMessages.map((item, index) => (
+                        <div key={`${item.role}-${index}`} className={`flex ${item.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-[85%] rounded-lg px-2 py-1.5 text-sm ${item.role === 'user' ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-800'}`}>
+                            <pre className="whitespace-pre-wrap font-sans text-xs">{item.content}</pre>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                    {modelTestLoading && <span className="text-xs text-gray-500">Consultando IA...</span>}
+                  </div>
+
+                  <div className="flex gap-2 shrink-0">
+                    <textarea
+                      value={modelTestInput}
+                      onChange={(e) => setModelTestInput(e.target.value)}
+                      className="flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm min-h-[60px] focus:border-blue-500 focus:ring-blue-500"
+                      rows={2}
+                      placeholder="Digite uma mensagem..."
+                    />
+                    <Button type="button" onClick={handleSendModelTest} disabled={!modelTestInput.trim() || modelTestLoading} className="self-end shrink-0">
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Coluna direita: auditoria + request/response */}
+                <div className="flex flex-col gap-3 min-h-0">
+                  {(modelTestRequest || modelTestResponse || modelTestRequestId || modelTestTraceId) ? (
+                    <>
+                      <div className="rounded-lg border border-gray-200 bg-gray-50 p-2 text-xs text-gray-700 shrink-0">
+                        <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                          <span><strong>Status:</strong> {modelTestResponse?.status || (modelTestError ? 'error' : 'success')}</span>
+                          <span><strong>Modelo:</strong> {modelTestResponse?.meta?.model || modelTestResponse?.model || '-'}</span>
+                          <span><strong>Request ID:</strong> <span className="truncate block" title={modelTestRequestId}>{modelTestRequestId || '-'}</span></span>
+                          <span><strong>Trace ID:</strong> <span className="truncate block" title={modelTestTraceId}>{modelTestTraceId || '-'}</span></span>
+                          <span><strong>Latência:</strong> {typeof modelTestResponse?.meta?.latency_ms === 'number' && modelTestResponse.meta.latency_ms > 1e9
+                            ? `${(modelTestResponse.meta.latency_ms / 1e6).toFixed(0)} ms`
+                            : (modelTestResponse?.meta?.latency_ms ?? '-')}</span>
+                          <span><strong>RAG hits:</strong> {modelTestResponse?.meta?.rag_hits ?? '-'}</span>
+                          <span><strong>Handoff:</strong> {String(modelTestResponse?.handoff ?? false)}</span>
+                          <span><strong>Motivo:</strong> {modelTestResponse?.handoff_reason || '-'}</span>
+                        </div>
+                      </div>
+                      {modelTestError && (
+                        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700 shrink-0">{modelTestError}</div>
+                      )}
+                      <div className="flex-1 grid grid-cols-2 gap-2 min-h-0">
+                        <div className="flex flex-col min-h-0">
+                          <p className="text-xs text-gray-500 mb-0.5 shrink-0">Request (mascarado)</p>
+                          <pre className="flex-1 rounded border border-gray-200 bg-white p-2 text-xs overflow-auto min-h-0 whitespace-pre-wrap">
+                            {modelTestRequest ? JSON.stringify(modelTestRequest, null, 2) : 'Sem request.'}
+                          </pre>
+                        </div>
+                        <div className="flex flex-col min-h-0">
+                          <p className="text-xs text-gray-500 mb-0.5 shrink-0">Response (mascarado)</p>
+                          <pre className="flex-1 rounded border border-gray-200 bg-white p-2 text-xs overflow-auto min-h-0 whitespace-pre-wrap">
+                            {modelTestResponse ? JSON.stringify(modelTestResponse, null, 2) : 'Sem response.'}
+                          </pre>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex-1 flex items-center justify-center rounded-lg border border-dashed border-gray-300 bg-gray-50/50 text-sm text-gray-500">
+                      Envie uma mensagem para ver auditoria e payloads aqui.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
