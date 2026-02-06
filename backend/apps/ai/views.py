@@ -480,6 +480,26 @@ def gateway_test(request):
     masked_request = _mask_payload(payload)
     masked_response = _mask_payload(response_payload)
 
+    raw_latency = meta.get("latency_ms") if isinstance(meta, dict) else None
+    try:
+        if raw_latency is not None:
+            val = int(float(raw_latency))
+            latency_ms_save = max(0, min(val, 2147483647))
+        else:
+            latency_ms_save = latency_ms
+    except (TypeError, ValueError):
+        latency_ms_save = latency_ms
+
+    raw_rag_hits = rag_hits
+    try:
+        if raw_rag_hits is not None:
+            val = int(float(raw_rag_hits))
+            rag_hits_save = max(0, min(val, 2147483647))
+        else:
+            rag_hits_save = None
+    except (TypeError, ValueError):
+        rag_hits_save = None
+
     AiGatewayAudit.objects.create(
         tenant=request.user.tenant,
         conversation_id=conversation_id,
@@ -491,8 +511,8 @@ def gateway_test(request):
         trace_id=trace_id,
         status=status_value,
         model_name=model_name or "",
-        latency_ms=meta.get("latency_ms") if isinstance(meta, dict) else latency_ms,
-        rag_hits=rag_hits,
+        latency_ms=latency_ms_save,
+        rag_hits=rag_hits_save,
         prompt_version=prompt_version or "",
         input_summary=_safe_summary(message_text),
         output_summary=_safe_summary(reply_text),

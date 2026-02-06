@@ -1,0 +1,77 @@
+{
+  "name": "Sense - Gateway IA (teste com prompt e RAG)",
+  "nodes": [
+    {
+      "id": "webhook-sense-ia",
+      "name": "Webhook Sense IA",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [200, 300],
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "sense-ia-gateway",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "webhookId": "sense-ia-gateway"
+    },
+    {
+      "id": "code-montar-prompt",
+      "name": "Montar prompt e modelo",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [420, 300],
+      "parameters": {
+        "jsCode": "// Payload enviado pelo Sense (backend)\nconst raw = $input.first().json;\nconst body = raw.body && typeof raw.body === 'object' ? raw.body : raw;\n\nconst promptFromBody = body.prompt || (body.metadata && body.metadata.prompt) || '';\nconst systemPrompt = (promptFromBody && String(promptFromBody).trim()) ? String(promptFromBody).trim() : 'Você é um assistente prestativo.';\nconst knowledgeItems = Array.isArray(body.knowledge_items) ? body.knowledge_items : [];\nconst context = knowledgeItems.map(i => `## ${i.title || 'Documento'}\\n${i.content || ''}`).join('\\n\\n');\nconst userMessage = (body.message && body.message.content) ? String(body.message.content) : '';\nconst fullPrompt = [\n  systemPrompt,\n  context ? `Contexto para consulta:\\n${context}` : '',\n  userMessage ? `Mensagem do usuário: ${userMessage}` : ''\n].filter(Boolean).join('\\n\\n');\n\nconst model = (body.metadata && body.metadata.model) ? String(body.metadata.model).trim() : (body.model ? String(body.model).trim() : 'llama3.2');\n\nreturn [{ json: { fullPrompt, model, knowledgeItemsCount: knowledgeItems.length } }];\n"
+      }
+    },
+    {
+      "id": "http-ollama",
+      "name": "Chamar Ollama",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [640, 300],
+      "parameters": {
+        "method": "POST",
+        "url": "=http://localhost:11434/api/generate",
+        "sendBody": true,
+        "contentType": "json",
+        "specifyBody": "json",
+        "jsonBody": "={{ { model: $json.model, prompt: $json.fullPrompt, stream: false } }}"
+      },
+      "notesInFlow": true,
+      "notes": "Use sua credencial Ollama/API aqui e ajuste a URL (ex.: base da credencial + /api/generate)"
+    },
+    {
+      "id": "code-formatar-resposta",
+      "name": "Formatar resposta para o Sense",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [860, 300],
+      "parameters": {
+        "jsCode": "// Resposta do Ollama: { response, model, ... }\nconst ollama = $input.first().json;\nconst prev = $('Montar prompt e modelo').first().json;\nconst replyText = (ollama.response && String(ollama.response).trim()) ? String(ollama.response).trim() : '(Sem resposta do modelo.)';\n\nreturn [{\n  json: {\n    reply_text: replyText,\n    status: 'success',\n    meta: {\n      model: ollama.model || prev.model,\n      latency_ms: ollama.eval_duration ? Math.round(ollama.eval_duration * 1000) : 0,\n      rag_hits: prev.knowledgeItemsCount || 0\n    }\n  }\n}];\n"
+      }
+    }
+  ],
+  "connections": {
+    "Webhook Sense IA": {
+      "main": [
+        [{ "node": "Montar prompt e modelo", "type": "main", "index": 0 }]
+      ]
+    },
+    "Montar prompt e modelo": {
+      "main": [
+        [{ "node": "Chamar Ollama", "type": "main", "index": 0 }]
+      ]
+    },
+    "Chamar Ollama": {
+      "main": [
+        [{ "node": "Formatar resposta para o Sense", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null,
+  "meta": { "templateCredsSetupCompleted": false },
+  "pinData": {}
+}

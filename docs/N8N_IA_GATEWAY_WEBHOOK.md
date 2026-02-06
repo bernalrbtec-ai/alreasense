@@ -137,13 +137,82 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
 - **prompt** (string, opcional): quando presente, use como prompt de sistema/instrução no teste.
 - **knowledge_items** (array, opcional): lista de `{ title, content, source }` para contexto RAG no teste; injete no contexto do modelo (ex.: concatenar ao prompt ou usar em passo de RAG).
 
-### 2. Processar com IA/RAG
+### 2. Resposta obrigatória do webhook
 
-- Buscar contexto relevante (RAG)
-- Chamar modelo de IA
-- Gerar resposta
+O Sense espera que o n8n **responda à requisição HTTP** (o webhook) com um JSON no corpo da resposta. O timeout do Sense é 10 segundos; responda dentro desse tempo.
 
-### 3. Enviar Resposta ao Chat
+**Formato obrigatório da resposta (JSON):**
+
+| Campo        | Obrigatório | Descrição |
+|-------------|-------------|-----------|
+| `reply_text` ou `text` | Sim* | Texto da resposta da IA. O Sense usa `reply_text` primeiro; se não existir, usa `text`. |
+| `status`    | Não  | Use `"success"` em caso de sucesso. Se for outro valor ou `"error"`, o Sense trata como falha e pode retornar 400. |
+| `meta`      | Não  | Objeto com `model`, `latency_ms`, `rag_hits`, `prompt_version` (todos opcionais). **Se enviar `meta`, deve ser um objeto** (nunca `null`), senão o Sense pode falhar. |
+
+\* Se não houver `reply_text` nem `text`, o Sense considera resposta vazia (pode não enviar ao chat).
+
+**Exemplo de resposta de sucesso:**
+
+```json
+{
+  "reply_text": "Olá! Como posso ajudar?",
+  "status": "success",
+  "meta": {
+    "model": "llama-3.1-8b",
+    "latency_ms": 1200,
+    "rag_hits": 2,
+    "prompt_version": "v1"
+  }
+}
+```
+
+**Exemplo de resposta de erro (Sense trata como falha e retorna 400):**
+
+```json
+{
+  "status": "error",
+  "error_code": "MODEL_ERROR",
+  "error_message": "Modelo indisponível"
+}
+```
+
+### 3. Processar com IA/RAG
+
+- Se existir `payload.prompt`, use como **instrução de sistema** do modelo.
+- Se existir `payload.knowledge_items`, monte o **contexto** (ex.: concatenar `title` + `content` de cada item) e inclua no prompt ou em passo de RAG.
+- Mensagem do usuário: `payload.message.content`.
+- Chame o modelo de IA (Ollama, OpenAI, etc.) e obtenha o texto de resposta.
+
+**Montagem sugerida do prompt enviado ao modelo:**
+
+1. **System:** `payload.prompt` (se existir), senão um texto padrão (ex.: "Você é um assistente prestativo.").
+2. **Contexto RAG:** se `payload.knowledge_items` existir, para cada item: `## ${item.title}\n${item.content}` e concatene com quebras de linha.
+3. **Usuário:** `payload.message.content`.
+
+Exemplo em JavaScript (para usar em nó **Code** do n8n):
+
+```javascript
+const body = $input.first().json;
+const systemPrompt = body.prompt && body.prompt.trim() ? body.prompt.trim() : 'Você é um assistente prestativo.';
+const knowledgeItems = body.knowledge_items || [];
+const context = knowledgeItems.map(i => `## ${i.title}\n${i.content}`).join('\n\n');
+const userMessage = (body.message && body.message.content) ? body.message.content : '';
+const fullPrompt = [
+  systemPrompt,
+  context ? `Contexto para consulta:\n${context}` : '',
+  `Mensagem do usuário: ${userMessage}`
+].filter(Boolean).join('\n\n');
+
+const model = (body.metadata && body.metadata.model) ? body.metadata.model : 'llama-3.1-8b';
+// Use fullPrompt e model na chamada ao Ollama/OpenAI; depois devolva:
+// { reply_text: "...", status: "success", meta: { model, latency_ms } }
+```
+
+**Importante:** o nó **Webhook** do n8n deve estar configurado para **Responder quando o último nó terminar** (Response Mode: "When Last Node Finishes"). O último nó do fluxo deve devolver um único item cujo JSON seja exatamente o formato de resposta obrigatória (ex.: um nó **Code** que monta `{ reply_text, status, meta }` e retorna). Assim o Sense recebe a resposta na mesma chamada HTTP ao webhook.
+
+### 4. Enviar Resposta ao Chat (produção)
+
+Quando o Sense quiser enviar a resposta ao chat (ex.: teste com "Enviar resposta ao chat"), ele usa o `reply_text` que você devolveu e chama o endpoint `/api/ai/gateway/reply/` internamente. Você **não** precisa chamar esse endpoint a partir do n8n no fluxo de teste; basta devolver o JSON com `reply_text`. Se no futuro quiser que o n8n envie direto ao chat (ex.: em produção com outra ação), use:
 
 **HTTP Request Node:**
 
@@ -170,7 +239,7 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
   }
   ```
 
-### 4. Resposta Esperada
+### 5. Resposta Esperada do /api/ai/gateway/reply/
 
 ```json
 {
@@ -179,6 +248,22 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
   "conversation_id": "uuid"
 }
 ```
+
+## Workflow n8n pronto (Gateway IA – teste com prompt e RAG)
+
+Há um workflow de exemplo que você pode importar no n8n: **[n8n_workflow_ia_gateway.json](n8n_workflow_ia_gateway.json)**.
+
+Ele tem 4 nós:
+
+1. **Webhook Sense IA** (POST) – recebe o payload do Sense (message, prompt, knowledge_items, metadata). Responde quando o último nó terminar.
+2. **Montar prompt e modelo** (Code) – monta o prompt (system + contexto RAG + mensagem do usuário) e devolve `fullPrompt`, `model` e `knowledgeItemsCount`.
+3. **Chamar Ollama** (HTTP Request) – POST para `/api/generate` no Ollama. **Use aqui a sua credencial já salva no n8n** (Ollama ou HTTP Request com a URL do seu Ollama).
+4. **Formatar resposta para o Sense** (Code) – monta o JSON que o Sense espera: `reply_text`, `status: "success"`, `meta` (model, latency_ms, rag_hits).
+
+**Configuração após importar:**
+
+- No nó **Chamar Ollama**: selecione a sua credencial (ex.: credencial Ollama ou HTTP com URL do Ollama) e ajuste a **URL** para o endpoint do Ollama (ex.: `http://localhost:11434/api/generate` ou a base da credencial + `/api/generate`). Não é necessário usar variável de ambiente; a URL pode vir da própria credencial.
+- O **path do Webhook** (ex.: `sense-ia-gateway`) deve bater com a URL que você configurar no Sense em **Configurações > Agentes IA > Webhook do Gateway IA** (a URL completa que o Sense chama).
 
 ## Variáveis de Ambiente N8N
 
