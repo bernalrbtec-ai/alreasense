@@ -326,6 +326,12 @@ export default function ConfigurationsPage() {
   const [modelTestConversationId, setModelTestConversationId] = useState<string>('')
   const [modelTestConversations, setModelTestConversations] = useState<Array<{ id: string; contact_name: string; contact_phone: string }>>([])
   const [modelTestSendToChat, setModelTestSendToChat] = useState(false)
+  const [modelTestPrompt, setModelTestPrompt] = useState('')
+  const [modelTestRagItems, setModelTestRagItems] = useState<Array<{ title: string; content: string }>>([])
+  const [modelTestRagLoading, setModelTestRagLoading] = useState(false)
+  const modelTestRagInputRef = useRef<HTMLInputElement>(null)
+  const MAX_PROMPT_LENGTH = 10000
+  const MAX_RAG_FILE_SIZE = 2 * 1024 * 1024 // 2MB
   const [gatewayAuditItems, setGatewayAuditItems] = useState<GatewayAuditItem[]>([])
   const [gatewayAuditLoading, setGatewayAuditLoading] = useState(false)
   const [gatewayAuditError, setGatewayAuditError] = useState<string | null>(null)
@@ -770,6 +776,10 @@ export default function ConfigurationsPage() {
     setModelTestError(null)
     setModelTestConversationId('')
     setModelTestSendToChat(false)
+    setModelTestPrompt('')
+    setModelTestRagItems([])
+    setModelTestRagLoading(false)
+    if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
     if (aiSettings?.agent_model && aiModelOptions.includes(aiSettings.agent_model)) {
       setModelTestSelectedModel(aiSettings.agent_model)
     } else if (aiModelOptions.length > 0) {
@@ -808,6 +818,50 @@ export default function ConfigurationsPage() {
     setModelTestError(null)
     setModelTestConversationId('')
     setModelTestSendToChat(false)
+    setModelTestPrompt('')
+    setModelTestRagItems([])
+    setModelTestRagLoading(false)
+    if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
+  }
+
+  const handleModelTestRagFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const name = file.name.toLowerCase()
+    if (!name.endsWith('.txt') && !name.endsWith('.md')) {
+      showErrorToast('Use um arquivo .txt ou .md')
+      e.target.value = ''
+      return
+    }
+    if (file.size > MAX_RAG_FILE_SIZE) {
+      showErrorToast('Arquivo muito grande. Máximo 2MB.')
+      e.target.value = ''
+      return
+    }
+    setModelTestRagLoading(true)
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const content = typeof reader.result === 'string' ? reader.result : ''
+        setModelTestRagItems([{ title: file.name, content }])
+      } catch {
+        showErrorToast('Erro ao ler o arquivo.')
+        setModelTestRagItems([])
+      }
+      setModelTestRagLoading(false)
+      e.target.value = ''
+    }
+    reader.onerror = () => {
+      showErrorToast('Erro ao ler o arquivo.')
+      setModelTestRagLoading(false)
+      e.target.value = ''
+    }
+    reader.readAsText(file, 'UTF-8')
+  }
+
+  const handleRemoveModelTestRag = () => {
+    setModelTestRagItems([])
+    if (modelTestRagInputRef.current) modelTestRagInputRef.current.value = ''
   }
 
   const handleSendModelTest = async () => {
@@ -847,6 +901,16 @@ export default function ConfigurationsPage() {
       }
       if (modelTestSendToChat && modelTestConversationId) {
         requestData.send_to_chat = true
+      }
+      if (modelTestPrompt.trim()) {
+        requestData.prompt = modelTestPrompt.trim()
+      }
+      if (modelTestRagItems.length > 0) {
+        requestData.knowledge_items = modelTestRagItems.map((item) => ({
+          title: item.title,
+          content: item.content,
+          source: 'test_upload',
+        }))
       }
 
       const response = await api.post('/ai/gateway/test/', requestData)
@@ -2824,6 +2888,55 @@ export default function ConfigurationsPage() {
                       </Label>
                     </div>
                   )}
+                </div>
+
+                <details className="mb-4 rounded-lg border border-gray-200 bg-gray-50/50">
+                  <summary className="cursor-pointer list-none px-3 py-2 text-sm font-medium text-gray-700 select-none">
+                    Prompt do sistema (opcional)
+                  </summary>
+                  <div className="px-3 pb-3 pt-0">
+                    <textarea
+                      id="model_test_prompt"
+                      value={modelTestPrompt}
+                      onChange={(e) => setModelTestPrompt(e.target.value)}
+                      placeholder="Ex.: Você é um assistente... Deixe vazio para usar o prompt padrão do n8n."
+                      maxLength={MAX_PROMPT_LENGTH}
+                      rows={4}
+                      className="mt-2 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    <p className="mt-1 text-xs text-gray-500">
+                      {modelTestPrompt.length} / {MAX_PROMPT_LENGTH} caracteres
+                    </p>
+                  </div>
+                </details>
+
+                <div className="mb-4">
+                  <Label className="text-sm text-gray-700">Conhecimento RAG (opcional)</Label>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <input
+                      ref={modelTestRagInputRef}
+                      type="file"
+                      accept=".txt,.md"
+                      onChange={handleModelTestRagFileChange}
+                      disabled={modelTestRagLoading}
+                      className="block w-full max-w-xs text-sm text-gray-500 file:mr-2 file:rounded-md file:border-0 file:bg-blue-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-blue-700 hover:file:bg-blue-100"
+                    />
+                    {modelTestRagItems.length > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-1 text-xs text-gray-700">
+                        {modelTestRagItems[0].title}
+                        <button
+                          type="button"
+                          onClick={handleRemoveModelTestRag}
+                          className="rounded p-0.5 hover:bg-gray-200 text-gray-500 hover:text-gray-700"
+                          title="Remover"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
+                    )}
+                    {modelTestRagLoading && <span className="text-xs text-gray-500">Lendo arquivo...</span>}
+                  </div>
+                  <p className="mt-1 text-xs text-gray-500">.txt ou .md, até 2MB. Conteúdo será enviado como contexto no teste.</p>
                 </div>
 
                 <div className="border border-gray-200 rounded-lg p-4 h-64 overflow-y-auto bg-gray-50">

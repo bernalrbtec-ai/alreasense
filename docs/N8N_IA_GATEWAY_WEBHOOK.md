@@ -29,7 +29,11 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
   "message": "Olá, preciso de ajuda",
   "model": "llama-3.1-8b",
   "conversation_id": "uuid-da-conversa",  // opcional
-  "send_to_chat": true  // se true e conversation_id fornecido, envia resposta ao chat
+  "send_to_chat": true,  // se true e conversation_id fornecido, envia resposta ao chat
+  "prompt": "Você é um assistente...",  // opcional: prompt de sistema/instrução para o teste
+  "knowledge_items": [   // opcional: contexto RAG para o teste (até 5 itens)
+    { "title": "Doc.txt", "content": "Texto do documento...", "source": "test_upload" }
+  ]
 }
 ```
 
@@ -122,9 +126,16 @@ No modal de teste (`Configurações > Agentes IA > Testar IA`):
   "metadata": {
     "source": "test",
     "model": "llama-3.1-8b"
-  }
+  },
+  "prompt": "Você é um assistente...",
+  "knowledge_items": [
+    { "title": "Doc.txt", "content": "Texto do documento...", "source": "test_upload" }
+  ]
 }
 ```
+
+- **prompt** (string, opcional): quando presente, use como prompt de sistema/instrução no teste.
+- **knowledge_items** (array, opcional): lista de `{ title, content, source }` para contexto RAG no teste; injete no contexto do modelo (ex.: concatenar ao prompt ou usar em passo de RAG).
 
 ### 2. Processar com IA/RAG
 

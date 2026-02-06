@@ -306,6 +306,11 @@ def triage_test(request):
         )
 
 
+MAX_PROMPT_LENGTH = 10000
+MAX_KNOWLEDGE_ITEMS = 5
+MAX_KNOWLEDGE_CONTENT_LENGTH = 50000
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
 @throttle_classes([GatewayTestThrottle])
@@ -321,6 +326,52 @@ def gateway_test(request):
 
     selected_model = str(request.data.get("model") or "").strip() or settings_obj.agent_model
     message_text = str(request.data.get("message") or "").strip()
+
+    # Prompt de sistema (opcional)
+    custom_prompt = ""
+    prompt_raw = request.data.get("prompt")
+    if prompt_raw is not None:
+        prompt = str(prompt_raw).strip()
+        if prompt:
+            if len(prompt) > MAX_PROMPT_LENGTH:
+                return Response(
+                    {"error": f"Prompt excede o limite de {MAX_PROMPT_LENGTH} caracteres."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            custom_prompt = "".join(c for c in prompt if ord(c) >= 32 or c in "\n\r\t")
+
+    # Knowledge items RAG (opcional)
+    knowledge_items_raw = request.data.get("knowledge_items")
+    knowledge_items_payload = []
+    if knowledge_items_raw is not None:
+        if not isinstance(knowledge_items_raw, list):
+            return Response(
+                {"error": "knowledge_items deve ser uma lista."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(knowledge_items_raw) > MAX_KNOWLEDGE_ITEMS:
+            return Response(
+                {"error": f"Máximo de {MAX_KNOWLEDGE_ITEMS} itens de conhecimento permitido."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        for i, item in enumerate(knowledge_items_raw):
+            if not isinstance(item, dict):
+                return Response(
+                    {"error": f"knowledge_items[{i}] deve ser um objeto com title e content."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            title = str(item.get("title") or "").strip() or f"Documento {i + 1}"
+            content = str(item.get("content") or "")
+            if len(content) > MAX_KNOWLEDGE_CONTENT_LENGTH:
+                return Response(
+                    {"error": f"Conteúdo do item {i + 1} excede {MAX_KNOWLEDGE_CONTENT_LENGTH} caracteres."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            knowledge_items_payload.append({
+                "title": title,
+                "content": content,
+                "source": "test_upload",
+            })
     request_id = uuid.uuid4()
     trace_id = uuid.uuid4()
 
@@ -365,6 +416,10 @@ def gateway_test(request):
             "model": selected_model,
         },
     }
+    if custom_prompt:
+        payload["prompt"] = custom_prompt
+    if knowledge_items_payload:
+        payload["knowledge_items"] = knowledge_items_payload
 
     start_time = time.monotonic()
     status_value = "success"
