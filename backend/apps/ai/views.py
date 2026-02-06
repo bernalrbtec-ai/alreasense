@@ -964,11 +964,12 @@ def transcription_quality_feedback(request, attachment_id):
     
     attachment.transcription_quality = quality
     attachment.transcription_quality_feedback_at = timezone.now()
-    attachment.transcription_quality_feedback_by = request.user
+    # ✅ Usar o ID UUID explicitamente para evitar problemas de tipo
+    attachment.transcription_quality_feedback_by_id = request.user.id
     attachment.save(update_fields=[
         "transcription_quality",
         "transcription_quality_feedback_at",
-        "transcription_quality_feedback_by",
+        "transcription_quality_feedback_by_id",
     ])
     
     return Response({
