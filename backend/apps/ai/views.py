@@ -967,26 +967,11 @@ def transcription_quality_feedback(request, attachment_id):
     import logging
     logger = logging.getLogger(__name__)
     
-    # Debug: verificar tipo do request.user.id
-    logger.info(f"DEBUG: request.user.id = {request.user.id}, type = {type(request.user.id)}")
-    logger.info(f"DEBUG: request.user.email = {request.user.email}")
-    
+    # Buscar usuário pelo email para garantir UUID correto
     try:
-        # Buscar usuário pelo email para garantir UUID correto
         user = User.objects.get(email=request.user.email, tenant=request.user.tenant)
-        user_id = str(user.id)  # UUID como string
-        logger.info(f"DEBUG: user.id do banco = {user.id}, type = {type(user.id)}, user_id = {user_id}")
-        
-        # Validar que é um UUID válido
-        try:
-            uuid.UUID(user_id)  # Testar se é UUID válido
-        except (ValueError, AttributeError):
-            logger.error(f"ERROR: user_id '{user_id}' não é um UUID válido!")
-            return Response(
-                {"error": "Erro ao identificar usuário: ID inválido."},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            )
-            
+        # Usar o objeto User diretamente - Django ORM vai fazer a conversão correta
+        user_for_feedback = user
     except User.DoesNotExist:
         logger.error(f"ERROR: Usuário não encontrado: {request.user.email}")
         return Response(
@@ -995,34 +980,47 @@ def transcription_quality_feedback(request, attachment_id):
         )
     except Exception as e:
         logger.error(f"ERROR: Erro ao buscar usuário: {e}")
-        return Response(
-            {"error": f"Erro ao identificar usuário: {str(e)}"},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        )
+        # Se não conseguir buscar, usar None (campo é nullable)
+        user_for_feedback = None
     
-    # ✅ Usar SQL direto para garantir que o UUID seja salvo corretamente
-    from django.db import connection
+    # ✅ Usar Django ORM diretamente - mais seguro que SQL direto
+    attachment.transcription_quality = quality
+    attachment.transcription_quality_feedback_at = timezone.now()
+    attachment.transcription_quality_feedback_by = user_for_feedback
     
-    logger.info(f"DEBUG: Executando UPDATE com user_id = {user_id}")
-    
-    with connection.cursor() as cursor:
-        cursor.execute("""
-            UPDATE chat_attachment 
-            SET transcription_quality = %s,
-                transcription_quality_feedback_at = %s,
-                transcription_quality_feedback_by_id = %s::uuid
-            WHERE id = %s::uuid 
-              AND tenant_id = %s::uuid
-        """, [
-            quality,
-            timezone.now(),
-            user_id,
-            str(attachment_id),
-            str(request.user.tenant.id),
+    try:
+        attachment.save(update_fields=[
+            "transcription_quality",
+            "transcription_quality_feedback_at",
+            "transcription_quality_feedback_by",
         ])
-    
-    # Recarregar o attachment atualizado
-    attachment.refresh_from_db()
+    except Exception as e:
+        logger.error(f"ERROR ao salvar attachment: {e}")
+        # Se falhar, tentar com SQL direto como fallback
+        if user_for_feedback:
+            user_uuid = str(user_for_feedback.id)
+            from django.db import connection
+            with connection.cursor() as cursor:
+                cursor.execute("""
+                    UPDATE chat_attachment 
+                    SET transcription_quality = %s,
+                        transcription_quality_feedback_at = %s,
+                        transcription_quality_feedback_by_id = %s::uuid
+                    WHERE id = %s::uuid 
+                      AND tenant_id = %s::uuid
+                """, [
+                    quality,
+                    timezone.now(),
+                    user_uuid,
+                    str(attachment_id),
+                    str(request.user.tenant.id),
+                ])
+            attachment.refresh_from_db()
+        else:
+            return Response(
+                {"error": f"Erro ao salvar feedback: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
     
     return Response({
         "status": "success",
