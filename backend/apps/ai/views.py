@@ -962,15 +962,15 @@ def transcription_quality_feedback(request, attachment_id):
             status=status.HTTP_400_BAD_REQUEST,
         )
     
-    attachment.transcription_quality = quality
-    attachment.transcription_quality_feedback_at = timezone.now()
-    # ✅ Usar o ID UUID explicitamente para evitar problemas de tipo
-    attachment.transcription_quality_feedback_by_id = request.user.id
-    attachment.save(update_fields=[
-        "transcription_quality",
-        "transcription_quality_feedback_at",
-        "transcription_quality_feedback_by_id",
-    ])
+    # ✅ Usar update() diretamente para evitar problemas de tipo UUID
+    MessageAttachment.objects.filter(id=attachment_id, tenant=request.user.tenant).update(
+        transcription_quality=quality,
+        transcription_quality_feedback_at=timezone.now(),
+        transcription_quality_feedback_by_id=request.user.id,
+    )
+    
+    # Recarregar o attachment atualizado
+    attachment.refresh_from_db()
     
     return Response({
         "status": "success",
