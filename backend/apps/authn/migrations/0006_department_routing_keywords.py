@@ -1,6 +1,7 @@
 # Secretária IA: palavras-chave por departamento para roteamento
+# RunSQL para não depender do modelo Department no estado (tabela foi criada via RunPython em 0003)
 
-from django.db import migrations, models
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -10,14 +11,14 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='department',
-            name='routing_keywords',
-            field=models.JSONField(
-                blank=True,
-                default=list,
-                help_text='Lista de palavras-chave para a Secretária IA encaminhar conversas a este departamento (ex: ["financeiro", "boleto", "pagamento"])',
-                verbose_name='Palavras-chave para roteamento',
-            ),
+        migrations.RunSQL(
+            sql="""
+                ALTER TABLE authn_department
+                ADD COLUMN IF NOT EXISTS routing_keywords JSONB NOT NULL DEFAULT '[]';
+            """,
+            reverse_sql="""
+                ALTER TABLE authn_department
+                DROP COLUMN IF EXISTS routing_keywords;
+            """,
         ),
     ]
