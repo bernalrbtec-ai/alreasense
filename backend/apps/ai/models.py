@@ -190,6 +190,11 @@ class TenantSecretaryProfile(models.Model):
         blank=True,
         help_text='Prompt de sistema da secretária (ex: instruções, tom, regras). Se vazio, o N8N usa o padrão do fluxo.',
     )
+    signature_name = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='Nome exibido nas mensagens da secretária (ex: Bia). Se vazio, usa "Secretária IA".',
+    )
     use_memory = models.BooleanField(
         default=True,
         help_text='Usar memória de conversas anteriores por contato (últimos 12 meses). Desativar para LGPD.',

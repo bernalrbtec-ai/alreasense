@@ -274,17 +274,19 @@ def _secretary_worker(conversation, message) -> None:
             return
 
         reply_text = (data.get("reply_text") or "").strip()
-        if not reply_text:
+        # Não criar mensagem se o modelo não respondeu (fallback do n8n)
+        if not reply_text or reply_text == "(Sem resposta do modelo.)":
             return
 
         latency_ms = int((time.time() - start_time) * 1000)
         request_id = data.get("request_id")
         trace_id = data.get("trace_id")
 
+        sender_name = (getattr(profile, "signature_name", None) or "").strip() or "Secretária IA"
         message_obj = ChatMessage.objects.create(
             conversation=conversation,
             sender=None,
-            sender_name="Secretária IA",
+            sender_name=sender_name,
             content=reply_text,
             direction="outgoing",
             status="pending",

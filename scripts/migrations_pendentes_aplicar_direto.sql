@@ -130,3 +130,13 @@ WHERE NOT EXISTS (SELECT 1 FROM django_migrations WHERE app = 'chat' AND name = 
 INSERT INTO django_migrations (app, name, applied)
 SELECT 'ai', '0009_secretary_prompt_and_model', NOW()
 WHERE NOT EXISTS (SELECT 1 FROM django_migrations WHERE app = 'ai' AND name = '0009_secretary_prompt_and_model');
+
+-- ============================================================================
+-- AI 0010: signature_name no perfil da secretária (nome exibido nas mensagens)
+-- ============================================================================
+ALTER TABLE ai_tenant_secretary_profile
+  ADD COLUMN IF NOT EXISTS signature_name VARCHAR(100) NOT NULL DEFAULT '';
+
+INSERT INTO django_migrations (app, name, applied)
+SELECT 'ai', '0010_secretary_signature_name', NOW()
+WHERE NOT EXISTS (SELECT 1 FROM django_migrations WHERE app = 'ai' AND name = '0010_secretary_signature_name');

@@ -191,6 +191,7 @@ interface AiSettings {
 interface SecretaryProfile {
   form_data: Record<string, unknown>
   prompt?: string
+  signature_name?: string
   use_memory: boolean
   is_active: boolean
   created_at?: string
@@ -363,6 +364,7 @@ export default function ConfigurationsPage() {
   const [isSecretaryModalOpen, setIsSecretaryModalOpen] = useState(false)
   const [secretaryFormData, setSecretaryFormData] = useState<Record<string, unknown>>({})
   const [secretaryPrompt, setSecretaryPrompt] = useState('')
+  const [secretarySignatureName, setSecretarySignatureName] = useState('')
   const [secretaryUseMemory, setSecretaryUseMemory] = useState(true)
   const [secretaryIsActive, setSecretaryIsActive] = useState(false)
 
@@ -1351,6 +1353,7 @@ export default function ConfigurationsPage() {
       setSecretaryProfile(data)
       setSecretaryFormData(data?.form_data || {})
       setSecretaryPrompt(data?.prompt || '')
+      setSecretarySignatureName(data?.signature_name || '')
       setSecretaryUseMemory(data?.use_memory !== false)
       setSecretaryIsActive(data?.is_active === true)
     } catch (error: any) {
@@ -1368,10 +1371,11 @@ export default function ConfigurationsPage() {
       await api.put('/ai/secretary/profile/', {
         form_data: secretaryFormData,
         prompt: secretaryPrompt,
+        signature_name: secretarySignatureName,
         use_memory: secretaryUseMemory,
         is_active: secretaryIsActive
       })
-      setSecretaryProfile(prev => prev ? { ...prev, form_data: secretaryFormData, prompt: secretaryPrompt, use_memory: secretaryUseMemory, is_active: secretaryIsActive } : null)
+      setSecretaryProfile(prev => prev ? { ...prev, form_data: secretaryFormData, prompt: secretaryPrompt, signature_name: secretarySignatureName, use_memory: secretaryUseMemory, is_active: secretaryIsActive } : null)
       showSuccessToast('Perfil da Secretária salvo.')
       setIsSecretaryModalOpen(false)
     } catch (error: any) {
@@ -2197,6 +2201,7 @@ export default function ConfigurationsPage() {
                         onClick={() => {
                           setSecretaryFormData(secretaryProfile?.form_data || {})
                           setSecretaryPrompt(secretaryProfile?.prompt || '')
+                          setSecretarySignatureName(secretaryProfile?.signature_name || '')
                           setSecretaryUseMemory(secretaryProfile?.use_memory !== false)
                           setSecretaryIsActive(secretaryProfile?.is_active === true)
                           setIsSecretaryModalOpen(true)
@@ -3244,6 +3249,16 @@ export default function ConfigurationsPage() {
                     placeholder="Ex: Minha Empresa Ltda"
                     className="mt-1"
                   />
+                </div>
+                <div>
+                  <Label>Nome da assinatura</Label>
+                  <Input
+                    value={secretarySignatureName}
+                    onChange={(e) => setSecretarySignatureName(e.target.value)}
+                    placeholder="Ex: Bia (nome exibido nas mensagens da secretária)"
+                    className="mt-1"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Se vazio, aparece &quot;Secretária IA&quot;.</p>
                 </div>
                 <div>
                   <Label>Missão / Sobre</Label>

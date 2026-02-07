@@ -786,6 +786,7 @@ def secretary_profile(request):
         return Response({
             "form_data": profile.form_data,
             "prompt": getattr(profile, "prompt", "") or "",
+            "signature_name": getattr(profile, "signature_name", "") or "",
             "use_memory": profile.use_memory,
             "is_active": profile.is_active,
             "created_at": timezone.localtime(profile.created_at).isoformat(),
@@ -807,6 +808,9 @@ def secretary_profile(request):
     if 'prompt' in data:
         prompt_val = data.get('prompt')
         profile.prompt = str(prompt_val)[:10000] if prompt_val is not None else ""
+
+    if 'signature_name' in data:
+        profile.signature_name = str(data.get('signature_name') or '')[:100].strip()
 
     if 'use_memory' in data:
         use_memory = _normalize_bool(data.get('use_memory'))
@@ -841,6 +845,7 @@ def secretary_profile(request):
     return Response({
         "form_data": profile.form_data,
         "prompt": getattr(profile, "prompt", "") or "",
+        "signature_name": getattr(profile, "signature_name", "") or "",
         "use_memory": profile.use_memory,
         "is_active": profile.is_active,
         "updated_at": timezone.localtime(profile.updated_at).isoformat(),
