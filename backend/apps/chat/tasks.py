@@ -993,38 +993,34 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # ✅ CORREÇÃO: Criar variável separada para conteúdo com assinatura (apenas para envio)
         content_for_send = content  # Conteúdo que será enviado (pode ter assinatura)
         
-        if include_signature:
+        if include_signature and content:
             sender = message.sender  # ✅ Já carregado via select_related
-            if sender and content:
+            sender_name = (getattr(message, 'sender_name', None) or '').strip()
+            full_name = None
+            if sender:
                 first_name = sender.first_name or ''
                 last_name = sender.last_name or ''
-                
                 if first_name or last_name:
-                    # Montar assinatura com nome completo
                     full_name = f"{first_name} {last_name}".strip()
-                    
-                    # ✅ NOVO: Formato para Evolution API (com asteriscos para negrito)
-                    signature_for_send = f"*{full_name}:*\n\n"
-                    content_for_send = signature_for_send + content
-                    
-                    # ✅ NOVO: Formato para banco/app (sem asteriscos, com "disse:")
-                    signature_for_db = f"{full_name} disse:\n\n"
-                    # ✅ CRÍTICO: Atualizar message.content para salvar no banco com formato "disse:"
-                    message.content = signature_for_db + content
-                    # Salvar imediatamente no banco
-                    from channels.db import database_sync_to_async
-                    from django.db import close_old_connections
-                    close_old_connections()
-                    await database_sync_to_async(message.save)(update_fields=['content'])
-                    
-                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada:")
-                    logger.critical(f"   Nome: {full_name}")
-                    logger.critical(f"   content original (sem assinatura): {content[:50] if content else 'VAZIO'}...")
-                    logger.critical(f"   content_for_send (Evolution API, com *): {content_for_send[:100] if content_for_send else 'VAZIO'}...")
-                    logger.critical(f"   message.content (banco/app, com 'disse:'): {message.content[:100] if message.content else 'VAZIO'}...")
-                else:
-                    logger.warning(f"⚠️ [CHAT ENVIO] Sender sem nome (first_name='{first_name}', last_name='{last_name}')")
-            else:
+            elif sender_name:
+                # Mensagem da secretária (sender=None, sender_name=ex: "Bia")
+                full_name = sender_name
+
+            if full_name:
+                # Formato para Evolution API (com asteriscos para negrito)
+                signature_for_send = f"*{full_name}:*\n\n"
+                content_for_send = signature_for_send + content
+                # Formato para banco/app (com "disse:")
+                signature_for_db = f"{full_name} disse:\n\n"
+                message.content = signature_for_db + content
+                from channels.db import database_sync_to_async
+                from django.db import close_old_connections
+                close_old_connections()
+                await database_sync_to_async(message.save)(update_fields=['content'])
+                logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada: {full_name}")
+            elif sender and not (getattr(sender, 'first_name', '') or getattr(sender, 'last_name', '')):
+                logger.warning(f"⚠️ [CHAT ENVIO] Sender sem nome")
+            elif not sender and not sender_name:
                 logger.warning(f"⚠️ [CHAT ENVIO] Sender ou content ausente (sender={bool(sender)}, content={bool(content)})")
         else:
             logger.info(f"✍️ [CHAT ENVIO] Assinatura desabilitada pelo usuário")

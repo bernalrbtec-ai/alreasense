@@ -83,7 +83,12 @@ def upsert_secretary_rag_for_tenant(tenant_id: str) -> None:
                 metadata={},
                 embedding=embedding or None,
             )
-        logger.info("Secretary RAG upserted for tenant %s", tenant_id)
+        logger.info(
+            "[SECRETARY RAG] Salvamento OK para tenant %s: 1 doc, %s caracteres, embedding=%s",
+            tenant_id,
+            len(text),
+            "ok" if embedding else "vazio",
+        )
     except Exception as e:
         logger.exception("Secretary RAG upsert failed for tenant %s: %s", tenant_id, e)
         raise
@@ -93,16 +98,51 @@ def get_secretary_rag_context(
     tenant_id: str,
     query_embedding: List[float],
     limit: int = 5,
-    similarity_threshold: float = 0.7,
+    similarity_threshold: float = 0.5,
 ) -> List[Dict[str, Any]]:
-    """Busca conhecimento apenas source=secretary para o tenant."""
-    return search_knowledge(
+    """
+    Busca conhecimento apenas source=secretary para o tenant.
+    Usa threshold 0.5 para não descartar o doc "Dados da empresa".
+    Se a busca semântica retornar vazio, faz fallback: retorna o(s) doc(s) da secretária
+    para o modelo sempre ter o contexto da empresa.
+    """
+    items = search_knowledge(
         tenant_id=tenant_id,
         query_embedding=query_embedding,
         limit=limit,
         similarity_threshold=similarity_threshold,
         source=SOURCE_SECRETARY,
     )
+    if items:
+        return items
+    # Fallback: garantir que o contexto "Dados da empresa" vá no payload quando existir
+    fallback = list(
+        AiKnowledgeDocument.objects.filter(
+            tenant_id=tenant_id,
+            source=SOURCE_SECRETARY,
+            embedding__isnull=False,
+        )
+        .order_by("-created_at")[:limit]
+        .values("id", "title", "content", "source", "tags", "metadata")
+    )
+    if fallback:
+        logger.info(
+            "[SECRETARY RAG] Busca semântica retornou 0; usando fallback com %s doc(s) para tenant %s",
+            len(fallback),
+            tenant_id,
+        )
+    return [
+        {
+            "id": str(d["id"]),
+            "title": d["title"] or "",
+            "content": d["content"] or "",
+            "source": d["source"] or SOURCE_SECRETARY,
+            "tags": d["tags"] or [],
+            "metadata": d["metadata"] or {},
+            "similarity": 1.0,
+        }
+        for d in fallback
+    ]
 
 
 def get_secretary_memory_for_contact(
@@ -179,6 +219,17 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         query_embedding,
         limit=getattr(settings, "AI_RAG_TOP_K", 5),
     )
+    logger.info(
+        "[SECRETARY RAG] Consulta: tenant=%s knowledge_items=%s (query_len=%s)",
+        conversation.tenant_id,
+        len(knowledge_items),
+        len(query_text),
+    )
+    if not knowledge_items:
+        logger.warning(
+            "[SECRETARY RAG] Nenhum item retornado para tenant %s; confira se o perfil está ativo e Dados da empresa foram salvos.",
+            conversation.tenant_id,
+        )
     memory_items = get_secretary_memory_for_contact(
         str(conversation.tenant_id),
         (conversation.contact_phone or "").strip(),
