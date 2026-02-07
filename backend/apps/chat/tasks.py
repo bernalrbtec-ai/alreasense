@@ -1007,17 +1007,30 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 full_name = sender_name
 
             if full_name:
-                # Formato para Evolution API (com asteriscos para negrito)
-                signature_for_send = f"*{full_name}:*\n\n"
-                content_for_send = signature_for_send + content
-                # Formato para banco/app (com "disse:")
-                signature_for_db = f"{full_name} disse:\n\n"
-                message.content = signature_for_db + content
-                from channels.db import database_sync_to_async
-                from django.db import close_old_connections
-                close_old_connections()
-                await database_sync_to_async(message.save)(update_fields=['content'])
-                logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada: {full_name}")
+                # Evitar duplicar assinatura se o modelo (ex: secretária) já colocou na resposta
+                content_stripped = content.strip()
+                prefix_disse = f"{full_name} disse:"
+                already_has_disse = content_stripped.lower().startswith(prefix_disse.lower())
+                already_has_asterisk = content_stripped.startswith(f"*{full_name}:*")
+                if already_has_disse:
+                    # Conteúdo já tem "Bia disse:" (formato do chat). Para WhatsApp enviar só *Bia:* + corpo
+                    body = content_stripped[len(prefix_disse):].lstrip("\n\t ")
+                    content_for_send = f"*{full_name}:*\n\n" + (body or content_stripped)
+                    # message.content manter como está (já tem "Bia disse:" para o chat)
+                    logger.critical(f"✍️ [CHAT ENVIO] Assinatura já no conteúdo; envio para Evolution só *Nome:* + corpo")
+                elif already_has_asterisk:
+                    content_for_send = content  # Já no formato WhatsApp
+                    logger.critical(f"✍️ [CHAT ENVIO] Conteúdo já com *Nome:*")
+                else:
+                    signature_for_send = f"*{full_name}:*\n\n"
+                    content_for_send = signature_for_send + content
+                    signature_for_db = f"{full_name} disse:\n\n"
+                    message.content = signature_for_db + content
+                    from channels.db import database_sync_to_async
+                    from django.db import close_old_connections
+                    close_old_connections()
+                    await database_sync_to_async(message.save)(update_fields=['content'])
+                    logger.critical(f"✍️ [CHAT ENVIO] ✅ Assinatura adicionada: {full_name}")
             elif sender and not (getattr(sender, 'first_name', '') or getattr(sender, 'last_name', '')):
                 logger.warning(f"⚠️ [CHAT ENVIO] Sender sem nome")
             elif not sender and not sender_name:
