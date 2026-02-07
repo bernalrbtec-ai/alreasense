@@ -157,6 +157,18 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         for msg in recent_messages
         if (msg.content or "").strip()
     ]
+    # Garantir que a mensagem que disparou a secretária seja a última (evita race/commit e n8n sem a nova mensagem)
+    current_msg_content = (message.content or "").strip()
+    if current_msg_content:
+        last_id = context_messages[-1]["id"] if context_messages else None
+        if last_id != str(message.id):
+            context_messages.append({
+                "id": str(message.id),
+                "direction": message.direction,
+                "content": current_msg_content,
+                "created_at": message.created_at.isoformat(),
+                "sender_name": getattr(message, "sender_name", "") or "",
+            })
     is_open, next_open_time = BusinessHoursService.is_business_hours(
         conversation.tenant, conversation.department
     )
