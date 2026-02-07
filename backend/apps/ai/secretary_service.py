@@ -145,15 +145,17 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     message_limit = getattr(settings, "AI_CONTEXT_MESSAGE_LIMIT", 20)
     recent_messages = list(conversation.messages.order_by("-created_at")[:message_limit])
     recent_messages.reverse()
+    # Só incluir mensagens com conteúdo (evita user/content vazios no n8n e respostas estranhas)
     context_messages = [
         {
             "id": str(msg.id),
             "direction": msg.direction,
-            "content": msg.content,
+            "content": (msg.content or "").strip(),
             "created_at": msg.created_at.isoformat(),
             "sender_name": getattr(msg, "sender_name", "") or "",
         }
         for msg in recent_messages
+        if (msg.content or "").strip()
     ]
     is_open, next_open_time = BusinessHoursService.is_business_hours(
         conversation.tenant, conversation.department
