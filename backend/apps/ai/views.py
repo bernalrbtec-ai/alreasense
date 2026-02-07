@@ -160,6 +160,7 @@ def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
         "transcription_max_mb": settings_obj.transcription_max_mb,
         "triage_enabled": settings_obj.triage_enabled,
         "secretary_enabled": getattr(settings_obj, 'secretary_enabled', False),
+        "secretary_model": getattr(settings_obj, 'secretary_model', '') or '',
         "agent_model": settings_obj.agent_model,
         "n8n_audio_webhook_url": settings_obj.n8n_audio_webhook_url or "",
         "n8n_triage_webhook_url": settings_obj.n8n_triage_webhook_url or "",
@@ -784,6 +785,7 @@ def secretary_profile(request):
         profile, _ = TenantSecretaryProfile.objects.get_or_create(tenant=tenant)
         return Response({
             "form_data": profile.form_data,
+            "prompt": getattr(profile, "prompt", "") or "",
             "use_memory": profile.use_memory,
             "is_active": profile.is_active,
             "created_at": timezone.localtime(profile.created_at).isoformat(),
@@ -801,6 +803,10 @@ def secretary_profile(request):
             errors['form_data'] = err
         else:
             profile.form_data = sanitized
+
+    if 'prompt' in data:
+        prompt_val = data.get('prompt')
+        profile.prompt = str(prompt_val)[:10000] if prompt_val is not None else ""
 
     if 'use_memory' in data:
         use_memory = _normalize_bool(data.get('use_memory'))
@@ -834,6 +840,7 @@ def secretary_profile(request):
 
     return Response({
         "form_data": profile.form_data,
+        "prompt": getattr(profile, "prompt", "") or "",
         "use_memory": profile.use_memory,
         "is_active": profile.is_active,
         "updated_at": timezone.localtime(profile.updated_at).isoformat(),
@@ -1007,6 +1014,9 @@ def ai_settings(request):
 
     if 'agent_model' in data:
         settings_obj.agent_model = str(data.get('agent_model') or '').strip()
+
+    if 'secretary_model' in data:
+        settings_obj.secretary_model = str(data.get('secretary_model') or '').strip()[:100]
 
     if 'n8n_audio_webhook_url' in data:
         url = str(data.get('n8n_audio_webhook_url') or '').strip()

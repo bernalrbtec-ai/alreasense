@@ -184,6 +184,13 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
             })
     except Exception:
         pass
+    settings_obj = TenantAiSettings.objects.filter(tenant=conversation.tenant).first()
+    secretary_model = (
+        (getattr(settings_obj, "secretary_model", None) or "").strip()
+        or (getattr(settings_obj, "agent_model", None) or "llama3.2")
+    )
+    prompt = (getattr(profile, "prompt", None) or "").strip()
+
     return {
         "agent_type": "secretary",
         "tenant": {"id": str(conversation.tenant_id), "name": conversation.tenant.name},
@@ -206,6 +213,9 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         "knowledge_items": knowledge_items,
         "memory_items": memory_items,
         "departments": departments,
+        "model": secretary_model,
+        "metadata": {"model": secretary_model},
+        "prompt": prompt,
     }
 
 
@@ -235,6 +245,12 @@ def _secretary_worker(conversation, message) -> None:
 
         context = _build_secretary_context(conversation, message, profile)
         body = {"action": "secretary", **context}
+        logger.info(
+            "[SECRETARY] Chamando n8n url=%s conversation_id=%s model=%s",
+            n8n_url[:50] + "..." if len(n8n_url) > 50 else n8n_url,
+            conversation.id,
+            body.get("model"),
+        )
 
         last_error = None
         for attempt in range(2):
@@ -360,17 +376,38 @@ def dispatch_secretary_async(conversation, message) -> None:
     Chamar apenas quando conversa está no Inbox (department is None) e mensagem é incoming.
     """
     if conversation.department_id is not None:
+        logger.info(
+            "[SECRETARY] Skip: conversa não está no Inbox (department_id=%s)",
+            conversation.department_id,
+        )
         return
     try:
         settings_obj = TenantAiSettings.objects.filter(tenant=conversation.tenant).first()
-        if not settings_obj or not getattr(settings_obj, "secretary_enabled", False):
+        if not settings_obj:
+            logger.info("[SECRETARY] Skip: tenant sem ai_settings")
+            return
+        if not getattr(settings_obj, "secretary_enabled", False):
+            logger.info("[SECRETARY] Skip: secretary_enabled desligado para tenant %s", conversation.tenant_id)
             return
         profile = TenantSecretaryProfile.objects.filter(tenant=conversation.tenant).first()
-        if not profile or not profile.is_active:
+        if not profile:
+            logger.info("[SECRETARY] Skip: tenant sem secretary_profile")
             return
-        if not _resolve_n8n_ai_url(conversation.tenant):
+        if not profile.is_active:
+            logger.info("[SECRETARY] Skip: perfil da secretária inativo (is_active=False) para tenant %s", conversation.tenant_id)
             return
-    except Exception:
+        n8n_url = _resolve_n8n_ai_url(conversation.tenant)
+        if not n8n_url:
+            logger.info("[SECRETARY] Skip: webhook da IA não configurado (n8n_ai_webhook_url vazio) para tenant %s", conversation.tenant_id)
+            return
+    except Exception as e:
+        logger.warning("[SECRETARY] Skip: exceção ao checar condições: %s", e, exc_info=True)
         return
+    logger.info(
+        "[SECRETARY] Disparando worker para conversation_id=%s message_id=%s tenant_id=%s",
+        conversation.id,
+        message.id,
+        conversation.tenant_id,
+    )
     thread = threading.Thread(target=_secretary_worker, args=(conversation, message), daemon=True)
     thread.start()

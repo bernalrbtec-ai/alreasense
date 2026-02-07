@@ -180,6 +180,7 @@ interface AiSettings {
   transcription_max_mb: number
   triage_enabled: boolean
   secretary_enabled?: boolean
+  secretary_model?: string
   agent_model: string
   n8n_audio_webhook_url: string
   n8n_triage_webhook_url: string
@@ -189,6 +190,7 @@ interface AiSettings {
 
 interface SecretaryProfile {
   form_data: Record<string, unknown>
+  prompt?: string
   use_memory: boolean
   is_active: boolean
   created_at?: string
@@ -360,6 +362,7 @@ export default function ConfigurationsPage() {
   const [secretaryProfileSaving, setSecretaryProfileSaving] = useState(false)
   const [isSecretaryModalOpen, setIsSecretaryModalOpen] = useState(false)
   const [secretaryFormData, setSecretaryFormData] = useState<Record<string, unknown>>({})
+  const [secretaryPrompt, setSecretaryPrompt] = useState('')
   const [secretaryUseMemory, setSecretaryUseMemory] = useState(true)
   const [secretaryIsActive, setSecretaryIsActive] = useState(false)
 
@@ -1347,6 +1350,7 @@ export default function ConfigurationsPage() {
       const data = response.data
       setSecretaryProfile(data)
       setSecretaryFormData(data?.form_data || {})
+      setSecretaryPrompt(data?.prompt || '')
       setSecretaryUseMemory(data?.use_memory !== false)
       setSecretaryIsActive(data?.is_active === true)
     } catch (error: any) {
@@ -1363,10 +1367,11 @@ export default function ConfigurationsPage() {
       setSecretaryProfileSaving(true)
       await api.put('/ai/secretary/profile/', {
         form_data: secretaryFormData,
+        prompt: secretaryPrompt,
         use_memory: secretaryUseMemory,
         is_active: secretaryIsActive
       })
-      setSecretaryProfile(prev => prev ? { ...prev, form_data: secretaryFormData, use_memory: secretaryUseMemory, is_active: secretaryIsActive } : null)
+      setSecretaryProfile(prev => prev ? { ...prev, form_data: secretaryFormData, prompt: secretaryPrompt, use_memory: secretaryUseMemory, is_active: secretaryIsActive } : null)
       showSuccessToast('Perfil da Secretária salvo.')
       setIsSecretaryModalOpen(false)
     } catch (error: any) {
@@ -2169,6 +2174,21 @@ export default function ConfigurationsPage() {
                         <span className="ml-2 text-sm font-medium text-gray-700">Ativar no Inbox</span>
                       </label>
                     </div>
+                    <div className="mt-3">
+                      <Label htmlFor="secretary_model" className="text-sm text-gray-700">Modelo da secretária (opcional)</Label>
+                      <select
+                        id="secretary_model"
+                        className="mt-1 block w-full max-w-xs rounded-md border border-gray-300 bg-white py-2 pl-3 pr-10 text-sm focus:border-blue-500 focus:ring-blue-500"
+                        value={aiSettings.secretary_model ?? ''}
+                        onChange={(e) => setAiSettings({ ...aiSettings, secretary_model: e.target.value })}
+                      >
+                        <option value="">Usar modelo padrão</option>
+                        {aiModelOptions.map((m) => (
+                          <option key={m} value={m}>{m}</option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">Se vazio, usa o modelo padrão da IA.</p>
+                    </div>
                     <div className="flex items-center gap-2 mt-3">
                       <Button
                         type="button"
@@ -2176,6 +2196,7 @@ export default function ConfigurationsPage() {
                         size="sm"
                         onClick={() => {
                           setSecretaryFormData(secretaryProfile?.form_data || {})
+                          setSecretaryPrompt(secretaryProfile?.prompt || '')
                           setSecretaryUseMemory(secretaryProfile?.use_memory !== false)
                           setSecretaryIsActive(secretaryProfile?.is_active === true)
                           setIsSecretaryModalOpen(true)
@@ -3261,6 +3282,17 @@ export default function ConfigurationsPage() {
                     rows={3}
                     className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                   />
+                </div>
+                <div>
+                  <Label>Prompt da secretária</Label>
+                  <textarea
+                    value={secretaryPrompt}
+                    onChange={(e) => setSecretaryPrompt(e.target.value)}
+                    placeholder="Ex: Você é a secretária virtual. Seja cordial. Encaminhe para o departamento quando fizer sentido. Não invente informações."
+                    rows={4}
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Instruções de sistema para a secretária. Se vazio, o N8N usa o padrão do fluxo.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input

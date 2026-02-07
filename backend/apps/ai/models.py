@@ -150,6 +150,11 @@ class TenantAiSettings(models.Model):
         default=False,
         help_text='Ativar secretária IA no Inbox (responde e opcionalmente encaminha por departamento)',
     )
+    secretary_model = models.CharField(
+        max_length=100,
+        blank=True,
+        help_text='Modelo usado pela Secretária IA (ex: qwen2.5:7b-instruct). Vazio = usa o modelo padrão (agent_model).',
+    )
     agent_model = models.CharField(max_length=100, default='llama3.1:8b')
     n8n_audio_webhook_url = models.URLField(blank=True)
     n8n_triage_webhook_url = models.URLField(blank=True)
@@ -180,6 +185,10 @@ class TenantSecretaryProfile(models.Model):
         default=dict,
         blank=True,
         help_text='Dados da empresa: missão, endereço, telefone, serviços, etc. Usado como contexto RAG (source=secretary).',
+    )
+    prompt = models.TextField(
+        blank=True,
+        help_text='Prompt de sistema da secretária (ex: instruções, tom, regras). Se vazio, o N8N usa o padrão do fluxo.',
     )
     use_memory = models.BooleanField(
         default=True,
