@@ -2531,6 +2531,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     conversation.refresh_from_db()
             except Exception as e:
                 logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
+
+            # Secretária IA: se Inbox e secretary_enabled, disparar task em background (RAG + memória → n8n → resposta)
+            try:
+                from apps.ai.secretary_service import dispatch_secretary_async
+                dispatch_secretary_async(conversation, message)
+            except Exception as e:
+                logger.warning(f"⚠️ [SECRETARY] Dispatch falhou: {e}", exc_info=True)
         else:
             logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
         

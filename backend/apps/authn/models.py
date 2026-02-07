@@ -38,6 +38,12 @@ class Department(models.Model):
         verbose_name='Mensagem de Transferência',
         help_text='Mensagem automática enviada ao cliente quando uma conversa é transferida para este departamento'
     )
+    routing_keywords = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Palavras-chave para roteamento',
+        help_text='Lista de palavras-chave para a Secretária IA encaminhar conversas a este departamento (ex: ["financeiro", "boleto", "pagamento"])',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Criado em')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='Atualizado em')
     

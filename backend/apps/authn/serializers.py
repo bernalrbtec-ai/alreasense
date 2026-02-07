@@ -16,6 +16,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
         model = Department
         fields = [
             'id', 'tenant_id', 'name', 'color', 'ai_enabled', 'transfer_message',
+            'routing_keywords',
             'pending_count',  # ✅ NOVO: Contador de conversas pendentes
             'created_at', 'updated_at'
         ]
@@ -58,9 +59,29 @@ class DepartmentSerializer(serializers.ModelSerializer):
         return pending_conversations.count()
     
     def validate(self, attrs):
-        """Valida que não pode criar departamento duplicado no mesmo tenant."""
+        """Valida que não pode criar departamento duplicado no mesmo tenant e valida routing_keywords."""
         name = attrs.get('name')
-        
+
+        # Validação routing_keywords (Secretária IA): lista de strings, limite de itens e tamanho por item
+        routing_keywords = attrs.get('routing_keywords')
+        if routing_keywords is not None:
+            if not isinstance(routing_keywords, list):
+                raise serializers.ValidationError({'routing_keywords': 'Deve ser uma lista de strings.'})
+            max_items = 50
+            max_length = 100
+            if len(routing_keywords) > max_items:
+                raise serializers.ValidationError({
+                    'routing_keywords': f'Máximo de {max_items} palavras-chave.'
+                })
+            sanitized = []
+            for i, item in enumerate(routing_keywords):
+                if not isinstance(item, str):
+                    continue
+                s = item.strip()[:max_length]
+                if s and s not in sanitized:
+                    sanitized.append(s)
+            attrs['routing_keywords'] = sanitized
+
         # Pega o tenant da instância (update) ou do contexto (create)
         if self.instance:
             tenant = self.instance.tenant
@@ -68,7 +89,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
             # Tenant será adicionado pelo perform_create do ViewSet
             # Não validamos duplicidade aqui pois não temos o tenant ainda
             return attrs
-        
+
         # Verifica duplicidade apenas em updates
         if name:
             exists = Department.objects.filter(tenant=tenant, name=name).exclude(pk=self.instance.pk)
@@ -76,7 +97,7 @@ class DepartmentSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError({
                     'name': f'Já existe um departamento "{name}" neste tenant.'
                 })
-        
+
         return attrs
 
 

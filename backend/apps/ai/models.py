@@ -21,6 +21,7 @@ class AiKnowledgeDocument(models.Model):
         db_table = 'ai_knowledge_document'
         indexes = [
             models.Index(fields=['tenant', 'created_at']),
+            models.Index(fields=['tenant', 'source'], name='ai_knowledge_tenant_source'),
         ]
         ordering = ['-created_at']
 
@@ -53,6 +54,7 @@ class AiMemoryItem(models.Model):
         indexes = [
             models.Index(fields=['tenant', 'created_at']),
             models.Index(fields=['tenant', 'expires_at']),
+            models.Index(fields=['tenant', 'conversation_id', 'created_at'], name='ai_memory_tenant_conv_created'),
         ]
         ordering = ['-created_at']
 
@@ -144,6 +146,10 @@ class TenantAiSettings(models.Model):
     transcription_min_seconds = models.IntegerField(default=5)
     transcription_max_mb = models.IntegerField(default=16)
     triage_enabled = models.BooleanField(default=False)
+    secretary_enabled = models.BooleanField(
+        default=False,
+        help_text='Ativar secretária IA no Inbox (responde e opcionalmente encaminha por departamento)',
+    )
     agent_model = models.CharField(max_length=100, default='llama3.1:8b')
     n8n_audio_webhook_url = models.URLField(blank=True)
     n8n_triage_webhook_url = models.URLField(blank=True)
@@ -157,6 +163,40 @@ class TenantAiSettings(models.Model):
 
     def __str__(self):
         return f"AI Settings ({self.tenant_id})"
+
+
+class TenantSecretaryProfile(models.Model):
+    """
+    Perfil da Secretária IA por tenant: dados da empresa (form_data) para RAG,
+    opção de memória por contato (1 ano) e estado ativo.
+    """
+
+    tenant = models.OneToOneField(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='secretary_profile',
+    )
+    form_data = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Dados da empresa: missão, endereço, telefone, serviços, etc. Usado como contexto RAG (source=secretary).',
+    )
+    use_memory = models.BooleanField(
+        default=True,
+        help_text='Usar memória de conversas anteriores por contato (últimos 12 meses). Desativar para LGPD.',
+    )
+    is_active = models.BooleanField(
+        default=False,
+        help_text='Perfil ativo (dados prontos para RAG). Ativar no Inbox é controlado por TenantAiSettings.secretary_enabled.',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'ai_tenant_secretary_profile'
+
+    def __str__(self):
+        return f"Secretary profile ({self.tenant_id})"
 
 
 class AiTranscriptionDailyMetric(models.Model):

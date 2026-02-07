@@ -17,7 +17,7 @@ from django.utils.dateparse import parse_datetime, parse_date
 # from .tasks import analyze_message_async  # Removido - Celery deletado
 from apps.chat.models import Conversation, Message as ChatMessage
 from apps.common.permissions import IsTenantMember, IsAdminUser
-from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, AiTranscriptionDailyMetric
+from apps.ai.models import AiGatewayAudit, AiTriageResult, TenantAiSettings, TenantSecretaryProfile, AiTranscriptionDailyMetric
 from apps.ai.transcription_metrics import (
     aggregate_transcription_metrics,
     build_transcription_queryset,
@@ -159,6 +159,7 @@ def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
         "transcription_min_seconds": settings_obj.transcription_min_seconds,
         "transcription_max_mb": settings_obj.transcription_max_mb,
         "triage_enabled": settings_obj.triage_enabled,
+        "secretary_enabled": getattr(settings_obj, 'secretary_enabled', False),
         "agent_model": settings_obj.agent_model,
         "n8n_audio_webhook_url": settings_obj.n8n_audio_webhook_url or "",
         "n8n_triage_webhook_url": settings_obj.n8n_triage_webhook_url or "",
@@ -311,6 +312,11 @@ MAX_KNOWLEDGE_ITEMS = 5
 MAX_KNOWLEDGE_CONTENT_LENGTH = 50000
 MAX_CHAT_MESSAGES = 50
 GATEWAY_TEST_WEBHOOK_TIMEOUT = 60
+
+# Secretária IA: limites de validação (segurança e desempenho)
+SECRETARY_FORM_DATA_MAX_JSON_BYTES = 50_000
+SECRETARY_ROUTING_KEYWORDS_MAX_ITEMS = 50
+SECRETARY_ROUTING_KEYWORD_MAX_LENGTH = 100
 
 
 @api_view(['POST'])
@@ -677,7 +683,33 @@ def gateway_reply(request):
     request_id = _parse_uuid(request.data.get("request_id"))
     trace_id = _parse_uuid(request.data.get("trace_id"))
     metadata = request.data.get("metadata") or {}
-    if request_id or trace_id:
+    agent_type = str(request.data.get("agent_type") or "").strip()
+    suggested_department_id = request.data.get("suggested_department_id")
+    summary_for_department = (request.data.get("summary_for_department") or "").strip()[:2000]
+
+    if suggested_department_id:
+        try:
+            from apps.authn.models import Department
+            dept = Department.objects.filter(
+                tenant_id=request.user.tenant_id,
+                id=suggested_department_id,
+            ).first()
+            if dept:
+                conversation.department = dept
+                conversation.status = "open"
+                update_fields = ["department", "status"]
+                if summary_for_department:
+                    meta = getattr(conversation, "metadata", None) or {}
+                    if not isinstance(meta, dict):
+                        meta = {}
+                    meta["secretary_summary"] = summary_for_department
+                    conversation.metadata = meta
+                    update_fields.append("metadata")
+                conversation.save(update_fields=update_fields)
+        except Exception as e:
+            logger.warning("gateway_reply: failed to assign department %s: %s", suggested_department_id, e)
+
+    if request_id or trace_id or agent_type:
         try:
             AiGatewayAudit.objects.create(
                 tenant=request.user.tenant,
@@ -690,6 +722,7 @@ def gateway_reply(request):
                 latency_ms=metadata.get("latency_ms"),
                 rag_hits=metadata.get("rag_hits"),
                 output_summary=_safe_summary(reply_text),
+                handoff=bool(suggested_department_id),
             )
         except Exception as e:
             logger.warning("⚠️ [GATEWAY REPLY] Erro ao registrar audit: %s", e, exc_info=True)
@@ -702,6 +735,109 @@ def gateway_reply(request):
         },
         status=status.HTTP_201_CREATED,
     )
+
+
+def _validate_secretary_form_data(data) -> tuple:
+    """
+    Valida e sanitiza form_data da Secretária IA.
+    Retorna (dict_sanitizado, None) ou (None, mensagem_erro).
+    Regras: apenas dict com valores string/number/list de strings; tamanho máximo; sem scripts.
+    """
+    if not isinstance(data, dict):
+        return None, "form_data deve ser um objeto."
+    import json
+    # Sanitizar: apenas chaves alfanuméricas e valores primitivos ou lista de strings
+    sanitized = {}
+    for key, value in data.items():
+        if not isinstance(key, str) or not key.replace("_", "").replace("-", "").isalnum():
+            continue
+        if isinstance(value, str):
+            # Remover possíveis scripts
+            if "<script" in value.lower() or "javascript:" in value.lower():
+                continue
+            sanitized[key] = value.strip()[:5000]
+        elif isinstance(value, (int, float, bool)):
+            sanitized[key] = value
+        elif isinstance(value, list):
+            sanitized[key] = [str(x).strip()[:500] for x in value if isinstance(x, (str, int, float))][:100]
+        else:
+            continue
+    try:
+        json_str = json.dumps(sanitized, ensure_ascii=False)
+    except (TypeError, ValueError):
+        return None, "form_data contém valores não serializáveis."
+    if len(json_str.encode("utf-8")) > SECRETARY_FORM_DATA_MAX_JSON_BYTES:
+        return None, f"form_data excede o limite de {SECRETARY_FORM_DATA_MAX_JSON_BYTES} bytes."
+    return sanitized, None
+
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def secretary_profile(request):
+    """
+    GET: retorna o perfil da Secretária IA do tenant (form_data, use_memory, is_active).
+    PUT: atualiza perfil; valida form_data e routing_keywords; ao ativar (is_active=True)
+         pode disparar atualização do RAG (source=secretary) em background.
+    """
+    tenant = request.user.tenant
+    if request.method == 'GET':
+        profile, _ = TenantSecretaryProfile.objects.get_or_create(tenant=tenant)
+        return Response({
+            "form_data": profile.form_data,
+            "use_memory": profile.use_memory,
+            "is_active": profile.is_active,
+            "created_at": timezone.localtime(profile.created_at).isoformat(),
+            "updated_at": timezone.localtime(profile.updated_at).isoformat(),
+        })
+    # PUT
+    data = request.data or {}
+    profile, _ = TenantSecretaryProfile.objects.get_or_create(tenant=tenant)
+    errors = {}
+
+    if 'form_data' in data:
+        fd = data.get('form_data')
+        sanitized, err = _validate_secretary_form_data(fd)
+        if err:
+            errors['form_data'] = err
+        else:
+            profile.form_data = sanitized
+
+    if 'use_memory' in data:
+        use_memory = _normalize_bool(data.get('use_memory'))
+        if use_memory is None:
+            errors['use_memory'] = 'Valor inválido.'
+        else:
+            profile.use_memory = use_memory
+
+    if 'is_active' in data:
+        is_active = _normalize_bool(data.get('is_active'))
+        if is_active is None:
+            errors['is_active'] = 'Valor inválido.'
+        else:
+            profile.is_active = is_active
+
+    if errors:
+        return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
+
+    profile.save()
+
+    # Ao ativar, atualizar RAG em background (embedding + upsert source=secretary)
+    if profile.is_active and profile.form_data:
+        import threading
+        def _run_upsert():
+            try:
+                from apps.ai.secretary_service import upsert_secretary_rag_for_tenant
+                upsert_secretary_rag_for_tenant(str(tenant.id))
+            except Exception as e:
+                logger.warning("Secretary RAG upsert after profile save failed: %s", e, exc_info=True)
+        threading.Thread(target=_run_upsert, daemon=True).start()
+
+    return Response({
+        "form_data": profile.form_data,
+        "use_memory": profile.use_memory,
+        "is_active": profile.is_active,
+        "updated_at": timezone.localtime(profile.updated_at).isoformat(),
+    })
 
 
 @api_view(['GET'])
@@ -848,7 +984,7 @@ def ai_settings(request):
             else:
                 setattr(settings_obj, field_name, value)
 
-    for field in ['ai_enabled', 'audio_transcription_enabled', 'transcription_auto', 'triage_enabled']:
+    for field in ['ai_enabled', 'audio_transcription_enabled', 'transcription_auto', 'triage_enabled', 'secretary_enabled']:
         _update_bool(field)
 
     if 'transcription_min_seconds' in data:
