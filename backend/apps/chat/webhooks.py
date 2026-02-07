@@ -2008,18 +2008,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as e:
                             logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
                 
-                    # ✅ CORREÇÃO CRÍTICA: Quando reabrir conversa fechada, respeitar default_department
-                    # Se instância tem default_department, usar ele. Senão, remover para voltar ao Inbox
-                    if default_department:
-                        # ✅ CORREÇÃO: Se tem default_department, usar ele ao invés de remover
-                        conversation.department = default_department
-                        conversation.status = 'open'
-                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta com default_department: {default_department.name}")
-                    else:
-                        # Sem default_department, remover departamento para voltar ao Inbox
-                        conversation.status = 'pending' if not from_me else 'open'
-                        conversation.department = None
-                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta sem departamento (Inbox)")
+                    # ✅ CORREÇÃO: Ao reabrir conversa fechada, SEMPRE colocar no Inbox (department=None)
+                    # para que a Secretária IA possa responder. default_department só vale para conversas novas.
+                    conversation.status = 'pending' if not from_me else 'open'
+                    conversation.department = None
+                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (Secretária IA pode responder)")
                     
                     conversation.save(update_fields=['status', 'department'])
                     
@@ -2534,6 +2527,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
 
             # Secretária IA: se Inbox e secretary_enabled, disparar task em background (RAG + memória → n8n → resposta)
             try:
+                conversation.refresh_from_db()
+                logger.info(
+                    "[SECRETARY] Verificando: conversation_id=%s department_id=%s status=%s",
+                    conversation.id, conversation.department_id, conversation.status,
+                )
                 from apps.ai.secretary_service import dispatch_secretary_async
                 dispatch_secretary_async(conversation, message)
             except Exception as e:

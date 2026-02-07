@@ -375,6 +375,10 @@ def dispatch_secretary_async(conversation, message) -> None:
     Dispara o worker da Secretária em thread (Inbox + secretary_enabled).
     Chamar apenas quando conversa está no Inbox (department is None) e mensagem é incoming.
     """
+    logger.info(
+        "[SECRETARY] Avaliando: conv=%s dept_id=%s msg=%s",
+        conversation.id, conversation.department_id, message.id,
+    )
     if conversation.department_id is not None:
         logger.info(
             "[SECRETARY] Skip: conversa não está no Inbox (department_id=%s)",

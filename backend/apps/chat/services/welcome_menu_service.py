@@ -445,9 +445,10 @@ class WelcomeMenuService:
             if unread_count > 0:
                 logger.debug(f"✅ {unread_count} mensagens marcadas como lidas")
             
-            # Fechar conversa
+            # Fechar conversa e remover departamento (Inbox) para a Secretária poder responder quando reabrir
             conversation.status = 'closed'
-            conversation.save(update_fields=['status'])
+            conversation.department = None
+            conversation.save(update_fields=['status', 'department'])
             
             logger.info(f"✅ Conversa {conversation.id} fechada pelo cliente")
             return True
