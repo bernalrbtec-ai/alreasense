@@ -979,7 +979,174 @@ class BusinessHoursService:
                 exc_info=True
             )
             return None
-    
+
+    @staticmethod
+    @transaction.atomic
+    def create_secretary_return_task(
+        conversation: Conversation,
+        message: Message,
+        tenant,
+        return_subject: str,
+        return_department_id: Optional[str] = None,
+    ) -> Optional[Task]:
+        """
+        Cria tarefa de retorno solicitada pela secretária (Bia) quando fora do horário.
+        Regras: só cria se is_open=False; valida department_id (senão geral); duplicidade:
+        mesmo departamento = unificar; departamento diferente = novo evento. Reutiliza
+        template de AfterHoursTaskConfig.
+        """
+        is_open, next_open_time_str = BusinessHoursService.is_business_hours(
+            tenant, None, message.created_at
+        )
+        if is_open:
+            logger.info(
+                "[SECRETARY RETURN] Não criar tarefa de retorno: empresa está aberta (conv=%s)",
+                conversation.id,
+            )
+            return None
+
+        from apps.authn.models import Department
+
+        department = None
+        if return_department_id:
+            try:
+                dept = Department.objects.filter(
+                    tenant=tenant, id=return_department_id
+                ).first()
+                if dept:
+                    department = dept
+            except Exception:
+                pass
+        if not department:
+            logger.info(
+                "[SECRETARY RETURN] department_id inválido ou vazio; criando tarefa geral (conv=%s)",
+                conversation.id,
+            )
+
+        task_config = BusinessHoursService.get_after_hours_task_config(tenant, department)
+        if not task_config:
+            task_config = BusinessHoursService.get_after_hours_task_config(tenant, None)
+        if not task_config or not task_config.create_task_enabled:
+            logger.warning(
+                "[SECRETARY RETURN] Sem AfterHoursTaskConfig ativo para tenant/department; não criando tarefa"
+            )
+            return None
+
+        dept_id_str = str(department.id) if department else None
+        existing = Task.objects.filter(
+            tenant=tenant,
+            metadata__is_secretary_return=True,
+            metadata__conversation_id=str(conversation.id),
+            status__in=["pending", "in_progress"],
+        ).order_by("-created_at")
+
+        for task in existing:
+            meta = task.metadata or {}
+            if meta.get("department_id") == dept_id_str:
+                subjects = meta.get("secretary_return_subjects", [])
+                if return_subject and return_subject not in subjects:
+                    subjects.append(return_subject[:500])
+                meta["secretary_return_subjects"] = subjects[-10:]
+                task.metadata = meta
+                desc_extra = "\nAssunto(s): " + "; ".join(meta.get("secretary_return_subjects", []))
+                if desc_extra not in (task.description or ""):
+                    task.description = (task.description or "") + desc_extra
+                task.save(update_fields=["metadata", "description"])
+                logger.info(
+                    "[SECRETARY RETURN] Tarefa existente atualizada (mesmo departamento): task=%s",
+                    task.id,
+                )
+                return task
+
+        try:
+            due_date = BusinessHoursService._calculate_task_due_date(
+                tenant, department, message.created_at
+            )
+        except Exception:
+            due_date = message.created_at + timedelta(hours=24)
+
+        contact = None
+        try:
+            from apps.notifications.services import normalize_phone
+            contact_phone_raw = (conversation.contact_phone or "").strip()
+            if contact_phone_raw and "@g.us" not in contact_phone_raw:
+                contact_phone_normalized = normalize_phone(contact_phone_raw) or contact_phone_raw[:20]
+                contact_phone_normalized = (contact_phone_normalized or contact_phone_raw)[:20]
+                contact = Contact.objects.filter(
+                    tenant=tenant, phone=contact_phone_normalized
+                ).first()
+                if not contact:
+                    contact = Contact.objects.create(
+                        tenant=tenant,
+                        phone=contact_phone_normalized,
+                        name=conversation.contact_name or "Cliente",
+                    )
+        except Exception as e:
+            logger.debug("create_secretary_return_task: contact lookup/create failed: %s", e)
+
+        contact_name = conversation.contact_name or (contact.name if contact else "Cliente")
+        sao_paulo_tz = ZoneInfo("America/Sao_Paulo")
+        message_time_local = message.created_at.astimezone(sao_paulo_tz)
+        context = {
+            "contact_name": contact_name,
+            "department_name": department.name if department else "Atendimento",
+            "message_time": message_time_local.strftime("%d/%m/%Y às %H:%M"),
+            "message_content": (return_subject or (message.content or ""))[:500],
+            "next_open_time": next_open_time_str or "Em breve",
+            "contact_phone": conversation.contact_phone or "",
+        }
+        try:
+            task_title = BusinessHoursService.format_message_template(
+                task_config.task_title_template, context
+            )
+            task_description = BusinessHoursService.format_message_template(
+                task_config.task_description_template, context
+            )
+        except Exception as e:
+            logger.warning("create_secretary_return_task: template format failed: %s", e)
+            task_title = f"Retorno: {contact_name}"
+            task_description = f"Assunto: {return_subject}\n\nPróximo horário: {next_open_time_str or 'Em breve'}"
+
+        task_department = (
+            task_config.task_department
+            or department
+            or (getattr(conversation, "department", None))
+        )
+        if not task_department:
+            inbox = Department.objects.filter(tenant=tenant, name="Inbox").first()
+            task_department = inbox or Department.objects.filter(tenant=tenant).first()
+        if not task_department:
+            logger.error("[SECRETARY RETURN] Nenhum departamento disponível para criar tarefa")
+            return None
+
+        task_metadata = {
+            "is_secretary_return": True,
+            "conversation_id": str(conversation.id),
+            "department_id": dept_id_str,
+            "secretary_return_subjects": [return_subject[:500]] if return_subject else [],
+            "original_message_id": str(message.id),
+            "next_open_time": next_open_time_str,
+        }
+        task = Task.objects.create(
+            tenant=tenant,
+            department=task_department,
+            assigned_to=task_config.auto_assign_to_agent,
+            title=task_title,
+            description=task_description,
+            priority=task_config.task_priority,
+            due_date=due_date,
+            status="pending",
+            created_by=None,
+            metadata=task_metadata,
+        )
+        if contact:
+            task.related_contacts.add(contact)
+        logger.info(
+            "[SECRETARY RETURN] Tarefa criada: task=%s conv=%s dept=%s",
+            task.id, conversation.id, task_department.name,
+        )
+        return task
+
     @staticmethod
     def _calculate_task_due_date(tenant, department=None, message_datetime: datetime = None) -> datetime:
         """

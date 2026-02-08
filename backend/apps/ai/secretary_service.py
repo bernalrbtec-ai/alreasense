@@ -481,6 +481,25 @@ def _secretary_worker(conversation, message) -> None:
             except Exception as e:
                 logger.warning("Secretary: failed to assign department %s: %s", suggested_department_id, e)
 
+        # Registro de retorno (Bia): criar tarefa na agenda quando fora do horário
+        if data.get("register_return") and (data.get("return_subject") or "").strip():
+            return_subject = (data.get("return_subject") or "").strip()
+            return_department_id = (data.get("return_department_id") or "").strip() or None
+            try:
+                from apps.chat.services.business_hours_service import BusinessHoursService
+                BusinessHoursService.create_secretary_return_task(
+                    conversation=conversation,
+                    message=message,
+                    tenant=tenant,
+                    return_subject=return_subject,
+                    return_department_id=return_department_id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Secretary: create_secretary_return_task failed conv=%s: %s",
+                    conversation.id, e, exc_info=True,
+                )
+
         memory_items = data.get("memory_items") or []
         if memory_items and profile.use_memory:
             from datetime import timedelta
