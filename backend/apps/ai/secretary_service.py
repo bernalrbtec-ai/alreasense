@@ -500,6 +500,30 @@ def _secretary_worker(conversation, message) -> None:
                     conversation.id, e, exc_info=True,
                 )
 
+        # Encerrar conversa no app quando a Bia se despede (ex.: após registrar retorno)
+        if data.get("close_conversation"):
+            try:
+                conversation.status = "closed"
+                conversation.save(update_fields=["status"])
+                conv_data_closed = serialize_conversation_for_ws(conversation)
+                async_to_sync(channel_layer.group_send)(
+                    room_group_name,
+                    {"type": "message_received", "conversation": conv_data_closed},
+                )
+                async_to_sync(channel_layer.group_send)(
+                    tenant_group,
+                    {"type": "message_received", "conversation": conv_data_closed},
+                )
+                logger.info(
+                    "[SECRETARY] Conversa encerrada no app (Bia se despediu): conv=%s",
+                    conversation.id,
+                )
+            except Exception as e:
+                logger.warning(
+                    "Secretary: close_conversation failed conv=%s: %s",
+                    conversation.id, e, exc_info=True,
+                )
+
         memory_items = data.get("memory_items") or []
         if memory_items and profile.use_memory:
             from datetime import timedelta
