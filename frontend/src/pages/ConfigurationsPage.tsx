@@ -194,6 +194,7 @@ interface SecretaryProfile {
   signature_name?: string
   use_memory: boolean
   is_active: boolean
+  inbox_idle_minutes?: number
   created_at?: string
   updated_at?: string
 }
@@ -367,6 +368,7 @@ export default function ConfigurationsPage() {
   const [secretarySignatureName, setSecretarySignatureName] = useState('')
   const [secretaryUseMemory, setSecretaryUseMemory] = useState(true)
   const [secretaryIsActive, setSecretaryIsActive] = useState(false)
+  const [secretaryInboxIdleMinutes, setSecretaryInboxIdleMinutes] = useState(0)
 
   const loadGatewayAudit = async (options?: { offset?: number }) => {
     try {
@@ -1356,6 +1358,7 @@ export default function ConfigurationsPage() {
       setSecretarySignatureName(data?.signature_name || '')
       setSecretaryUseMemory(data?.use_memory !== false)
       setSecretaryIsActive(data?.is_active === true)
+      setSecretaryInboxIdleMinutes(typeof data?.inbox_idle_minutes === 'number' ? data.inbox_idle_minutes : 0)
     } catch (error: any) {
       if (error.response?.status !== 403) {
         showErrorToast('Erro ao carregar perfil da Secretária IA')
@@ -1373,9 +1376,10 @@ export default function ConfigurationsPage() {
         prompt: secretaryPrompt,
         signature_name: secretarySignatureName,
         use_memory: secretaryUseMemory,
-        is_active: secretaryIsActive
+        is_active: secretaryIsActive,
+        inbox_idle_minutes: secretaryInboxIdleMinutes
       })
-      setSecretaryProfile(prev => prev ? { ...prev, form_data: secretaryFormData, prompt: secretaryPrompt, signature_name: secretarySignatureName, use_memory: secretaryUseMemory, is_active: secretaryIsActive } : null)
+      setSecretaryProfile(prev => prev ? { ...prev, form_data: secretaryFormData, prompt: secretaryPrompt, signature_name: secretarySignatureName, use_memory: secretaryUseMemory, is_active: secretaryIsActive, inbox_idle_minutes: secretaryInboxIdleMinutes } : null)
       showSuccessToast('Perfil da Secretária salvo.')
       setIsSecretaryModalOpen(false)
     } catch (error: any) {
@@ -2204,6 +2208,7 @@ export default function ConfigurationsPage() {
                           setSecretarySignatureName(secretaryProfile?.signature_name || '')
                           setSecretaryUseMemory(secretaryProfile?.use_memory !== false)
                           setSecretaryIsActive(secretaryProfile?.is_active === true)
+                          setSecretaryInboxIdleMinutes(typeof secretaryProfile?.inbox_idle_minutes === 'number' ? secretaryProfile.inbox_idle_minutes : 0)
                           setIsSecretaryModalOpen(true)
                         }}
                         disabled={secretaryProfileLoading}
@@ -3332,6 +3337,19 @@ export default function ConfigurationsPage() {
                   <Label htmlFor="secretary_is_active" className="font-normal">
                     Perfil ativo (contexto RAG pronto para respostas)
                   </Label>
+                </div>
+                <div>
+                  <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (minutos)</Label>
+                  <Input
+                    id="secretary_inbox_idle_minutes"
+                    type="number"
+                    min={0}
+                    max={1440}
+                    value={secretaryInboxIdleMinutes}
+                    onChange={(e) => setSecretaryInboxIdleMinutes(Math.min(1440, Math.max(0, parseInt(e.target.value, 10) || 0)))}
+                    className="mt-1 w-32"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">0 = desativado. Máx. 1440 (24h). Se não houver mensagens no Inbox por X minutos, a conversa é encerrada com mensagem de despedida.</p>
                 </div>
               </div>
               <div className="mt-6 flex justify-end gap-2">

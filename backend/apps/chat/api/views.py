@@ -3313,8 +3313,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             is_internal=True
         )
         
-        # ✅ NOVO: Enviar mensagem automática de transferência para o cliente
-        if new_department_id and conversation.department and conversation.department.transfer_message:
+        # ✅ NOVO: Enviar mensagem automática de transferência para o cliente (fallback se transfer_message vazio)
+        if new_department_id and conversation.department:
             try:
                 import httpx
                 from apps.notifications.models import WhatsAppInstance
@@ -3335,8 +3335,13 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     api_key = wa_instance.api_key or evolution_server.api_key
                     instance_name = wa_instance.instance_name
                     
-                    # Preparar mensagem de transferência
-                    transfer_message_text = conversation.department.transfer_message
+                    # Mensagem de transferência: usar transfer_message do departamento ou padrão
+                    transfer_message_text = (conversation.department.transfer_message or "").strip()
+                    if not transfer_message_text:
+                        transfer_message_text = (
+                            f"Sua conversa foi transferida para o departamento {conversation.department.name}. "
+                            "Em breve você será atendido."
+                        )
                     
                     # Enviar via Evolution API
                     with httpx.Client(timeout=10.0) as client:

@@ -789,6 +789,7 @@ def secretary_profile(request):
             "signature_name": getattr(profile, "signature_name", "") or "",
             "use_memory": profile.use_memory,
             "is_active": profile.is_active,
+            "inbox_idle_minutes": getattr(profile, "inbox_idle_minutes", 0) or 0,
             "created_at": timezone.localtime(profile.created_at).isoformat(),
             "updated_at": timezone.localtime(profile.updated_at).isoformat(),
         })
@@ -826,6 +827,20 @@ def secretary_profile(request):
         else:
             profile.is_active = is_active
 
+    if 'inbox_idle_minutes' in data:
+        try:
+            val = data.get('inbox_idle_minutes')
+            if val is None:
+                profile.inbox_idle_minutes = 0
+            else:
+                n = int(val)
+                if n < 0 or n > 1440:
+                    errors['inbox_idle_minutes'] = 'Valor deve estar entre 0 e 1440 (0 = desativado, máx. 24h).'
+                else:
+                    profile.inbox_idle_minutes = n
+        except (TypeError, ValueError):
+            errors['inbox_idle_minutes'] = 'Valor inválido (número 0-1440).'
+
     if errors:
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -848,6 +863,7 @@ def secretary_profile(request):
         "signature_name": getattr(profile, "signature_name", "") or "",
         "use_memory": profile.use_memory,
         "is_active": profile.is_active,
+        "inbox_idle_minutes": getattr(profile, "inbox_idle_minutes", 0) or 0,
         "updated_at": timezone.localtime(profile.updated_at).isoformat(),
     })
 

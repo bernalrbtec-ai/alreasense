@@ -178,27 +178,53 @@ def _resolve_n8n_ai_url(tenant) -> str:
     return getattr(settings, "N8N_AI_WEBHOOK", "")
 
 
+def _message_content_for_secretary(msg) -> str:
+    """
+    Conteúdo de uma mensagem para o contexto da secretária: texto ou transcrição de áudio.
+    Usa msg.content se preenchido; senão, anexos de áudio com transcription; se áudio sem transcrição, placeholder.
+    """
+    text = (getattr(msg, "content", None) or "").strip()
+    if text:
+        return text
+    attachments = getattr(msg, "attachments", None)
+    if not attachments:
+        return ""
+    audio_attachments = [a for a in attachments.all() if (getattr(a, "mime_type", "") or "").lower().find("audio") >= 0]
+    if not audio_attachments:
+        return ""
+    transcriptions = []
+    for a in audio_attachments:
+        t = (getattr(a, "transcription", None) or "").strip()
+        if t:
+            transcriptions.append(t)
+    if transcriptions:
+        return "[Áudio] " + (" ".join(transcriptions) if len(transcriptions) > 1 else transcriptions[0])
+    return "[Áudio em processamento]"
+
+
 def _build_secretary_context(conversation, message, profile: TenantSecretaryProfile) -> Dict[str, Any]:
-    """Monta contexto para a Secretária: mensagens recentes, RAG source=secretary, memória por contato."""
+    """Monta contexto para a Secretária: mensagens recentes (texto ou transcrição), RAG source=secretary, memória por contato."""
     from apps.chat.services.business_hours_service import BusinessHoursService
 
     message_limit = getattr(settings, "AI_CONTEXT_MESSAGE_LIMIT", 20)
-    recent_messages = list(conversation.messages.order_by("-created_at")[:message_limit])
+    recent_messages = list(
+        conversation.messages.prefetch_related("attachments").order_by("-created_at")[:message_limit]
+    )
     recent_messages.reverse()
-    # Só incluir mensagens com conteúdo (evita user/content vazios no n8n e respostas estranhas)
-    context_messages = [
-        {
-            "id": str(msg.id),
-            "direction": msg.direction,
-            "content": (msg.content or "").strip(),
-            "created_at": msg.created_at.isoformat(),
-            "sender_name": getattr(msg, "sender_name", "") or "",
-        }
-        for msg in recent_messages
-        if (msg.content or "").strip()
-    ]
-    # Garantir que a mensagem que disparou a secretária seja a última (evita race/commit e n8n sem a nova mensagem)
-    current_msg_content = (message.content or "").strip()
+    context_messages = []
+    for msg in recent_messages:
+        content = _message_content_for_secretary(msg)
+        if content:
+            context_messages.append({
+                "id": str(msg.id),
+                "direction": msg.direction,
+                "content": content,
+                "created_at": msg.created_at.isoformat(),
+                "sender_name": getattr(msg, "sender_name", "") or "",
+            })
+    # Garantir que a mensagem que disparou a secretária seja a última (usar prefetched se for a mesma)
+    trigger_msg = recent_messages[-1] if recent_messages and str(recent_messages[-1].id) == str(message.id) else message
+    current_msg_content = _message_content_for_secretary(trigger_msg) or (message.content or "").strip()
     if current_msg_content:
         last_id = context_messages[-1]["id"] if context_messages else None
         if last_id != str(message.id):
@@ -212,7 +238,7 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     is_open, next_open_time = BusinessHoursService.is_business_hours(
         conversation.tenant, conversation.department
     )
-    query_text = (message.content or "").strip()
+    query_text = current_msg_content if current_msg_content else (message.content or "").strip()
     query_embedding = embed_text(query_text) if query_text else []
     knowledge_items = get_secretary_rag_context(
         str(conversation.tenant_id),
@@ -271,7 +297,7 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         "message": {
             "id": str(message.id),
             "direction": message.direction,
-            "content": message.content,
+            "content": query_text or (message.content or ""),
             "created_at": message.created_at.isoformat(),
         },
         "messages": context_messages,
@@ -307,6 +333,25 @@ def _secretary_worker(conversation, message) -> None:
         if not n8n_url:
             logger.info("Secretary: n8n AI webhook not configured for tenant %s", tenant_id)
             return
+
+        # Só enviar ao agente quando houver conteúdo: texto ou transcrição de áudio pronta
+        content = (getattr(message, "content", None) or "").strip()
+        if not content:
+            from apps.chat.models import MessageAttachment
+            audio_attachments = list(
+                message.attachments.filter(mime_type__icontains="audio").only("id", "transcription")
+            )
+            if audio_attachments:
+                has_transcription = any(
+                    (getattr(a, "transcription", None) or "").strip()
+                    for a in audio_attachments
+                )
+                if not has_transcription:
+                    logger.info(
+                        "[SECRETARY] Mensagem é áudio sem transcrição; não enviar ao agente (conv=%s)",
+                        conversation.id,
+                    )
+                    return
 
         context = _build_secretary_context(conversation, message, profile)
         body = {"action": "secretary", **context}
@@ -392,6 +437,47 @@ def _secretary_worker(conversation, message) -> None:
                         conversation.metadata = meta
                         update_fields.append("metadata")
                     conversation.save(update_fields=update_fields)
+
+                    # Mensagem interna para o departamento (resumo visível no chat)
+                    internal_content = f"Conversa transferida para {dept.name} (Secretária IA). Resumo: {summary_for_department[:500] if summary_for_department else '—'}"
+                    ChatMessage.objects.create(
+                        conversation=conversation,
+                        sender=None,
+                        sender_name="Sistema",
+                        content=internal_content,
+                        direction="outgoing",
+                        status="sent",
+                        is_internal=True,
+                    )
+
+                    # Confirmação ao cliente: transfer_message do departamento ou padrão; opcionalmente resumo (limite 200)
+                    confirmation_text = (getattr(dept, "transfer_message", None) or "").strip()
+                    if not confirmation_text:
+                        confirmation_text = f"Sua conversa foi transferida para o departamento {dept.name}. Em breve você será atendido."
+                    if summary_for_department:
+                        summary_line = (summary_for_department[:200] + ("…" if len(summary_for_department) > 200 else ""))
+                        confirmation_text = f"{confirmation_text}\n\nResumo do que você nos disse: {summary_line}"
+
+                    confirmation_message = ChatMessage.objects.create(
+                        conversation=conversation,
+                        sender=None,
+                        sender_name=sender_name,
+                        content=confirmation_text,
+                        direction="outgoing",
+                        status="pending",
+                        is_internal=False,
+                    )
+                    conv_data_after = serialize_conversation_for_ws(conversation)
+                    msg_conf_data = serialize_message_for_ws(confirmation_message)
+                    async_to_sync(channel_layer.group_send)(
+                        room_group_name,
+                        {"type": "message_received", "message": msg_conf_data},
+                    )
+                    async_to_sync(channel_layer.group_send)(
+                        tenant_group,
+                        {"type": "message_received", "message": msg_conf_data, "conversation": conv_data_after},
+                    )
+                    send_message_to_evolution.delay(str(confirmation_message.id))
             except Exception as e:
                 logger.warning("Secretary: failed to assign department %s: %s", suggested_department_id, e)
 

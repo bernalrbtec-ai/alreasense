@@ -203,6 +203,11 @@ class TenantSecretaryProfile(models.Model):
         default=False,
         help_text='Perfil ativo (dados prontos para RAG). Ativar no Inbox é controlado por TenantAiSettings.secretary_enabled.',
     )
+    inbox_idle_minutes = models.PositiveIntegerField(
+        default=0,
+        blank=True,
+        help_text='Minutos sem interação no Inbox para fechar conversa (0=desativado, máx. 1440=24h).',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
