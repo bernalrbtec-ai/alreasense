@@ -2478,39 +2478,49 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   Message created_at: {message.created_at}")
             try:
                 from apps.chat.services.business_hours_service import BusinessHoursService
-                
-                # Processa mensagem fora de horário (cria mensagem automática se configurado)
-                was_after_hours, auto_message = BusinessHoursService.handle_after_hours_message(
-                    conversation=conversation,
-                    message=message,
-                    tenant=tenant,
-                    department=conversation.department
+                from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
+
+                # Se Inbox + secretária ativa: não enviar mensagem automática fora de horário; a secretária responde (com is_open/next_open_time no contexto)
+                secretary_responds_instead = (
+                    conversation.department_id is None
+                    and TenantAiSettings.objects.filter(tenant=tenant).filter(secretary_enabled=True).exists()
+                    and TenantSecretaryProfile.objects.filter(tenant=tenant).filter(is_active=True).exists()
                 )
-                
-                logger.info(f"🔍 [BUSINESS HOURS] Resultado da verificação: was_after_hours={was_after_hours}")
-                
-                if was_after_hours:
-                    logger.info(f"⏰ [BUSINESS HOURS] Mensagem recebida fora de horário")
-                    if auto_message:
-                        logger.info(f"   📨 Mensagem automática criada: {auto_message.id}")
-                    else:
-                        logger.info(f"   ⚠️ Mensagem automática não foi criada (pode não estar configurada)")
-                    
-                    # Cria tarefa automática se configurado
-                    logger.info(f"🔍 [BUSINESS HOURS] Tentando criar tarefa automática...")
-                    task = BusinessHoursService.create_after_hours_task(
+                if secretary_responds_instead:
+                    logger.info(f"⏰ [BUSINESS HOURS] Secretária ativa no Inbox: mensagem fora de horário será respondida pela secretária (sem mensagem automática)")
+                else:
+                    # Processa mensagem fora de horário (cria mensagem automática se configurado)
+                    was_after_hours, auto_message = BusinessHoursService.handle_after_hours_message(
                         conversation=conversation,
                         message=message,
                         tenant=tenant,
                         department=conversation.department
                     )
-                    
-                    if task:
-                        logger.info(f"   ✅ Tarefa automática criada: {task.id} - {task.title}")
+
+                    logger.info(f"🔍 [BUSINESS HOURS] Resultado da verificação: was_after_hours={was_after_hours}")
+
+                    if was_after_hours:
+                        logger.info(f"⏰ [BUSINESS HOURS] Mensagem recebida fora de horário")
+                        if auto_message:
+                            logger.info(f"   📨 Mensagem automática criada: {auto_message.id}")
+                        else:
+                            logger.info(f"   ⚠️ Mensagem automática não foi criada (pode não estar configurada)")
+
+                        # Cria tarefa automática se configurado
+                        logger.info(f"🔍 [BUSINESS HOURS] Tentando criar tarefa automática...")
+                        task = BusinessHoursService.create_after_hours_task(
+                            conversation=conversation,
+                            message=message,
+                            tenant=tenant,
+                            department=conversation.department
+                        )
+
+                        if task:
+                            logger.info(f"   ✅ Tarefa automática criada: {task.id} - {task.title}")
+                        else:
+                            logger.warning(f"   ⚠️ Tarefa automática não foi criada - verifique os logs acima para detalhes")
                     else:
-                        logger.warning(f"   ⚠️ Tarefa automática não foi criada - verifique os logs acima para detalhes")
-                else:
-                    logger.info(f"✅ [BUSINESS HOURS] Mensagem recebida dentro do horário de atendimento")
+                        logger.info(f"✅ [BUSINESS HOURS] Mensagem recebida dentro do horário de atendimento")
             except Exception as e:
                 logger.error(f"❌ [BUSINESS HOURS] Erro ao processar horário de atendimento: {e}", exc_info=True)
             
