@@ -47,7 +47,7 @@ class BusinessHoursService:
                 logger.debug(f"⏰ [BUSINESS HOURS] Encontrado horário do departamento: {business_hours.id} (is_active={business_hours.is_active})")
                 return business_hours
         
-        # Busca horário geral do tenant (mais recente primeiro)
+        # Busca horário geral do tenant (department=None, mais recente primeiro)
         business_hours = BusinessHours.objects.filter(
             tenant=tenant,
             department__isnull=True
@@ -55,7 +55,18 @@ class BusinessHoursService:
         
         if business_hours:
             logger.debug(f"⏰ [BUSINESS HOURS] Encontrado horário geral: {business_hours.id} (is_active={business_hours.is_active})")
-        
+            return business_hours
+
+        # Inbox (department=None): se não há horário "geral", usa qualquer horário do tenant como fallback
+        # (ex.: usuário configurou só para um departamento; Inbox deve respeitar esse horário)
+        business_hours = BusinessHours.objects.filter(tenant=tenant).order_by('-updated_at', '-created_at').first()
+        if business_hours:
+            logger.debug(
+                "⏰ [BUSINESS HOURS] Sem horário geral; usando fallback do tenant: %s (department=%s, is_active=%s)",
+                business_hours.id,
+                business_hours.department_id,
+                business_hours.is_active,
+            )
         return business_hours
     
     @staticmethod
