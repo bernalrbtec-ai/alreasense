@@ -875,6 +875,21 @@ class EvolutionWebhookView(APIView):
                 # Buscar EvolutionConnection para passar também
                 connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
                 
+                # ✅ FALLBACK 3: Se ainda não encontrou e temos connection, buscar por tenant
+                if not whatsapp_instance and connection and connection.tenant:
+                    logger.info(f"🔍 [FLOW CHAT] Tentando buscar instância do tenant {connection.tenant.name}...")
+                    whatsapp_instance = WhatsAppInstance.objects.select_related(
+                        'tenant',
+                        'default_department'
+                    ).filter(
+                        tenant=connection.tenant,
+                        is_active=True,
+                        status='active'
+                    ).first()
+                    
+                    if whatsapp_instance:
+                        logger.info(f"✅ [FLOW CHAT] Instância encontrada por tenant: {whatsapp_instance.friendly_name}")
+                
                 if whatsapp_instance:
                     logger.info(f"✅ [FLOW CHAT] WhatsAppInstance encontrada: {whatsapp_instance.friendly_name} ({whatsapp_instance.instance_name})")
                     logger.info(f"   📋 Default Department ID: {whatsapp_instance.default_department_id}")
