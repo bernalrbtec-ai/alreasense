@@ -825,14 +825,16 @@ class EvolutionWebhookView(APIView):
                 from apps.connections.models import EvolutionConnection
                 from django.db.models import Q
                 
+                # ✅ Normalizar: strip (evita falha por espaço no webhook)
+                instance_name = (instance_name or '').strip()
                 # ✅ FIX CRÍTICO: Buscar WhatsAppInstance pelo instance_name (UUID) com default_department
-                # Evolution API envia UUID (ex: "9afdad84-5411-4754-8f63-2599a6b9142c")
+                # Evolution API envia UUID (ex: "262b8dcd-337c-4db0-8970-d5d3e28d63cc"); no banco pode ser igual
                 logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance por instance_name: {instance_name}")
                 whatsapp_instance = WhatsAppInstance.objects.select_related(
-                    'tenant', 
-                    'default_department'  # ✅ CRÍTICO: Carregar departamento padrão
+                    'tenant',
+                    'default_department'
                 ).filter(
-                    instance_name=instance_name,  # ✅ FIX: Buscar apenas por instance_name (UUID)
+                    instance_name__iexact=instance_name,
                     is_active=True,
                     status='active'
                 ).first()
@@ -842,14 +844,14 @@ class EvolutionWebhookView(APIView):
                 else:
                     logger.warning(f"⚠️ [FLOW CHAT] Instância não encontrada por instance_name={instance_name}")
                 
-                # ✅ FALLBACK: Se não encontrou por instance_name, tentar por evolution_instance_name
+                # ✅ FALLBACK: Se não encontrou por instance_name, tentar por evolution_instance_name (case-insensitive)
                 if not whatsapp_instance:
                     logger.info(f"🔍 [FLOW CHAT] Tentando buscar por evolution_instance_name: {instance_name}")
                     whatsapp_instance = WhatsAppInstance.objects.select_related(
                         'tenant',
                         'default_department'
                     ).filter(
-                        evolution_instance_name=instance_name,
+                        evolution_instance_name__iexact=instance_name,
                         is_active=True,
                         status='active'
                     ).first()
@@ -871,7 +873,23 @@ class EvolutionWebhookView(APIView):
                     
                     if whatsapp_instance:
                         logger.info(f"✅ [FLOW CHAT] Instância encontrada por friendly_name: {whatsapp_instance.friendly_name}")
-                
+
+                # ✅ FALLBACK 2b: Evolution às vezes envia UUID; no banco pode estar sem hífens ou em outro campo
+                if not whatsapp_instance and '-' in instance_name and len(instance_name) >= 32:
+                    instance_name_compact = instance_name.replace('-', '')
+                    logger.info(f"🔍 [FLOW CHAT] Tentando buscar por UUID (com e sem hífens): {instance_name_compact[:8]}...")
+                    whatsapp_instance = WhatsAppInstance.objects.select_related(
+                        'tenant',
+                        'default_department'
+                    ).filter(
+                        Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name)
+                        | Q(instance_name=instance_name_compact) | Q(evolution_instance_name=instance_name_compact),
+                        is_active=True,
+                        status='active'
+                    ).first()
+                    if whatsapp_instance:
+                        logger.info(f"✅ [FLOW CHAT] Instância encontrada por UUID: {whatsapp_instance.friendly_name}")
+
                 # Buscar EvolutionConnection para passar também
                 connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
                 
@@ -915,31 +933,41 @@ class EvolutionWebhookView(APIView):
                     logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {whatsapp_instance.tenant.name}")
                 else:
                     logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para instance: {instance_name}")
-                    logger.warning(f"   📋 Tentando buscar todas as instâncias ativas...")
-                    
-                    # ✅ FALLBACK: Tentar buscar qualquer instância ativa do tenant
-                    if connection and connection.tenant:
-                        fallback_instance = WhatsAppInstance.objects.select_related(
-                            'tenant', 
-                            'default_department'
-                        ).filter(
-                            tenant=connection.tenant,
-                            is_active=True,
-                            status='active'
-                        ).first()
-                        
-                        if fallback_instance:
-                            logger.warning(f"⚠️ [FLOW CHAT] Usando instância fallback: {fallback_instance.friendly_name}")
-                            logger.info(f"   📋 Default Department: {fallback_instance.default_department.name if fallback_instance.default_department else 'Nenhum (Inbox)'}")
-                            chat_handle_message(data, connection.tenant, connection=connection, wa_instance=fallback_instance)
-                        else:
-                            logger.warning(f"⚠️ [FLOW CHAT] Nenhuma instância ativa encontrada, processando sem wa_instance")
-                            if connection:
+                    logger.warning(
+                        f"   💡 Se a Evolution envia UUID no webhook, cadastre em Configurações > Instâncias: "
+                        f"em evolution_instance_name (ou instance_name) o valor: {instance_name}"
+                    )
+                    # ✅ FALLBACK: Se existe só uma instância ativa no sistema, usar (single-tenant)
+                    only_one = WhatsAppInstance.objects.filter(is_active=True, status='active').select_related('tenant', 'default_department')
+                    if only_one.count() == 1:
+                        whatsapp_instance = only_one.first()
+                        logger.warning(f"⚠️ [FLOW CHAT] Usando única instância ativa (single-tenant): {whatsapp_instance.friendly_name}")
+                        if not connection:
+                            connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
+                        chat_handle_message(data, whatsapp_instance.tenant, connection=connection, wa_instance=whatsapp_instance)
+                        logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {whatsapp_instance.tenant.name}")
+                    else:
+                        # ✅ FALLBACK: Tentar buscar qualquer instância ativa do tenant da connection
+                        if connection and connection.tenant:
+                            fallback_instance = WhatsAppInstance.objects.select_related(
+                                'tenant',
+                                'default_department'
+                            ).filter(
+                                tenant=connection.tenant,
+                                is_active=True,
+                                status='active'
+                            ).first()
+                            if fallback_instance:
+                                logger.warning(f"⚠️ [FLOW CHAT] Usando instância fallback: {fallback_instance.friendly_name}")
+                                logger.info(f"   📋 Default Department: {fallback_instance.default_department.name if fallback_instance.default_department else 'Nenhum (Inbox)'}")
+                                chat_handle_message(data, connection.tenant, connection=connection, wa_instance=fallback_instance)
+                            else:
+                                logger.warning(f"⚠️ [FLOW CHAT] Nenhuma instância ativa encontrada, processando sem wa_instance")
                                 logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
                                 chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
-                    elif connection:
-                        logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
-                        chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
+                        elif connection:
+                            logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
+                            chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
             except Exception as e:
                 logger.error(f"❌ [FLOW CHAT] Erro ao processar mensagem: {e}", exc_info=True)
             
