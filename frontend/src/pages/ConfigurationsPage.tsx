@@ -30,7 +30,11 @@ import {
   Calendar,
   Activity,
   Lock,
-  Mic
+  Mic,
+  ChevronRight,
+  ChevronLeft,
+  FileText,
+  Sparkles
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -320,6 +324,19 @@ export default function ConfigurationsPage() {
   const [secretaryProfileLoading, setSecretaryProfileLoading] = useState(false)
   const [secretaryProfileSaving, setSecretaryProfileSaving] = useState(false)
   const [secretaryProfileErrors, setSecretaryProfileErrors] = useState<Record<string, string>>({})
+  const [isSecretaryModalOpen, setIsSecretaryModalOpen] = useState(false)
+  const [secretaryWizardStep, setSecretaryWizardStep] = useState(1)
+  const [secretaryFormData, setSecretaryFormData] = useState<{
+    empresa?: string
+    missao?: string
+    endereco?: string
+    telefone?: string
+    email?: string
+    ramo?: string
+    servicos?: string
+    horario_atendimento?: string
+  }>({})
+  const [secretaryRagPreview, setSecretaryRagPreview] = useState<string>('')
   const [audioTestLoading, setAudioTestLoading] = useState(false)
   const [isAudioRecording, setIsAudioRecording] = useState(false)
   const [audioRecordingTime, setAudioRecordingTime] = useState(0)
@@ -1361,20 +1378,49 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const handleSaveSecretaryProfile = async () => {
-    if (!secretaryProfile || !aiSettings) return
+  const generateRagPreview = (formData: typeof secretaryFormData) => {
+    const parts: string[] = []
+    if (formData.empresa) parts.push(`Empresa: ${formData.empresa}`)
+    if (formData.missao) parts.push(`Missão: ${formData.missao}`)
+    if (formData.endereco) parts.push(`Endereço: ${formData.endereco}`)
+    if (formData.telefone) parts.push(`Telefone: ${formData.telefone}`)
+    if (formData.email) parts.push(`Email: ${formData.email}`)
+    if (formData.ramo) parts.push(`Ramo de atuação: ${formData.ramo}`)
+    if (formData.servicos) parts.push(`Serviços: ${formData.servicos}`)
+    if (formData.horario_atendimento) parts.push(`Horário de atendimento: ${formData.horario_atendimento}`)
+    
+    if (departments && departments.length > 0) {
+      parts.push('\nDepartamentos disponíveis:')
+      departments.forEach(dept => {
+        parts.push(`- ${dept.name}`)
+      })
+    }
+    
+    return parts.join('\n') || 'Nenhum dado configurado ainda.'
+  }
+
+  const handleSaveSecretaryProfile = async (fromModal = false) => {
+    if (!secretaryProfile) return
     const errors: Record<string, string> = {}
     if (secretaryProfile.inbox_idle_minutes < 0 || secretaryProfile.inbox_idle_minutes > 1440) {
       errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
     }
     setSecretaryProfileErrors(errors)
     if (Object.keys(errors).length > 0) return
+    
     const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
     try {
       setSecretaryProfileSaving(true)
       await api.put('/ai/secretary/profile/', secretaryProfile)
       setSecretaryProfileErrors({})
       updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
+      
+      if (fromModal) {
+        setIsSecretaryModalOpen(false)
+        if (secretaryProfile.is_active && aiSettings?.secretary_enabled) {
+          showSuccessToast('A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.')
+        }
+      }
     } catch (error: any) {
       const apiErrors = error.response?.data?.errors || {}
       if (apiErrors && typeof apiErrors === 'object') {
@@ -1384,6 +1430,46 @@ export default function ConfigurationsPage() {
     } finally {
       setSecretaryProfileSaving(false)
     }
+  }
+
+  const handleSecretaryWizardNext = () => {
+    if (secretaryWizardStep === 1) {
+      // Validar dados básicos antes de avançar
+      if (!secretaryFormData.empresa?.trim()) {
+        showErrorToast('Preencha pelo menos o nome da empresa')
+        return
+      }
+      // Atualizar preview ao avançar
+      setSecretaryRagPreview(generateRagPreview(secretaryFormData))
+    } else if (secretaryWizardStep === 2) {
+      // Atualizar preview antes da revisão
+      setSecretaryRagPreview(generateRagPreview(secretaryFormData))
+    }
+    if (secretaryWizardStep < 3) {
+      setSecretaryWizardStep(secretaryWizardStep + 1)
+    }
+  }
+
+  const handleSecretaryWizardPrev = () => {
+    if (secretaryWizardStep > 1) {
+      setSecretaryWizardStep(secretaryWizardStep - 1)
+    }
+  }
+
+  const handleSecretaryModalSave = () => {
+    if (!secretaryProfile) return
+    
+    // Atualizar form_data estruturado
+    const updatedProfile = {
+      ...secretaryProfile,
+      form_data: secretaryFormData
+    }
+    setSecretaryProfile(updatedProfile)
+    
+    // Salvar
+    setTimeout(() => {
+      handleSaveSecretaryProfile(true)
+    }, 100)
   }
 
   const fetchAiModels = async (currentSettings?: AiSettings, overrideUrl?: string) => {
@@ -2188,103 +2274,73 @@ export default function ConfigurationsPage() {
 
               {/* Secretária IA (Bia) */}
               <Card className="p-6">
-                <h3 className="text-lg font-medium text-gray-900 mb-1">Secretária IA (Bia)</h3>
-                <p className="text-sm text-gray-600 mb-4">
-                  Perfil da secretária virtual no Inbox: dados da empresa, prompt e opções. Só atua quando &quot;Ativar Secretária IA (Inbox)&quot; estiver ligado acima.
-                </p>
-                {secretaryProfileLoading || secretaryProfile === null ? (
-                  <div className="flex items-center justify-center h-32">
-                    <LoadingSpinner />
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-lg font-medium text-gray-900 mb-1">Secretária IA (Bia)</h3>
+                    <p className="text-sm text-gray-600">
+                      Configure a secretária virtual para atender conversas do Inbox automaticamente.
+                    </p>
                   </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-base font-semibold">Perfil ativo</Label>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={secretaryProfile.is_active}
-                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, is_active: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label className="text-base font-semibold">Usar memória por contato</Label>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={secretaryProfile.use_memory}
-                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                    <div>
-                      <Label htmlFor="secretary_signature_name">Nome na assinatura (ex: Bia)</Label>
-                      <Input
-                        id="secretary_signature_name"
-                        value={secretaryProfile.signature_name}
-                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
-                        placeholder="Bia"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (minutos)</Label>
-                      <Input
-                        id="secretary_inbox_idle_minutes"
-                        type="number"
-                        min={0}
-                        max={1440}
-                        value={secretaryProfile.inbox_idle_minutes}
-                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
-                        className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">0 = desativado. Máx. 1440 (24h).</p>
-                      {secretaryProfileErrors.inbox_idle_minutes && (
-                        <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                  {secretaryProfileLoading || secretaryProfile === null ? (
+                    <LoadingSpinner />
+                  ) : (
+                    <div className="flex items-center gap-3">
+                      {secretaryProfile.is_active && (
+                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
+                          Ativa
+                        </span>
                       )}
-                    </div>
-                    <div>
-                      <Label htmlFor="secretary_form_data">Dados da empresa (JSON)</Label>
-                      <textarea
-                        id="secretary_form_data"
-                        value={typeof secretaryProfile.form_data === 'object' ? JSON.stringify(secretaryProfile.form_data, null, 2) : String(secretaryProfile.form_data || '')}
-                        onChange={(e) => {
-                          try {
-                            const parsed = e.target.value.trim() ? JSON.parse(e.target.value) : {}
-                            if (typeof parsed === 'object' && parsed !== null) {
-                              setSecretaryProfile({ ...secretaryProfile, form_data: parsed })
-                            }
-                          } catch {
-                            // mantém texto enquanto digita
+                      <Button
+                        onClick={() => {
+                          // Inicializar form_data estruturado se existir
+                          if (secretaryProfile.form_data && typeof secretaryProfile.form_data === 'object') {
+                            setSecretaryFormData(secretaryProfile.form_data as any)
+                          } else {
+                            setSecretaryFormData({})
                           }
+                          // Gerar preview inicial
+                          const currentFormData = secretaryProfile.form_data && typeof secretaryProfile.form_data === 'object' 
+                            ? secretaryProfile.form_data as any 
+                            : {}
+                          setSecretaryRagPreview(generateRagPreview(currentFormData))
+                          setIsSecretaryModalOpen(true)
+                          setSecretaryWizardStep(1)
                         }}
-                        rows={6}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
-                        placeholder='{"empresa": "Nome", "servicos": "..."}'
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Objeto JSON usado como contexto RAG da secretária.</p>
-                    </div>
-                    <div>
-                      <Label htmlFor="secretary_prompt">Prompt da secretária</Label>
-                      <textarea
-                        id="secretary_prompt"
-                        value={secretaryProfile.prompt}
-                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, prompt: e.target.value })}
-                        rows={8}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="Instruções de tom, regras e formato. Vazio = usa o padrão do n8n."
-                      />
-                    </div>
-                    <div className="flex justify-end">
-                      <Button onClick={handleSaveSecretaryProfile} disabled={secretaryProfileSaving}>
-                        <Save className="h-4 w-4 mr-2" />
-                        {secretaryProfileSaving ? 'Salvando...' : 'Salvar perfil da Secretária'}
+                        variant="outline"
+                      >
+                        <Edit className="h-4 w-4 mr-2" />
+                        {secretaryProfile.is_active ? 'Editar' : 'Configurar'}
                       </Button>
+                    </div>
+                  )}
+                </div>
+                {secretaryProfile && !secretaryProfileLoading && (
+                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <span className="text-gray-600">Nome:</span>
+                        <span className="ml-2 font-medium">{secretaryProfile.signature_name || 'Bia'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Memória:</span>
+                        <span className="ml-2 font-medium">{secretaryProfile.use_memory ? 'Ativada' : 'Desativada'}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Timeout Inbox:</span>
+                        <span className="ml-2 font-medium">
+                          {secretaryProfile.inbox_idle_minutes > 0 
+                            ? `${secretaryProfile.inbox_idle_minutes} min` 
+                            : 'Desativado'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-gray-600">Dados empresa:</span>
+                        <span className="ml-2 font-medium">
+                          {secretaryProfile.form_data && Object.keys(secretaryProfile.form_data).length > 0 
+                            ? `${Object.keys(secretaryProfile.form_data).length} campos` 
+                            : 'Não configurado'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}
@@ -3922,6 +3978,344 @@ export default function ConfigurationsPage() {
               </div>
             </Card>
           )}
+        </div>
+      )}
+
+      {/* Modal Secretária IA - Wizard */}
+      {isSecretaryModalOpen && secretaryProfile && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
+            {/* Header */}
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                  <Sparkles className="h-6 w-6 text-blue-600" />
+                  Configurar Secretária IA (Bia)
+                </h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Configure os dados da empresa e o comportamento da secretária virtual
+                </p>
+              </div>
+              <button
+                onClick={() => setIsSecretaryModalOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            {/* Steps indicator */}
+            <div className="px-6 py-4 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                {[1, 2, 3].map((step) => (
+                  <div key={step} className="flex items-center flex-1">
+                    <div className="flex flex-col items-center flex-1">
+                      <div
+                        className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-colors ${
+                          secretaryWizardStep === step
+                            ? 'bg-blue-600 text-white'
+                            : secretaryWizardStep > step
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-600'
+                        }`}
+                      >
+                        {secretaryWizardStep > step ? <Check className="h-5 w-5" /> : step}
+                      </div>
+                      <span className={`text-xs mt-2 font-medium ${
+                        secretaryWizardStep === step ? 'text-blue-600' : 'text-gray-500'
+                      }`}>
+                        {step === 1 ? 'Dados da Empresa' : step === 2 ? 'Configurações' : 'Revisão'}
+                      </span>
+                    </div>
+                    {step < 3 && (
+                      <div
+                        className={`h-1 flex-1 mx-2 rounded ${
+                          secretaryWizardStep > step ? 'bg-green-500' : 'bg-gray-200'
+                        }`}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {/* Etapa 1: Dados da Empresa */}
+              {secretaryWizardStep === 1 && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Informações da Empresa</h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Preencha os dados que a secretária usará para responder aos clientes. Essas informações serão usadas como contexto RAG.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label htmlFor="empresa">Nome da Empresa *</Label>
+                      <Input
+                        id="empresa"
+                        value={secretaryFormData.empresa || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, empresa: e.target.value })}
+                        placeholder="Ex: Minha Empresa Ltda"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="ramo">Ramo de Atuação</Label>
+                      <Input
+                        id="ramo"
+                        value={secretaryFormData.ramo || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, ramo: e.target.value })}
+                        placeholder="Ex: Tecnologia, Varejo, Serviços"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="telefone">Telefone</Label>
+                      <Input
+                        id="telefone"
+                        value={secretaryFormData.telefone || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, telefone: e.target.value })}
+                        placeholder="(00) 00000-0000"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="email">Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        value={secretaryFormData.email || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, email: e.target.value })}
+                        placeholder="contato@empresa.com"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="endereco">Endereço</Label>
+                      <Input
+                        id="endereco"
+                        value={secretaryFormData.endereco || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, endereco: e.target.value })}
+                        placeholder="Rua, número, bairro, cidade - UF"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="missao">Missão / Sobre a Empresa</Label>
+                      <textarea
+                        id="missao"
+                        value={secretaryFormData.missao || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, missao: e.target.value })}
+                        rows={3}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="Descreva brevemente a missão e o propósito da empresa..."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="servicos">Serviços / Produtos Oferecidos</Label>
+                      <textarea
+                        id="servicos"
+                        value={secretaryFormData.servicos || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, servicos: e.target.value })}
+                        rows={3}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="Liste os principais serviços ou produtos oferecidos..."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label htmlFor="horario_atendimento">Horário de Atendimento</Label>
+                      <Input
+                        id="horario_atendimento"
+                        value={secretaryFormData.horario_atendimento || ''}
+                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, horario_atendimento: e.target.value })}
+                        placeholder="Ex: Segunda a Sexta, 8h às 18h"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Etapa 2: Configurações Avançadas */}
+              {secretaryWizardStep === 2 && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Configurações da Secretária</h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Personalize o comportamento e o tom da secretária virtual.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div>
+                      <Label htmlFor="secretary_signature_name_modal">Nome da Secretária</Label>
+                      <Input
+                        id="secretary_signature_name_modal"
+                        value={secretaryProfile.signature_name}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
+                        placeholder="Bia"
+                        className="mt-1"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Nome usado nas assinaturas das mensagens.</p>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <Label className="text-base font-semibold">Usar memória por contato</Label>
+                        <p className="text-sm text-gray-600 mt-1">
+                          A secretária lembra do histórico com cada cliente nos últimos 12 meses, apenas dentro da sua empresa.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={secretaryProfile.use_memory}
+                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="secretary_inbox_idle_minutes_modal">Fechar Inbox sem resposta (minutos)</Label>
+                      <Input
+                        id="secretary_inbox_idle_minutes_modal"
+                        type="number"
+                        min={0}
+                        max={1440}
+                        value={secretaryProfile.inbox_idle_minutes}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
+                        className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">0 = desativado. Máx. 1440 (24h).</p>
+                      {secretaryProfileErrors.inbox_idle_minutes && (
+                        <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                      )}
+                    </div>
+
+                    <div>
+                      <Label htmlFor="secretary_prompt_modal">Prompt Personalizado (Opcional)</Label>
+                      <textarea
+                        id="secretary_prompt_modal"
+                        value={secretaryProfile.prompt}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, prompt: e.target.value })}
+                        rows={10}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
+                        placeholder="Deixe vazio para usar o prompt padrão. Ou personalize as instruções de tom, regras e formato da secretária."
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Instruções de tom, regras e formato. Vazio = usa o padrão do sistema.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Etapa 3: Revisão e Preview */}
+              {secretaryWizardStep === 3 && (
+                <div className="space-y-6">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Revisão e Preview</h3>
+                    <p className="text-sm text-gray-600 mb-6">
+                      Revise as configurações e veja o preview do contexto que será usado pela secretária.
+                    </p>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                        <div className="flex-1">
+                          <h4 className="font-semibold text-blue-900 mb-2">Preview do Contexto RAG</h4>
+                          <p className="text-sm text-blue-800 mb-3">
+                            Este texto será usado como contexto para as respostas da secretária:
+                          </p>
+                          <div className="bg-white p-4 rounded border border-blue-200 max-h-64 overflow-y-auto">
+                            <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans">
+                              {secretaryRagPreview}
+                            </pre>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
+                      <div>
+                        <span className="text-sm text-gray-600">Nome:</span>
+                        <span className="ml-2 font-medium">{secretaryProfile.signature_name || 'Bia'}</span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Memória:</span>
+                        <span className="ml-2 font-medium">{secretaryProfile.use_memory ? 'Ativada' : 'Desativada'}</span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Timeout Inbox:</span>
+                        <span className="ml-2 font-medium">
+                          {secretaryProfile.inbox_idle_minutes > 0 
+                            ? `${secretaryProfile.inbox_idle_minutes} min` 
+                            : 'Desativado'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-sm text-gray-600">Prompt:</span>
+                        <span className="ml-2 font-medium">
+                          {secretaryProfile.prompt?.trim() ? 'Personalizado' : 'Padrão'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                      <div>
+                        <Label className="text-base font-semibold">Ativar Secretária</Label>
+                        <p className="text-sm text-gray-600 mt-1">
+                          A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={secretaryProfile.is_active}
+                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, is_active: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
+              <Button
+                variant="outline"
+                onClick={secretaryWizardStep === 1 ? () => setIsSecretaryModalOpen(false) : handleSecretaryWizardPrev}
+                disabled={secretaryProfileSaving}
+              >
+                <ChevronLeft className="h-4 w-4 mr-2" />
+                {secretaryWizardStep === 1 ? 'Cancelar' : 'Voltar'}
+              </Button>
+              
+              <div className="flex gap-3">
+                {secretaryWizardStep < 3 ? (
+                  <Button onClick={handleSecretaryWizardNext}>
+                    Próximo
+                    <ChevronRight className="h-4 w-4 ml-2" />
+                  </Button>
+                ) : (
+                  <Button onClick={handleSecretaryModalSave} disabled={secretaryProfileSaving}>
+                    <Save className="h-4 w-4 mr-2" />
+                    {secretaryProfileSaving ? 'Salvando...' : 'Salvar e Ativar'}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
