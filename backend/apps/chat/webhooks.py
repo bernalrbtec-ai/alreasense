@@ -553,10 +553,56 @@ def evolution_webhook(request):
                 status='active'
             ).first()
             
+            # ✅ FALLBACK: Se não encontrou por instance_name, tentar por evolution_instance_name
+            if not wa_instance:
+                logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada por instance_name={instance_name}, tentando evolution_instance_name")
+                wa_instance = WhatsAppInstance.objects.select_related(
+                    'tenant', 
+                    'default_department'
+                ).filter(
+                    evolution_instance_name=instance_name,
+                    is_active=True,
+                    status='active'
+                ).first()
+            
+            # ✅ FALLBACK 2: Se ainda não encontrou, tentar buscar todas as instâncias ativas do tenant
+            # e usar a primeira (útil quando instance_name não corresponde)
+            if not wa_instance:
+                logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada por instance_name nem evolution_instance_name")
+                logger.warning(f"   Tentando buscar instância padrão do tenant...")
+                # Buscar tenant primeiro (pode vir do connection ou do webhook)
+                # Por enquanto, vamos buscar todas as instâncias ativas
+                wa_instance = WhatsAppInstance.objects.select_related(
+                    'tenant', 
+                    'default_department'
+                ).filter(
+                    is_active=True,
+                    status='active'
+                ).first()
+                
+                if wa_instance:
+                    logger.warning(f"⚠️ [WEBHOOK] Usando primeira instância ativa encontrada: {wa_instance.friendly_name}")
+            
             if wa_instance:
                 logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada: {wa_instance.friendly_name} ({wa_instance.instance_name})")
                 logger.info(f"   📌 Tenant: {wa_instance.tenant.name if wa_instance.tenant else 'Global'}")
+                logger.info(f"   📋 Default Department ID: {wa_instance.default_department_id}")
                 logger.info(f"   📋 Default Department: {wa_instance.default_department.name if wa_instance.default_department else 'Nenhum (Inbox)'}")
+                
+                # ✅ VERIFICAÇÃO: Se default_department_id existe mas objeto não foi carregado
+                if wa_instance.default_department_id and not wa_instance.default_department:
+                    logger.warning(f"⚠️ [WEBHOOK] default_department_id existe mas objeto não foi carregado, recarregando...")
+                    try:
+                        from apps.authn.models import Department
+                        wa_instance.default_department = Department.objects.get(
+                            id=wa_instance.default_department_id,
+                            tenant=wa_instance.tenant
+                        )
+                        logger.info(f"✅ [WEBHOOK] Departamento recarregado: {wa_instance.default_department.name}")
+                    except Department.DoesNotExist:
+                        logger.error(f"❌ [WEBHOOK] Departamento {wa_instance.default_department_id} não encontrado")
+                    except Exception as e:
+                        logger.error(f"❌ [WEBHOOK] Erro ao recarregar departamento: {e}", exc_info=True)
                 
                 # Buscar EvolutionConnection (servidor Evolution) para usar api_url/api_key
                 # Se WhatsAppInstance tem api_url/api_key próprios, usar deles
@@ -569,7 +615,7 @@ def evolution_webhook(request):
                     logger.warning(f"⚠️ [WEBHOOK] EvolutionConnection não encontrada, mas WhatsAppInstance encontrada")
                     # Continuar mesmo assim (WhatsAppInstance pode ter api_url/api_key próprios)
         except Exception as e:
-            logger.warning(f"⚠️ [WEBHOOK] Erro ao buscar WhatsAppInstance: {e}")
+            logger.error(f"❌ [WEBHOOK] Erro ao buscar WhatsAppInstance: {e}", exc_info=True)
         
         # ✅ FALLBACK: Se não encontrou WhatsAppInstance, tentar buscar EvolutionConnection pelo name
         # (pode ser que instance_name seja nome amigável em alguns casos)
