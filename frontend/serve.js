@@ -28,11 +28,23 @@ if (!existsSync(indexPath)) {
 console.log(`✅ Serving files from: ${distPath}`);
 console.log(`✅ Index file: ${indexPath}`);
 
-// Serve static files from the dist directory
-app.use(express.static(distPath));
+// Evitar "Failed to fetch dynamically imported module": index.html não deve ser cacheado,
+// para que após cada deploy o cliente baixe o HTML novo com os hashes corretos dos JS.
+// Assets em /assets/ são hashed e podem ser cacheados por muito tempo.
+app.use(express.static(distPath, {
+  setHeaders: (res, filePath) => {
+    const isIndex = filePath === indexPath || filePath.endsWith(path.sep + 'index.html');
+    if (isIndex) {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (filePath.includes(path.sep + 'assets' + path.sep)) {
+      res.set('Cache-Control', 'max-age=31536000, immutable');
+    }
+  },
+}));
 
-// Handle client-side routing
+// Handle client-side routing (SPA fallback)
 app.get('*', (req, res) => {
+  res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.sendFile(indexPath);
 });
 
