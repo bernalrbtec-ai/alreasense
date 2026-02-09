@@ -840,15 +840,52 @@ class EvolutionWebhookView(APIView):
                 
                 if whatsapp_instance:
                     logger.info(f"✅ [FLOW CHAT] WhatsAppInstance encontrada: {whatsapp_instance.friendly_name} ({whatsapp_instance.instance_name})")
+                    logger.info(f"   📋 Default Department ID: {whatsapp_instance.default_department_id}")
                     logger.info(f"   📋 Default Department: {whatsapp_instance.default_department.name if whatsapp_instance.default_department else 'Nenhum (Inbox)'}")
+                    
+                    # ✅ VERIFICAÇÃO: Se default_department_id existe mas objeto não foi carregado
+                    if whatsapp_instance.default_department_id and not whatsapp_instance.default_department:
+                        logger.warning(f"⚠️ [FLOW CHAT] default_department_id existe mas objeto não foi carregado, recarregando...")
+                        try:
+                            from apps.authn.models import Department
+                            whatsapp_instance.default_department = Department.objects.get(
+                                id=whatsapp_instance.default_department_id,
+                                tenant=whatsapp_instance.tenant
+                            )
+                            logger.info(f"✅ [FLOW CHAT] Departamento recarregado: {whatsapp_instance.default_department.name}")
+                        except Department.DoesNotExist:
+                            logger.error(f"❌ [FLOW CHAT] Departamento {whatsapp_instance.default_department_id} não encontrado")
+                        except Exception as e:
+                            logger.error(f"❌ [FLOW CHAT] Erro ao recarregar departamento: {e}", exc_info=True)
                     
                     # ✅ FIX: Passar wa_instance e connection para chat_handle_message
                     chat_handle_message(data, whatsapp_instance.tenant, connection=connection, wa_instance=whatsapp_instance)
                     logger.info(f"💬 [FLOW CHAT] Mensagem processada para tenant {whatsapp_instance.tenant.name}")
                 else:
                     logger.warning(f"⚠️ [FLOW CHAT] WhatsAppInstance não encontrada para instance: {instance_name}")
-                    # ✅ FALLBACK: Tentar processar mesmo sem wa_instance (pode funcionar com connection)
-                    if connection:
+                    logger.warning(f"   📋 Tentando buscar todas as instâncias ativas...")
+                    
+                    # ✅ FALLBACK: Tentar buscar qualquer instância ativa do tenant
+                    if connection and connection.tenant:
+                        fallback_instance = WhatsAppInstance.objects.select_related(
+                            'tenant', 
+                            'default_department'
+                        ).filter(
+                            tenant=connection.tenant,
+                            is_active=True,
+                            status='active'
+                        ).first()
+                        
+                        if fallback_instance:
+                            logger.warning(f"⚠️ [FLOW CHAT] Usando instância fallback: {fallback_instance.friendly_name}")
+                            logger.info(f"   📋 Default Department: {fallback_instance.default_department.name if fallback_instance.default_department else 'Nenhum (Inbox)'}")
+                            chat_handle_message(data, connection.tenant, connection=connection, wa_instance=fallback_instance)
+                        else:
+                            logger.warning(f"⚠️ [FLOW CHAT] Nenhuma instância ativa encontrada, processando sem wa_instance")
+                            if connection:
+                                logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
+                                chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
+                    elif connection:
                         logger.info(f"⚠️ [FLOW CHAT] Processando com connection apenas (sem wa_instance)")
                         chat_handle_message(data, connection.tenant, connection=connection, wa_instance=None)
             except Exception as e:
