@@ -1483,11 +1483,27 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Determinar departamento padrão
         default_department = None
-        if wa_instance and wa_instance.default_department:
-            default_department = wa_instance.default_department
-            logger.info(f"📋 [ROUTING] Instância tem departamento padrão: {default_department.name}")
+        if wa_instance:
+            logger.info(f"📋 [ROUTING] wa_instance encontrada: {wa_instance.friendly_name} (ID: {wa_instance.id})")
+            logger.info(f"   📋 default_department_id: {wa_instance.default_department_id}")
+            if wa_instance.default_department:
+                default_department = wa_instance.default_department
+                logger.info(f"📋 [ROUTING] Instância tem departamento padrão: {default_department.name} (ID: {default_department.id})")
+            else:
+                logger.warning(f"⚠️ [ROUTING] wa_instance.default_department é None mesmo tendo default_department_id={wa_instance.default_department_id}")
+                # ✅ FIX: Tentar recarregar se default_department_id existe mas objeto não foi carregado
+                if wa_instance.default_department_id:
+                    try:
+                        from apps.authn.models import Department
+                        default_department = Department.objects.get(id=wa_instance.default_department_id, tenant=tenant)
+                        logger.info(f"✅ [ROUTING] Departamento padrão recarregado: {default_department.name} (ID: {default_department.id})")
+                    except Department.DoesNotExist:
+                        logger.error(f"❌ [ROUTING] Departamento {wa_instance.default_department_id} não encontrado no tenant {tenant.id}")
+                    except Exception as e:
+                        logger.error(f"❌ [ROUTING] Erro ao recarregar departamento: {e}", exc_info=True)
         else:
-            logger.info(f"📋 [ROUTING] Instância sem departamento padrão - vai para Inbox")
+            logger.warning(f"⚠️ [ROUTING] wa_instance não encontrada - instance_name: {instance_name}")
+            logger.warning(f"   📋 Vai para Inbox (sem departamento padrão)")
         
         # ✅ NOVO: Padronizar nome do contato - usar dados da lista de contatos se existir
         # Se não existir, mostrar apenas o número formatado (não usar pushName)
@@ -1665,12 +1681,23 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             created = False
         else:
             # Criar nova conversa com telefone normalizado
+            logger.info(f"📋 [ROUTING] Criando nova conversa com defaults:")
+            logger.info(f"   📋 department: {defaults.get('department')} ({defaults.get('department').name if defaults.get('department') else 'None'})")
+            logger.info(f"   📊 status: {defaults.get('status')}")
+            logger.info(f"   📞 contact_phone: {normalized_phone}")
+            
             conversation = Conversation.objects.create(
                 tenant=tenant,
                 contact_phone=normalized_phone,
                 **defaults
             )
             created = True
+            
+            # ✅ DEBUG: Verificar se department foi aplicado
+            logger.info(f"📋 [ROUTING] Conversa criada - verificando department aplicado:")
+            logger.info(f"   📋 conversation.department_id: {conversation.department_id}")
+            logger.info(f"   📋 conversation.department: {conversation.department.name if conversation.department else 'None'}")
+            logger.info(f"   📋 defaults tinha department: {defaults.get('department').id if defaults.get('department') else 'None'}")
             
             # ✅ NOVO: Enviar menu de boas-vindas para conversa nova (se configurado)
             if not from_me:  # Apenas para mensagens recebidas
@@ -1718,11 +1745,28 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.error(f"❌ [ROUTING] ERRO: Conversa criada mas department não foi aplicado dos defaults!")
             logger.error(f"   Defaults tinha: department={default_department.id} ({default_department.name})")
             logger.error(f"   Conversa tem: department={conversation.department_id}")
+            logger.error(f"   wa_instance: {wa_instance.friendly_name if wa_instance else 'None'}")
+            logger.error(f"   wa_instance.default_department: {wa_instance.default_department.name if wa_instance and wa_instance.default_department else 'None'}")
             # Forçar atualização
             conversation.department = default_department
             conversation.status = 'open'
             update_fields_list.extend(['department', 'status'])
             needs_update = True
+        
+        # ✅ FIX ADICIONAL: Se conversa foi criada e tem default_department mas não foi aplicado
+        # Isso pode acontecer se get_or_create não aplicou os defaults corretamente
+        if created and default_department:
+            # Recarregar do banco para garantir que temos o estado atual
+            conversation.refresh_from_db()
+            if not conversation.department:
+                logger.warning(f"⚠️ [ROUTING] Conversa criada mas department ainda None após refresh, forçando atualização")
+                conversation.department = default_department
+                conversation.status = 'open'
+                if 'department' not in update_fields_list:
+                    update_fields_list.append('department')
+                if 'status' not in update_fields_list:
+                    update_fields_list.append('status')
+                needs_update = True
         
         if needs_update:
             conversation.save(update_fields=update_fields_list)
