@@ -846,11 +846,12 @@ export function ChatWindow() {
         </div>
 
         {/* Botão INICIAR ATENDIMENTO */}
-        {/* ✅ CORREÇÃO: Aparecer mesmo se conversa tiver department atribuído automaticamente pela instância */}
+        {/* ✅ Mostrar quando: não atribuída E (pending OU open com department - ex: Suporte) */}
         {/* O método start() remove o department e atribui ao usuário */}
         {activeConversation && 
          !activeConversation.assigned_to && 
-         activeConversation.status === 'pending' && (
+         (activeConversation.status === 'pending' || 
+          (activeConversation.status === 'open' && activeConversation.department)) && (
           <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
             <button
               onClick={handleStartConversation}

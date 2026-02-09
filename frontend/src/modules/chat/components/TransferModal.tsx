@@ -25,18 +25,24 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Departamento atual da conversa (para "Manter departamento atual" carregar agentes e enviar no payload)
+  const currentDepartmentId = typeof conversation.department === 'string'
+    ? conversation.department
+    : conversation.department?.id ?? '';
+
   useEffect(() => {
     fetchDepartments();
   }, []);
 
   useEffect(() => {
-    if (selectedDepartment) {
-      fetchUsers(selectedDepartment);
+    const deptId = selectedDepartment || currentDepartmentId;
+    if (deptId) {
+      fetchUsers(deptId);
     } else {
       setUsers([]);
       setSelectedAgent('');
     }
-  }, [selectedDepartment]);
+  }, [selectedDepartment, currentDepartmentId]);
 
   const fetchDepartments = async () => {
     try {
@@ -68,7 +74,8 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
   };
 
   const handleTransfer = async () => {
-    if (!selectedDepartment && !selectedAgent) {
+    const effectiveDepartment = selectedDepartment || currentDepartmentId;
+    if (!effectiveDepartment && !selectedAgent) {
       toast.error('Selecione um departamento ou agente');
       return;
     }
@@ -77,7 +84,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
       setLoading(true);
 
       const payload: any = { reason };
-      if (selectedDepartment) payload.new_department = selectedDepartment;
+      if (effectiveDepartment) payload.new_department = effectiveDepartment;
       if (selectedAgent) payload.new_agent = selectedAgent;
 
       const response = await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
@@ -188,10 +195,13 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
             </label>
             <select
               value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
+              onChange={(e) => {
+                setSelectedDepartment(e.target.value);
+                setSelectedAgent('');
+              }}
               className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600"
             >
-              <option value="">Manter departamento atual</option>
+              <option value="">Manter no mesmo departamento</option>
               {departments.map((dept) => (
                 <option key={dept.id} value={dept.id}>
                   {dept.name}
@@ -208,19 +218,18 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
             <select
               value={selectedAgent}
               onChange={(e) => setSelectedAgent(e.target.value)}
-              disabled={!selectedDepartment}
               className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 disabled:opacity-50"
             >
               <option value="">Sem agente específico</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.first_name || user.email}
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.first_name || u.email}
                 </option>
               ))}
             </select>
-            {!selectedDepartment && (
+            {!currentDepartmentId && !selectedDepartment && (
               <p className="mt-1 text-xs text-gray-500">
-                Selecione um departamento primeiro
+                Selecione um departamento para listar agentes
               </p>
             )}
           </div>
@@ -251,7 +260,7 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
           </button>
           <button
             onClick={handleTransfer}
-            disabled={loading || (!selectedDepartment && !selectedAgent)}
+            disabled={loading || (!(selectedDepartment || currentDepartmentId) && !selectedAgent)}
             className="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 rounded-lg transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? (
