@@ -449,6 +449,135 @@ Antes de commitar código novo, verifique:
 - `REFATORACAO_COMPLETA.md` - Mudanças aplicadas
 - `ROTACAO_CREDENCIAIS_URGENTE.md` - Como rotacionar
 
+## 🔐 AUTENTICAÇÃO JWT E WEBSOCKET (CRÍTICO - NÃO MEXER SEM NECESSIDADE)
+
+### ⚠️ REGRA CRÍTICA: NÃO ALTERE A LÓGICA DE TOKEN JWT SEM CONSULTAR ANTES
+
+**Contexto do Problema (Fev/2026):**
+- O sistema usa JWT (SimpleJWT) para autenticação HTTP e WebSocket
+- O token é gerado no login e armazenado no `authStore` (Zustand) no frontend
+- O mesmo token deve funcionar tanto em requisições HTTP (`Authorization: Bearer <token>`) quanto em WebSocket (`?token=<token>` na URL)
+- **Problema ocorrido:** Token funcionava em HTTP mas falhava em WebSocket com "Token inválido ou expirado"
+- **Causa raiz:** Dessincronia entre token do store vs token usado pelo axios, encoding/decoding duplo por proxy, ou token truncado na query string
+
+### ✅ IMPLEMENTAÇÃO ATUAL (NÃO ALTERAR SEM NECESSIDADE CRÍTICA):
+
+**Backend (`consumers_v2.py`):**
+```python
+# ✅ CORRETO - Normalização do token (unquote até estabilizar, strip)
+token = token_raw.strip()
+while True:
+    decoded = unquote(token)
+    if decoded == token:
+        break
+    token = decoded
+
+# Validação com AccessToken do SimpleJWT
+access_token = AccessToken(token)
+user_id = access_token['user_id']
+```
+
+**Frontend (`useTenantSocket.ts`, `useChatSocket.ts`):**
+```typescript
+// ✅ CORRETO - Usar o MESMO token que o axios usa (evita dessincronia)
+const authHeader = api.defaults.headers.common['Authorization'] as string | undefined;
+const tokenFromApi = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+const currentToken = tokenFromApi || tokenFromStore; // Fallback para store
+
+// ✅ CORRETO - URL-encode o token antes de colocar na query string
+const encodedToken = encodeURIComponent(currentToken);
+const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${tenantId}/?token=${encodedToken}`;
+```
+
+**Frontend (`authStore.ts`):**
+```typescript
+// ✅ CORRETO - Token sempre sincronizado com axios
+api.defaults.headers.common['Authorization'] = `Bearer ${token}`
+```
+
+### ❌ NUNCA FAÇA ISSO:
+
+1. **NUNCA altere a forma como o token é extraído/validado sem testar HTTP E WebSocket**
+   ```python
+   # ❌ ERRADO - Alterar validação sem testar ambos os fluxos
+   # Se mudar aqui, pode quebrar WebSocket
+   access_token = AccessToken(token)  # ← NÃO ALTERAR sem necessidade crítica
+   ```
+
+2. **NUNCA use token diferente entre HTTP e WebSocket**
+   ```typescript
+   // ❌ ERRADO - Usar token do store sem verificar se axios tem outro
+   const token = useAuthStore.getState().token; // ← Pode estar desatualizado
+   
+   // ✅ CORRETO - Sempre usar token do axios primeiro
+   const tokenFromApi = api.defaults.headers.common['Authorization']?.slice(7);
+   ```
+
+3. **NUNCA remova o URL-encode do token na query string do WebSocket**
+   ```typescript
+   // ❌ ERRADO - Token pode ter caracteres especiais que quebram a URL
+   const wsUrl = `${base}/?token=${token}`;
+   
+   // ✅ CORRETO - Sempre encode
+   const wsUrl = `${base}/?token=${encodeURIComponent(token)}`;
+   ```
+
+4. **NUNCA logue o token completo em produção**
+   ```python
+   # ❌ ERRADO - Exposição de credencial
+   logger.info(f"Token: {token}")
+   
+   # ✅ CORRETO - Apenas tamanho e formato
+   logger.info(f"Token length: {len(token)}, parts: {len(token.split('.'))}")
+   ```
+
+5. **NUNCA altere a forma como o token é armazenado no authStore sem atualizar todos os lugares que o usam**
+   ```typescript
+   // Se mudar a estrutura do store, atualizar:
+   // - useTenantSocket.ts
+   // - useChatSocket.ts
+   // - ChatWebSocketManager.ts
+   // - App.tsx (sincronização com axios)
+   ```
+
+### ✅ SE PRECISAR ALTERAR (PROCESSO OBRIGATÓRIO):
+
+1. **Testar em AMBOS os fluxos:**
+   - ✅ Requisição HTTP (ex: `GET /api/auth/departments/`)
+   - ✅ Conexão WebSocket (`/ws/chat/tenant/<id>/?token=...`)
+
+2. **Verificar logs:**
+   - Backend: `Query string length`, `Token length`, `Token parts`
+   - Frontend: `tokenLength`, `tokenParts`, `tokenFrom` (api/store)
+
+3. **Validar que o mesmo token funciona em ambos:**
+   - Se HTTP funciona mas WS não → problema de encoding/decoding
+   - Se nenhum funciona → problema de geração/validação do token
+   - Se ambos funcionam → OK
+
+4. **Documentar a mudança:**
+   - Explicar POR QUE foi necessário alterar
+   - Listar TODOS os arquivos afetados
+   - Adicionar testes se possível
+
+### 📋 CHECKLIST ANTES DE MEXER EM TOKEN JWT:
+
+- [ ] Li esta seção completamente?
+- [ ] Entendo por que a implementação atual está assim?
+- [ ] Testei HTTP E WebSocket após minha mudança?
+- [ ] Verifiquei que o mesmo token funciona em ambos?
+- [ ] Removi logs que expõem o token completo?
+- [ ] Documentei a mudança e o motivo?
+
+### 🎓 LIÇÃO APRENDIDA (Fev/2026):
+
+**Problema:** Token funcionava em HTTP mas falhava em WebSocket após várias tentativas de "melhorias".
+**Causa:** Dessincronia entre token do store vs axios, encoding duplo por proxy, falta de normalização.
+**Solução:** Usar token do axios (fonte única da verdade), normalizar com unquote em loop, URL-encode sempre.
+**Prevenção:** Esta regra documentada + não alterar sem testar ambos os fluxos.
+
+---
+
 ## 🎯 STACK ATUAL
 
 - Backend: Django 5 + DRF + Channels + RabbitMQ
