@@ -3248,17 +3248,24 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 
                 # ✅ VALIDAÇÃO: Se não for admin, verificar se usuário tem acesso ao departamento
                 if not user.is_admin:
-                    user_departments = user.departments.all()
-                    if new_dept not in user_departments:
+                    user_department_ids = set(user.departments.values_list('id', flat=True))
+                    if new_dept.id not in user_department_ids:
                         import logging
                         logger = logging.getLogger(__name__)
+                        user_department_names = list(user.departments.values_list('name', flat=True))
                         logger.warning(
-                            f"⚠️ [TRANSFER] Usuário {user.email} tentou transferir para departamento {new_dept.name} "
-                            f"sem acesso. Departamentos do usuário: {[d.name for d in user_departments]}"
+                            f"⚠️ [TRANSFER] Usuário {user.email} (role: {user.role}) tentou transferir para departamento {new_dept.name} "
+                            f"sem acesso. Departamentos do usuário: {user_department_names}"
                         )
                         return Response(
                             {'error': f'Você não tem acesso ao departamento {new_dept.name}. Selecione um departamento ao qual você pertence.'},
                             status=status.HTTP_403_FORBIDDEN
+                        )
+                    else:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.info(
+                            f"✅ [TRANSFER] Usuário {user.email} tem acesso ao departamento {new_dept.name}"
                         )
             except Department.DoesNotExist:
                 return Response(
