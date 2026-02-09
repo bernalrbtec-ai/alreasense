@@ -514,35 +514,96 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     
     # Database queries (sync_to_async)
     
+    def _decode_jwt_payload_unsafe(self, token):
+        """
+        Decodifica apenas o payload do JWT (base64) SEM verificar assinatura.
+        Uso: diagnóstico para saber se falha é expiração ou assinatura.
+        """
+        import base64
+        import json
+        from datetime import datetime, timezone
+        try:
+            parts = token.split('.')
+            if len(parts) != 3:
+                return None
+            payload_b64 = parts[1]
+            payload_b64 += '=' * (4 - len(payload_b64) % 4)
+            raw = base64.urlsafe_b64decode(payload_b64)
+            payload = json.loads(raw)
+            exp = payload.get('exp')
+            iat = payload.get('iat')
+            user_id = payload.get('user_id')
+            now_ts = datetime.now(timezone.utc).timestamp()
+            expired = exp is not None and now_ts > exp
+            exp_utc = datetime.fromtimestamp(exp, tz=timezone.utc).isoformat() if exp else None
+            return {
+                'user_id': user_id,
+                'exp': exp,
+                'iat': iat,
+                'exp_utc': exp_utc,
+                'expired': expired,
+                'now_ts': now_ts,
+            }
+        except Exception:
+            return None
+
     @database_sync_to_async
     def authenticate_token(self, token):
-        """Autentica usuário via token JWT."""
+        """Autentica usuário via token JWT. Tenta JWTAuthentication (igual DRF) e depois AccessToken."""
         try:
+            from django.http import HttpRequest
+            from rest_framework_simplejwt.authentication import JWTAuthentication
             from rest_framework_simplejwt.tokens import AccessToken
-            from rest_framework_simplejwt.exceptions import TokenError, InvalidToken, TokenBackendError
+            from rest_framework_simplejwt.exceptions import TokenError, InvalidToken
             from django.contrib.auth import get_user_model
-            
-            # ✅ DEBUG: Log token (primeiros e últimos caracteres apenas)
+
             token_preview = f"{token[:10]}...{token[-10:]}" if token and len(token) > 20 else token
             logger.info(f"🔍 [CHAT WS V2] Validando token: {token_preview}")
-            
+
+            # 1) Tentar exatamente o mesmo fluxo que o DRF (header Authorization)
+            try:
+                request = HttpRequest()
+                request.META['HTTP_AUTHORIZATION'] = f'Bearer {token}'
+                jwt_auth = JWTAuthentication()
+                auth_result = jwt_auth.authenticate(request)
+                if auth_result:
+                    user, _ = auth_result
+                    logger.info(f"✅ [CHAT WS V2] Token válido via JWTAuthentication (user_id: {user.id})")
+                    return user
+            except Exception as jwt_auth_e:
+                logger.info(f"🔍 [CHAT WS V2] JWTAuthentication falhou: {type(jwt_auth_e).__name__}, tentando AccessToken")
+
+            # 2) Fallback: validar com AccessToken (mesma lib, outro ponto de entrada)
             try:
                 access_token = AccessToken(token)
                 user_id = access_token['user_id']
                 logger.info(f"✅ [CHAT WS V2] Token válido, user_id: {user_id}")
             except TokenError as e:
-                # Mensagem exata ajuda a distinguir expirado vs assinatura inválida vs malformed
-                logger.error(
-                    f"❌ [CHAT WS V2] TokenError ao validar token: {type(e).__name__} - {e} | token_len={len(token) if token else 0}"
-                )
+                # Diagnóstico: payload sem verificar assinatura para saber se é expiração ou assinatura
+                diag = self._decode_jwt_payload_unsafe(token)
+                if diag:
+                    logger.error(
+                        f"❌ [CHAT WS V2] TokenError: {e} | token_len={len(token)} | "
+                        f"diagnóstico: expired={diag.get('expired')} exp_utc={diag.get('exp_utc')} user_id={diag.get('user_id')} | "
+                        f"(expired=True → token expirado, front deve enviar token novo; expired=False → falha assinatura/SECRET_KEY)"
+                    )
+                else:
+                    logger.error(f"❌ [CHAT WS V2] TokenError: {e} | token_len={len(token)} | payload não decodificável (token malformed?)")
                 return None
             except InvalidToken as e:
-                logger.error(f"❌ [CHAT WS V2] InvalidToken: {e} | token_len={len(token) if token else 0}")
+                diag = self._decode_jwt_payload_unsafe(token)
+                if diag:
+                    logger.error(
+                        f"❌ [CHAT WS V2] InvalidToken: {e} | token_len={len(token)} | "
+                        f"diagnóstico: expired={diag.get('expired')} exp_utc={diag.get('exp_utc')}"
+                    )
+                else:
+                    logger.error(f"❌ [CHAT WS V2] InvalidToken: {e} | token_len={len(token)}")
                 return None
             except Exception as e:
                 logger.error(f"❌ [CHAT WS V2] Erro inesperado ao validar token: {type(e).__name__} - {e}", exc_info=True)
                 return None
-            
+
             User = get_user_model()
             try:
                 user = User.objects.select_related('tenant').get(id=user_id)
@@ -551,7 +612,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             except User.DoesNotExist:
                 logger.error(f"❌ [CHAT WS V2] Usuário {user_id} não encontrado no banco")
                 return None
-        
+
         except Exception as e:
             logger.error(f"❌ [CHAT WS V2] Erro ao autenticar token: {type(e).__name__} - {e}", exc_info=True)
             return None
