@@ -39,6 +39,7 @@ export function ChatWindow() {
   const [loadingGroupInfo, setLoadingGroupInfo] = useState(false);
   // ✅ CORREÇÃO CRÍTICA: Adicionar estado para controlar se está pronto para renderizar
   const [isReady, setIsReady] = useState(false);
+  const [loadingStart, setLoadingStart] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   // ✅ NOVO: Ref para debounce do refresh-info (deve estar no nível superior)
   const refreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -438,6 +439,30 @@ export function ChatWindow() {
     }
   };
 
+  const handleStartConversation = async () => {
+    if (!activeConversation) return;
+    
+    try {
+      setLoadingStart(true);
+      const response = await api.post(`/chat/conversations/${activeConversation.id}/start/`);
+      
+      // Atualizar conversa no store usando o método do store
+      const { updateConversation } = useChatStore.getState();
+      updateConversation(response.data);
+      
+      // Atualizar conversa ativa
+      setActiveConversation(response.data);
+      
+      // Mostrar notificação de sucesso
+      toast.success('Atendimento iniciado com sucesso');
+    } catch (error: any) {
+      console.error('Erro ao iniciar atendimento:', error);
+      toast.error(error.response?.data?.error || 'Erro ao iniciar atendimento');
+    } finally {
+      setLoadingStart(false);
+    }
+  };
+
   const handleMarkAsResolved = async () => {
     if (!activeConversation) return;
     
@@ -819,6 +844,22 @@ export function ChatWindow() {
             </div>
           </div>
         </div>
+
+        {/* Botão INICIAR ATENDIMENTO */}
+        {activeConversation && 
+         !activeConversation.assigned_to && 
+         activeConversation.status === 'pending' && 
+         !activeConversation.department && (
+          <div className="px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border-b border-blue-200 dark:border-blue-800">
+            <button
+              onClick={handleStartConversation}
+              disabled={loadingStart}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed font-medium text-sm"
+            >
+              {loadingStart ? 'Iniciando...' : 'INICIAR ATENDIMENTO'}
+            </button>
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex items-center gap-2">

@@ -338,12 +338,14 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         
         # ✅ OTIMIZAÇÃO: Anotar contador de conversas pendentes (sempre necessário para serializer)
         # Esta anotação não é cacheada porque muda quando conversas são transferidas
+        # ✅ CORREÇÃO: Excluir conversas atribuídas a usuários (não aparecem no inbox)
         queryset = queryset.annotate(
             pending_count_annotated=Count(
                 'conversations',
                 filter=Q(
                     conversations__status='pending',
-                    conversations__tenant=user.tenant
+                    conversations__tenant=user.tenant,
+                    conversations__assigned_to__isnull=True  # ✅ NOVO: Excluir atribuídas
                 ),
                 distinct=True
             )

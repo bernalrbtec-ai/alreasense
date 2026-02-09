@@ -13,6 +13,7 @@ import { ptBR } from 'date-fns/locale';
 import { upsertConversation } from '../store/conversationUpdater';
 import { getDisplayName } from '../utils/phoneFormatter';
 import { NewConversationModal } from './NewConversationModal';
+import { useAuthStore } from '@/stores/authStore';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -72,10 +73,13 @@ export function ConversationList() {
       try {
         setLoading(true);
         
-        // Buscar TODAS as conversas (sem filtro de departamento)
-        const response = await api.get('/chat/conversations/', {
-          params: { ordering: '-last_message_at' }
-        });
+        // Buscar conversas com parâmetro assigned_to_me se necessário
+        const params: any = { ordering: '-last_message_at' };
+        if (activeDepartment?.id === 'my_conversations') {
+          params.assigned_to_me = 'true';
+        }
+        
+        const response = await api.get('/chat/conversations/', { params });
         
         const convs = response.data.results || response.data;
         
@@ -234,6 +238,19 @@ export function ConversationList() {
             expected: 'Sem departamento E status=pending'
           });
         }
+        
+        return passes;
+      }
+      
+      if (activeDepartment.id === 'my_conversations') {
+        // Minhas Conversas: apenas conversas atribuídas ao usuário atual
+        const { user } = useAuthStore.getState();
+        if (!user) return false;
+        
+        const passes = 
+          conversationItem.assigned_to === user.id &&
+          conversationItem.status === 'open' &&
+          !conversationItem.department; // Sem department (atribuída diretamente)
         
         return passes;
       } else {

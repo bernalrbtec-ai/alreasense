@@ -2,12 +2,13 @@
  * Tabs de departamentos - Estilo WhatsApp Web
  */
 import React, { useEffect, useMemo } from 'react';
-import { Inbox } from 'lucide-react';
+import { Inbox, User } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { Department } from '../types';
 import { usePermissions } from '@/hooks/usePermissions';
 import { NotificationToggle } from './NotificationToggle';
+import { useAuthStore } from '@/stores/authStore';
 
 export function DepartmentTabs() {
   const { departments, activeDepartment, setDepartments, setActiveDepartment, conversations } = useChatStore();
@@ -59,6 +60,19 @@ export function DepartmentTabs() {
         (typeof conv.department === 'string' ? conv.department === deptId : conv.department?.id === deptId)
       ).length;
     }
+  };
+
+  // ✅ NOVO: Calcular contador de minhas conversas
+  const getMyConversationsCount = () => {
+    const { user } = useAuthStore.getState();
+    if (!user) return 0;
+    
+    // Contar apenas conversas atribuídas ao usuário, sem departamento e abertas
+    return conversations.filter(conv => 
+      conv.assigned_to === user.id && 
+      conv.status === 'open' &&
+      (!conv.department || conv.department === null)  // ✅ CRÍTICO: Sem departamento
+    ).length;
   };
 
   useEffect(() => {
@@ -124,6 +138,33 @@ export function DepartmentTabs() {
           {getPendingCount('inbox') > 0 && (
             <span className="sm:hidden px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
               {getPendingCount('inbox')}
+            </span>
+          )}
+        </button>
+
+        {/* Tab Minhas Conversas */}
+        <button
+          onClick={() => setActiveDepartment({ id: 'my_conversations', name: 'Minhas Conversas', color: '#3b82f6' } as Department)}
+          className={`
+            flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0
+            ${activeDepartment?.id === 'my_conversations'
+              ? 'bg-[#3b82f6] text-white'
+              : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95'
+            }
+          `}
+        >
+          <User className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+          <span className="hidden sm:inline">
+            Minhas Conversas
+            {getMyConversationsCount() > 0 && (
+              <span className="ml-1.5 px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
+                {getMyConversationsCount()}
+              </span>
+            )}
+          </span>
+          {getMyConversationsCount() > 0 && (
+            <span className="sm:hidden px-1.5 py-0.5 rounded-full bg-white/20 text-xs font-semibold">
+              {getMyConversationsCount()}
             </span>
           )}
         </button>

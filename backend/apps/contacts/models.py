@@ -732,6 +732,7 @@ class ContactHistory(models.Model):
         ('campaign_message_read', 'Mensagem de Campanha Lida'),
         ('campaign_message_failed', 'Mensagem de Campanha Falhou'),
         ('department_transfer', 'Transferência de Departamento'),
+        ('conversation_started', 'Atendimento Iniciado'),  # ✅ NOVO
         ('assigned_to', 'Atribuição de Atendente'),
         ('status_changed', 'Mudança de Status'),
         ('contact_created', 'Contato Criado'),

@@ -350,6 +350,12 @@ CHAT_STREAM_MARK_READ_NAME = config('CHAT_STREAM_MARK_READ_NAME', default=f'{CHA
 CHAT_STREAM_DLQ_NAME = config('CHAT_STREAM_DLQ_NAME', default=f'{CHAT_STREAM_REDIS_PREFIX}dead_letter')
 CHAT_STREAM_CONSUMER_GROUP = config('CHAT_STREAM_CONSUMER_GROUP', default='chat_send_workers')
 CHAT_STREAM_CONSUMER_NAME = config('CHAT_STREAM_CONSUMER_NAME', default='worker-default')
+
+# Feature Flags
+# ✅ NOVO: Sistema de conversas privadas por usuário
+# Quando habilitado, permite que conversas sejam atribuídas diretamente a usuários
+# sem passar por departamentos, criando uma aba "Minhas Conversas"
+ENABLE_MY_CONVERSATIONS = config('ENABLE_MY_CONVERSATIONS', default=False, cast=bool)
 CHAT_STREAM_MAXLEN = config('CHAT_STREAM_MAXLEN', default=5000, cast=int)
 CHAT_STREAM_DLQ_MAXLEN = config('CHAT_STREAM_DLQ_MAXLEN', default=2000, cast=int)
 CHAT_STREAM_MAX_RETRIES = config('CHAT_STREAM_MAX_RETRIES', default=5, cast=int)

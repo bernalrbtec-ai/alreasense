@@ -241,6 +241,39 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             return ConversationDetailSerializer
         return ConversationSerializer
     
+    def _get_queryset_current_behavior(self, queryset, user):
+        """
+        Comportamento atual garantido - nunca muda.
+        Usado como fallback em caso de erro ou quando feature flag está desabilitado.
+        
+        Lógica atual:
+        - Admin: vê tudo do tenant
+        - Gerente/Agente: vê conversas dos seus departamentos + atribuídas a ele + inbox (pending sem department)
+        """
+        # Admin vê tudo (incluindo pending)
+        if user.is_admin:
+            return queryset
+        
+        # Gerente e Agente vêem:
+        # 1. Conversas dos seus departamentos
+        # 2. Conversas atribuídas diretamente a eles
+        # 3. Conversas pending (sem departamento) do tenant
+        department_ids = list(user.departments.values_list('id', flat=True))
+        
+        if department_ids:
+            # ✅ Usuário tem departamentos: ver conversas dos departamentos OU atribuídas a ele
+            return queryset.filter(
+                Q(department__in=department_ids) |  # Conversas dos departamentos
+                Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
+                Q(department__isnull=True, status='pending')  # Inbox do tenant
+            ).distinct()
+        else:
+            # ✅ Usuário SEM departamentos: ver apenas conversas atribuídas diretamente a ele OU inbox
+            return queryset.filter(
+                Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
+                Q(department__isnull=True, status='pending')  # Inbox do tenant
+            ).distinct()
+    
     def get_queryset(self):
         """
         Override para incluir conversas pending (Inbox) no filtro.
@@ -341,29 +374,30 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 department__isnull=True  # ← CRÍTICO: Apenas conversas SEM departamento no Inbox
             )
         
-        # Admin vê tudo (incluindo pending)
-        if user.is_admin:
-            return queryset
+        # ✅ SEGURANÇA: Feature flag - se desabilitado, usar comportamento atual
+        from django.conf import settings
+        if not settings.ENABLE_MY_CONVERSATIONS:
+            return self._get_queryset_current_behavior(queryset, user)
         
-        # Gerente e Agente vêem:
-        # 1. Conversas dos seus departamentos
-        # 2. Conversas atribuídas diretamente a eles
-        # 3. Conversas pending (sem departamento) do tenant
-        department_ids = list(user.departments.values_list('id', flat=True))
+        # ✅ SEGURANÇA: Nova funcionalidade apenas com parâmetro explícito
+        assigned_to_me = self.request.query_params.get('assigned_to_me') == 'true'
         
-        if department_ids:
-            # ✅ Usuário tem departamentos: ver conversas dos departamentos OU atribuídas a ele
-            return queryset.filter(
-                Q(department__in=department_ids) |  # Conversas dos departamentos
-                Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
-                Q(department__isnull=True, status='pending')  # Inbox do tenant
-            ).distinct()
-        else:
-            # ✅ Usuário SEM departamentos: ver apenas conversas atribuídas diretamente a ele OU inbox
-            return queryset.filter(
-                Q(assigned_to=user) |  # Conversas atribuídas diretamente ao usuário
-                Q(department__isnull=True, status='pending')  # Inbox do tenant
-            ).distinct()
+        try:
+            if assigned_to_me:
+                # Nova funcionalidade: apenas conversas atribuídas ao usuário E sem departamento
+                # Isso garante que apenas conversas "privadas" apareçam
+                return queryset.filter(
+                    assigned_to=user,
+                    department__isnull=True,  # ✅ CRÍTICO: Sem departamento
+                    status='open'  # Apenas conversas abertas
+                )
+            else:
+                # ✅ SEGURANÇA: Comportamento atual (garantido)
+                return self._get_queryset_current_behavior(queryset, user)
+        except Exception as e:
+            logger.error(f"❌ [QUERYSET] Erro ao filtrar conversas: {e}", exc_info=True)
+            # ✅ SEGURANÇA: Fallback garantido
+            return self._get_queryset_current_behavior(queryset, user)
     
     def perform_create(self, serializer):
         """Associa conversa ao tenant do usuário."""
@@ -393,11 +427,31 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         department_id = request.data.get('department')
         assigned_to_id = request.data.get('assigned_to')
         
+        # ✅ NOVO: Department opcional - se não fornecido, atribuir apenas ao usuário
         if not department_id:
-            return Response(
-                {'error': 'department é obrigatório'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            # Validar usuário atribuído (se fornecido)
+            assigned_to = request.user  # Padrão: quem está pegando
+            if assigned_to_id:
+                from apps.authn.models import User
+                try:
+                    assigned_to = User.objects.get(
+                        id=assigned_to_id,
+                        tenant=request.user.tenant
+                    )
+                except User.DoesNotExist:
+                    return Response(
+                        {'error': 'Usuário não encontrado'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+            # Atribuir apenas ao usuário (remover do departamento)
+            conversation.assigned_to = assigned_to
+            conversation.department = None  # ✅ NOVO: Remover department
+            conversation.status = 'open'
+            conversation.save(update_fields=['assigned_to', 'department', 'status'])
+            
+            serializer = self.get_serializer(conversation)
+            return Response(serializer.data)
         
         # Validar departamento
         from apps.authn.models import Department, User
@@ -431,6 +485,117 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.assigned_to = assigned_to
         conversation.status = 'open'
         conversation.save(update_fields=['department', 'assigned_to', 'status'])
+        
+        serializer = self.get_serializer(conversation)
+        return Response(serializer.data)
+    
+    @action(detail=True, methods=['post'])
+    def start(self, request, pk=None):
+        """
+        Inicia atendimento de uma conversa pendente, atribuindo-a ao usuário atual.
+        Remove a conversa do departamento e atribui diretamente ao usuário.
+        """
+        import logging
+        logger = logging.getLogger(__name__)
+        
+        conversation = self.get_object()
+        user = request.user
+        
+        # Validar que conversa pode ser iniciada
+        if conversation.assigned_to and conversation.assigned_to != user:
+            logger.warning(
+                f"⚠️ [START] Tentativa de iniciar conversa já atribuída: {conversation.id} "
+                f"(atribuída para: {conversation.assigned_to.email})"
+            )
+            return Response(
+                {'error': 'Conversa já está atribuída a outro usuário'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Salvar valores anteriores para logs
+        old_department = conversation.department
+        old_status = conversation.status
+        
+        # Atribuir ao usuário atual
+        conversation.assigned_to = user
+        conversation.department = None  # Remover do departamento
+        conversation.status = 'open'
+        conversation.save(update_fields=['assigned_to', 'department', 'status'])
+        
+        # ✅ LOGS: Log detalhado
+        logger.info(
+            f"✅ [START CONVERSATION] Conversa {conversation.id} iniciada por {user.email} "
+            f"(tenant: {user.tenant.name})"
+        )
+        logger.info(f"   📋 Contato: {conversation.contact_name} ({conversation.contact_phone})")
+        logger.info(f"   👤 Atribuído para: {user.get_full_name() or user.email}")
+        logger.info(f"   📊 Status anterior: {old_status} → Status novo: {conversation.status}")
+        logger.info(f"   🏢 Departamento anterior: {old_department.name if old_department else 'Nenhum'} → Departamento novo: Nenhum (atribuído diretamente)")
+        
+        # Criar mensagem interna
+        try:
+            from apps.chat.models import Message
+            Message.objects.create(
+                conversation=conversation,
+                sender=user,
+                content=f"Atendimento iniciado por {user.get_full_name() or user.email}",
+                direction='outgoing',
+                status='sent',
+                is_internal=True
+            )
+        except Exception as e:
+            logger.error(f"❌ [START] Erro ao criar mensagem interna: {e}", exc_info=True)
+        
+        # ✅ CONTACT HISTORY: Criar evento
+        try:
+            from apps.contacts.models import Contact, ContactHistory
+            from apps.contacts.signals import normalize_phone_for_search
+            
+            normalized_phone = normalize_phone_for_search(conversation.contact_phone)
+            contact = Contact.objects.filter(
+                tenant=conversation.tenant,
+                phone=normalized_phone
+            ).first()
+            
+            if contact:
+                ContactHistory.objects.create(
+                    contact=contact,
+                    tenant=conversation.tenant,
+                    event_type='conversation_started',  # ✅ NOVO tipo
+                    title=f'Atendimento iniciado por {user.get_full_name() or user.email}',
+                    description=f'Conversa atribuída diretamente para {user.get_full_name() or user.email}',
+                    created_by=user,
+                    is_editable=False,
+                    metadata={
+                        'assigned_to_id': str(user.id),
+                        'assigned_to_name': user.get_full_name() or user.email,
+                        'old_department_id': str(old_department.id) if old_department else None,
+                        'old_status': old_status,
+                    },
+                    related_conversation=conversation
+                )
+        except Exception as e:
+            logger.error(f"❌ [START] Erro ao criar ContactHistory: {e}", exc_info=True)
+        
+        # Broadcast WebSocket
+        try:
+            from channels.layers import get_channel_layer
+            from asgiref.sync import async_to_sync
+            from apps.chat.utils.serialization import serialize_conversation_for_ws
+            
+            channel_layer = get_channel_layer()
+            tenant_group = f"chat_tenant_{conversation.tenant_id}"
+            
+            conv_data_serializable = serialize_conversation_for_ws(conversation)
+            async_to_sync(channel_layer.group_send)(
+                tenant_group,
+                {
+                    'type': 'conversation_updated',
+                    'conversation': conv_data_serializable
+                }
+            )
+        except Exception as e:
+            logger.error(f"❌ [START] Erro ao fazer broadcast: {e}", exc_info=True)
         
         serializer = self.get_serializer(conversation)
         return Response(serializer.data)
@@ -2507,6 +2672,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         """
         Atribui conversa a um usuário.
         Body: { "user_id": "uuid" }
+        
+        ✅ MODIFICADO: Department agora é opcional - se conversa não tiver department,
+        pode atribuir a qualquer usuário do tenant. Se tiver department, valida que
+        usuário pertence ao departamento.
         """
         conversation = self.get_object()
         user_id = request.data.get('user_id')
@@ -2517,14 +2686,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Verifica se o usuário pertence ao mesmo tenant e departamento
+        # ✅ NOVO: Tornar department opcional
         from apps.authn.models import User
         try:
             user = User.objects.get(
                 id=user_id,
-                tenant=conversation.tenant,
-                departments=conversation.department
+                tenant=conversation.tenant
             )
+            
+            # ✅ VALIDAÇÃO: Validar department apenas se conversa tiver department
+            if conversation.department:
+                if not user.departments.filter(id=conversation.department_id).exists():
+                    return Response(
+                        {'error': 'Usuário não pertence ao departamento da conversa'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+            
             conversation.assigned_to = user
             conversation.save(update_fields=['assigned_to'])
             
@@ -2534,7 +2711,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             )
         except User.DoesNotExist:
             return Response(
-                {'error': 'Usuário não encontrado ou não pertence ao departamento'},
+                {'error': 'Usuário não encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
     
@@ -3335,6 +3512,22 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     {'error': 'Agente não encontrado'},
                     status=status.HTTP_404_NOT_FOUND
                 )
+        
+        # ✅ NOVO: Se transferir apenas para agente (sem department), remover department
+        if new_agent_id and not new_department_id:
+            # Transferir para usuário específico - remover do departamento
+            conversation.department = None
+            logger.info(
+                f"✅ [TRANSFER] Conversa {conversation.id} atribuída diretamente a {new_agent.email} "
+                f"(department removido - conversa privada)"
+            )
+        elif new_agent_id and new_department_id:
+            # Transferir para agente E departamento - manter ambos
+            # (comportamento atual mantido)
+            logger.info(
+                f"✅ [TRANSFER] Conversa {conversation.id} transferida para departamento {new_dept.name} "
+                f"e agente {new_agent.email}"
+            )
         
         # ✅ FIX: Atualizar status quando transferir para departamento
         if new_department_id:
