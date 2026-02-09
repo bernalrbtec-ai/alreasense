@@ -792,8 +792,10 @@ class EvolutionWebhookView(APIView):
             message_data = data.get('data', {})
             instance_name = data.get('instance', 'default')
             
-            logger.info(f"📥 [CONNECTIONS WEBHOOK] Instance: {instance_name}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] ====== PROCESSANDO MENSAGEM ======")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Instance do webhook: {instance_name}")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Message data keys: {list(message_data.keys()) if isinstance(message_data, dict) else 'not dict'}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Data completo: {data}")
             
             # ✅ FIX: Se data é um objeto (não lista), processar diretamente
             # Se for lista (formato antigo), processar primeiro item
@@ -815,6 +817,7 @@ class EvolutionWebhookView(APIView):
                 
                 # ✅ FIX CRÍTICO: Buscar WhatsAppInstance pelo instance_name (UUID) com default_department
                 # Evolution API envia UUID (ex: "9afdad84-5411-4754-8f63-2599a6b9142c")
+                logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance por instance_name: {instance_name}")
                 whatsapp_instance = WhatsAppInstance.objects.select_related(
                     'tenant', 
                     'default_department'  # ✅ CRÍTICO: Carregar departamento padrão
@@ -824,8 +827,29 @@ class EvolutionWebhookView(APIView):
                     status='active'
                 ).first()
                 
-                # ✅ FALLBACK: Se não encontrou por instance_name, tentar por friendly_name
+                if whatsapp_instance:
+                    logger.info(f"✅ [FLOW CHAT] Instância encontrada por instance_name: {whatsapp_instance.friendly_name}")
+                else:
+                    logger.warning(f"⚠️ [FLOW CHAT] Instância não encontrada por instance_name={instance_name}")
+                
+                # ✅ FALLBACK: Se não encontrou por instance_name, tentar por evolution_instance_name
                 if not whatsapp_instance:
+                    logger.info(f"🔍 [FLOW CHAT] Tentando buscar por evolution_instance_name: {instance_name}")
+                    whatsapp_instance = WhatsAppInstance.objects.select_related(
+                        'tenant',
+                        'default_department'
+                    ).filter(
+                        evolution_instance_name=instance_name,
+                        is_active=True,
+                        status='active'
+                    ).first()
+                    
+                    if whatsapp_instance:
+                        logger.info(f"✅ [FLOW CHAT] Instância encontrada por evolution_instance_name: {whatsapp_instance.friendly_name}")
+                
+                # ✅ FALLBACK 2: Se não encontrou por evolution_instance_name, tentar por friendly_name
+                if not whatsapp_instance:
+                    logger.info(f"🔍 [FLOW CHAT] Tentando buscar por friendly_name: {instance_name}")
                     whatsapp_instance = WhatsAppInstance.objects.select_related(
                         'tenant',
                         'default_department'
@@ -834,6 +858,9 @@ class EvolutionWebhookView(APIView):
                         is_active=True,
                         status='active'
                     ).first()
+                    
+                    if whatsapp_instance:
+                        logger.info(f"✅ [FLOW CHAT] Instância encontrada por friendly_name: {whatsapp_instance.friendly_name}")
                 
                 # Buscar EvolutionConnection para passar também
                 connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
