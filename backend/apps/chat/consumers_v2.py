@@ -71,9 +71,19 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             await self.close(code=4001)
             return
         
-        # ✅ DEBUG: Log token (primeiros e últimos caracteres apenas)
-        token_preview = f"{token[:15]}...{token[-15:]}" if len(token) > 30 else "***"
-        logger.info(f"🔍 [CHAT WS V2] Token extraído (preview): {token_preview}")
+        # ✅ DEBUG: Log token completo para debug (será removido depois)
+        logger.info(f"🔍 [CHAT WS V2] Token extraído - Length: {len(token) if token else 0}")
+        logger.info(f"🔍 [CHAT WS V2] Token completo: {token}")
+        logger.info(f"🔍 [CHAT WS V2] Token type: {type(token)}")
+        
+        # ✅ DEBUG: Verificar se token parece válido (JWT tem 3 partes separadas por ponto)
+        if token:
+            parts = token.split('.')
+            logger.info(f"🔍 [CHAT WS V2] Token parts count: {len(parts)} (esperado: 3)")
+            if len(parts) != 3:
+                logger.error(f"❌ [CHAT WS V2] Token não tem formato JWT válido! Tem {len(parts)} partes ao invés de 3")
+                await self.close(code=4001)
+                return
         
         # Autenticar usuário via token
         self.user = await self.authenticate_token(token)
