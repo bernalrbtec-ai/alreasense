@@ -676,21 +676,25 @@ class ConversationSerializer(serializers.ModelSerializer):
         return None
     
     def get_instance_friendly_name(self, obj):
-        """Retorna nome amigável da instância (com cache)."""
+        """Retorna nome amigável da instância (com cache).
+        Prioriza friendly_name; fallback para instance_name (UUID) só se instância não for encontrada.
+        """
         if not obj.instance_name:
             return None
         
         # ✅ PERFORMANCE: Cache de 5 minutos para evitar queries repetidas
         from django.core.cache import cache
+        from django.db.models import Q
         cache_key = f"instance_friendly_name:{obj.instance_name}"
         friendly_name = cache.get(cache_key)
         
         if friendly_name is None:
-            # Buscar no banco
+            # Buscar no banco - por instance_name OU evolution_instance_name (webhook pode enviar qualquer um)
+            # Sem filtro is_active: mostrar nome amigável mesmo se instância foi desativada
             from apps.notifications.models import WhatsAppInstance
             instance = WhatsAppInstance.objects.filter(
-                instance_name=obj.instance_name,
-                is_active=True
+                Q(instance_name=obj.instance_name) | Q(evolution_instance_name=obj.instance_name),
+                tenant=obj.tenant
             ).values('friendly_name').first()
             
             friendly_name = instance['friendly_name'] if instance else obj.instance_name
