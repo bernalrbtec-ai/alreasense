@@ -8,6 +8,8 @@
 
 Plataforma SaaS multi-tenant para análise de sentimento e satisfação de clientes em conversas do WhatsApp.
 
+<!-- deploy trigger 2026-02-09 -->
+
 ## 🚀 Stack
 
 - **Backend:** Django 5 + DRF + Channels + RabbitMQ (NÃO Celery)
