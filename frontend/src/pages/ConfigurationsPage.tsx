@@ -1452,7 +1452,8 @@ export default function ConfigurationsPage() {
     const backendFormData: Record<string, string> = {}
     
     // Mapear campos do formulário (português) para formato do backend (inglês)
-    // Apenas incluir campos que têm valor (não vazios)
+    // ✅ CORREÇÃO: Incluir TODOS os campos, mesmo vazios, para manter estrutura consistente
+    // Campos obrigatórios/principais: sempre incluir se tiver valor
     if (structuredData.empresa?.trim()) {
       backendFormData.company_name = structuredData.empresa.trim()
     }
@@ -1465,15 +1466,23 @@ export default function ConfigurationsPage() {
     if (structuredData.telefone?.trim()) {
       backendFormData.phone = structuredData.telefone.trim()
     }
+    if (structuredData.servicos?.trim()) {
+      backendFormData.services = structuredData.servicos.trim()
+    }
+    
+    // ✅ CORREÇÃO CRÍTICA: email e business_area devem ser incluídos se preenchidos
+    // (mesmo que vazios, para manter estrutura, mas vamos incluir apenas se tiver valor para não poluir)
     if (structuredData.email?.trim()) {
       backendFormData.email = structuredData.email.trim()
     }
     if (structuredData.ramo?.trim()) {
       backendFormData.business_area = structuredData.ramo.trim()
     }
-    if (structuredData.servicos?.trim()) {
-      backendFormData.services = structuredData.servicos.trim()
-    }
+    
+    // Log para debug
+    console.log('[SECRETARY MAP] Dados estruturados recebidos:', structuredData)
+    console.log('[SECRETARY MAP] Dados convertidos para backend:', backendFormData)
+    console.log('[SECRETARY MAP] Campos incluídos:', Object.keys(backendFormData))
     
     return backendFormData
   }
@@ -1591,6 +1600,11 @@ export default function ConfigurationsPage() {
     
     // ✅ CORREÇÃO: Converter dados estruturados (português) para formato do backend (inglês)
     const backendFormData = mapStructuredToFormData(secretaryFormData)
+    
+    // Log detalhado antes de salvar
+    console.log('[SECRETARY MODAL SAVE] Dados do formulário (português):', secretaryFormData)
+    console.log('[SECRETARY MODAL SAVE] Dados convertidos (inglês):', backendFormData)
+    console.log('[SECRETARY MODAL SAVE] Campos que serão salvos:', Object.keys(backendFormData))
     
     // Atualizar form_data no formato correto do backend
     const updatedProfile = {
