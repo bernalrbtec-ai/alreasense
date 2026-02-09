@@ -34,7 +34,8 @@ import {
   ChevronRight,
   ChevronLeft,
   FileText,
-  Sparkles
+  Sparkles,
+  RefreshCw
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -265,6 +266,7 @@ export default function ConfigurationsPage() {
   const [showApiKeys, setShowApiKeys] = useState(false)
   const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
   const [testPhoneNumber, setTestPhoneNumber] = useState('')
+  const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null)
   
   // Estados para SMTP
   const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>([])
@@ -644,15 +646,18 @@ export default function ConfigurationsPage() {
   }, [qrCodeInstance])
 
   const handleCheckStatus = async (instance: WhatsAppInstance) => {
+    setCheckingStatusId(instance.id)
     const toastId = showLoadingToast('atualizar', 'Status')
     
     try {
       await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
       updateToastSuccess(toastId, 'atualizar', 'Status')
-      fetchInstances()
+      await fetchInstances()
     } catch (error: any) {
       console.error('Error checking status:', error)
       updateToastError(toastId, 'atualizar', 'Status', error)
+    } finally {
+      setCheckingStatusId(null)
     }
   }
 
@@ -2032,10 +2037,10 @@ export default function ConfigurationsPage() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleCheckStatus(instance)}
-                          disabled={instance.connection_state !== 'open'}
-                          title="Verificar Status da Conexão"
+                          disabled={checkingStatusId === instance.id}
+                          title="Atualizar status (sincronizar com Evolution)"
                         >
-                          <WifiOff className="h-4 w-4" />
+                          <RefreshCw className={`h-4 w-4 ${checkingStatusId === instance.id ? 'animate-spin' : ''}`} />
                         </Button>
                         <Button
                           variant="outline"

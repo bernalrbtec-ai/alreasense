@@ -493,6 +493,11 @@ class WhatsAppInstance(models.Model):
         tenant_name = self.tenant.name if self.tenant else 'Global'
         return f"{self.friendly_name} ({self.instance_name}) - {tenant_name}"
     
+    @property
+    def evolution_api_instance_name(self):
+        """Nome usado nas chamadas à Evolution API (UUID). Preferir evolution_instance_name se preenchido."""
+        return (self.evolution_instance_name or self.instance_name or '').strip()
+    
     def generate_qr_code(self):
         """Generate QR code for connection."""
         import requests
@@ -754,15 +759,16 @@ class WhatsAppInstance(models.Model):
         
         api_url = evolution_server.base_url
         api_master = evolution_server.api_key  # ← API MASTER
+        api_instance_name = self.evolution_api_instance_name or self.instance_name
         
-        print(f"🔍 Verificando status da instância {self.instance_name}")
-        print(f"   URL: {api_url}/instance/connectionState/{self.instance_name}")
+        print(f"🔍 Verificando status da instância {api_instance_name}")
+        print(f"   URL: {api_url}/instance/connectionState/{api_instance_name}")
             
         try:
             # MÉTODO 1: Usar connectionState específico (mais rápido e direto)
             # Referência: https://doc.evolution-api.com/v2/api-reference/instance-controller/connection-state
             response = requests.get(
-                f"{api_url}/instance/connectionState/{self.instance_name}",
+                f"{api_url}/instance/connectionState/{api_instance_name}",
                 headers={'apikey': api_master},  # ← API MASTER
                 timeout=10
             )
@@ -773,9 +779,8 @@ class WhatsAppInstance(models.Model):
             if response.status_code == 200:
                 data = response.json()
                 instance_data = data.get('instance', {})
-                
-                # Pegar estado da conexão
-                state = instance_data.get('state', 'close')
+                # Evolution pode retornar state no topo ou dentro de instance
+                state = data.get('state') or instance_data.get('state') or 'close'
                 print(f"   📱 State: {state}")
                 
                 # Atualizar estado
@@ -798,11 +803,11 @@ class WhatsAppInstance(models.Model):
                         print(f"   🔍 Total retornado: {len(instances_data)}")
                         
                         found_in_fetch = False
-                        for instance_data in instances_data:
+                        for inst_item in instances_data:
                             # Evolution API retorna objeto direto, não dentro de 'instance'
-                            inst_name = instance_data.get('name', 'N/A')
-                            
-                            if inst_name == self.instance_name:
+                            inst_name = inst_item.get('name', 'N/A')
+                            if inst_name == api_instance_name or inst_name == self.instance_name:
+                                instance_data = inst_item
                                 found_in_fetch = True
                                 print(f"   ✅ Encontrada em fetchInstances!")
                                 print(f"   📋 Dados completos: {instance_data}")
@@ -939,17 +944,20 @@ class WhatsAppInstance(models.Model):
         
         api_url = evolution_server.base_url
         api_master = evolution_server.api_key  # ← API MASTER
+        api_instance_name = self.evolution_api_instance_name or self.instance_name
         
         try:
             response = requests.get(
-                f"{api_url}/instance/connectionState/{self.instance_name}",
+                f"{api_url}/instance/connectionState/{api_instance_name}",
                 headers={'apikey': api_master},  # ← API MASTER (não da instância!)
                 timeout=5
             )
             
             if response.status_code == 200:
                 data = response.json()
-                state = data.get('state', 'close')
+                instance_data = data.get('instance', {})
+                # Evolution pode retornar state no topo ou dentro de instance
+                state = data.get('state') or instance_data.get('state') or 'close'
                 
                 if state == 'open':
                     self.status = 'active'

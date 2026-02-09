@@ -827,16 +827,15 @@ class EvolutionWebhookView(APIView):
                 
                 # ✅ Normalizar: strip (evita falha por espaço no webhook)
                 instance_name = (instance_name or '').strip()
-                # ✅ FIX CRÍTICO: Buscar WhatsAppInstance pelo instance_name (UUID) com default_department
-                # Evolution API envia UUID (ex: "262b8dcd-337c-4db0-8970-d5d3e28d63cc"); no banco pode ser igual
+                # ✅ Para webhook: aceitar is_active=True com qualquer status (active/connecting/inactive)
+                # Evolution envia eventos mesmo quando nossa instância está "connecting" ou "inactive"
                 logger.info(f"🔍 [FLOW CHAT] Buscando WhatsAppInstance por instance_name: {instance_name}")
                 whatsapp_instance = WhatsAppInstance.objects.select_related(
                     'tenant',
                     'default_department'
                 ).filter(
                     instance_name__iexact=instance_name,
-                    is_active=True,
-                    status='active'
+                    is_active=True
                 ).first()
                 
                 if whatsapp_instance:
@@ -852,8 +851,7 @@ class EvolutionWebhookView(APIView):
                         'default_department'
                     ).filter(
                         evolution_instance_name__iexact=instance_name,
-                        is_active=True,
-                        status='active'
+                        is_active=True
                     ).first()
                     
                     if whatsapp_instance:
@@ -867,8 +865,7 @@ class EvolutionWebhookView(APIView):
                         'default_department'
                     ).filter(
                         friendly_name=instance_name,
-                        is_active=True,
-                        status='active'
+                        is_active=True
                     ).first()
                     
                     if whatsapp_instance:
@@ -884,8 +881,7 @@ class EvolutionWebhookView(APIView):
                     ).filter(
                         Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name)
                         | Q(instance_name=instance_name_compact) | Q(evolution_instance_name=instance_name_compact),
-                        is_active=True,
-                        status='active'
+                        is_active=True
                     ).first()
                     if whatsapp_instance:
                         logger.info(f"✅ [FLOW CHAT] Instância encontrada por UUID: {whatsapp_instance.friendly_name}")
@@ -893,7 +889,7 @@ class EvolutionWebhookView(APIView):
                 # Buscar EvolutionConnection para passar também
                 connection = EvolutionConnection.objects.filter(is_active=True).select_related('tenant').first()
                 
-                # ✅ FALLBACK 3: Se ainda não encontrou e temos connection, buscar por tenant
+                # ✅ FALLBACK 3: Se ainda não encontrou e temos connection, buscar por tenant (qualquer status)
                 if not whatsapp_instance and connection and connection.tenant:
                     logger.info(f"🔍 [FLOW CHAT] Tentando buscar instância do tenant {connection.tenant.name}...")
                     whatsapp_instance = WhatsAppInstance.objects.select_related(
@@ -901,8 +897,7 @@ class EvolutionWebhookView(APIView):
                         'default_department'
                     ).filter(
                         tenant=connection.tenant,
-                        is_active=True,
-                        status='active'
+                        is_active=True
                     ).first()
                     
                     if whatsapp_instance:
