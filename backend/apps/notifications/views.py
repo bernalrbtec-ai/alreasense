@@ -85,13 +85,16 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     
     def get_queryset(self):
         from apps.common.cache_manager import CacheManager
+        import logging
         
+        logger = logging.getLogger(__name__)
         user = self.request.user
         
         # REGRA: Cada cliente vê APENAS seus dados
         # Superadmin NÃO vê dados individuais de clientes
         if not user.tenant:
             # Superadmin sem tenant = sem acesso a dados de clientes
+            logger.warning(f"⚠️ [INSTANCES] Usuário {user.email} sem tenant, retornando queryset vazio")
             return WhatsAppInstance.objects.none()
         
         # Cache key por tenant
@@ -104,7 +107,9 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         def fetch_instance_ids():
             """Função para buscar IDs de instâncias do banco"""
             queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
-            return list(queryset.values_list('id', flat=True))
+            ids = list(queryset.values_list('id', flat=True))
+            logger.info(f"📋 [INSTANCES] Buscadas {len(ids)} instâncias do banco para tenant {user.tenant.id}")
+            return ids
         
         # ✅ OTIMIZAÇÃO: Cachear IDs (TTL de 2 minutos - dados podem mudar frequentemente)
         instance_ids = CacheManager.get_or_set(
@@ -113,11 +118,26 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             ttl=CacheManager.TTL_MINUTE * 2
         )
         
-        # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related
-        return WhatsAppInstance.objects.filter(
-            id__in=instance_ids,
-            tenant=user.tenant
-        ).select_related('tenant', 'created_by')
+        # ✅ CORREÇÃO: Se cache retornou vazio ou None, buscar diretamente do banco
+        if not instance_ids or len(instance_ids) == 0:
+            logger.warning(f"⚠️ [INSTANCES] Cache retornou vazio para tenant {user.tenant.id}, buscando diretamente do banco")
+            # Invalidar cache corrompido
+            try:
+                CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+            except Exception as e:
+                logger.error(f"❌ [INSTANCES] Erro ao invalidar cache: {e}")
+            
+            # Buscar diretamente do banco (bypass do cache)
+            queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+        else:
+            # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related
+            queryset = WhatsAppInstance.objects.filter(
+                id__in=instance_ids,
+                tenant=user.tenant
+            ).select_related('tenant', 'created_by')
+        
+        logger.info(f"✅ [INSTANCES] Retornando {queryset.count()} instâncias para usuário {user.email}")
+        return queryset
     
     def perform_create(self, serializer):
         """Ao criar, verificar limites, logar e invalidar cache."""
