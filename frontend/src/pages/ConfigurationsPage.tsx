@@ -1377,6 +1377,40 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const mapFormDataToStructured = (formData: Record<string, unknown> | null | undefined): typeof secretaryFormData => {
+    // Helper para extrair string de forma segura
+    const getString = (value: unknown, fallback = ''): string => {
+      if (typeof value === 'string') return value.trim()
+      if (value === null || value === undefined) return fallback
+      return String(value).trim() || fallback
+    }
+    
+    // Se não há form_data, retornar objeto vazio com todos os campos
+    if (!formData || typeof formData !== 'object' || Array.isArray(formData)) {
+      return {
+        empresa: '',
+        missao: '',
+        endereco: '',
+        telefone: '',
+        email: '',
+        ramo: '',
+        servicos: '',
+      }
+    }
+    
+    // Mapear campos do form_data para os campos estruturados do formulário
+    // Aceita tanto os nomes novos (empresa, missao, etc) quanto possíveis nomes antigos
+    return {
+      empresa: getString(formData.empresa || formData.nome || formData.nome_empresa),
+      missao: getString(formData.missao || formData.sobre || formData.descricao),
+      endereco: getString(formData.endereco || formData.endereco_completo),
+      telefone: getString(formData.telefone || formData.phone),
+      email: getString(formData.email || formData.email_contato),
+      ramo: getString(formData.ramo || formData.ramo_atuacao || formData.area),
+      servicos: getString(formData.servicos || formData.produtos || formData.servicos_produtos),
+    }
+  }
+
   const generateRagPreview = (formData: typeof secretaryFormData) => {
     const parts: string[] = []
     if (formData.empresa) parts.push(`Empresa: ${formData.empresa}`)
@@ -2290,19 +2324,20 @@ export default function ConfigurationsPage() {
                       )}
                       <Button
                         onClick={() => {
-                          // Inicializar form_data estruturado se existir
-                          if (secretaryProfile.form_data && typeof secretaryProfile.form_data === 'object') {
-                            setSecretaryFormData(secretaryProfile.form_data as any)
-                          } else {
-                            setSecretaryFormData({})
-                          }
+                          // Mapear form_data para campos estruturados
+                          const structuredData = mapFormDataToStructured(secretaryProfile.form_data)
+                          console.log('[SECRETARY MODAL] Form data original:', secretaryProfile.form_data)
+                          console.log('[SECRETARY MODAL] Form data mapeado:', structuredData)
+                          setSecretaryFormData(structuredData)
+                          
                           // Gerar preview inicial
-                          const currentFormData = secretaryProfile.form_data && typeof secretaryProfile.form_data === 'object' 
-                            ? secretaryProfile.form_data as any 
-                            : {}
-                          setSecretaryRagPreview(generateRagPreview(currentFormData))
-                          setIsSecretaryModalOpen(true)
+                          setSecretaryRagPreview(generateRagPreview(structuredData))
+                          
+                          // Resetar wizard para etapa 1
                           setSecretaryWizardStep(1)
+                          
+                          // Abrir modal
+                          setIsSecretaryModalOpen(true)
                         }}
                         variant="outline"
                       >
