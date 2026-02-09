@@ -782,7 +782,23 @@ export function useTenantSocket() {
       console.error('❌ [TENANT WS] Token não tem formato JWT (3 partes). Abortando.');
       return;
     }
-    
+
+    // ✅ Não conectar se o token já expirou (evita 4001 e loop; força novo login)
+    try {
+      const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+      const padding = payloadB64.length % 4 ? '='.repeat(4 - (payloadB64.length % 4)) : '';
+      const payload = JSON.parse(atob(payloadB64 + padding));
+      const exp = payload.exp as number | undefined;
+      if (exp && Math.floor(Date.now() / 1000) > exp) {
+        console.warn('⚠️ [TENANT WS] Token já expirado (exp no payload). Redirecionando para login...');
+        setConnectionStatus('disconnected');
+        useAuthStore.getState().logout();
+        return;
+      }
+    } catch (_) {
+      // Se não conseguir decodificar, deixa o backend rejeitar
+    }
+
     const encodedToken = encodeURIComponent(currentToken);
     const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${currentUser.tenant_id}/?token=${encodedToken}`;
 

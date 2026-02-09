@@ -106,6 +106,25 @@ class ChatWebSocketManager {
     this.token = token;
     this.isConnecting = true;
 
+    // ✅ Não conectar se o token já expirou (evita 4001; força novo login)
+    const parts = token.split('.');
+    if (parts.length === 3) {
+      try {
+        const payloadB64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+        const padding = payloadB64.length % 4 ? '='.repeat(4 - (payloadB64.length % 4)) : '';
+        const payload = JSON.parse(atob(payloadB64 + padding));
+        const exp = payload.exp as number | undefined;
+        if (exp && Math.floor(Date.now() / 1000) > exp) {
+          console.warn('⚠️ [MANAGER] Token já expirado. Redirecionando para login...');
+          this.isConnecting = false;
+          useAuthStore.getState().logout();
+          return;
+        }
+      } catch {
+        // Se não conseguir decodificar, deixa o backend rejeitar
+      }
+    }
+
     const encodedToken = encodeURIComponent(token);
     const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${tenantId}/?token=${encodedToken}`;
     console.log('🔌 [MANAGER] Conectando ao WebSocket global (tenant:', tenantId, ', token length:', token.length, ')');
