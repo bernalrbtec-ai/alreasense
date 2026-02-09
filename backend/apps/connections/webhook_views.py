@@ -51,27 +51,32 @@ class EvolutionWebhookView(APIView):
     
     def post(self, request):
         try:
-            # Log básico do webhook
-            # Webhook received - log removed for cleaner output
+            # ✅ LOG CRÍTICO: Log imediatamente quando webhook chega
+            logger.info(f"📥 [EVOLUTION WEBHOOK] ====== WEBHOOK RECEBIDO ======")
+            logger.info(f"📥 [EVOLUTION WEBHOOK] Método: {request.method}")
+            logger.info(f"📥 [EVOLUTION WEBHOOK] Content-Type: {request.content_type}")
+            logger.info(f"📥 [EVOLUTION WEBHOOK] Body length: {len(request.body) if request.body else 0}")
             
             # Parse JSON data
             data = json.loads(request.body)
             
+            # ✅ LOG CRÍTICO: Log dados do webhook antes de processar
+            event_type = data.get('event', 'N/A')
+            instance_name = data.get('instance', 'N/A')
+            logger.info(f"📥 [EVOLUTION WEBHOOK] Event: {event_type}")
+            logger.info(f"📥 [EVOLUTION WEBHOOK] Instance: {instance_name}")
+            logger.info(f"📥 [EVOLUTION WEBHOOK] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
+            
             # Generate unique event ID
             event_id = generate_event_id(data)
-            # Webhook received - log removed for cleaner output
-            
-            # Log completo do JSON para debug
-            # Full webhook data logging removed for cleaner output
             
             # Store event in Redis cache (24h)
             WebhookCache.store_event(event_id, data)
             logger.info(f"💾 Evento armazenado no cache: {event_id}")
             
             # Process different event types
-            event_type = data.get('event')
-            
             if event_type == 'messages.upsert':
+                logger.info(f"📥 [EVOLUTION WEBHOOK] Processando messages.upsert...")
                 return self.handle_message_upsert(data)
             elif event_type == 'messages.update':
                 return self.handle_message_update(data)
