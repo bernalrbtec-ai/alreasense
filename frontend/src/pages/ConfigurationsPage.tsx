@@ -1399,15 +1399,45 @@ export default function ConfigurationsPage() {
     }
     
     // Mapear campos do form_data para os campos estruturados do formulário
-    // Aceita tanto os nomes novos (empresa, missao, etc) quanto possíveis nomes antigos
+    // Aceita múltiplos nomes possíveis (incluindo os que vêm do backend)
     return {
-      empresa: getString(formData.empresa || formData.nome || formData.nome_empresa),
-      missao: getString(formData.missao || formData.sobre || formData.descricao),
-      endereco: getString(formData.endereco || formData.endereco_completo),
-      telefone: getString(formData.telefone || formData.phone),
-      email: getString(formData.email || formData.email_contato),
-      ramo: getString(formData.ramo || formData.ramo_atuacao || formData.area),
-      servicos: getString(formData.servicos || formData.produtos || formData.servicos_produtos),
+      empresa: getString(
+        formData.empresa || 
+        formData.company_name || 
+        formData.nome || 
+        formData.nome_empresa
+      ),
+      missao: getString(
+        formData.missao || 
+        formData.mission || 
+        formData.sobre || 
+        formData.descricao
+      ),
+      endereco: getString(
+        formData.endereco || 
+        formData.address || 
+        formData.endereco_completo
+      ),
+      telefone: getString(
+        formData.telefone || 
+        formData.phone
+      ),
+      email: getString(
+        formData.email || 
+        formData.email_contato
+      ),
+      ramo: getString(
+        formData.ramo || 
+        formData.ramo_atuacao || 
+        formData.area || 
+        formData.business_area
+      ),
+      servicos: getString(
+        formData.servicos || 
+        formData.services || 
+        formData.produtos || 
+        formData.servicos_produtos
+      ),
     }
   }
 
