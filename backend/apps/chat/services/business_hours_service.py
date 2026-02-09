@@ -999,11 +999,13 @@ class BusinessHoursService:
             tenant, None, message.created_at
         )
         if is_open:
+            # Bia só envia register_return quando fora do horário; se backend considerou aberto
+            # (ex.: sem BusinessHours configurado), criar mesmo assim para não perder o retorno
             logger.info(
-                "[SECRETARY RETURN] Não criar tarefa de retorno: empresa está aberta (conv=%s)",
+                "[SECRETARY RETURN] is_open=true (conv=%s); criando tarefa mesmo assim pois Bia solicitou registro de retorno",
                 conversation.id,
             )
-            return None
+            next_open_time_str = next_open_time_str or "Em breve"
 
         from apps.authn.models import Department
 
@@ -1026,11 +1028,12 @@ class BusinessHoursService:
         task_config = BusinessHoursService.get_after_hours_task_config(tenant, department)
         if not task_config:
             task_config = BusinessHoursService.get_after_hours_task_config(tenant, None)
-        if not task_config or not task_config.create_task_enabled:
-            logger.warning(
-                "[SECRETARY RETURN] Sem AfterHoursTaskConfig ativo para tenant/department; não criando tarefa"
+        use_fallback_config = not task_config or not getattr(task_config, "create_task_enabled", True)
+        if use_fallback_config:
+            logger.info(
+                "[SECRETARY RETURN] Sem AfterHoursTaskConfig ativo; criando tarefa com fallback (conv=%s)",
+                conversation.id,
             )
-            return None
 
         dept_id_str = str(department.id) if department else None
         existing = Task.objects.filter(
@@ -1095,26 +1098,40 @@ class BusinessHoursService:
             "next_open_time": next_open_time_str or "Em breve",
             "contact_phone": conversation.contact_phone or "",
         }
-        try:
-            task_title = BusinessHoursService.format_message_template(
-                task_config.task_title_template, context
-            )
-            task_description = BusinessHoursService.format_message_template(
-                task_config.task_description_template, context
-            )
-        except Exception as e:
-            logger.warning("create_secretary_return_task: template format failed: %s", e)
-            task_title = f"Retorno: {contact_name}"
-            task_description = f"Assunto: {return_subject}\n\nPróximo horário: {next_open_time_str or 'Em breve'}"
 
-        task_department = (
-            task_config.task_department
-            or department
-            or (getattr(conversation, "department", None))
-        )
-        if not task_department:
-            inbox = Department.objects.filter(tenant=tenant, name="Inbox").first()
-            task_department = inbox or Department.objects.filter(tenant=tenant).first()
+        if use_fallback_config:
+            task_title = f"Retorno: {contact_name}"
+            task_description = f"Assunto: {return_subject or '—'}\n\nPróximo horário: {next_open_time_str or 'Em breve'}"
+            task_department = (
+                department
+                or (getattr(conversation, "department", None))
+                or Department.objects.filter(tenant=tenant, name="Inbox").first()
+                or Department.objects.filter(tenant=tenant).first()
+            )
+            assigned_to = None
+            task_priority = "high"
+        else:
+            try:
+                task_title = BusinessHoursService.format_message_template(
+                    task_config.task_title_template, context
+                )
+                task_description = BusinessHoursService.format_message_template(
+                    task_config.task_description_template, context
+                )
+            except Exception as e:
+                logger.warning("create_secretary_return_task: template format failed: %s", e)
+                task_title = f"Retorno: {contact_name}"
+                task_description = f"Assunto: {return_subject}\n\nPróximo horário: {next_open_time_str or 'Em breve'}"
+            task_department = (
+                getattr(task_config, "task_department", None)
+                or department
+                or (getattr(conversation, "department", None))
+            )
+            if not task_department:
+                task_department = Department.objects.filter(tenant=tenant, name="Inbox").first() or Department.objects.filter(tenant=tenant).first()
+            assigned_to = getattr(task_config, "auto_assign_to_agent", None)
+            task_priority = getattr(task_config, "task_priority", "high") or "high"
+
         if not task_department:
             logger.error("[SECRETARY RETURN] Nenhum departamento disponível para criar tarefa")
             return None
@@ -1130,10 +1147,10 @@ class BusinessHoursService:
         task = Task.objects.create(
             tenant=tenant,
             department=task_department,
-            assigned_to=task_config.auto_assign_to_agent,
+            assigned_to=assigned_to,
             title=task_title,
             description=task_description,
-            priority=task_config.task_priority,
+            priority=task_priority,
             due_date=due_date,
             status="pending",
             created_by=None,
