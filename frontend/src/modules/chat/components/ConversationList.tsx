@@ -112,6 +112,38 @@ export function ConversationList() {
     fetchConversations();
   }, [hasLoaded, setConversations]);
 
+  // ✅ NOVO: Buscar conversas quando mudar para "Minhas Conversas"
+  useEffect(() => {
+    if (activeDepartment?.id === 'my_conversations' && hasLoaded) {
+      const fetchMyConversations = async () => {
+        try {
+          setLoading(true);
+          const params: any = { ordering: '-last_message_at', assigned_to_me: 'true' };
+          const response = await api.get('/chat/conversations/', { params });
+          const convs = response.data.results || response.data;
+          
+          const { clearUpdateCache } = await import('../store/conversationUpdater');
+          clearUpdateCache();
+          
+          const { conversations: currentConvs } = useChatStore.getState();
+          let updatedConvs = currentConvs;
+          
+          for (const conversationItem of convs) {
+            updatedConvs = upsertConversation(updatedConvs, conversationItem);
+          }
+          
+          setConversations(updatedConvs);
+        } catch (error) {
+          console.error('❌ [ConversationList] Erro ao carregar minhas conversas:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
+      
+      fetchMyConversations();
+    }
+  }, [activeDepartment?.id, hasLoaded, setConversations]);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const conversationId = params.get('conversation_id');

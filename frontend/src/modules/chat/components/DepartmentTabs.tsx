@@ -28,8 +28,9 @@ export function DepartmentTabs() {
   }, [departments, can_access_all_departments, departmentIds]);
   
   // ✅ FIX: Limpar activeDepartment se não estiver mais na lista de departamentos permitidos
+  // ✅ CORREÇÃO: Não limpar se for 'my_conversations' (tab especial)
   useEffect(() => {
-    if (activeDepartment && activeDepartment.id !== 'inbox') {
+    if (activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations') {
       const isAllowed = filteredDepartments.some(dept => dept.id === activeDepartment.id);
       if (!isAllowed) {
         console.log('🔒 [DEPARTMENTS] Departamento ativo não permitido, mudando para Inbox');

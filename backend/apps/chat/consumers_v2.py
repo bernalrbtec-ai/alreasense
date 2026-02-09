@@ -432,6 +432,35 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'conversation': event.get('conversation')
         }))
     
+    async def conversation_transferred(self, event):
+        """✅ NOVO: Broadcast quando conversa é transferida."""
+        # Converter para conversation_updated para manter compatibilidade
+        # O frontend já trata conversation_updated corretamente
+        logger.info(f"🔄 [CHAT WS V2] conversation_transferred recebido, convertendo para conversation_updated")
+        # Buscar conversa atualizada do banco
+        from apps.chat.models import Conversation
+        from channels.db import database_sync_to_async
+        
+        conversation_id = event.get('conversation_id')
+        if conversation_id:
+            @database_sync_to_async
+            def get_conversation():
+                try:
+                    from apps.chat.utils.serialization import serialize_conversation_for_ws
+                    conv = Conversation.objects.select_related(
+                        'tenant', 'department', 'assigned_to'
+                    ).prefetch_related('participants').get(id=conversation_id)
+                    return serialize_conversation_for_ws(conv)
+                except Conversation.DoesNotExist:
+                    return None
+            
+            conversation_data = await get_conversation()
+            if conversation_data:
+                await self.send(text_data=json.dumps({
+                    'type': 'conversation_updated',
+                    'conversation': conversation_data
+                }))
+    
     async def message_edited(self, event):
         """✅ NOVO: Broadcast quando mensagem é editada."""
         message_data = event.get('message', {})
