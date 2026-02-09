@@ -2856,7 +2856,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 elif connection:
                     instance_name_for_media = instance_name  # Usar instance_name do webhook (pode ser UUID ou nome)
                     api_key_for_media = connection.api_key
-                    evolution_api_url_for_media = connection.api_url or connection.base_url
+                    evolution_api_url_for_media = connection.base_url
                     
                     logger.info(f"✅ [WEBHOOK] Usando EvolutionConnection para descriptografar mídia:")
                     logger.info(f"   📌 Instance: {instance_name_for_media}")
@@ -2907,7 +2907,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             if fallback_connection:
                                 instance_name_for_media = instance_name
                                 api_key_for_media = fallback_connection.api_key
-                                evolution_api_url_for_media = fallback_connection.api_url or fallback_connection.base_url
+                                evolution_api_url_for_media = fallback_connection.base_url
                                 
                                 logger.info(f"✅ [WEBHOOK] EvolutionConnection encontrada via fallback:")
                                 logger.info(f"   📌 Instance: {instance_name_for_media}")

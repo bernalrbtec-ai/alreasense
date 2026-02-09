@@ -12,6 +12,7 @@
 
 import { useEffect, useCallback, useState } from 'react';
 import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { chatWebSocketManager, WebSocketMessage } from '../services/ChatWebSocketManager';
 import { useDesktopNotifications } from '@/hooks/useDesktopNotifications';
@@ -23,15 +24,22 @@ export function useChatSocket(conversationId?: string) {
   // ✅ REMOVIDO: updateAttachment não é mais usado aqui (movido para useTenantSocket)
   const { showNotification, isEnabled: notificationsEnabled } = useDesktopNotifications();
 
-  // Conectar ao manager global (1 vez por sessão)
+  // Conectar ao manager global (1 vez por sessão) com o MESMO token que o axios usa
   useEffect(() => {
-    if (!token || !user || !user.tenant_id) {
+    if (!user?.tenant_id) {
       console.log('⏸️ [HOOK] Aguardando autenticação...');
+      return;
+    }
+    const authHeader = api.defaults.headers.common['Authorization'] as string | undefined;
+    const tokenFromApi = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const currentToken = tokenFromApi || token;
+    if (!currentToken) {
+      console.log('⏸️ [HOOK] Token não disponível');
       return;
     }
 
     console.log('🔌 [HOOK] Conectando ao manager global...');
-    chatWebSocketManager.connect(user.tenant_id, token);
+    chatWebSocketManager.connect(user.tenant_id, currentToken);
 
     // Atualizar estado de conexão
     const checkConnection = setInterval(() => {

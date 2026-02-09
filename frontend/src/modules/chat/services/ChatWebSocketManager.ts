@@ -106,8 +106,9 @@ class ChatWebSocketManager {
     this.token = token;
     this.isConnecting = true;
 
-    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${tenantId}/?token=${token}`;
-    console.log('🔌 [MANAGER] Conectando ao WebSocket global:', wsUrl);
+    const encodedToken = encodeURIComponent(token);
+    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${tenantId}/?token=${encodedToken}`;
+    console.log('🔌 [MANAGER] Conectando ao WebSocket global (tenant:', tenantId, ', token length:', token.length, ')');
 
     try {
       this.ws = new WebSocket(wsUrl);

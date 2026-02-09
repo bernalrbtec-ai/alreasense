@@ -6,6 +6,7 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useChatStore } from '../store/chatStore';
 import { useAuthStore } from '@/stores/authStore';
+import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getDisplayName } from '../utils/phoneFormatter';
 
@@ -754,32 +755,36 @@ export function useTenantSocket() {
       return;
     }
 
-    // ✅ CORREÇÃO CRÍTICA: Sempre buscar token mais recente do store (não usar closure)
-    // Isso garante que mesmo se token foi renovado, usamos o mais recente
-    const { token: currentToken, user: currentUser } = useAuthStore.getState();
-    if (!currentToken || !currentUser) {
-      console.warn('⚠️ [TENANT WS] Token ou usuário não disponível, aguardando...');
+    // ✅ CORREÇÃO CRÍTICA: Usar o MESMO token que o axios usa (evita dessincronia store vs HTTP)
+    const authHeader = api.defaults.headers.common['Authorization'] as string | undefined;
+    const tokenFromApi = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const { token: tokenFromStore, user: currentUser } = useAuthStore.getState();
+    
+    const currentToken = tokenFromApi || tokenFromStore;
+    
+    if (!currentToken || !currentUser?.tenant_id) {
+      console.warn('⚠️ [TENANT WS] Token ou tenant_id não disponível. Token do API:', !!tokenFromApi, 'Token do store:', !!tokenFromStore);
       return;
     }
     
-    // ✅ DEBUG: Log token completo para debug
-    console.log('🔌 [TENANT WS] Criando nova conexão WebSocket:', {
+    // ✅ DEBUG: Log sem expor token (apenas tamanho e formato)
+    const parts = currentToken.split('.');
+    console.log('🔌 [TENANT WS] Conectando WebSocket:', {
       tenantId: currentUser.tenant_id,
       tokenLength: currentToken.length,
-      tokenFull: currentToken, // ✅ DEBUG: Log token completo temporariamente
-      tokenParts: currentToken.split('.').length,
+      tokenParts: parts.length,
+      tokenFrom: tokenFromApi ? 'api' : 'store',
       userEmail: currentUser.email,
       wsBaseUrl: WS_BASE_URL
     });
     
-    // ✅ CORREÇÃO: URL-encode o token para evitar problemas com caracteres especiais
+    if (parts.length !== 3) {
+      console.error('❌ [TENANT WS] Token não tem formato JWT (3 partes). Abortando.');
+      return;
+    }
+    
     const encodedToken = encodeURIComponent(currentToken);
     const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${currentUser.tenant_id}/?token=${encodedToken}`;
-    console.log('🔌 [TENANT WS] URL WebSocket criada:', {
-      urlLength: wsUrl.length,
-      urlPreview: wsUrl.substring(0, 100) + '...',
-      encodedTokenLength: encodedToken.length
-    });
 
     try {
       const ws = new WebSocket(wsUrl);
