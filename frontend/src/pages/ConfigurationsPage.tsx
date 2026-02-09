@@ -179,11 +179,22 @@ interface AiSettings {
   transcription_min_seconds: number
   transcription_max_mb: number
   triage_enabled: boolean
+  secretary_enabled?: boolean
+  secretary_model?: string
   agent_model: string
   n8n_audio_webhook_url: string
   n8n_triage_webhook_url: string
   n8n_ai_webhook_url: string
   n8n_models_webhook_url: string
+}
+
+interface SecretaryProfile {
+  form_data: Record<string, unknown>
+  prompt: string
+  signature_name: string
+  use_memory: boolean
+  is_active: boolean
+  inbox_idle_minutes: number
 }
 
 interface GatewayAuditItem {
@@ -305,6 +316,10 @@ export default function ConfigurationsPage() {
   const [audioTestFile, setAudioTestFile] = useState<File | null>(null)
   const [audioTestResult, setAudioTestResult] = useState<string | null>(null)
   const [audioTestError, setAudioTestError] = useState<string | null>(null)
+  const [secretaryProfile, setSecretaryProfile] = useState<SecretaryProfile | null>(null)
+  const [secretaryProfileLoading, setSecretaryProfileLoading] = useState(false)
+  const [secretaryProfileSaving, setSecretaryProfileSaving] = useState(false)
+  const [secretaryProfileErrors, setSecretaryProfileErrors] = useState<Record<string, string>>({})
   const [audioTestLoading, setAudioTestLoading] = useState(false)
   const [isAudioRecording, setIsAudioRecording] = useState(false)
   const [audioRecordingTime, setAudioRecordingTime] = useState(0)
@@ -401,6 +416,7 @@ export default function ConfigurationsPage() {
     }
     if (activeTab === 'ai' && user?.is_admin) {
       fetchAiSettings()
+      fetchSecretaryProfile()
       setGatewayAuditOffset(0)
       loadGatewayAudit({ offset: 0 })
     }
@@ -1321,6 +1337,55 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const fetchSecretaryProfile = async () => {
+    try {
+      setSecretaryProfileLoading(true)
+      const response = await api.get('/ai/secretary/profile/')
+      setSecretaryProfile({
+        form_data: response.data?.form_data ?? {},
+        prompt: response.data?.prompt ?? '',
+        signature_name: response.data?.signature_name ?? '',
+        use_memory: response.data?.use_memory ?? true,
+        is_active: response.data?.is_active ?? false,
+        inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+      })
+      setSecretaryProfileErrors({})
+    } catch (error: any) {
+      console.error('Erro ao carregar perfil da secretária:', error)
+      setSecretaryProfile(null)
+      if (error.response?.status === 403) {
+        showErrorToast('Apenas administradores podem acessar esta configuração')
+      }
+    } finally {
+      setSecretaryProfileLoading(false)
+    }
+  }
+
+  const handleSaveSecretaryProfile = async () => {
+    if (!secretaryProfile || !aiSettings) return
+    const errors: Record<string, string> = {}
+    if (secretaryProfile.inbox_idle_minutes < 0 || secretaryProfile.inbox_idle_minutes > 1440) {
+      errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
+    }
+    setSecretaryProfileErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
+    try {
+      setSecretaryProfileSaving(true)
+      await api.put('/ai/secretary/profile/', secretaryProfile)
+      setSecretaryProfileErrors({})
+      updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
+    } catch (error: any) {
+      const apiErrors = error.response?.data?.errors || {}
+      if (apiErrors && typeof apiErrors === 'object') {
+        setSecretaryProfileErrors(apiErrors)
+      }
+      updateToastError(toastId, 'salvar', 'Perfil da Secretária', error)
+    } finally {
+      setSecretaryProfileSaving(false)
+    }
+  }
+
   const fetchAiModels = async (currentSettings?: AiSettings, overrideUrl?: string) => {
     try {
       setAiModelsLoading(true)
@@ -1996,6 +2061,25 @@ export default function ConfigurationsPage() {
                     </label>
                   </div>
 
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-base font-semibold">Ativar Secretária IA (Inbox)</Label>
+                      <p className="text-sm text-gray-600 mt-1">
+                        Atende conversas no Inbox com a secretária virtual (Bia) quando habilitada.
+                      </p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                      <input
+                        type="checkbox"
+                        disabled={!aiSettings.ai_enabled}
+                        checked={!!aiSettings.secretary_enabled}
+                        onChange={(e) => setAiSettings({ ...aiSettings, secretary_enabled: e.target.checked })}
+                        className="sr-only peer"
+                      />
+                      <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    </label>
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="transcription_min_seconds">Min. segundos para transcrição</Label>
@@ -2100,6 +2184,110 @@ export default function ConfigurationsPage() {
                     </Button>
                   </div>
                 </div>
+              </Card>
+
+              {/* Secretária IA (Bia) */}
+              <Card className="p-6">
+                <h3 className="text-lg font-medium text-gray-900 mb-1">Secretária IA (Bia)</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Perfil da secretária virtual no Inbox: dados da empresa, prompt e opções. Só atua quando &quot;Ativar Secretária IA (Inbox)&quot; estiver ligado acima.
+                </p>
+                {secretaryProfileLoading || secretaryProfile === null ? (
+                  <div className="flex items-center justify-center h-32">
+                    <LoadingSpinner />
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Perfil ativo</Label>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={secretaryProfile.is_active}
+                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, is_active: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <Label className="text-base font-semibold">Usar memória por contato</Label>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={secretaryProfile.use_memory}
+                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div>
+                      <Label htmlFor="secretary_signature_name">Nome na assinatura (ex: Bia)</Label>
+                      <Input
+                        id="secretary_signature_name"
+                        value={secretaryProfile.signature_name}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
+                        placeholder="Bia"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (minutos)</Label>
+                      <Input
+                        id="secretary_inbox_idle_minutes"
+                        type="number"
+                        min={0}
+                        max={1440}
+                        value={secretaryProfile.inbox_idle_minutes}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
+                        className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
+                      />
+                      <p className="text-xs text-gray-500 mt-1">0 = desativado. Máx. 1440 (24h).</p>
+                      {secretaryProfileErrors.inbox_idle_minutes && (
+                        <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="secretary_form_data">Dados da empresa (JSON)</Label>
+                      <textarea
+                        id="secretary_form_data"
+                        value={typeof secretaryProfile.form_data === 'object' ? JSON.stringify(secretaryProfile.form_data, null, 2) : String(secretaryProfile.form_data || '')}
+                        onChange={(e) => {
+                          try {
+                            const parsed = e.target.value.trim() ? JSON.parse(e.target.value) : {}
+                            if (typeof parsed === 'object' && parsed !== null) {
+                              setSecretaryProfile({ ...secretaryProfile, form_data: parsed })
+                            }
+                          } catch {
+                            // mantém texto enquanto digita
+                          }
+                        }}
+                        rows={6}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
+                        placeholder='{"empresa": "Nome", "servicos": "..."}'
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Objeto JSON usado como contexto RAG da secretária.</p>
+                    </div>
+                    <div>
+                      <Label htmlFor="secretary_prompt">Prompt da secretária</Label>
+                      <textarea
+                        id="secretary_prompt"
+                        value={secretaryProfile.prompt}
+                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, prompt: e.target.value })}
+                        rows={8}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                        placeholder="Instruções de tom, regras e formato. Vazio = usa o padrão do n8n."
+                      />
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={handleSaveSecretaryProfile} disabled={secretaryProfileSaving}>
+                        <Save className="h-4 w-4 mr-2" />
+                        {secretaryProfileSaving ? 'Salvando...' : 'Salvar perfil da Secretária'}
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </Card>
 
               <Card className="p-6">
