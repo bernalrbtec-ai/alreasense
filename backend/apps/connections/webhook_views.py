@@ -786,6 +786,9 @@ class EvolutionWebhookView(APIView):
             logger.info(f"📥 [CONNECTIONS WEBHOOK] ====== messages.upsert RECEBIDO ======")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Data keys: {list(data.keys()) if isinstance(data, dict) else 'not dict'}")
             logger.info(f"📥 [CONNECTIONS WEBHOOK] Data completo: {data}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Tipo de data: {type(data)}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Event: {data.get('event', 'N/A')}")
+            logger.info(f"📥 [CONNECTIONS WEBHOOK] Instance: {data.get('instance', 'N/A')}")
             
             # ✅ FIX: Evolution API v2 envia 'data' como objeto, não lista
             # Estrutura: { event: 'messages.upsert', instance: '...', data: { key: {...}, message: {...} } }
