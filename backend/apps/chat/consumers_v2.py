@@ -56,34 +56,36 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         # Extrair e validar token JWT
         from urllib.parse import parse_qs, unquote
         query_string = self.scope.get("query_string", b"").decode()
-        logger.info(f"🔍 [CHAT WS V2] Query string recebida: {query_string[:100]}...")
+        logger.info(f"🔍 [CHAT WS V2] Query string length: {len(query_string)}")
         
         params = parse_qs(query_string)
         token_raw = params.get('token', [None])[0]
         
-        # ✅ CORREÇÃO: Decodificar token se necessário (pode vir URL-encoded)
-        token = unquote(token_raw) if token_raw else None
-        
-        if not token:
+        if not token_raw:
             logger.warning(f"❌ [CHAT WS V2] Token JWT não fornecido na query string")
-            logger.warning(f"   Query string: {query_string}")
-            logger.warning(f"   Params: {params}")
             await self.close(code=4001)
             return
         
-        # ✅ DEBUG: Log token completo para debug (será removido depois)
-        logger.info(f"🔍 [CHAT WS V2] Token extraído - Length: {len(token) if token else 0}")
-        logger.info(f"🔍 [CHAT WS V2] Token completo: {token}")
-        logger.info(f"🔍 [CHAT WS V2] Token type: {type(token)}")
+        # ✅ Decodificar URL (pode vir encoded por proxy); unquote até estabilizar (evita double-encode)
+        token = token_raw.strip()
+        while True:
+            decoded = unquote(token)
+            if decoded == token:
+                break
+            token = decoded
         
-        # ✅ DEBUG: Verificar se token parece válido (JWT tem 3 partes separadas por ponto)
-        if token:
-            parts = token.split('.')
-            logger.info(f"🔍 [CHAT WS V2] Token parts count: {len(parts)} (esperado: 3)")
-            if len(parts) != 3:
-                logger.error(f"❌ [CHAT WS V2] Token não tem formato JWT válido! Tem {len(parts)} partes ao invés de 3")
-                await self.close(code=4001)
-                return
+        if not token:
+            logger.warning(f"❌ [CHAT WS V2] Token vazio após decode")
+            await self.close(code=4001)
+            return
+        
+        # Log sem expor token (segurança)
+        parts = token.split('.')
+        logger.info(f"🔍 [CHAT WS V2] Token length: {len(token)}, parts: {len(parts)}")
+        if len(parts) != 3:
+            logger.error(f"❌ [CHAT WS V2] Token sem formato JWT (3 partes). Recebido: {len(parts)} partes")
+            await self.close(code=4001)
+            return
         
         # Autenticar usuário via token
         self.user = await self.authenticate_token(token)
@@ -529,13 +531,16 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 user_id = access_token['user_id']
                 logger.info(f"✅ [CHAT WS V2] Token válido, user_id: {user_id}")
             except TokenError as e:
-                logger.error(f"❌ [CHAT WS V2] TokenError ao validar token: {type(e).__name__} - {e}")
+                # Mensagem exata ajuda a distinguir expirado vs assinatura inválida vs malformed
+                logger.error(
+                    f"❌ [CHAT WS V2] TokenError ao validar token: {type(e).__name__} - {e} | token_len={len(token) if token else 0}"
+                )
                 return None
             except InvalidToken as e:
-                logger.error(f"❌ [CHAT WS V2] InvalidToken: {e}")
+                logger.error(f"❌ [CHAT WS V2] InvalidToken: {e} | token_len={len(token) if token else 0}")
                 return None
             except Exception as e:
-                logger.error(f"❌ [CHAT WS V2] Erro inesperado ao validar token: {type(e).__name__} - {e}")
+                logger.error(f"❌ [CHAT WS V2] Erro inesperado ao validar token: {type(e).__name__} - {e}", exc_info=True)
                 return None
             
             User = get_user_model()
