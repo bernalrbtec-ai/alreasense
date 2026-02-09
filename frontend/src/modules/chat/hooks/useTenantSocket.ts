@@ -755,11 +755,10 @@ export function useTenantSocket() {
       return;
     }
 
-    // ✅ CORREÇÃO CRÍTICA: Usar o MESMO token que o axios usa (evita dessincronia store vs HTTP)
+    // ✅ Sempre ler token AGORA do store/axios (nunca usar closure) – store pode ter token "preso" vindo do persist/localStorage
     const authHeader = api.defaults.headers.common['Authorization'] as string | undefined;
     const tokenFromApi = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
     const { token: tokenFromStore, user: currentUser } = useAuthStore.getState();
-    
     const currentToken = tokenFromApi || tokenFromStore;
     
     if (!currentToken || !currentUser?.tenant_id) {

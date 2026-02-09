@@ -171,9 +171,11 @@ class ChatWebSocketManager {
         this.isConnecting = false;
         this.ws = null;
 
-        // ✅ Token inválido/expirado (4001) → logout e redirecionar para login
+        // ✅ Token inválido/expirado (4001) → logout e limpar token guardado (evita reconectar com token preso)
         if (event.code === 4001) {
           console.warn('⚠️ [MANAGER] Token inválido/expirado (4001). Redirecionando para login...');
+          this.token = '';
+          this.tenantId = '';
           useAuthStore.getState().logout();
           return;
         }
