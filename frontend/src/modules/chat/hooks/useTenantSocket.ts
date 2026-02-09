@@ -499,9 +499,31 @@ export function useTenantSocket() {
             // Isso garante que last_message seja atualizado mesmo se outros campos não mudaram
             console.log('🔄 [TENANT WS] Atualizando conversa existente no store:', {
               id: data.conversation.id,
-              name: data.conversation.contact_name
+              name: data.conversation.contact_name,
+              last_message: data.conversation.last_message?.content?.substring(0, 50),
+              assigned_to: data.conversation.assigned_to,
+              department: data.conversation.department,
+              status: data.conversation.status
             });
             updateConv(data.conversation);
+            
+            // ✅ DEBUG: Verificar se conversa está visível após atualização
+            const { conversations: updatedConvs, activeDepartment: activeDept } = useChatStore.getState();
+            const updatedConv = updatedConvs.find(c => c.id === data.conversation.id);
+            if (updatedConv && activeDept?.id === 'my_conversations') {
+              const { user } = useAuthStore.getState();
+              const shouldBeVisible = updatedConv.assigned_to === user?.id && 
+                                     updatedConv.status === 'open' && 
+                                     !updatedConv.department;
+              console.log('🔍 [TENANT WS] Conversa atualizada - visibilidade em Minhas Conversas:', {
+                conversationId: updatedConv.id,
+                shouldBeVisible,
+                assigned_to: updatedConv.assigned_to,
+                userId: user?.id,
+                status: updatedConv.status,
+                department: updatedConv.department
+              });
+            }
           }
           
           // ✅ FIX CRÍTICO: SEMPRE refetch departamentos quando conversation_updated é recebido
