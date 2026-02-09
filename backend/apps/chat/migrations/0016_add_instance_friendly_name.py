@@ -1,5 +1,5 @@
-# Generated manually
-from django.db import migrations, models
+# Generated manually - usa RunSQL para evitar KeyError em chains com RunSQL anteriores
+from django.db import migrations
 
 
 class Migration(migrations.Migration):
@@ -9,14 +9,13 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.AddField(
-            model_name='conversation',
-            name='instance_friendly_name',
-            field=models.CharField(
-                blank=True,
-                help_text='Nome exibido para o usuário (ex: C_Financeiro)',
-                max_length=100,
-                verbose_name='Nome Amigável da Instância'
-            ),
+        migrations.RunSQL(
+            sql="""
+            ALTER TABLE chat_conversation 
+            ADD COLUMN IF NOT EXISTS instance_friendly_name VARCHAR(100) NOT NULL DEFAULT '';
+            """,
+            reverse_sql="""
+            ALTER TABLE chat_conversation DROP COLUMN IF EXISTS instance_friendly_name;
+            """,
         ),
     ]
