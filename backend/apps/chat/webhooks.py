@@ -1606,6 +1606,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             contact_name_to_save = 'Grupo WhatsApp'  # Placeholder até buscar da API
         
         # Para grupos, usar o ID do grupo como identificador único
+        # ✅ VERIFICAÇÃO CRÍTICA: Garantir que default_department está sendo usado
+        logger.info(f"📋 [ROUTING] Preparando defaults para conversa:")
+        logger.info(f"   📋 default_department: {default_department.name if default_department else 'None'}")
+        logger.info(f"   📋 default_department_id: {default_department.id if default_department else 'None'}")
+        
         defaults = {
             'department': default_department,  # Departamento padrão da instância (ou None = Inbox)
             'contact_name': contact_name_to_save,
@@ -1614,6 +1619,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             'status': 'pending' if not default_department else 'open',  # Pendente se Inbox, aberta se departamento
             'conversation_type': conversation_type,
         }
+        
+        logger.info(f"📋 [ROUTING] Defaults preparados:")
+        logger.info(f"   📋 defaults['department']: {defaults['department'].name if defaults['department'] else 'None'}")
+        logger.info(f"   📋 defaults['status']: {defaults['status']}")
         
         # Para grupos, adicionar metadados
         # ⚠️ pushName é de quem ENVIOU, não do grupo! Nome real virá da API
@@ -1728,9 +1737,19 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         else:
             # Criar nova conversa com telefone normalizado
             logger.info(f"📋 [ROUTING] Criando nova conversa com defaults:")
-            logger.info(f"   📋 department: {defaults.get('department')} ({defaults.get('department').name if defaults.get('department') else 'None'})")
+            logger.info(f"   📋 department no defaults: {defaults.get('department')} ({defaults.get('department').name if defaults.get('department') else 'None'})")
+            logger.info(f"   📋 department_id no defaults: {defaults.get('department').id if defaults.get('department') else 'None'}")
             logger.info(f"   📊 status: {defaults.get('status')}")
             logger.info(f"   📞 contact_phone: {normalized_phone}")
+            logger.info(f"   🔍 default_department disponível: {default_department.name if default_department else 'None'}")
+            
+            # ✅ VERIFICAÇÃO CRÍTICA: Garantir que department está nos defaults
+            if default_department and 'department' not in defaults:
+                logger.warning(f"⚠️ [ROUTING] default_department existe mas não está em defaults, adicionando...")
+                defaults['department'] = default_department
+            elif default_department and defaults.get('department') != default_department:
+                logger.warning(f"⚠️ [ROUTING] default_department diferente do que está em defaults, corrigindo...")
+                defaults['department'] = default_department
             
             conversation = Conversation.objects.create(
                 tenant=tenant,
@@ -1744,6 +1763,15 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   📋 conversation.department_id: {conversation.department_id}")
             logger.info(f"   📋 conversation.department: {conversation.department.name if conversation.department else 'None'}")
             logger.info(f"   📋 defaults tinha department: {defaults.get('department').id if defaults.get('department') else 'None'}")
+            
+            # ✅ VERIFICAÇÃO CRÍTICA: Se department não foi aplicado, forçar
+            if default_department and not conversation.department:
+                logger.error(f"❌ [ROUTING] ERRO CRÍTICO: Conversa criada SEM department mesmo tendo default_department!")
+                logger.error(f"   Forçando atualização imediata...")
+                conversation.department = default_department
+                conversation.status = 'open'
+                conversation.save(update_fields=['department', 'status'])
+                logger.info(f"✅ [ROUTING] Department forçado após criação: {conversation.department.name}")
             
             # ✅ NOVO: Enviar menu de boas-vindas para conversa nova (se configurado)
             if not from_me:  # Apenas para mensagens recebidas
@@ -1760,6 +1788,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         logger.info(f"   📊 Status atual ANTES: {conversation.status}")
         logger.info(f"   🆔 ID: {conversation.id}")
         logger.info(f"   🔍 Default Department disponível: {default_department.name if default_department else 'Nenhum'}")
+        logger.info(f"   🔍 wa_instance: {wa_instance.friendly_name if wa_instance else 'None'}")
+        logger.info(f"   🔍 instance_name do webhook: {instance_name}")
+        if wa_instance:
+            logger.info(f"   🔍 wa_instance.instance_name: {wa_instance.instance_name}")
+            logger.info(f"   🔍 wa_instance.default_department_id: {wa_instance.default_department_id}")
         
         # ✅ FIX CRÍTICO: Se conversa já existia mas não tem departamento E instância tem default_department,
         # atualizar conversa para usar o departamento padrão
