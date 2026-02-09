@@ -114,11 +114,13 @@ class EvolutionWebhookView(APIView):
                 logger.info(f"Unhandled event type: {event_type}")
                 return JsonResponse({'status': 'ignored', 'event': event_type})
                 
-        except json.JSONDecodeError:
-            logger.error("Invalid JSON in webhook payload")
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ [EVOLUTION WEBHOOK] JSON inválido no payload: {str(e)}")
+            logger.error(f"   Body recebido: {request.body[:500] if request.body else 'None'}")
             return JsonResponse({'error': 'Invalid JSON'}, status=400)
         except Exception as e:
-            logger.error(f"Webhook error: {str(e)}")
+            logger.error(f"❌ [EVOLUTION WEBHOOK] Erro ao processar webhook: {str(e)}", exc_info=True)
+            logger.error(f"   Body recebido: {request.body[:500] if request.body else 'None'}")
             return JsonResponse({'error': 'Internal server error'}, status=500)
     
     def get(self, request):
