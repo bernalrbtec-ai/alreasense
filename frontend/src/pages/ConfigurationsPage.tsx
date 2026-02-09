@@ -1357,14 +1357,20 @@ export default function ConfigurationsPage() {
     try {
       setSecretaryProfileLoading(true)
       const response = await api.get('/ai/secretary/profile/')
-      setSecretaryProfile({
+      const loadedProfile = {
         form_data: response.data?.form_data ?? {},
         prompt: response.data?.prompt ?? '',
         signature_name: response.data?.signature_name ?? '',
         use_memory: response.data?.use_memory ?? true,
         is_active: response.data?.is_active ?? false,
         inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+      }
+      console.log('[SECRETARY FETCH] Dados carregados do servidor:', {
+        form_data_keys: Object.keys(loadedProfile.form_data),
+        form_data: loadedProfile.form_data,
+        is_active: loadedProfile.is_active
       })
+      setSecretaryProfile(loadedProfile)
       setSecretaryProfileErrors({})
     } catch (error: any) {
       console.error('Erro ao carregar perfil da secretária:', error)
@@ -1508,14 +1514,27 @@ export default function ConfigurationsPage() {
       
       // ✅ CORREÇÃO: Atualizar com os dados retornados do servidor (garante sincronização)
       if (response.data) {
-        setSecretaryProfile({
+        const savedProfile = {
           form_data: response.data?.form_data ?? {},
           prompt: response.data?.prompt ?? '',
           signature_name: response.data?.signature_name ?? '',
           use_memory: response.data?.use_memory ?? true,
           is_active: response.data?.is_active ?? false,
           inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+        }
+        console.log('[SECRETARY SAVE] Dados retornados do servidor:', {
+          form_data_keys: Object.keys(savedProfile.form_data),
+          form_data: savedProfile.form_data,
+          is_active: savedProfile.is_active
         })
+        setSecretaryProfile(savedProfile)
+        
+        // ✅ NOVO: Se estava no modal, atualizar também o secretaryFormData para manter sincronizado
+        if (fromModal) {
+          const updatedStructuredData = mapFormDataToStructured(savedProfile.form_data)
+          console.log('[SECRETARY SAVE] Dados estruturados atualizados:', updatedStructuredData)
+          setSecretaryFormData(updatedStructuredData)
+        }
       }
       
       setSecretaryProfileErrors({})
@@ -1523,6 +1542,11 @@ export default function ConfigurationsPage() {
       
       if (fromModal) {
         setIsSecretaryModalOpen(false)
+        // ✅ NOVO: Recarregar dados do servidor após salvar para garantir sincronização completa
+        // Pequeno delay para garantir que o backend processou completamente
+        setTimeout(() => {
+          fetchSecretaryProfile()
+        }, 500)
         if (secretaryProfile.is_active && aiSettings?.secretary_enabled) {
           showSuccessToast('A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.')
         }

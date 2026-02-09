@@ -783,6 +783,13 @@ def secretary_profile(request):
     tenant = request.user.tenant
     if request.method == 'GET':
         profile, _ = TenantSecretaryProfile.objects.get_or_create(tenant=tenant)
+        logger.info(
+            "[SECRETARY PROFILE GET] Retornando perfil: tenant=%s, form_data_keys=%s, form_data_size=%s, is_active=%s",
+            tenant.id,
+            list(profile.form_data.keys()) if isinstance(profile.form_data, dict) else 'N/A',
+            len(str(profile.form_data)) if profile.form_data else 0,
+            profile.is_active
+        )
         return Response({
             "form_data": profile.form_data,
             "prompt": getattr(profile, 'prompt', '') or '',
@@ -800,10 +807,21 @@ def secretary_profile(request):
 
     if 'form_data' in data:
         fd = data.get('form_data')
+        logger.info(
+            "[SECRETARY PROFILE PUT] Recebido form_data: keys=%s, tamanho=%s",
+            list(fd.keys()) if isinstance(fd, dict) else 'N/A',
+            len(str(fd)) if fd else 0
+        )
         sanitized, err = _validate_secretary_form_data(fd)
         if err:
             errors['form_data'] = err
+            logger.warning("[SECRETARY PROFILE PUT] Erro na validação: %s", err)
         else:
+            logger.info(
+                "[SECRETARY PROFILE PUT] form_data sanitizado: keys=%s, tamanho=%s",
+                list(sanitized.keys()) if isinstance(sanitized, dict) else 'N/A',
+                len(str(sanitized)) if sanitized else 0
+            )
             profile.form_data = sanitized
 
     if 'prompt' in data:
@@ -840,6 +858,23 @@ def secretary_profile(request):
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
 
     profile.save()
+    
+    # ✅ LOG: Verificar o que foi salvo no banco
+    logger.info(
+        "[SECRETARY PROFILE PUT] Perfil salvo no banco: tenant=%s, form_data_keys=%s, form_data_size=%s, is_active=%s",
+        tenant.id,
+        list(profile.form_data.keys()) if isinstance(profile.form_data, dict) else 'N/A',
+        len(str(profile.form_data)) if profile.form_data else 0,
+        profile.is_active
+    )
+    
+    # Recarregar do banco para garantir que temos os dados mais recentes
+    profile.refresh_from_db()
+    logger.info(
+        "[SECRETARY PROFILE PUT] Após refresh_from_db: form_data_keys=%s, form_data_size=%s",
+        list(profile.form_data.keys()) if isinstance(profile.form_data, dict) else 'N/A',
+        len(str(profile.form_data)) if profile.form_data else 0
+    )
 
     # Ao ativar, atualizar RAG em background (embedding + upsert source=secretary)
     if profile.is_active and profile.form_data:
