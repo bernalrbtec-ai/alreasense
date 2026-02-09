@@ -788,11 +788,33 @@ export function useTenantSocket() {
       };
 
       ws.onclose = (event) => {
-        console.warn('🔌 [TENANT WS] Conexão fechada:', event.code);
+        console.warn('🔌 [TENANT WS] Conexão fechada:', event.code, event.reason);
         socketRef.current = null;
         globalWebSocket = null; // ✅ Limpar singleton global
 
-        // Reconectar com backoff exponencial
+        // ✅ CORREÇÃO CRÍTICA: Se fechou por token inválido (4001), aguardar renovação do token
+        if (event.code === 4001) {
+          console.warn('⚠️ [TENANT WS] Token inválido/expirado. Aguardando renovação do token...');
+          // Aguardar 2 segundos para dar tempo do token ser renovado
+          reconnectTimeoutRef.current = setTimeout(() => {
+            // Verificar se token foi renovado
+            const { token: newToken } = useAuthStore.getState();
+            if (newToken && newToken !== token) {
+              console.log('✅ [TENANT WS] Token renovado detectado, reconectando...');
+              reconnectAttemptsRef.current = 0; // Resetar tentativas
+              connect();
+            } else {
+              console.warn('⚠️ [TENANT WS] Token ainda não renovado, tentando reconectar mesmo assim...');
+              reconnectAttemptsRef.current++;
+              if (reconnectAttemptsRef.current < 5) {
+                connect();
+              }
+            }
+          }, 2000);
+          return;
+        }
+
+        // Reconectar com backoff exponencial para outros erros
         if (reconnectAttemptsRef.current < 5) {
           const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
           console.log(`🔄 [TENANT WS] Reconectando em ${delay}ms...`);
@@ -827,14 +849,21 @@ export function useTenantSocket() {
     // deixamos a conexão aberta até que todas as instâncias desmontem)
   }, []);
 
-  // Conectar quando montar o componente
+  // Conectar quando montar o componente ou quando token mudar
   useEffect(() => {
-    connect();
+    // ✅ CORREÇÃO CRÍTICA: Se token mudou e WebSocket está fechado, reconectar
+    if (token && user && socketRef.current?.readyState !== WebSocket.OPEN && socketRef.current?.readyState !== WebSocket.CONNECTING) {
+      console.log('🔄 [TENANT WS] Token atualizado, reconectando WebSocket...');
+      reconnectAttemptsRef.current = 0; // Resetar tentativas
+      connect();
+    } else if (token && user) {
+      connect();
+    }
 
     return () => {
       disconnect();
     };
-  }, [connect, disconnect]);
+  }, [token, user, connect, disconnect]);
 
   return {
     isConnected: socketRef.current?.readyState === WebSocket.OPEN
