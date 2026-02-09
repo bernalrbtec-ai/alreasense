@@ -488,11 +488,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         serializer = self.get_serializer(conversation)
         return Response(serializer.data)
     
-    @action(detail=True, methods=['post'])
-    def start(self, request, pk=None):
+    @action(detail=True, methods=['post'], url_path='start')
+    def start_attendance(self, request, pk=None):
         """
         Inicia atendimento de uma conversa pendente, atribuindo-a ao usuário atual.
         Remove a conversa do departamento e atribui diretamente ao usuário.
+        POST /conversations/{id}/start/
         """
         import logging
         logger = logging.getLogger(__name__)
