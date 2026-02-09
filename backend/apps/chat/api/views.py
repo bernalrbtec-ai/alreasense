@@ -384,11 +384,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         try:
             if assigned_to_me:
-                # Nova funcionalidade: apenas conversas atribuídas ao usuário E sem departamento
-                # Isso garante que apenas conversas "privadas" apareçam
+                # Minhas Conversas: todas as conversas atribuídas ao usuário (com ou sem departamento)
+                # Inclui: tomadas do Inbox (sem dept) e transferidas para o agente (podem ter dept)
                 return queryset.filter(
                     assigned_to=user,
-                    department__isnull=True,  # ✅ CRÍTICO: Sem departamento
                     status='open'  # Apenas conversas abertas
                 )
             else:

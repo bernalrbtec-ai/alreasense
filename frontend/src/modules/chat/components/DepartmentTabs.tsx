@@ -63,16 +63,14 @@ export function DepartmentTabs() {
     }
   };
 
-  // ✅ NOVO: Calcular contador de minhas conversas
+  // ✅ Contador de minhas conversas (atribuídas ao usuário, com ou sem departamento)
   const getMyConversationsCount = () => {
     const { user } = useAuthStore.getState();
     if (!user) return 0;
     
-    // Contar apenas conversas atribuídas ao usuário, sem departamento e abertas
     return conversations.filter(conv => 
       conv.assigned_to === user.id && 
-      conv.status === 'open' &&
-      (!conv.department || conv.department === null)  // ✅ CRÍTICO: Sem departamento
+      conv.status === 'open'
     ).length;
   };
 

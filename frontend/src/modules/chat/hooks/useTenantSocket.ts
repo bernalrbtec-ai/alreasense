@@ -513,16 +513,13 @@ export function useTenantSocket() {
             const updatedConv = updatedConvs.find(c => c.id === data.conversation.id);
             if (updatedConv && activeDept?.id === 'my_conversations') {
               const { user } = useAuthStore.getState();
-              const shouldBeVisible = updatedConv.assigned_to === user?.id && 
-                                     updatedConv.status === 'open' && 
-                                     !updatedConv.department;
+              const shouldBeVisible = updatedConv.assigned_to === user?.id && updatedConv.status === 'open';
               console.log('🔍 [TENANT WS] Conversa atualizada - visibilidade em Minhas Conversas:', {
                 conversationId: updatedConv.id,
                 shouldBeVisible,
                 assigned_to: updatedConv.assigned_to,
                 userId: user?.id,
-                status: updatedConv.status,
-                department: updatedConv.department
+                status: updatedConv.status
               });
             }
           }

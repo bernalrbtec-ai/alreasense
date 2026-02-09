@@ -275,29 +275,14 @@ export function ConversationList() {
       }
       
       if (activeDepartment.id === 'my_conversations') {
-        // Minhas Conversas: apenas conversas atribuídas ao usuário atual
+        // Minhas Conversas: todas as conversas atribuídas ao usuário (com ou sem departamento)
         const { user } = useAuthStore.getState();
         if (!user) return false;
         
-        const passes = 
+        return (
           conversationItem.assigned_to === user.id &&
-          conversationItem.status === 'open' &&
-          !conversationItem.department; // Sem department (atribuída diretamente)
-        
-        // ✅ DEBUG: Log quando conversa não passa no filtro de Minhas Conversas
-        if (!passes && conversationItem.assigned_to === user.id) {
-          console.log('🔍 [FILTER] Conversa atribuída ao usuário não passou no filtro Minhas Conversas:', {
-            conversationId: conversationItem.id,
-            conversationName: conversationItem.contact_name,
-            assigned_to: conversationItem.assigned_to,
-            userId: user.id,
-            status: conversationItem.status,
-            department: conversationItem.department,
-            reason: conversationItem.status !== 'open' ? 'Status não é open' : 'Tem department'
-          });
-        }
-        
-        return passes;
+          conversationItem.status === 'open'
+        );
       } else {
         // Departamento específico: conversas do departamento (qualquer status EXCETO closed)
         if (conversationItem.status === 'closed') {
