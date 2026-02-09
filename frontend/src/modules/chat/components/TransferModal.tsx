@@ -34,28 +34,31 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
     fetchDepartments();
   }, []);
 
+  const effectiveDeptId = selectedDepartment || currentDepartmentId;
+  const canSeeAgents =
+    !!effectiveDeptId &&
+    (!!user?.is_admin || !!user?.is_gerente || (user?.department_ids?.includes(effectiveDeptId) ?? false));
+
   useEffect(() => {
-    const deptId = selectedDepartment || currentDepartmentId;
-    if (deptId) {
-      fetchUsers(deptId);
+    if (!effectiveDeptId) {
+      setUsers([]);
+      setSelectedAgent('');
+      return;
+    }
+    if (canSeeAgents) {
+      fetchUsers(effectiveDeptId);
     } else {
       setUsers([]);
       setSelectedAgent('');
     }
-  }, [selectedDepartment, currentDepartmentId]);
+  }, [selectedDepartment, currentDepartmentId, effectiveDeptId, canSeeAgents]);
 
   const fetchDepartments = async () => {
     try {
       const response = await api.get('/auth/departments/');
       const depts = response.data.results || response.data;
-      // ✅ FILTRO: Mostrar apenas departamentos aos quais o usuário pertence (se não for admin)
-      const filteredDepts = user?.is_admin 
-        ? depts 
-        : depts.filter((dept: Department) => 
-            user?.department_ids?.includes(dept.id)
-          );
-      setDepartments(filteredDepts);
-      console.log(`✅ [TransferModal] Departamentos carregados: ${filteredDepts.length} (total: ${depts.length})`);
+      // Mostrar todos os departamentos (agente pode transferir para qualquer um; acesso ao dropdown de agente é por depto)
+      setDepartments(Array.isArray(depts) ? depts : []);
     } catch (error) {
       console.error('Erro ao carregar departamentos:', error);
     }
@@ -218,20 +221,22 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
             <select
               value={selectedAgent}
               onChange={(e) => setSelectedAgent(e.target.value)}
+              disabled={!effectiveDeptId || !canSeeAgents}
               className="w-full px-4 py-2 bg-[#2b2f36] border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 disabled:opacity-50"
             >
-              <option value="">Sem agente específico</option>
+              <option value="">
+                {!effectiveDeptId
+                  ? 'Selecione um departamento'
+                  : !canSeeAgents
+                    ? 'Atendentes não visíveis para você'
+                    : 'Sem agente específico'}
+              </option>
               {users.map((u) => (
                 <option key={u.id} value={u.id}>
                   {u.first_name || u.email}
                 </option>
               ))}
             </select>
-            {!currentDepartmentId && !selectedDepartment && (
-              <p className="mt-1 text-xs text-gray-500">
-                Selecione um departamento para listar agentes
-              </p>
-            )}
           </div>
 
           {/* Motivo */}

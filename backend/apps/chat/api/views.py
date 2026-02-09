@@ -3426,23 +3426,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             
             try:
                 new_dept = Department.objects.get(id=new_department_id, tenant=user.tenant)
-                
-                # ✅ VALIDAÇÃO: Se não for admin, verificar se usuário tem acesso ao departamento
-                if not user.is_admin:
+                # Agente pode transferir "só para departamento" para qualquer depto (fila).
+                # Só exige acesso ao depto quando está atribuindo um agente (new_agent).
+                if not user.is_admin and not user.is_gerente and new_agent_id:
                     user_department_ids = set(user.departments.values_list('id', flat=True))
                     if new_dept.id not in user_department_ids:
-                        user_department_names = list(user.departments.values_list('name', flat=True))
                         logger.warning(
-                            f"⚠️ [TRANSFER] Usuário {user.email} (role: {user.role}) tentou transferir para departamento {new_dept.name} "
-                            f"sem acesso. Departamentos do usuário: {user_department_names}"
+                            f"⚠️ [TRANSFER] Usuário {user.email} (agente) tentou atribuir agente em departamento {new_dept.name} sem acesso."
                         )
                         return Response(
-                            {'error': f'Você não tem acesso ao departamento {new_dept.name}. Selecione um departamento ao qual você pertence.'},
+                            {'error': 'Você só pode atribuir um atendente em departamentos aos quais você pertence.'},
                             status=status.HTTP_403_FORBIDDEN
-                        )
-                    else:
-                        logger.info(
-                            f"✅ [TRANSFER] Usuário {user.email} tem acesso ao departamento {new_dept.name}"
                         )
             except Department.DoesNotExist:
                 logger.error(f"❌ [TRANSFER] Departamento não encontrado: {new_department_id}")
@@ -3457,22 +3451,28 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
         
-        # Validar novo agente pertence ao departamento
-        if new_agent_id and new_department_id:
+        # Validar novo agente pertence ao departamento (alvo ou atual da conversa)
+        if new_agent_id:
             from apps.authn.models import User
             import logging
             logger = logging.getLogger(__name__)
-            
             try:
                 agent = User.objects.get(id=new_agent_id, tenant=user.tenant)
-                if not agent.departments.filter(id=new_department_id).exists():
+                dept_id = new_department_id or (conversation.department_id if conversation.department_id else None)
+                if dept_id and not agent.departments.filter(id=dept_id).exists():
                     logger.warning(
-                        f"⚠️ [TRANSFER] Agente {agent.email} não pertence ao departamento {new_department_id}"
+                        f"⚠️ [TRANSFER] Agente {agent.email} não pertence ao departamento {dept_id}"
                     )
                     return Response(
                         {'error': 'Agente não pertence ao departamento selecionado'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
+                if dept_id and not user.is_admin and not user.is_gerente:
+                    if not user.departments.filter(id=dept_id).exists():
+                        return Response(
+                            {'error': 'Você só pode atribuir um atendente em departamentos aos quais você pertence.'},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
             except User.DoesNotExist:
                 logger.error(f"❌ [TRANSFER] Agente não encontrado: {new_agent_id}")
                 return Response(

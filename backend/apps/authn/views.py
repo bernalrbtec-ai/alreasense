@@ -517,6 +517,26 @@ class UserViewSet(viewsets.ModelViewSet):
         count = queryset.count()
         logger.info(f"✅ [USERS] Retornando {count} usuários para usuário {user.email} (método: {request_method})")
         return queryset
+
+    def list(self, request, *args, **kwargs):
+        """
+        Lista usuários. Se ?department=uuid for enviado, filtra por departamento.
+        Agente só vê atendentes dos departamentos aos quais pertence; para outros
+        departamentos retorna lista vazia (dropdown desabilitado no front).
+        """
+        queryset = self.get_queryset()
+        department_id = request.query_params.get('department')
+        if department_id:
+            queryset = queryset.filter(departments__id=department_id).distinct()
+            if not (request.user.is_admin or request.user.is_gerente):
+                if not request.user.departments.filter(id=department_id).exists():
+                    queryset = queryset.none()
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
     
     def perform_create(self, serializer):
         """Ao criar, invalidar cache e forçar busca do banco."""
