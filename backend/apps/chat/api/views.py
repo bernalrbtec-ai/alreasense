@@ -3489,18 +3489,6 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         old_department = conversation.department
         old_agent = conversation.assigned_to
         
-        # Atualizar conversa (já validado acima)
-        if new_department_id and new_dept:
-            conversation.department = new_dept
-        elif new_department_id and not new_dept:
-            import logging
-            logger = logging.getLogger(__name__)
-            logger.error(f"❌ [TRANSFER] new_dept não definido mas new_department_id existe: {new_department_id}")
-            return Response(
-                {'error': 'Erro ao processar departamento'},
-                status=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-        
         if new_agent_id:
             from apps.authn.models import User
             try:
@@ -3511,26 +3499,26 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     {'error': 'Agente não encontrado'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-        
-        # ✅ NOVO: Se transferir apenas para agente (sem department), remover department
-        if new_agent_id and not new_department_id:
-            # Transferir para usuário específico - remover do departamento
+            # ✅ Atribuição a agente: conversa sai do departamento e fica só em "Minhas Conversas" do atendente
             conversation.department = None
             logger.info(
-                f"✅ [TRANSFER] Conversa {conversation.id} atribuída diretamente a {new_agent.email} "
-                f"(department removido - conversa privada)"
+                f"✅ [TRANSFER] Conversa {conversation.id} atribuída a {new_agent.email} "
+                f"(department removido - só na caixa do atendente até nova transferência ou encerramento)"
             )
-        elif new_agent_id and new_department_id:
-            # Transferir para agente E departamento - manter ambos
-            # (comportamento atual mantido)
-            logger.info(
-                f"✅ [TRANSFER] Conversa {conversation.id} transferida para departamento {new_dept.name} "
-                f"e agente {new_agent.email}"
-            )
+        else:
+            # Transferir só para departamento (sem agente): conversa vai para a fila do departamento
+            if new_department_id and new_dept:
+                conversation.department = new_dept
+                conversation.assigned_to = None
+            elif new_department_id and not new_dept:
+                logger.error(f"❌ [TRANSFER] new_dept não definido mas new_department_id existe: {new_department_id}")
+                return Response(
+                    {'error': 'Erro ao processar departamento'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
         
-        # ✅ FIX: Atualizar status quando transferir para departamento
-        if new_department_id:
-            conversation.status = 'open'  # Abrir quando transferir para departamento
+        # Manter status open
+        conversation.status = 'open'
         
         conversation.save()
         
@@ -3543,13 +3531,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         try:
             old_dept_name = old_department.name if old_department else 'Inbox'
-            new_dept_name = conversation.department.name if conversation.department else 'Sem departamento'
             old_agent_name = old_agent.get_full_name() if old_agent else 'Não atribuído'
             new_agent_name = conversation.assigned_to.get_full_name() if conversation.assigned_to else 'Não atribuído'
+            if conversation.department:
+                new_dest = f"{conversation.department.name} ({new_agent_name})"
+            else:
+                new_dest = f"Atendente {new_agent_name}" if conversation.assigned_to else "Sem departamento"
             
             transfer_msg = f"Conversa transferida:\n"
             transfer_msg += f"De: {old_dept_name} ({old_agent_name})\n"
-            transfer_msg += f"Para: {new_dept_name} ({new_agent_name})"
+            transfer_msg += f"Para: {new_dest}"
             if reason:
                 transfer_msg += f"\nMotivo: {reason}"
             
