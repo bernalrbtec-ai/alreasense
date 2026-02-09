@@ -3241,8 +3241,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             )
         
         # ✅ VALIDAÇÃO: Verificar se departamento existe e usuário tem acesso (se não for admin)
+        new_dept = None
         if new_department_id:
             from apps.authn.models import Department
+            import logging
+            logger = logging.getLogger(__name__)
+            
             try:
                 new_dept = Department.objects.get(id=new_department_id, tenant=user.tenant)
                 
@@ -3250,8 +3254,6 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 if not user.is_admin:
                     user_department_ids = set(user.departments.values_list('id', flat=True))
                     if new_dept.id not in user_department_ids:
-                        import logging
-                        logger = logging.getLogger(__name__)
                         user_department_names = list(user.departments.values_list('name', flat=True))
                         logger.warning(
                             f"⚠️ [TRANSFER] Usuário {user.email} (role: {user.role}) tentou transferir para departamento {new_dept.name} "
@@ -3262,31 +3264,49 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             status=status.HTTP_403_FORBIDDEN
                         )
                     else:
-                        import logging
-                        logger = logging.getLogger(__name__)
                         logger.info(
                             f"✅ [TRANSFER] Usuário {user.email} tem acesso ao departamento {new_dept.name}"
                         )
             except Department.DoesNotExist:
+                logger.error(f"❌ [TRANSFER] Departamento não encontrado: {new_department_id}")
                 return Response(
                     {'error': 'Departamento não encontrado'},
                     status=status.HTTP_404_NOT_FOUND
+                )
+            except Exception as e:
+                logger.error(f"❌ [TRANSFER] Erro ao buscar departamento: {e}", exc_info=True)
+                return Response(
+                    {'error': f'Erro ao validar departamento: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
         
         # Validar novo agente pertence ao departamento
         if new_agent_id and new_department_id:
             from apps.authn.models import User
+            import logging
+            logger = logging.getLogger(__name__)
+            
             try:
                 agent = User.objects.get(id=new_agent_id, tenant=user.tenant)
                 if not agent.departments.filter(id=new_department_id).exists():
+                    logger.warning(
+                        f"⚠️ [TRANSFER] Agente {agent.email} não pertence ao departamento {new_department_id}"
+                    )
                     return Response(
                         {'error': 'Agente não pertence ao departamento selecionado'},
                         status=status.HTTP_400_BAD_REQUEST
                     )
             except User.DoesNotExist:
+                logger.error(f"❌ [TRANSFER] Agente não encontrado: {new_agent_id}")
                 return Response(
                     {'error': 'Agente não encontrado'},
                     status=status.HTTP_404_NOT_FOUND
+                )
+            except Exception as e:
+                logger.error(f"❌ [TRANSFER] Erro ao validar agente: {e}", exc_info=True)
+                return Response(
+                    {'error': f'Erro ao validar agente: {str(e)}'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
         
         # Salvar dados anteriores para log
@@ -3294,9 +3314,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         old_agent = conversation.assigned_to
         
         # Atualizar conversa (já validado acima)
-        if new_department_id:
-            # new_dept já foi buscado e validado acima
+        if new_department_id and new_dept:
             conversation.department = new_dept
+        elif new_department_id and not new_dept:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ [TRANSFER] new_dept não definido mas new_department_id existe: {new_department_id}")
+            return Response(
+                {'error': 'Erro ao processar departamento'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
         
         if new_agent_id:
             from apps.authn.models import User
@@ -3319,6 +3346,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         conversation.refresh_from_db()
         
         # ✅ FIX: Criar mensagem interna de transferência APENAS se transferência foi bem-sucedida
+        import logging
+        logger = logging.getLogger(__name__)
+        
         try:
             old_dept_name = old_department.name if old_department else 'Inbox'
             new_dept_name = conversation.department.name if conversation.department else 'Sem departamento'
@@ -3339,11 +3369,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status='sent',
                 is_internal=True
             )
+            logger.info(f"✅ [TRANSFER] Mensagem de transferência criada para conversa {conversation.id}")
         except Exception as e:
-            import logging
-            logger = logging.getLogger(__name__)
             logger.error(f"❌ [TRANSFER] Erro ao criar mensagem de transferência: {e}", exc_info=True)
             # Não falhar a transferência se a mensagem não puder ser criada
+            # Mas logar o erro para diagnóstico
         
         # ✅ NOVO: Enviar mensagem automática de transferência para o cliente (fallback se transfer_message vazio)
         if new_department_id and conversation.department:
