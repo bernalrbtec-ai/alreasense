@@ -238,6 +238,15 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     is_open, next_open_time = BusinessHoursService.is_business_hours(
         conversation.tenant, conversation.department
     )
+    # Log detalhado para debug de timezone
+    from django.utils import timezone as django_timezone
+    utc_now = django_timezone.now()
+    logger.info(
+        "[SECRETARY] Business hours check: is_open=%s, next_open_time=%s, UTC_now=%s",
+        is_open,
+        next_open_time,
+        utc_now.strftime('%Y-%m-%d %H:%M:%S %Z'),
+    )
     query_text = current_msg_content if current_msg_content else (message.content or "").strip()
     query_embedding = embed_text(query_text) if query_text else []
     knowledge_items = get_secretary_rag_context(

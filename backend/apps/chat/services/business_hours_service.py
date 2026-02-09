@@ -161,28 +161,47 @@ class BusinessHoursService:
         """
         tz = ZoneInfo(business_hours.timezone)
         local_datetime = current_datetime.astimezone(tz)
+        local_date = local_datetime.date()
+        local_time = local_datetime.time()
+        current_weekday = local_datetime.weekday()
         
-        # Procura nos próximos 7 dias
+        # Mapeia weekday para campos
+        day_configs = {
+            0: ('monday_enabled', 'monday_start', 'Segunda-feira'),
+            1: ('tuesday_enabled', 'tuesday_start', 'Terça-feira'),
+            2: ('wednesday_enabled', 'wednesday_start', 'Quarta-feira'),
+            3: ('thursday_enabled', 'thursday_start', 'Quinta-feira'),
+            4: ('friday_enabled', 'friday_start', 'Sexta-feira'),
+            5: ('saturday_enabled', 'saturday_start', 'Sábado'),
+            6: ('sunday_enabled', 'sunday_start', 'Domingo'),
+        }
+        
+        # ✅ CORREÇÃO: Verificar primeiro se o mesmo dia ainda tem horário de abertura futuro
+        holidays = business_hours.holidays or []
+        date_str = local_date.strftime('%Y-%m-%d')
+        
+        if date_str not in holidays:
+            enabled_field, start_field, day_name = day_configs[current_weekday]
+            is_enabled = getattr(business_hours, enabled_field)
+            start_time = getattr(business_hours, start_field)
+            
+            # Se o dia está habilitado e ainda não passou do horário de início, retorna hoje
+            if is_enabled and start_time and local_time < start_time:
+                next_open_local = datetime.combine(local_date, start_time)
+                next_open_aware = next_open_local.replace(tzinfo=tz)
+                next_open_utc = next_open_aware.astimezone(ZoneInfo('UTC'))
+                logger.info(f"⏰ [BUSINESS HOURS] Próximo horário: hoje ({day_name}) às {start_time}")
+                return next_open_utc
+        
+        # Procura nos próximos 7 dias (começando de amanhã)
         for days_ahead in range(1, 8):
-            check_date = local_datetime.date() + timedelta(days=days_ahead)
+            check_date = local_date + timedelta(days=days_ahead)
             check_weekday = check_date.weekday()
             
             # Verifica se é feriado
-            holidays = business_hours.holidays or []
             date_str = check_date.strftime('%Y-%m-%d')
             if date_str in holidays:
                 continue
-            
-            # Mapeia weekday para campos
-            day_configs = {
-                0: ('monday_enabled', 'monday_start', 'Segunda-feira'),
-                1: ('tuesday_enabled', 'tuesday_start', 'Terça-feira'),
-                2: ('wednesday_enabled', 'wednesday_start', 'Quarta-feira'),
-                3: ('thursday_enabled', 'thursday_start', 'Quinta-feira'),
-                4: ('friday_enabled', 'friday_start', 'Sexta-feira'),
-                5: ('saturday_enabled', 'saturday_start', 'Sábado'),
-                6: ('sunday_enabled', 'sunday_start', 'Domingo'),
-            }
             
             enabled_field, start_field, day_name = day_configs[check_weekday]
             is_enabled = getattr(business_hours, enabled_field)
@@ -195,6 +214,7 @@ class BusinessHoursService:
                 next_open_aware = next_open_local.replace(tzinfo=tz)
                 # Converte para UTC (padrão Django)
                 next_open_utc = next_open_aware.astimezone(ZoneInfo('UTC'))
+                logger.info(f"⏰ [BUSINESS HOURS] Próximo horário: {day_name} ({check_date}) às {start_time}")
                 return next_open_utc
         
         return None
