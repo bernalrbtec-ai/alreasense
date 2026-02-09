@@ -1441,6 +1441,37 @@ export default function ConfigurationsPage() {
     }
   }
 
+  // ✅ NOVO: Converte dados estruturados (português) para formato do backend (inglês)
+  const mapStructuredToFormData = (structuredData: typeof secretaryFormData): Record<string, string> => {
+    const backendFormData: Record<string, string> = {}
+    
+    // Mapear campos do formulário (português) para formato do backend (inglês)
+    // Apenas incluir campos que têm valor (não vazios)
+    if (structuredData.empresa?.trim()) {
+      backendFormData.company_name = structuredData.empresa.trim()
+    }
+    if (structuredData.missao?.trim()) {
+      backendFormData.mission = structuredData.missao.trim()
+    }
+    if (structuredData.endereco?.trim()) {
+      backendFormData.address = structuredData.endereco.trim()
+    }
+    if (structuredData.telefone?.trim()) {
+      backendFormData.phone = structuredData.telefone.trim()
+    }
+    if (structuredData.email?.trim()) {
+      backendFormData.email = structuredData.email.trim()
+    }
+    if (structuredData.ramo?.trim()) {
+      backendFormData.business_area = structuredData.ramo.trim()
+    }
+    if (structuredData.servicos?.trim()) {
+      backendFormData.services = structuredData.servicos.trim()
+    }
+    
+    return backendFormData
+  }
+
   const generateRagPreview = (formData: typeof secretaryFormData) => {
     const parts: string[] = []
     if (formData.empresa) parts.push(`Empresa: ${formData.empresa}`)
@@ -1473,7 +1504,20 @@ export default function ConfigurationsPage() {
     const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
     try {
       setSecretaryProfileSaving(true)
-      await api.put('/ai/secretary/profile/', secretaryProfile)
+      const response = await api.put('/ai/secretary/profile/', secretaryProfile)
+      
+      // ✅ CORREÇÃO: Atualizar com os dados retornados do servidor (garante sincronização)
+      if (response.data) {
+        setSecretaryProfile({
+          form_data: response.data?.form_data ?? {},
+          prompt: response.data?.prompt ?? '',
+          signature_name: response.data?.signature_name ?? '',
+          use_memory: response.data?.use_memory ?? true,
+          is_active: response.data?.is_active ?? false,
+          inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+        })
+      }
+      
       setSecretaryProfileErrors({})
       updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
       
@@ -1521,10 +1565,13 @@ export default function ConfigurationsPage() {
   const handleSecretaryModalSave = () => {
     if (!secretaryProfile) return
     
-    // Atualizar form_data estruturado
+    // ✅ CORREÇÃO: Converter dados estruturados (português) para formato do backend (inglês)
+    const backendFormData = mapStructuredToFormData(secretaryFormData)
+    
+    // Atualizar form_data no formato correto do backend
     const updatedProfile = {
       ...secretaryProfile,
-      form_data: secretaryFormData
+      form_data: backendFormData
     }
     setSecretaryProfile(updatedProfile)
     
