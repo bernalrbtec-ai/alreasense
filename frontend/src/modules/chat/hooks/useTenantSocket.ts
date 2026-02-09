@@ -762,8 +762,21 @@ export function useTenantSocket() {
       return;
     }
     
-    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${currentUser.tenant_id}/?token=${currentToken}`;
-    console.log('🔌 [TENANT WS] Criando nova conexão WebSocket global:', currentUser.tenant_id);
+    // ✅ DEBUG: Log token (primeiros e últimos caracteres apenas)
+    const tokenPreview = currentToken.length > 30 
+      ? `${currentToken.substring(0, 15)}...${currentToken.substring(currentToken.length - 15)}`
+      : '***';
+    console.log('🔌 [TENANT WS] Criando nova conexão WebSocket:', {
+      tenantId: currentUser.tenant_id,
+      tokenLength: currentToken.length,
+      tokenPreview: tokenPreview,
+      userEmail: currentUser.email
+    });
+    
+    // ✅ CORREÇÃO: URL-encode o token para evitar problemas com caracteres especiais
+    const encodedToken = encodeURIComponent(currentToken);
+    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${currentUser.tenant_id}/?token=${encodedToken}`;
+    console.log('🔌 [TENANT WS] URL WebSocket criada (token codificado)');
 
     try {
       const ws = new WebSocket(wsUrl);
