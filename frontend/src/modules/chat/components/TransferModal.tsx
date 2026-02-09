@@ -42,7 +42,14 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
     try {
       const response = await api.get('/auth/departments/');
       const depts = response.data.results || response.data;
-      setDepartments(depts);
+      // ✅ FILTRO: Mostrar apenas departamentos aos quais o usuário pertence (se não for admin)
+      const filteredDepts = user?.is_admin 
+        ? depts 
+        : depts.filter((dept: Department) => 
+            user?.department_ids?.includes(dept.id)
+          );
+      setDepartments(filteredDepts);
+      console.log(`✅ [TransferModal] Departamentos carregados: ${filteredDepts.length} (total: ${depts.length})`);
     } catch (error) {
       console.error('Erro ao carregar departamentos:', error);
     }
@@ -74,6 +81,12 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
       if (selectedAgent) payload.new_agent = selectedAgent;
 
       const response = await api.post(`/chat/conversations/${conversation.id}/transfer/`, payload);
+      
+      // ✅ VALIDAÇÃO: Verificar se a resposta foi bem-sucedida
+      if (response.status < 200 || response.status >= 300) {
+        throw new Error(response.data?.error || 'Erro ao transferir conversa');
+      }
+      
       const updatedConv: Conversation = response.data;
 
       // ✅ Recarregar lista completa de conversas
@@ -124,8 +137,15 @@ export function TransferModal({ conversation, onClose, onTransferSuccess }: Tran
       
       onClose();
     } catch (error: any) {
-      console.error('Erro ao transferir:', error);
-      toast.error(error.response?.data?.error || 'Erro ao transferir conversa');
+      console.error('❌ [TransferModal] Erro ao transferir:', error);
+      const errorMessage = error.response?.data?.error || error.message || 'Erro ao transferir conversa';
+      toast.error(errorMessage);
+      
+      // ✅ LOG: Log detalhado do erro
+      if (error.response) {
+        console.error('   Status:', error.response.status);
+        console.error('   Data:', error.response.data);
+      }
     } finally {
       setLoading(false);
     }

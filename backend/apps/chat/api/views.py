@@ -3213,9 +3213,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         }
         
         Permissões:
-        - Admin: pode transferir qualquer conversa
-        - Gerente: pode transferir qualquer conversa
-        - Agente: pode transferir conversas que tem acesso (mesmo sem acesso ao departamento destino)
+        - Admin: pode transferir qualquer conversa para qualquer departamento
+        - Gerente: pode transferir conversas para departamentos aos quais pertence
+        - Agente: pode transferir conversas para departamentos aos quais pertence
         """
         conversation = self.get_object()
         user = request.user
@@ -3240,11 +3240,37 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # ✅ VALIDAÇÃO: Verificar se departamento existe e usuário tem acesso (se não for admin)
+        if new_department_id:
+            from apps.authn.models import Department
+            try:
+                new_dept = Department.objects.get(id=new_department_id, tenant=user.tenant)
+                
+                # ✅ VALIDAÇÃO: Se não for admin, verificar se usuário tem acesso ao departamento
+                if not user.is_admin:
+                    user_departments = user.departments.all()
+                    if new_dept not in user_departments:
+                        import logging
+                        logger = logging.getLogger(__name__)
+                        logger.warning(
+                            f"⚠️ [TRANSFER] Usuário {user.email} tentou transferir para departamento {new_dept.name} "
+                            f"sem acesso. Departamentos do usuário: {[d.name for d in user_departments]}"
+                        )
+                        return Response(
+                            {'error': f'Você não tem acesso ao departamento {new_dept.name}. Selecione um departamento ao qual você pertence.'},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+            except Department.DoesNotExist:
+                return Response(
+                    {'error': 'Departamento não encontrado'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+        
         # Validar novo agente pertence ao departamento
         if new_agent_id and new_department_id:
             from apps.authn.models import User
             try:
-                agent = User.objects.get(id=new_agent_id)
+                agent = User.objects.get(id=new_agent_id, tenant=user.tenant)
                 if not agent.departments.filter(id=new_department_id).exists():
                     return Response(
                         {'error': 'Agente não pertence ao departamento selecionado'},
@@ -3260,17 +3286,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         old_department = conversation.department
         old_agent = conversation.assigned_to
         
-        # Atualizar conversa
+        # Atualizar conversa (já validado acima)
         if new_department_id:
-            from apps.authn.models import Department
-            try:
-                new_dept = Department.objects.get(id=new_department_id, tenant=user.tenant)
-                conversation.department = new_dept
-            except Department.DoesNotExist:
-                return Response(
-                    {'error': 'Departamento não encontrado'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+            # new_dept já foi buscado e validado acima
+            conversation.department = new_dept
         
         if new_agent_id:
             from apps.authn.models import User
@@ -3292,26 +3311,32 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ FIX: Recarregar conversa do banco para garantir dados atualizados
         conversation.refresh_from_db()
         
-        # Criar mensagem interna de transferência
-        old_dept_name = old_department.name if old_department else 'Inbox'
-        new_dept_name = conversation.department.name if conversation.department else 'Sem departamento'
-        old_agent_name = old_agent.get_full_name() if old_agent else 'Não atribuído'
-        new_agent_name = conversation.assigned_to.get_full_name() if conversation.assigned_to else 'Não atribuído'
-        
-        transfer_msg = f"Conversa transferida:\n"
-        transfer_msg += f"De: {old_dept_name} ({old_agent_name})\n"
-        transfer_msg += f"Para: {new_dept_name} ({new_agent_name})"
-        if reason:
-            transfer_msg += f"\nMotivo: {reason}"
-        
-        Message.objects.create(
-            conversation=conversation,
-            sender=user,
-            content=transfer_msg,
-            direction='outgoing',
-            status='sent',
-            is_internal=True
-        )
+        # ✅ FIX: Criar mensagem interna de transferência APENAS se transferência foi bem-sucedida
+        try:
+            old_dept_name = old_department.name if old_department else 'Inbox'
+            new_dept_name = conversation.department.name if conversation.department else 'Sem departamento'
+            old_agent_name = old_agent.get_full_name() if old_agent else 'Não atribuído'
+            new_agent_name = conversation.assigned_to.get_full_name() if conversation.assigned_to else 'Não atribuído'
+            
+            transfer_msg = f"Conversa transferida:\n"
+            transfer_msg += f"De: {old_dept_name} ({old_agent_name})\n"
+            transfer_msg += f"Para: {new_dept_name} ({new_agent_name})"
+            if reason:
+                transfer_msg += f"\nMotivo: {reason}"
+            
+            Message.objects.create(
+                conversation=conversation,
+                sender=user,
+                content=transfer_msg,
+                direction='outgoing',
+                status='sent',
+                is_internal=True
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"❌ [TRANSFER] Erro ao criar mensagem de transferência: {e}", exc_info=True)
+            # Não falhar a transferência se a mensagem não puder ser criada
         
         # ✅ NOVO: Enviar mensagem automática de transferência para o cliente (fallback se transfer_message vazio)
         if new_department_id and conversation.department:
