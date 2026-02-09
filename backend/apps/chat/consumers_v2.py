@@ -54,15 +54,26 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         Autentica via JWT no query string.
         """
         # Extrair e validar token JWT
-        from urllib.parse import parse_qs
+        from urllib.parse import parse_qs, unquote
         query_string = self.scope.get("query_string", b"").decode()
+        logger.info(f"🔍 [CHAT WS V2] Query string recebida: {query_string[:100]}...")
+        
         params = parse_qs(query_string)
-        token = params.get('token', [None])[0]
+        token_raw = params.get('token', [None])[0]
+        
+        # ✅ CORREÇÃO: Decodificar token se necessário (pode vir URL-encoded)
+        token = unquote(token_raw) if token_raw else None
         
         if not token:
-            logger.warning(f"❌ [CHAT WS V2] Token JWT não fornecido")
+            logger.warning(f"❌ [CHAT WS V2] Token JWT não fornecido na query string")
+            logger.warning(f"   Query string: {query_string}")
+            logger.warning(f"   Params: {params}")
             await self.close(code=4001)
             return
+        
+        # ✅ DEBUG: Log token (primeiros e últimos caracteres apenas)
+        token_preview = f"{token[:15]}...{token[-15:]}" if len(token) > 30 else "***"
+        logger.info(f"🔍 [CHAT WS V2] Token extraído (preview): {token_preview}")
         
         # Autenticar usuário via token
         self.user = await self.authenticate_token(token)
@@ -496,18 +507,38 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         """Autentica usuário via token JWT."""
         try:
             from rest_framework_simplejwt.tokens import AccessToken
+            from rest_framework_simplejwt.exceptions import TokenError, InvalidToken, TokenBackendError
             from django.contrib.auth import get_user_model
             
-            access_token = AccessToken(token)
-            user_id = access_token['user_id']
+            # ✅ DEBUG: Log token (primeiros e últimos caracteres apenas)
+            token_preview = f"{token[:10]}...{token[-10:]}" if token and len(token) > 20 else token
+            logger.info(f"🔍 [CHAT WS V2] Validando token: {token_preview}")
+            
+            try:
+                access_token = AccessToken(token)
+                user_id = access_token['user_id']
+                logger.info(f"✅ [CHAT WS V2] Token válido, user_id: {user_id}")
+            except TokenError as e:
+                logger.error(f"❌ [CHAT WS V2] TokenError ao validar token: {type(e).__name__} - {e}")
+                return None
+            except InvalidToken as e:
+                logger.error(f"❌ [CHAT WS V2] InvalidToken: {e}")
+                return None
+            except Exception as e:
+                logger.error(f"❌ [CHAT WS V2] Erro inesperado ao validar token: {type(e).__name__} - {e}")
+                return None
             
             User = get_user_model()
-            user = User.objects.select_related('tenant').get(id=user_id)
-            
-            return user
+            try:
+                user = User.objects.select_related('tenant').get(id=user_id)
+                logger.info(f"✅ [CHAT WS V2] Usuário encontrado: {user.email} (tenant: {user.tenant_id})")
+                return user
+            except User.DoesNotExist:
+                logger.error(f"❌ [CHAT WS V2] Usuário {user_id} não encontrado no banco")
+                return None
         
         except Exception as e:
-            logger.error(f"❌ [CHAT WS V2] Erro ao autenticar token: {e}")
+            logger.error(f"❌ [CHAT WS V2] Erro ao autenticar token: {type(e).__name__} - {e}", exc_info=True)
             return None
     
     @database_sync_to_async
