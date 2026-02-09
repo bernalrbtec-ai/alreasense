@@ -754,8 +754,16 @@ export function useTenantSocket() {
       return;
     }
 
-    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${tenantId}/?token=${token}`;
-    console.log('🔌 [TENANT WS] Criando nova conexão WebSocket global:', tenantId);
+    // ✅ CORREÇÃO CRÍTICA: Sempre buscar token mais recente do store (não usar closure)
+    // Isso garante que mesmo se token foi renovado, usamos o mais recente
+    const { token: currentToken, user: currentUser } = useAuthStore.getState();
+    if (!currentToken || !currentUser) {
+      console.warn('⚠️ [TENANT WS] Token ou usuário não disponível, aguardando...');
+      return;
+    }
+    
+    const wsUrl = `${WS_BASE_URL}/ws/chat/tenant/${currentUser.tenant_id}/?token=${currentToken}`;
+    console.log('🔌 [TENANT WS] Criando nova conexão WebSocket global:', currentUser.tenant_id);
 
     try {
       const ws = new WebSocket(wsUrl);
@@ -794,23 +802,23 @@ export function useTenantSocket() {
 
         // ✅ CORREÇÃO CRÍTICA: Se fechou por token inválido (4001), aguardar renovação do token
         if (event.code === 4001) {
-          console.warn('⚠️ [TENANT WS] Token inválido/expirado. Aguardando renovação do token...');
-          // Aguardar 2 segundos para dar tempo do token ser renovado
+          console.warn('⚠️ [TENANT WS] Token inválido/expirado (código 4001). Aguardando renovação do token...');
+          // Aguardar 3 segundos e tentar reconectar com token atualizado
           reconnectTimeoutRef.current = setTimeout(() => {
-            // Verificar se token foi renovado
-            const { token: newToken } = useAuthStore.getState();
-            if (newToken && newToken !== token) {
-              console.log('✅ [TENANT WS] Token renovado detectado, reconectando...');
+            const { token: newToken, user: newUser } = useAuthStore.getState();
+            if (newToken && newUser) {
+              console.log('✅ [TENANT WS] Tentando reconectar com token atualizado...');
               reconnectAttemptsRef.current = 0; // Resetar tentativas
-              connect();
+              connect(); // connect() já busca token mais recente do store
             } else {
-              console.warn('⚠️ [TENANT WS] Token ainda não renovado, tentando reconectar mesmo assim...');
+              console.warn('⚠️ [TENANT WS] Token ainda não disponível, aguardando mais...');
               reconnectAttemptsRef.current++;
-              if (reconnectAttemptsRef.current < 5) {
-                connect();
+              if (reconnectAttemptsRef.current < 10) {
+                // Tentar novamente após mais tempo
+                reconnectTimeoutRef.current = setTimeout(() => connect(), 5000);
               }
             }
-          }, 2000);
+          }, 3000);
           return;
         }
 
@@ -851,19 +859,26 @@ export function useTenantSocket() {
 
   // Conectar quando montar o componente ou quando token mudar
   useEffect(() => {
-    // ✅ CORREÇÃO CRÍTICA: Se token mudou e WebSocket está fechado, reconectar
-    if (token && user && socketRef.current?.readyState !== WebSocket.OPEN && socketRef.current?.readyState !== WebSocket.CONNECTING) {
-      console.log('🔄 [TENANT WS] Token atualizado, reconectando WebSocket...');
+    if (!token || !user) {
+      console.log('⏸️ [TENANT WS] Aguardando token/usuário...');
+      return;
+    }
+
+    // ✅ CORREÇÃO CRÍTICA: Se WebSocket está fechado ou token mudou, reconectar
+    const shouldReconnect = 
+      socketRef.current?.readyState !== WebSocket.OPEN && 
+      socketRef.current?.readyState !== WebSocket.CONNECTING;
+    
+    if (shouldReconnect) {
+      console.log('🔄 [TENANT WS] Conectando WebSocket...');
       reconnectAttemptsRef.current = 0; // Resetar tentativas
-      connect();
-    } else if (token && user) {
       connect();
     }
 
     return () => {
       disconnect();
     };
-  }, [token, user, connect, disconnect]);
+  }, [token, user?.tenant_id, connect, disconnect]);
 
   return {
     isConnected: socketRef.current?.readyState === WebSocket.OPEN
