@@ -10,6 +10,7 @@ from apps.chat.api.views import (
     MessageReactionViewSet,
     chat_metrics_overview,
     chat_ping_evolution,
+    chat_diagnose_instance_friendly_name,
     UploadPresignedUrlView,
     ConfirmUploadView,
 )
@@ -59,6 +60,7 @@ urlpatterns = [
     # Monitores/diagnósticos
     path('metrics/overview/', chat_metrics_overview, name='chat-metrics-overview'),
     path('metrics/ping-evolution/', chat_ping_evolution, name='chat-ping-evolution'),
+    path('metrics/diagnose-instance-friendly-name/', chat_diagnose_instance_friendly_name, name='chat-diagnose-instance-friendly-name'),
     
     # Webhook Evolution
     path('webhooks/evolution/', evolution_webhook, name='evolution-webhook'),

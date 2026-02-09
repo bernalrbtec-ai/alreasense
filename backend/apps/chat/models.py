@@ -83,7 +83,13 @@ class Conversation(models.Model):
         blank=True,
         db_index=True,
         verbose_name='Instância de Origem',
-        help_text='Nome da instância Evolution que recebeu a mensagem (ex: Comercial, Suporte)'
+        help_text='Nome da instância Evolution que recebeu a mensagem (UUID)'
+    )
+    instance_friendly_name = models.CharField(
+        max_length=100,
+        blank=True,
+        verbose_name='Nome Amigável da Instância',
+        help_text='Nome exibido para o usuário (ex: C_Financeiro)'
     )
     conversation_type = models.CharField(
         max_length=20,

@@ -1649,7 +1649,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             'department': default_department,  # Departamento padrão da instância (ou None = Inbox)
             'contact_name': contact_name_to_save,
             'profile_pic_url': profile_pic_url if profile_pic_url else None,
-            'instance_name': instance_name,  # Salvar instância de origem
+            'instance_name': instance_name,  # Salvar instância de origem (UUID)
+            'instance_friendly_name': wa_instance.friendly_name if wa_instance else '',  # Nome exibido (ex: C_Financeiro)
             'status': 'pending' if not default_department else 'open',  # Pendente se Inbox, aberta se departamento
             'conversation_type': conversation_type,
         }
@@ -1833,6 +1834,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # IMPORTANTE: get_or_create só usa defaults na criação, não atualiza existentes!
         needs_update = False
         update_fields_list = []
+        
+        # ✅ Atualizar instance_friendly_name em conversas existentes (evitar mostrar UUID)
+        if not created and wa_instance and (not conversation.instance_friendly_name or conversation.instance_friendly_name == conversation.instance_name):
+            conversation.instance_friendly_name = wa_instance.friendly_name
+            update_fields_list.append('instance_friendly_name')
+            needs_update = True
         
         if not created and default_department and not conversation.department:
             logger.info(f"📋 [ROUTING] Conversa existente sem departamento, aplicando default_department: {default_department.name}")

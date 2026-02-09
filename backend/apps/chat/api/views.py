@@ -4449,6 +4449,48 @@ class MessageReactionViewSet(viewsets.ViewSet):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated, CanAccessChat])
+def chat_diagnose_instance_friendly_name(request):
+    """
+    Diagnóstico: por que instance_friendly_name mostra UUID em vez do nome?
+    Use: GET /api/chat/metrics/diagnose-instance-friendly-name/?uuid=05886c7f-783e-4c49-8af3-bbcb1cf59621
+    """
+    from django.core.cache import cache
+    target_uuid = request.query_params.get('uuid', '05886c7f-783e-4c49-8af3-bbcb1cf59621')
+    result = {
+        'uuid_buscado': target_uuid,
+        'conversas': [],
+        'whatsapp_instance': None,
+        'cache': {},
+        'possivel_causa': None,
+    }
+    # 1. Conversas com esse instance_name
+    convs = Conversation.objects.filter(
+        instance_name__icontains=target_uuid[:8]
+    ).values('id', 'instance_name', 'tenant_id').order_by('-last_message_at')[:5]
+    for c in convs:
+        result['conversas'].append(dict(c))
+    # 2. WhatsAppInstance lookup
+    wa = WhatsAppInstance.objects.filter(
+        Q(instance_name=target_uuid) | Q(evolution_instance_name=target_uuid)
+    ).values('id', 'friendly_name', 'instance_name', 'evolution_instance_name', 'is_active').first()
+    result['whatsapp_instance'] = wa
+    # 3. Cache
+    try:
+        result['cache']['v2'] = cache.get(f'instance_friendly_name:v2:{target_uuid}')
+    except Exception:
+        pass
+    # 4. Possível causa
+    if not wa and result['conversas']:
+        result['possivel_causa'] = 'WhatsAppInstance não encontrada com esse UUID - verificar instance_name/evolution_instance_name na tabela notifications_whatsappinstance'
+    elif wa and result['cache'].get('v2') == target_uuid:
+        result['possivel_causa'] = 'Cache antigo com UUID - limpar Redis ou aguardar 5 min'
+    elif wa:
+        result['possivel_causa'] = 'Lookup OK - friendly_name deveria aparecer. Verificar se serializer está sendo usado na resposta.'
+    return Response(result)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, CanAccessChat])
 def chat_metrics_overview(request):
     """
     Retorna snapshot das filas Redis e métricas de integração com a Evolution.

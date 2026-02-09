@@ -676,29 +676,29 @@ class ConversationSerializer(serializers.ModelSerializer):
         return None
     
     def get_instance_friendly_name(self, obj):
-        """Retorna nome amigável da instância (com cache).
-        Prioriza friendly_name; fallback para instance_name (UUID) só se instância não for encontrada.
+        """Retorna nome amigável da instância.
+        Prioridade: 1) instance_friendly_name salvo no modelo, 2) lookup no banco, 3) instance_name (UUID).
         """
         if not obj.instance_name:
             return None
         
-        # ✅ PERFORMANCE: Cache de 5 minutos para evitar queries repetidas
+        # 1) Usar valor salvo no modelo (webhook grava quando tem wa_instance)
+        if getattr(obj, 'instance_friendly_name', None) and obj.instance_friendly_name.strip():
+            return obj.instance_friendly_name
+        
+        # 2) Lookup no banco (fallback para conversas antigas)
         from django.core.cache import cache
         from django.db.models import Q
-        cache_key = f"instance_friendly_name:{obj.instance_name}"
+        cache_key = f"instance_friendly_name:v2:{obj.instance_name}"
         friendly_name = cache.get(cache_key)
         
         if friendly_name is None:
-            # Buscar no banco - por instance_name OU evolution_instance_name (webhook pode enviar qualquer um)
-            # Sem filtro is_active: mostrar nome amigável mesmo se instância foi desativada
             from apps.notifications.models import WhatsAppInstance
             instance = WhatsAppInstance.objects.filter(
-                Q(instance_name=obj.instance_name) | Q(evolution_instance_name=obj.instance_name),
-                tenant=obj.tenant
+                Q(instance_name=obj.instance_name) | Q(evolution_instance_name=obj.instance_name)
             ).values('friendly_name').first()
             
             friendly_name = instance['friendly_name'] if instance else obj.instance_name
-            # Cache por 5 minutos (300 segundos)
             cache.set(cache_key, friendly_name, 300)
         
         return friendly_name
