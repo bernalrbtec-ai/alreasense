@@ -377,18 +377,22 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
     # Handlers de eventos do grupo
     
     async def message_received(self, event):
-        """Broadcast nova mensagem."""
-        # ✅ DEBUG: Logar recebimento de evento
+        """Broadcast nova mensagem (repassa message, conversation e conversation_id para o front)."""
         logger.info(f"📨 [CHAT WS V2] message_received recebido do grupo")
         logger.info(f"   Event keys: {list(event.keys())}")
         logger.info(f"   Message ID: {event.get('message', {}).get('id', 'N/A')}")
         logger.info(f"   Conversation ID: {event.get('conversation_id', 'N/A')}")
-        
-        await self.send(text_data=json.dumps({
+
+        payload = {
             'type': 'message_received',
-            'message': event['message']
-        }))
-        
+            'message': event['message'],
+        }
+        if event.get('conversation_id'):
+            payload['conversation_id'] = event['conversation_id']
+        if event.get('conversation'):
+            payload['conversation'] = event['conversation']
+
+        await self.send(text_data=json.dumps(payload))
         logger.info(f"✅ [CHAT WS V2] message_received enviado para frontend")
     
     async def message_status_update(self, event):
