@@ -334,7 +334,6 @@ export default function ConfigurationsPage() {
     email?: string
     ramo?: string
     servicos?: string
-    horario_atendimento?: string
   }>({})
   const [secretaryRagPreview, setSecretaryRagPreview] = useState<string>('')
   const [audioTestLoading, setAudioTestLoading] = useState(false)
@@ -1387,7 +1386,6 @@ export default function ConfigurationsPage() {
     if (formData.email) parts.push(`Email: ${formData.email}`)
     if (formData.ramo) parts.push(`Ramo de atuação: ${formData.ramo}`)
     if (formData.servicos) parts.push(`Serviços: ${formData.servicos}`)
-    if (formData.horario_atendimento) parts.push(`Horário de atendimento: ${formData.horario_atendimento}`)
     
     if (departments && departments.length > 0) {
       parts.push('\nDepartamentos disponíveis:')
@@ -4125,15 +4123,16 @@ export default function ConfigurationsPage() {
                         placeholder="Liste os principais serviços ou produtos oferecidos..."
                       />
                     </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="horario_atendimento">Horário de Atendimento</Label>
-                      <Input
-                        id="horario_atendimento"
-                        value={secretaryFormData.horario_atendimento || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, horario_atendimento: e.target.value })}
-                        placeholder="Ex: Segunda a Sexta, 8h às 18h"
-                        className="mt-1"
-                      />
+                  </div>
+                  
+                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
+                      <div className="flex-1">
+                        <p className="text-sm text-blue-800">
+                          <strong>Horário de atendimento:</strong> O sistema consulta automaticamente os horários configurados na aba "Horários de Atendimento" desta página. A secretária receberá essa informação automaticamente e informará aos clientes quando estiver fora do horário.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
