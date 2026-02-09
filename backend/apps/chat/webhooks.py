@@ -2184,8 +2184,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         conversation.department = None
                         conversation.status = 'pending' if not from_me else 'open'
                         logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (Secretária IA pode responder)")
-                    
-                    conversation.save(update_fields=['status', 'department'])
+                    # Reaberta vai para a fila: sem agente atribuído
+                    conversation.assigned_to = None
+                    conversation.save(update_fields=['status', 'department', 'assigned_to'])
                     
                     status_str = conversation.department.name if conversation.department else "Inbox"
                     status_changed = True

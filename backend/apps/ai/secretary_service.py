@@ -624,7 +624,9 @@ def _secretary_worker(conversation, message) -> None:
         if data.get("close_conversation"):
             try:
                 conversation.status = "closed"
-                conversation.save(update_fields=["status"])
+                conversation.assigned_to = None
+                conversation.department = None
+                conversation.save(update_fields=["status", "assigned_to", "department"])
                 conv_data_closed = serialize_conversation_for_ws(conversation)
                 async_to_sync(channel_layer.group_send)(
                     room_group_name,

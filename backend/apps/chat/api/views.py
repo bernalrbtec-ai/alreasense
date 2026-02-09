@@ -1621,8 +1621,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     existing.status = 'pending'
                     existing.department = None
                     logger.info(f"🔄 [CONVERSATION START] Conversa {normalized_phone} reaberta sem departamento (Inbox)")
-                
-                update_fields_list.extend(['status', 'department'])
+                # Reaberta vai para a fila: sem agente atribuído
+                existing.assigned_to = None
+                update_fields_list.extend(['status', 'department', 'assigned_to'])
                 needs_update = True
                 
                 status_str = existing.department.name if existing.department else "Inbox"
