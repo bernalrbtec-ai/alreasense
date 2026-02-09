@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 SOURCE_SECRETARY = "secretary"
 SECRETARY_N8N_TIMEOUT = 20
 SECRETARY_N8N_RETRY_DELAY = 2
+SECRETARY_TYPING_DELAY_SECONDS = 8  # Tempo que o indicador "digitando" fica ativo
 
 
 def build_secretary_context_text(form_data: Dict[str, Any]) -> str:
@@ -319,6 +320,79 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
     }
 
 
+def _send_typing_indicator(conversation, typing_seconds: float = SECRETARY_TYPING_DELAY_SECONDS) -> None:
+    """
+    Envia indicador "digitando" para a Evolution API antes da secretária responder.
+    
+    Args:
+        conversation: Objeto Conversation
+        typing_seconds: Tempo em segundos que o indicador ficará ativo
+    """
+    try:
+        from apps.notifications.models import WhatsAppInstance
+        from apps.connections.models import EvolutionConnection
+        
+        # Buscar instância WhatsApp ativa do tenant
+        instance = WhatsAppInstance.objects.filter(
+            tenant=conversation.tenant,
+            is_active=True,
+            status='active'
+        ).first()
+        
+        if not instance:
+            logger.debug("[SECRETARY TYPING] Nenhuma instância WhatsApp ativa para enviar typing indicator")
+            return
+        
+        # Buscar servidor Evolution (fallback)
+        evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+        
+        # Preparar URL e credenciais
+        api_url = instance.api_url or (evolution_server.base_url if evolution_server else None)
+        api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
+        
+        if not api_url or not api_key:
+            logger.debug("[SECRETARY TYPING] API URL ou API key não disponível")
+            return
+        
+        # Preparar dados
+        contact_phone = conversation.contact_phone
+        if not contact_phone:
+            logger.debug("[SECRETARY TYPING] Contact phone não disponível")
+            return
+        
+        presence_url = f"{api_url.rstrip('/')}/chat/sendPresence/{instance.instance_name}"
+        presence_data = {
+            "number": contact_phone,
+            "delay": int(typing_seconds * 1000),  # Converter para milissegundos
+            "presence": "composing"
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": api_key
+        }
+        
+        logger.info(
+            "[SECRETARY TYPING] Enviando indicador 'digitando' para %s (delay=%sms)",
+            contact_phone,
+            presence_data["delay"]
+        )
+        
+        # Enviar request (síncrono, pois estamos em thread)
+        response = requests.post(presence_url, json=presence_data, headers=headers, timeout=10)
+        
+        if response.status_code in [200, 201]:
+            logger.info("[SECRETARY TYPING] Indicador 'digitando' enviado com sucesso")
+        else:
+            logger.warning(
+                "[SECRETARY TYPING] Erro %s ao enviar typing indicator: %s",
+                response.status_code,
+                response.text[:200] if hasattr(response, 'text') else 'N/A'
+            )
+    except Exception as e:
+        # Não bloquear o processamento se o typing indicator falhar
+        logger.warning("[SECRETARY TYPING] Erro ao enviar typing indicator: %s", e, exc_info=True)
+
+
 def _secretary_worker(conversation, message) -> None:
     """Worker em background: chama n8n com contexto da secretária, cria mensagem de resposta, opcionalmente atribui departamento."""
     from django.db import close_old_connections
@@ -361,6 +435,9 @@ def _secretary_worker(conversation, message) -> None:
                         conversation.id,
                     )
                     return
+
+        # ✅ NOVO: Enviar indicador "digitando" antes de processar
+        _send_typing_indicator(conversation)
 
         context = _build_secretary_context(conversation, message, profile)
         body = {"action": "secretary", **context}
