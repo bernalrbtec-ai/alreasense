@@ -97,6 +97,10 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             logger.warning(f"⚠️ [INSTANCES] Usuário {user.email} sem tenant, retornando queryset vazio")
             return WhatsAppInstance.objects.none()
         
+        # ✅ MELHORIA: Verificar se é uma requisição GET após POST/PATCH/DELETE
+        # Se sim, sempre buscar do banco para garantir dados atualizados
+        force_refresh = self.request.GET.get('_refresh', 'false').lower() == 'true'
+        
         # Cache key por tenant
         cache_key = CacheManager.make_key(
             CacheManager.PREFIX_INSTANCE,
@@ -111,37 +115,66 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             logger.info(f"📋 [INSTANCES] Buscadas {len(ids)} instâncias do banco para tenant {user.tenant.id}")
             return ids
         
-        # ✅ OTIMIZAÇÃO: Cachear IDs (TTL de 2 minutos - dados podem mudar frequentemente)
-        instance_ids = CacheManager.get_or_set(
-            cache_key,
-            fetch_instance_ids,
-            ttl=CacheManager.TTL_MINUTE * 2
-        )
-        
-        # ✅ CORREÇÃO: Se cache retornou vazio ou None, buscar diretamente do banco
-        if not instance_ids or len(instance_ids) == 0:
-            logger.warning(f"⚠️ [INSTANCES] Cache retornou vazio para tenant {user.tenant.id}, buscando diretamente do banco")
-            # Invalidar cache corrompido
+        # ✅ MELHORIA: Se forçar refresh ou cache não existir, buscar do banco diretamente
+        if force_refresh:
+            logger.info(f"🔄 [INSTANCES] Refresh forçado, buscando diretamente do banco")
+            # Invalidar cache antes de buscar
             try:
                 CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
             except Exception as e:
                 logger.error(f"❌ [INSTANCES] Erro ao invalidar cache: {e}")
             
-            # Buscar diretamente do banco (bypass do cache)
+            # Buscar diretamente do banco
             queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
         else:
-            # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related
-            queryset = WhatsAppInstance.objects.filter(
-                id__in=instance_ids,
-                tenant=user.tenant
-            ).select_related('tenant', 'created_by')
+            # ✅ OTIMIZAÇÃO: Cachear IDs (TTL de 1 minuto - dados mudam muito frequentemente)
+            instance_ids = CacheManager.get_or_set(
+                cache_key,
+                fetch_instance_ids,
+                ttl=CacheManager.TTL_MINUTE * 1  # Reduzido de 2 para 1 minuto
+            )
+            
+            # ✅ CORREÇÃO: Se cache retornou vazio ou None, buscar diretamente do banco
+            if not instance_ids or len(instance_ids) == 0:
+                logger.warning(f"⚠️ [INSTANCES] Cache retornou vazio para tenant {user.tenant.id}, buscando diretamente do banco")
+                # Invalidar cache corrompido
+                try:
+                    CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+                except Exception as e:
+                    logger.error(f"❌ [INSTANCES] Erro ao invalidar cache: {e}")
+                
+                # Buscar diretamente do banco (bypass do cache)
+                queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+            else:
+                # ✅ MELHORIA: Verificar se há novos registros no banco
+                db_count = WhatsAppInstance.objects.filter(tenant=user.tenant).count()
+                
+                # Se o número no banco é maior que no cache, buscar do banco
+                if db_count > len(instance_ids):
+                    logger.warning(f"⚠️ [INSTANCES] Banco tem {db_count} instâncias mas cache tem {len(instance_ids)}, buscando do banco")
+                    try:
+                        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+                    except Exception as e:
+                        logger.error(f"❌ [INSTANCES] Erro ao invalidar cache: {e}")
+                    
+                    queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+                else:
+                    # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related
+                    queryset = WhatsAppInstance.objects.filter(
+                        id__in=instance_ids,
+                        tenant=user.tenant
+                    ).select_related('tenant', 'created_by')
         
-        logger.info(f"✅ [INSTANCES] Retornando {queryset.count()} instâncias para usuário {user.email}")
+        count = queryset.count()
+        logger.info(f"✅ [INSTANCES] Retornando {count} instâncias para usuário {user.email}")
         return queryset
     
     def perform_create(self, serializer):
         """Ao criar, verificar limites, logar e invalidar cache."""
         from apps.common.cache_manager import CacheManager
+        import logging
+        
+        logger = logging.getLogger(__name__)
         
         # Verificar limite de instâncias antes de criar
         tenant = self.request.tenant
@@ -153,6 +186,7 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         
         # Criar a instância
         instance = serializer.save(created_by=self.request.user)
+        logger.info(f"✅ [INSTANCES] Instância criada: {instance.friendly_name} (ID: {instance.id})")
         
         # Log da criação
         from .models import WhatsAppConnectionLog
@@ -163,8 +197,12 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             user=self.request.user
         )
         
-        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant de forma mais agressiva
+        try:
+            CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
+            logger.info(f"🔄 [INSTANCES] Cache invalidado após criar instância {instance.friendly_name}")
+        except Exception as e:
+            logger.error(f"❌ [INSTANCES] Erro ao invalidar cache: {e}")
         
         return instance
     

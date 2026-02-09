@@ -410,7 +410,7 @@ class UserViewSet(viewsets.ModelViewSet):
         return UserSerializer
     
     def get_queryset(self):
-        """Retorna apenas usuários do tenant do usuário (COM CACHE)."""
+        """Retorna apenas usuários do tenant do usuário (COM CACHE MELHORADO)."""
         from apps.common.cache_manager import CacheManager
         import logging
         
@@ -421,6 +421,11 @@ class UserViewSet(viewsets.ModelViewSet):
         if not user.tenant:
             logger.warning(f"⚠️ [USERS] Usuário {user.email} sem tenant, retornando queryset vazio")
             return User.objects.none()
+        
+        # ✅ MELHORIA: Verificar se é uma requisição GET após POST/PATCH/DELETE
+        # Se sim, sempre buscar do banco para garantir dados atualizados
+        request_method = self.request.method
+        force_refresh = self.request.GET.get('_refresh', 'false').lower() == 'true'
         
         # Cache key por tenant
         cache_key = CacheManager.make_key(
@@ -441,48 +446,94 @@ class UserViewSet(viewsets.ModelViewSet):
             logger.info(f"📋 [USERS] Buscados {len(ids)} usuários do banco para tenant {user.tenant.id}")
             return ids
         
-        # ✅ OTIMIZAÇÃO: Cachear IDs (TTL de 5 minutos - dados podem mudar)
-        user_ids = CacheManager.get_or_set(
-            cache_key,
-            fetch_user_ids,
-            ttl=CacheManager.TTL_MINUTE * 5
-        )
-        
-        # ✅ CORREÇÃO: Se cache retornou vazio ou None, buscar diretamente do banco
-        if not user_ids or len(user_ids) == 0:
-            logger.warning(f"⚠️ [USERS] Cache retornou vazio para tenant {user.tenant.id}, buscando diretamente do banco")
-            # Invalidar cache corrompido
+        # ✅ MELHORIA: Se forçar refresh ou cache não existir, buscar do banco diretamente
+        if force_refresh:
+            logger.info(f"🔄 [USERS] Refresh forçado, buscando diretamente do banco")
+            # Invalidar cache antes de buscar
             try:
                 CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
             except Exception as e:
                 logger.error(f"❌ [USERS] Erro ao invalidar cache: {e}")
             
-            # Buscar diretamente do banco (bypass do cache)
+            # Buscar diretamente do banco
             if user.is_superuser:
                 queryset = User.objects.select_related('tenant').prefetch_related('departments').all()
             else:
                 queryset = User.objects.filter(tenant=user.tenant).select_related('tenant').prefetch_related('departments')
         else:
-            # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related/prefetch_related
-            if user.is_superuser:
-                queryset = User.objects.filter(id__in=user_ids).select_related('tenant').prefetch_related('departments')
+            # ✅ OTIMIZAÇÃO: Cachear IDs (TTL reduzido para 2 minutos - dados mudam frequentemente)
+            user_ids = CacheManager.get_or_set(
+                cache_key,
+                fetch_user_ids,
+                ttl=CacheManager.TTL_MINUTE * 2  # Reduzido de 5 para 2 minutos
+            )
+            
+            # ✅ CORREÇÃO: Se cache retornou vazio ou None, buscar diretamente do banco
+            if not user_ids or len(user_ids) == 0:
+                logger.warning(f"⚠️ [USERS] Cache retornou vazio para tenant {user.tenant.id}, buscando diretamente do banco")
+                # Invalidar cache corrompido
+                try:
+                    CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
+                except Exception as e:
+                    logger.error(f"❌ [USERS] Erro ao invalidar cache: {e}")
+                
+                # Buscar diretamente do banco (bypass do cache)
+                if user.is_superuser:
+                    queryset = User.objects.select_related('tenant').prefetch_related('departments').all()
+                else:
+                    queryset = User.objects.filter(tenant=user.tenant).select_related('tenant').prefetch_related('departments')
             else:
-                queryset = User.objects.filter(
-                    id__in=user_ids,
-                    tenant=user.tenant
-                ).select_related('tenant').prefetch_related('departments')
+                # ✅ OTIMIZAÇÃO: Reconstruir queryset com select_related/prefetch_related
+                # Mas também verificar se há novos registros no banco
+                if user.is_superuser:
+                    db_count = User.objects.count()
+                else:
+                    db_count = User.objects.filter(tenant=user.tenant).count()
+                
+                # Se o número no banco é maior que no cache, buscar do banco
+                if db_count > len(user_ids):
+                    logger.warning(f"⚠️ [USERS] Banco tem {db_count} usuários mas cache tem {len(user_ids)}, buscando do banco")
+                    try:
+                        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
+                    except Exception as e:
+                        logger.error(f"❌ [USERS] Erro ao invalidar cache: {e}")
+                    
+                    if user.is_superuser:
+                        queryset = User.objects.select_related('tenant').prefetch_related('departments').all()
+                    else:
+                        queryset = User.objects.filter(tenant=user.tenant).select_related('tenant').prefetch_related('departments')
+                else:
+                    # Usar cache normalmente
+                    if user.is_superuser:
+                        queryset = User.objects.filter(id__in=user_ids).select_related('tenant').prefetch_related('departments')
+                    else:
+                        queryset = User.objects.filter(
+                            id__in=user_ids,
+                            tenant=user.tenant
+                        ).select_related('tenant').prefetch_related('departments')
         
-        logger.info(f"✅ [USERS] Retornando {queryset.count()} usuários para usuário {user.email}")
+        count = queryset.count()
+        logger.info(f"✅ [USERS] Retornando {count} usuários para usuário {user.email} (método: {request_method})")
         return queryset
     
     def perform_create(self, serializer):
-        """Ao criar, invalidar cache."""
+        """Ao criar, invalidar cache e forçar busca do banco."""
         from apps.common.cache_manager import CacheManager
+        import logging
         
-        serializer.save()
+        logger = logging.getLogger(__name__)
         
-        # ✅ INVALIDAR CACHE: Limpar cache de usuários do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
+        user = serializer.save()
+        logger.info(f"✅ [USERS] Usuário criado: {user.email} (ID: {user.id})")
+        
+        # ✅ INVALIDAR CACHE: Limpar cache de usuários do tenant de forma mais agressiva
+        try:
+            CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_USER}:*")
+            logger.info(f"🔄 [USERS] Cache invalidado após criar usuário {user.email}")
+        except Exception as e:
+            logger.error(f"❌ [USERS] Erro ao invalidar cache: {e}")
+        
+        return user
     
     def perform_update(self, serializer):
         """Ao atualizar, invalidar cache."""

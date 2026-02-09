@@ -91,12 +91,18 @@ export default function ConnectionsPage() {
     }
   }
 
-  const fetchData = async () => {
+  const fetchData = async (forceRefresh = false) => {
     try {
       setIsLoading(true)
-      // Buscar instâncias WhatsApp
-      const instancesResponse = await api.get('/notifications/whatsapp-instances/')
-      setInstances(instancesResponse.data.results || instancesResponse.data)
+      // ✅ MELHORIA: Adicionar parâmetro _refresh para forçar busca do banco
+      const url = forceRefresh
+        ? '/notifications/whatsapp-instances/?_refresh=true'
+        : '/notifications/whatsapp-instances/'
+      
+      const instancesResponse = await api.get(url)
+      const instances = instancesResponse.data.results || instancesResponse.data
+      setInstances(instances)
+      console.log(`✅ [INSTANCES] Carregadas ${instances.length} instâncias (refresh: ${forceRefresh})`)
     } catch (error) {
       console.error('Failed to fetch instances:', error)
     } finally {
@@ -144,8 +150,9 @@ export default function ConnectionsPage() {
       setEditingInstance(null)
       setShowInstanceModal(false)
       
-      // Atualizar lista
-      fetchData()
+      // ✅ MELHORIA: Aguardar um pouco e forçar refresh para garantir dados atualizados
+      await new Promise(resolve => setTimeout(resolve, 300)) // 300ms de delay
+      await fetchData(true) // Forçar refresh
       
     } catch (error: any) {
       console.error('❌ Erro ao salvar instância:', error)
@@ -179,7 +186,9 @@ export default function ConnectionsPage() {
     try {
       await api.delete(`/notifications/whatsapp-instances/${id}/`)
       showToast('✅ Instância WhatsApp excluída com sucesso!', 'success')
-      fetchData()
+      // ✅ MELHORIA: Aguardar um pouco e forçar refresh para garantir dados atualizados
+      await new Promise(resolve => setTimeout(resolve, 300)) // 300ms de delay
+      await fetchData(true) // Forçar refresh
     } catch (error: any) {
       console.error('❌ Erro ao excluir instância:', error)
       showToast(`❌ Erro ao excluir instância: ${error.response?.data?.detail || error.message}`, 'error')
@@ -224,14 +233,16 @@ export default function ConnectionsPage() {
               const connectionState = statusResponse.data.connection_state
               console.log(`📱 Estado atual: ${connectionState}`)
               
-              if (connectionState === 'open') {
-                clearInterval(checkInterval)
-                setShowQRModal(false)
-                setQrInstance(null)
-                fetchData() // Recarregar lista para mostrar número e status atualizado
-                showToast('🎉 WhatsApp conectado com sucesso!', 'success')
-                console.log('✅ WhatsApp conectado! Polling encerrado.')
-              }
+            if (connectionState === 'open') {
+              clearInterval(checkInterval)
+              setShowQRModal(false)
+              setQrInstance(null)
+              // ✅ MELHORIA: Forçar refresh após conectar
+              await new Promise(resolve => setTimeout(resolve, 300))
+              await fetchData(true) // Recarregar lista para mostrar número e status atualizado
+              showToast('🎉 WhatsApp conectado com sucesso!', 'success')
+              console.log('✅ WhatsApp conectado! Polling encerrado.')
+            }
             }
           } catch (err: any) {
             // Não mostrar erro para o usuário durante polling (pode ser temporário)
@@ -269,7 +280,9 @@ export default function ConnectionsPage() {
           const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/disconnect/`)
           if (response.data.success) {
             showToast('✅ Instância desconectada com sucesso!', 'success')
-            fetchData()
+            // ✅ MELHORIA: Forçar refresh após desconectar
+            await new Promise(resolve => setTimeout(resolve, 300))
+            await fetchData(true)
           } else {
             showToast(`❌ Erro ao desconectar: ${response.data.error}`, 'error')
           }
@@ -286,7 +299,9 @@ export default function ConnectionsPage() {
       const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
       if (response.data.success) {
         showToast('✅ Status verificado com sucesso!', 'success')
-        fetchData()
+        // ✅ MELHORIA: Forçar refresh após verificar status
+        await new Promise(resolve => setTimeout(resolve, 300))
+        await fetchData(true)
       } else {
         showToast(`❌ Erro ao verificar status: ${response.data.error}`, 'error')
       }

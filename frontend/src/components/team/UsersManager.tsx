@@ -54,14 +54,20 @@ export function UsersManager() {
     Promise.all([fetchUsers(), fetchDepartments()]);
   }, []);
 
-  const fetchUsers = async () => {
+  const fetchUsers = async (forceRefresh = false) => {
     try {
-      const response = await api.get('/auth/users-api/');
+      // ✅ MELHORIA: Adicionar parâmetro _refresh para forçar busca do banco
+      const url = forceRefresh 
+        ? '/auth/users-api/?_refresh=true'
+        : '/auth/users-api/';
+      
+      const response = await api.get(url);
       // Garantir que sempre temos um array
       const data = Array.isArray(response.data) 
         ? response.data 
         : (response.data?.results || []);
       setUsers(data);
+      console.log(`✅ [USERS] Carregados ${data.length} usuários (refresh: ${forceRefresh})`);
     } catch (error) {
       console.error('Erro ao buscar usuários:', error);
       toast.error('Erro ao carregar usuários');
@@ -151,7 +157,9 @@ export function UsersManager() {
         toast.success('Usuário criado!');
       }
       
-      fetchUsers();
+      // ✅ MELHORIA: Aguardar um pouco e forçar refresh para garantir dados atualizados
+      await new Promise(resolve => setTimeout(resolve, 300)); // 300ms de delay
+      await fetchUsers(true); // Forçar refresh
       handleCloseModal();
     } catch (error: any) {
       console.error('Erro ao salvar usuário:', error);
@@ -194,7 +202,9 @@ export function UsersManager() {
     try {
       await api.delete(`/auth/users-api/${id}/`);
       toast.success('Usuário excluído!');
-      fetchUsers();
+      // ✅ MELHORIA: Aguardar um pouco e forçar refresh para garantir dados atualizados
+      await new Promise(resolve => setTimeout(resolve, 300)); // 300ms de delay
+      await fetchUsers(true); // Forçar refresh
     } catch (error) {
       toast.error('Erro ao excluir usuário');
     }
