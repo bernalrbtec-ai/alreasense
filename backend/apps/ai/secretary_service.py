@@ -502,6 +502,40 @@ def _secretary_worker(conversation, message) -> None:
         from apps.chat.tasks import send_message_to_evolution
         send_message_to_evolution.delay(str(message_obj.id))
 
+        # ✅ NOVO: Marcar mensagens do cliente como recebidas e lidas quando a secretária responde
+        try:
+            from apps.chat.webhooks import send_delivery_receipt, send_read_receipt
+            unread_messages = ChatMessage.objects.filter(
+                conversation=conversation,
+                direction='incoming',
+                status__in=['sent', 'delivered']  # Mensagens ainda não lidas
+            ).order_by('created_at')
+            
+            for unread_msg in unread_messages:
+                if unread_msg.message_id:  # Só marcar se tiver message_id da Evolution
+                    # Marcar como entregue (✓✓ cinza)
+                    send_delivery_receipt(conversation, unread_msg)
+                    # Pequeno delay antes de marcar como lida (simula leitura humana)
+                    time.sleep(0.5)
+                    # Marcar como lida (✓✓ azul)
+                    read_success = send_read_receipt(conversation, unread_msg, max_retries=2)
+                    if read_success:
+                        # Atualizar status no banco para 'seen'
+                        unread_msg.status = 'seen'
+                        unread_msg.save(update_fields=['status'])
+                        logger.info(
+                            "[SECRETARY] Mensagem marcada como recebida e lida: message_id=%s",
+                            unread_msg.message_id
+                        )
+                    else:
+                        logger.warning(
+                            "[SECRETARY] Falha ao marcar mensagem como lida: message_id=%s",
+                            unread_msg.message_id
+                        )
+        except Exception as e:
+            # Não bloquear o processamento se falhar ao marcar como lida
+            logger.warning("[SECRETARY] Erro ao marcar mensagens como lidas: %s", e, exc_info=True)
+
         suggested_department_id = data.get("suggested_department_id")
         summary_for_department = (data.get("summary_for_department") or "").strip()
         if suggested_department_id:
