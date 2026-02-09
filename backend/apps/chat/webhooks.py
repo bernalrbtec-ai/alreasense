@@ -3004,7 +3004,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 do_broadcast()
             
             # ✅ FIX: Também enviar message_received para adicionar mensagem na conversa ativa
+            # ✅ CORREÇÃO CRÍTICA: Incluir conversation completa para atualizar lista de conversas
             msg_data_serializable = serialize_message_for_ws(message)
+            conv_data_serializable_for_message = serialize_conversation_for_ws(conversation)
             
             channel_layer = get_channel_layer()
             tenant_group = f"chat_tenant_{tenant.id}"
@@ -3020,11 +3022,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 {
                     'type': 'message_received',
                     'message': msg_data_serializable,
+                    'conversation': conv_data_serializable_for_message,  # ✅ CRÍTICO: Incluir conversation completa
                     'conversation_id': str(conversation.id)
                 }
             )
             
-            logger.info(f"✅ [WEBSOCKET] message_received enviado para grupo do tenant: {tenant_group}")
+            logger.info(f"✅ [WEBSOCKET] message_received enviado para grupo do tenant: {tenant_group} (com conversation completa)")
         except Exception as e:
             logger.error(f"❌ [WEBSOCKET] Erro ao broadcast para tenant: {e}", exc_info=True)
         
