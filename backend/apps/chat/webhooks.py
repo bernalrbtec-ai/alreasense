@@ -2165,11 +2165,18 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         except Exception as e:
                             logger.error(f"❌ [WELCOME MENU] Erro ao verificar se deve enviar menu: {e}", exc_info=True)
                 
-                    # ✅ CORREÇÃO: Ao reabrir conversa fechada, SEMPRE colocar no Inbox (department=None)
-                    # para que a Secretária IA possa responder. default_department só vale para conversas novas.
-                    conversation.status = 'pending' if not from_me else 'open'
-                    conversation.department = None
-                    logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (Secretária IA pode responder)")
+                    # ✅ CORREÇÃO: Ao reabrir conversa fechada, respeitar default_department da instância.
+                    # Se a instância tem departamento configurado, manter no departamento (não Inbox).
+                    # Só colocar no Inbox (department=None) quando instância não tem departamento,
+                    # para que a Secretária IA possa responder.
+                    if default_department:
+                        conversation.department = default_department
+                        conversation.status = 'open'
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no departamento {default_department.name} (instância com departamento padrão)")
+                    else:
+                        conversation.department = None
+                        conversation.status = 'pending' if not from_me else 'open'
+                        logger.info(f"🔄 [WEBHOOK] Conversa {phone} reaberta no Inbox (Secretária IA pode responder)")
                     
                     conversation.save(update_fields=['status', 'department'])
                     
