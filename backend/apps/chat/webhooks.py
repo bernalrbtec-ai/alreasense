@@ -565,13 +565,26 @@ def evolution_webhook(request):
                     status='active'
                 ).first()
             
-            # ✅ FALLBACK 2: Se ainda não encontrou, tentar buscar todas as instâncias ativas do tenant
-            # e usar a primeira (útil quando instance_name não corresponde)
-            if not wa_instance:
+            # ✅ FALLBACK 2: Se ainda não encontrou, tentar buscar instância padrão do tenant
+            # Primeiro tentar buscar pelo tenant do connection (se existir)
+            if not wa_instance and connection and connection.tenant:
                 logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada por instance_name nem evolution_instance_name")
-                logger.warning(f"   Tentando buscar instância padrão do tenant...")
-                # Buscar tenant primeiro (pode vir do connection ou do webhook)
-                # Por enquanto, vamos buscar todas as instâncias ativas
+                logger.warning(f"   Tentando buscar instância padrão do tenant {connection.tenant.name}...")
+                wa_instance = WhatsAppInstance.objects.select_related(
+                    'tenant', 
+                    'default_department'
+                ).filter(
+                    tenant=connection.tenant,
+                    is_active=True,
+                    status='active'
+                ).first()
+                
+                if wa_instance:
+                    logger.warning(f"⚠️ [WEBHOOK] Usando instância padrão do tenant: {wa_instance.friendly_name}")
+            
+            # ✅ FALLBACK 3: Se ainda não encontrou, buscar qualquer instância ativa (último recurso)
+            if not wa_instance:
+                logger.warning(f"⚠️ [WEBHOOK] WhatsAppInstance não encontrada, tentando buscar qualquer instância ativa...")
                 wa_instance = WhatsAppInstance.objects.select_related(
                     'tenant', 
                     'default_department'
@@ -581,7 +594,7 @@ def evolution_webhook(request):
                 ).first()
                 
                 if wa_instance:
-                    logger.warning(f"⚠️ [WEBHOOK] Usando primeira instância ativa encontrada: {wa_instance.friendly_name}")
+                    logger.warning(f"⚠️ [WEBHOOK] Usando primeira instância ativa encontrada: {wa_instance.friendly_name} (tenant: {wa_instance.tenant.name if wa_instance.tenant else 'None'})")
             
             if wa_instance:
                 logger.info(f"✅ [WEBHOOK] WhatsAppInstance encontrada: {wa_instance.friendly_name} ({wa_instance.instance_name})")
@@ -647,14 +660,35 @@ def evolution_webhook(request):
         # ✅ Determinar tenant: usar do wa_instance se tiver, senão usar do connection
         if wa_instance and wa_instance.tenant:
             tenant = wa_instance.tenant
-        elif connection:
+        elif connection and connection.tenant:
             tenant = connection.tenant
+            # ✅ FIX: Se não encontrou wa_instance mas tem connection, tentar buscar instância do tenant
+            if not wa_instance:
+                logger.warning(f"⚠️ [WEBHOOK] wa_instance não encontrada, tentando buscar instância do tenant {tenant.name}...")
+                wa_instance = WhatsAppInstance.objects.select_related(
+                    'tenant', 
+                    'default_department'
+                ).filter(
+                    tenant=tenant,
+                    is_active=True,
+                    status='active'
+                ).first()
+                
+                if wa_instance:
+                    logger.info(f"✅ [WEBHOOK] Instância encontrada pelo tenant: {wa_instance.friendly_name}")
+                    logger.info(f"   📋 Default Department: {wa_instance.default_department.name if wa_instance.default_department else 'Nenhum (Inbox)'}")
         else:
             logger.error(f"❌ [WEBHOOK] Nenhum tenant encontrado!")
             return Response(
                 {'error': 'Tenant não encontrado'},
                 status=status.HTTP_404_NOT_FOUND
             )
+        
+        # ✅ LOG FINAL: Verificar estado antes de processar
+        logger.info(f"📋 [WEBHOOK] Estado final antes de processar:")
+        logger.info(f"   📋 Tenant: {tenant.name}")
+        logger.info(f"   📋 wa_instance: {wa_instance.friendly_name if wa_instance else 'None'}")
+        logger.info(f"   📋 default_department: {wa_instance.default_department.name if wa_instance and wa_instance.default_department else 'None'}")
         
         # Roteamento por tipo de evento
         # ✅ Passar wa_instance também para handler (pode ter api_url/api_key próprios)
