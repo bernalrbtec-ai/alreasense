@@ -92,6 +92,23 @@ class CacheManager:
         return value
     
     @classmethod
+    def invalidate_department_cache_for_tenant(cls, tenant_id) -> int:
+        """
+        Invalida cache de departamentos para um tenant por chave exata.
+        Funciona com qualquer backend (Redis, DB, local), não só Redis.
+        """
+        deleted = 0
+        for scope in ('tenant', 'all'):
+            key = cls.make_key(cls.PREFIX_DEPARTMENT, scope, tenant_id=str(tenant_id))
+            try:
+                if cache.delete(key):
+                    deleted += 1
+                logger.debug(f"🗑️ [CACHE] Department cache invalidado: {key}")
+            except Exception as e:
+                logger.warning(f"⚠️ [CACHE] Erro ao remover key {key}: {e}")
+        return deleted
+
+    @classmethod
     def invalidate_pattern(cls, pattern: str) -> int:
         """
         Invalidate all keys matching pattern

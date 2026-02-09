@@ -38,7 +38,9 @@ export default function DepartmentsPage() {
       const response = await axios.get(`${API_URL}/api/auth/departments/`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDepartments(response.data);
+      // API pode retornar paginado { results: [...] } ou lista direta
+      const data = response.data?.results ?? response.data;
+      setDepartments(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error('Erro ao buscar departamentos:', error);
       toast.error('Erro ao carregar departamentos');

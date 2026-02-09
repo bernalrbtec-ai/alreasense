@@ -366,26 +366,29 @@ class DepartmentViewSet(viewsets.ModelViewSet):
         
         serializer.save(tenant=tenant)
         
-        # ✅ INVALIDAR CACHE: Limpar cache de departamentos do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+        # ✅ INVALIDAR CACHE: por chave exata (funciona sem Redis)
+        CacheManager.invalidate_department_cache_for_tenant(tenant.id)
     
     def perform_update(self, serializer):
         """Ao atualizar, invalidar cache."""
         from apps.common.cache_manager import CacheManager
         
-        serializer.save()
+        instance = serializer.save()
         
-        # ✅ INVALIDAR CACHE: Limpar cache de departamentos do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+        # ✅ INVALIDAR CACHE: por chave exata (funciona sem Redis)
+        if getattr(instance, 'tenant_id', None):
+            CacheManager.invalidate_department_cache_for_tenant(instance.tenant_id)
     
     def perform_destroy(self, instance):
         """Ao deletar, invalidar cache."""
         from apps.common.cache_manager import CacheManager
         
+        tenant_id = getattr(instance, 'tenant_id', None) or (instance.tenant.id if instance.tenant else None)
         instance.delete()
         
-        # ✅ INVALIDAR CACHE: Limpar cache de departamentos do tenant
-        CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+        # ✅ INVALIDAR CACHE: por chave exata (funciona sem Redis)
+        if tenant_id:
+            CacheManager.invalidate_department_cache_for_tenant(tenant_id)
 
 
 class UserViewSet(viewsets.ModelViewSet):

@@ -16,8 +16,10 @@ def invalidate_department_cache(sender, instance, **kwargs):
     """Invalidar cache de departamentos quando departamento é salvo ou deletado"""
     logger.info(f"🔄 [CACHE] Invalidando cache de departamentos após mudança em {instance.name}")
     
-    # Invalidar cache de departamentos (todos os padrões)
-    CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_DEPARTMENT}:*")
+    # Por chave exata (funciona com qualquer backend de cache, não só Redis)
+    tenant_id = getattr(instance, 'tenant_id', None) or (instance.tenant.id if getattr(instance, 'tenant', None) else None)
+    if tenant_id:
+        CacheManager.invalidate_department_cache_for_tenant(tenant_id)
 
 
 @receiver(post_save, sender=User)

@@ -160,7 +160,6 @@ def _serialize_ai_settings(settings_obj: TenantAiSettings) -> dict:
         "transcription_max_mb": settings_obj.transcription_max_mb,
         "triage_enabled": settings_obj.triage_enabled,
         "secretary_enabled": getattr(settings_obj, 'secretary_enabled', False),
-        "secretary_model": getattr(settings_obj, 'secretary_model', '') or '',
         "agent_model": settings_obj.agent_model,
         "n8n_audio_webhook_url": settings_obj.n8n_audio_webhook_url or "",
         "n8n_triage_webhook_url": settings_obj.n8n_triage_webhook_url or "",
@@ -785,11 +784,8 @@ def secretary_profile(request):
         profile, _ = TenantSecretaryProfile.objects.get_or_create(tenant=tenant)
         return Response({
             "form_data": profile.form_data,
-            "prompt": getattr(profile, "prompt", "") or "",
-            "signature_name": getattr(profile, "signature_name", "") or "",
             "use_memory": profile.use_memory,
             "is_active": profile.is_active,
-            "inbox_idle_minutes": getattr(profile, "inbox_idle_minutes", 0) or 0,
             "created_at": timezone.localtime(profile.created_at).isoformat(),
             "updated_at": timezone.localtime(profile.updated_at).isoformat(),
         })
@@ -806,13 +802,6 @@ def secretary_profile(request):
         else:
             profile.form_data = sanitized
 
-    if 'prompt' in data:
-        prompt_val = data.get('prompt')
-        profile.prompt = str(prompt_val)[:10000] if prompt_val is not None else ""
-
-    if 'signature_name' in data:
-        profile.signature_name = str(data.get('signature_name') or '')[:100].strip()
-
     if 'use_memory' in data:
         use_memory = _normalize_bool(data.get('use_memory'))
         if use_memory is None:
@@ -826,20 +815,6 @@ def secretary_profile(request):
             errors['is_active'] = 'Valor inválido.'
         else:
             profile.is_active = is_active
-
-    if 'inbox_idle_minutes' in data:
-        try:
-            val = data.get('inbox_idle_minutes')
-            if val is None:
-                profile.inbox_idle_minutes = 0
-            else:
-                n = int(val)
-                if n < 0 or n > 1440:
-                    errors['inbox_idle_minutes'] = 'Valor deve estar entre 0 e 1440 (0 = desativado, máx. 24h).'
-                else:
-                    profile.inbox_idle_minutes = n
-        except (TypeError, ValueError):
-            errors['inbox_idle_minutes'] = 'Valor inválido (número 0-1440).'
 
     if errors:
         return Response({"errors": errors}, status=status.HTTP_400_BAD_REQUEST)
@@ -859,11 +834,8 @@ def secretary_profile(request):
 
     return Response({
         "form_data": profile.form_data,
-        "prompt": getattr(profile, "prompt", "") or "",
-        "signature_name": getattr(profile, "signature_name", "") or "",
         "use_memory": profile.use_memory,
         "is_active": profile.is_active,
-        "inbox_idle_minutes": getattr(profile, "inbox_idle_minutes", 0) or 0,
         "updated_at": timezone.localtime(profile.updated_at).isoformat(),
     })
 
@@ -1035,9 +1007,6 @@ def ai_settings(request):
 
     if 'agent_model' in data:
         settings_obj.agent_model = str(data.get('agent_model') or '').strip()
-
-    if 'secretary_model' in data:
-        settings_obj.secretary_model = str(data.get('secretary_model') or '').strip()[:100]
 
     if 'n8n_audio_webhook_url' in data:
         url = str(data.get('n8n_audio_webhook_url') or '').strip()
