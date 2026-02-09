@@ -821,25 +821,11 @@ export function useTenantSocket() {
         socketRef.current = null;
         globalWebSocket = null; // ✅ Limpar singleton global
 
-        // ✅ CORREÇÃO CRÍTICA: Se fechou por token inválido (4001), aguardar renovação do token
+        // ✅ Token inválido ou expirado (4001) → limpar sessão e redirecionar para login
         if (event.code === 4001) {
-          console.warn('⚠️ [TENANT WS] Token inválido/expirado (código 4001). Aguardando renovação do token...');
-          // Aguardar 3 segundos e tentar reconectar com token atualizado
-          reconnectTimeoutRef.current = setTimeout(() => {
-            const { token: newToken, user: newUser } = useAuthStore.getState();
-            if (newToken && newUser) {
-              console.log('✅ [TENANT WS] Tentando reconectar com token atualizado...');
-              reconnectAttemptsRef.current = 0; // Resetar tentativas
-              connect(); // connect() já busca token mais recente do store
-            } else {
-              console.warn('⚠️ [TENANT WS] Token ainda não disponível, aguardando mais...');
-              reconnectAttemptsRef.current++;
-              if (reconnectAttemptsRef.current < 10) {
-                // Tentar novamente após mais tempo
-                reconnectTimeoutRef.current = setTimeout(() => connect(), 5000);
-              }
-            }
-          }, 3000);
+          console.warn('⚠️ [TENANT WS] Token inválido/expirado (4001). Redirecionando para login...');
+          setConnectionStatus('disconnected');
+          useAuthStore.getState().logout();
           return;
         }
 

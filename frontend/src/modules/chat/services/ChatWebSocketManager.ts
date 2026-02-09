@@ -152,6 +152,13 @@ class ChatWebSocketManager {
         this.isConnecting = false;
         this.ws = null;
 
+        // ✅ Token inválido/expirado (4001) → logout e redirecionar para login
+        if (event.code === 4001) {
+          console.warn('⚠️ [MANAGER] Token inválido/expirado (4001). Redirecionando para login...');
+          useAuthStore.getState().logout();
+          return;
+        }
+
         // ✅ NOVO: Não reconectar se está pausado (aba em background)
         if (this.isPaused) {
           console.log('⏸️ [MANAGER] Reconexão pausada (aba em background)');
