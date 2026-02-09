@@ -2743,10 +2743,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             logger.info(f"✅ [CONVERSA] {marked_count} mensagens marcadas como lidas antes de fechar conversa {conversation.id}")
         
         conversation.status = 'closed'
-        conversation.department = None  # ✅ Remover departamento para voltar ao Inbox quando reabrir
-        conversation.save(update_fields=['status', 'department'])
+        conversation.department = None  # Voltar ao Inbox quando reabrir
+        conversation.assigned_to = None  # Limpar atendente ao fechar
+        conversation.save(update_fields=['status', 'department', 'assigned_to'])
         
-        logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada e departamento removido (volta ao Inbox quando reabrir)")
+        logger.info(f"🔒 [CONVERSA] Conversa {conversation.id} fechada (departamento e atendente removidos)")
         
         return Response(
             ConversationSerializer(conversation).data,
@@ -3499,11 +3500,13 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     {'error': 'Agente não encontrado'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-            # ✅ Atribuição a agente: conversa sai do departamento e fica só em "Minhas Conversas" do atendente
-            conversation.department = None
+            # Manter departamento: conversa fica no departamento E em "Minhas Conversas" do atendente (aviso "Fulano está atendendo" na lista do dept)
+            if new_department_id and new_dept:
+                conversation.department = new_dept
+            # Se não informou novo departamento, mantém o atual (não zera)
             logger.info(
                 f"✅ [TRANSFER] Conversa {conversation.id} atribuída a {new_agent.email} "
-                f"(department removido - só na caixa do atendente até nova transferência ou encerramento)"
+                f"(permanece no departamento com aviso de quem está atendendo)"
             )
         else:
             # Transferir só para departamento (sem agente): conversa vai para a fila do departamento

@@ -504,6 +504,15 @@ export function ConversationList() {
                   </div>
                 )}
 
+                {/* Aviso: Fulano está atendendo (apenas na aba do departamento) */}
+                {conversationItem.assigned_to && activeDepartment?.id !== 'my_conversations' && activeDepartment?.id !== 'inbox' && (
+                  <div className="flex items-center gap-1 mb-1">
+                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-200 rounded text-[10px] font-medium">
+                      👤 {(conversationItem.assigned_to_data?.first_name || conversationItem.assigned_to_data?.email || 'Atendente').trim() || 'Atendente'} está atendendo
+                    </span>
+                  </div>
+                )}
+
                 {/* Última mensagem + Badge de não lidas */}
                 <div className="flex items-center justify-between">
                   {/* ✅ MELHORIA UX: Loading state para última mensagem */}
