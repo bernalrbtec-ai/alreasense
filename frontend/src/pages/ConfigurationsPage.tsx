@@ -1627,7 +1627,7 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const handleSecretaryModalSave = () => {
+  const handleSecretaryModalSave = async () => {
     if (!secretaryProfile) return
     
     // ✅ LOG CRÍTICO: Verificar estado ANTES de converter
@@ -1646,18 +1646,70 @@ export default function ConfigurationsPage() {
     console.log('[SECRETARY MODAL SAVE] ⚠️ Email incluído?', backendFormData.hasOwnProperty('email'), '| Valor:', backendFormData.email)
     console.log('[SECRETARY MODAL SAVE] ⚠️ Business_area incluído?', backendFormData.hasOwnProperty('business_area'), '| Valor:', backendFormData.business_area)
     
-    // Atualizar form_data no formato correto do backend
+    // ✅ CORREÇÃO CRÍTICA: Criar perfil atualizado e salvar diretamente, sem depender do estado React
     const updatedProfile = {
       ...secretaryProfile,
       form_data: backendFormData
     }
     console.log('[SECRETARY MODAL SAVE] ⚠️ updatedProfile.form_data:', updatedProfile.form_data)
-    setSecretaryProfile(updatedProfile)
     
-    // Salvar
-    setTimeout(() => {
-      handleSaveSecretaryProfile(true)
-    }, 100)
+    // Salvar diretamente usando o objeto atualizado, não o estado
+    const errors: Record<string, string> = {}
+    if (updatedProfile.inbox_idle_minutes < 0 || updatedProfile.inbox_idle_minutes > 1440) {
+      errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
+    }
+    setSecretaryProfileErrors(errors)
+    if (Object.keys(errors).length > 0) return
+    
+    const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
+    try {
+      setSecretaryProfileSaving(true)
+      console.log('[SECRETARY MODAL SAVE] ⚠️ Enviando para API:', updatedProfile)
+      const response = await api.put('/ai/secretary/profile/', updatedProfile)
+      
+      // ✅ CORREÇÃO: Atualizar com os dados retornados do servidor (garante sincronização)
+      if (response.data) {
+        const savedProfile = {
+          form_data: response.data?.form_data ?? {},
+          prompt: response.data?.prompt ?? '',
+          signature_name: response.data?.signature_name ?? '',
+          use_memory: response.data?.use_memory ?? true,
+          is_active: response.data?.is_active ?? false,
+          inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
+        }
+        console.log('[SECRETARY MODAL SAVE] Dados retornados do servidor:', {
+          form_data_keys: Object.keys(savedProfile.form_data),
+          form_data: savedProfile.form_data,
+          is_active: savedProfile.is_active
+        })
+        setSecretaryProfile(savedProfile)
+        
+        // ✅ NOVO: Atualizar também o secretaryFormData para manter sincronizado
+        const updatedStructuredData = mapFormDataToStructured(savedProfile.form_data)
+        console.log('[SECRETARY MODAL SAVE] Dados estruturados atualizados:', updatedStructuredData)
+        setSecretaryFormData(updatedStructuredData)
+      }
+      
+      setSecretaryProfileErrors({})
+      updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
+      
+      setIsSecretaryModalOpen(false)
+      // ✅ NOVO: Recarregar dados do servidor após salvar para garantir sincronização completa
+      setTimeout(() => {
+        fetchSecretaryProfile()
+      }, 500)
+      if (updatedProfile.is_active && aiSettings?.secretary_enabled) {
+        showSuccessToast('A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.')
+      }
+    } catch (error: any) {
+      const apiErrors = error.response?.data?.errors || {}
+      if (apiErrors && typeof apiErrors === 'object') {
+        setSecretaryProfileErrors(apiErrors)
+      }
+      updateToastError(toastId, 'salvar', 'Perfil da Secretária', error)
+    } finally {
+      setSecretaryProfileSaving(false)
+    }
   }
 
   const fetchAiModels = async (currentSettings?: AiSettings, overrideUrl?: string) => {
@@ -4256,7 +4308,11 @@ export default function ConfigurationsPage() {
                       <Input
                         id="ramo"
                         value={secretaryFormData.ramo || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, ramo: e.target.value })}
+                        onChange={(e) => {
+                          const newValue = e.target.value
+                          console.log('[SECRETARY INPUT] Ramo alterado:', newValue)
+                          setSecretaryFormData({ ...secretaryFormData, ramo: newValue })
+                        }}
                         placeholder="Ex: Tecnologia, Varejo, Serviços"
                         className="mt-1"
                       />
@@ -4277,7 +4333,11 @@ export default function ConfigurationsPage() {
                         id="email"
                         type="email"
                         value={secretaryFormData.email || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, email: e.target.value })}
+                        onChange={(e) => {
+                          const newValue = e.target.value
+                          console.log('[SECRETARY INPUT] Email alterado:', newValue)
+                          setSecretaryFormData({ ...secretaryFormData, email: newValue })
+                        }}
                         placeholder="contato@empresa.com"
                         className="mt-1"
                       />
