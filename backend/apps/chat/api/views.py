@@ -3564,8 +3564,12 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             # Não falhar a transferência se a mensagem não puder ser criada
             # Mas logar o erro para diagnóstico
         
-        # ✅ NOVO: Enviar mensagem automática de transferência para o cliente (fallback se transfer_message vazio)
-        if new_department_id and conversation.department:
+        # ✅ Enviar mensagem automática ao cliente só quando o DEPARTAMENTO mudar (não ao trocar só de agente no mesmo depto)
+        department_changed = (
+            (old_department is None and conversation.department is not None)
+            or (old_department is not None and conversation.department is not None and old_department.id != conversation.department.id)
+        )
+        if department_changed and conversation.department:
             try:
                 import httpx
                 from apps.notifications.models import WhatsAppInstance
