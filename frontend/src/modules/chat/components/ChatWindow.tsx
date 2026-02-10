@@ -439,6 +439,11 @@ export function ChatWindow() {
     }
   };
 
+  /**
+   * Iniciar atendimento: atribui a conversa ao usuário atual mantendo o departamento.
+   * Mesmo comportamento da transferência: conversa permanece na caixa do departamento
+   * (com "X está atendendo") e também em "Minhas conversas".
+   */
   const handleStartConversation = async () => {
     if (!activeConversation) return;
     
@@ -845,9 +850,8 @@ export function ChatWindow() {
           </div>
         </div>
 
-        {/* Botão INICIAR ATENDIMENTO */}
-        {/* ✅ Mostrar quando: não atribuída E (pending OU open com department - ex: Suporte) */}
-        {/* O método start() remove o department e atribui ao usuário */}
+        {/* INICIAR ATENDIMENTO: atribui ao usuário; mantém no departamento; aparece nos dois lugares (departamento + Minhas conversas) com "X está atendendo" */}
+        {/* Mostrar quando: conversa não atribuída E (pending OU open com department) */}
         {activeConversation && 
          !activeConversation.assigned_to && 
          (activeConversation.status === 'pending' || 

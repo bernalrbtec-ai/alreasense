@@ -491,8 +491,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
     @action(detail=True, methods=['post'], url_path='start')
     def start_attendance(self, request, pk=None):
         """
-        Inicia atendimento de uma conversa pendente, atribuindo-a ao usuário atual.
-        Remove a conversa do departamento e atribui diretamente ao usuário.
+        Iniciar atendimento: atribui a conversa ao usuário atual mantendo o departamento.
+        Comportamento igual à transferência: conversa permanece na caixa do departamento
+        (com rótulo "X está atendendo") e também em "Minhas conversas".
         POST /conversations/{id}/start/
         """
         import logging
@@ -516,11 +517,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         old_department = conversation.department
         old_status = conversation.status
         
-        # Atribuir ao usuário atual
+        # Atribuir ao usuário atual; manter departamento para conversa ficar nos dois lugares (departamento + Minhas conversas)
         conversation.assigned_to = user
-        conversation.department = None  # Remover do departamento
+        # department não é alterado: conversa continua no departamento com "X está atendendo"
         conversation.status = 'open'
-        conversation.save(update_fields=['assigned_to', 'department', 'status'])
+        conversation.save(update_fields=['assigned_to', 'status'])
         
         # ✅ LOGS: Log detalhado
         logger.info(
@@ -530,7 +531,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         logger.info(f"   📋 Contato: {conversation.contact_name} ({conversation.contact_phone})")
         logger.info(f"   👤 Atribuído para: {user.get_full_name() or user.email}")
         logger.info(f"   📊 Status anterior: {old_status} → Status novo: {conversation.status}")
-        logger.info(f"   🏢 Departamento anterior: {old_department.name if old_department else 'Nenhum'} → Departamento novo: Nenhum (atribuído diretamente)")
+        logger.info(f"   🏢 Departamento mantido: {old_department.name if old_department else 'Inbox'} (conversa nos dois lugares)")
         
         # Criar mensagem interna
         try:
