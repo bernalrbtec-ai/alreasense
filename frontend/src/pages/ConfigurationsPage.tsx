@@ -1456,6 +1456,11 @@ export default function ConfigurationsPage() {
   const mapStructuredToFormData = (structuredData: typeof secretaryFormData): Record<string, string> => {
     const backendFormData: Record<string, string> = {}
     
+    // Log detalhado ANTES de processar
+    console.log('[SECRETARY MAP] Dados estruturados recebidos (ANTES):', structuredData)
+    console.log('[SECRETARY MAP] Email raw:', structuredData.email, '| Email trimmed:', structuredData.email?.trim())
+    console.log('[SECRETARY MAP] Ramo raw:', structuredData.ramo, '| Ramo trimmed:', structuredData.ramo?.trim())
+    
     // Mapear campos do formulário (português) para formato do backend (inglês)
     // ✅ CORREÇÃO: Incluir TODOS os campos, mesmo vazios, para manter estrutura consistente
     // Campos obrigatórios/principais: sempre incluir se tiver valor
@@ -1476,16 +1481,38 @@ export default function ConfigurationsPage() {
     }
     
     // ✅ CORREÇÃO CRÍTICA: email e business_area devem ser incluídos se preenchidos
-    // (mesmo que vazios, para manter estrutura, mas vamos incluir apenas se tiver valor para não poluir)
-    if (structuredData.email?.trim()) {
-      backendFormData.email = structuredData.email.trim()
+    // Verificar se os campos existem e têm valor
+    const emailValue = structuredData.email?.trim()
+    const ramoValue = structuredData.ramo?.trim()
+    
+    console.log('[SECRETARY MAP] Verificando email:', {
+      exists: structuredData.email !== undefined,
+      value: structuredData.email,
+      trimmed: emailValue,
+      willInclude: !!emailValue
+    })
+    console.log('[SECRETARY MAP] Verificando ramo:', {
+      exists: structuredData.ramo !== undefined,
+      value: structuredData.ramo,
+      trimmed: ramoValue,
+      willInclude: !!ramoValue
+    })
+    
+    if (emailValue) {
+      backendFormData.email = emailValue
+      console.log('[SECRETARY MAP] ✅ Email incluído:', emailValue)
+    } else {
+      console.log('[SECRETARY MAP] ❌ Email NÃO incluído (vazio ou undefined)')
     }
-    if (structuredData.ramo?.trim()) {
-      backendFormData.business_area = structuredData.ramo.trim()
+    
+    if (ramoValue) {
+      backendFormData.business_area = ramoValue
+      console.log('[SECRETARY MAP] ✅ Ramo incluído:', ramoValue)
+    } else {
+      console.log('[SECRETARY MAP] ❌ Ramo NÃO incluído (vazio ou undefined)')
     }
     
     // Log para debug
-    console.log('[SECRETARY MAP] Dados estruturados recebidos:', structuredData)
     console.log('[SECRETARY MAP] Dados convertidos para backend:', backendFormData)
     console.log('[SECRETARY MAP] Campos incluídos:', Object.keys(backendFormData))
     
@@ -1603,6 +1630,12 @@ export default function ConfigurationsPage() {
   const handleSecretaryModalSave = () => {
     if (!secretaryProfile) return
     
+    // ✅ LOG CRÍTICO: Verificar estado ANTES de converter
+    console.log('[SECRETARY MODAL SAVE] ⚠️ Estado ANTES da conversão:')
+    console.log('[SECRETARY MODAL SAVE] secretaryFormData completo:', JSON.stringify(secretaryFormData, null, 2))
+    console.log('[SECRETARY MODAL SAVE] Email no estado:', secretaryFormData.email, '| Tipo:', typeof secretaryFormData.email)
+    console.log('[SECRETARY MODAL SAVE] Ramo no estado:', secretaryFormData.ramo, '| Tipo:', typeof secretaryFormData.ramo)
+    
     // ✅ CORREÇÃO: Converter dados estruturados (português) para formato do backend (inglês)
     const backendFormData = mapStructuredToFormData(secretaryFormData)
     
@@ -1610,12 +1643,15 @@ export default function ConfigurationsPage() {
     console.log('[SECRETARY MODAL SAVE] Dados do formulário (português):', secretaryFormData)
     console.log('[SECRETARY MODAL SAVE] Dados convertidos (inglês):', backendFormData)
     console.log('[SECRETARY MODAL SAVE] Campos que serão salvos:', Object.keys(backendFormData))
+    console.log('[SECRETARY MODAL SAVE] ⚠️ Email incluído?', backendFormData.hasOwnProperty('email'), '| Valor:', backendFormData.email)
+    console.log('[SECRETARY MODAL SAVE] ⚠️ Business_area incluído?', backendFormData.hasOwnProperty('business_area'), '| Valor:', backendFormData.business_area)
     
     // Atualizar form_data no formato correto do backend
     const updatedProfile = {
       ...secretaryProfile,
       form_data: backendFormData
     }
+    console.log('[SECRETARY MODAL SAVE] ⚠️ updatedProfile.form_data:', updatedProfile.form_data)
     setSecretaryProfile(updatedProfile)
     
     // Salvar
