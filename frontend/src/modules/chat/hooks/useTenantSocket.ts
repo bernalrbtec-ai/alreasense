@@ -196,9 +196,16 @@ export function useTenantSocket() {
                 isAudio: data.data?.mime_type?.startsWith('audio/'),
                 hasTranscription: !!data.data?.transcription
               });
-              // ✅ FASE 2: Fallback: buscar do backend se messageId estiver disponível (pode ser de outra conversa que será aberta depois)
+              // ✅ CORREÇÃO TRANSCRIÇÃO TARDIA: Fallback para verificar se mensagem é da conversa ativa
+              // Para transcrições que chegam depois, só atualizar se for da conversa ativa
               if (messageId) {
-                console.log('ℹ️ [TENANT WS] Tentando buscar mensagem do backend para verificar conversa...');
+                console.log('ℹ️ [TENANT WS] Tentando buscar mensagem do backend para verificar conversa...', {
+                  attachmentId,
+                  messageId,
+                  mimeType: data.data?.mime_type,
+                  isAudio: data.data?.mime_type?.startsWith('audio/'),
+                  hasTranscription: !!data.data?.transcription
+                });
                 api.get(`/chat/messages/${messageId}/`)
                   .then((response) => {
                     const freshMessage = response.data;
@@ -207,14 +214,26 @@ export function useTenantSocket() {
                     const freshConvId = freshMessage.conversation_id 
                       ? String(freshMessage.conversation_id)
                       : (freshMessage.conversation?.id ? String(freshMessage.conversation.id) : null);
-                    // Se for da conversa ativa, atualizar; senão, atualizar na conversa correta
+                    // ✅ CRÍTICO: Só atualizar se for da conversa ativa (não atualizar mensagens de outras conversas)
+                    // Isso evita que transcrições tardias apareçam na conversa errada
                     if (freshConvId === activeConversationId) {
                       updateMessage(activeConversationId, freshMessage);
-                      console.log('✅ [TENANT WS] Mensagem atualizada via fetch (era da conversa ativa)');
-                    } else if (freshConvId) {
-                      // Atualizar na conversa correta (mesmo que não esteja ativa)
-                      updateMessage(freshConvId, freshMessage);
-                      console.log('✅ [TENANT WS] Mensagem atualizada na conversa correta:', freshConvId);
+                      console.log('✅ [TENANT WS] Mensagem atualizada via fetch (era da conversa ativa)', {
+                        messageId,
+                        isAudio: data.data?.mime_type?.startsWith('audio/'),
+                        hasTranscription: !!data.data?.transcription
+                      });
+                    } else {
+                      // ✅ CORREÇÃO: Não atualizar mensagens de outras conversas (evita aparecer na conversa errada)
+                      // A mensagem será atualizada quando a conversa correta for aberta
+                      console.log('⚠️ [TENANT WS] Mensagem é de outra conversa, ignorando atualização:', {
+                        messageId,
+                        freshConvId,
+                        activeConversationId,
+                        isAudio: data.data?.mime_type?.startsWith('audio/'),
+                        hasTranscription: !!data.data?.transcription,
+                        reason: 'Atualização será aplicada quando conversa correta for aberta'
+                      });
                     }
                   })
                   .catch((error) => {
@@ -325,28 +344,47 @@ export function useTenantSocket() {
             updateMessage(activeConversationId, updatedMessage);
             console.log('✅ [TENANT WS] Attachment atualizado via tenant socket (conversa:', activeConversationId, ')');
           } else {
-            // ✅ FASE 2: Mensagem não encontrada na conversa ativa - buscar do backend e verificar conversation_id
-            console.log('ℹ️ [TENANT WS] Mensagem não encontrada localmente, buscando do backend...');
+            // ✅ CORREÇÃO TRANSCRIÇÃO TARDIA: Mensagem não encontrada na conversa ativa
+            // Para transcrições que chegam depois, só atualizar se for da conversa ativa
+            // Não atualizar mensagens de outras conversas (evita aparecer na conversa errada)
+            console.log('ℹ️ [TENANT WS] Mensagem não encontrada na conversa ativa, buscando do backend...', {
+              attachmentId,
+              messageId,
+              mimeType: data.data?.mime_type,
+              isAudio: data.data?.mime_type?.startsWith('audio/'),
+              hasTranscription: !!data.data?.transcription,
+              activeConversationId: currentActiveConversation?.id
+            });
             if (messageId && currentActiveConversation?.id) {
               const activeConversationId = String(currentActiveConversation.id);
               api.get(`/chat/messages/${messageId}/`)
                 .then((response) => {
                   const freshMessage = response.data;
                   if (!freshMessage) return;
-                  // ✅ FASE 2: Verificar conversation_id antes de atualizar
+                  // ✅ CORREÇÃO TRANSCRIÇÃO TARDIA: Verificar conversation_id antes de atualizar
                   const freshConvId = freshMessage.conversation_id 
                     ? String(freshMessage.conversation_id)
                     : (freshMessage.conversation?.id ? String(freshMessage.conversation.id) : null);
-                  // Só atualizar se for da conversa ativa
+                  // ✅ CRÍTICO: Só atualizar se for da conversa ativa (não atualizar mensagens de outras conversas)
+                  // Isso evita que transcrições tardias apareçam na conversa errada
                   if (freshConvId === activeConversationId) {
                     updateMessage(activeConversationId, freshMessage);
-                    console.log('✅ [TENANT WS] Mensagem atualizada via fetch (conversa ativa)');
-                  } else if (freshConvId) {
-                    // Atualizar na conversa correta (mesmo que não esteja ativa)
-                    updateMessage(freshConvId, freshMessage);
-                    console.log('✅ [TENANT WS] Mensagem atualizada na conversa correta:', freshConvId);
+                    console.log('✅ [TENANT WS] Mensagem atualizada via fetch (conversa ativa)', {
+                      messageId,
+                      isAudio: data.data?.mime_type?.startsWith('audio/'),
+                      hasTranscription: !!data.data?.transcription
+                    });
                   } else {
-                    console.warn('⚠️ [TENANT WS] Mensagem sem conversation_id válido, ignorando');
+                    // ✅ CORREÇÃO: Não atualizar mensagens de outras conversas (evita aparecer na conversa errada)
+                    // A mensagem será atualizada quando a conversa correta for aberta
+                    console.log('⚠️ [TENANT WS] Mensagem é de outra conversa, ignorando atualização:', {
+                      messageId,
+                      freshConvId,
+                      activeConversationId,
+                      isAudio: data.data?.mime_type?.startsWith('audio/'),
+                      hasTranscription: !!data.data?.transcription,
+                      reason: 'Atualização será aplicada quando conversa correta for aberta'
+                    });
                   }
                 })
                 .catch((error) => {
