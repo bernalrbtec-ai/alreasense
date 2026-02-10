@@ -156,8 +156,12 @@ export function useTenantSocket() {
         break;
 
       case 'attachment_updated':
-        // ✅ FASE 1 + 2: Tratar attachment_updated apenas da conversa ativa para evitar imagens em conversas erradas
-        console.log('📎 [TENANT WS] Attachment atualizado:', data.data?.attachment_id);
+        // ✅ FASE 1 + 2: Tratar attachment_updated apenas da conversa ativa para evitar attachments (imagens/áudios) em conversas erradas
+        console.log('📎 [TENANT WS] Attachment atualizado:', {
+          attachmentId: data.data?.attachment_id,
+          mimeType: data.data?.mime_type,
+          hasTranscription: !!data.data?.transcription
+        });
         if (data.data?.attachment_id) {
           const { updateAttachment, updateMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
           const attachmentId = data.data.attachment_id;
@@ -186,8 +190,11 @@ export function useTenantSocket() {
               console.log('⚠️ [TENANT WS] Attachment de mensagem de outra conversa, ignorando:', {
                 attachmentId,
                 messageId,
+                mimeType: data.data?.mime_type,
                 messageConversationId,
-                activeConversationId
+                activeConversationId,
+                isAudio: data.data?.mime_type?.startsWith('audio/'),
+                hasTranscription: !!data.data?.transcription
               });
               // ✅ FASE 2: Fallback: buscar do backend se messageId estiver disponível (pode ser de outra conversa que será aberta depois)
               if (messageId) {
@@ -243,11 +250,15 @@ export function useTenantSocket() {
             // ✅ Se está processando OU URL mudou OU URL estava vazia, ATUALIZAR
             console.log('🔄 [TENANT WS] Atualizando attachment:', {
               attachmentId,
+              mimeType: data.data?.mime_type,
+              isAudio: data.data?.mime_type?.startsWith('audio/'),
               isProcessing,
               isSameUrl,
               hasValidUrl,
+              hasTranscription: !!data.data?.transcription,
               oldUrl: existingAttachment?.file_url?.substring(0, 80) || 'VAZIO',
               newUrl: fileUrl?.substring(0, 80) || 'VAZIO',
+              conversationId: activeConversationId,
               oldMetadata: existingAttachment?.metadata,
               newMetadata: data.data?.metadata
             });
