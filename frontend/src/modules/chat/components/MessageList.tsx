@@ -293,6 +293,7 @@ export function MessageList() {
   console.log('✅ [MessageList] Funções do store capturadas');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
+  const lastMessageIdRef = useRef<string | null>(null); // ✅ NOVO: Rastrear última mensagem para detectar novas vs antigas
   
   // ✅ CORREÇÃO: Usar hooks DEPOIS de inicializar estados e capturar conversationId
   // ✅ CORREÇÃO CRÍTICA: useUserAccess agora é seguro e sempre retorna valores válidos
@@ -558,12 +559,22 @@ export function MessageList() {
       }
     };
 
+    // ✅ CORREÇÃO: Resetar ref da última mensagem ao trocar de conversa
+    lastMessageIdRef.current = null;
+    
     fetchMessages();
   }, [activeConversation?.id, activeConversation?.created_at, setMessages]);
 
   // Auto-scroll quando novas mensagens chegam + fade-in para novas mensagens
   useEffect(() => {
     if (messages.length === 0) return;
+    
+    // ✅ CORREÇÃO: Identificar se última mensagem mudou (nova mensagem chegou) vs primeira mudou (mensagens antigas carregadas)
+    const currentLastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id : null;
+    const lastMessageChanged = currentLastMessageId && currentLastMessageId !== lastMessageIdRef.current;
+    
+    // ✅ CORREÇÃO: Só fazer scroll se última mensagem mudou (nova mensagem chegou) E não está carregando mensagens antigas
+    const shouldScrollToBottom = lastMessageChanged && !loadingOlder;
     
     // Identificar novas mensagens (não visíveis ainda)
     const newMessages = messages.filter((messageItem) => !visibleMessages.has(messageItem.id));
@@ -577,11 +588,18 @@ export function MessageList() {
       });
     }
     
-    // Scroll suave ao final
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
-  }, [messages, visibleMessages]);
+    // ✅ CORREÇÃO: Scroll suave ao final APENAS se nova mensagem chegou (não ao carregar antigas)
+    if (shouldScrollToBottom) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
+    }
+    
+    // ✅ Atualizar ref da última mensagem
+    if (currentLastMessageId) {
+      lastMessageIdRef.current = currentLastMessageId;
+    }
+  }, [messages, visibleMessages, loadingOlder]);
 
   // ✅ PERFORMANCE: Memoizar funções para evitar recriação a cada render
   const getStatusIcon = useCallback((status: string) => {
@@ -792,20 +810,25 @@ export function MessageList() {
                     const olderMsgs = data.results || data;
                     
                     if (olderMsgs.length > 0) {
+                      // ✅ CORREÇÃO: Salvar scroll position antes de adicionar mensagens
+                      const container = messagesStartRef.current?.parentElement as HTMLElement | null;
+                      const scrollHeightBefore = container?.scrollHeight || 0;
+                      const scrollTopBefore = container?.scrollTop || 0;
+                      
                       // Adicionar mensagens antigas no início
                       setMessages([...olderMsgs.reverse(), ...messages], activeConversation.id);
                       setHasMoreMessages(data.has_more || false);
                       
-                      // Manter scroll na posição atual (sem pular para o topo)
-                      const container = messagesStartRef.current?.parentElement;
-                      if (container) {
-                        const scrollHeightBefore = container.scrollHeight;
-                        setTimeout(() => {
+                      // ✅ CORREÇÃO: Manter scroll na posição visual após adicionar mensagens antigas
+                      // Usar requestAnimationFrame para garantir que DOM foi atualizado
+                      requestAnimationFrame(() => {
+                        if (container) {
                           const scrollHeightAfter = container.scrollHeight;
                           const scrollDiff = scrollHeightAfter - scrollHeightBefore;
-                          container.scrollTop += scrollDiff;
-                        }, 0);
-                      }
+                          // Ajustar scroll para manter a mesma posição visual
+                          container.scrollTop = scrollTopBefore + scrollDiff;
+                        }
+                      });
                     } else {
                       setHasMoreMessages(false);
                     }
