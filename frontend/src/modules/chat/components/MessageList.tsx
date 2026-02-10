@@ -853,9 +853,18 @@ export function MessageList() {
               return null;
             }
             
+            // ✅ FASE 1: Key composta para evitar reutilização incorreta de componentes entre conversas
+            const messageKey = messageItem.conversation_id 
+              ? `${messageItem.conversation_id}-${messageItem.id}`
+              : (typeof messageItem.conversation === 'string' 
+                  ? `${messageItem.conversation}-${messageItem.id}`
+                  : (typeof messageItem.conversation === 'object' && messageItem.conversation?.id
+                      ? `${messageItem.conversation.id}-${messageItem.id}`
+                      : messageItem.id));
+            
             return (
             <div
-              key={messageItem.id}
+              key={messageKey}
               data-message-id={messageItem.id}
               className={`flex flex-col ${messageItem.direction === 'outgoing' ? 'items-end' : 'items-start'} ${
                 visibleMessages.has(messageItem.id) 

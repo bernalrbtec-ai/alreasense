@@ -156,23 +156,66 @@ export function useTenantSocket() {
         break;
 
       case 'attachment_updated':
-        // ✅ NOVO: Tratar attachment_updated do grupo do tenant
-        // Isso garante que attachments sejam atualizados mesmo se conversa não estiver aberta
+        // ✅ FASE 1 + 2: Tratar attachment_updated apenas da conversa ativa para evitar imagens em conversas erradas
         console.log('📎 [TENANT WS] Attachment atualizado:', data.data?.attachment_id);
         if (data.data?.attachment_id) {
-          // Atualizar attachment via store (mesmo se conversa não estiver aberta)
-          const { updateAttachment, addMessage, updateMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
-          const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
+          const { updateAttachment, updateMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
           const attachmentId = data.data.attachment_id;
           const messageId = data.data.message_id;
           
-          // Buscar mensagem no store
+          // ✅ FASE 2: Buscar mensagem APENAS na conversa ativa (evita atualizar mensagem de outra conversa)
+          const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
           const messageWithAttachment = messages.find(m => 
             m.id === messageId || 
             m.attachments?.some(a => a.id === attachmentId)
           );
           
-          if (messageWithAttachment) {
+          // ✅ FASE 2: Extrair conversation_id da mensagem encontrada e verificar se pertence à conversa ativa
+          if (messageWithAttachment && currentActiveConversation) {
+            const messageConversationId = messageWithAttachment.conversation_id 
+              ? String(messageWithAttachment.conversation_id)
+              : (typeof messageWithAttachment.conversation === 'object' && messageWithAttachment.conversation?.id
+                  ? String(messageWithAttachment.conversation.id)
+                  : (typeof messageWithAttachment.conversation === 'string'
+                      ? messageWithAttachment.conversation
+                      : null));
+            const activeConversationId = String(currentActiveConversation.id);
+            
+            // ✅ FASE 2: Verificar se mensagem pertence à conversa ativa antes de atualizar
+            if (messageConversationId && messageConversationId !== activeConversationId) {
+              console.log('⚠️ [TENANT WS] Attachment de mensagem de outra conversa, ignorando:', {
+                attachmentId,
+                messageId,
+                messageConversationId,
+                activeConversationId
+              });
+              // ✅ FASE 2: Fallback: buscar do backend se messageId estiver disponível (pode ser de outra conversa que será aberta depois)
+              if (messageId) {
+                console.log('ℹ️ [TENANT WS] Tentando buscar mensagem do backend para verificar conversa...');
+                api.get(`/chat/messages/${messageId}/`)
+                  .then((response) => {
+                    const freshMessage = response.data;
+                    if (!freshMessage) return;
+                    // Verificar conversation_id da mensagem fresca
+                    const freshConvId = freshMessage.conversation_id 
+                      ? String(freshMessage.conversation_id)
+                      : (freshMessage.conversation?.id ? String(freshMessage.conversation.id) : null);
+                    // Se for da conversa ativa, atualizar; senão, atualizar na conversa correta
+                    if (freshConvId === activeConversationId) {
+                      updateMessage(activeConversationId, freshMessage);
+                      console.log('✅ [TENANT WS] Mensagem atualizada via fetch (era da conversa ativa)');
+                    } else if (freshConvId) {
+                      // Atualizar na conversa correta (mesmo que não esteja ativa)
+                      updateMessage(freshConvId, freshMessage);
+                      console.log('✅ [TENANT WS] Mensagem atualizada na conversa correta:', freshConvId);
+                    }
+                  })
+                  .catch((error) => {
+                    console.warn('⚠️ [TENANT WS] Falha ao buscar mensagem atualizada:', error);
+                  });
+              }
+              return; // Não atualizar mensagem de outra conversa
+            }
             // ✅ MESMA LÓGICA: Verificar se já está atualizado antes de processar
             const existingAttachment = messageWithAttachment.attachments?.find(a => a.id === attachmentId);
             const fileUrl = data.data.file_url || '';
@@ -237,10 +280,11 @@ export function useTenantSocket() {
               ai_metadata: data.data.ai_metadata,
             } as any);
             
-            // Forçar re-render da mensagem
-            // ✅ CORREÇÃO: Incluir size_bytes e original_filename para garantir atualização completa
+            // ✅ FASE 1: Usar updateMessage ao invés de addMessage para garantir conversation_id correto
+            // Forçar re-render da mensagem com attachment atualizado
             const updatedMessage = {
               ...messageWithAttachment,
+              conversation_id: activeConversationId, // ✅ Garantir conversation_id correto
               attachments: messageWithAttachment.attachments?.map(att => {
                 if (att.id === attachmentId) {
                   const updatedAtt = {
@@ -248,9 +292,9 @@ export function useTenantSocket() {
                     file_url: fileUrl,
                     thumbnail_url: data.data.thumbnail_url,
                     mime_type: data.data.mime_type,
-                    size_bytes: sizeBytes,  // ✅ CORREÇÃO: Usar mesmo valor do updateAttachment
-                    original_filename: originalFilename,  // ✅ CORREÇÃO: Usar mesmo valor do updateAttachment
-                    metadata: updatedMetadata,  // ✅ Metadata sem flag processing
+                    size_bytes: sizeBytes,
+                    original_filename: originalFilename,
+                    metadata: updatedMetadata,
                     transcription: data.data.transcription,
                     transcription_language: data.data.transcription_language,
                     ai_metadata: data.data.ai_metadata,
@@ -266,17 +310,33 @@ export function useTenantSocket() {
                 return att;
               })
             };
-            addMessage(updatedMessage as any);
-            console.log('✅ [TENANT WS] Attachment atualizado via tenant socket');
+            // ✅ FASE 1: updateMessage garante que a mensagem vai para a conversa correta
+            updateMessage(activeConversationId, updatedMessage);
+            console.log('✅ [TENANT WS] Attachment atualizado via tenant socket (conversa:', activeConversationId, ')');
           } else {
+            // ✅ FASE 2: Mensagem não encontrada na conversa ativa - buscar do backend e verificar conversation_id
             console.log('ℹ️ [TENANT WS] Mensagem não encontrada localmente, buscando do backend...');
             if (messageId && currentActiveConversation?.id) {
+              const activeConversationId = String(currentActiveConversation.id);
               api.get(`/chat/messages/${messageId}/`)
                 .then((response) => {
                   const freshMessage = response.data;
                   if (!freshMessage) return;
-                  updateMessage(String(currentActiveConversation.id), freshMessage);
-                  console.log('✅ [TENANT WS] Mensagem atualizada via fetch');
+                  // ✅ FASE 2: Verificar conversation_id antes de atualizar
+                  const freshConvId = freshMessage.conversation_id 
+                    ? String(freshMessage.conversation_id)
+                    : (freshMessage.conversation?.id ? String(freshMessage.conversation.id) : null);
+                  // Só atualizar se for da conversa ativa
+                  if (freshConvId === activeConversationId) {
+                    updateMessage(activeConversationId, freshMessage);
+                    console.log('✅ [TENANT WS] Mensagem atualizada via fetch (conversa ativa)');
+                  } else if (freshConvId) {
+                    // Atualizar na conversa correta (mesmo que não esteja ativa)
+                    updateMessage(freshConvId, freshMessage);
+                    console.log('✅ [TENANT WS] Mensagem atualizada na conversa correta:', freshConvId);
+                  } else {
+                    console.warn('⚠️ [TENANT WS] Mensagem sem conversation_id válido, ignorando');
+                  }
                 })
                 .catch((error) => {
                   console.warn('⚠️ [TENANT WS] Falha ao buscar mensagem atualizada:', error);
