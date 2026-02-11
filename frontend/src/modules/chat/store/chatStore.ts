@@ -293,14 +293,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return state;
     }
     
+    const convIdStr = String(conversationId);
+    // ✅ Garantir conversation_id em cada mensagem (API pode enviar "conversation" ou omitir)
+    const messagesWithConv = messages.map((m) => ({
+      ...m,
+      conversation_id: m.conversation_id ?? m.conversation ?? convIdStr,
+      conversation: m.conversation ?? m.conversation_id ?? convIdStr,
+    }));
+    
     // ✅ Normalizar novas mensagens
-    const normalized = normalizeMessages(messages);
+    const normalized = normalizeMessages(messagesWithConv);
+    
+    // ✅ Quando setMessages(msgs, conversationId) é chamado, sempre usar a lista ordenada destas mensagens
+    // para esta conversa (evita mensagens fora da lista se a API omitir conversation em alguma)
+    const sortedMsgs = sortMessagesByTimestamp(messagesWithConv);
+    const orderedIds = sortedMsgs.map((m) => m.id).filter(Boolean) as string[];
     
     // ✅ Merge com mensagens existentes (preservar outras conversas)
     const updatedById = { ...state.messages.byId, ...normalized.byId };
     const updatedByConversationId = { 
       ...state.messages.byConversationId,
-      [conversationId]: normalized.byConversationId[conversationId] || []
+      [convIdStr]: orderedIds.length > 0 ? orderedIds : (normalized.byConversationId[convIdStr] || [])
     };
     
     return {
