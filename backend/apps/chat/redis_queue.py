@@ -79,7 +79,7 @@ def get_chat_redis_client():
                 chat_redis_url,
                 decode_responses=True,
                 max_connections=50,  # Connection pooling
-                socket_connect_timeout=10,
+                socket_connect_timeout=5,  # Falhar rápido se Redis inacessível (evita bloquear requests)
                 socket_timeout=30,
                 socket_keepalive=True,
                 socket_keepalive_options={},
@@ -103,21 +103,27 @@ def enqueue_message(queue_name: str, payload: dict):
     """
     Enfileira mensagem no Redis (LPUSH).
     
+    Quando Redis está indisponível (timeout/rede), não levanta exceção:
+    registra aviso e retorna None para não quebrar webhooks/requests.
+    Tasks não-críticas (ex: fetch_profile_pic) são apenas adiadas.
+    
     Args:
         queue_name: Nome da fila (ex: REDIS_QUEUE_SEND_MESSAGE)
         payload: Dados da mensagem
     
     Returns:
         int: Número de mensagens na fila após adicionar
-    
-    Raises:
-        Exception: Se Redis não estiver disponível ou erro ao enfileirar
+        None: Se Redis não disponível (degradação graciosa)
     """
     try:
         client = get_chat_redis_client()
         if client is None:
-            logger.error("❌ [REDIS] Redis client não disponível")
-            raise Exception("Redis client não disponível")
+            logger.warning(
+                "⚠️ [REDIS] Redis indisponível - enfileiramento ignorado (degradação graciosa): %s",
+                queue_name,
+                extra={"queue": queue_name, "payload_keys": list(payload.keys())},
+            )
+            return None
         
         # Enfileirar mensagem (LPUSH)
         message = json.dumps(payload)
@@ -128,6 +134,14 @@ def enqueue_message(queue_name: str, payload: dict):
         
         return queue_length
         
+    except (redis.exceptions.ConnectionError, redis.exceptions.TimeoutError) as e:
+        logger.warning(
+            "⚠️ [REDIS] Falha de conexão ao enfileirar (degradação graciosa): %s - %s",
+            queue_name,
+            e,
+            extra={"queue": queue_name},
+        )
+        return None
     except Exception as e:
         logger.error(f"❌ [REDIS] Erro ao enfileirar mensagem: {e}", exc_info=True)
         raise
