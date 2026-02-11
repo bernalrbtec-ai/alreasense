@@ -240,48 +240,15 @@ export function MessageList() {
   const conversationId = activeConversation?.id;
   console.log('✅ [MessageList] conversationId extraído:', conversationId);
   
-  // ✅ CORREÇÃO CRÍTICA: Usar selector do Zustand que reage às mudanças no store
-  // Observar diretamente messages.byId e messages.byConversationId para a conversa ativa
-  // Isso garante que o componente re-renderize quando novas mensagens são adicionadas
-  console.log('🔍 [MessageList] Capturando messages do store...');
+  // ✅ CORREÇÃO CRÍTICA: Usar chave normalizada (lowercase) para coincidir com o store
+  const conversationKey = conversationId ? String(conversationId).trim().toLowerCase() : '';
+  // ✅ Selector que reage a byId e byConversationId da conversa ativa
   const messages = useChatStore((state) => {
-    console.log('🔍 [MessageList] Selector de messages executado:', {
-      conversationId,
-      hasConversationId: !!conversationId,
-      hasMessagesByConversationId: !!(state.messages.byConversationId[conversationId || '']),
-      messageIdsCount: conversationId ? (state.messages.byConversationId[conversationId] || []).length : 0
-    });
-    
-    if (!conversationId) {
-      console.log('⚠️ [MessageList] Sem conversationId, retornando array vazio');
-      return [];
-    }
-    
-    const messageIds = state.messages.byConversationId[conversationId] || [];
-    console.log('📨 [MessageList] messageIds encontrados:', {
-      conversationId,
-      messageIdsCount: messageIds.length,
-      messageIds: messageIds.slice(0, 5) // Primeiros 5 para não poluir o log
-    });
-    
-    const mappedMessages = messageIds.map((messageIdItem) => {
-      const message = state.messages.byId[messageIdItem];
-      console.log('🔍 [MessageList] Mapeando mensagem:', {
-        id: messageIdItem,
-        hasMessage: !!message,
-        messageId: message?.id,
-        hasReactions: !!(message?.reactions),
-        hasReactionsSummary: !!(message?.reactions_summary)
-      });
-      return message;
-    }).filter(Boolean);
-    
-    console.log('✅ [MessageList] Messages mapeados:', {
-      conversationId,
-      totalMessages: mappedMessages.length
-    });
-    
-    return mappedMessages;
+    if (!conversationKey) return [];
+    const messageIds = state.messages.byConversationId[conversationKey] || [];
+    return messageIds
+      .map((id) => state.messages.byId[String(id)])
+      .filter(Boolean);
   });
   
   console.log('🔍 [MessageList] Capturando outras funções do store...');
