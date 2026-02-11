@@ -53,7 +53,7 @@ terminate_processes() {
 trap terminate_processes SIGINT SIGTERM
 
 log_info "Subindo servidor ASGI com daphne"
-daphne -b 0.0.0.0 -p 8000 alrea_sense.asgi:application &
+daphne -b 0.0.0.0 -p 8000 --application-close-timeout 35 alrea_sense.asgi:application &
 DAPHNE_PID=$!
 
 wait "${DAPHNE_PID}"

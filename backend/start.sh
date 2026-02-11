@@ -42,4 +42,4 @@ python manage.py collectstatic --noinput
 
 # Start the server
 echo "Starting server..."
-exec daphne -b 0.0.0.0 -p $PORT alrea_sense.asgi:application
+exec daphne -b 0.0.0.0 -p $PORT --application-close-timeout 35 alrea_sense.asgi:application
