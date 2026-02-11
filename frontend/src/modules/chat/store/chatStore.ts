@@ -567,7 +567,6 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // ✅ Garantir que messageId está na lista da conversa
     const convKey = normalizeConversationKey(conversationId);
     const conversationMessageIds = (convKey ? state.messages.byConversationId[convKey] : null) || [];
-    const messageIdStr = messageId != null ? String(messageId) : '';
     const updatedByConversationId = {
       ...state.messages.byConversationId,
       [convKey]: conversationMessageIds.includes(messageIdStr)

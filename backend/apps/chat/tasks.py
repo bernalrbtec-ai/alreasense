@@ -3394,198 +3394,141 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str, ret
 async def start_chat_consumers():
     """
     Inicia consumers RabbitMQ para processar filas do chat.
-    Roda em background via management command ou ASGI lifespan.
+    Loop de reconexão: em caso de Connection reset / AMQPConnectionError, aguarda backoff e tenta de novo.
     """
-    try:
-        # ✅ CORREÇÃO: Usar mesmos parâmetros do campaigns consumer
-        import re
-        import os
-        
-        # 🔍 DEBUG: Verificar variáveis de ambiente diretamente
-        logger.info("=" * 80)
-        logger.info("🔍 [CHAT CONSUMER DEBUG] Verificando variáveis RabbitMQ")
-        logger.info("=" * 80)
-        
-        env_private = os.environ.get('RABBITMQ_PRIVATE_URL', 'NOT_SET')
-        env_public = os.environ.get('RABBITMQ_URL', 'NOT_SET')
-        env_user = os.environ.get('RABBITMQ_DEFAULT_USER', 'NOT_SET')
-        env_pass = os.environ.get('RABBITMQ_DEFAULT_PASS', 'NOT_SET')
-        
-        logger.info(f"RABBITMQ_PRIVATE_URL presente: {env_private != 'NOT_SET'}")
-        logger.info(f"RABBITMQ_URL presente: {env_public != 'NOT_SET'}")
-        logger.info(f"RABBITMQ_DEFAULT_USER: {env_user}")
-        logger.info(f"RABBITMQ_DEFAULT_PASS presente: {env_pass != 'NOT_SET'} (len={len(env_pass) if env_pass != 'NOT_SET' else 0})")
-        
-        # ✅ FIX FINAL: Usar URL DIRETAMENTE como Campaigns Consumer
-        # Railway já fornece URL com encoding correto
-        # Aplicar encoding novamente causa DOUBLE ENCODING e falha de autenticação
-        rabbitmq_url = settings.RABBITMQ_URL
-        
-        # Log seguro (mascarar credenciais)
-        safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
-        
-        logger.info(f"settings.RABBITMQ_URL: {safe_url}")
-        logger.info(f"URL length: {len(rabbitmq_url)}")
-        logger.info("=" * 80)
-        logger.info(f"🔍 [CHAT CONSUMER] Conectando ao RabbitMQ: {safe_url}")
-        logger.info(f"🔍 [CHAT CONSUMER] Usando parâmetros de conexão robustos...")
-        
-        connection = await aio_pika.connect_robust(
-            rabbitmq_url,
-            heartbeat=0,  # Desabilitar heartbeat (mesmo do campaigns)
-            blocked_connection_timeout=0,
-            socket_timeout=10,
-            retry_delay=1,
-            connection_attempts=1
-        )
-        logger.info("✅ [CHAT CONSUMER] Conexão RabbitMQ estabelecida com sucesso!")
-        
-        channel = await connection.channel()
-        logger.info("✅ [CHAT CONSUMER] Channel criado com sucesso!")
-        
-        # Declara filas
-        queue_send = await channel.declare_queue(QUEUE_SEND_MESSAGE, durable=True)
-        queue_profile_pic = await channel.declare_queue(QUEUE_FETCH_PROFILE_PIC, durable=True)
-        queue_process_incoming_media = await channel.declare_queue(QUEUE_PROCESS_INCOMING_MEDIA, durable=True)
-        queue_fetch_group_info = await channel.declare_queue(QUEUE_FETCH_GROUP_INFO, durable=True)  # ✅ NOVO
-        
-        logger.info("✅ [CHAT CONSUMER] Filas declaradas")
-        
-        # Consumer: send_message
-        async def on_send_message(message: aio_pika.IncomingMessage):
-            async with message.process():
-                try:
-                    payload = json.loads(message.body.decode())
-                    await handle_send_message(payload['message_id'])
-                except Exception as e:
-                    logger.error(f"❌ [CHAT CONSUMER] Erro send_message: {e}", exc_info=True)
-        
-        # ❌ Consumers download_attachment e migrate_to_s3 REMOVIDOS
-        # Motivo: Fluxo antigo substituído por process_incoming_media
-        
-        # Consumer: fetch_profile_pic
-        async def on_fetch_profile_pic(message: aio_pika.IncomingMessage):
-            async with message.process():
-                try:
-                    payload = json.loads(message.body.decode())
-                    await handle_fetch_profile_pic(
-                        payload['conversation_id'],
-                        payload['phone']
-                    )
-                except Exception as e:
-                    logger.error(f"❌ [CHAT CONSUMER] Erro fetch_profile_pic: {e}", exc_info=True)
-        
-        # Consumer: process_incoming_media (novo fluxo: S3 direto - sem cache)
-        async def on_process_incoming_media(message: aio_pika.IncomingMessage):
-            async with message.process():
-                try:
-                    from apps.chat.media_tasks import handle_process_incoming_media
-                    payload = json.loads(message.body.decode())
-                    logger.info(f"📥 [CHAT CONSUMER] Recebida task process_incoming_media")
-                    logger.info(f"   📌 tenant_id: {payload.get('tenant_id')}")
-                    logger.info(f"   📌 message_id: {payload.get('message_id')}")
-                    logger.info(f"   📌 media_type: {payload.get('media_type')}")
-                    logger.info(f"   📌 media_url: {payload.get('media_url', '')[:100]}...")
-                    logger.info(f"   📌 instance_name: {payload.get('instance_name')}")
-                    logger.info(f"   📌 api_key: {'Configurada' if payload.get('api_key') else 'Não configurada'}")
-                    logger.info(f"   📌 evolution_api_url: {payload.get('evolution_api_url')}")
-                    logger.info(f"   📌 message_key: {payload.get('message_key')}")
-                    message_key_from_payload = payload.get('message_key')
-                    if message_key_from_payload:
-                        logger.info(f"   ✅ [CHAT CONSUMER] message_key recebido: id={message_key_from_payload.get('id')}, remoteJid={message_key_from_payload.get('remoteJid')}")
-                    retry_count = payload.get('_retry_count', 0)
-                    await handle_process_incoming_media(
-                        tenant_id=payload['tenant_id'],
-                        message_id=payload['message_id'],
-                        media_url=payload['media_url'],
-                        media_type=payload['media_type'],
-                        instance_name=payload.get('instance_name'),
-                        api_key=payload.get('api_key'),
-                        evolution_api_url=payload.get('evolution_api_url'),
-                        message_key=message_key_from_payload,
-                        retry_count=retry_count,
-                        mime_type=payload.get('mime_type')
-                    )
-                    logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
-                except InstanceTemporarilyUnavailable as e:
-                    wait_time = e.wait_seconds or compute_backoff(payload.get('_retry_count', 0))
-                    next_retry = payload.get('_retry_count', 0) + 1
-                    logger.warning(
-                        "⏳ [CHAT CONSUMER] Instância indisponível para process_incoming_media (message=%s). Reagendando em %ss. Estado: %s",
-                        payload.get('message_id'),
-                        wait_time,
-                        e.state_payload or {},
-                    )
-                    payload['_retry_count'] = next_retry
-                    payload['_last_error'] = e.state_payload or {}
-                    await asyncio.sleep(wait_time)
-                    await queue_process_incoming_media.channel.default_exchange.publish(
-                        aio_pika.Message(
-                            body=json.dumps(payload).encode(),
-                            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-                        ),
-                        routing_key=queue_process_incoming_media.name,
-                    )
-                except Exception as e:
-                    logger.error(f"❌ [CHAT CONSUMER] Erro process_incoming_media: {e}", exc_info=True)
-                    raise  # ✅ Re-raise para não silenciar erro
-        
-        # Consumer: fetch_group_info (✅ NOVO: busca informações de grupo de forma assíncrona)
-        async def on_fetch_group_info(message: aio_pika.IncomingMessage):
-            async with message.process():
-                try:
-                    from apps.chat.media_tasks import handle_fetch_group_info
-                    payload = json.loads(message.body.decode())
-                    logger.info(f"📥 [CHAT CONSUMER] Recebida task fetch_group_info")
-                    logger.info(f"   📌 conversation_id: {payload.get('conversation_id')}")
-                    logger.info(f"   📌 group_jid: {payload.get('group_jid')}")
-                    await handle_fetch_group_info(
-                        conversation_id=payload['conversation_id'],
-                        group_jid=payload['group_jid'],
-                        instance_name=payload['instance_name'],
-                        api_key=payload['api_key'],
-                        base_url=payload['base_url']
-                    )
-                    logger.info(f"✅ [CHAT CONSUMER] fetch_group_info concluída com sucesso")
-                except Exception as e:
-                    logger.error(f"❌ [CHAT CONSUMER] Erro fetch_group_info: {e}", exc_info=True)
-                    raise  # ✅ Re-raise para não silenciar erro
-        
-        # Inicia consumo
-        await queue_send.consume(on_send_message)
-        await queue_profile_pic.consume(on_fetch_profile_pic)
-        await queue_process_incoming_media.consume(on_process_incoming_media)
-        await queue_fetch_group_info.consume(on_fetch_group_info)  # ✅ NOVO
-        
-        logger.info("🚀 [CHAT CONSUMER] Consumers iniciados e aguardando mensagens")
-        
-        # Mantém rodando
-        await asyncio.Future()
-    
-    except Exception as e:
-        error_msg = str(e)
-        
-        # ✅ DIAGNÓSTICO: Erro de autenticação RabbitMQ
-        if 'ACCESS_REFUSED' in error_msg or 'authentication' in error_msg.lower():
-            logger.error("=" * 80)
-            logger.error("🚨 [CHAT CONSUMER] ERRO DE AUTENTICAÇÃO RABBITMQ")
-            logger.error("=" * 80)
-            logger.error(f"❌ Erro: {error_msg}")
-            logger.error("")
-            logger.error("📋 POSSÍVEIS CAUSAS:")
-            logger.error("1. Credenciais RabbitMQ incorretas na variável de ambiente")
-            logger.error("2. RABBITMQ_PRIVATE_URL pode estar usando credenciais antigas")
-            logger.error("3. Usuário RabbitMQ pode não ter permissões suficientes")
-            logger.error("")
-            logger.error("🔧 SOLUÇÕES:")
-            logger.error("1. Verificar variáveis no Railway:")
-            logger.error("   - RABBITMQ_URL")
-            logger.error("   - RABBITMQ_PRIVATE_URL")
-            logger.error("2. Comparar com credenciais do campaigns consumer (que funciona)")
-            logger.error("3. Regenerar credenciais RabbitMQ no Railway se necessário")
-            logger.error("=" * 80)
-        else:
-            logger.error(f"❌ [CHAT CONSUMER] Erro ao iniciar consumers: {e}", exc_info=True)
+    import re
+    import os
+
+    rabbitmq_url = settings.RABBITMQ_URL
+    safe_url = re.sub(r'://.*@', '://***:***@', rabbitmq_url)
+
+    backoff_sec = 5
+    max_backoff = 60
+    attempt = 0
+
+    while True:
+        try:
+            attempt += 1
+            logger.info("=" * 80)
+            logger.info("🔍 [CHAT CONSUMER] Conectando ao RabbitMQ (tentativa %s): %s", attempt, safe_url)
+            logger.info("=" * 80)
+
+            connection = await aio_pika.connect_robust(
+                rabbitmq_url,
+                heartbeat=0,
+                blocked_connection_timeout=0,
+                socket_timeout=10,
+                retry_delay=1,
+                connection_attempts=1
+            )
+            logger.info("✅ [CHAT CONSUMER] Conexão RabbitMQ estabelecida com sucesso!")
+            backoff_sec = 5  # reset backoff após sucesso
+
+            channel = await connection.channel()
+            logger.info("✅ [CHAT CONSUMER] Channel criado com sucesso!")
+
+            queue_send = await channel.declare_queue(QUEUE_SEND_MESSAGE, durable=True)
+            queue_profile_pic = await channel.declare_queue(QUEUE_FETCH_PROFILE_PIC, durable=True)
+            queue_process_incoming_media = await channel.declare_queue(QUEUE_PROCESS_INCOMING_MEDIA, durable=True)
+            queue_fetch_group_info = await channel.declare_queue(QUEUE_FETCH_GROUP_INFO, durable=True)
+            logger.info("✅ [CHAT CONSUMER] Filas declaradas")
+
+            async def on_send_message(message: aio_pika.IncomingMessage):
+                async with message.process():
+                    try:
+                        payload = json.loads(message.body.decode())
+                        await handle_send_message(payload['message_id'])
+                    except Exception as e:
+                        logger.error(f"❌ [CHAT CONSUMER] Erro send_message: {e}", exc_info=True)
+
+            async def on_fetch_profile_pic(message: aio_pika.IncomingMessage):
+                async with message.process():
+                    try:
+                        payload = json.loads(message.body.decode())
+                        await handle_fetch_profile_pic(
+                            payload['conversation_id'],
+                            payload['phone']
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ [CHAT CONSUMER] Erro fetch_profile_pic: {e}", exc_info=True)
+
+            async def on_process_incoming_media(message: aio_pika.IncomingMessage):
+                async with message.process():
+                    try:
+                        from apps.chat.media_tasks import handle_process_incoming_media
+                        payload = json.loads(message.body.decode())
+                        logger.info(f"📥 [CHAT CONSUMER] Recebida task process_incoming_media")
+                        retry_count = payload.get('_retry_count', 0)
+                        message_key_from_payload = payload.get('message_key')
+                        await handle_process_incoming_media(
+                            tenant_id=payload['tenant_id'],
+                            message_id=payload['message_id'],
+                            media_url=payload['media_url'],
+                            media_type=payload['media_type'],
+                            instance_name=payload.get('instance_name'),
+                            api_key=payload.get('api_key'),
+                            evolution_api_url=payload.get('evolution_api_url'),
+                            message_key=message_key_from_payload,
+                            retry_count=retry_count,
+                            mime_type=payload.get('mime_type')
+                        )
+                        logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
+                    except InstanceTemporarilyUnavailable as e:
+                        wait_time = e.wait_seconds or compute_backoff(payload.get('_retry_count', 0))
+                        next_retry = payload.get('_retry_count', 0) + 1
+                        logger.warning(
+                            "⏳ [CHAT CONSUMER] Instância indisponível para process_incoming_media (message=%s). Reagendando em %ss.",
+                            payload.get('message_id'), wait_time,
+                        )
+                        payload['_retry_count'] = next_retry
+                        payload['_last_error'] = e.state_payload or {}
+                        await asyncio.sleep(wait_time)
+                        await queue_process_incoming_media.channel.default_exchange.publish(
+                            aio_pika.Message(
+                                body=json.dumps(payload).encode(),
+                                delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
+                            ),
+                            routing_key=queue_process_incoming_media.name,
+                        )
+                    except Exception as e:
+                        logger.error(f"❌ [CHAT CONSUMER] Erro process_incoming_media: {e}", exc_info=True)
+                        raise
+
+            async def on_fetch_group_info(message: aio_pika.IncomingMessage):
+                async with message.process():
+                    try:
+                        from apps.chat.media_tasks import handle_fetch_group_info
+                        payload = json.loads(message.body.decode())
+                        await handle_fetch_group_info(
+                            conversation_id=payload['conversation_id'],
+                            group_jid=payload['group_jid'],
+                            instance_name=payload['instance_name'],
+                            api_key=payload['api_key'],
+                            base_url=payload['base_url']
+                        )
+                        logger.info(f"✅ [CHAT CONSUMER] fetch_group_info concluída com sucesso")
+                    except Exception as e:
+                        logger.error(f"❌ [CHAT CONSUMER] Erro fetch_group_info: {e}", exc_info=True)
+                        raise
+
+            await queue_send.consume(on_send_message)
+            await queue_profile_pic.consume(on_fetch_profile_pic)
+            await queue_process_incoming_media.consume(on_process_incoming_media)
+            await queue_fetch_group_info.consume(on_fetch_group_info)
+            logger.info("🚀 [CHAT CONSUMER] Consumers iniciados e aguardando mensagens")
+            await asyncio.Future()
+
+        except Exception as e:
+            error_msg = str(e)
+            if 'ACCESS_REFUSED' in error_msg or 'authentication' in error_msg.lower():
+                logger.error("🚨 [CHAT CONSUMER] Erro de autenticação RabbitMQ: %s. Reconectando em %ss.", error_msg[:200], backoff_sec)
+            else:
+                logger.warning(
+                    "⚠️ [CHAT CONSUMER] Conexão RabbitMQ falhou (Connection reset / rede). Reconectando em %ss: %s",
+                    backoff_sec, error_msg[:200],
+                )
+            await asyncio.sleep(backoff_sec)
+            backoff_sec = min(backoff_sec * 2, max_backoff)
 
 
 # Para rodar o consumer
