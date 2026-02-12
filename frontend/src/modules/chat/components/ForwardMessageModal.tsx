@@ -1,8 +1,8 @@
 /**
- * Modal para encaminhar mensagem para outra conversa
+ * Modal para encaminhar mensagem para outra conversa ou contato
  */
-import React, { useState, useEffect } from 'react';
-import { X, Search, MessageSquare } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { X, Search, MessageSquare, User } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
@@ -14,6 +14,23 @@ const getMediaProxyUrl = (externalUrl: string) => {
   return `${API_BASE_URL}/api/chat/media-proxy/?url=${encodeURIComponent(externalUrl)}`;
 };
 
+interface Contact {
+  id: string;
+  name: string;
+  phone: string;
+  tags?: Array<{ id: string; name: string; color: string }>;
+}
+
+type ForwardableItem = Conversation | Contact;
+
+function isContact(item: ForwardableItem): item is Contact {
+  return 'phone' in item && !('conversation_type' in item);
+}
+
+function isConversation(item: ForwardableItem): item is Conversation {
+  return 'conversation_type' in item || 'status' in item;
+}
+
 interface ForwardMessageModalProps {
   message: Message;
   onClose: () => void;
@@ -21,70 +38,172 @@ interface ForwardMessageModalProps {
 }
 
 export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMessageModalProps) {
-  const { conversations, activeConversation, setActiveConversation, addConversation } = useChatStore();
+  const { conversations, activeConversation, setActiveConversation, addConversation, activeDepartment } = useChatStore();
   const [searchQuery, setSearchQuery] = useState('');
-  const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
-  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [filteredItems, setFilteredItems] = useState<ForwardableItem[]>([]);
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [isSearchingContacts, setIsSearchingContacts] = useState(false);
+  const [selectedItem, setSelectedItem] = useState<ForwardableItem | null>(null);
   const [sending, setSending] = useState(false);
 
-  // Filtrar conversas baseado na busca
+  // Normalizar telefone (reutilizar lógica do NewConversationModal)
+  const normalizePhone = useCallback((phone: string): string => {
+    let clean = phone.replace(/[^\d+]/g, '');
+    if (!clean.startsWith('+')) {
+      if (clean.startsWith('55')) {
+        clean = '+' + clean;
+      } else {
+        clean = '+55' + clean;
+      }
+    }
+    return clean;
+  }, []);
+
+  const validatePhone = useCallback((phone: string): boolean => {
+    if (!phone) return false;
+    const normalized = normalizePhone(phone);
+    return /^\+55\d{10,11}$/.test(normalized);
+  }, [normalizePhone]);
+
+  // Buscar contatos quando searchQuery muda (com debounce e fallback)
+  useEffect(() => {
+    if (!searchQuery || searchQuery.length < 2) {
+      setContacts([]);
+      setIsSearchingContacts(false);
+      return;
+    }
+
+    setIsSearchingContacts(true);
+    const timeoutId = setTimeout(async () => {
+      try {
+        const response = await api.get('/contacts/contacts/', {
+          params: { search: searchQuery, page_size: 10 }
+        });
+        const results = response.data.results || response.data || [];
+        setContacts(Array.isArray(results) ? results : []);
+      } catch (error) {
+        // Fallback silencioso: se busca falhar, continuar só com conversas
+        setContacts([]);
+      } finally {
+        setIsSearchingContacts(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery]);
+
+  // Combinar conversas + contatos em lista filtrada
   useEffect(() => {
     if (!searchQuery.trim()) {
-      // Mostrar todas as conversas exceto a atual
-      setFilteredConversations(
-        conversations.filter((conversationItem) => conversationItem.id !== activeConversation?.id)
+      // Sem busca: mostrar todas as conversas exceto a atual
+      setFilteredItems(
+        conversations.filter((conv) => conv.id !== activeConversation?.id)
       );
     } else {
       const query = searchQuery.toLowerCase();
-      setFilteredConversations(
-        conversations.filter((conversationItem) => {
-          if (conversationItem.id === activeConversation?.id) return false;
-          const name = (conversationItem.contact_name || '').toLowerCase();
-          const phone = (conversationItem.contact_phone || '').toLowerCase();
-          return name.includes(query) || phone.includes(query);
-        })
-      );
+      // Filtrar conversas
+      const filteredConvs = conversations.filter((conv) => {
+        if (conv.id === activeConversation?.id) return false;
+        const name = (conv.contact_name || '').toLowerCase();
+        const phone = (conv.contact_phone || '').toLowerCase();
+        return name.includes(query) || phone.includes(query);
+      });
+      // Filtrar contatos (já filtrados pela API, mas garantir que não duplicam conversas existentes)
+      const filteredContacts = contacts.filter((contact) => {
+        // Não mostrar contato se já existe conversa com esse telefone
+        const contactPhone = contact.phone.replace(/[^\d]/g, '');
+        return !conversations.some((conv) => {
+          const convPhone = (conv.contact_phone || '').replace(/[^\d]/g, '');
+          return convPhone === contactPhone || convPhone === `55${contactPhone}` || `55${convPhone}` === contactPhone;
+        });
+      });
+      // Combinar: conversas primeiro, depois contatos
+      setFilteredItems([...filteredConvs, ...filteredContacts]);
     }
-  }, [searchQuery, conversations, activeConversation]);
+  }, [searchQuery, conversations, contacts, activeConversation]);
 
   const handleForward = async () => {
-    if (!selectedConversation || sending) return;
+    if (!selectedItem || sending) return;
 
     try {
       setSending(true);
 
+      let conversationId: string;
+      let displayName: string;
+
+      let destConversation: Conversation | null = null;
+
+      // Se selecionado for CONTATO, criar conversa primeiro
+      if (isContact(selectedItem)) {
+        // Validação: verificar telefone válido antes de criar conversa
+        if (!selectedItem.phone || !validatePhone(selectedItem.phone)) {
+          toast.error('Telefone inválido. Verifique o número do contato.');
+          return;
+        }
+
+        try {
+          // Criar/iniciar conversa com o contato
+          const departmentId = activeDepartment && activeDepartment.id !== 'inbox' ? activeDepartment.id : undefined;
+          const createResponse = await api.post('/chat/conversations/start/', {
+            contact_phone: selectedItem.phone,
+            contact_name: selectedItem.name,
+            ...(departmentId && { department: departmentId })
+          });
+          destConversation = createResponse.data.conversation || createResponse.data;
+          conversationId = destConversation.id;
+          displayName = selectedItem.name || selectedItem.phone;
+          addConversation(destConversation);
+        } catch (createError: any) {
+          const createErrorMsg = createError.response?.data?.error || createError.response?.data?.detail || createError.message || 'Erro ao criar conversa';
+          toast.error(`Não foi possível criar conversa: ${createErrorMsg}`);
+          return; // Não encaminhar se não conseguiu criar conversa
+        }
+      } else {
+        // Se selecionado for CONVERSA, usar diretamente
+        conversationId = selectedItem.id;
+        displayName = selectedItem.contact_name || selectedItem.contact_phone;
+        destConversation = selectedItem;
+      }
+
+      // Encaminhar mensagem para a conversa (criada ou existente)
       const { data } = await api.post<{
         status: string;
         conversation_id?: string;
         forwarded_message_id?: string;
       }>(`/chat/messages/${message.id}/forward/`, {
-        conversation_id: selectedConversation.id
+        conversation_id: conversationId
       });
 
-      toast.success(`Mensagem encaminhada para ${selectedConversation.contact_name || selectedConversation.contact_phone}`);
+      toast.success(`Mensagem encaminhada para ${displayName}`);
 
-      // Abrir a conversa de destino: se não estiver no store, buscar do backend; só abrir se encontrar
-      const destId = data?.conversation_id || selectedConversation.id;
-      let destConversation = conversations.find((c) => String(c.id) === String(destId));
+      // Se já temos a conversa (criada ou selecionada), usar diretamente
+      // Caso contrário, buscar do backend usando conversation_id da resposta
       if (!destConversation) {
-        try {
-          const res = await api.get(`/chat/conversations/${destId}/`);
-          destConversation = res.data;
-          addConversation(destConversation);
-        } catch (err: any) {
-          // Se não encontrou no backend (404) ou sem permissão (403), não abrir conversa
-          // O forward foi bem-sucedido, mas a conversa pode não estar acessível ou foi removida
-          if (err?.response?.status === 404 || err?.response?.status === 403) {
-            // Não abrir conversa - deixar usuário na conversa atual ou sem conversa ativa
+        const destId = data?.conversation_id || conversationId;
+        destConversation = conversations.find((c) => String(c.id) === String(destId)) || null;
+        if (!destConversation) {
+          try {
+            const res = await api.get(`/chat/conversations/${destId}/`);
+            destConversation = res.data;
+            addConversation(destConversation);
+          } catch (err: any) {
+            if (err?.response?.status === 404 || err?.response?.status === 403) {
+              onSuccess?.();
+              onClose();
+              return;
+            }
+            // Outros erros: não abrir conversa
             onSuccess?.();
             onClose();
             return;
           }
-          // Outros erros (rede, timeout): usar selectedConversation como fallback
-          destConversation = selectedConversation;
         }
       }
-      setActiveConversation(destConversation);
+
+      // Abrir a conversa de destino
+      if (destConversation) {
+        setActiveConversation(destConversation);
+      }
       onSuccess?.();
       onClose();
     } catch (error: any) {
@@ -128,62 +247,91 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" />
             <input
               type="text"
-              placeholder="Buscar conversa..."
+              placeholder="Buscar conversa ou contato..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400"
             />
+            {isSearchingContacts && (
+              <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Lista de conversas */}
+        {/* Lista de conversas e contatos */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {filteredConversations.length === 0 ? (
+          {filteredItems.length === 0 ? (
             <div className="text-center py-8 text-gray-500">
               <MessageSquare className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-              <p>Nenhuma conversa encontrada</p>
+              <p>{searchQuery.trim() ? 'Nenhuma conversa ou contato encontrado' : 'Nenhuma conversa disponível'}</p>
             </div>
           ) : (
             <div className="space-y-2">
-              {filteredConversations.map((conversationItem) => (
-                <button
-                  key={conversationItem.id}
-                  onClick={() => setSelectedConversation(conversationItem)}
-                  className={`
-                    w-full text-left p-3 rounded-lg border transition-all flex items-center gap-3
-                    ${selectedConversation?.id === conversationItem.id
-                      ? 'border-blue-500 bg-blue-50'
-                      : 'border-gray-200 hover:bg-gray-50'
-                    }
-                  `}
-                >
-                  {/* Foto de perfil (apenas se existir em cache) */}
-                  {conversationItem.profile_pic_url ? (
-                    <img
-                      src={getMediaProxyUrl(conversationItem.profile_pic_url)}
-                      alt={conversationItem.contact_name || conversationItem.contact_phone}
-                      className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                      onError={(e) => {
-                        // Se a imagem falhar ao carregar, esconder
-                        e.currentTarget.style.display = 'none';
-                      }}
-                    />
-                  ) : (
-                    <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center flex-shrink-0">
-                      <MessageSquare className="w-5 h-5 text-gray-400" />
-                    </div>
-                  )}
-                  
-                  <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 truncate">
-                      {conversationItem.contact_name || conversationItem.contact_phone}
-                    </p>
-                    {conversationItem.contact_name && (
-                      <p className="text-sm text-gray-500 truncate">{conversationItem.contact_phone}</p>
+              {filteredItems.map((item) => {
+                const isConv = isConversation(item);
+                const isSelected = selectedItem && (
+                  (isConv && isConversation(selectedItem) && selectedItem.id === item.id) ||
+                  (!isConv && isContact(selectedItem) && selectedItem.id === item.id)
+                );
+                const displayName = isConv ? (item.contact_name || item.contact_phone) : item.name;
+                const displayPhone = isConv ? item.contact_phone : item.phone;
+
+                return (
+                  <button
+                    key={isConv ? item.id : `contact-${item.id}`}
+                    onClick={() => setSelectedItem(item)}
+                    className={`
+                      w-full text-left p-3 rounded-lg border transition-all flex items-center gap-3
+                      ${isSelected
+                        ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                        : 'border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'
+                      }
+                    `}
+                  >
+                    {/* Avatar */}
+                    {isConv && item.profile_pic_url ? (
+                      <img
+                        src={getMediaProxyUrl(item.profile_pic_url)}
+                        alt={displayName}
+                        className="w-10 h-10 rounded-full object-cover flex-shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    ) : (
+                      <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0">
+                        {isConv ? (
+                          <MessageSquare className="w-5 h-5 text-gray-400" />
+                        ) : (
+                          <User className="w-5 h-5 text-gray-400" />
+                        )}
+                      </div>
                     )}
-                  </div>
-                </button>
-              ))}
+                    
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-900 dark:text-gray-100 truncate">
+                          {displayName}
+                        </p>
+                        <span className={`
+                          text-xs px-1.5 py-0.5 rounded
+                          ${isConv 
+                            ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                            : 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                          }
+                        `}>
+                          {isConv ? 'Conversa' : 'Contato'}
+                        </span>
+                      </div>
+                      {displayPhone && (
+                        <p className="text-sm text-gray-500 dark:text-gray-400 truncate">{displayPhone}</p>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           )}
         </div>
@@ -199,10 +347,10 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
           </button>
           <button
             onClick={handleForward}
-            disabled={!selectedConversation || sending}
+            disabled={!selectedItem || sending}
             className={`
               px-4 py-2 rounded-lg transition-colors
-              ${selectedConversation && !sending
+              ${selectedItem && !sending
                 ? 'bg-blue-600 text-white hover:bg-blue-700'
                 : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }
