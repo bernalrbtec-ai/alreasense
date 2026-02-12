@@ -320,7 +320,8 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         if not message:
             await self.send(text_data=json.dumps({
                 'type': 'error',
-                'message': 'Erro ao criar mensagem'
+                'message': 'Conversa não encontrada ou não acessível. A conversa pode ter sido removida ou você não tem permissão para enviar mensagens.',
+                'conversation_id': conversation_id
             }))
             return
         
@@ -838,6 +839,12 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             
             return message
         
+        except Conversation.DoesNotExist:
+            logger.warning(
+                f"⚠️ [CHAT WS V2] Conversa não encontrada ao criar mensagem: {conversation_id} "
+                f"(tenant: {self.user.tenant_id}, user: {self.user.email})"
+            )
+            return None
         except Exception as e:
             logger.error(f"❌ [CHAT WS V2] Erro ao criar mensagem: {e}", exc_info=True)
             return None
