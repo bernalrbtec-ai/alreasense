@@ -3464,33 +3464,10 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # ✅ VALIDAÇÃO DE ACESSO: Verificar se usuário tem acesso à conversa
-        # Admin pode transferir qualquer conversa do tenant
-        if not user.is_admin:
-            # Gerente/Agente: verificar se tem acesso ao departamento OU conversa está atribuída a ele
-            if conversation.department_id:
-                user_department_ids = set(user.departments.values_list('id', flat=True))
-                if conversation.department_id not in user_department_ids:
-                    # Verificar se conversa está atribuída ao usuário
-                    if conversation.assigned_to_id != user.id:
-                        return Response(
-                            {'error': 'Você não tem acesso a esta conversa'},
-                            status=status.HTTP_403_FORBIDDEN
-                        )
-            else:
-                # ✅ CORREÇÃO: Conversa sem departamento (Inbox)
-                # Se não está atribuída a ninguém (assigned_to=None), qualquer usuário do tenant pode transferir
-                # Se está atribuída, só o usuário atribuído pode transferir
-                if conversation.assigned_to_id and conversation.assigned_to_id != user.id:
-                    return Response(
-                        {'error': 'Você não tem acesso a esta conversa'},
-                        status=status.HTTP_403_FORBIDDEN
-                    )
-        
-        # ✅ CORREÇÃO: Permitir que agentes transfiram conversas
-        # Qualquer usuário autenticado com acesso ao chat pode transferir conversas
-        # (não precisa ter acesso ao departamento de destino)
-        # A validação de acesso à conversa já foi feita acima (linhas 3467-3485)
+        # ✅ CORREÇÃO CRÍTICA: Para transferir, não é necessário ter acesso ao departamento de origem
+        # A validação de acesso será feita apenas para o departamento de destino (se estiver atribuindo agente)
+        # Qualquer usuário autenticado com acesso ao chat pode transferir conversas do tenant
+        # A única validação necessária aqui é garantir que a conversa pertence ao tenant (já feita acima)
         if not (user.is_admin or user.is_gerente or user.is_agente):
             return Response(
                 {'error': 'Sem permissão para transferir conversas'},
