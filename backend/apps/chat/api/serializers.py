@@ -665,14 +665,21 @@ class ConversationSerializer(serializers.ModelSerializer):
     def get_last_message(self, obj):
         """Retorna a última mensagem da conversa (otimizado com prefetch)."""
         # ✅ PERFORMANCE: Usar last_message_list do prefetch_related
-        # Se não estiver disponível (fallback), buscar normalmente
+        # ✅ CORREÇÃO: last_message_list pode ter múltiplas mensagens (ordenadas DESC), pegar apenas a primeira
         if hasattr(obj, 'last_message_list') and obj.last_message_list:
-            return MessageSerializer(obj.last_message_list[0]).data
+            # last_message_list está ordenado por -created_at, então o primeiro é o mais recente
+            last_msg = obj.last_message_list[0] if isinstance(obj.last_message_list, list) else obj.last_message_list
+            return MessageSerializer(last_msg).data
         
         # Fallback para query normal (caso não tenha prefetch)
-        last_message = obj.messages.order_by('-created_at').first()
-        if last_message:
-            return MessageSerializer(last_message).data
+        # ✅ CORREÇÃO: Evitar N+1 query usando select_related e prefetch_related
+        try:
+            last_message = obj.messages.select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at').first()
+            if last_message:
+                return MessageSerializer(last_message).data
+        except Exception as e:
+            logger.warning(f"⚠️ [SERIALIZER] Erro ao buscar última mensagem (fallback): {e}")
+        
         return None
     
     def get_instance_friendly_name(self, obj):
@@ -711,7 +718,15 @@ class ConversationSerializer(serializers.ModelSerializer):
         
         # ✅ CORREÇÃO CRÍTICA: Normalizar telefone antes de buscar no cache
         # Isso garante que o cache seja encontrado mesmo se telefone estiver em formato diferente
-        normalized_phone = normalize_phone_for_search(obj.contact_phone)
+        if not obj.contact_phone:
+            return []
+            
+        try:
+            normalized_phone = normalize_phone_for_search(obj.contact_phone)
+        except Exception as e:
+            logger.warning(f"⚠️ [SERIALIZER] Erro ao normalizar telefone {obj.contact_phone}: {e}")
+            normalized_phone = obj.contact_phone
+        
         cache_key = f"contact_tags:{obj.tenant_id}:{normalized_phone}"
         
         tags = cache.get(cache_key)
@@ -736,16 +751,20 @@ class ConversationSerializer(serializers.ModelSerializer):
                         }
                         for tag in contact.tags.all()
                     ]
+                    logger.debug(f"✅ [SERIALIZER] Tags encontradas para {obj.contact_phone}: {len(tags)} tags")
                 else:
                     tags = []
+                    logger.debug(f"ℹ️ [SERIALIZER] Contato não encontrado para {obj.contact_phone}")
             except Exception as e:
                 logger.error(f"❌ [SERIALIZER] Erro ao buscar tags do contato: {e}", exc_info=True)
                 tags = []
             
-            # Cache por 10 minutos (600 segundos)
+            # Cache por 10 minutos (600 segundos) - mesmo se tags estiver vazio
             cache.set(cache_key, tags, 600)
+        else:
+            logger.debug(f"✅ [SERIALIZER] Tags do cache para {obj.contact_phone}: {len(tags)} tags")
         
-        return tags
+        return tags or []
 
 
 class ConversationDetailSerializer(ConversationSerializer):

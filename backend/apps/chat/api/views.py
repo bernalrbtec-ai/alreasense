@@ -328,15 +328,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         )
         
         # ✅ PERFORMANCE: Prefetch última mensagem para evitar N+1 queries
-        # Usa Prefetch com queryset customizado para buscar apenas última mensagem
+        # ✅ CORREÇÃO: Usar Prefetch com queryset limitado (mesma abordagem usada em webhooks.py)
+        # O slicing [:1] funciona quando aplicado diretamente no queryset dentro do Prefetch
         last_message_queryset = Message.objects.select_related(
             'sender', 'conversation'
-        ).prefetch_related('attachments').order_by('-created_at')
+        ).prefetch_related('attachments').order_by('-created_at')[:1]
         
         queryset = queryset.prefetch_related(
             Prefetch(
                 'messages',
-                queryset=last_message_queryset[:1],  # Apenas última mensagem
+                queryset=last_message_queryset,
                 to_attr='last_message_list'
             )
         )
