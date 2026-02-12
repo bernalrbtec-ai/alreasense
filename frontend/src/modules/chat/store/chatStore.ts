@@ -339,13 +339,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   // ✅ MELHORIA: addMessage agora usa estrutura normalizada (sem reordenar tudo)
   addMessage: (message) => set((state) => {
-    // ✅ FIX CRÍTICO: Verificar se mensagem pertence à conversa ativa
-    if (!state.activeConversation) {
-      console.log('⚠️ [STORE] Nenhuma conversa ativa, ignorando mensagem:', message.id);
-      return state;
-    }
-    
-    // ✅ FIX CRÍTICO: Comparar conversation_id da mensagem com a conversa ativa
+    // ✅ CORREÇÃO CRÍTICA: Extrair conversation_id da mensagem
     let messageConversationId: string | null = null;
     
     if (message.conversation_id) {
@@ -366,20 +360,39 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }
     
-    const activeConversationId = state.activeConversation.id ? String(state.activeConversation.id) : null;
-    
     if (!messageConversationId) {
       console.warn('⚠️ [STORE] Mensagem sem conversation_id válido, ignorando:', message.id);
       return state;
     }
     
-    if (messageConversationId !== activeConversationId) {
-      console.log('⚠️ [STORE] Mensagem não pertence à conversa ativa, ignorando:', {
+    // ✅ CORREÇÃO CRÍTICA: Verificar se conversa existe no store (ativa ou não)
+    // Se conversa existe no store, adicionar mensagem mesmo se não estiver aberta
+    // Isso garante que mensagens sejam disponibilizadas quando a conversa for aberta
+    const conversationExists = state.conversations.some(conv => 
+      String(conv.id) === messageConversationId
+    );
+    const activeConversationId = state.activeConversation?.id ? String(state.activeConversation.id) : null;
+    const isActiveConversation = activeConversationId === messageConversationId;
+    
+    if (!conversationExists && !isActiveConversation) {
+      console.log('⚠️ [STORE] Mensagem não pertence a nenhuma conversa conhecida, ignorando:', {
+        messageId: message.id,
+        messageConversationId,
+        activeConversationId,
+        conversationExists
+      });
+      return state;
+    }
+    
+    // ✅ CORREÇÃO: Se não é conversa ativa mas existe no store, ainda adicionar mensagem
+    // Isso permite que mensagens sejam adicionadas para conversas que não estão abertas
+    // mas que existem no store (serão visíveis quando a conversa for aberta)
+    if (!isActiveConversation && conversationExists) {
+      console.log('ℹ️ [STORE] Mensagem de conversa não ativa mas existente no store, adicionando:', {
         messageId: message.id,
         messageConversationId,
         activeConversationId
       });
-      return state;
     }
     
     console.log('✅ [STORE] Mensagem pertence à conversa ativa, adicionando:', message.id);

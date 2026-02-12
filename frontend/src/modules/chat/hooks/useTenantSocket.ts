@@ -397,21 +397,10 @@ export function useTenantSocket() {
                     return;
                   }
                   
-                  // ✅ SEGURANÇA: Verificar se conversa pertence ao tenant do usuário
-                  // Backend já valida, mas adicionar verificação extra no frontend
-                  const { conversations: userConversations } = useChatStore.getState();
-                  const conversationBelongsToUser = userConversations.some(conv => 
-                    String(conv.id) === freshConvId
-                  ) || currentActiveConversation?.id === freshConvId;
-                  
-                  if (!conversationBelongsToUser) {
-                    console.warn('⚠️ [TENANT WS] Conversa não encontrada na lista do usuário, ignorando:', {
-                      messageId,
-                      conversationId: freshConvId
-                    });
-                    (window as any)[pendingKey] = false;
-                    return;
-                  }
+                  // ✅ CORREÇÃO CRÍTICA: Remover validação restritiva que bloqueia attachments
+                  // A validação de tenant já foi feita no backend, não precisamos validar novamente aqui
+                  // Isso estava bloqueando attachments para conversas que não estão na lista do usuário
+                  // mas que pertencem ao tenant (por exemplo, conversas de outros departamentos)
                   
                   // ✅ VALIDAÇÃO: Verificar se attachment realmente pertence à mensagem
                   const attachmentInMessage = freshMessage.attachments?.some(
@@ -540,11 +529,24 @@ export function useTenantSocket() {
             isActiveConversation
           });
           
+          // ✅ CORREÇÃO CRÍTICA: Adicionar mensagem se for da conversa ativa OU se conversa existe no store
+          // Isso garante que mensagens sejam adicionadas mesmo se conversa não estiver aberta no momento
+          // Quando a conversa for aberta, a mensagem já estará disponível
+          const { conversations } = useChatStore.getState();
+          const conversationExists = conversations.some(conv => 
+            String(conv.id) === finalMessageConvId
+          );
+          
           if (isActiveConversation) {
             console.log('✅ [TENANT WS] Mensagem é da conversa ativa, adicionando ao store...');
             addMessage(data.message);
+          } else if (conversationExists) {
+            // ✅ CORREÇÃO: Se conversa existe no store mas não está aberta, adicionar mensagem também
+            // Isso garante que quando a conversa for aberta, a mensagem já esteja disponível
+            console.log('✅ [TENANT WS] Mensagem é de conversa existente no store, adicionando ao store...');
+            addMessage(data.message);
           } else {
-            console.log('ℹ️ [TENANT WS] Mensagem NÃO é da conversa ativa, NÃO adicionando ao store');
+            console.log('ℹ️ [TENANT WS] Mensagem NÃO é da conversa ativa e conversa não existe no store');
             console.log('   ⚠️ Mensagem será carregada quando a conversa correta for aberta');
           }
           
