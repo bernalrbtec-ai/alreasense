@@ -3477,17 +3477,20 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                             {'error': 'Você não tem acesso a esta conversa'},
                             status=status.HTTP_403_FORBIDDEN
                         )
-            elif conversation.assigned_to_id != user.id:
-                # Conversa sem departamento (Inbox) só pode ser transferida se atribuída ao usuário
-                return Response(
-                    {'error': 'Você não tem acesso a esta conversa'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+            else:
+                # ✅ CORREÇÃO: Conversa sem departamento (Inbox)
+                # Se não está atribuída a ninguém (assigned_to=None), qualquer usuário do tenant pode transferir
+                # Se está atribuída, só o usuário atribuído pode transferir
+                if conversation.assigned_to_id and conversation.assigned_to_id != user.id:
+                    return Response(
+                        {'error': 'Você não tem acesso a esta conversa'},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
         
         # ✅ CORREÇÃO: Permitir que agentes transfiram conversas
         # Qualquer usuário autenticado com acesso ao chat pode transferir conversas
         # (não precisa ter acesso ao departamento de destino)
-        # A validação de acesso à conversa já é feita pelo get_object() via CanAccessChat
+        # A validação de acesso à conversa já foi feita acima (linhas 3467-3485)
         if not (user.is_admin or user.is_gerente or user.is_agente):
             return Response(
                 {'error': 'Sem permissão para transferir conversas'},
