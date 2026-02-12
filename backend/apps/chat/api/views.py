@@ -2732,8 +2732,30 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                         status=status.HTTP_400_BAD_REQUEST
                     )
             
+            old_assigned_to = conversation.assigned_to
             conversation.assigned_to = user
-            conversation.save(update_fields=['assigned_to'])
+            # ✅ CORREÇÃO: Atualizar status para 'open' quando atribuir conversa
+            if conversation.status == 'pending':
+                conversation.status = 'open'
+                conversation.save(update_fields=['assigned_to', 'status'])
+            else:
+                conversation.save(update_fields=['assigned_to'])
+            
+            # ✅ CORREÇÃO CRÍTICA: Fazer broadcast da atualização da conversa
+            from apps.chat.utils.websocket import broadcast_conversation_updated
+            from django.db import transaction
+            
+            def do_broadcast():
+                try:
+                    broadcast_conversation_updated(conversation, request=request)
+                    logger.info(f"✅ [ASSIGN] Broadcast conversation_updated enviado para conversa {conversation.id}")
+                except Exception as e:
+                    logger.error(f"❌ [ASSIGN] Erro no broadcast após commit: {e}", exc_info=True)
+            
+            if transaction.get_connection().in_atomic_block:
+                transaction.on_commit(do_broadcast)
+            else:
+                do_broadcast()
             
             return Response(
                 ConversationSerializer(conversation).data,
@@ -3661,14 +3683,29 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         serializer = ConversationSerializer(conversation)
         conversation_data = serializer.data
         
-        # Broadcast via WebSocket para atualizar conversa em todos os clientes
+        # ✅ CORREÇÃO CRÍTICA: Usar broadcast_conversation_updated para garantir consistência
+        # Isso garante que last_message seja prefetched corretamente e unread_count seja atualizado
+        from apps.chat.utils.websocket import broadcast_conversation_updated
+        from django.db import transaction
+        
+        def do_broadcast():
+            try:
+                broadcast_conversation_updated(conversation, request=request)
+                logger.info(f"✅ [TRANSFER] Broadcast conversation_updated enviado para conversa {conversation.id}")
+            except Exception as e:
+                logger.error(f"❌ [TRANSFER] Erro no broadcast após commit: {e}", exc_info=True)
+        
+        if transaction.get_connection().in_atomic_block:
+            transaction.on_commit(do_broadcast)
+        else:
+            do_broadcast()
+        
+        # ✅ MANTER: Também enviar conversation_transferred para compatibilidade com handlers específicos
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
-        from apps.chat.utils.serialization import serialize_conversation_for_ws
         
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
-        tenant_group = f"chat_tenant_{conversation.tenant_id}"
         
         # ✅ FIX: Broadcast para a sala da conversa (atualiza chat aberto)
         async_to_sync(channel_layer.group_send)(

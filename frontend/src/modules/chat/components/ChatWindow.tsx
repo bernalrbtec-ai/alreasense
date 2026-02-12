@@ -14,6 +14,7 @@ import { useChatSocket } from '../hooks/useChatSocket';
 import { usePollingFallback } from '../hooks/usePollingFallback';
 import ContactModal from '@/components/contacts/ContactModal';
 import ContactHistory from '@/components/contacts/ContactHistory';
+import { useAuthStore } from '@/stores/authStore';
 
 // Helper para gerar URL do media proxy
 const getMediaProxyUrl = (externalUrl: string) => {
@@ -23,6 +24,7 @@ const getMediaProxyUrl = (externalUrl: string) => {
 
 export function ChatWindow() {
   const { activeConversation, setActiveConversation } = useChatStore();
+  const { user } = useAuthStore();
   // ✅ CORREÇÃO: can_transfer_conversations pode não existir no tipo, usar verificação segura
   const permissions = usePermissions();
   const can_transfer_conversations = (permissions as any).can_transfer_conversations || false;
@@ -445,11 +447,15 @@ export function ChatWindow() {
    * (com "X está atendendo") e também em "Minhas conversas".
    */
   const handleStartConversation = async () => {
-    if (!activeConversation) return;
+    if (!activeConversation || !user?.id) return;
     
     try {
       setLoadingStart(true);
-      const response = await api.post(`/chat/conversations/${activeConversation.id}/start/`);
+      // ✅ CORREÇÃO CRÍTICA: Usar endpoint /assign/ ao invés de /start/
+      // /start/ é apenas para criar novas conversas, /assign/ é para atribuir conversas existentes
+      const response = await api.post(`/chat/conversations/${activeConversation.id}/assign/`, {
+        user_id: user.id
+      });
       
       // Atualizar conversa no store usando o método do store
       const { updateConversation } = useChatStore.getState();
