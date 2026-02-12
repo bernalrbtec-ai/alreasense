@@ -50,14 +50,21 @@ export default function BillingPage() {
   const { user, token } = useAuthStore()
 
   useEffect(() => {
+    // ✅ CORREÇÃO CRÍTICA: Limpar tenant quando usuário ou tenant_id mudar (troca de usuário)
+    // Isso garante que dados do tenant anterior não sejam exibidos
+    setTenant(null)
+    
     // Só buscar se estiver autenticado
     if (token && user) {
+      console.log('🔄 [BILLING] Recarregando dados do tenant para:', user.tenant_id)
       fetchTenantData()
     } else {
       console.log('⚠️ Usuário não autenticado, não buscando dados do tenant')
       setIsLoading(false)
     }
-  }, [token, user])
+    // ✅ CORREÇÃO: Adicionar user?.id e user?.tenant_id como dependências para detectar troca de usuário
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, user?.id, user?.tenant_id])
 
   const fetchTenantData = async () => {
     try {
