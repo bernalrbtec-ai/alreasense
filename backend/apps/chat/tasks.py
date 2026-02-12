@@ -3459,8 +3459,8 @@ async def start_chat_consumers():
                         from apps.chat.media_tasks import handle_process_incoming_media
                         payload = json.loads(message.body.decode())
                         inst = payload.get('instance_name') or '(vazio)'
-mid = (payload.get('message_id') or '')[:8]
-logger.info(f"📥 [CHAT CONSUMER] Recebida task process_incoming_media | instance_name={inst} | message_id={mid}...")
+                        mid = (payload.get('message_id') or '')[:8]
+                        logger.info(f"📥 [CHAT CONSUMER] Recebida task process_incoming_media | instance_name={inst} | message_id={mid}...")
                         retry_count = payload.get('_retry_count', 0)
                         message_key_from_payload = payload.get('message_key')
                         await handle_process_incoming_media(
