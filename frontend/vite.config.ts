@@ -3,7 +3,7 @@ import react from '@vitejs/plugin-react'
 import path from 'path'
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
+export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
@@ -26,8 +26,8 @@ export default defineConfig(({ mode }) => ({
       minifySyntax: true,
       minifyWhitespace: true,
       keepNames: true,
-      // Produção: remove console.* e debugger do bundle (navegador sem logs)
-      ...(mode === 'production' ? { drop: ['console', 'debugger'] } : {}),
+      // Remove console.* e debugger do bundle (vite build = produção)
+      drop: ['console', 'debugger'],
     },
     rollupOptions: {
       output: {
@@ -35,4 +35,4 @@ export default defineConfig(({ mode }) => ({
       },
     },
   },
-}))
+})
