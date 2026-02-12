@@ -1732,18 +1732,37 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # em formatos diferentes (com/sem +, com/sem código do país)
         # Nota: normalized_phone já foi calculado acima ao buscar contato
         
-        # Buscar conversa existente usando telefone normalizado
+        # Buscar conversa existente usando telefone normalizado + instance_name
         # Usar Q() para buscar por telefone normalizado OU telefone original (para compatibilidade)
-        # ✅ CORREÇÃO: Usar Q() para tudo para evitar erro de sintaxe (keyword + positional)
+        # ✅ CORREÇÃO CRÍTICA MULTI-INSTÂNCIA: Incluir instance_name na busca!
+        # O mesmo telefone pode ter conversas em instâncias diferentes (números WhatsApp diferentes).
+        # Cada (tenant, phone, instance) = uma conversa única.
         from django.db.models import Q
         phone_query = Q(contact_phone=normalized_phone) | Q(contact_phone=phone)
         if is_group and normalized_phone_for_search:
             # ✅ Compatibilidade: localizar grupos antigos salvos como +55...
             phone_query |= Q(contact_phone=normalized_phone_for_search)
         
-        existing_conversation = Conversation.objects.filter(
-            Q(tenant=tenant) & phone_query
-        ).first()
+        base_filter = Q(tenant=tenant) & phone_query
+        
+        # 1. Prioridade: conversa com mesma instância (match exato)
+        existing_conversation = None
+        if instance_name and str(instance_name).strip():
+            existing_conversation = Conversation.objects.filter(
+                base_filter & Q(instance_name=instance_name.strip())
+            ).first()
+        
+        # 2. Fallback: conversa legada sem instance_name (atualizar depois)
+        if not existing_conversation:
+            existing_conversation = Conversation.objects.filter(
+                base_filter & Q(instance_name='')
+            ).first()
+            if existing_conversation and instance_name and str(instance_name).strip():
+                logger.info(f"🔄 [MULTI-INST] Conversa legada encontrada (sem instance_name), atribuindo: {instance_name}")
+                existing_conversation.instance_name = instance_name.strip()
+                if correct_friendly_name:
+                    existing_conversation.instance_friendly_name = correct_friendly_name
+                existing_conversation.save(update_fields=['instance_name', 'instance_friendly_name'])
         
         if existing_conversation:
             # Conversa existe - usar telefone normalizado para garantir consistência
