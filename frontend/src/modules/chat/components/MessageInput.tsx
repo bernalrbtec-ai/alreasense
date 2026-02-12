@@ -22,7 +22,7 @@ interface MessageInputProps {
 }
 
 export function MessageInput({ sendMessage, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
-  const { activeConversation, replyToMessage, clearReply } = useChatStore();
+  const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
   // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
   const conversationId = propConversationId || activeConversation?.id;
   const conversationType = propConversationType || activeConversation?.conversation_type || 'individual';
@@ -431,7 +431,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       console.log('✅ [FILE] Upload S3 completo');
 
       // 3️⃣ Confirmar backend
-      await api.post('/chat/confirm-upload/', {
+      const { data: confirmData } = await api.post('/chat/confirm-upload/', {
         conversation_id: activeConversation.id,
         attachment_id: presignedData.attachment_id,
         s3_key: presignedData.s3_key,
@@ -439,6 +439,15 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         content_type: file.type,
         file_size: file.size,
       });
+
+      // ✅ CRÍTICO: Adicionar mensagem ao store imediatamente (evita "imagem não aparece na 1ª vez")
+      if (confirmData?.message) {
+        const msg = { ...confirmData.message };
+        if (!msg.conversation_id && activeConversation?.id) {
+          msg.conversation_id = activeConversation.id;
+        }
+        addMessage(msg);
+      }
 
       console.log('✅ [FILE] Arquivo enviado com sucesso!');
 
