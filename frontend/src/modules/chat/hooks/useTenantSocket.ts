@@ -506,10 +506,9 @@ export function useTenantSocket() {
         console.log('💬 [TENANT WS] Active conversation id:', useChatStore.getState().activeConversation?.id);
         
         if (data.message) {
-          const { addMessage, activeConversation } = useChatStore.getState();
+          const { addMessage, addConversation, activeConversation, setActiveConversation } = useChatStore.getState();
           
           // ✅ CORREÇÃO: Verificar conversation_id em TODAS as possíveis localizações
-          // Backend pode enviar: data.conversation_id OU data.message.conversation OU data.conversation.id
           const messageConversationId = data.message.conversation 
             ? String(data.message.conversation) 
             : (data.message.conversation_id ? String(data.message.conversation_id) : null);
@@ -517,46 +516,37 @@ export function useTenantSocket() {
           const directConversationId = data.conversation_id ? String(data.conversation_id) : null;
           const activeConversationId = activeConversation?.id ? String(activeConversation.id) : null;
           
-          // ✅ CORREÇÃO: Usar qualquer um dos IDs disponíveis (prioridade: direct > message > conversation)
           const finalMessageConvId = directConversationId || messageConversationId || dataConversationId;
           const isActiveConversation = activeConversationId && finalMessageConvId && (
             activeConversationId === finalMessageConvId
           );
           
-          console.log('🔍 [TENANT WS] Verificando se mensagem é da conversa ativa:', {
-            messageConversationId: messageConversationId,
-            dataConversationId: dataConversationId,
-            directConversationId: directConversationId,
-            finalMessageConvId: finalMessageConvId,
-            activeConversationId: activeConversationId,
-            messageConversation: data.message.conversation,
-            messageConversationIdField: data.message.conversation_id,
-            dataConversationIdField: data.conversation_id,
-            isActiveConversation
-          });
-          
-          // ✅ CORREÇÃO CRÍTICA: Adicionar mensagem se for da conversa ativa OU se conversa existe no store
-          // Isso garante que mensagens sejam adicionadas mesmo se conversa não estiver aberta no momento
-          // Quando a conversa for aberta, a mensagem já estará disponível
           const { conversations } = useChatStore.getState();
-          const conversationExists = conversations.some(conv => 
-            String(conv.id) === finalMessageConvId
+          const convIdNorm = (id: string | null | undefined) => (id || '').toString().toLowerCase();
+          let conversationExists = conversations.some(conv => 
+            convIdNorm(conv.id) === convIdNorm(finalMessageConvId)
           );
           
-          if (isActiveConversation) {
-            console.log('✅ [TENANT WS] Mensagem é da conversa ativa, adicionando ao store...');
-            addMessage(data.message);
-          } else if (conversationExists) {
-            // ✅ CORREÇÃO: Se conversa existe no store mas não está aberta, adicionar mensagem também
-            // Isso garante que quando a conversa for aberta, a mensagem já esteja disponível
-            console.log('✅ [TENANT WS] Mensagem é de conversa existente no store, adicionando ao store...');
-            addMessage(data.message);
-          } else {
-            console.log('ℹ️ [TENANT WS] Mensagem NÃO é da conversa ativa e conversa não existe no store');
-            console.log('   ⚠️ Mensagem será carregada quando a conversa correta for aberta');
+          // ✅ FIX CRÍTICO: Se conversa NÃO existe e temos data.conversation, adicionar PRIMEIRO
+          // message_received pode chegar ANTES de conversation_updated (race no backend).
+          // Sem isso, addMessage ignora a mensagem e a 1ª msg de individual nunca aparece.
+          if (!conversationExists && data.conversation && finalMessageConvId) {
+            console.log('✅ [TENANT WS] Conversa nova (ainda não no store), adicionando antes da mensagem:', finalMessageConvId);
+            addConversation(data.conversation);
+            conversationExists = true;
+            
+            // ✅ Auto-abrir conversa se usuário está no chat sem conversa ativa (individual e grupo)
+            const currentPath = window.location.pathname;
+            if (currentPath === '/chat' && !activeConversationId) {
+              setActiveConversation(data.conversation);
+            }
           }
           
-          // ✅ Atualizar conversa na lista se fornecida (sempre atualizar para unread_count)
+          if (isActiveConversation || conversationExists) {
+            addMessage(data.message);
+          }
+          
+          // ✅ Atualizar conversa na lista se fornecida (last_message, unread_count)
           if (data.conversation) {
             const { updateConversation, setDepartments } = useChatStore.getState();
             console.log('🔄 [TENANT WS] Atualizando conversa com unread_count:', data.conversation.unread_count);
