@@ -3717,9 +3717,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ MANTER: Também enviar conversation_transferred para compatibilidade com handlers específicos
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
+        from apps.chat.utils.serialization import serialize_conversation_for_ws
         
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
+        tenant_group = f"chat_tenant_{conversation.tenant_id}"
         
         # ✅ FIX: Broadcast para a sala da conversa (atualiza chat aberto)
         async_to_sync(channel_layer.group_send)(
@@ -3734,6 +3736,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         )
         
         # ✅ FIX: Broadcast para todo o tenant (atualiza lista de conversas)
+        # NOTA: Este broadcast é redundante com o broadcast_conversation_updated acima,
+        # mas mantido para compatibilidade com handlers específicos que podem estar escutando
+        # apenas este evento específico. O broadcast_conversation_updated já faz o trabalho principal.
         conv_data_serializable = serialize_conversation_for_ws(conversation)
         async_to_sync(channel_layer.group_send)(
             tenant_group,
