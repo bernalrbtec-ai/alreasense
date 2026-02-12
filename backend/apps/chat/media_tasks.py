@@ -48,6 +48,20 @@ async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance
     
     logger.critical(f"👥 [GROUP INFO] Buscando informações do grupo: {group_jid}")
     
+    # ✅ CRÍTICO: Usar instance_name da conversa (instância que tem o grupo)
+    instance_name_for_api = instance_name
+    try:
+        conv_inst = await sync_to_async(
+            lambda: Conversation.objects.filter(id=conversation_id).values_list('instance_name', flat=True).first()
+        )()
+        if conv_inst and str(conv_inst).strip():
+            instance_name_for_api = str(conv_inst).strip()
+            if instance_name_for_api != (instance_name or ''):
+                logger.info(f"   📌 [GROUP INFO] Usando instance da conversa ({instance_name_for_api[:8]}...) em vez do payload")
+        instance_name = instance_name_for_api
+    except Exception as e:
+        logger.debug("   [GROUP INFO] Não foi possível obter instance da conversa: %s", e)
+    
     # ✅ VALIDAÇÃO CRÍTICA: Garantir que group_jid termina com @g.us
     if not group_jid.endswith('@g.us'):
         logger.critical(f"❌ [GROUP INFO] ERRO CRÍTICO: group_jid não termina com @g.us!")

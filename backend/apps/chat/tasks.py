@@ -2463,19 +2463,30 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
             logger.critical(f"   ⚠️ Continuando mesmo assim, mas pode haver confusão...")
         
         # Busca instância WhatsApp ativa
+        from django.db.models import Q
         from apps.notifications.models import WhatsAppInstance
         from apps.connections.models import EvolutionConnection
         
         # ✅ CORREÇÃO: Fechar conexões antigas antes de nova operação de banco
         close_old_connections()
         
-        wa_instance = await database_sync_to_async(
-            WhatsAppInstance.objects.filter(
-                tenant=conversation.tenant,
-                is_active=True,
-                status='active'
-            ).first
-        )()
+        # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
+        wa_instance = None
+        if conversation.instance_name and str(conversation.instance_name).strip():
+            wa_instance = await database_sync_to_async(
+                lambda: WhatsAppInstance.objects.filter(
+                    Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                    tenant=conversation.tenant, is_active=True, status='active'
+                ).first()
+            )()
+        if not wa_instance:
+            wa_instance = await database_sync_to_async(
+                WhatsAppInstance.objects.filter(
+                    tenant=conversation.tenant,
+                    is_active=True,
+                    status='active'
+                ).first
+            )()
         
         if not wa_instance:
             logger.warning(f"⚠️ [PROFILE PIC] Nenhuma instância WhatsApp ativa")
@@ -2501,7 +2512,8 @@ async def handle_fetch_profile_pic(conversation_id: str, phone: str):
         # Endpoint Evolution API
         base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = wa_instance.api_key or evolution_server.api_key
-        instance_name = wa_instance.instance_name
+        # ✅ CRÍTICO: Usar instance da conversa (instância que tem o contato)
+        instance_name = (conversation.instance_name and str(conversation.instance_name).strip()) or wa_instance.instance_name
         
         headers = {
             'apikey': api_key,
@@ -2772,6 +2784,10 @@ async def handle_fetch_contact_name(
         if conversation.conversation_type == 'group':
             logger.info(f"⏭️ [CONTACT NAME] Pulando grupo (não processa grupos): {conversation_id}")
             return
+        
+        # ✅ CRÍTICO: Usar instance da conversa (instância que tem o contato)
+        instance_name_for_api = (conversation.instance_name and str(conversation.instance_name).strip()) or instance_name
+        instance_name = instance_name_for_api
         
         # Formatar telefone (sem + e sem @s.whatsapp.net)
         clean_phone = phone.replace('+', '').replace('@s.whatsapp.net', '')
@@ -3341,15 +3357,26 @@ async def handle_mark_message_as_read(conversation_id: str, message_id: str, ret
         )(status='seen')
         message.status = 'seen'
 
+    from django.db.models import Q
     from apps.notifications.models import WhatsAppInstance
 
     close_old_connections()
-    wa_instance = await database_sync_to_async(
-        WhatsAppInstance.objects.filter(
-            tenant=message.conversation.tenant,
-            is_active=True
-        ).first
-    )()
+    # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
+    wa_instance = None
+    if message.conversation.instance_name and str(message.conversation.instance_name).strip():
+        wa_instance = await database_sync_to_async(
+            lambda: WhatsAppInstance.objects.filter(
+                Q(instance_name=message.conversation.instance_name.strip()) | Q(evolution_instance_name=message.conversation.instance_name.strip()),
+                tenant=message.conversation.tenant, is_active=True, status='active'
+            ).first()
+        )()
+    if not wa_instance:
+        wa_instance = await database_sync_to_async(
+            WhatsAppInstance.objects.filter(
+                tenant=message.conversation.tenant,
+                is_active=True
+            ).first
+        )()
 
     if wa_instance:
         defer, state_info = should_defer_instance(wa_instance.instance_name)

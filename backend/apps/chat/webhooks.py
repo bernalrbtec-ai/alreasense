@@ -1974,10 +1974,20 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 
                 if wa_instance and evolution_server:
                     logger.info(f"📸 [WEBHOOK] Buscando foto de perfil...")
-                    
-                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-                    api_key = wa_instance.api_key or evolution_server.api_key
-                    instance_name = wa_instance.instance_name
+                    # ✅ CRÍTICO: Usar instance da conversa (instância que recebeu a mensagem)
+                    instance_name = (conversation.instance_name and conversation.instance_name.strip()) or wa_instance.instance_name
+                    wa_for_api = wa_instance
+                    if conversation.instance_name and conversation.instance_name.strip():
+                        from django.db.models import Q
+                        from apps.notifications.models import WhatsAppInstance
+                        match = WhatsAppInstance.objects.filter(
+                            Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                            tenant=tenant, is_active=True
+                        ).first()
+                        if match:
+                            wa_for_api = match
+                    base_url = (wa_for_api.api_url or evolution_server.base_url).rstrip('/')
+                    api_key = wa_for_api.api_key or evolution_server.api_key
                     
                     # 👥 Para GRUPOS: enfileirar busca de informações (assíncrona, não bloqueia webhook)
                     if is_group:
@@ -2052,15 +2062,22 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         elif is_group:
             logger.info("👥 [GRUPO EXISTENTE] Enfileirando busca de informações do grupo...")
             try:
-                from apps.notifications.models import WhatsAppInstance as WAInstance
+                from django.db.models import Q
+                from apps.notifications.models import WhatsAppInstance
                 from apps.connections.models import EvolutionConnection
                 from apps.chat.tasks import fetch_group_info
 
-                wa_instance = WAInstance.objects.filter(
-                    tenant=tenant,
-                    is_active=True,
-                    status='active'
-                ).first()
+                # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
+                wa_instance = None
+                if conversation.instance_name and conversation.instance_name.strip():
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                        tenant=tenant, is_active=True
+                    ).first()
+                if not wa_instance:
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        tenant=tenant, is_active=True, status='active'
+                    ).first()
 
                 evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
 
@@ -2090,7 +2107,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
 
                     base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
                     api_key = wa_instance.api_key or evolution_server.api_key
-                    instance_name = wa_instance.instance_name
+                    # ✅ CRÍTICO: Usar instance da conversa (instância que tem o grupo)
+                    instance_name = (conversation.instance_name and conversation.instance_name.strip()) or wa_instance.instance_name
 
                     # ✅ MELHORIA: Sempre enfileirar busca de info (garante nome e foto atualizados)
                     fetch_group_info.delay(
@@ -2110,15 +2128,22 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         elif not is_group:
             logger.info("👤 [INDIVIDUAL EXISTENTE] Enfileirando busca de informações do contato...")
             try:
-                from apps.notifications.models import WhatsAppInstance as WAInstance
+                from django.db.models import Q
+                from apps.notifications.models import WhatsAppInstance
                 from apps.connections.models import EvolutionConnection
                 from apps.chat.tasks import fetch_contact_name, fetch_profile_pic
 
-                wa_instance = WAInstance.objects.filter(
-                    tenant=tenant,
-                    is_active=True,
-                    status='active'
-                ).first()
+                # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
+                wa_instance = None
+                if conversation.instance_name and conversation.instance_name.strip():
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                        tenant=tenant, is_active=True
+                    ).first()
+                if not wa_instance:
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        tenant=tenant, is_active=True, status='active'
+                    ).first()
 
                 evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
 
@@ -3541,12 +3566,20 @@ def send_delivery_receipt(conversation: Conversation, message: Message):
     Isso fará com que o remetente veja ✓✓ cinza no WhatsApp dele.
     """
     try:
-        # Buscar instância WhatsApp ativa do tenant
-        wa_instance = WhatsAppInstance.objects.filter(
-            tenant=conversation.tenant,
-            is_active=True,
-            status='active'
-        ).first()
+        # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
+        from django.db.models import Q
+        wa_instance = None
+        if conversation.instance_name and str(conversation.instance_name).strip():
+            wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                tenant=conversation.tenant, is_active=True, status='active'
+            ).first()
+        if not wa_instance:
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant=conversation.tenant,
+                is_active=True,
+                status='active'
+            ).first()
         
         if not wa_instance:
             logger.warning(f"⚠️ [DELIVERY ACK] Nenhuma instância WhatsApp ativa para tenant {conversation.tenant.name}")
@@ -3561,7 +3594,8 @@ def send_delivery_receipt(conversation: Conversation, message: Message):
         # Endpoint da Evolution API para enviar ACK de entrega
         base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = wa_instance.api_key or evolution_server.api_key
-        instance_name = wa_instance.instance_name
+        # ✅ CRÍTICO: Usar instance da conversa (instância que recebeu a mensagem)
+        instance_name = (conversation.instance_name and str(conversation.instance_name).strip()) or wa_instance.instance_name
         
         url = f"{base_url}/chat/markMessageAsRead/{instance_name}"
         
@@ -3790,12 +3824,20 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
     import time
     
     try:
-        # Buscar instância WhatsApp ativa do tenant
-        wa_instance = WhatsAppInstance.objects.filter(
-            tenant=conversation.tenant,
-            is_active=True,
-            status='active'
-        ).first()
+        # ✅ CRÍTICO: Preferir instância da conversa (que recebeu a mensagem)
+        from django.db.models import Q
+        wa_instance = None
+        if conversation.instance_name and str(conversation.instance_name).strip():
+            wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
+                tenant=conversation.tenant, is_active=True, status='active'
+            ).first()
+        if not wa_instance:
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant=conversation.tenant,
+                is_active=True,
+                status='active'
+            ).first()
         
         if not wa_instance:
             logger.warning(f"⚠️ [READ RECEIPT] Nenhuma instância WhatsApp ativa para tenant {conversation.tenant.name}")
@@ -3820,7 +3862,8 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
         # Formato: POST /chat/markMessageAsRead/{instance}
         base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = wa_instance.api_key or evolution_server.api_key
-        instance_name = wa_instance.instance_name
+        # ✅ CRÍTICO: Usar instance da conversa (instância que recebeu a mensagem)
+        instance_name = (conversation.instance_name and str(conversation.instance_name).strip()) or wa_instance.instance_name
         
         url = f"{base_url}/chat/markMessageAsRead/{instance_name}"
         
