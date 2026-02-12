@@ -4105,21 +4105,20 @@ class MessageViewSet(viewsets.ModelViewSet):
                 from apps.chat.models import MessageAttachment
                 tenant_id = message.conversation.tenant_id
                 for original_attachment in message.attachments.all():
-                    MessageAttachment.objects.create(
+                    # Não copiar media_hash: é único por attachment; o save() gera um novo para o encaminhado
+                    new_attachment = MessageAttachment.objects.create(
                         message=forwarded_message,
                         tenant_id=tenant_id,
                         file_url=original_attachment.file_url or '',
-                        short_url=original_attachment.short_url,
+                        short_url=None,  # preenchido no save() com o novo media_hash
                         mime_type=original_attachment.mime_type or 'application/octet-stream',
                         original_filename=original_attachment.original_filename or 'attachment',
                         file_path=getattr(original_attachment, 'file_path', '') or '',
                         expires_at=getattr(original_attachment, 'expires_at', None) or timezone.now() + timedelta(days=30),
                         size_bytes=getattr(original_attachment, 'size_bytes', 0) or 0,
                         storage_type=getattr(original_attachment, 'storage_type', 's3') or 's3',
-                        media_hash=getattr(original_attachment, 'media_hash', None),
                     )
-                    # Adicionar URL para envio
-                    attachment_urls.append(original_attachment.short_url or original_attachment.file_url)
+                    attachment_urls.append(new_attachment.short_url or new_attachment.file_url)
                 
                 forwarded_message.metadata['attachment_urls'] = attachment_urls
                 forwarded_message.save(update_fields=['metadata'])

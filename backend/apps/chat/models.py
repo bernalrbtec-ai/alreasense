@@ -549,8 +549,9 @@ class MessageAttachment(models.Model):
         Define expires_at e gera media_hash/short_url automaticamente.
         """
         import logging
+        from django.conf import settings
         from django.db import IntegrityError
-        
+
         logger = logging.getLogger(__name__)
         
         # 1. Definir expires_at (cache local)
@@ -599,7 +600,6 @@ class MessageAttachment(models.Model):
                         raise
             
             # Gerar short_url (endpoint está em /api/chat/media/)
-            from django.conf import settings
             base_url = getattr(settings, 'BASE_URL', 'https://alreasense-backend-production.up.railway.app')
             # Canonical com barra final
             self.short_url = f"{base_url}/api/chat/media/{self.media_hash}/"
