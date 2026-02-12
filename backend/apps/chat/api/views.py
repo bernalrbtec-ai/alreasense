@@ -3447,8 +3447,42 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         - Gerente: pode transferir conversas para departamentos aos quais pertence
         - Agente: pode transferir conversas para departamentos aos quais pertence
         """
-        conversation = self.get_object()
         user = request.user
+        
+        # ✅ CORREÇÃO CRÍTICA: Buscar conversa diretamente sem usar get_object()
+        # get_object() usa queryset filtrado que pode não incluir a conversa se o usuário
+        # não tiver acesso ao departamento. Para transferir, precisamos buscar diretamente
+        # e validar acesso manualmente.
+        try:
+            conversation = Conversation.objects.select_related('tenant', 'department', 'assigned_to').get(
+                id=pk,
+                tenant=user.tenant  # ✅ SEGURANÇA: Sempre filtrar por tenant
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {'error': 'Conversa não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        
+        # ✅ VALIDAÇÃO DE ACESSO: Verificar se usuário tem acesso à conversa
+        # Admin pode transferir qualquer conversa do tenant
+        if not user.is_admin:
+            # Gerente/Agente: verificar se tem acesso ao departamento OU conversa está atribuída a ele
+            if conversation.department_id:
+                user_department_ids = set(user.departments.values_list('id', flat=True))
+                if conversation.department_id not in user_department_ids:
+                    # Verificar se conversa está atribuída ao usuário
+                    if conversation.assigned_to_id != user.id:
+                        return Response(
+                            {'error': 'Você não tem acesso a esta conversa'},
+                            status=status.HTTP_403_FORBIDDEN
+                        )
+            elif conversation.assigned_to_id != user.id:
+                # Conversa sem departamento (Inbox) só pode ser transferida se atribuída ao usuário
+                return Response(
+                    {'error': 'Você não tem acesso a esta conversa'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
         
         # ✅ CORREÇÃO: Permitir que agentes transfiram conversas
         # Qualquer usuário autenticado com acesso ao chat pode transferir conversas
