@@ -709,6 +709,10 @@ export function useTenantSocket() {
           
           // ✅ IMPORTANTE: Se conversa não existe no store, adicionar (pode acontecer em race conditions)
           const isNewConversation = !existingConversation;
+          const currentPath = window.location.pathname;
+          const isOnChatPage = currentPath === '/chat';
+          const { setActiveConversation } = useChatStore.getState();
+          
           if (isNewConversation) {
             console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...', {
               id: data.conversation.id,
@@ -719,6 +723,13 @@ export function useTenantSocket() {
             });
             addConversation(data.conversation);
             console.log('✅ [TENANT WS] Conversa adicionada ao store via conversation_updated');
+            
+            // ✅ CORREÇÃO CRÍTICA: Se conversa é nova e usuário está na página do chat sem conversa ativa,
+            // definir automaticamente como ativa para que apareça no chat
+            if (isOnChatPage && !activeConv) {
+              console.log('✅ [TENANT WS] Conversa nova e nenhuma conversa ativa, definindo como ativa automaticamente');
+              setActiveConversation(data.conversation);
+            }
           } else {
             // ✅ CORREÇÃO CRÍTICA: Sempre atualizar, mesmo que pareça igual
             // Isso garante que last_message seja atualizado mesmo se outros campos não mudaram
@@ -731,6 +742,13 @@ export function useTenantSocket() {
               status: data.conversation.status
             });
             updateConv(data.conversation);
+            
+            // ✅ CORREÇÃO CRÍTICA: Se conversa foi reaberta e usuário está na página do chat sem conversa ativa,
+            // definir automaticamente como ativa para que apareça no chat
+            if (statusReopened && isOnChatPage && !activeConv) {
+              console.log('✅ [TENANT WS] Conversa reaberta e nenhuma conversa ativa, definindo como ativa automaticamente');
+              setActiveConversation(data.conversation);
+            }
             
             // ✅ DEBUG: Verificar se conversa está visível após atualização
             const { conversations: updatedConvs, activeDepartment: activeDept } = useChatStore.getState();
@@ -800,12 +818,12 @@ export function useTenantSocket() {
             }
           }
           
-          // 🔔 Mostrar toast se conversa foi reaberta
+          // 🔔 Mostrar toast se conversa foi reaberta (apenas se não foi definida como ativa automaticamente)
           // ✅ FIX: Também mostrar se não existia no store E status é pending (nova conversa ou reaberta)
-          if (statusReopened || (!existingConversation && isNowPending)) {
+          // ✅ CORREÇÃO: Não mostrar toast se conversa já foi definida como ativa automaticamente acima
+          const wasAutoActivated = (isNewConversation || statusReopened) && isOnChatPage && !activeConv;
+          if ((statusReopened || (!existingConversation && isNowPending)) && !wasAutoActivated) {
             const contactName = data.conversation.contact_name || data.conversation.contact_phone;
-            const currentPath = window.location.pathname;
-            const isOnChatPage = currentPath === '/chat';
             
             // ✅ Prevenir múltiplos toasts: só mostrar uma vez por conversa reaberta
             // Usar apenas o ID da conversa como chave (sem timestamp) para detectar duplicatas
@@ -840,7 +858,7 @@ export function useTenantSocket() {
               // ✅ Limpar do registry após 10 segundos (backup caso callbacks não sejam chamados)
               globalToastRegistry.clearAfterTimeout(toastKey, 10000);
             } else {
-              console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat');
+              console.log('🔕 [TOAST] Não exibido - usuário já está na página do chat e conversa foi ativada automaticamente');
               // ✅ Remover do registry se não mostrou o toast (para permitir mostrar depois)
               globalToastRegistry.removeToast(toastKey);
             }
