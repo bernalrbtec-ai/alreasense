@@ -2902,7 +2902,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         ).first()
                         
                         if fallback_wa_instance:
-                            instance_name_for_media = fallback_wa_instance.instance_name
+                            # ✅ CRÍTICO: Sempre usar instance_name do webhook (instância que recebeu a mídia),
+                            # nunca fallback_wa_instance.instance_name (pode ser outra instância do tenant)
+                            instance_name_for_media = instance_name
                             api_key_for_media = fallback_wa_instance.api_key
                             evolution_api_url_for_media = fallback_wa_instance.api_url
                             
@@ -2945,6 +2947,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     logger.info(f"🔄 [WEBHOOK] Enfileirando processamento direto (S3) do anexo {attachment_id_str}...")
                     logger.info(f"   📌 tenant_id: {tenant_id_str}")
                     logger.info(f"   📌 message_id: {message_id_str}")
+                    logger.info(f"   📌 instance_name (webhook): {instance_name_for_media}")
                     logger.info(f"   📌 media_url: {attachment_url[:100]}...")
                     logger.info(f"   📌 media_type: {incoming_media_type}")
                     

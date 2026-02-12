@@ -907,6 +907,9 @@ class EvolutionWebhookView(APIView):
                     logger.info(f"✅ [FLOW CHAT] WhatsAppInstance encontrada: {whatsapp_instance.friendly_name} ({whatsapp_instance.instance_name})")
                     logger.info(f"   📋 Default Department ID: {whatsapp_instance.default_department_id}")
                     logger.info(f"   📋 Default Department: {whatsapp_instance.default_department.name if whatsapp_instance.default_department else 'Nenhum (Inbox)'}")
+                    # ✅ AVISO: Se instância encontrada não bate com webhook, mídia usará instance do webhook (data['instance'])
+                    if whatsapp_instance.instance_name != instance_name and (whatsapp_instance.evolution_instance_name or '') != instance_name:
+                        logger.warning(f"⚠️ [FLOW CHAT] Instância encontrada ({whatsapp_instance.instance_name[:8]}...) difere do webhook ({instance_name[:8] if instance_name else 'N/A'}...). Mídia usará instance do webhook.")
                     
                     # ✅ VERIFICAÇÃO: Se default_department_id existe mas objeto não foi carregado
                     if whatsapp_instance.default_department_id and not whatsapp_instance.default_department:

@@ -562,13 +562,16 @@ async def handle_process_incoming_media(
                 
                 # ✅ PRIORIDADE 2: URL descriptografada se base64 não funcionou ou não tiver message_key
                 if not decrypted_data:
+                    # ✅ CRÍTICO: Evolution API getMediaUrl espera mediaId = key.id do WhatsApp (ex: 3EB09F19...),
+                    # NÃO nosso UUID interno (message_id). Usar message_key['id'] quando disponível.
+                    media_id_for_evolution = (message_key.get('id') if message_key else None) or message_id
                     logger.info(f"🔐 [INCOMING MEDIA] PRIORIDADE 2: Tentando /s3/getMediaUrl (URL descriptografada)...")
-                    logger.info(f"   📌 [INCOMING MEDIA] Motivo: base64 não funcionou ou message_key não disponível")
+                    logger.info(f"   📌 [INCOMING MEDIA] instance_name={instance_name} mediaId={str(media_id_for_evolution)[:20]}...")
                     endpoint_url = f"{base_url}/s3/getMediaUrl/{instance_name}"
                     
                     response_url = await client.get(
                         endpoint_url,
-                        params={'mediaId': message_id},
+                        params={'mediaId': media_id_for_evolution},
                         headers={'apikey': api_key}
                     )
                     
