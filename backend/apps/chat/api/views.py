@@ -3715,15 +3715,16 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             do_broadcast()
         
         # ✅ MANTER: Também enviar conversation_transferred para compatibilidade com handlers específicos
+        # Este evento é específico para transferências e pode ser usado por handlers que precisam
+        # de informações específicas da transferência (novo agente, departamento, etc)
         from channels.layers import get_channel_layer
         from asgiref.sync import async_to_sync
-        from apps.chat.utils.serialization import serialize_conversation_for_ws
         
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
-        tenant_group = f"chat_tenant_{conversation.tenant_id}"
         
         # ✅ FIX: Broadcast para a sala da conversa (atualiza chat aberto)
+        # Este evento é específico para transferências e não conflita com conversation_updated
         async_to_sync(channel_layer.group_send)(
             room_group_name,
             {
@@ -3735,18 +3736,15 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             }
         )
         
-        # ✅ FIX: Broadcast para todo o tenant (atualiza lista de conversas)
-        # NOTA: Este broadcast é redundante com o broadcast_conversation_updated acima,
-        # mas mantido para compatibilidade com handlers específicos que podem estar escutando
-        # apenas este evento específico. O broadcast_conversation_updated já faz o trabalho principal.
-        conv_data_serializable = serialize_conversation_for_ws(conversation)
-        async_to_sync(channel_layer.group_send)(
-            tenant_group,
-            {
-                'type': 'conversation_updated',
-                'conversation': conv_data_serializable
-            }
-        )
+        # ✅ CORREÇÃO CRÍTICA: Remover broadcast redundante que estava causando conflitos
+        # O broadcast_conversation_updated acima já faz todo o trabalho necessário:
+        # - Faz prefetch correto de last_message
+        # - Recalcula unread_count
+        # - Envia para tenant_group via broadcast_to_tenant
+        # O broadcast manual com serialize_conversation_for_ws estava causando problemas porque:
+        # - Não fazia prefetch de last_message (dados inconsistentes)
+        # - Podia sobrescrever dados corretos com dados incorretos
+        # - Causava race conditions com novas conversas
         
         import logging
         logger = logging.getLogger(__name__)
