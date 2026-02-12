@@ -353,6 +353,20 @@ async def handle_process_profile_pic(tenant_id: str, phone: str, profile_url: st
         logger.error(f"❌ [PROFILE PIC] Erro: {e}", exc_info=True)
 
 
+def _thumbnail_dict_to_bytes(thumb: dict) -> Optional[bytes]:
+    """Converte jpegThumbnail do webhook (dict {0: 255, 1: 216, ...}) em bytes."""
+    if not thumb or not isinstance(thumb, dict):
+        return None
+    try:
+        items = [(int(k), v) for k, v in thumb.items() if str(k).lstrip('-').isdigit()]
+        if not items:
+            return None
+        items.sort(key=lambda x: x[0])
+        return bytes(v for _, v in items)
+    except (ValueError, TypeError):
+        return None
+
+
 async def handle_process_incoming_media(
     tenant_id: str,
     message_id: str,
@@ -365,6 +379,7 @@ async def handle_process_incoming_media(
     message_key: dict = None,
     retry_count: int = 0,
     mime_type: Optional[str] = None,
+    jpeg_thumbnail: dict = None,
 ):
     """
     Handler: Processa mídia recebida do WhatsApp.
@@ -624,7 +639,13 @@ async def handle_process_incoming_media(
             logger.warning(f"⚠️ [INCOMING MEDIA] Erro ao obter mídia descriptografada: {e}. Usando URL original.", exc_info=True)
     
     # ✅ Se URL original tem .enc, avisar
-    if '.enc' in media_url.lower() and final_media_url == media_url and not decrypted_data:
+    # ✅ Rastrear se falhou descriptografia (para mensagem de erro amigável ao usuário)
+    decryption_failed = (
+        instance_name and api_key and evolution_api_url
+        and not decrypted_data
+        and final_media_url == media_url
+    )
+    if '.enc' in (media_url or '').lower() and decryption_failed:
         logger.warning(f"⚠️ [INCOMING MEDIA] URL original tem .enc e não foi possível descriptografar!")
         logger.warning(f"   🔐 [INCOMING MEDIA] URL pode estar criptografada: {media_url[:100]}...")
     
@@ -845,26 +866,46 @@ async def handle_process_incoming_media(
             is_valid, validation_error, detected_format = validate_image_data(media_data, media_type)
             
             if not is_valid:
-                logger.error(f"❌ [INCOMING MEDIA] Validação falhou: {validation_error}")
-                # Marcar attachment como erro
-                try:
-                    existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
-                        message__id=message_id,
-                        file_url='',
-                        file_path=''
-                    ).first())()
-                    if existing:
-                        from apps.chat.utils.serialization import normalize_metadata
-                        metadata = normalize_metadata(existing.metadata)
-                        metadata['error'] = f'Validação falhou: {validation_error}'
-                        metadata.pop('processing', None)
-                        existing.metadata = metadata
-                        # ✅ CORREÇÃO CRÍTICA: Marcar como falhou
-                        existing.processing_status = 'failed'
-                        await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
-                except Exception:
-                    pass
-                return  # Não processar arquivo inválido
+                # ✅ FALLBACK: Usar jpegThumbnail quando descriptografia falhou (imagem criptografada)
+                thumbnail_bytes = _thumbnail_dict_to_bytes(jpeg_thumbnail) if jpeg_thumbnail else None
+                if (decryption_failed and media_type == 'image' and thumbnail_bytes and
+                        len(thumbnail_bytes) >= 4):
+                    from apps.chat.utils.image_processing import validate_image_data
+                    thumb_valid, _, _ = validate_image_data(thumbnail_bytes, 'image')
+                    if thumb_valid:
+                        logger.info(f"✅ [INCOMING MEDIA] Usando jpegThumbnail como fallback ({len(thumbnail_bytes)} bytes)")
+                        media_data = thumbnail_bytes
+                        content_type = 'image/jpeg'
+                        is_valid = True  # Continuar processamento com thumbnail
+                if not is_valid:
+                    # Mensagem amigável quando falhou descriptografia
+                    if decryption_failed and 'Magic numbers' in (validation_error or ''):
+                        user_error = (
+                            'Não foi possível processar a imagem. '
+                            'A mídia pode estar criptografada ou indisponível.'
+                        )
+                        logger.warning(f"⚠️ [INCOMING MEDIA] Validação falhou (provável mídia criptografada): {validation_error}")
+                    else:
+                        user_error = f'Validação falhou: {validation_error}'
+                        logger.error(f"❌ [INCOMING MEDIA] Validação falhou: {validation_error}")
+                    # Marcar attachment como erro
+                    try:
+                        existing = await sync_to_async(lambda: MessageAttachment.objects.filter(
+                            message__id=message_id,
+                            file_url='',
+                            file_path=''
+                        ).first())()
+                        if existing:
+                            from apps.chat.utils.serialization import normalize_metadata
+                            metadata = normalize_metadata(existing.metadata)
+                            metadata['error'] = user_error
+                            metadata.pop('processing', None)
+                            existing.metadata = metadata
+                            existing.processing_status = 'failed'
+                            await sync_to_async(existing.save)(update_fields=['metadata', 'processing_status'])
+                    except Exception:
+                        pass
+                    return  # Não processar arquivo inválido
         
         # ✅ DETECÇÃO: Usar formato detectado pelos magic numbers
         from apps.chat.utils.image_processing import validate_magic_numbers

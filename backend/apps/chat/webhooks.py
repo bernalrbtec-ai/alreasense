@@ -2970,6 +2970,13 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     except Exception as e:
                         logger.error(f"❌ [WEBHOOK] Erro ao extrair message_key: {e}", exc_info=True)
                     
+                    # ✅ Extrair jpegThumbnail para imagens (fallback quando descriptografia falhar)
+                    jpeg_thumbnail = None
+                    if message_type == 'imageMessage':
+                        thumb = message_info.get('imageMessage', {}).get('jpegThumbnail')
+                        if thumb and isinstance(thumb, dict):
+                            jpeg_thumbnail = thumb
+                            logger.info(f"✅ [WEBHOOK] jpegThumbnail disponível para fallback ({len(thumb)} bytes)")
                     try:
                         from apps.chat.tasks import process_incoming_media
                         process_incoming_media.delay(
@@ -2981,7 +2988,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             api_key=api_key_for_media,
                             evolution_api_url=evolution_api_url_for_media,
                             message_key=message_key_data,
-                            mime_type=mime_type
+                            mime_type=mime_type,
+                            jpeg_thumbnail=jpeg_thumbnail
                         )
                         logger.info(f"✅ [WEBHOOK] Processamento enfileirado com sucesso na fila chat_process_incoming_media!")
                     except Exception as e:
