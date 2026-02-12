@@ -261,6 +261,7 @@ export function MessageList() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesStartRef = useRef<HTMLDivElement>(null); // ✅ NOVO: Ref para topo (lazy loading)
   const lastMessageIdRef = useRef<string | null>(null); // ✅ NOVO: Rastrear última mensagem para detectar novas vs antigas
+  const retryTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]); // ✅ MELHORIA: Ref para armazenar timeouts de retry
   
   // ✅ CORREÇÃO: Usar hooks DEPOIS de inicializar estados e capturar conversationId
   // ✅ CORREÇÃO CRÍTICA: useUserAccess agora é seguro e sempre retorna valores válidos
@@ -315,6 +316,9 @@ export function MessageList() {
     if (!activeConversation?.id) {
       // ✅ CORREÇÃO: Limpar mensagens quando não há conversa ativa
       setMessages([], '');
+      setIsLoading(false); // ✅ MELHORIA: Resetar loading quando não há conversa
+      setHasMoreMessages(false); // ✅ MELHORIA: Resetar flag de mais mensagens
+      setVisibleMessages(new Set()); // ✅ MELHORIA: Limpar mensagens visíveis
       return;
     }
 
@@ -330,6 +334,8 @@ export function MessageList() {
     }
 
     const fetchMessages = async (retryCount = 0) => {
+      let error: any = null; // ✅ MELHORIA: Declarar error no escopo correto para usar no finally
+      
       try {
         setIsLoading(true);
         setVisibleMessages(new Set()); // Reset visibilidade ao trocar conversa
@@ -408,6 +414,10 @@ export function MessageList() {
         
         setMessages(mergedMessages, activeConversation.id);
         
+        // ✅ MELHORIA: Resetar loading imediatamente após setMessages (antes dos retries)
+        // Isso garante que loading seja resetado mesmo se houver retries pendentes
+        setIsLoading(false);
+        
         // ✅ PERFORMANCE: Animar mensagens em batch (mais rápido)
         // Reduzido delay de 20ms para 10ms e limita animação a 15 mensagens
         setTimeout(() => {
@@ -432,21 +442,35 @@ export function MessageList() {
           messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
         }, 100);
         
-        // ✅ FIX CRÍTICO: Se conversa não tem mensagens e foi criada recentemente (< 60s), 
-        // fazer múltiplos re-fetches para pegar mensagem que pode estar sendo processada
+        // ✅ MELHORIA: Se conversa não tem mensagens e foi criada recentemente (< 30s), 
+        // fazer re-fetches para pegar mensagem que pode estar sendo processada
+        // Reduzido de 60s para 30s e melhorado controle de retries
         if (mergedMessages.length === 0 && activeConversation.created_at) {
           const createdDate = new Date(activeConversation.created_at);
           const now = new Date();
           const ageInSeconds = (now.getTime() - createdDate.getTime()) / 1000;
           
-          if (ageInSeconds < 60) {
+          // ✅ MELHORIA: Reduzir tempo de retry para 30s (conversas muito novas)
+          if (ageInSeconds < 30) {
             console.log(`🔄 [MessageList] Conversa nova sem mensagens (${Math.round(ageInSeconds)}s), fazendo re-fetches...`);
             
-            // ✅ FIX: Fazer múltiplos retries com intervalos crescentes
-            const retryDelays = [1000, 2000, 3000, 5000]; // 1s, 2s, 3s, 5s
+            // ✅ MELHORIA: Limpar retries anteriores antes de criar novos
+            retryTimeoutsRef.current.forEach(t => clearTimeout(t));
+            retryTimeoutsRef.current = [];
+            
+            // ✅ MELHORIA: Fazer retries com intervalos crescentes e timeout máximo
+            const retryDelays = [1000, 2000, 3000]; // 1s, 2s, 3s (reduzido de 4 para 3 tentativas)
             
             retryDelays.forEach((delay, index) => {
-              setTimeout(async () => {
+              const timeoutId = setTimeout(async () => {
+                // ✅ MELHORIA: Verificar se ainda é a mesma conversa antes de fazer retry
+                const { activeConversation: currentActiveConversation } = useChatStore.getState();
+                if (currentActiveConversation?.id !== activeConversation.id) {
+                  console.log(`⚠️ [MessageList] Conversa mudou durante retry, cancelando...`);
+                  setIsLoading(false);
+                  return;
+                }
+                
                 try {
                   console.log(`🔄 [MessageList] Re-fetch #${index + 1} após ${delay}ms...`);
                   const retryResponse = await api.get(`/chat/conversations/${activeConversation.id}/messages/`, {
@@ -462,32 +486,40 @@ export function MessageList() {
                     console.log(`✅ [MessageList] Re-fetch #${index + 1} encontrou ${retryMsgs.length} mensagem(ns)!`);
                     setMessages(retryMsgs, activeConversation.id);
                     setHasMoreMessages(retryData.has_more || false);
-                    setIsLoading(false); // ✅ CORREÇÃO: Resetar loading quando encontrar mensagens
+                    setIsLoading(false);
+                    
+                    // ✅ MELHORIA: Cancelar outros retries pendentes
+                    retryTimeoutsRef.current.forEach(t => clearTimeout(t));
+                    retryTimeoutsRef.current = [];
                     
                     // Scroll to bottom
                     setTimeout(() => {
                       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
                     }, 100);
-                    
-                    // Parar outros retries
                     return;
                   } else if (index === retryDelays.length - 1) {
                     console.log(`⚠️ [MessageList] Nenhum retry encontrou mensagens após ${retryDelays.length} tentativas`);
-                    setIsLoading(false); // ✅ CORREÇÃO: Resetar loading ao final de todos os retries se não encontrou mensagens
+                    setIsLoading(false); // ✅ CORREÇÃO: Resetar loading ao final de todos os retries
                   }
-                } catch (error) {
-                  console.error(`❌ [MessageList] Erro no re-fetch #${index + 1}:`, error);
+                } catch (err) {
+                  console.error(`❌ [MessageList] Erro no re-fetch #${index + 1}:`, err);
+                  // ✅ MELHORIA: Resetar loading mesmo em caso de erro no último retry
+                  if (index === retryDelays.length - 1) {
+                    setIsLoading(false);
+                  }
                 }
               }, delay);
+              retryTimeoutsRef.current.push(timeoutId);
             });
           }
         }
-      } catch (error: any) {
-        console.error('❌ Erro ao carregar mensagens:', error);
+      } catch (err: any) {
+        error = err; // ✅ MELHORIA: Salvar error para usar no finally
+        console.error('❌ Erro ao carregar mensagens:', err);
         
         // ✅ CORREÇÃO: Se erro 404 e conversa é nova, fazer retry com backoff exponencial
         // Isso trata o caso onde conversa ainda está sendo criada no backend
-        if (error?.response?.status === 404 && retryCount < 3) {
+        if (err?.response?.status === 404 && retryCount < 3) {
           const createdDate = activeConversation.created_at ? new Date(activeConversation.created_at) : null;
           const now = new Date();
           const isNewConversation = createdDate && (now.getTime() - createdDate.getTime()) < 30000; // < 30s
@@ -504,7 +536,7 @@ export function MessageList() {
         }
         
         // ✅ CORREÇÃO: Se erro 404 e não é conversa nova, verificar se há mensagens no WebSocket
-        if (error?.response?.status === 404) {
+        if (err?.response?.status === 404) {
           const { getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
           const wsMessages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
           
@@ -513,6 +545,7 @@ export function MessageList() {
             const sortedMsgs = sortMessagesByTimestamp(wsMessages);
             setMessages(sortedMsgs, activeConversation.id);
             setHasMoreMessages(false);
+            setIsLoading(false); // ✅ MELHORIA: Resetar loading quando usar mensagens do WebSocket
             
             // Scroll to bottom
             setTimeout(() => {
@@ -522,21 +555,15 @@ export function MessageList() {
           }
         }
       } finally {
-        // ✅ CORREÇÃO: Sempre resetar loading no finally, exceto se for retry de 404 (que vai tentar novamente)
-        // Mas garantir que seja resetado mesmo em caso de erro ou quando não há mensagens
-        if (retryCount === 0) {
+        // ✅ CORREÇÃO MELHORADA: Sempre resetar loading no finally, exceto se for retry de 404 para conversa nova
+        // Isso garante que loading seja resetado mesmo em caso de erro ou quando não há mensagens
+        const shouldKeepLoading = error?.response?.status === 404 && 
+                                  retryCount < 3 && 
+                                  activeConversation.created_at && 
+                                  (new Date().getTime() - new Date(activeConversation.created_at).getTime()) < 30000;
+        
+        if (!shouldKeepLoading) {
           setIsLoading(false);
-        } else {
-          // Se é retry e chegou aqui, significa que não vai tentar novamente - resetar loading
-          const is404Retry = error?.response?.status === 404;
-          const createdDate = activeConversation.created_at ? new Date(activeConversation.created_at) : null;
-          const now = new Date();
-          const isNewConversation = createdDate && (now.getTime() - createdDate.getTime()) < 30000; // < 30s
-          
-          // Se não é retry de 404 para conversa nova, resetar loading
-          if (!is404Retry || !isNewConversation) {
-            setIsLoading(false);
-          }
         }
       }
     };
@@ -545,6 +572,16 @@ export function MessageList() {
     lastMessageIdRef.current = null;
     
     fetchMessages();
+    
+    // ✅ MELHORIA: Cleanup - resetar loading, limpar estados e cancelar retries quando conversa mudar ou componente desmontar
+    return () => {
+      setIsLoading(false);
+      setHasMoreMessages(false);
+      setVisibleMessages(new Set());
+      // ✅ MELHORIA: Cancelar todos os retries pendentes
+      retryTimeoutsRef.current.forEach(t => clearTimeout(t));
+      retryTimeoutsRef.current = [];
+    };
   }, [activeConversation?.id, activeConversation?.created_at, setMessages]);
 
   // Auto-scroll quando novas mensagens chegam + fade-in para novas mensagens
