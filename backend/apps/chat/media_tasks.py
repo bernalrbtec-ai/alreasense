@@ -1221,39 +1221,37 @@ async def handle_process_incoming_media(
         # Garantir que não tem flag processing (já foi removido acima)
         metadata_for_ws.pop('processing', None)
         
-        # ✅ IMPORTANTE: Sempre incluir message_id no broadcast para facilitar busca no frontend
-        # ✅ ENVIAR PARA DOIS GRUPOS:
-        # 1. Grupo da conversa específica (usuários com conversa aberta)
-        # 2. Grupo do tenant inteiro (para que seja recebido mesmo se conversa não estiver aberta)
+        # ✅ IMPORTANTE: Sempre incluir message_id e conversation_id no broadcast
+        # ✅ Enviar para tenant E para room da conversa (garante atualização em tempo real para imagens)
+        conversation_id = str(message.conversation_id)
         attachment_update_event = {
             'type': 'attachment_updated',
             'data': {
-                'message_id': str(message_id),  # ✅ Incluir message_id para busca precisa
+                'message_id': str(message_id),
                 'attachment_id': str(attachment.id),
-                'file_url': public_url,  # ✅ URL do proxy (via get_public_url)
-                'thumbnail_url': None,  # ✅ Removido: não geramos thumbnail mais (padronizado com ENVIO)
+                'conversation_id': conversation_id,  # ✅ Frontend precisa para filtrar conversa ativa
+                'file_url': public_url,
+                'thumbnail_url': None,  # ✅ Imagens: apenas file_url (sem thumbnail duplicado)
                 'mime_type': content_type,
                 'file_type': media_type,
-                'size_bytes': len(processed_data),  # ✅ NOVO: Incluir tamanho do arquivo
-                'original_filename': filename,  # ✅ NOVO: Incluir nome original do arquivo
-                'metadata': metadata_for_ws  # ✅ Incluir metadata sem flag processing
+                'size_bytes': len(processed_data),
+                'original_filename': filename,
+                'metadata': metadata_for_ws
             }
         }
         
         logger.info(f"📡 [INCOMING MEDIA] Preparando WebSocket broadcast:")
         logger.info(f"   📌 message_id: {message_id}")
         logger.info(f"   📌 attachment_id: {attachment.id}")
+        logger.info(f"   📌 conversation_id: {conversation_id}")
         logger.info(f"   📌 file_url: {public_url[:80]}...")
-        logger.info(f"   📌 conversation_id: {message.conversation_id}")
-        logger.info(f"   📌 tenant_id: {tenant_id}")
         
-        # ✅ CORREÇÃO: Enviar APENAS para grupo do tenant (evita duplicação)
-        # O useTenantSocket já cobre todas as conversas, então não precisa enviar para grupo específico
-        # Isso evita que o evento chegue duas vezes (useChatSocket + useTenantSocket)
         tenant_group = f'chat_tenant_{tenant_id}'
+        conversation_room = f'chat_tenant_{tenant_id}_conversation_{conversation_id}'
+        
         await channel_layer.group_send(tenant_group, attachment_update_event)
-        logger.info(f"📡 [INCOMING MEDIA] WebSocket enviado para grupo tenant: {tenant_group}")
-        logger.info(f"   ℹ️ [INCOMING MEDIA] NOTA: Não enviando para grupo conversa para evitar duplicação")
+        await channel_layer.group_send(conversation_room, attachment_update_event)
+        logger.info(f"📡 [INCOMING MEDIA] WebSocket enviado para tenant + conversation_room (auto-update imagens)")
         
         logger.info(f"✅ [INCOMING MEDIA] Processamento completo: {attachment.id}")
         

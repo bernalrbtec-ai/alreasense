@@ -134,6 +134,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
   // 🖼️ IMAGEM
   if (attachment.is_image) {
     // ✅ Verificar se está processando, tem erro ou se file_url é inválido
+    // ✅ CORREÇÃO: Usar APENAS file_url para imagens (nunca thumbnail_url - evita mostrar thumbnail + imagem)
     const fileUrl = (attachment.file_url || '').trim();
     const metadata = attachment.metadata || {};
     const hasError = Boolean(metadata.error);

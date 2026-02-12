@@ -156,18 +156,24 @@ export function useTenantSocket() {
         break;
 
       case 'attachment_updated':
-        // ✅ FASE 1 + 2: Tratar attachment_updated apenas da conversa ativa para evitar attachments (imagens/áudios) em conversas erradas
+        // ✅ Atualizar attachment quando mídia (imagem/áudio) é processada - garante auto-update do chat
         console.log('📎 [TENANT WS] Attachment atualizado:', {
           attachmentId: data.data?.attachment_id,
-          mimeType: data.data?.mime_type,
-          hasTranscription: !!data.data?.transcription
+          conversationId: data.data?.conversation_id,
+          mimeType: data.data?.mime_type
         });
         if (data.data?.attachment_id) {
           const { updateAttachment, updateMessage, getMessagesArray, activeConversation: currentActiveConversation } = useChatStore.getState();
           const attachmentId = data.data.attachment_id;
           const messageId = data.data.message_id;
+          const eventConversationId = data.data?.conversation_id ? String(data.data.conversation_id) : null;
           
-          // ✅ FASE 2: Buscar mensagem APENAS na conversa ativa (evita atualizar mensagem de outra conversa)
+          // ✅ Otimização: se event tem conversation_id e não é a ativa, pular busca (evita atualizar conversa errada)
+          if (eventConversationId && currentActiveConversation && eventConversationId !== String(currentActiveConversation.id)) {
+            console.log('⏭️ [TENANT WS] Attachment de outra conversa, ignorando:', { eventConversationId, activeId: currentActiveConversation.id });
+            break;
+          }
+          
           const messages = currentActiveConversation ? getMessagesArray(currentActiveConversation.id) : [];
           const messageWithAttachment = messages.find(m => 
             m.id === messageId || 
@@ -300,7 +306,7 @@ export function useTenantSocket() {
             
             updateAttachment(attachmentId, {
               file_url: fileUrl,
-              thumbnail_url: data.data.thumbnail_url,
+              thumbnail_url: undefined,  // ✅ Imagens: nunca usar thumbnail (apenas file_url) - evita duplicar preview
               mime_type: data.data.mime_type,
               size_bytes: sizeBytes,  // ✅ NOVO: Atualizar tamanho
               original_filename: originalFilename,  // ✅ NOVO: Atualizar nome original
@@ -320,7 +326,7 @@ export function useTenantSocket() {
                   const updatedAtt = {
                     ...att,
                     file_url: fileUrl,
-                    thumbnail_url: data.data.thumbnail_url,
+                    thumbnail_url: undefined,  // ✅ Imagens: apenas file_url (sem thumbnail duplicado)
                     mime_type: data.data.mime_type,
                     size_bytes: sizeBytes,
                     original_filename: originalFilename,
@@ -427,7 +433,7 @@ export function useTenantSocket() {
                   
                   updateAttachment(attachmentId, {
                     file_url: data.data.file_url || '',
-                    thumbnail_url: data.data.thumbnail_url,
+                    thumbnail_url: undefined,  // ✅ Imagens: apenas file_url (sem thumbnail duplicado)
                     mime_type: data.data.mime_type,
                     size_bytes: data.data.size_bytes || 0,
                     original_filename: data.data.original_filename || 'arquivo',
@@ -475,7 +481,7 @@ export function useTenantSocket() {
                   
                   updateAttachment(attachmentId, {
                     file_url: data.data.file_url || '',
-                    thumbnail_url: data.data.thumbnail_url,
+                    thumbnail_url: undefined,  // ✅ Imagens: apenas file_url (sem thumbnail duplicado)
                     mime_type: data.data.mime_type,
                     size_bytes: data.data.size_bytes || 0,
                     original_filename: data.data.original_filename || 'arquivo',

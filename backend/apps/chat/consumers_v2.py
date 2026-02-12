@@ -1020,6 +1020,7 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             'data': {
                 'message_id': data.get('message_id'),
                 'attachment_id': data.get('attachment_id'),
+                'conversation_id': data.get('conversation_id'),
                 'file_url': data.get('file_url'),
                 'thumbnail_url': data.get('thumbnail_url'),
                 'mime_type': data.get('mime_type'),
