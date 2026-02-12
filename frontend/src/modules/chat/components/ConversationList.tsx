@@ -525,10 +525,10 @@ export function ConversationList() {
                       }
                     </p>
                   ) : (
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-3 h-3 border-2 border-gray-300 border-t-gray-500 rounded-full animate-spin flex-shrink-0" />
-                      <span className="text-xs text-gray-400 dark:text-gray-500 truncate">Carregando última mensagem...</span>
-                    </div>
+                    // ✅ CORREÇÃO: Para conversas novas sem mensagens, mostrar texto estático ao invés de loading infinito
+                    <p className="text-sm text-gray-400 dark:text-gray-500 italic truncate">
+                      Nova conversa
+                    </p>
                   )}
                   {conversationItem.unread_count > 0 && (
                     <span className="ml-2 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full font-medium flex-shrink-0">

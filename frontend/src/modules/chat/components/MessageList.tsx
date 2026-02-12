@@ -462,6 +462,7 @@ export function MessageList() {
                     console.log(`✅ [MessageList] Re-fetch #${index + 1} encontrou ${retryMsgs.length} mensagem(ns)!`);
                     setMessages(retryMsgs, activeConversation.id);
                     setHasMoreMessages(retryData.has_more || false);
+                    setIsLoading(false); // ✅ CORREÇÃO: Resetar loading quando encontrar mensagens
                     
                     // Scroll to bottom
                     setTimeout(() => {
@@ -472,6 +473,7 @@ export function MessageList() {
                     return;
                   } else if (index === retryDelays.length - 1) {
                     console.log(`⚠️ [MessageList] Nenhum retry encontrou mensagens após ${retryDelays.length} tentativas`);
+                    setIsLoading(false); // ✅ CORREÇÃO: Resetar loading ao final de todos os retries se não encontrou mensagens
                   }
                 } catch (error) {
                   console.error(`❌ [MessageList] Erro no re-fetch #${index + 1}:`, error);
@@ -520,8 +522,21 @@ export function MessageList() {
           }
         }
       } finally {
+        // ✅ CORREÇÃO: Sempre resetar loading no finally, exceto se for retry de 404 (que vai tentar novamente)
+        // Mas garantir que seja resetado mesmo em caso de erro ou quando não há mensagens
         if (retryCount === 0) {
           setIsLoading(false);
+        } else {
+          // Se é retry e chegou aqui, significa que não vai tentar novamente - resetar loading
+          const is404Retry = error?.response?.status === 404;
+          const createdDate = activeConversation.created_at ? new Date(activeConversation.created_at) : null;
+          const now = new Date();
+          const isNewConversation = createdDate && (now.getTime() - createdDate.getTime()) < 30000; // < 30s
+          
+          // Se não é retry de 404 para conversa nova, resetar loading
+          if (!is404Retry || !isNewConversation) {
+            setIsLoading(false);
+          }
         }
       }
     };
