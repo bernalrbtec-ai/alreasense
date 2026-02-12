@@ -2859,14 +2859,17 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 api_key_for_media = None
                 evolution_api_url_for_media = None
                 
-                # ✅ OPÇÃO 1: Usar WhatsAppInstance (tem instance_name UUID do webhook)
+                # ✅ OPÇÃO 1: Usar WhatsAppInstance para api_key/url, mas instance do WEBHOOK para mídia
+                # CRÍTICO: A mídia está na instância que RECEBEU a mensagem (instance_name do webhook),
+                # não em wa_instance.instance_name (que pode ser outra instância do mesmo tenant).
                 if wa_instance:
-                    instance_name_for_media = wa_instance.instance_name  # UUID da instância
+                    # Sempre usar instance do webhook - é a instância Evolution que recebeu a mensagem
+                    instance_name_for_media = instance_name
                     api_key_for_media = wa_instance.api_key or (connection.api_key if connection else None)
                     evolution_api_url_for_media = wa_instance.api_url or (connection.base_url if connection else None)
                     
-                    logger.info(f"✅ [WEBHOOK] Usando WhatsAppInstance para descriptografar mídia:")
-                    logger.info(f"   📌 Instance (UUID): {instance_name_for_media}")
+                    logger.info(f"✅ [WEBHOOK] Usando instância do webhook para descriptografar mídia (evita confusão com multi-instância):")
+                    logger.info(f"   📌 Instance (webhook): {instance_name_for_media}")
                     logger.info(f"   📌 Friendly Name: {wa_instance.friendly_name}")
                     logger.info(f"   📌 API URL: {evolution_api_url_for_media}")
                     logger.info(f"   📌 API Key: {'Configurada' if api_key_for_media else 'Não configurada'}")
