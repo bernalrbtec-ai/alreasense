@@ -440,8 +440,26 @@ async def handle_process_incoming_media(
 
     log.info("📦 [INCOMING MEDIA] Processando %s | message_id=%s tenant=%s retry=%s", media_type, message_id, tenant_id, retry_count)
     log.debug("   🔗 URL original: %s", (media_url or '')[:200])
-    log.debug("   📌 instance_name=%s api_key=%s evolution_api_url=%s", instance_name, bool(api_key), evolution_api_url)
+    log.debug("   📌 instance_name (payload)=%s api_key=%s evolution_api_url=%s", instance_name, bool(api_key), evolution_api_url)
     log.debug("   📌 message_key=%s decrypted_bytes=%s", message_key, bool(decrypted_bytes))
+
+    # ✅ CRÍTICO: Usar instance_name da CONVERSA (instância que realmente recebeu a mensagem)
+    # O payload pode vir com instância errada em tenants multi-instância (ex: fallback retornou C_recepção)
+    instance_name_for_api = instance_name
+    try:
+        from asgiref.sync import sync_to_async
+        from apps.chat.models import Message
+        msg = await sync_to_async(Message.objects.select_related('conversation').get)(id=message_id)
+        if msg.conversation and msg.conversation.instance_name and msg.conversation.instance_name.strip():
+            instance_name_for_api = msg.conversation.instance_name.strip()
+            if instance_name_for_api != (instance_name or ''):
+                log.warning(
+                    "⚠️ [INCOMING MEDIA] Usando instance da conversa (%s) em vez do payload (%s)",
+                    instance_name_for_api[:8], (instance_name or '')[:8] if instance_name else 'vazio'
+                )
+    except Exception as e:
+        log.debug("   [INCOMING MEDIA] Não foi possível obter instance da conversa: %s. Usando payload.", e)
+    instance_name = instance_name_for_api or instance_name
 
     if instance_name:
         defer, state_info = should_defer_instance(instance_name)
