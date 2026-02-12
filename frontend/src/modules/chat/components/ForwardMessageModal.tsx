@@ -63,7 +63,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
 
       toast.success(`Mensagem encaminhada para ${selectedConversation.contact_name || selectedConversation.contact_phone}`);
 
-      // Abrir a conversa de destino: se não estiver no store (ex.: conversa nova), buscar e adicionar; depois abrir
+      // Abrir a conversa de destino: se não estiver no store, buscar do backend; só abrir se encontrar
       const destId = data?.conversation_id || selectedConversation.id;
       let destConversation = conversations.find((c) => String(c.id) === String(destId));
       if (!destConversation) {
@@ -71,7 +71,16 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
           const res = await api.get(`/chat/conversations/${destId}/`);
           destConversation = res.data;
           addConversation(destConversation);
-        } catch {
+        } catch (err: any) {
+          // Se não encontrou no backend (404) ou sem permissão (403), não abrir conversa
+          // O forward foi bem-sucedido, mas a conversa pode não estar acessível ou foi removida
+          if (err?.response?.status === 404 || err?.response?.status === 403) {
+            // Não abrir conversa - deixar usuário na conversa atual ou sem conversa ativa
+            onSuccess?.();
+            onClose();
+            return;
+          }
+          // Outros erros (rede, timeout): usar selectedConversation como fallback
           destConversation = selectedConversation;
         }
       }
