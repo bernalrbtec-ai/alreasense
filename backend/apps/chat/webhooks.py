@@ -1645,12 +1645,28 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         logger.info(f"   📋 default_department: {default_department.name if default_department else 'None'}")
         logger.info(f"   📋 default_department_id: {default_department.id if default_department else 'None'}")
         
+        # ✅ CORREÇÃO: Buscar friendly_name correto baseado no instance_name do webhook
+        # wa_instance pode ter vindo de fallback (primeira instância ativa), então não confiar nela
+        # para instance_friendly_name - buscar instância que realmente corresponde ao webhook
+        from django.db.models import Q
+        correct_friendly_name = ''
+        if instance_name:
+            correct_wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
+                is_active=True,
+                status='active'
+            ).first()
+            if correct_wa_instance:
+                correct_friendly_name = correct_wa_instance.friendly_name or ''
+            elif wa_instance:
+                correct_friendly_name = wa_instance.friendly_name or ''
+        
         defaults = {
             'department': default_department,  # Departamento padrão da instância (ou None = Inbox)
             'contact_name': contact_name_to_save,
             'profile_pic_url': profile_pic_url if profile_pic_url else None,
             'instance_name': instance_name,  # Salvar instância de origem (UUID)
-            'instance_friendly_name': wa_instance.friendly_name if wa_instance else '',  # Nome exibido (ex: C_Financeiro)
+            'instance_friendly_name': correct_friendly_name,  # Nome exibido correto (instância do webhook)
             'status': 'pending' if not default_department else 'open',  # Pendente se Inbox, aberta se departamento
             'conversation_type': conversation_type,
         }
@@ -1836,8 +1852,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         update_fields_list = []
         
         # ✅ Atualizar instance_friendly_name em conversas existentes (evitar mostrar UUID)
-        if not created and wa_instance and (not conversation.instance_friendly_name or conversation.instance_friendly_name == conversation.instance_name):
-            conversation.instance_friendly_name = wa_instance.friendly_name
+        # Usar correct_friendly_name (instância do webhook) ao invés de wa_instance (pode ser fallback)
+        if not created and correct_friendly_name and (not conversation.instance_friendly_name or conversation.instance_friendly_name == conversation.instance_name):
+            conversation.instance_friendly_name = correct_friendly_name
             update_fields_list.append('instance_friendly_name')
             needs_update = True
         
