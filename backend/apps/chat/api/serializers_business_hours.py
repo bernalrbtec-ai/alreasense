@@ -45,8 +45,8 @@ class AfterHoursMessageSerializer(serializers.ModelSerializer):
     tenant_name = serializers.CharField(source='tenant.name', read_only=True)
     department_name = serializers.CharField(source='department.name', read_only=True, allow_null=True)
     reply_to_groups = serializers.BooleanField(default=False, required=False)
-    # ✅ is_active agora é read-only - sincroniza automaticamente com BusinessHours
-    is_active = serializers.BooleanField(read_only=True)
+    # ✅ is_active agora é editável - usuário pode controlar independentemente do BusinessHours
+    is_active = serializers.BooleanField(default=True, required=False)
     
     class Meta:
         model = AfterHoursMessage
@@ -62,7 +62,7 @@ class AfterHoursMessageSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'is_active', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class AfterHoursTaskConfigSerializer(serializers.ModelSerializer):

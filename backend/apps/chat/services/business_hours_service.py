@@ -251,16 +251,18 @@ class BusinessHoursService:
         return "Em breve"
     
     @staticmethod
-    def get_after_hours_message(tenant, department=None, sync_status=True) -> Optional[AfterHoursMessage]:
+    def get_after_hours_message(tenant, department=None, sync_status=False) -> Optional[AfterHoursMessage]:
         """
         Busca mensagem automática para fora de horário.
         
-        ✅ NOVO: Sincroniza is_active com BusinessHours antes de retornar.
+        ✅ CORREÇÃO: sync_status agora é False por padrão - não sincroniza automaticamente.
+        Permite controle manual independente do BusinessHours.is_active.
         
         Args:
             tenant: Tenant para buscar mensagem
             department: Departamento (opcional)
-            sync_status: Se True, sincroniza is_active com BusinessHours (padrão: True)
+            sync_status: Se True, sincroniza is_active com BusinessHours (padrão: False)
+                        Use apenas quando realmente necessário sincronizar.
         
         Returns:
             AfterHoursMessage se encontrada, None caso contrário
@@ -282,12 +284,12 @@ class BusinessHoursService:
             ).first()
         
         if message and sync_status:
-            # ✅ NOVO: Sincronizar is_active com BusinessHours correspondente
+            # ✅ Sincronizar is_active com BusinessHours correspondente (apenas se explicitamente solicitado)
             business_hours = BusinessHoursService.get_business_hours(tenant, department)
             if business_hours:
                 if message.is_active != business_hours.is_active:
-                    logger.debug(
-                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática: "
+                    logger.info(
+                        f"🔄 [BUSINESS HOURS] Sincronizando mensagem automática (solicitado explicitamente): "
                         f"is_active={message.is_active} → {business_hours.is_active}"
                     )
                     message.is_active = business_hours.is_active
@@ -303,9 +305,10 @@ class BusinessHoursService:
         Usado pelo webhook para verificar se deve enviar mensagem automática.
         Retorna apenas se a mensagem estiver ativa.
         
-        ✅ CRÍTICO: Sempre sincroniza is_active com BusinessHours antes de retornar.
+        ✅ CORREÇÃO: Não sincroniza automaticamente - respeita valor manual do usuário.
+        Verifica BusinessHours.is_active primeiro (se desativado, não envia mesmo que mensagem esteja ativa).
         """
-        # ✅ CRÍTICO: Verificar BusinessHours primeiro para garantir sincronização
+        # ✅ CRÍTICO: Verificar BusinessHours primeiro - se desativado, não enviar mensagem
         business_hours = BusinessHoursService.get_business_hours(tenant, department)
         if business_hours and not business_hours.is_active:
             # Se BusinessHours está desativado, não deve retornar mensagem ativa
@@ -315,7 +318,8 @@ class BusinessHoursService:
             )
             return None
         
-        message = BusinessHoursService.get_after_hours_message(tenant, department, sync_status=True)
+        # ✅ Buscar mensagem SEM sincronização automática - respeitar valor manual do usuário
+        message = BusinessHoursService.get_after_hours_message(tenant, department, sync_status=False)
         if message and message.is_active:
             return message
         return None

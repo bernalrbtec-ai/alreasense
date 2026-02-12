@@ -334,16 +334,14 @@ export default function BusinessHoursPage() {
     try {
       setIsSaving(true)
 
-      // ✅ REMOVIDO: is_active não é mais editável - sincroniza com BusinessHours
-      // ✅ GARANTIR que reply_to_groups seja boolean explícito antes de enviar
+      // ✅ CORREÇÃO: is_active agora é editável - enviar valor do estado
+      // ✅ GARANTIR que reply_to_groups e is_active sejam boolean explícito antes de enviar
       const data = {
         ...afterHoursMessage,
         department: selectedDepartment || null,
-        // is_active será sincronizado automaticamente pelo backend com BusinessHours
         reply_to_groups: Boolean(afterHoursMessage.reply_to_groups ?? false),
+        is_active: Boolean(afterHoursMessage.is_active ?? true), // ✅ Enviar is_active
       }
-      // Remover is_active do payload (não deve ser enviado)
-      delete data.is_active
 
       console.log('💾 [SAVE MESSAGE] Dados que serão enviados:', JSON.stringify(data, null, 2))
       console.log('💾 [SAVE MESSAGE] is_active (tipo):', typeof data.is_active, 'valor:', data.is_active)
@@ -640,26 +638,39 @@ export default function BusinessHoursPage() {
             </div>
 
             <div className="space-y-3">
-              {/* ✅ REMOVIDO: Toggle is_active - agora sincroniza automaticamente com Business Hours */}
-              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center gap-2">
-                  <Info className="h-4 w-4 text-gray-600" />
-                  <div className="text-sm text-gray-700">
-                    <p>
-                      <strong>Status:</strong> A mensagem automática está{' '}
-                      <span className={afterHoursMessage.is_active ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                        {afterHoursMessage.is_active ? 'ATIVA' : 'INATIVA'}
-                      </span>
-                      {' '}e sincroniza automaticamente com os Horários de Atendimento.
-                    </p>
-                    {businessHours && (
-                      <p className="mt-1 text-xs text-gray-500">
-                        Horários de Atendimento: {businessHours.is_active ? 'Ativo' : 'Inativo'}
+              {/* ✅ CHECKBOX: Ativo - agora editável independentemente do Business Hours */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="message_is_active"
+                  checked={Boolean(afterHoursMessage?.is_active ?? true)}
+                  onChange={(e) => {
+                    console.log('🔄 [CHECKBOX] is_active alterado:', e.target.checked)
+                    setAfterHoursMessage({ 
+                      ...afterHoursMessage, 
+                      is_active: e.target.checked 
+                    })
+                  }}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <Label htmlFor="message_is_active" className="cursor-pointer">
+                  Ativo
+                </Label>
+              </div>
+              
+              {/* ✅ AVISO: Sincronização quando BusinessHours é salvo */}
+              {businessHours && businessHours.is_active !== afterHoursMessage?.is_active && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+                  <div className="flex items-center gap-2">
+                    <Info className="h-4 w-4 text-yellow-600" />
+                    <div className="text-sm text-yellow-700">
+                      <p>
+                        <strong>Atenção:</strong> Ao salvar os Horários de Atendimento, esta mensagem será sincronizada automaticamente com o status do horário.
                       </p>
-                    )}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
 
               {/* ✅ CHECKBOX: Responder em Grupos - FORÇAR VISIBILIDADE */}
               <div className="flex items-center gap-2" style={{ visibility: 'visible', display: 'flex' }}>
