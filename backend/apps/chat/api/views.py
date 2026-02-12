@@ -4139,7 +4139,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                 {
                     'status': 'success',
                     'message': 'Mensagem encaminhada com sucesso',
-                    'forwarded_message_id': str(forwarded_message.id)
+                    'forwarded_message_id': str(forwarded_message.id),
+                    'conversation_id': str(destination_conversation.id),
                 },
                 status=status.HTTP_200_OK
             )

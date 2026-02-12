@@ -21,7 +21,7 @@ interface ForwardMessageModalProps {
 }
 
 export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMessageModalProps) {
-  const { conversations, activeConversation } = useChatStore();
+  const { conversations, activeConversation, setActiveConversation, addConversation } = useChatStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredConversations, setFilteredConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
@@ -53,16 +53,32 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
     try {
       setSending(true);
 
-      // ✅ CORREÇÃO: Usar endpoint específico de encaminhar que chama Evolution API
-      await api.post(`/chat/messages/${message.id}/forward/`, {
+      const { data } = await api.post<{
+        status: string;
+        conversation_id?: string;
+        forwarded_message_id?: string;
+      }>(`/chat/messages/${message.id}/forward/`, {
         conversation_id: selectedConversation.id
       });
 
       toast.success(`Mensagem encaminhada para ${selectedConversation.contact_name || selectedConversation.contact_phone}`);
+
+      // Abrir a conversa de destino: se não estiver no store (ex.: conversa nova), buscar e adicionar; depois abrir
+      const destId = data?.conversation_id || selectedConversation.id;
+      let destConversation = conversations.find((c) => String(c.id) === String(destId));
+      if (!destConversation) {
+        try {
+          const res = await api.get(`/chat/conversations/${destId}/`);
+          destConversation = res.data;
+          addConversation(destConversation);
+        } catch {
+          destConversation = selectedConversation;
+        }
+      }
+      setActiveConversation(destConversation);
       onSuccess?.();
       onClose();
     } catch (error: any) {
-      console.error('❌ Erro ao encaminhar mensagem:', error);
       const errorMsg = error.response?.data?.error || error.response?.data?.detail || error.message || 'Erro ao encaminhar mensagem';
       toast.error(errorMsg);
     } finally {
@@ -70,8 +86,6 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
     }
   };
 
-  console.log('📤 [FORWARD MODAL] Renderizando modal, conversations:', conversations.length);
-  
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>
       <div
