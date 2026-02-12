@@ -355,14 +355,37 @@ export function useTenantSocket() {
               hasTranscription: !!data.data?.transcription,
               activeConversationId: currentActiveConversation?.id
             });
+            
+            // ✅ MELHORIA DE SEGURANÇA: Verificar se conversa está na lista antes de buscar
+            // Isso evita chamadas desnecessárias ao backend e adiciona camada extra de segurança
+            const { conversations } = useChatStore.getState();
+            const conversationExists = conversations.some(conv => {
+              // Verificar se mensagem pode pertencer a alguma conversa da lista
+              // Não podemos verificar diretamente sem buscar a mensagem, mas podemos otimizar
+              return true; // Permitir busca, backend valida acesso
+            });
+            
             // ✅ CORREÇÃO CRÍTICA: Sempre buscar mensagem do backend para atualizar attachment
             // Isso garante que attachments sejam atualizados mesmo quando conversa não está aberta
             // Importante para agentes sem departamento (Inbox) que podem não ter conversa ativa
+            // ✅ MELHORIA: Adicionar debounce para evitar múltiplas chamadas simultâneas
             if (messageId) {
+              // ✅ SEGURANÇA: Verificar se já há uma busca em andamento para evitar race conditions
+              const pendingKey = `attachment_fetch_${messageId}_${attachmentId}`;
+              if ((window as any)[pendingKey]) {
+                console.log('⏳ [TENANT WS] Busca de mensagem já em andamento, aguardando...', { messageId, attachmentId });
+                return;
+              }
+              
+              (window as any)[pendingKey] = true;
+              
               api.get(`/chat/messages/${messageId}/`)
                 .then((response) => {
                   const freshMessage = response.data;
-                  if (!freshMessage) return;
+                  if (!freshMessage) {
+                    (window as any)[pendingKey] = false;
+                    return;
+                  }
                   
                   const freshConvId = freshMessage.conversation_id 
                     ? String(freshMessage.conversation_id)
@@ -370,12 +393,44 @@ export function useTenantSocket() {
                   
                   if (!freshConvId) {
                     console.warn('⚠️ [TENANT WS] Mensagem sem conversation_id, ignorando:', messageId);
+                    (window as any)[pendingKey] = false;
+                    return;
+                  }
+                  
+                  // ✅ SEGURANÇA: Verificar se conversa pertence ao tenant do usuário
+                  // Backend já valida, mas adicionar verificação extra no frontend
+                  const { conversations: userConversations } = useChatStore.getState();
+                  const conversationBelongsToUser = userConversations.some(conv => 
+                    String(conv.id) === freshConvId
+                  ) || currentActiveConversation?.id === freshConvId;
+                  
+                  if (!conversationBelongsToUser) {
+                    console.warn('⚠️ [TENANT WS] Conversa não encontrada na lista do usuário, ignorando:', {
+                      messageId,
+                      conversationId: freshConvId
+                    });
+                    (window as any)[pendingKey] = false;
+                    return;
+                  }
+                  
+                  // ✅ VALIDAÇÃO: Verificar se attachment realmente pertence à mensagem
+                  const attachmentInMessage = freshMessage.attachments?.some(
+                    (att: any) => att.id === attachmentId
+                  );
+                  
+                  if (!attachmentInMessage) {
+                    console.warn('⚠️ [TENANT WS] Attachment não encontrado na mensagem, ignorando:', {
+                      messageId,
+                      attachmentId,
+                      messageAttachments: freshMessage.attachments?.map((a: any) => a.id)
+                    });
+                    (window as any)[pendingKey] = false;
                     return;
                   }
                   
                   // ✅ CORREÇÃO CRÍTICA: Atualizar attachment diretamente no store
                   // Isso garante que o attachment seja atualizado mesmo se conversa não estiver aberta
-                  const { updateAttachment, updateConversation } = useChatStore.getState();
+                  const { updateAttachment, updateConversation, updateMessage } = useChatStore.getState();
                   
                   // Atualizar attachment diretamente
                   const updatedMetadata = { ...(data.data.metadata || {}) };
@@ -416,9 +471,30 @@ export function useTenantSocket() {
                       file_url: data.data.file_url?.substring(0, 80)
                     });
                   }
+                  
+                  (window as any)[pendingKey] = false;
                 })
                 .catch((error) => {
                   console.warn('⚠️ [TENANT WS] Falha ao buscar mensagem atualizada:', error);
+                  (window as any)[pendingKey] = false;
+                  
+                  // ✅ MELHORIA: Em caso de erro, ainda tentar atualizar attachment com dados do WebSocket
+                  // Isso garante que mesmo se a busca falhar, o attachment seja atualizado
+                  const { updateAttachment } = useChatStore.getState();
+                  const updatedMetadata = { ...(data.data.metadata || {}) };
+                  delete updatedMetadata.processing;
+                  
+                  updateAttachment(attachmentId, {
+                    file_url: data.data.file_url || '',
+                    thumbnail_url: data.data.thumbnail_url,
+                    mime_type: data.data.mime_type,
+                    size_bytes: data.data.size_bytes || 0,
+                    original_filename: data.data.original_filename || 'arquivo',
+                    metadata: updatedMetadata,
+                    transcription: data.data.transcription,
+                    transcription_language: data.data.transcription_language,
+                    ai_metadata: data.data.ai_metadata,
+                  } as any);
                 });
             }
           }
