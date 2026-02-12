@@ -46,6 +46,14 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
   const [selectedItem, setSelectedItem] = useState<ForwardableItem | null>(null);
   const [sending, setSending] = useState(false);
 
+  // Bloquear modal se mensagem foi apagada
+  useEffect(() => {
+    if (message?.is_deleted) {
+      toast.error('Não é possível encaminhar uma mensagem que foi apagada');
+      onClose();
+    }
+  }, [message?.is_deleted, onClose]);
+
   // Normalizar telefone (reutilizar lógica do NewConversationModal)
   const normalizePhone = useCallback((phone: string): string => {
     let clean = phone.replace(/[^\d+]/g, '');
@@ -213,6 +221,11 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
       setSending(false);
     }
   };
+
+  // Não renderizar se mensagem apagada (após todos os hooks)
+  if (message?.is_deleted) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>

@@ -78,7 +78,9 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
     
     # ✅ CORREÇÃO CRÍTICA: Buscar última mensagem de forma mais robusta
     # Se message_id foi fornecido, garantir que essa mensagem seja incluída
-    last_message_queryset = Message.objects.select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at')
+    last_message_queryset = Message.objects.filter(
+        is_deleted=False
+    ).select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at')
     
     # Se temos message_id, garantir que essa mensagem seja incluída (pode ser a mais recente)
     if message_id:
@@ -111,7 +113,8 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
             'messages',
             filter=Q(
                 messages__direction='incoming',
-                messages__status__in=['sent', 'delivered']
+                messages__status__in=['sent', 'delivered'],
+                messages__is_deleted=False
             ),
             distinct=True
         )
@@ -125,7 +128,8 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
     if not hasattr(conversation, 'last_message_list') or not conversation.last_message_list:
         # Fallback: buscar última mensagem diretamente
         last_msg = Message.objects.filter(
-            conversation=conversation
+            conversation=conversation,
+            is_deleted=False
         ).select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at').first()
         
         if last_msg:

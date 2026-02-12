@@ -294,14 +294,16 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           <span>Dados da mensagem</span>
         </button>
 
-        {/* Responder */}
-        <button
-          onClick={handleReply}
-          className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
-        >
-          <Reply className="w-4 h-4 text-gray-500" />
-          <span>Responder</span>
-        </button>
+        {/* Responder (não disponível para mensagens apagadas) */}
+        {!message.is_deleted && (
+          <button
+            onClick={handleReply}
+            className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
+          >
+            <Reply className="w-4 h-4 text-gray-500" />
+            <span>Responder</span>
+          </button>
+        )}
 
         {/* Copiar */}
         {message.content && (
@@ -334,14 +336,16 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           </button>
         )}
 
-        {/* Encaminhar */}
-        <button
-          onClick={handleForward}
-          className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
-        >
-          <Forward className="w-4 h-4 text-gray-500" />
-          <span>Encaminhar</span>
-        </button>
+        {/* Encaminhar (não disponível para mensagens apagadas) */}
+        {!message.is_deleted && (
+          <button
+            onClick={handleForward}
+            className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"
+          >
+            <Forward className="w-4 h-4 text-gray-500" />
+            <span>Encaminhar</span>
+          </button>
+        )}
 
         {/* Editar (apenas se pode editar) */}
         {canEdit && (
@@ -354,14 +358,16 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           </button>
         )}
 
-        {/* Apagar */}
-        <button
-          onClick={handleDelete}
-          className="w-full px-4 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 text-sm text-red-600 dark:text-red-400"
-        >
-          <Trash2 className="w-4 h-4 text-red-500" />
-          <span>Apagar</span>
-        </button>
+        {/* Apagar (não disponível para mensagens já apagadas) */}
+        {!message.is_deleted && (
+          <button
+            onClick={handleDelete}
+            className="w-full px-4 py-2.5 text-left hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3 text-sm text-red-600 dark:text-red-400"
+          >
+            <Trash2 className="w-4 h-4 text-red-500" />
+            <span>Apagar</span>
+          </button>
+        )}
       </div>
 
 

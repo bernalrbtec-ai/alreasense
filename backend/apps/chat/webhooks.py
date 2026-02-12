@@ -1649,9 +1649,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # wa_instance pode ter vindo de fallback (primeira instância ativa), então não confiar nela
         # para instance_friendly_name - buscar instância que realmente corresponde ao webhook
         from django.db.models import Q
+        from apps.notifications.models import WhatsAppInstance as WAInstanceModel
         correct_friendly_name = ''
         if instance_name:
-            correct_wa_instance = WhatsAppInstance.objects.filter(
+            correct_wa_instance = WAInstanceModel.objects.filter(
                 Q(instance_name=instance_name) | Q(evolution_instance_name=instance_name),
                 is_active=True,
                 status='active'

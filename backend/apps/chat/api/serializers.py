@@ -223,6 +223,11 @@ class MessageSerializer(serializers.ModelSerializer):
                             logger.warning(f"⚠️ [SERIALIZER] Erro ao reprocessar menções: {e}", exc_info=True)
                             # Em caso de erro, manter menções originais
 
+        # ✅ Mensagens apagadas: não expor conteúdo/attachments, apenas is_deleted=True
+        if instance.is_deleted:
+            data['content'] = ''
+            data['attachments'] = []
+
         return data
 
     def get_reactions_summary(self, obj):
@@ -676,8 +681,11 @@ class ConversationSerializer(serializers.ModelSerializer):
         
         # Fallback para query normal (caso não tenha prefetch)
         # ✅ CORREÇÃO: Evitar N+1 query usando select_related e prefetch_related
+        # ✅ Mensagens apagadas: não considerar como last_message
         try:
-            last_message = obj.messages.select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at').first()
+            last_message = obj.messages.filter(
+                is_deleted=False
+            ).select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at').first()
             if last_message:
                 return MessageSerializer(last_message).data
         except Exception as e:

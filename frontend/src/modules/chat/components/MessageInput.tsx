@@ -236,6 +236,13 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       return;
     }
 
+    // Bloquear envio de reply para mensagem apagada
+    if (replyToMessage?.is_deleted) {
+      toast.error('Não é possível responder a uma mensagem que foi apagada');
+      clearReply();
+      return;
+    }
+
     try {
       setSending(true);
       
@@ -478,13 +485,15 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
                 </span>
               </div>
               <p className="text-xs text-gray-600 dark:text-gray-300 line-clamp-2 break-words">
-                {replyToMessage.content 
-                  ? (replyToMessage.content.length > 100 
-                      ? replyToMessage.content.substring(0, 100) + '...' 
-                      : replyToMessage.content)
-                  : (replyToMessage.attachments && replyToMessage.attachments.length > 0
-                      ? `📎 ${replyToMessage.attachments[0].original_filename || 'Anexo'}`
-                      : 'Mensagem')}
+                {replyToMessage.is_deleted
+                  ? 'Mensagem apagada'
+                  : (replyToMessage.content
+                      ? (replyToMessage.content.length > 100
+                          ? replyToMessage.content.substring(0, 100) + '...'
+                          : replyToMessage.content)
+                      : (replyToMessage.attachments && replyToMessage.attachments.length > 0
+                          ? `📎 ${replyToMessage.attachments[0].original_filename || 'Anexo'}`
+                          : 'Mensagem'))}
               </p>
             </div>
             <button

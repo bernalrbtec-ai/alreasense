@@ -321,7 +321,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 'messages',
                 filter=Q(
                     messages__direction='incoming',
-                    messages__status__in=['sent', 'delivered']
+                    messages__status__in=['sent', 'delivered'],
+                    messages__is_deleted=False
                 ),
                 distinct=True
             )
@@ -330,9 +331,9 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ PERFORMANCE: Prefetch última mensagem para evitar N+1 queries
         # ✅ CORREÇÃO: Usar Prefetch com queryset limitado (mesma abordagem usada em webhooks.py)
         # O slicing [:1] funciona quando aplicado diretamente no queryset dentro do Prefetch
-        last_message_queryset = Message.objects.select_related(
-            'sender', 'conversation'
-        ).prefetch_related('attachments').order_by('-created_at')[:1]
+        last_message_queryset = Message.objects.filter(
+            is_deleted=False
+        ).select_related('sender', 'conversation').prefetch_related('attachments').order_by('-created_at')[:1]
         
         queryset = queryset.prefetch_related(
             Prefetch(
@@ -4096,6 +4097,13 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
         
+        # Verificar se mensagem foi apagada
+        if message.is_deleted:
+            return Response(
+                {'error': 'Não é possível encaminhar uma mensagem que foi apagada'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Verificar se mensagem tem message_id (Evolution ID)
         if not message.message_id:
             return Response(

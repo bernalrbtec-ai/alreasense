@@ -518,10 +518,12 @@ export function ConversationList() {
                   {/* ✅ MELHORIA UX: Loading state para última mensagem */}
                   {conversationItem.last_message ? (
                     <p className="text-sm text-gray-600 dark:text-gray-400 truncate">
-                      {/* Para grupos, mostrar "Nome: mensagem" */}
-                      {conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
-                        ? `${conversationItem.last_message.sender_name}: ${conversationItem.last_message.content || ''}`
-                        : (conversationItem.last_message?.content || '📎 Anexo')
+                      {/* Mensagem apagada: indicar sem exibir conteúdo */}
+                      {conversationItem.last_message?.is_deleted
+                        ? 'Mensagem apagada'
+                        : (conversationItem.conversation_type === 'group' && conversationItem.last_message?.sender_name
+                            ? `${conversationItem.last_message.sender_name}: ${conversationItem.last_message.content || ''}`
+                            : (conversationItem.last_message?.content || '📎 Anexo'))
                       }
                     </p>
                   ) : (
