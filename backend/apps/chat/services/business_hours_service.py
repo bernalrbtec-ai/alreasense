@@ -302,7 +302,19 @@ class BusinessHoursService:
         
         Usado pelo webhook para verificar se deve enviar mensagem automática.
         Retorna apenas se a mensagem estiver ativa.
+        
+        ✅ CRÍTICO: Sempre sincroniza is_active com BusinessHours antes de retornar.
         """
+        # ✅ CRÍTICO: Verificar BusinessHours primeiro para garantir sincronização
+        business_hours = BusinessHoursService.get_business_hours(tenant, department)
+        if business_hours and not business_hours.is_active:
+            # Se BusinessHours está desativado, não deve retornar mensagem ativa
+            logger.debug(
+                f"⏰ [BUSINESS HOURS] BusinessHours desativado - não retornando mensagem automática. "
+                f"Tenant: {tenant.name}, Department: {department.name if department else 'Geral'}"
+            )
+            return None
+        
         message = BusinessHoursService.get_after_hours_message(tenant, department, sync_status=True)
         if message and message.is_active:
             return message
@@ -393,6 +405,23 @@ class BusinessHoursService:
             - was_after_hours: True se estava fora de horário
             - auto_message_sent: Mensagem automática enviada (se houver)
         """
+        # ✅ VERIFICAÇÃO CRÍTICA: Verificar se BusinessHours está ativo ANTES de processar
+        business_hours = BusinessHoursService.get_business_hours(tenant, department)
+        if business_hours and not business_hours.is_active:
+            logger.info(
+                f"⏰ [BUSINESS HOURS] Horário de atendimento DESATIVADO (is_active=False) - "
+                f"não enviando mensagem automática mesmo se estiver fora do horário. "
+                f"Tenant: {tenant.name}, Department: {department.name if department else 'Geral'}, "
+                f"BusinessHours ID: {business_hours.id}"
+            )
+            return False, None  # Considera como "dentro do horário" (não processa)
+        
+        if not business_hours:
+            logger.debug(
+                f"⏰ [BUSINESS HOURS] Nenhum BusinessHours configurado - "
+                f"continuando verificação normal. Tenant: {tenant.name}, Department: {department.name if department else 'Geral'}"
+            )
+        
         # Verifica se está fora de horário
         is_open, next_open_time = BusinessHoursService.is_business_hours(
             tenant, department, message.created_at
