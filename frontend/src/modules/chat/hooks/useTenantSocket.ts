@@ -573,9 +573,16 @@ export function useTenantSocket() {
         const { updateConversation: updateConv, addConversation, conversations, activeConversation: activeConv, setMessages, setDepartments } = useChatStore.getState();
         if (data.conversation) {
           // ✅ CORREÇÃO CRÍTICA: Verificar se last_message foi atualizado
+          // ✅ MELHORIA: Tratar null explicitamente (conversas sem mensagens)
           const existingConversation = conversations.find((conversationItem) => conversationItem.id === data.conversation.id);
-          const lastMessageUpdated = existingConversation && 
-            JSON.stringify(existingConversation.last_message) !== JSON.stringify(data.conversation.last_message);
+          const existingLastMsg = existingConversation?.last_message;
+          const incomingLastMsg = data.conversation.last_message;
+          // Comparar null vs undefined vs objeto corretamente
+          const lastMessageUpdated = existingConversation && (
+            (existingLastMsg === null && incomingLastMsg !== null) ||
+            (existingLastMsg !== null && incomingLastMsg === null) ||
+            (existingLastMsg && incomingLastMsg && JSON.stringify(existingLastMsg) !== JSON.stringify(incomingLastMsg))
+          );
           
           if (lastMessageUpdated) {
             console.log('📨 [TENANT WS] Última mensagem atualizada:', {

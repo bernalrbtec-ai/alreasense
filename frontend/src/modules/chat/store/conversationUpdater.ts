@@ -57,8 +57,12 @@ function mergeConversations(
     
     // ✅ CORREÇÃO CRÍTICA: last_message deve SEMPRE usar incoming se presente (mesmo que seja null)
     // Se incoming.last_message é undefined, preservar existing. Mas se for null, usar null.
+    // ✅ MELHORIA: Tratar explicitamente null vs undefined para conversas sem mensagens
     // Isso garante que quando uma nova mensagem chega, ela atualiza corretamente
-    last_message: incoming.last_message !== undefined ? incoming.last_message : existing.last_message,
+    // E quando não há mensagens (null), isso é preservado corretamente
+    last_message: incoming.last_message !== undefined 
+      ? (incoming.last_message === null ? null : incoming.last_message)
+      : existing.last_message,
     last_message_at: incoming.last_message_at !== undefined ? incoming.last_message_at : existing.last_message_at,
     
     // ✅ CORREÇÃO CRÍTICA: Garantir que nome, foto, telefone, tipo e department sempre sejam atualizados se vierem novos dados

@@ -1681,10 +1681,24 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             except Exception as e:
                 logger.critical(f"❌ [CONVERSATION START] Erro ao configurar broadcast para conversa existente: {e}", exc_info=True)
             
+            # ✅ CORREÇÃO CRÍTICA: Fazer prefetch de last_message antes de serializar
+            # Isso garante que last_message seja None (não undefined) quando não há mensagens
+            from django.db.models import Prefetch
+            from apps.chat.models import Message
+            existing_with_prefetch = Conversation.objects.prefetch_related(
+                Prefetch(
+                    'messages',
+                    queryset=Message.objects.select_related('sender', 'conversation')
+                        .prefetch_related('attachments')
+                        .order_by('-created_at')[:1],
+                    to_attr='last_message_list'
+                )
+            ).get(id=existing.id)
+            
             return Response(
                 {
                     'message': 'Conversa já existe',
-                    'conversation': ConversationSerializer(existing).data
+                    'conversation': ConversationSerializer(existing_with_prefetch).data
                 },
                 status=status.HTTP_200_OK
             )
@@ -1749,10 +1763,23 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         except Exception as e:
             logger.critical(f"❌ [CONVERSATION START] Erro ao configurar broadcast conversation_updated: {e}", exc_info=True)
         
+        # ✅ CORREÇÃO CRÍTICA: Fazer prefetch de last_message antes de serializar
+        # Isso garante que last_message seja None (não undefined) quando não há mensagens
+        # Para conversas novas sem mensagens, last_message_list será [] e serializer retornará None
+        conversation_with_prefetch = Conversation.objects.prefetch_related(
+            Prefetch(
+                'messages',
+                queryset=Message.objects.select_related('sender', 'conversation')
+                    .prefetch_related('attachments')
+                    .order_by('-created_at')[:1],
+                to_attr='last_message_list'
+            )
+        ).get(id=conversation.id)
+        
         return Response(
             {
                 'message': 'Conversa criada com sucesso!',
-                'conversation': ConversationSerializer(conversation).data
+                'conversation': ConversationSerializer(conversation_with_prefetch).data
             },
             status=status.HTTP_201_CREATED
         )

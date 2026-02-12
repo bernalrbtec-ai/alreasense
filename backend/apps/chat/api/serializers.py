@@ -669,7 +669,10 @@ class ConversationSerializer(serializers.ModelSerializer):
         if hasattr(obj, 'last_message_list') and obj.last_message_list:
             # last_message_list está ordenado por -created_at, então o primeiro é o mais recente
             last_msg = obj.last_message_list[0] if isinstance(obj.last_message_list, list) else obj.last_message_list
-            return MessageSerializer(last_msg).data
+            if last_msg:
+                return MessageSerializer(last_msg).data
+            # ✅ CORREÇÃO: Se last_message_list existe mas está vazio ou None, retornar None explicitamente
+            return None
         
         # Fallback para query normal (caso não tenha prefetch)
         # ✅ CORREÇÃO: Evitar N+1 query usando select_related e prefetch_related
@@ -680,6 +683,8 @@ class ConversationSerializer(serializers.ModelSerializer):
         except Exception as e:
             logger.warning(f"⚠️ [SERIALIZER] Erro ao buscar última mensagem (fallback): {e}")
         
+        # ✅ CORREÇÃO CRÍTICA: Retornar None explicitamente quando não há mensagens
+        # Isso garante que o DRF serialize como null no JSON e o frontend trate corretamente
         return None
     
     def get_instance_friendly_name(self, obj):
