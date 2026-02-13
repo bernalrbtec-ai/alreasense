@@ -386,13 +386,13 @@ export default function ReportsPage() {
                   </Card>
                 </div>
 
-                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div className="space-y-6">
                   <Card>
                     <div className="p-6">
                       <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                         Mensagens por dia ({messageMetrics.range.from} a {messageMetrics.range.to})
                       </h2>
-                      <div className="h-72 xl:h-80">
+                      <div className="h-80">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart
                             data={messageMetrics.series_by_date || []}
@@ -428,15 +428,15 @@ export default function ReportsPage() {
                   </Card>
 
                   {(messageMetrics.series_by_hour_by_department?.length ?? 0) > 0 ? (
-                    <Card className="bg-gray-900 dark:bg-gray-900/90">
+                    <Card>
                       <div className="p-6">
-                        <h2 className="text-lg font-semibold text-white mb-1">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                           Média de Mensagens por Hora do Dia
                         </h2>
-                        <p className="text-sm text-gray-400 mb-4">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                           Por departamento ({messageMetrics.num_days ?? 1} dia(s) no período)
                         </p>
-                        <div className="h-72 xl:h-80">
+                        <div className="h-80">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart
                               data={Array.from({ length: 24 }, (_, h) => {
@@ -452,35 +452,27 @@ export default function ReportsPage() {
                               <defs>
                                 {['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899'].map((color, i) => (
                                   <linearGradient key={i} id={`grad-hour-${i}`} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                                    <stop offset="0%" stopColor={color} stopOpacity={0.25} />
                                     <stop offset="100%" stopColor={color} stopOpacity={0} />
                                   </linearGradient>
                                 ))}
                               </defs>
-                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
                               <XAxis
                                 dataKey="hourLabel"
-                                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                                axisLine={{ stroke: '#475569' }}
+                                tick={{ fill: 'currentColor', fontSize: 11 }}
                               />
                               <YAxis
-                                tick={{ fill: '#94a3b8', fontSize: 11 }}
-                                axisLine={{ stroke: '#475569' }}
+                                tick={{ fill: 'currentColor', fontSize: 11 }}
                                 label={{
                                   value: 'Média de Mensagens',
                                   angle: -90,
                                   position: 'insideLeft',
-                                  fill: '#94a3b8',
                                   style: { fontSize: 11 },
                                 }}
                               />
                               <Tooltip
-                                contentStyle={{
-                                  backgroundColor: '#1e293b',
-                                  border: '1px solid #475569',
-                                  borderRadius: 8,
-                                }}
-                                labelStyle={{ color: '#e2e8f0' }}
+                                contentStyle={{ borderRadius: 8 }}
                                 labelFormatter={(label) => label}
                                 formatter={(value: number) => [`${Math.round(value * 10) / 10} msg`, '']}
                               />
@@ -509,7 +501,7 @@ export default function ReportsPage() {
                     </Card>
                   ) : (
                     <Card>
-                      <div className="p-6 flex items-center justify-center h-72 xl:h-80 text-gray-500 dark:text-gray-400 text-sm">
+                      <div className="p-6 flex items-center justify-center h-80 text-gray-500 dark:text-gray-400 text-sm">
                         Sem dados por departamento para exibir hora do dia.
                       </div>
                     </Card>
