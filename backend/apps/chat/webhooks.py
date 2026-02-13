@@ -1670,11 +1670,12 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         effective_department = None if use_inbox_for_new else default_department
         effective_status = 'pending' if use_inbox_for_new or not effective_department else 'open'
         
+        instance_name_normalized = (instance_name or '').strip() if instance_name else ''
         defaults = {
             'department': effective_department,
             'contact_name': contact_name_to_save,
             'profile_pic_url': profile_pic_url if profile_pic_url else None,
-            'instance_name': instance_name,
+            'instance_name': instance_name_normalized,
             'instance_friendly_name': correct_friendly_name,
             'status': effective_status,
             'conversation_type': conversation_type,
@@ -1760,10 +1761,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 base_filter & Q(instance_name=instance_name.strip())
             ).first()
         
-        # 2. Fallback: conversa legada sem instance_name (atualizar depois)
+        # 2. Fallback: conversa legada sem instance_name (NULL ou vazio)
         if not existing_conversation:
             existing_conversation = Conversation.objects.filter(
-                base_filter & Q(instance_name='')
+                base_filter & (Q(instance_name='') | Q(instance_name__isnull=True))
             ).first()
             if existing_conversation and instance_name and str(instance_name).strip():
                 logger.info(f"🔄 [MULTI-INST] Conversa legada encontrada (sem instance_name), atribuindo: {instance_name}")
@@ -1830,12 +1831,38 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 logger.warning(f"⚠️ [ROUTING] default_department diferente do que está em defaults, corrigindo...")
                 defaults['department'] = default_department
             
-            conversation = Conversation.objects.create(
-                tenant=tenant,
-                contact_phone=normalized_phone,
-                **defaults
-            )
-            created = True
+            try:
+                conversation = Conversation.objects.create(
+                    tenant=tenant,
+                    contact_phone=normalized_phone,
+                    **defaults
+                )
+            except Exception as create_err:
+                # ✅ Race condition: outro webhook criou primeiro. Buscar e usar.
+                from django.db import IntegrityError
+                if isinstance(create_err, IntegrityError) and 'idx_chat_conversation_unique' in str(create_err):
+                    logger.warning(f"⚠️ [WEBHOOK] Race: conversa já existe, buscando... ({create_err})")
+                    inst_key = (instance_name or '').strip() or ''
+                    existing_conversation = Conversation.objects.filter(
+                        tenant=tenant,
+                        contact_phone=normalized_phone
+                    ).filter(
+                        Q(instance_name=inst_key) if inst_key else (Q(instance_name='') | Q(instance_name__isnull=True))
+                    ).first()
+                    if not existing_conversation:
+                        existing_conversation = Conversation.objects.filter(
+                            tenant=tenant, contact_phone=normalized_phone
+                        ).first()
+                    if existing_conversation:
+                        conversation = existing_conversation
+                        created = False
+                        logger.info(f"✅ [WEBHOOK] Conversa encontrada após race: {conversation.id}")
+                    else:
+                        raise
+                else:
+                    raise
+            else:
+                created = True
             
             # ✅ DEBUG: Verificar se department foi aplicado
             logger.info(f"📋 [ROUTING] Conversa criada - verificando department aplicado:")
