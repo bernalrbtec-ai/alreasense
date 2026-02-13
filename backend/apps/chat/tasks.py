@@ -639,18 +639,32 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             log.info("📝 Nota interna criada (não enviada ao WhatsApp)")
             return
         
-        # Busca instância WhatsApp ativa do tenant (mesmo modelo das campanhas)
+        # Busca instância WhatsApp ativa do tenant
+        # ✅ CORREÇÃO MULTI-INSTÂNCIA: Priorizar instance_name da conversa (que recebeu a mensagem)
         log.debug("🔍 Buscando instância WhatsApp ativa...")
         
         # ✅ CORREÇÃO: Fechar conexões antigas antes de nova operação de banco
         close_old_connections()
         
-        instance = await database_sync_to_async(
-            WhatsAppInstance.objects.filter(
-                tenant=message.conversation.tenant,
-                is_active=True
-            ).first
-        )()
+        from django.db.models import Q
+        instance = None
+        if message.conversation.instance_name and str(message.conversation.instance_name).strip():
+            instance = await database_sync_to_async(
+                lambda: WhatsAppInstance.objects.filter(
+                    Q(instance_name=message.conversation.instance_name.strip())
+                    | Q(evolution_instance_name=message.conversation.instance_name.strip()),
+                    tenant=message.conversation.tenant,
+                    is_active=True,
+                    status='active',
+                ).first()
+            )()
+        if not instance:
+            instance = await database_sync_to_async(
+                WhatsAppInstance.objects.filter(
+                    tenant=message.conversation.tenant,
+                    is_active=True,
+                ).first
+            )()
         
         if not instance:
             message.status = 'failed'

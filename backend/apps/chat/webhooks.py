@@ -3534,7 +3534,14 @@ def broadcast_message_edited(message):
 
 
 def broadcast_message_to_websocket(message, conversation):
-    """Envia nova mensagem via WebSocket para o grupo da conversa."""
+    """
+    Envia nova mensagem via WebSocket para o grupo da conversa.
+    
+    ✅ CORREÇÃO CRÍTICA: Incluir conversation completa ao enviar para tenant_group.
+    O frontend precisa de data.conversation para adicionar a conversa quando message_received
+    chega ANTES de conversation_updated (race no backend). Sem isso, msgs individuais
+    vindas de fora nunca apareciam no chat.
+    """
     try:
         channel_layer = get_channel_layer()
         room_group_name = f"chat_tenant_{conversation.tenant_id}_conversation_{conversation.id}"
@@ -3544,7 +3551,7 @@ def broadcast_message_to_websocket(message, conversation):
         logger.info(f"   Direction: {message.direction}")
         
         # ✅ Usar utilitário centralizado para serialização
-        from apps.chat.utils.serialization import serialize_message_for_ws
+        from apps.chat.utils.serialization import serialize_message_for_ws, serialize_conversation_for_ws
         message_data_serializable = serialize_message_for_ws(message)
         
         logger.info(f"📡 [WEBSOCKET] Enviando message_received para room: {room_group_name}")
@@ -3560,14 +3567,17 @@ def broadcast_message_to_websocket(message, conversation):
             }
         )
         
-        # ✅ NOVO: Também enviar para grupo do tenant (para garantir que chegue)
+        # ✅ CRÍTICO: Enviar para tenant_group COM conversation completa
+        # Garante que 1ª msg individual apareça mesmo quando message_received chega antes de conversation_updated
         tenant_group = f"chat_tenant_{conversation.tenant_id}"
-        logger.info(f"📡 [WEBSOCKET] Enviando message_received para grupo do tenant: {tenant_group}")
+        conv_data_serializable = serialize_conversation_for_ws(conversation)
+        logger.info(f"📡 [WEBSOCKET] Enviando message_received para tenant: {tenant_group} (com conversation)")
         async_to_sync(channel_layer.group_send)(
             tenant_group,
             {
                 'type': 'message_received',
                 'message': message_data_serializable,
+                'conversation': conv_data_serializable,
                 'conversation_id': str(conversation.id)
             }
         )

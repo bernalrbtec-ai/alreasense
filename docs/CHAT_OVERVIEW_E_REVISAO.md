@@ -58,6 +58,8 @@
 | **IDs case-insensitive** | `useTenantSocket.ts` | `convIdNorm` para comparação consistente de UUIDs |
 | **Status seen não reverter** | `webhooks.py` | Ignora `delivered`/`sent` para mensagens incoming já `seen` |
 | **Individual → Inbox** | `webhooks.py` | Conversas individuais incoming vão para Inbox (department=null, pending) |
+| **message_received com conversation** | `webhooks.py` | `broadcast_message_to_websocket` agora inclui conversation completa no tenant_group |
+| **send_message multi-instância** | `tasks.py` | Prioriza `conversation.instance_name` antes de fallback para primeira instância |
 
 ---
 
