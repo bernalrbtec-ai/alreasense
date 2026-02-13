@@ -141,7 +141,7 @@ def message_metrics(request):
             if data.get("avg_first_response_seconds") is not None and data["total_count"]:
                 avg_sum += data["avg_first_response_seconds"] * data["total_count"]
                 avg_weight += data["total_count"]
-            for uid, ud in data.get("by_user") or {}.items():
+            for uid, ud in (data.get("by_user") or {}).items():
                 if uid not in by_user:
                     by_user[uid] = {"total_sent": 0, "avg_first_response_seconds": None, "_resp_sum": 0.0, "_resp_n": 0}
                 by_user[uid]["total_sent"] += ud.get("total_sent", 0)
