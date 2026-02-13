@@ -1822,6 +1822,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # ✅ CORREÇÃO CRÍTICA: Fazer prefetch de last_message antes de serializar
         # Isso garante que last_message seja None (não undefined) quando não há mensagens
         # Para conversas novas sem mensagens, last_message_list será [] e serializer retornará None
+        from django.db.models import Prefetch
         conversation_with_prefetch = Conversation.objects.prefetch_related(
             Prefetch(
                 'messages',
