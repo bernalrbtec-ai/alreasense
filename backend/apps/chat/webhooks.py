@@ -1540,8 +1540,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     content = "📇 Contato compartilhado"
                 
                 logger.info(f"📇 [CONTACT MESSAGE] Nome: {display_name}, Telefone: {phone_from_contact}, vCard: {vcard[:100] if vcard else 'N/A'}")
-                else:
-                    content = "📇 Contato compartilhado"
+            else:
+                content = "📇 Contato compartilhado"
         elif message_type == 'locationMessage':
             # ✅ Suporte para localização (lat/lng, nome, endereço)
             loc_msg = message_info.get('locationMessage', {})
