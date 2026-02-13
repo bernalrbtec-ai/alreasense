@@ -3,7 +3,7 @@ Serviço para enviar notificações WhatsApp relacionadas a tarefas/agenda.
 """
 import logging
 from typing import Optional, List
-from django.db import transaction, models
+from django.db import transaction, models, IntegrityError
 from django.utils import timezone
 from zoneinfo import ZoneInfo
 from datetime import datetime
@@ -135,52 +135,115 @@ def get_or_create_conversation(
 ) -> Optional[Conversation]:
     """
     Busca ou cria conversa para um contato.
-    
+
+    contact_phone pode ser E.164 ou outro formato (ex.: com @s.whatsapp.net) e será
+    normalizado internamente. Novas conversas são criadas com contact_phone em formato
+    E.164 (canônico).
+
     Args:
         tenant: Tenant da conversa
-        contact_phone: Telefone do contato (formato E.164)
+        contact_phone: Telefone do contato (E.164 ou outro formato; será normalizado)
         contact_name: Nome do contato
         instance: Instância WhatsApp
-        
+
     Returns:
         Conversation ou None se erro
     """
     try:
-        # Normalizar telefone para busca
+        # 3.1 / 3.2 – Guarda inicial
+        if contact_phone is None or (isinstance(contact_phone, str) and not contact_phone.strip()):
+            logger.warning("⚠️ [TASK NOTIFICATION] get_or_create_conversation chamado sem contact_phone")
+            return None
+
+        if not isinstance(contact_phone, str):
+            contact_phone = str(contact_phone)
+
+        from apps.contacts.signals import normalize_phone_for_search
+
+        canonical_phone = normalize_phone_for_search(contact_phone)
+        if not canonical_phone or (isinstance(canonical_phone, str) and not canonical_phone.strip()):
+            canonical_phone = contact_phone
+        if not canonical_phone or (isinstance(canonical_phone, str) and not canonical_phone.strip()):
+            logger.warning("⚠️ [TASK NOTIFICATION] contact_phone inválido após normalização")
+            return None
+
+        # 3.3 – Cálculo para busca (formatos antigos)
         phone_normalized = contact_phone.replace('+', '').strip()
         phone_with_suffix = f"{phone_normalized}@s.whatsapp.net"
-        
-        # Buscar conversa existente
+
+        candidate_list = [
+            canonical_phone,
+            phone_with_suffix,
+            phone_normalized,
+            contact_phone,
+        ]
+        candidate_list = [p for p in candidate_list if p is not None and (not isinstance(p, str) or p.strip())]
+        if not candidate_list:
+            logger.warning("⚠️ [TASK NOTIFICATION] Lista de candidatos vazia para busca de conversa")
+            return None
+
         conversation = Conversation.objects.filter(
             tenant=tenant,
-            contact_phone__in=[contact_phone, phone_with_suffix, phone_normalized],
+            contact_phone__in=candidate_list,
             conversation_type='individual'
         ).first()
-        
+
         if conversation:
-            # Atualizar nome se necessário
-            if conversation.contact_name != contact_name:
-                conversation.contact_name = contact_name
-                conversation.save(update_fields=['contact_name'])
+            # 3.4 – Atualizar nome e opcionalmente telefone (só se @s.whatsapp.net e sem duplicata)
+            update_fields = []
+            name_value = contact_name or ''
+            if conversation.contact_name != name_value:
+                conversation.contact_name = name_value
+                update_fields.append('contact_name')
+            if '@s.whatsapp.net' in (conversation.contact_phone or ''):
+                other_exists = Conversation.objects.filter(
+                    tenant=tenant,
+                    contact_phone=canonical_phone
+                ).exclude(id=conversation.id).exists()
+                if not other_exists:
+                    conversation.contact_phone = canonical_phone
+                    update_fields.append('contact_phone')
+            if update_fields:
+                conversation.save(update_fields=update_fields)
             return conversation
-        
-        # Criar nova conversa
-        conversation = Conversation.objects.create(
-            tenant=tenant,
-            contact_phone=phone_with_suffix,  # Formato padrão: número@s.whatsapp.net
-            contact_name=contact_name,
-            conversation_type='individual',
-            status='pending',  # Inbox
-            department=None,  # Sem departamento = Inbox
-            metadata={
-                'created_from_task': True,
-                'instance_name': instance.instance_name if instance else None
-            }
+
+        # 3.5 – Criar nova conversa (com tratamento de race)
+        try:
+            conversation = Conversation.objects.create(
+                tenant=tenant,
+                contact_phone=canonical_phone,
+                contact_name=contact_name or '',
+                conversation_type='individual',
+                status='pending',
+                department=None,
+                metadata={
+                    'created_from_task': True,
+                    'instance_name': instance.instance_name if instance else None
+                }
+            )
+        except IntegrityError as create_err:
+            if 'idx_chat_conversation_unique' in str(create_err):
+                conversation = Conversation.objects.filter(
+                    tenant=tenant,
+                    contact_phone__in=candidate_list,
+                    conversation_type='individual'
+                ).first()
+                if conversation:
+                    logger.info(
+                        "ℹ️ [TASK NOTIFICATION] Conversa encontrada após race na criação (%s)",
+                        canonical_phone
+                    )
+                    return conversation
+            raise
+
+        logger.info(
+            "✅ [TASK NOTIFICATION] Conversa criada: %s para %s (%s)",
+            conversation.id,
+            contact_name,
+            canonical_phone
         )
-        
-        logger.info(f"✅ [TASK NOTIFICATION] Conversa criada: {conversation.id} para {contact_name} ({phone_with_suffix})")
         return conversation
-        
+
     except Exception as e:
         logger.error(f"❌ [TASK NOTIFICATION] Erro ao criar/buscar conversa: {e}", exc_info=True)
         return None
