@@ -1,5 +1,6 @@
 from datetime import date as date_type, datetime, time as dt_time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional
 
 from django.db.models import (
     BigIntegerField,
@@ -165,7 +166,7 @@ def _extract_duration_ms_from_attachment(attachment) -> int:
     return 0
 
 
-def _extract_latency_ms_from_attachment(attachment) -> int | None:
+def _extract_latency_ms_from_attachment(attachment) -> Optional[int]:
     """Extrai latency_ms (processing_time_ms) de um attachment."""
     if not attachment.ai_metadata:
         return None
@@ -179,7 +180,7 @@ def _extract_latency_ms_from_attachment(attachment) -> int | None:
     return None
 
 
-def _extract_model_name_from_attachment(attachment) -> str | None:
+def _extract_model_name_from_attachment(attachment) -> Optional[str]:
     """Extrai model_name de um attachment."""
     if not attachment.ai_metadata:
         return None

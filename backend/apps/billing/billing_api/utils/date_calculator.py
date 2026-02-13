@@ -2,7 +2,7 @@
 BillingDateCalculator - Calcula dias de atraso ou até vencimento
 """
 from datetime import datetime, date, timedelta
-from typing import Optional
+from typing import Optional, Union
 from django.utils import timezone
 import logging
 
@@ -105,7 +105,7 @@ class BillingDateCalculator:
     """
     
     @staticmethod
-    def calculate_days_overdue(due_date: date | datetime) -> int:
+    def calculate_days_overdue(due_date: Union[date, datetime]) -> int:
         """
         Calcula quantos dias a cobrança está atrasada
         
@@ -136,7 +136,7 @@ class BillingDateCalculator:
         return days_overdue
     
     @staticmethod
-    def calculate_days_until_due(due_date: date | datetime) -> int:
+    def calculate_days_until_due(due_date: Union[date, datetime]) -> int:
         """
         Calcula quantos dias faltam até o vencimento
         
@@ -167,7 +167,7 @@ class BillingDateCalculator:
         return days_until
     
     @staticmethod
-    def format_date_for_template(due_date: date | datetime) -> str:
+    def format_date_for_template(due_date: Union[date, datetime]) -> str:
         """
         Formata data para usar em templates (DD/MM/YYYY)
         
