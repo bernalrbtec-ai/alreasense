@@ -1662,18 +1662,26 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             elif wa_instance:
                 correct_friendly_name = wa_instance.friendly_name or ''
         
+        # ✅ CORREÇÃO CRÍTICA: Conversas INDIVIDUAIS vindas de fora (incoming) vão para INBOX
+        # Isso garante que apareçam na lista e no badge. Grupos mantêm default_department.
+        use_inbox_for_new = not from_me and conversation_type == 'individual'
+        if use_inbox_for_new:
+            logger.info(f"📥 [ROUTING] Mensagem individual incoming → nova conversa vai para INBOX (department=null, status=pending)")
+        effective_department = None if use_inbox_for_new else default_department
+        effective_status = 'pending' if use_inbox_for_new or not effective_department else 'open'
+        
         defaults = {
-            'department': default_department,  # Departamento padrão da instância (ou None = Inbox)
+            'department': effective_department,
             'contact_name': contact_name_to_save,
             'profile_pic_url': profile_pic_url if profile_pic_url else None,
-            'instance_name': instance_name,  # Salvar instância de origem (UUID)
-            'instance_friendly_name': correct_friendly_name,  # Nome exibido correto (instância do webhook)
-            'status': 'pending' if not default_department else 'open',  # Pendente se Inbox, aberta se departamento
+            'instance_name': instance_name,
+            'instance_friendly_name': correct_friendly_name,
+            'status': effective_status,
             'conversation_type': conversation_type,
         }
         
         logger.info(f"📋 [ROUTING] Defaults preparados:")
-        logger.info(f"   📋 defaults['department']: {defaults['department'].name if defaults['department'] else 'None'}")
+        logger.info(f"   📋 defaults['department']: {defaults['department'].name if defaults['department'] else 'None (Inbox)'}")
         logger.info(f"   📋 defaults['status']: {defaults['status']}")
         
         # Para grupos, adicionar metadados
@@ -1835,10 +1843,9 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             logger.info(f"   📋 conversation.department: {conversation.department.name if conversation.department else 'None'}")
             logger.info(f"   📋 defaults tinha department: {defaults.get('department').id if defaults.get('department') else 'None'}")
             
-            # ✅ VERIFICAÇÃO CRÍTICA: Se department não foi aplicado, forçar
-            if default_department and not conversation.department:
-                logger.error(f"❌ [ROUTING] ERRO CRÍTICO: Conversa criada SEM department mesmo tendo default_department!")
-                logger.error(f"   Forçando atualização imediata...")
+            # ✅ VERIFICAÇÃO: Forçar department apenas se era esperado (não para individual incoming → Inbox)
+            if default_department and not conversation.department and not use_inbox_for_new:
+                logger.warning(f"⚠️ [ROUTING] Conversa criada sem department, forçando default_department")
                 conversation.department = default_department
                 conversation.status = 'open'
                 conversation.save(update_fields=['department', 'status'])
@@ -1889,16 +1896,16 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                 conversation.status = 'open'
                 update_fields_list.append('status')
         
-        # ✅ FIX CRÍTICO: Se conversa foi criada COM departamento, garantir que status está correto
-        if created and default_department:
+        # ✅ FIX: Se conversa foi criada COM departamento, garantir status (não para individual Inbox)
+        if created and default_department and not use_inbox_for_new:
             if conversation.status != 'open':
                 logger.warning(f"⚠️ [ROUTING] Conversa criada com departamento mas status errado: {conversation.status} → corrigindo para 'open'")
                 conversation.status = 'open'
                 update_fields_list.append('status')
                 needs_update = True
         
-        # ✅ FIX CRÍTICO: Se conversa foi criada SEM departamento mas deveria ter (verificar se defaults foi aplicado)
-        if created and default_department and not conversation.department:
+        # ✅ FIX: Forçar department apenas se era esperado (não para individual incoming → Inbox)
+        if created and default_department and not conversation.department and not use_inbox_for_new:
             logger.error(f"❌ [ROUTING] ERRO: Conversa criada mas department não foi aplicado dos defaults!")
             logger.error(f"   Defaults tinha: department={default_department.id} ({default_department.name})")
             logger.error(f"   Conversa tem: department={conversation.department_id}")
@@ -1910,9 +1917,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             update_fields_list.extend(['department', 'status'])
             needs_update = True
         
-        # ✅ FIX ADICIONAL: Se conversa foi criada e tem default_department mas não foi aplicado
-        # Isso pode acontecer se get_or_create não aplicou os defaults corretamente
-        if created and default_department:
+        # ✅ FIX ADICIONAL: Recarregar e forçar department apenas se não for individual Inbox
+        if created and default_department and not use_inbox_for_new:
             # Recarregar do banco para garantir que temos o estado atual
             conversation.refresh_from_db()
             if not conversation.department:
@@ -3316,14 +3322,18 @@ def handle_message_update(data, tenant):
             
             # ✅ CORREÇÃO CRÍTICA: Ignorar status READ para mensagens INCOMING
             # Mensagens incoming são marcadas como lidas pelo USUÁRIO via mark_as_read(),
-            # não pelo WhatsApp via webhook. WhatsApp envia READ apenas para mensagens
-            # OUTGOING (quando o destinatário lê nossa mensagem).
+            # não pelo WhatsApp via webhook.
             if new_status == 'seen' and message.direction == 'incoming':
                 logger.info(f"⏸️ [WEBHOOK UPDATE] Ignorando status READ para mensagem INCOMING")
-                logger.info(f"   Direction: {message.direction}")
-                logger.info(f"   Mensagens incoming são marcadas como lidas pelo USUÁRIO")
-                logger.info(f"   WhatsApp não controla status de leitura de mensagens que ELE enviou para NÓS")
                 return
+            
+            # ✅ CORREÇÃO CRÍTICA: Para mensagens INCOMING, nunca reverter status
+            # mark_as_read() define 'seen'. Evolution pode enviar DELIVERY_ACK depois (atrasado).
+            # Se já está 'seen', ignorar 'delivered'/'sent' para não remover os tiques de leitura.
+            if message.direction == 'incoming' and message.status == 'seen':
+                if new_status in ('delivered', 'sent', 'pending'):
+                    logger.info(f"⏸️ [WEBHOOK UPDATE] Ignorando status {new_status} para mensagem INCOMING já lida (seen)")
+                    return
             
             message.status = new_status
             message.evolution_status = status_value
