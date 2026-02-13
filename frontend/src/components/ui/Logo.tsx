@@ -77,10 +77,10 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
     )
   }
 
-  // Tentar carregar imagem do logo (fundo escuro para contraste com logo branco)
+  // Container claro para o logo (roxo/ALREA visível)
   return (
     <div className={`flex items-center justify-center ${sizeClasses.container} ${className}`}>
-      <div className={`flex items-center justify-center rounded-lg bg-gray-800 dark:bg-gray-700 p-1.5 ${sizeClasses.image}`}>
+      <div className={`flex items-center justify-center rounded-lg bg-gray-100 dark:bg-gray-200 p-1.5 ${sizeClasses.image}`}>
         <img 
           src={imagePath}
           alt="Alrea Sense"
