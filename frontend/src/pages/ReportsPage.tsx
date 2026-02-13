@@ -530,56 +530,6 @@ export default function ReportsPage() {
                   )}
                 </div>
 
-                <Card>
-                  <div className="p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Mensagens enviadas por atendente
-                    </h2>
-                    <div className="h-96">
-                      {messageMetrics.by_user.length === 0 ? (
-                        <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 text-sm">
-                          Nenhum atendente com mensagens no período.
-                        </div>
-                      ) : (
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={messageMetrics.by_user.map((u) => ({
-                            name: u.first_name || u.email?.split('@')[0] || u.user_id.slice(0, 8),
-                            total_sent: u.total_sent,
-                            avg_resp: u.avg_first_response_seconds,
-                          }))}
-                          layout="vertical"
-                          margin={{ left: 80 }}
-                          animationDuration={600}
-                          animationEasing="ease-out"
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis type="number" />
-                          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
-                          <Tooltip
-                            formatter={(value: number) => [`${value} mensagens`, 'Enviadas']}
-                            content={({ active, payload }) => {
-                              if (!active || !payload?.length) return null
-                              const p = payload[0].payload
-                              return (
-                                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg px-3 py-2 text-sm">
-                                  <p className="font-medium">{p.name}</p>
-                                  <p>{p.total_sent} mensagens enviadas</p>
-                                  {p.avg_resp != null && (
-                                    <p>Tempo médio 1ª resposta: {formatFirstResponse(p.avg_resp)}</p>
-                                  )}
-                                </div>
-                              )
-                            }}
-                          />
-                          <Bar dataKey="total_sent" name="Enviadas" fill="#6366f1" isAnimationActive />
-                        </BarChart>
-                      </ResponsiveContainer>
-                      )}
-                    </div>
-                  </div>
-                </Card>
-
                 {(messageMetrics.by_department_user?.length ?? 0) > 0 && (
                   <Card>
                     <div className="p-6">
@@ -587,7 +537,7 @@ export default function ReportsPage() {
                         Departamento × Usuário × Mensagens × Dia
                       </h2>
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                        Quem conversa mais ou menos por departamento (mensagens enviadas no período)
+                        Quem conversa mais ou menos por departamento (mensagens enviadas) — {messageMetrics.range.from} a {messageMetrics.range.to}
                       </p>
                       <div className="h-96">
                         <ResponsiveContainer width="100%" height="100%">
@@ -651,9 +601,12 @@ export default function ReportsPage() {
                   return (
                     <Card>
                       <div className="p-6">
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                           Mensagens por dia (top atendentes por departamento)
                         </h2>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                          Período: {messageMetrics.range.from} a {messageMetrics.range.to}
+                        </p>
                         <div className="h-96">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={dailyChartData} margin={{ left: 20 }}>
