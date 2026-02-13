@@ -271,17 +271,58 @@ def message_metrics(request):
                 "by_hour": {hr: 0 for hr in range(24)},
             }
         dept_hour_map[dept_id]["by_hour"][h] = total
+    # Sent/received por departamento
+    dept_direction_rows = (
+        Message.objects.filter(
+            conversation__in=conv_qs,
+            created_at__gte=start_dt,
+            created_at__lt=end_dt,
+            is_internal=False,
+            is_deleted=False,
+        )
+        .values("conversation__department_id", "conversation__department__name", "direction")
+        .annotate(count=Count("id"))
+    )
+    dept_sent_received = {}  # dept_id -> { sent, received }
+    for row in dept_direction_rows:
+        dept_id = str(row["conversation__department_id"]) if row["conversation__department_id"] else "_inbox"
+        if dept_id not in dept_sent_received:
+            dept_sent_received[dept_id] = {"sent": 0, "received": 0}
+        if row["direction"] == "outgoing":
+            dept_sent_received[dept_id]["sent"] += row["count"] or 0
+        else:
+            dept_sent_received[dept_id]["received"] += row["count"] or 0
+
     series_by_hour_by_department = []
+    by_department_summary = []
     for dept_id, entry in dept_hour_map.items():
         by_hour_list = [
             {"hour": h, "total": entry["by_hour"].get(h, 0), "avg": entry["by_hour"].get(h, 0) / num_days}
             for h in range(24)
         ]
+        total_period = sum(entry["by_hour"].values())
+        sr = dept_sent_received.get(dept_id, {"sent": 0, "received": 0})
+        hour_totals = [(h, entry["by_hour"].get(h, 0)) for h in range(24)]
+        peak = max(hour_totals, key=lambda x: x[1])
+        quiet = min((ht for ht in hour_totals if ht[1] > 0), key=lambda x: x[1]) if any(ht[1] > 0 for ht in hour_totals) else (0, 0)
         series_by_hour_by_department.append({
             "department_id": entry["department_id"],
             "department_name": entry["department_name"],
             "by_hour": by_hour_list,
         })
+        by_department_summary.append({
+            "department_id": entry["department_id"],
+            "department_name": entry["department_name"],
+            "total_period": total_period,
+            "avg_per_day": round(total_period / num_days, 3) if num_days else 0,
+            "peak_hour": peak[0],
+            "peak_count": peak[1],
+            "quiet_hour": quiet[0],
+            "quiet_count": quiet[1],
+            "sent": sr["sent"],
+            "received": sr["received"],
+        })
+    by_department_summary.sort(key=lambda x: x["total_period"], reverse=True)
 
     return Response({
         "range": {
@@ -300,6 +341,7 @@ def message_metrics(request):
         "by_user": by_user_list,
         "by_department_user": by_department_user_list,
         "series_by_hour_by_department": series_by_hour_by_department,
+        "by_department_summary": by_department_summary,
         "num_days": num_days,
     })
 

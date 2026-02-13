@@ -101,6 +101,18 @@ interface MessageMetricsResponse {
     department_name: string
     by_hour: Array<{ hour: number; total: number; avg: number }>
   }>
+  by_department_summary?: Array<{
+    department_id: string | null
+    department_name: string
+    total_period: number
+    avg_per_day: number
+    peak_hour: number
+    peak_count: number
+    quiet_hour: number
+    quiet_count: number
+    sent: number
+    received: number
+  }>
   num_days?: number
 }
 
@@ -387,46 +399,7 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="space-y-6">
-                  <Card>
-                    <div className="p-6">
-                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                        Mensagens por dia ({messageMetrics.range.from} a {messageMetrics.range.to})
-                      </h2>
-                      <div className="h-80">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart
-                            data={messageMetrics.series_by_date || []}
-                            animationDuration={600}
-                            animationEasing="ease-out"
-                          >
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
-                            <XAxis
-                              dataKey="date"
-                              tickFormatter={(d) => {
-                                const [y, m, day] = d.split('-')
-                                return `${day}/${m}`
-                              }}
-                              tick={{ fill: 'currentColor', fontSize: 11 }}
-                            />
-                            <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} />
-                            <Tooltip
-                              formatter={(value: number) => [`${value} msg`, '']}
-                              labelFormatter={(label) => {
-                                const [y, m, d] = label.split('-')
-                                return `${d}/${m}/${y}`
-                              }}
-                              contentStyle={{ borderRadius: 8 }}
-                            />
-                            <Legend />
-                            <Bar dataKey="total" name="Total" fill="#6366f1" isAnimationActive />
-                            <Bar dataKey="sent" name="Enviadas" fill="#10b981" isAnimationActive />
-                            <Bar dataKey="received" name="Recebidas" fill="#3b82f6" isAnimationActive />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  </Card>
-
+                  {/* Gráfico principal: Média de Mensagens por Hora do Dia (substitui Mensagens por dia) */}
                   {(messageMetrics.series_by_hour_by_department?.length ?? 0) > 0 ? (
                     <Card>
                       <div className="p-6">
@@ -434,7 +407,7 @@ export default function ReportsPage() {
                           Média de Mensagens por Hora do Dia
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                          Por departamento ({messageMetrics.num_days ?? 1} dia(s) no período)
+                          Por departamento ({messageMetrics.range.from} a {messageMetrics.range.to} — {messageMetrics.num_days ?? 1} dia(s))
                         </p>
                         <div className="h-80">
                           <ResponsiveContainer width="100%" height="100%">
@@ -502,9 +475,58 @@ export default function ReportsPage() {
                   ) : (
                     <Card>
                       <div className="p-6 flex items-center justify-center h-80 text-gray-500 dark:text-gray-400 text-sm">
-                        Sem dados por departamento para exibir hora do dia.
+                        Sem dados por departamento para exibir gráfico.
                       </div>
                     </Card>
+                  )}
+
+                  {/* Cards por departamento */}
+                  {(messageMetrics.by_department_summary?.length ?? 0) > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {messageMetrics.by_department_summary!.map((dept, i) => {
+                        const colors = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899']
+                        const color = colors[i % colors.length]
+                        return (
+                          <Card key={dept.department_id ?? 'inbox'} className="p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div
+                                className="w-3 h-3 rounded-sm shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                                {dept.department_name}
+                              </h3>
+                            </div>
+                            <div className="space-y-3 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Total no período</span>
+                                <span className="font-medium tabular-nums">{dept.total_period.toLocaleString('pt-BR')}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Média por dia</span>
+                                <span className="font-medium tabular-nums">{dept.avg_per_day.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Horário de pico</span>
+                                <span className="font-medium tabular-nums">{dept.peak_hour}h ({dept.peak_count.toLocaleString('pt-BR')} msg)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Horário tranquilo</span>
+                                <span className="font-medium tabular-nums">{dept.quiet_hour}h ({dept.quiet_count.toLocaleString('pt-BR')} msg)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Enviadas</span>
+                                <span className="font-medium tabular-nums text-green-600 dark:text-green-400">{dept.sent.toLocaleString('pt-BR')}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Recebidas</span>
+                                <span className="font-medium tabular-nums text-blue-600 dark:text-blue-400">{dept.received.toLocaleString('pt-BR')}</span>
+                              </div>
+                            </div>
+                          </Card>
+                        )
+                      })}
+                    </div>
                   )}
                 </div>
 
