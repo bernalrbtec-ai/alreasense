@@ -2,7 +2,7 @@
 Agregação de métricas diárias de mensagens para relatórios.
 Usado pelo job periódico e pela API (delta do dia incompleto).
 """
-from datetime import timedelta, datetime, time
+from datetime import timedelta, datetime, time, date
 from collections import defaultdict
 from itertools import groupby
 from django.db.models import Count, Min
@@ -20,7 +20,7 @@ def aggregate_message_metrics_for_date(conversation_queryset, target_date):
     Retorna dict com: total_count, sent_count, received_count, series_by_hour,
     avg_first_response_seconds, by_user.
     """
-    if hasattr(target_date, 'replace'):
+    if isinstance(target_date, datetime):
         start_naive = target_date.replace(hour=0, minute=0, second=0, microsecond=0)
     else:
         start_naive = datetime.combine(target_date, time.min)
