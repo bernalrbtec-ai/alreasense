@@ -291,11 +291,28 @@ def _build_secretary_context(conversation, message, profile: TenantSecretaryProf
         or (getattr(settings_obj, "agent_model", None) or "llama3.2")
     )
     prompt = (getattr(profile, "prompt", None) or "").strip()
+    
+    # ✅ MELHORIA: Incluir informação de horário de forma explícita no contexto
+    # Mesmo que o prompt personalizado não mencione, garantir que a IA tenha acesso claro
+    business_hours_info = {
+        "is_open": is_open,
+        "next_open_time": next_open_time,
+        # Formatação explícita para facilitar uso pela IA
+        "status_text": "ABERTA" if is_open else "FECHADA",
+        "status_message": (
+            f"A empresa está ABERTA no momento. Atenda normalmente."
+            if is_open
+            else (
+                f"A empresa está FECHADA no momento."
+                + (f" Retornamos em: {next_open_time}" if next_open_time else "")
+            )
+        ),
+    }
 
     return {
         "agent_type": "secretary",
         "tenant": {"id": str(conversation.tenant_id), "name": conversation.tenant.name},
-        "business_hours": {"is_open": is_open, "next_open_time": next_open_time},
+        "business_hours": business_hours_info,
         "conversation": {
             "id": str(conversation.id),
             "status": conversation.status,
@@ -329,15 +346,26 @@ def _send_typing_indicator(conversation, typing_seconds: float = SECRETARY_TYPIN
         typing_seconds: Tempo em segundos que o indicador ficará ativo
     """
     try:
+        from django.db.models import Q
         from apps.notifications.models import WhatsAppInstance
         from apps.connections.models import EvolutionConnection
         
-        # Buscar instância WhatsApp ativa do tenant
-        instance = WhatsAppInstance.objects.filter(
-            tenant=conversation.tenant,
-            is_active=True,
-            status='active'
-        ).first()
+        # ✅ MULTI-INSTÂNCIA: Priorizar instância da conversa (que recebeu a mensagem)
+        instance = None
+        if conversation.instance_name and str(conversation.instance_name).strip():
+            instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=conversation.instance_name.strip())
+                | Q(evolution_instance_name=conversation.instance_name.strip()),
+                tenant=conversation.tenant,
+                is_active=True,
+                status='active'
+            ).first()
+        if not instance:
+            instance = WhatsAppInstance.objects.filter(
+                tenant=conversation.tenant,
+                is_active=True,
+                status='active'
+            ).first()
         
         if not instance:
             logger.debug("[SECRETARY TYPING] Nenhuma instância WhatsApp ativa para enviar typing indicator")

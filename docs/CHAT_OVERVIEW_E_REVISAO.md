@@ -60,6 +60,9 @@
 | **Individual → Inbox** | `webhooks.py` | Conversas individuais incoming vão para Inbox (department=null, pending) |
 | **message_received com conversation** | `webhooks.py` | `broadcast_message_to_websocket` agora inclui conversation completa no tenant_group |
 | **send_message multi-instância** | `tasks.py` | Prioriza `conversation.instance_name` antes de fallback para primeira instância |
+| **/start multi-instância** | `views.py` | Aceita `instance_id`/`instance_name` na busca e criação; filtra por instância quando tenant tem 2+ |
+| **Secretária typing** | `secretary_service.py` | `_send_typing_indicator` prioriza `conversation.instance_name` |
+| **NewConversationModal** | `NewConversationModal.tsx` | Seletor de instância quando tenant tem 2+ (envia `instance_id` para /start) |
 
 ---
 

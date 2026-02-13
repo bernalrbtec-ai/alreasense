@@ -1489,6 +1489,8 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         contact_phone = request.data.get('contact_phone')
         contact_name = request.data.get('contact_name', '')
         department_id = request.data.get('department')
+        instance_id = request.data.get('instance_id')  # UUID da WhatsAppInstance (opcional, multi-instância)
+        instance_name = request.data.get('instance_name')  # instance_name/evolution_instance_name (opcional)
         
         if not contact_phone:
             return Response(
@@ -1579,9 +1581,29 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
             if candidate:
                 phone_filters |= Q(contact_phone=candidate)
         
-        existing = Conversation.objects.filter(
-            Q(tenant=request.user.tenant) & phone_filters
-        ).first()
+        # ✅ MULTI-INSTÂNCIA: Se instance_id ou instance_name foi informado E tenant tem 2+ instâncias,
+        # filtrar por instância. Com 1 instância, manter comportamento anterior (busca só por phone).
+        instance_name_for_filter = None
+        if instance_id:
+            wa = WhatsAppInstance.objects.filter(
+                id=instance_id, tenant=request.user.tenant, is_active=True
+            ).values_list('instance_name', 'evolution_instance_name').first()
+            if wa:
+                instance_name_for_filter = (wa[1] or wa[0] or '').strip() or (wa[0] or '').strip()
+        elif instance_name and str(instance_name).strip():
+            instance_name_for_filter = str(instance_name).strip()
+        
+        tenant_instance_count = WhatsAppInstance.objects.filter(
+            tenant=request.user.tenant, is_active=True
+        ).count() if instance_name_for_filter else 0
+        
+        existing_qs = Conversation.objects.filter(Q(tenant=request.user.tenant) & phone_filters)
+        if instance_name_for_filter and tenant_instance_count >= 2:
+            existing_qs = existing_qs.filter(
+                Q(instance_name__iexact=instance_name_for_filter)
+                | Q(instance_name=instance_name_for_filter)
+            )
+        existing = existing_qs.first()
         
         if existing:
             needs_update = False
@@ -1709,15 +1731,48 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Se com departamento, status pode ser 'open'
         initial_status = 'pending' if not department else 'open'
         
-        conversation = Conversation.objects.create(
+        # ✅ MULTI-INSTÂNCIA: Resolver instance_name para nova conversa (evita enviar pela instância errada)
+        create_instance_name = None
+        create_instance_friendly = None
+        if instance_id:
+            wa = WhatsAppInstance.objects.filter(
+                id=instance_id, tenant=request.user.tenant, is_active=True
+            ).first()
+            if wa:
+                create_instance_name = wa.instance_name or wa.evolution_instance_name
+                create_instance_friendly = wa.friendly_name
+        elif instance_name and str(instance_name).strip():
+            create_instance_name = str(instance_name).strip()
+            wa = WhatsAppInstance.objects.filter(
+                Q(instance_name__iexact=create_instance_name)
+                | Q(evolution_instance_name__iexact=create_instance_name),
+                tenant=request.user.tenant, is_active=True
+            ).first()
+            if wa:
+                create_instance_friendly = wa.friendly_name
+        if not create_instance_name:
+            # Fallback: primeira instância ativa (comportamento anterior, 1 instância)
+            wa = WhatsAppInstance.objects.filter(
+                tenant=request.user.tenant, is_active=True
+            ).first()
+            if wa:
+                create_instance_name = wa.instance_name
+                create_instance_friendly = wa.friendly_name
+        
+        create_kwargs = dict(
             tenant=request.user.tenant,
             department=department,
-            contact_phone=normalized_phone,  # ✅ Usar telefone normalizado
+            contact_phone=normalized_phone,
             contact_name=contact_name,
             assigned_to=request.user,
             status=initial_status,
             conversation_type=conversation_type
         )
+        if create_instance_name:
+            create_kwargs['instance_name'] = create_instance_name
+        if create_instance_friendly:
+            create_kwargs['instance_friendly_name'] = create_instance_friendly
+        conversation = Conversation.objects.create(**create_kwargs)
         
         logger.info(f"✅ [CONVERSATION START] Conversa criada: ID={conversation.id}, Status={initial_status}, Department={department.name if department else 'Inbox'}")
         

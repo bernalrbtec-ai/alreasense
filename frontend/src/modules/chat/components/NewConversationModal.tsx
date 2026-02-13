@@ -11,6 +11,13 @@ interface Contact {
   tags?: Array<{ id: string; name: string; color: string }>;
 }
 
+interface WhatsAppInstance {
+  id: string;
+  friendly_name: string;
+  instance_name: string;
+  is_active: boolean;
+}
+
 interface NewConversationModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -24,6 +31,34 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
   const [isCreating, setIsCreating] = useState(false);
   const [phoneInput, setPhoneInput] = useState('');
   const [isValidPhone, setIsValidPhone] = useState(false);
+  const [instances, setInstances] = useState<WhatsAppInstance[]>([]);
+  const [selectedInstanceId, setSelectedInstanceId] = useState<string | null>(null);
+
+  // ✅ MULTI-INSTÂNCIA: Buscar instâncias quando modal abre (para seletor se > 1)
+  useEffect(() => {
+    if (!isOpen) return;
+    const fetchInstances = async () => {
+      try {
+        const response = await api.get('/notifications/whatsapp-instances/', {
+          params: { page_size: 50 }
+        });
+        const results = response.data.results ?? response.data ?? [];
+        const list = Array.isArray(results) ? results.filter((i: any) => i.is_active !== false) : [];
+        setInstances(list);
+        if (list.length === 1) {
+          setSelectedInstanceId(list[0].id);
+        } else if (list.length > 1) {
+          setSelectedInstanceId(list[0]?.id ?? null);
+        } else {
+          setSelectedInstanceId(null);
+        }
+      } catch {
+        setInstances([]);
+        setSelectedInstanceId(null);
+      }
+    };
+    fetchInstances();
+  }, [isOpen]);
 
   // ✅ DEBUG: Log quando isOpen muda
   useEffect(() => {
@@ -176,7 +211,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: contact.name,
-          ...(departmentId && { department: departmentId })
+          ...(departmentId && { department: departmentId }),
+          ...(selectedInstanceId && { instance_id: selectedInstanceId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
         
@@ -279,7 +315,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: normalizedPhone, // Usar telefone como nome se não tiver contato
-          ...(departmentId && { department: departmentId })
+          ...(departmentId && { department: departmentId }),
+          ...(selectedInstanceId && { instance_id: selectedInstanceId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
         
@@ -380,6 +417,24 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
             <X className="h-6 w-6" />
           </button>
         </div>
+
+        {/* ✅ MULTI-INSTÂNCIA: Seletor de instância (só quando > 1) */}
+        {instances.length > 1 && (
+          <div className="px-4 pt-4 pb-2 border-b">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Enviar por</label>
+            <select
+              value={selectedInstanceId ?? ''}
+              onChange={(e) => setSelectedInstanceId(e.target.value || null)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 text-sm"
+            >
+              {instances.map((inst) => (
+                <option key={inst.id} value={inst.id}>
+                  {inst.friendly_name || inst.instance_name || inst.id}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {/* Search Input */}
         <div className="p-4 border-b">
