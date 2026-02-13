@@ -133,8 +133,8 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
         // ✅ CORREÇÃO CRÍTICA: Usar endpoint /start/ que verifica se conversa já existe
         // Isso evita erro de duplicate key e garante que conversas existentes sejam reabertas
         const { activeDepartment } = useChatStore.getState();
-        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' 
-          ? activeDepartment.id 
+        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations'
+          ? activeDepartment.id
           : undefined;
         
         console.log('🆕 [SHARED CONTACT] Criando nova conversa via /start/...', {

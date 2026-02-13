@@ -1503,9 +1503,17 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         
         # Selecionar departamento
         # ✅ CORREÇÃO: Se department_id não for fornecido, criar conversa sem departamento (Inbox)
-        # Não usar departamento padrão para respeitar a seleção do usuário
+        # Ignorar IDs especiais da UI (my_conversations, inbox) que não são UUIDs de Department
         from apps.authn.models import Department
         department = None
+        if department_id and str(department_id).strip().lower() in ('inbox', 'my_conversations'):
+            department_id = None
+        elif department_id:
+            try:
+                import uuid
+                uuid.UUID(str(department_id))  # validar formato UUID
+            except (ValueError, TypeError):
+                department_id = None
         if department_id:
             try:
                 department = Department.objects.get(
@@ -1519,7 +1527,7 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                     status=status.HTTP_404_NOT_FOUND
                 )
         else:
-            # ✅ CORREÇÃO: Se não especificado, criar sem departamento (Inbox)
+            # ✅ CORREÇÃO: Se não especificado ou ID especial da UI, criar sem departamento (Inbox)
             logger.info(f"📋 [CONVERSATION START] Nenhum departamento especificado - criando no Inbox")
         
         # ✅ CORREÇÃO: Normalizar telefone/ID antes de buscar/criar para evitar duplicatas

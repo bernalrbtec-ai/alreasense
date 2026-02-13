@@ -199,8 +199,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       if (!conversation) {
         // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
         // ✅ NOVO: Enviar departamento selecionado (se não for inbox)
-        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' 
-          ? activeDepartment.id 
+        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations'
+          ? activeDepartment.id
           : undefined;
         
         console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/...', {
@@ -304,8 +304,8 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       if (!conversation) {
         // ✅ CORREÇÃO: Usar endpoint /start/ que tem broadcast configurado
         // ✅ NOVO: Enviar departamento selecionado (se não for inbox)
-        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' 
-          ? activeDepartment.id 
+        const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations'
+          ? activeDepartment.id
           : undefined;
         
         console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/ (telefone direto)...', {

@@ -151,7 +151,7 @@ export function ForwardMessageModal({ message, onClose, onSuccess }: ForwardMess
 
         try {
           // Criar/iniciar conversa com o contato
-          const departmentId = activeDepartment && activeDepartment.id !== 'inbox' ? activeDepartment.id : undefined;
+          const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations' ? activeDepartment.id : undefined;
           const createResponse = await api.post('/chat/conversations/start/', {
             contact_phone: selectedItem.phone,
             contact_name: selectedItem.name,
