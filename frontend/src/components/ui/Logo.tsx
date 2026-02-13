@@ -1,5 +1,8 @@
 import React, { useState } from 'react'
 
+import logoPng from '@/assets/logo/logo.png'
+import logoWithTextPng from '@/assets/logo/logo-with-text.png'
+
 interface LogoProps {
   className?: string
   showText?: boolean
@@ -37,12 +40,8 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
 
   const sizeClasses = getSizeClasses()
 
-  // ✅ NOVO: Tentar carregar logo personalizado, fallback para SVG gerado
-  const logoPath = '/assets/logo/logo.png'
-  const logoWithTextPath = '/assets/logo/logo-with-text.png'
-  
-  // Se showText, usar logo com texto, senão usar logo apenas
-  const imagePath = showText ? logoWithTextPath : logoPath
+  // Logo importado para garantir carregamento no build (Vite inclui no bundle)
+  const imagePath = showText ? logoWithTextPng : logoPng
 
   // Se imagem não carregou, mostrar SVG fallback
   if (imageError) {
@@ -78,15 +77,17 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
     )
   }
 
-  // Tentar carregar imagem do logo
+  // Tentar carregar imagem do logo (fundo escuro para contraste com logo branco)
   return (
     <div className={`flex items-center justify-center ${sizeClasses.container} ${className}`}>
-      <img 
-        src={imagePath}
-        alt="Alrea Flow"
-        className={`${sizeClasses.image} object-contain`}
-        onError={() => setImageError(true)}
-      />
+      <div className={`flex items-center justify-center rounded-lg bg-gray-800 dark:bg-gray-700 p-1.5 ${sizeClasses.image}`}>
+        <img 
+          src={imagePath}
+          alt="Alrea Sense"
+          className="w-full h-full object-contain"
+          onError={() => setImageError(true)}
+        />
+      </div>
     </div>
   )
 }

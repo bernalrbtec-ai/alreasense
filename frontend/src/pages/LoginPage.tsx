@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore'
 import { Button } from '../components/ui/Button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import logoPng from '@/assets/logo/logo.png'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -36,6 +37,15 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-gray-800 dark:bg-gray-700 p-3">
+              <img
+                src={logoPng}
+                alt="Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          </div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Alrea Sense</h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
             Análise de sentimento para WhatsApp
