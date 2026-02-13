@@ -3,8 +3,10 @@ Endpoint de métricas de mensagens para relatórios (API híbrida).
 Lê dias persistidos em ChatMessageDailyMetric e agrega o dia incompleto em tempo real.
 """
 import logging
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, time
 from django.utils import timezone
+from django.db.models import Count
+from django.db.models.functions import TruncDate
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -12,7 +14,7 @@ from rest_framework import status
 from django.db import transaction
 
 from apps.common.permissions import IsTenantMember, IsAdminUser
-from apps.chat.models import Conversation, ChatMessageDailyMetric
+from apps.chat.models import Conversation, ChatMessageDailyMetric, Message
 from apps.chat.message_metrics import aggregate_message_metrics_for_date
 
 logger = logging.getLogger(__name__)
@@ -90,6 +92,7 @@ def message_metrics(request):
     sent_count = 0
     received_count = 0
     series_by_hour = [{"hour": h, "total": 0, "sent": 0, "received": 0} for h in range(24)]
+    series_by_date = []
     avg_sum = 0.0
     avg_weight = 0
     by_user = {}
@@ -98,6 +101,9 @@ def message_metrics(request):
     use_table = not (department_id or agent_id)
     current = created_from
     while current <= created_to:
+        day_total = 0
+        day_sent = 0
+        day_received = 0
         if use_table and current < today:
             rows = ChatMessageDailyMetric.objects.filter(
                 tenant=user.tenant,
@@ -108,6 +114,9 @@ def message_metrics(request):
                 total_count += row.total_count
                 sent_count += row.sent_count
                 received_count += row.received_count
+                day_total += row.total_count
+                day_sent += row.sent_count
+                day_received += row.received_count
                 sh = row.series_by_hour or []
                 if isinstance(sh, list):
                     for item in sh:
@@ -126,6 +135,12 @@ def message_metrics(request):
                     if ud.get("avg_first_response_seconds") is not None:
                         by_user[uid]["_resp_sum"] += ud["avg_first_response_seconds"] * ud.get("total_sent", 0)
                         by_user[uid]["_resp_n"] += ud.get("total_sent", 0)
+            series_by_date.append({
+                "date": current.isoformat(),
+                "total": day_total,
+                "sent": day_sent,
+                "received": day_received,
+            })
         else:
             # Dia incompleto (hoje) ou filtro department/agent: agregação em tempo real
             data = aggregate_message_metrics_for_date(conv_qs, current)
@@ -149,6 +164,12 @@ def message_metrics(request):
                     n = ud.get("total_sent", 0) or 1
                     by_user[uid]["_resp_sum"] += ud["avg_first_response_seconds"] * n
                     by_user[uid]["_resp_n"] += n
+            series_by_date.append({
+                "date": current.isoformat(),
+                "total": data["total_count"],
+                "sent": data["sent_count"],
+                "received": data["received_count"],
+            })
         current += timedelta(days=1)
 
     # Média ponderada global
@@ -173,6 +194,56 @@ def message_metrics(request):
             "avg_first_response_seconds": ud["avg_first_response_seconds"],
         })
 
+    # by_department_user: departamento x usuário x mensagens x dia
+    start_dt = timezone.make_aware(datetime.combine(created_from, time.min))
+    end_dt = timezone.make_aware(datetime.combine(created_to + timedelta(days=1), time.min))
+    dept_user_rows = (
+        Message.objects.filter(
+            conversation__in=conv_qs,
+            created_at__gte=start_dt,
+            created_at__lt=end_dt,
+            is_internal=False,
+            is_deleted=False,
+            direction="outgoing",
+            sender_id__isnull=False,
+        )
+        .annotate(msg_date=TruncDate("created_at"))
+        .values("conversation__department_id", "conversation__department__name", "sender_id", "msg_date")
+        .annotate(sent=Count("id"))
+    )
+    dept_user_map = {}  # (dept_id, user_id) -> { department_id, department_name, user_id, total_sent, by_date: [] }
+    all_user_ids = set()
+    for row in dept_user_rows:
+        dept_id = str(row["conversation__department_id"]) if row["conversation__department_id"] else "_inbox"
+        dept_name = row["conversation__department__name"] or "Inbox (sem departamento)"
+        uid = str(row["sender_id"])
+        msg_date = row["msg_date"].isoformat() if row["msg_date"] else None
+        sent = row["sent"] or 0
+        key = (dept_id, uid)
+        if key not in dept_user_map:
+            dept_user_map[key] = {
+                "department_id": dept_id if dept_id != "_inbox" else None,
+                "department_name": dept_name,
+                "user_id": uid,
+                "total_sent": 0,
+                "by_date": [],
+            }
+        dept_user_map[key]["total_sent"] += sent
+        if msg_date:
+            dept_user_map[key]["by_date"].append({"date": msg_date, "sent": sent})
+        all_user_ids.add(uid)
+    dept_user_users = {str(u.id): u for u in User.objects.filter(id__in=all_user_ids)} if all_user_ids else {}
+    by_department_user_list = []
+    for (_, _), entry in dept_user_map.items():
+        u = dept_user_users.get(entry["user_id"])
+        user_name = f"{getattr(u, 'first_name', '')} {getattr(u, 'last_name', '')}".strip() or getattr(u, "email", "") or entry["user_id"][:8]
+        entry["by_date"].sort(key=lambda x: x["date"])
+        by_department_user_list.append({
+            **entry,
+            "user_name": user_name,
+        })
+    by_department_user_list.sort(key=lambda x: x["total_sent"], reverse=True)
+
     return Response({
         "range": {
             "from": created_from.isoformat(),
@@ -185,8 +256,10 @@ def message_metrics(request):
             "received": received_count,
         },
         "series_by_hour": series_by_hour,
+        "series_by_date": series_by_date,
         "avg_first_response_seconds": avg_first_response_seconds,
         "by_user": by_user_list,
+        "by_department_user": by_department_user_list,
     })
 
 

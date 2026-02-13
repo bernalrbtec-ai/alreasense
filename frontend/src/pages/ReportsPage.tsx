@@ -70,10 +70,20 @@ interface MetricsResponse {
   series: MetricSeriesItem[]
 }
 
+interface DepartmentUserMetric {
+  department_id: string | null
+  department_name: string
+  user_id: string
+  user_name: string
+  total_sent: number
+  by_date: Array<{ date: string; sent: number }>
+}
+
 interface MessageMetricsResponse {
   range: { from: string; to: string; timezone: string }
   totals: { total: number; sent: number; received: number }
   series_by_hour: Array<{ hour: number; total: number; sent: number; received: number }>
+  series_by_date: Array<{ date: string; total: number; sent: number; received: number }>
   avg_first_response_seconds: number | null
   by_user: Array<{
     user_id: string
@@ -83,6 +93,7 @@ interface MessageMetricsResponse {
     total_sent: number
     avg_first_response_seconds: number | null
   }>
+  by_department_user?: DepartmentUserMetric[]
 }
 
 const getDefaultRange = () => {
@@ -370,21 +381,30 @@ export default function ReportsPage() {
                 <Card>
                   <div className="p-6">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Mensagens por hora do dia
+                      Mensagens por dia do período ({messageMetrics.range.from} a {messageMetrics.range.to})
                     </h2>
                     <div className="h-80">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart
-                          data={messageMetrics.series_by_hour}
+                          data={messageMetrics.series_by_date || []}
                           animationDuration={600}
                           animationEasing="ease-out"
                         >
                           <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis dataKey="hour" tickFormatter={(h) => `${h}h`} />
+                          <XAxis
+                            dataKey="date"
+                            tickFormatter={(d) => {
+                              const [y, m, day] = d.split('-')
+                              return `${day}/${m}`
+                            }}
+                          />
                           <YAxis />
                           <Tooltip
                             formatter={(value: number) => [`${value} mensagens`, '']}
-                            labelFormatter={(label) => `${label}h`}
+                            labelFormatter={(label) => {
+                              const [y, m, d] = label.split('-')
+                              return `${d}/${m}/${y}`
+                            }}
                           />
                           <Legend />
                           <Bar dataKey="total" name="Total" fill="#6366f1" isAnimationActive />
@@ -445,6 +465,118 @@ export default function ReportsPage() {
                     </div>
                   </div>
                 </Card>
+
+                {(messageMetrics.by_department_user?.length ?? 0) > 0 && (
+                  <Card>
+                    <div className="p-6">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        Departamento × Usuário × Mensagens × Dia
+                      </h2>
+                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                        Quem conversa mais ou menos por departamento (mensagens enviadas no período)
+                      </p>
+                      <div className="h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={messageMetrics.by_department_user!.map((d) => ({
+                              name: `${d.department_name} – ${d.user_name}`,
+                              department_name: d.department_name,
+                              user_name: d.user_name,
+                              total_sent: d.total_sent,
+                              by_date: d.by_date,
+                            }))}
+                            layout="vertical"
+                            margin={{ left: 100 }}
+                            animationDuration={600}
+                            animationEasing="ease-out"
+                          >
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" />
+                            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
+                            <Tooltip
+                              formatter={(value: number) => [`${value} mensagens`, 'Enviadas']}
+                              content={({ active, payload }) => {
+                                if (!active || !payload?.length) return null
+                                const p = payload[0].payload
+                                const daily =
+                                  p.by_date?.length > 0
+                                    ? p.by_date
+                                        .slice(-7)
+                                        .map((d) => `${d.date.slice(8, 10)}/${d.date.slice(5, 7)}: ${d.sent}`)
+                                        .join(', ')
+                                    : null
+                                return (
+                                  <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg px-3 py-2 text-sm max-w-xs">
+                                    <p className="font-medium">{p.department_name} – {p.user_name}</p>
+                                    <p>{p.total_sent} mensagens enviadas (total)</p>
+                                    {daily && <p className="text-xs mt-1 text-gray-500">Últimos dias: {daily}</p>}
+                                  </div>
+                                )
+                              }}
+                            />
+                            <Bar dataKey="total_sent" name="Enviadas" fill="#8b5cf6" isAnimationActive />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {(messageMetrics.by_department_user?.length ?? 0) > 0 && (() => {
+                  const topDeptUsers = messageMetrics.by_department_user!.slice(0, 6)
+                  const dates = messageMetrics.series_by_date?.map((s) => s.date) ?? []
+                  const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4']
+                  const dailyChartData = dates.map((date) => {
+                    const row: Record<string, string | number> = { date }
+                    topDeptUsers.forEach((d, i) => {
+                      const dayEntry = d.by_date?.find((b) => b.date === date)
+                      row[d.department_name + ' – ' + d.user_name] = dayEntry?.sent ?? 0
+                    })
+                    return row
+                  })
+                  return (
+                    <Card>
+                      <div className="p-6">
+                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                          Mensagens por dia (top atendentes por departamento)
+                        </h2>
+                        <div className="h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={dailyChartData} margin={{ left: 20 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis
+                                dataKey="date"
+                                tickFormatter={(d) => {
+                                  const [y, m, day] = d.split('-')
+                                  return `${day}/${m}`
+                                }}
+                              />
+                              <YAxis />
+                              <Tooltip
+                                labelFormatter={(label) => {
+                                  const [y, m, d] = label.split('-')
+                                  return `${d}/${m}/${y}`
+                                }}
+                              />
+                              <Legend />
+                              {topDeptUsers.map((d, i) => (
+                                <Line
+                                  key={d.user_id + (d.department_id ?? '')}
+                                  type="monotone"
+                                  dataKey={d.department_name + ' – ' + d.user_name}
+                                  stroke={colors[i % colors.length]}
+                                  strokeWidth={2}
+                                  dot={false}
+                                  connectNulls
+                                />
+                              ))}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </Card>
+                  )
+                })()}
               </>
             )}
 
