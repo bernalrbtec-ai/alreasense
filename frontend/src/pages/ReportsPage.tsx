@@ -399,7 +399,56 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Gráfico principal: Média de Mensagens por Hora do Dia (substitui Mensagens por dia) */}
+                  {/* Cards por departamento (inclui Inbox) - em primeiro lugar após os totais */}
+                  {(messageMetrics.by_department_summary?.length ?? 0) > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {messageMetrics.by_department_summary!.map((dept, i) => {
+                        const colors = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899']
+                        const color = colors[i % colors.length]
+                        return (
+                          <Card key={dept.department_id ?? 'inbox'} className="p-5">
+                            <div className="flex items-center gap-2 mb-4">
+                              <div
+                                className="w-3 h-3 rounded-sm shrink-0"
+                                style={{ backgroundColor: color }}
+                              />
+                              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                                {dept.department_name}
+                              </h3>
+                            </div>
+                            <div className="space-y-3 text-sm">
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Total no período</span>
+                                <span className="font-medium tabular-nums">{dept.total_period.toLocaleString('pt-BR')}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Média por dia</span>
+                                <span className="font-medium tabular-nums">{dept.avg_per_day.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Horário de pico</span>
+                                <span className="font-medium tabular-nums">{dept.peak_hour}h ({dept.peak_count.toLocaleString('pt-BR')} msg)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Horário tranquilo</span>
+                                <span className="font-medium tabular-nums">{dept.quiet_hour}h ({dept.quiet_count.toLocaleString('pt-BR')} msg)</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Enviadas</span>
+                                <span className="font-medium tabular-nums text-green-600 dark:text-green-400">{dept.sent.toLocaleString('pt-BR')}</span>
+                              </div>
+                              <div className="flex justify-between">
+                                <span className="text-gray-600 dark:text-gray-400">Recebidas</span>
+                                <span className="font-medium tabular-nums text-blue-600 dark:text-blue-400">{dept.received.toLocaleString('pt-BR')}</span>
+                              </div>
+                            </div>
+                          </Card>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Gráfico: Média de Mensagens por Hora do Dia */}
                   {(messageMetrics.series_by_hour_by_department?.length ?? 0) > 0 ? (
                     <Card>
                       <div className="p-6">
@@ -478,55 +527,6 @@ export default function ReportsPage() {
                         Sem dados por departamento para exibir gráfico.
                       </div>
                     </Card>
-                  )}
-
-                  {/* Cards por departamento */}
-                  {(messageMetrics.by_department_summary?.length ?? 0) > 0 && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {messageMetrics.by_department_summary!.map((dept, i) => {
-                        const colors = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899']
-                        const color = colors[i % colors.length]
-                        return (
-                          <Card key={dept.department_id ?? 'inbox'} className="p-5">
-                            <div className="flex items-center gap-2 mb-4">
-                              <div
-                                className="w-3 h-3 rounded-sm shrink-0"
-                                style={{ backgroundColor: color }}
-                              />
-                              <h3 className="font-semibold text-gray-900 dark:text-white truncate">
-                                {dept.department_name}
-                              </h3>
-                            </div>
-                            <div className="space-y-3 text-sm">
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Total no período</span>
-                                <span className="font-medium tabular-nums">{dept.total_period.toLocaleString('pt-BR')}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Média por dia</span>
-                                <span className="font-medium tabular-nums">{dept.avg_per_day.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Horário de pico</span>
-                                <span className="font-medium tabular-nums">{dept.peak_hour}h ({dept.peak_count.toLocaleString('pt-BR')} msg)</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Horário tranquilo</span>
-                                <span className="font-medium tabular-nums">{dept.quiet_hour}h ({dept.quiet_count.toLocaleString('pt-BR')} msg)</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Enviadas</span>
-                                <span className="font-medium tabular-nums text-green-600 dark:text-green-400">{dept.sent.toLocaleString('pt-BR')}</span>
-                              </div>
-                              <div className="flex justify-between">
-                                <span className="text-gray-600 dark:text-gray-400">Recebidas</span>
-                                <span className="font-medium tabular-nums text-blue-600 dark:text-blue-400">{dept.received.toLocaleString('pt-BR')}</span>
-                              </div>
-                            </div>
-                          </Card>
-                        )
-                      })}
-                    </div>
                   )}
                 </div>
 
