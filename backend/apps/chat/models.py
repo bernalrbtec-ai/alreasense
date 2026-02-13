@@ -335,6 +335,54 @@ class Message(models.Model):
             self.conversation.update_last_message()
 
 
+class ChatMessageDailyMetric(models.Model):
+    """
+    Métricas diárias de mensagens por tenant (e opcionalmente departamento).
+    Pré-agregadas por job; a API lê daqui e complementa com o dia incompleto em tempo real.
+    Tabela criada via script SQL (scripts/create_chat_message_daily_metrics.sql).
+    """
+    id = models.BigAutoField(primary_key=True)
+    tenant = models.ForeignKey(
+        'tenancy.Tenant',
+        on_delete=models.CASCADE,
+        related_name='chat_message_daily_metrics',
+    )
+    date = models.DateField(db_index=True)
+    department = models.ForeignKey(
+        'authn.Department',
+        on_delete=models.CASCADE,
+        related_name='chat_message_daily_metrics',
+        null=True,
+        blank=True,
+    )
+    total_count = models.IntegerField(default=0)
+    sent_count = models.IntegerField(default=0)
+    received_count = models.IntegerField(default=0)
+    series_by_hour = models.JSONField(default=dict, blank=True)  # { "0": n, "1": n, ... } ou [ { "hour": 0, "total": n }, ... ]
+    avg_first_response_seconds = models.FloatField(null=True, blank=True)
+    by_user = models.JSONField(default=dict, blank=True)  # { "user_id": { "total_sent": n, "avg_first_response_seconds": x }, ... }
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'chat_message_daily_metric'
+        verbose_name = 'Métrica diária de mensagens'
+        verbose_name_plural = 'Métricas diárias de mensagens'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'date', 'department'],
+                name='uniq_chat_message_daily_tenant_date_dept',
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['tenant', 'date']),
+        ]
+
+    def __str__(self):
+        dept = f" / {self.department_id}" if self.department_id else ""
+        return f"Message metrics {self.tenant_id} {self.date}{dept}"
+
+
 class MessageAttachment(models.Model):
     """
     Representa um anexo de mensagem (imagem, vídeo, documento, áudio).

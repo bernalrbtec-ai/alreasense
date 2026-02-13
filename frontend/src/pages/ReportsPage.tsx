@@ -10,6 +10,10 @@ import {
   TrendingUp,
   Zap,
   Cpu,
+  MessageSquare,
+  FileText,
+  Send,
+  Inbox,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import {
@@ -66,6 +70,21 @@ interface MetricsResponse {
   series: MetricSeriesItem[]
 }
 
+interface MessageMetricsResponse {
+  range: { from: string; to: string; timezone: string }
+  totals: { total: number; sent: number; received: number }
+  series_by_hour: Array<{ hour: number; total: number; sent: number; received: number }>
+  avg_first_response_seconds: number | null
+  by_user: Array<{
+    user_id: string
+    email: string
+    first_name: string
+    last_name: string
+    total_sent: number
+    avg_first_response_seconds: number | null
+  }>
+}
+
 const getDefaultRange = () => {
   const to = new Date()
   const from = new Date()
@@ -76,8 +95,17 @@ const getDefaultRange = () => {
   }
 }
 
+function formatFirstResponse(seconds: number | null): string {
+  if (seconds == null) return '—'
+  if (seconds < 60) return `${Math.round(seconds)} s`
+  const min = Math.floor(seconds / 60)
+  const s = Math.round(seconds % 60)
+  return s ? `${min} min ${s} s` : `${min} min`
+}
+
 export default function ReportsPage() {
   const defaultRange = useMemo(() => getDefaultRange(), [])
+  const [activeReportTab, setActiveReportTab] = useState<'messages' | 'transcriptions'>('transcriptions')
   const [createdFrom, setCreatedFrom] = useState(defaultRange.from)
   const [createdTo, setCreatedTo] = useState(defaultRange.to)
   const [departmentId, setDepartmentId] = useState('')
@@ -86,6 +114,13 @@ export default function ReportsPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [isRebuilding, setIsRebuilding] = useState(false)
+
+  const [msgFrom, setMsgFrom] = useState(defaultRange.from)
+  const [msgTo, setMsgTo] = useState(defaultRange.to)
+  const [messageMetrics, setMessageMetrics] = useState<MessageMetricsResponse | null>(null)
+  const [messageMetricsLoading, setMessageMetricsLoading] = useState(false)
+  const [messageMetricsError, setMessageMetricsError] = useState('')
+  const [messageMetricsRebuilding, setMessageMetricsRebuilding] = useState(false)
 
   const fetchMetrics = async () => {
     setIsLoading(true)
@@ -110,6 +145,53 @@ export default function ReportsPage() {
     fetchMetrics()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const fetchMessageMetrics = async () => {
+    setMessageMetricsLoading(true)
+    setMessageMetricsError('')
+    try {
+      const params: Record<string, string> = {}
+      if (msgFrom) params.created_from = msgFrom
+      if (msgTo) params.created_to = msgTo
+      const response = await api.get<MessageMetricsResponse>('/chat/metrics/messages/', { params })
+      setMessageMetrics(response.data)
+    } catch {
+      setMessageMetricsError('Não foi possível carregar as métricas de mensagens.')
+    } finally {
+      setMessageMetricsLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (activeReportTab === 'messages') fetchMessageMetrics()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeReportTab])
+
+  const handleMessageRebuild = async () => {
+    if (!msgFrom || !msgTo) {
+      toast.error('Selecione um período para rebuild')
+      return
+    }
+    setMessageMetricsRebuilding(true)
+    try {
+      const response = await api.post<{
+        status: string
+        message: string
+        days_processed: number
+        totals: { total: number; sent: number; received: number }
+      }>('/chat/metrics/messages/rebuild/', { from: msgFrom, to: msgTo })
+      toast.success(response.data.message, {
+        description: `${response.data.days_processed} dia(s) processado(s). ${response.data.totals.total} mensagens no total.`,
+      })
+      await fetchMessageMetrics()
+    } catch (err: any) {
+      toast.error('Erro ao executar rebuild', {
+        description: err.response?.data?.error || 'Tente novamente',
+      })
+    } finally {
+      setMessageMetricsRebuilding(false)
+    }
+  }
 
   const handleRebuild = async () => {
     if (!createdFrom || !createdTo) {
@@ -150,10 +232,236 @@ export default function ReportsPage() {
         <div>
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Relatórios</h1>
           <p className="mt-2 text-gray-600 dark:text-gray-400">
-            KPIs e métricas diárias de transcrição
+            KPIs e métricas de mensagens e transcrição
           </p>
         </div>
 
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              type="button"
+              onClick={() => setActiveReportTab('messages')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeReportTab === 'messages'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              <MessageSquare className="h-4 w-4" />
+              Mensagens
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveReportTab('transcriptions')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm flex items-center gap-2 ${
+                activeReportTab === 'transcriptions'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              }`}
+            >
+              <FileText className="h-4 w-4" />
+              Transcrições
+            </button>
+          </nav>
+        </div>
+
+        {activeReportTab === 'messages' && (
+          <>
+            <Card>
+              <div className="p-6 space-y-4">
+                <div className="flex flex-wrap items-end gap-4">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm text-gray-600 dark:text-gray-400">De</label>
+                    <input
+                      type="date"
+                      value={msgFrom}
+                      onChange={(e) => setMsgFrom(e.target.value)}
+                      className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-sm text-gray-600 dark:text-gray-400">Até</label>
+                    <input
+                      type="date"
+                      value={msgTo}
+                      onChange={(e) => setMsgTo(e.target.value)}
+                      className="rounded-md border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 px-3 py-2 text-sm"
+                    />
+                  </div>
+                  <Button onClick={fetchMessageMetrics} disabled={messageMetricsLoading}>
+                    <RefreshCcw className="h-4 w-4 mr-2" />
+                    Atualizar
+                  </Button>
+                  <Button
+                    onClick={handleMessageRebuild}
+                    disabled={messageMetricsRebuilding || messageMetricsLoading}
+                    variant="outline"
+                    className="border-orange-200 dark:border-orange-800 text-orange-600 dark:text-orange-400 hover:bg-orange-50 dark:hover:bg-orange-900/20"
+                  >
+                    <Database className="h-4 w-4 mr-2" />
+                    {messageMetricsRebuilding ? 'Processando...' : 'Rebuild Métricas'}
+                  </Button>
+                </div>
+                {messageMetricsError && (
+                  <p className="text-sm text-red-600 dark:text-red-400">{messageMetricsError}</p>
+                )}
+              </div>
+            </Card>
+
+            {messageMetricsLoading && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {[1, 2, 3, 4].map((i) => (
+                  <Card key={i}>
+                    <div className="p-4 h-20 animate-pulse bg-gray-100 dark:bg-gray-800 rounded" />
+                  </Card>
+                ))}
+              </div>
+            )}
+
+            {!messageMetricsLoading && messageMetrics && (
+              <>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <Card>
+                    <div className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Total de mensagens</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {messageMetrics.totals.total}
+                        </p>
+                      </div>
+                      <MessageSquare className="h-8 w-8 text-brand-500" />
+                    </div>
+                  </Card>
+                  <Card>
+                    <div className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Enviadas</p>
+                        <p className="text-2xl font-bold text-green-600">
+                          {messageMetrics.totals.sent}
+                        </p>
+                      </div>
+                      <Send className="h-8 w-8 text-green-500" />
+                    </div>
+                  </Card>
+                  <Card>
+                    <div className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Recebidas</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          {messageMetrics.totals.received}
+                        </p>
+                      </div>
+                      <Inbox className="h-8 w-8 text-blue-500" />
+                    </div>
+                  </Card>
+                  <Card>
+                    <div className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400">Tempo médio de 1ª resposta</p>
+                        <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                          {formatFirstResponse(messageMetrics.avg_first_response_seconds)}
+                        </p>
+                      </div>
+                      <Clock className="h-8 w-8 text-brand-500" />
+                    </div>
+                  </Card>
+                </div>
+
+                <Card>
+                  <div className="p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Mensagens por hora do dia
+                    </h2>
+                    <div className="h-80">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={messageMetrics.series_by_hour}
+                          animationDuration={600}
+                          animationEasing="ease-out"
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="hour" tickFormatter={(h) => `${h}h`} />
+                          <YAxis />
+                          <Tooltip
+                            formatter={(value: number) => [`${value} mensagens`, '']}
+                            labelFormatter={(label) => `${label}h`}
+                          />
+                          <Legend />
+                          <Bar dataKey="total" name="Total" fill="#6366f1" isAnimationActive />
+                          <Bar dataKey="sent" name="Enviadas" fill="#10b981" isAnimationActive />
+                          <Bar dataKey="received" name="Recebidas" fill="#3b82f6" isAnimationActive />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </Card>
+
+                <Card>
+                  <div className="p-6">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                      Mensagens enviadas por atendente
+                    </h2>
+                    <div className="h-80">
+                      {messageMetrics.by_user.length === 0 ? (
+                        <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 text-sm">
+                          Nenhum atendente com mensagens no período.
+                        </div>
+                      ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart
+                          data={messageMetrics.by_user.map((u) => ({
+                            name: u.first_name || u.email?.split('@')[0] || u.user_id.slice(0, 8),
+                            total_sent: u.total_sent,
+                            avg_resp: u.avg_first_response_seconds,
+                          }))}
+                          layout="vertical"
+                          margin={{ left: 80 }}
+                          animationDuration={600}
+                          animationEasing="ease-out"
+                        >
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis type="number" />
+                          <YAxis type="category" dataKey="name" width={80} tick={{ fontSize: 12 }} />
+                          <Tooltip
+                            formatter={(value: number) => [`${value} mensagens`, 'Enviadas']}
+                            content={({ active, payload }) => {
+                              if (!active || !payload?.length) return null
+                              const p = payload[0].payload
+                              return (
+                                <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg px-3 py-2 text-sm">
+                                  <p className="font-medium">{p.name}</p>
+                                  <p>{p.total_sent} mensagens enviadas</p>
+                                  {p.avg_resp != null && (
+                                    <p>Tempo médio 1ª resposta: {formatFirstResponse(p.avg_resp)}</p>
+                                  )}
+                                </div>
+                              )
+                            }}
+                          />
+                          <Bar dataKey="total_sent" name="Enviadas" fill="#6366f1" isAnimationActive />
+                        </BarChart>
+                      </ResponsiveContainer>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              </>
+            )}
+
+            {!messageMetricsLoading && !messageMetrics && !messageMetricsError && (
+              <Card>
+                <div className="p-8 text-center text-gray-500 dark:text-gray-400">
+                  <MessageSquare className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhuma mensagem no período.</p>
+                  <p className="text-sm mt-1">Amplie o período ou altere os filtros.</p>
+                </div>
+              </Card>
+            )}
+          </>
+        )}
+
+        {activeReportTab === 'transcriptions' && (
+        <>
         <Card>
           <div className="p-6 space-y-4">
             <div className="flex flex-wrap items-end gap-4">
@@ -461,6 +769,8 @@ export default function ReportsPage() {
             </div>
           </Card>
         </div>
+        </>
+        )}
       </div>
     </PermissionGuard>
   )

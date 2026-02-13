@@ -14,6 +14,7 @@ from apps.chat.api.views import (
     UploadPresignedUrlView,
     ConfirmUploadView,
 )
+from apps.chat.api.views_metrics import message_metrics, message_metrics_rebuild
 from apps.chat.api.views_business_hours import (
     BusinessHoursViewSet,
     AfterHoursMessageViewSet,
@@ -59,6 +60,8 @@ urlpatterns = [
     path('profile-pic-proxy/', media_proxy, name='profile-pic-proxy'),
     # Monitores/diagnósticos
     path('metrics/overview/', chat_metrics_overview, name='chat-metrics-overview'),
+    path('metrics/messages/', message_metrics, name='chat-metrics-messages'),
+    path('metrics/messages/rebuild/', message_metrics_rebuild, name='chat-metrics-messages-rebuild'),
     path('metrics/ping-evolution/', chat_ping_evolution, name='chat-ping-evolution'),
     path('metrics/diagnose-instance-friendly-name/', chat_diagnose_instance_friendly_name, name='chat-diagnose-instance-friendly-name'),
     
