@@ -206,7 +206,7 @@ export default function Layout() {
   }, [activeProductSlugs, hasProductAccess, canAccessAgenda, canAccessChat, canAccessContacts, isAdmin, isGerente, isAgente, user])
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
+    <div className="flex min-h-screen w-full bg-gray-50 dark:bg-gray-900">
       {/* Mobile sidebar */}
       <div className={cn(
         "fixed inset-0 z-modal lg:hidden",
@@ -500,9 +500,9 @@ export default function Layout() {
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main content - flex-1 min-w-0 garante que o conteúdo use todo o espaço e não seja espremido */}
       <div className={cn(
-        "transition-all duration-300",
+        "flex-1 min-w-0 w-full transition-all duration-300 overflow-x-auto",
         sidebarCollapsed ? "md:pl-16" : "md:pl-64"
       )}>
         {/* Mobile menu button */}
@@ -522,8 +522,8 @@ export default function Layout() {
             <Outlet />
           </main>
         ) : (
-          <main className="py-4 sm:py-6">
-            <div className="mx-auto max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
+          <main className="w-full min-w-0 py-4 sm:py-6">
+            <div className="mx-auto w-full max-w-7xl px-3 sm:px-4 md:px-6 lg:px-8">
               <Outlet />
             </div>
           </main>
