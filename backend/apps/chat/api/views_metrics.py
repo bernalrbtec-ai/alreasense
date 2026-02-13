@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, date, timedelta, time
 from django.utils import timezone
 from django.db.models import Count
-from django.db.models.functions import TruncDate
+from django.db.models.functions import TruncDate, ExtractHour
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -244,6 +244,45 @@ def message_metrics(request):
         })
     by_department_user_list.sort(key=lambda x: x["total_sent"], reverse=True)
 
+    # series_by_hour_by_department: média de mensagens por hora do dia, por departamento
+    num_days = max(1, (created_to - created_from).days + 1)
+    dept_hour_rows = (
+        Message.objects.filter(
+            conversation__in=conv_qs,
+            created_at__gte=start_dt,
+            created_at__lt=end_dt,
+            is_internal=False,
+            is_deleted=False,
+        )
+        .annotate(hour=ExtractHour("created_at"))
+        .values("conversation__department_id", "conversation__department__name", "hour")
+        .annotate(total=Count("id"))
+    )
+    dept_hour_map = {}  # (dept_id,) -> { department_id, department_name, by_hour: { 0: n, 1: m, ... } }
+    for row in dept_hour_rows:
+        dept_id = str(row["conversation__department_id"]) if row["conversation__department_id"] else "_inbox"
+        dept_name = row["conversation__department__name"] or "Inbox (sem departamento)"
+        h = int(row["hour"]) if row["hour"] is not None else 0
+        total = row["total"] or 0
+        if dept_id not in dept_hour_map:
+            dept_hour_map[dept_id] = {
+                "department_id": dept_id if dept_id != "_inbox" else None,
+                "department_name": dept_name,
+                "by_hour": {hr: 0 for hr in range(24)},
+            }
+        dept_hour_map[dept_id]["by_hour"][h] = total
+    series_by_hour_by_department = []
+    for dept_id, entry in dept_hour_map.items():
+        by_hour_list = [
+            {"hour": h, "total": entry["by_hour"].get(h, 0), "avg": entry["by_hour"].get(h, 0) / num_days}
+            for h in range(24)
+        ]
+        series_by_hour_by_department.append({
+            "department_id": entry["department_id"],
+            "department_name": entry["department_name"],
+            "by_hour": by_hour_list,
+        })
+
     return Response({
         "range": {
             "from": created_from.isoformat(),
@@ -260,6 +299,8 @@ def message_metrics(request):
         "avg_first_response_seconds": avg_first_response_seconds,
         "by_user": by_user_list,
         "by_department_user": by_department_user_list,
+        "series_by_hour_by_department": series_by_hour_by_department,
+        "num_days": num_days,
     })
 
 

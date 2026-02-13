@@ -20,6 +20,8 @@ import {
   ResponsiveContainer,
   LineChart,
   Line,
+  Area,
+  AreaChart,
   BarChart,
   Bar,
   XAxis,
@@ -94,6 +96,12 @@ interface MessageMetricsResponse {
     avg_first_response_seconds: number | null
   }>
   by_department_user?: DepartmentUserMetric[]
+  series_by_hour_by_department?: Array<{
+    department_id: string | null
+    department_name: string
+    by_hour: Array<{ hour: number; total: number; avg: number }>
+  }>
+  num_days?: number
 }
 
 const getDefaultRange = () => {
@@ -378,50 +386,142 @@ export default function ReportsPage() {
                   </Card>
                 </div>
 
-                <Card>
-                  <div className="p-6">
-                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Mensagens por dia do período ({messageMetrics.range.from} a {messageMetrics.range.to})
-                    </h2>
-                    <div className="h-80">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart
-                          data={messageMetrics.series_by_date || []}
-                          animationDuration={600}
-                          animationEasing="ease-out"
-                        >
-                          <CartesianGrid strokeDasharray="3 3" />
-                          <XAxis
-                            dataKey="date"
-                            tickFormatter={(d) => {
-                              const [y, m, day] = d.split('-')
-                              return `${day}/${m}`
-                            }}
-                          />
-                          <YAxis />
-                          <Tooltip
-                            formatter={(value: number) => [`${value} mensagens`, '']}
-                            labelFormatter={(label) => {
-                              const [y, m, d] = label.split('-')
-                              return `${d}/${m}/${y}`
-                            }}
-                          />
-                          <Legend />
-                          <Bar dataKey="total" name="Total" fill="#6366f1" isAnimationActive />
-                          <Bar dataKey="sent" name="Enviadas" fill="#10b981" isAnimationActive />
-                          <Bar dataKey="received" name="Recebidas" fill="#3b82f6" isAnimationActive />
-                        </BarChart>
-                      </ResponsiveContainer>
+                <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                  <Card>
+                    <div className="p-6">
+                      <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+                        Mensagens por dia ({messageMetrics.range.from} a {messageMetrics.range.to})
+                      </h2>
+                      <div className="h-72 xl:h-80">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart
+                            data={messageMetrics.series_by_date || []}
+                            animationDuration={600}
+                            animationEasing="ease-out"
+                          >
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+                            <XAxis
+                              dataKey="date"
+                              tickFormatter={(d) => {
+                                const [y, m, day] = d.split('-')
+                                return `${day}/${m}`
+                              }}
+                              tick={{ fill: 'currentColor', fontSize: 11 }}
+                            />
+                            <YAxis tick={{ fill: 'currentColor', fontSize: 11 }} />
+                            <Tooltip
+                              formatter={(value: number) => [`${value} msg`, '']}
+                              labelFormatter={(label) => {
+                                const [y, m, d] = label.split('-')
+                                return `${d}/${m}/${y}`
+                              }}
+                              contentStyle={{ borderRadius: 8 }}
+                            />
+                            <Legend />
+                            <Bar dataKey="total" name="Total" fill="#6366f1" isAnimationActive />
+                            <Bar dataKey="sent" name="Enviadas" fill="#10b981" isAnimationActive />
+                            <Bar dataKey="received" name="Recebidas" fill="#3b82f6" isAnimationActive />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                  </div>
-                </Card>
+                  </Card>
+
+                  {(messageMetrics.series_by_hour_by_department?.length ?? 0) > 0 ? (
+                    <Card className="bg-gray-900 dark:bg-gray-900/90">
+                      <div className="p-6">
+                        <h2 className="text-lg font-semibold text-white mb-1">
+                          Média de Mensagens por Hora do Dia
+                        </h2>
+                        <p className="text-sm text-gray-400 mb-4">
+                          Por departamento ({messageMetrics.num_days ?? 1} dia(s) no período)
+                        </p>
+                        <div className="h-72 xl:h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart
+                              data={Array.from({ length: 24 }, (_, h) => {
+                                const row: Record<string, string | number> = { hour: h, hourLabel: `${h}h` }
+                                messageMetrics.series_by_hour_by_department!.forEach((d) => {
+                                  const bh = d.by_hour.find((b) => b.hour === h)
+                                  row[d.department_name] = bh ? Math.round(bh.avg * 100) / 100 : 0
+                                })
+                                return row
+                              })}
+                              margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
+                            >
+                              <defs>
+                                {['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899'].map((color, i) => (
+                                  <linearGradient key={i} id={`grad-hour-${i}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={color} stopOpacity={0.35} />
+                                    <stop offset="100%" stopColor={color} stopOpacity={0} />
+                                  </linearGradient>
+                                ))}
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                              <XAxis
+                                dataKey="hourLabel"
+                                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                                axisLine={{ stroke: '#475569' }}
+                              />
+                              <YAxis
+                                tick={{ fill: '#94a3b8', fontSize: 11 }}
+                                axisLine={{ stroke: '#475569' }}
+                                label={{
+                                  value: 'Média de Mensagens',
+                                  angle: -90,
+                                  position: 'insideLeft',
+                                  fill: '#94a3b8',
+                                  style: { fontSize: 11 },
+                                }}
+                              />
+                              <Tooltip
+                                contentStyle={{
+                                  backgroundColor: '#1e293b',
+                                  border: '1px solid #475569',
+                                  borderRadius: 8,
+                                }}
+                                labelStyle={{ color: '#e2e8f0' }}
+                                labelFormatter={(label) => label}
+                                formatter={(value: number) => [`${Math.round(value * 10) / 10} msg`, '']}
+                              />
+                              <Legend wrapperStyle={{ paddingTop: 8 }} />
+                              {messageMetrics.series_by_hour_by_department!.map((d, i) => {
+                                const colors = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4']
+                                const c = colors[i % colors.length]
+                                return (
+                                  <Area
+                                    key={d.department_id ?? 'inbox'}
+                                    type="monotone"
+                                    dataKey={d.department_name}
+                                    stroke={c}
+                                    strokeWidth={2}
+                                    fill={`url(#grad-hour-${i})`}
+                                    dot={{ r: 3, fill: c }}
+                                    activeDot={{ r: 5 }}
+                                    isAnimationActive
+                                  />
+                                )
+                              })}
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    </Card>
+                  ) : (
+                    <Card>
+                      <div className="p-6 flex items-center justify-center h-72 xl:h-80 text-gray-500 dark:text-gray-400 text-sm">
+                        Sem dados por departamento para exibir hora do dia.
+                      </div>
+                    </Card>
+                  )}
+                </div>
 
                 <Card>
                   <div className="p-6">
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       Mensagens enviadas por atendente
                     </h2>
-                    <div className="h-80">
+                    <div className="h-96">
                       {messageMetrics.by_user.length === 0 ? (
                         <div className="flex items-center justify-center h-full text-gray-500 dark:text-gray-400 text-sm">
                           Nenhum atendente com mensagens no período.
@@ -475,7 +575,7 @@ export default function ReportsPage() {
                       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                         Quem conversa mais ou menos por departamento (mensagens enviadas no período)
                       </p>
-                      <div className="h-80">
+                      <div className="h-96">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart
                             data={messageMetrics.by_department_user!.map((d) => ({
@@ -540,7 +640,7 @@ export default function ReportsPage() {
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                           Mensagens por dia (top atendentes por departamento)
                         </h2>
-                        <div className="h-80">
+                        <div className="h-96">
                           <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={dailyChartData} margin={{ left: 20 }}>
                               <CartesianGrid strokeDasharray="3 3" />
