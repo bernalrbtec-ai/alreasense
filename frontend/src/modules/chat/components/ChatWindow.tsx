@@ -870,6 +870,9 @@ export function ChatWindow() {
             >
               {loadingStart ? 'Iniciando...' : 'INICIAR ATENDIMENTO'}
             </button>
+            <p className="mt-1.5 text-xs text-center text-gray-600 dark:text-gray-400">
+              Ou envie uma mensagem para ser atribuído automaticamente.
+            </p>
           </div>
         )}
 

@@ -837,6 +837,18 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                 metadata=metadata
             )
             
+            # Atribuição automática: primeiro a responder em conversa sem atendente fica atribuído
+            if not is_internal and conversation.assigned_to_id is None:
+                updated = Conversation.objects.filter(
+                    id=conversation.id,
+                    assigned_to__isnull=True
+                ).update(assigned_to_id=self.user.id, status='open')
+                if updated:
+                    logger.info(
+                        f"✅ [CHAT WS V2] Conversa {conversation.id} atribuída automaticamente a {self.user.email}"
+                    )
+                    conversation.refresh_from_db()
+            
             return message
         
         except Conversation.DoesNotExist:

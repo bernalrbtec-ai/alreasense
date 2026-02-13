@@ -12,6 +12,15 @@ from apps.contacts.models import Contact
 logger = logging.getLogger(__name__)
 
 
+def _broadcast_conversation_after_assign(conversation):
+    """Broadcast conversation_updated após atribuição automática (chamado em on_commit)."""
+    from apps.chat.utils.websocket import broadcast_conversation_updated
+    try:
+        broadcast_conversation_updated(conversation)
+    except Exception as e:
+        logger.error("Erro no broadcast após atribuição automática: %s", e, exc_info=True)
+
+
 class MessageAttachmentSerializer(serializers.ModelSerializer):
     """
     Serializer para anexos de mensagem.
@@ -344,7 +353,8 @@ class MessageCreateSerializer(serializers.ModelSerializer):
                         raise serializers.ValidationError({
                             'conversation': 'Você não tem acesso a este departamento.'
                         })
-                elif conversation.assigned_to_id != user.id:
+                # Permitir envio quando ninguém está atribuído (Inbox ou fila); bloquear só se já atribuído a outro
+                elif conversation.assigned_to_id is not None and conversation.assigned_to_id != user.id:
                     raise serializers.ValidationError({
                         'conversation': 'Conversa não está atribuída a você.'
                     })
@@ -411,6 +421,24 @@ class MessageCreateSerializer(serializers.ModelSerializer):
         logger.critical(f"   Conversation ID: {message.conversation_id}")
         logger.critical(f"   Conversation Type: {message.conversation.conversation_type}")
         logger.critical(f"   Conversation Phone: {message.conversation.contact_phone}")
+        
+        # Atribuição automática: primeiro a responder em conversa sem atendente fica atribuído
+        if (
+            not message.is_internal
+            and message.sender_id
+            and message.conversation.assigned_to_id is None
+        ):
+            from django.db import transaction
+            updated = Conversation.objects.filter(
+                id=message.conversation_id,
+                assigned_to__isnull=True
+            ).update(assigned_to_id=user.id, status='open')
+            if updated:
+                logger.info(
+                    f"✅ [MESSAGE CREATE] Conversa {message.conversation_id} atribuída automaticamente a {user.email}"
+                )
+                message.conversation.refresh_from_db()
+                transaction.on_commit(lambda conv=message.conversation: _broadcast_conversation_after_assign(conv))
         
         # ✅ NOVO: Processar menções e salvar no metadata
         metadata = {}
