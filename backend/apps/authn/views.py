@@ -284,23 +284,36 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             logger.warning(f"⚠️ [DEPARTMENTS] Usuário {user.email} sem tenant, retornando queryset vazio")
             return Department.objects.none()
         
-        # Cache key por tenant e tipo de usuário
-        cache_key = CacheManager.make_key(
-            CacheManager.PREFIX_DEPARTMENT,
-            'all' if user.is_superuser else 'tenant',
-            tenant_id=user.tenant.id if user.tenant else 'none'
-        )
+        # Cache key: por tenant para admin (vê todos); por tenant+user para não-admin (só seus departamentos)
+        can_access_all = getattr(user, 'can_access_all_departments', lambda: False)
+        can_access_all = can_access_all() if callable(can_access_all) else bool(can_access_all)
+        if can_access_all or user.is_superuser:
+            cache_key = CacheManager.make_key(
+                CacheManager.PREFIX_DEPARTMENT,
+                'all',
+                tenant_id=user.tenant.id if user.tenant else 'none'
+            )
+        else:
+            cache_key = CacheManager.make_key(
+                CacheManager.PREFIX_DEPARTMENT,
+                'user',
+                tenant_id=user.tenant.id if user.tenant else 'none',
+                user_id=user.id
+            )
         
         def fetch_department_ids():
             """Função para buscar IDs de departamentos do banco (sem anotações)"""
-            if user.is_superuser:
-                queryset = Department.objects.select_related('tenant').all()
-            else:
+            if can_access_all or user.is_superuser:
                 queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
+            else:
+                # Não-admin: apenas departamentos aos quais o usuário pertence
+                queryset = Department.objects.filter(
+                    tenant=user.tenant,
+                    id__in=user.departments.values_list('id', flat=True)
+                ).select_related('tenant')
             
-            # Retornar apenas IDs para cache (anotações mudam frequentemente)
             ids = list(queryset.values_list('id', flat=True))
-            logger.info(f"📋 [DEPARTMENTS] Buscados {len(ids)} departamentos do banco para tenant {user.tenant.id}")
+            logger.info(f"📋 [DEPARTMENTS] Buscados {len(ids)} departamentos para usuário {user.email} (tenant {user.tenant.id})")
             return ids
         
         # ✅ OTIMIZAÇÃO: Cachear apenas IDs (anotações mudam quando conversas são transferidas)
@@ -322,19 +335,19 @@ class DepartmentViewSet(viewsets.ModelViewSet):
                 logger.error(f"❌ [DEPARTMENTS] Erro ao invalidar cache: {e}")
             
             # Buscar diretamente do banco (bypass do cache)
-            if user.is_superuser:
-                queryset = Department.objects.select_related('tenant').all()
-            else:
-                queryset = Department.objects.filter(tenant=user.tenant).select_related('tenant')
+            department_ids = fetch_department_ids()
+            if not department_ids:
+                return Department.objects.none()
+            queryset = Department.objects.filter(
+                id__in=department_ids,
+                tenant=user.tenant
+            ).select_related('tenant')
         else:
             # ✅ OTIMIZAÇÃO: Construir queryset completo com anotações em uma única query
-            if user.is_superuser:
-                queryset = Department.objects.filter(id__in=department_ids).select_related('tenant')
-            else:
-                queryset = Department.objects.filter(
-                    id__in=department_ids,
-                    tenant=user.tenant
-                ).select_related('tenant')
+            queryset = Department.objects.filter(
+                id__in=department_ids,
+                tenant=user.tenant
+            ).select_related('tenant')
         
         # ✅ OTIMIZAÇÃO: Anotar contador de conversas pendentes (sempre necessário para serializer)
         # Esta anotação não é cacheada porque muda quando conversas são transferidas

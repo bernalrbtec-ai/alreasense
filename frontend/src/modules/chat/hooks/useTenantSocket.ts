@@ -42,6 +42,26 @@ const globalToastRegistry = {
   }
 };
 
+/**
+ * Verifica se o usuário pode ver a conversa (mesma regra do backend ConversationViewSet.get_queryset).
+ * Usado para não notificar nem adicionar ao store conversas de departamentos sem permissão.
+ */
+function userCanSeeConversation(conversation: any, user: { id?: number | string; department_ids?: string[]; permissions?: { can_access_all_departments?: boolean }; is_admin?: boolean } | null): boolean {
+  if (!user) return false;
+  const canAccessAll = !!user.permissions?.can_access_all_departments || !!user.is_admin;
+  if (canAccessAll) return true;
+  const deptId = typeof conversation.department === 'object' && conversation.department != null
+    ? (conversation.department as { id?: string }).id
+    : (conversation.department ?? null);
+  const noDepartment = deptId == null || deptId === '';
+  if (noDepartment) return true; // Inbox
+  const assignedToMe = String(conversation.assigned_to ?? '') === String(user.id ?? '');
+  if (assignedToMe) return true;
+  const departmentIds = user.department_ids ?? [];
+  if (departmentIds.length === 0) return false; // usuário sem departamentos: só Inbox e atribuídas
+  return departmentIds.includes(String(deptId));
+}
+
 export function useTenantSocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -75,6 +95,11 @@ export function useTenantSocket() {
       case 'new_conversation':
         console.log('🆕 [TENANT WS] Nova conversa:', data.conversation);
         if (data.conversation) {
+          const currentUser = useAuthStore.getState().user;
+          if (!userCanSeeConversation(data.conversation, currentUser)) {
+            console.log('🔒 [TENANT WS] Nova conversa ignorada (sem permissão no departamento):', data.conversation.id);
+            break;
+          }
           addConversation(data.conversation);
           
           // ✅ FIX CRÍTICO: Refetch departamentos quando nova conversa é criada com departamento
@@ -531,6 +556,11 @@ export function useTenantSocket() {
           // message_received pode chegar ANTES de conversation_updated (race no backend).
           // Sem isso, addMessage ignora a mensagem e a 1ª msg de individual nunca aparece.
           if (!conversationExists && data.conversation && finalMessageConvId) {
+            const currentUser = useAuthStore.getState().user;
+            if (!userCanSeeConversation(data.conversation, currentUser)) {
+              console.log('🔒 [TENANT WS] Mensagem em conversa ignorada (sem permissão no departamento):', finalMessageConvId);
+              break;
+            }
             console.log('✅ [TENANT WS] Conversa nova (ainda não no store), adicionando antes da mensagem:', finalMessageConvId);
             addConversation(data.conversation);
             conversationExists = true;
@@ -575,6 +605,11 @@ export function useTenantSocket() {
       case 'new_message_notification':
         console.log('💬 [TENANT WS] Nova mensagem em conversa existente:', data);
         if (data.conversation) {
+          const currentUserMsg = useAuthStore.getState().user;
+          if (!userCanSeeConversation(data.conversation, currentUserMsg)) {
+            console.log('🔒 [TENANT WS] Nova mensagem ignorada (sem permissão no departamento):', data.conversation.id);
+            break;
+          }
           // Atualizar conversa na lista (mover para o topo, atualizar última mensagem)
           const { updateConversation, activeConversation } = useChatStore.getState();
           updateConversation(data.conversation);
@@ -710,6 +745,11 @@ export function useTenantSocket() {
           const { setActiveConversation } = useChatStore.getState();
           
           if (isNewConversation) {
+            const currentUserConv = useAuthStore.getState().user;
+            if (!userCanSeeConversation(data.conversation, currentUserConv)) {
+              console.log('🔒 [TENANT WS] conversation_updated ignorado (conversa nova sem permissão no departamento):', data.conversation.id);
+              break;
+            }
             console.log('⚠️ [TENANT WS] Conversa não encontrada no store, adicionando...', {
               id: data.conversation.id,
               name: data.conversation.contact_name,
