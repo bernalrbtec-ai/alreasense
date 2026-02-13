@@ -4268,7 +4268,11 @@ class MessageViewSet(viewsets.ModelViewSet):
                 forwarded_message.metadata['attachment_urls'] = attachment_urls
                 forwarded_message.save(update_fields=['metadata'])
             
-            # Localização: não copiar location_message (apenas recebimento por enquanto)
+            # Se a mensagem original era localização, copiar location_message para enviar via sendLocation
+            if message.metadata and message.metadata.get('location_message'):
+                forwarded_message.metadata = forwarded_message.metadata or {}
+                forwarded_message.metadata['location_message'] = message.metadata['location_message']
+                forwarded_message.save(update_fields=['metadata'])
             
             logger.info(f"✅ [FORWARD MESSAGE] Mensagem criada: {forwarded_message.id}")
             

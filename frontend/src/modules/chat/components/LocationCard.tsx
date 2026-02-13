@@ -22,7 +22,7 @@ export function LocationCard({ locationData, content }: LocationCardProps) {
   const address = locationData?.address || '';
 
   const hasCoords = typeof lat === 'number' && typeof lng === 'number';
-  const displayName = name || address || content || 'Localização compartilhada';
+  const displayName = name || address || 'Localização compartilhada';
   const mapUrl = hasCoords
     ? `https://www.google.com/maps?q=${lat},${lng}`
     : address
