@@ -365,14 +365,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return state;
     }
     
+    const convKeyNorm = normalizeConversationKey(messageConversationId);
+    if (!convKeyNorm) {
+      console.warn('⚠️ [STORE] conversation_id normalizado vazio, ignorando:', message.id);
+      return state;
+    }
+    
     // ✅ CORREÇÃO CRÍTICA: Verificar se conversa existe no store (ativa ou não)
-    // Se conversa existe no store, adicionar mensagem mesmo se não estiver aberta
-    // Isso garante que mensagens sejam disponibilizadas quando a conversa for aberta
+    // Usar normalizeConversationKey para consistência com useTenantSocket (UUIDs case-insensitive)
     const conversationExists = state.conversations.some(conv => 
-      String(conv.id) === messageConversationId
+      normalizeConversationKey(conv.id) === convKeyNorm
     );
     const activeConversationId = state.activeConversation?.id ? String(state.activeConversation.id) : null;
-    const isActiveConversation = activeConversationId === messageConversationId;
+    const isActiveConversation = normalizeConversationKey(activeConversationId) === convKeyNorm;
     
     if (!conversationExists && !isActiveConversation) {
       console.log('⚠️ [STORE] Mensagem não pertence a nenhuma conversa conhecida, ignorando:', {
@@ -400,8 +405,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // ✅ Verificar se mensagem já existe (usar chave normalizada)
     const msgIdStr = message.id != null ? String(message.id) : '';
     const existingMessage = msgIdStr ? state.messages.byId[msgIdStr] : undefined;
-    const convKey = normalizeConversationKey(messageConversationId);
-    const messageIds = (convKey ? state.messages.byConversationId[convKey] : null) || [];
+    const messageIds = (convKeyNorm ? state.messages.byConversationId[convKeyNorm] : null) || [];
     
     if (existingMessage) {
       // ✅ Merge inteligente de attachments
@@ -449,7 +453,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         byConversationId: {
           ...state.messages.byConversationId,
-          [convKey]: updatedMessageIds
+          [convKeyNorm]: updatedMessageIds
         }
       }
     };
