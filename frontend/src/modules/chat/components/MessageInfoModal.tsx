@@ -2,7 +2,7 @@
  * Modal com informações detalhadas da mensagem
  */
 import React from 'react';
-import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, MessageSquare } from 'lucide-react';
+import { X, Clock, CheckCircle2, Eye, User, FileText, Image, Video, Music, File, AlertCircle, Info, MessageSquare, MapPin } from 'lucide-react';
 import type { Message } from '../types';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -23,6 +23,9 @@ export function MessageInfoModal({ message, onClose }: MessageInfoModalProps) {
   };
 
   const getMessageType = () => {
+    if (message.metadata?.location_message) {
+      return { icon: MapPin, label: 'Localização' };
+    }
     if (message.attachments && message.attachments.length > 0) {
       const firstAttachment = message.attachments[0];
       const mimeType = firstAttachment.mime_type || '';

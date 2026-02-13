@@ -1250,6 +1250,7 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         
         # Conteúdo (para outros tipos de mensagem)
         contact_message_data = None
+        location_message_data = None
         mentions_list = []  # ✅ NOVO: Lista de menções na mensagem recebida
         mentioned_jids_raw = []  # ✅ NOVO: JIDs mencionados originais (para reprocessar depois)
         quoted_message_id_evolution = None  # ✅ NOVO: ID da Evolution da mensagem sendo respondida
@@ -1539,8 +1540,30 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                     content = "📇 Contato compartilhado"
                 
                 logger.info(f"📇 [CONTACT MESSAGE] Nome: {display_name}, Telefone: {phone_from_contact}, vCard: {vcard[:100] if vcard else 'N/A'}")
+                else:
+                    content = "📇 Contato compartilhado"
+        elif message_type == 'locationMessage':
+            # ✅ Suporte para localização (lat/lng, nome, endereço)
+            loc_msg = message_info.get('locationMessage', {})
+            degrees_lat = loc_msg.get('degreesLatitude')
+            degrees_lng = loc_msg.get('degreesLongitude')
+            name = loc_msg.get('name', '')
+            address = loc_msg.get('address', '')
+            
+            location_data = {}
+            if degrees_lat is not None and degrees_lng is not None:
+                location_data['latitude'] = float(degrees_lat)
+                location_data['longitude'] = float(degrees_lng)
+            if name:
+                location_data['name'] = str(name)
+            if address:
+                location_data['address'] = str(address)
+            
+            if location_data:
+                location_message_data = location_data
+                content = f"📍 Localização: {name or address or f'{degrees_lat}, {degrees_lng}'}"
             else:
-                content = "📇 Contato compartilhado"
+                content = "📍 Localização compartilhada"
         else:
             content = f'[{message_type}]'
         
@@ -2405,6 +2428,10 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
         # ✅ NOVO: Adicionar dados do contato compartilhado ao metadata
         if contact_message_data:
             message_defaults['metadata']['contact_message'] = contact_message_data
+        
+        # ✅ NOVO: Adicionar dados de localização ao metadata
+        if location_message_data:
+            message_defaults['metadata']['location_message'] = location_message_data
         
         # ✅ NOVO: Adicionar menções ao metadata (quando mensagem recebida tem menções)
         if mentions_list:

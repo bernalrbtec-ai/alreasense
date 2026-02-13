@@ -1083,6 +1083,63 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             
             logger.info(f"🔑 [CHAT] API Key: {'GLOBAL (settings)' if global_api_key != instance.api_key else 'INSTANCE'}")
             
+            # 📍 LOCALIZAÇÃO: Enviar via sendLocation (Evolution API)
+            location_data = (message.metadata or {}).get('location_message', {})
+            loc_lat = location_data.get('latitude')
+            loc_lng = location_data.get('longitude')
+            if loc_lat is not None and loc_lng is not None and not attachment_urls:
+                loc_name = location_data.get('name', 'Localização')
+                loc_address = location_data.get('address', '')
+                payload = {
+                    'number': recipient_value,
+                    'latitude': float(loc_lat),
+                    'longitude': float(loc_lng),
+                    'name': str(loc_name)[:255] if loc_name else 'Localização',
+                    'address': str(loc_address)[:500] if loc_address else str(loc_name)[:500] or 'Localização',
+                }
+                # Adicionar quoted se for resposta
+                if quoted_message_id and quoted_remote_jid:
+                    payload['quoted'] = {
+                        'key': {'id': quoted_message_id},
+                        'message': {'conversation': (content or '')[:100] or '.'}
+                    }
+                endpoint = f"{base_url}/message/sendLocation/{instance.instance_name}"
+                log.info(f"📍 [CHAT] Enviando localização via sendLocation | lat={loc_lat} lng={loc_lng}")
+                try:
+                    resp = await client.post(endpoint, headers=headers, json=payload)
+                    if resp.status_code in (200, 201):
+                        data = resp.json() if resp.text else {}
+                        evo_id = (data.get('key') or {}).get('id')
+                        if evo_id:
+                            close_old_connections()
+                            await database_sync_to_async(
+                                Message.objects.filter(id=message.id).update
+                            )(message_id=evo_id, status='sent', evolution_status='sent')
+                        log.info(f"✅ [CHAT] Localização enviada com sucesso")
+                        # Broadcast via utilitário padrão (mesmo grupo chat_tenant_xxx que consumer usa)
+                        from apps.chat.utils.websocket import broadcast_message_received
+                        close_old_connections()
+                        msg_obj = await database_sync_to_async(
+                            Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                        )(id=message.id)
+                        broadcast_message_received(msg_obj)
+                        return
+                    else:
+                        err_text = resp.text[:500] if resp.text else ''
+                        log.error(f"❌ [CHAT] sendLocation falhou: {resp.status_code} - {err_text}")
+                        close_old_connections()
+                        await database_sync_to_async(
+                            Message.objects.filter(id=message.id).update
+                        )(status='failed', error_message=err_text[:500])
+                except Exception as e:
+                    log.error(f"❌ [CHAT] Erro ao enviar localização: {e}", exc_info=True)
+                    close_old_connections()
+                    await database_sync_to_async(
+                        Message.objects.filter(id=message.id).update
+                    )(status='failed', error_message=str(e)[:500])
+                # ✅ CRÍTICO: Retornar após tentar localização (sucesso ou falha) para não cair no envio de texto
+                return
+            
             # Se tiver anexos, envia cada um
             if attachment_urls:
                 for idx, url in enumerate(attachment_urls):

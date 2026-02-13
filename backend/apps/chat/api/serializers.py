@@ -301,7 +301,7 @@ class MessageCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            'conversation', 'content', 'is_internal', 'attachment_urls'
+            'conversation', 'content', 'is_internal', 'attachment_urls', 'mentions'
         ]
     
     def __init__(self, *args, **kwargs):

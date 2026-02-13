@@ -336,8 +336,8 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
           </button>
         )}
 
-        {/* Encaminhar (não disponível para mensagens apagadas) */}
-        {!message.is_deleted && (
+        {/* Encaminhar (não disponível para mensagens apagadas ou localização - apenas recebimento por enquanto) */}
+        {!message.is_deleted && !message.metadata?.location_message && (
           <button
             onClick={handleForward}
             className="w-full px-4 py-2.5 text-left hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-3 text-sm text-gray-700 dark:text-gray-300"

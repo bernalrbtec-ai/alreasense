@@ -18,6 +18,7 @@ import type { Message } from '../types';
 import ContactModal from '@/components/contacts/ContactModal';
 import { MentionRenderer } from './MentionRenderer';
 import { SharedContactCard } from './SharedContactCard';
+import { LocationCard } from './LocationCard';
 import { MessageInfoModal } from './MessageInfoModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { EditMessageModal } from './EditMessageModal';
@@ -135,6 +136,7 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
   
   // ✅ MELHORIA: Detectar tipo de anexo
   const getAttachmentType = () => {
+    if (repliedMessage.metadata?.location_message) return '📍 Localização';
     if (!repliedMessage.attachments || repliedMessage.attachments.length === 0) return null;
     const attachment = repliedMessage.attachments[0];
     if (attachment.is_image) return '🖼️ Imagem';
@@ -975,6 +977,14 @@ export function MessageList() {
                   />
                 )}
                 
+                {/* ✅ NOVO: Localização compartilhada */}
+                {messageItem.metadata?.location_message && (
+                  <LocationCard
+                    locationData={messageItem.metadata.location_message}
+                    content={messageItem.content}
+                  />
+                )}
+                
                 {/* Anexos - renderizar ANTES do texto (apenas se não estiver apagada) */}
                 {/* ✅ CORREÇÃO: Renomear attachment para attachmentItem para evitar conflito de minificação */}
                 {/* ✅ NOVO: Cabeçalho já aparece antes dos anexos (linha 861), então mídia terá cabeçalho igual ao texto */}
@@ -992,13 +1002,14 @@ export function MessageList() {
                 )}
 
                 {/* Texto (se houver) - mostrar mesmo se só tiver anexos (apenas se não estiver apagada) */}
-                {/* ✅ FIX: Ocultar conteúdo se for contato compartilhado (já exibido no card acima) */}
+                {/* ✅ FIX: Ocultar conteúdo se for contato ou localização (já exibido no card acima) */}
                 {/* ✅ FIX: Sanitizar conteúdo e converter URLs em links clicáveis */}
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {/* ✅ NOVO: Formatação WhatsApp (negrito, itálico, riscado, monoespaçado) */}
                 {/* ✅ NOVO: Renderizar assinatura 'Nome disse:' como cabeçalho separado */}
                 {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() && 
-                 !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) && (
+                 !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) &&
+                 !messageItem.metadata?.location_message && (
                   <>
                     {/* ✅ NOVO: Renderizar assinatura como cabeçalho separado (apenas para mensagens enviadas) */}
                     {messageItem.direction === 'outgoing' && (() => {

@@ -4268,6 +4268,8 @@ class MessageViewSet(viewsets.ModelViewSet):
                 forwarded_message.metadata['attachment_urls'] = attachment_urls
                 forwarded_message.save(update_fields=['metadata'])
             
+            # Localização: não copiar location_message (apenas recebimento por enquanto)
+            
             logger.info(f"✅ [FORWARD MESSAGE] Mensagem criada: {forwarded_message.id}")
             
             # Enfileirar envio via fluxo normal (send_message_to_evolution)
