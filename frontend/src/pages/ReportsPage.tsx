@@ -113,6 +113,16 @@ interface MessageMetricsResponse {
     sent: number
     received: number
   }>
+  secretary_metrics?: {
+    total_period: number
+    avg_per_day: number
+    peak_hour: number
+    peak_count: number
+    quiet_hour: number
+    quiet_count: number
+    sent: number
+    by_hour: Array<{ hour: number; total: number; avg: number }>
+  }
   num_days?: number
 }
 
@@ -399,10 +409,42 @@ export default function ReportsPage() {
                 </div>
 
                 <div className="space-y-6">
-                  {/* Cards por departamento (inclui Inbox) - em primeiro lugar após os totais */}
-                  {(messageMetrics.by_department_summary?.length ?? 0) > 0 && (
+                  {/* Cards por departamento + BIA (quando secretary_enabled) */}
+                  {((messageMetrics.by_department_summary?.length ?? 0) > 0 || messageMetrics.secretary_metrics) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                      {messageMetrics.by_department_summary!.map((dept, i) => {
+                      {messageMetrics.secretary_metrics && (
+                        <Card key="bia" className="p-5 border-l-4 border-l-violet-500">
+                          <div className="flex items-center gap-2 mb-4">
+                            <div className="w-3 h-3 rounded-sm shrink-0 bg-violet-500" />
+                            <h3 className="font-semibold text-gray-900 dark:text-white">
+                              BIA (Secretária IA)
+                            </h3>
+                          </div>
+                          <div className="space-y-3 text-sm">
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">Total no período</span>
+                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.total_period.toLocaleString('pt-BR')}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">Média por dia</span>
+                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.avg_per_day.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 3 })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">Horário de pico</span>
+                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.peak_hour}h ({messageMetrics.secretary_metrics.peak_count.toLocaleString('pt-BR')} msg)</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">Horário tranquilo</span>
+                              <span className="font-medium tabular-nums">{messageMetrics.secretary_metrics.quiet_hour}h ({messageMetrics.secretary_metrics.quiet_count.toLocaleString('pt-BR')} msg)</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="text-gray-600 dark:text-gray-400">Enviadas</span>
+                              <span className="font-medium tabular-nums text-green-600 dark:text-green-400">{messageMetrics.secretary_metrics.sent.toLocaleString('pt-BR')}</span>
+                            </div>
+                          </div>
+                        </Card>
+                      )}
+                      {(messageMetrics.by_department_summary ?? []).map((dept, i) => {
                         const colors = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899']
                         const color = colors[i % colors.length]
                         return (
@@ -449,29 +491,37 @@ export default function ReportsPage() {
                   )}
 
                   {/* Gráfico: Média de Mensagens por Hora do Dia */}
-                  {(messageMetrics.series_by_hour_by_department?.length ?? 0) > 0 ? (
+                  {((messageMetrics.series_by_hour_by_department?.length ?? 0) > 0 || messageMetrics.secretary_metrics) ? (
                     <Card>
                       <div className="p-6">
                         <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-1">
                           Média de Mensagens por Hora do Dia
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                          Por departamento ({messageMetrics.range.from} a {messageMetrics.range.to} — {messageMetrics.num_days ?? 1} dia(s))
+                          Por departamento{messageMetrics.secretary_metrics ? ' e BIA' : ''} ({messageMetrics.range.from} a {messageMetrics.range.to} — {messageMetrics.num_days ?? 1} dia(s))
                         </p>
                         <div className="h-80">
                           <ResponsiveContainer width="100%" height="100%">
                             <AreaChart
                               data={Array.from({ length: 24 }, (_, h) => {
                                 const row: Record<string, string | number> = { hour: h, hourLabel: `${h}h` }
-                                messageMetrics.series_by_hour_by_department!.forEach((d) => {
+                                ;(messageMetrics.series_by_hour_by_department ?? []).forEach((d) => {
                                   const bh = d.by_hour.find((b) => b.hour === h)
                                   row[d.department_name] = bh ? Math.round(bh.avg * 100) / 100 : 0
                                 })
+                                if (messageMetrics.secretary_metrics) {
+                                  const bh = messageMetrics.secretary_metrics.by_hour.find((b) => b.hour === h)
+                                  row['BIA'] = bh ? Math.round(bh.avg * 100) / 100 : 0
+                                }
                                 return row
                               })}
                               margin={{ top: 10, right: 20, left: 10, bottom: 10 }}
                             >
                               <defs>
+                                <linearGradient id="grad-hour-bia" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor="#8b5cf6" stopOpacity={0.25} />
+                                  <stop offset="100%" stopColor="#8b5cf6" stopOpacity={0} />
+                                </linearGradient>
                                 {['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4', '#ec4899'].map((color, i) => (
                                   <linearGradient key={i} id={`grad-hour-${i}`} x1="0" y1="0" x2="0" y2="1">
                                     <stop offset="0%" stopColor={color} stopOpacity={0.25} />
@@ -499,7 +549,20 @@ export default function ReportsPage() {
                                 formatter={(value: number) => [`${Math.round(value * 10) / 10} msg`, '']}
                               />
                               <Legend wrapperStyle={{ paddingTop: 8 }} />
-                              {messageMetrics.series_by_hour_by_department!.map((d, i) => {
+                              {messageMetrics.secretary_metrics && (
+                                <Area
+                                  key="bia"
+                                  type="monotone"
+                                  dataKey="BIA"
+                                  stroke="#8b5cf6"
+                                  strokeWidth={2}
+                                  fill="url(#grad-hour-bia)"
+                                  dot={{ r: 3, fill: '#8b5cf6' }}
+                                  activeDot={{ r: 5 }}
+                                  isAnimationActive
+                                />
+                              )}
+                              {(messageMetrics.series_by_hour_by_department ?? []).map((d, i) => {
                                 const colors = ['#3b82f6', '#10b981', '#a855f7', '#f59e0b', '#06b6d4']
                                 const c = colors[i % colors.length]
                                 return (

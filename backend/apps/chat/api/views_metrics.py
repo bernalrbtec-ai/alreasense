@@ -16,6 +16,7 @@ from django.db import transaction
 from apps.common.permissions import IsTenantMember, IsAdminUser
 from apps.chat.models import Conversation, ChatMessageDailyMetric, Message
 from apps.chat.message_metrics import aggregate_message_metrics_for_date
+from apps.ai.models import TenantAiSettings
 
 logger = logging.getLogger(__name__)
 
@@ -324,6 +325,48 @@ def message_metrics(request):
         })
     by_department_summary.sort(key=lambda x: x["total_period"], reverse=True)
 
+    # Métricas da BIA (Secretária IA) - só quando secretary_enabled
+    secretary_metrics = None
+    settings_obj = TenantAiSettings.objects.filter(tenant=user.tenant).first()
+    if settings_obj and getattr(settings_obj, "secretary_enabled", False):
+        bia_qs = Message.objects.filter(
+            conversation__in=conv_qs,
+            conversation__department_id__isnull=True,
+            created_at__gte=start_dt,
+            created_at__lt=end_dt,
+            is_internal=False,
+            is_deleted=False,
+            direction="outgoing",
+            sender_id__isnull=True,
+        )
+        bia_total = bia_qs.count()
+        bia_hour_rows = (
+            bia_qs.annotate(hour=ExtractHour("created_at"))
+            .values("hour")
+            .annotate(total=Count("id"))
+        )
+        bia_by_hour = {h: 0 for h in range(24)}
+        for row in bia_hour_rows:
+            h = int(row["hour"]) if row["hour"] is not None else 0
+            bia_by_hour[h] = row["total"] or 0
+        by_hour_list = [
+            {"hour": h, "total": bia_by_hour[h], "avg": bia_by_hour[h] / num_days}
+            for h in range(24)
+        ]
+        hour_totals = [(h, bia_by_hour[h]) for h in range(24)]
+        peak = max(hour_totals, key=lambda x: x[1])
+        quiet = min((ht for ht in hour_totals if ht[1] > 0), key=lambda x: x[1]) if any(ht[1] > 0 for ht in hour_totals) else (0, 0)
+        secretary_metrics = {
+            "total_period": bia_total,
+            "avg_per_day": round(bia_total / num_days, 3) if num_days else 0,
+            "peak_hour": peak[0],
+            "peak_count": peak[1],
+            "quiet_hour": quiet[0],
+            "quiet_count": quiet[1],
+            "sent": bia_total,
+            "by_hour": by_hour_list,
+        }
+
     return Response({
         "range": {
             "from": created_from.isoformat(),
@@ -342,6 +385,7 @@ def message_metrics(request):
         "by_department_user": by_department_user_list,
         "series_by_hour_by_department": series_by_hour_by_department,
         "by_department_summary": by_department_summary,
+        "secretary_metrics": secretary_metrics,
         "num_days": num_days,
     })
 
