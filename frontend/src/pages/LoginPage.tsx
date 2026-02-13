@@ -38,7 +38,7 @@ export default function LoginPage() {
       <div className="max-w-md w-full space-y-8">
         <div className="text-center">
           <div className="flex justify-center mb-4">
-            <div className="flex items-center justify-center w-20 h-20 rounded-2xl bg-gray-800 dark:bg-gray-700 p-3">
+            <div className="flex items-center justify-center w-24 h-24 rounded-2xl bg-gray-800 dark:bg-gray-700 p-2">
               <img
                 src={logoPng}
                 alt="Logo"

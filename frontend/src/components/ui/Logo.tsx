@@ -16,8 +16,8 @@ export default function Logo({ className = '', showText = true, size = 'md' }: L
     switch (size) {
       case 'sm':
         return {
-          container: 'h-8',
-          image: 'h-6',
+          container: 'h-10',
+          image: 'h-8',
           waves: 'h-4',
           text: 'text-lg'
         }
