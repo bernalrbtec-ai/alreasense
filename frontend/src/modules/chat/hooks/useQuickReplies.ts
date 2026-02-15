@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
 
 export interface QuickReply {
   id: string;
@@ -11,90 +12,122 @@ export interface QuickReply {
   updated_at: string;
 }
 
-const CACHE_KEY = 'quick_replies_cache';
-const CACHE_TIMESTAMP_KEY = 'quick_replies_cache_timestamp';
+const CACHE_KEY_PREFIX = 'quick_replies_cache';
+const CACHE_TIMESTAMP_PREFIX = 'quick_replies_cache_timestamp';
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutos
+
+function getTenantId(): string | null {
+  const user = useAuthStore.getState().user;
+  const raw = user?.tenant_id ?? user?.tenant?.id;
+  return raw ? String(raw) : null;
+}
 
 export function useQuickReplies(search: string = '', ordering: string = '-use_count,title') {
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const getCachedData = (): QuickReply[] | null => {
+  const tenantId = useAuthStore((s) => {
+    const raw = s.user?.tenant_id ?? s.user?.tenant?.id;
+    return raw ? String(raw) : null;
+  });
+
+  const getCachedData = useCallback((tid: string | null): QuickReply[] | null => {
+    if (!tid) return null;
     try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
-      
+      const cacheKey = `${CACHE_KEY_PREFIX}:${tid}`;
+      const timestampKey = `${CACHE_TIMESTAMP_PREFIX}:${tid}`;
+      const cached = localStorage.getItem(cacheKey);
+      const timestamp = localStorage.getItem(timestampKey);
+
       if (!cached || !timestamp) return null;
-      
+
       const age = Date.now() - parseInt(timestamp, 10);
       if (age > CACHE_TTL_MS) {
-        // Cache expirado
-        localStorage.removeItem(CACHE_KEY);
-        localStorage.removeItem(CACHE_TIMESTAMP_KEY);
+        localStorage.removeItem(cacheKey);
+        localStorage.removeItem(timestampKey);
         return null;
       }
-      
+
       return JSON.parse(cached);
     } catch (e) {
-      console.error('Erro ao ler cache:', e);
+      console.error('Erro ao ler cache quick_replies:', e);
       return null;
     }
-  };
-
-  const setCachedData = (data: QuickReply[]) => {
-    try {
-      localStorage.setItem(CACHE_KEY, JSON.stringify(data));
-      localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-    } catch (e) {
-      console.error('Erro ao salvar cache:', e);
-    }
-  };
-
-  const invalidateCache = useCallback(() => {
-    localStorage.removeItem(CACHE_KEY);
-    localStorage.removeItem(CACHE_TIMESTAMP_KEY);
   }, []);
 
-  const fetchQuickReplies = useCallback(async (forceRefresh = false) => {
-    // ✅ Tentar cache primeiro (se não for refresh forçado)
-    if (!forceRefresh) {
-      const cached = getCachedData();
-      if (cached) {
-        console.log('✅ [QUICK REPLIES] Cache HIT (localStorage)');
-        setQuickReplies(cached);
+  const setCachedData = useCallback((data: QuickReply[], tid: string | null) => {
+    if (!tid) return;
+    try {
+      const cacheKey = `${CACHE_KEY_PREFIX}:${tid}`;
+      const timestampKey = `${CACHE_TIMESTAMP_PREFIX}:${tid}`;
+      localStorage.setItem(cacheKey, JSON.stringify(data));
+      localStorage.setItem(timestampKey, Date.now().toString());
+    } catch (e) {
+      console.error('Erro ao salvar cache quick_replies:', e);
+    }
+  }, []);
+
+  const invalidateCache = useCallback(() => {
+    const tid = getTenantId();
+    if (tid) {
+      localStorage.removeItem(`${CACHE_KEY_PREFIX}:${tid}`);
+      localStorage.removeItem(`${CACHE_TIMESTAMP_PREFIX}:${tid}`);
+    }
+  }, []);
+
+  const fetchQuickReplies = useCallback(
+    async (forceRefresh = false) => {
+      const tid = tenantId;
+
+      if (!tid) {
+        setQuickReplies([]);
+        setError(null);
         return;
       }
-    }
 
-    setLoading(true);
-    setError(null);
+      if (!forceRefresh) {
+        const cached = getCachedData(tid);
+        if (cached) {
+          setQuickReplies(cached);
+          return;
+        }
+      }
 
-    try {
-      const { data } = await api.get('/chat/quick-replies/', {
-        params: { search, ordering }
-      });
-      
-      const replies = data.results || data;
-      setQuickReplies(replies);
-      
-      // ✅ Salvar no cache
-      setCachedData(replies);
-      console.log('💾 [QUICK REPLIES] Cache salvo (localStorage)');
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.error || 'Erro ao buscar respostas rápidas';
-      setError(errorMsg);
-      console.error('❌ [QUICK REPLIES] Erro:', errorMsg);
-    } finally {
-      setLoading(false);
-    }
-  }, [search, ordering]);
+      setLoading(true);
+      setError(null);
 
-  // ✅ FIX: Usar search e ordering diretamente no useEffect para evitar loops
+      try {
+        const { data } = await api.get('/chat/quick-replies/', {
+          params: { search, ordering }
+        });
+
+        const replies = data.results ?? data ?? [];
+        const currentTenantId = getTenantId();
+
+        if (currentTenantId !== tid) {
+          return;
+        }
+
+        setQuickReplies(replies);
+        setCachedData(replies, tid);
+      } catch (err: any) {
+        const currentTenantId = getTenantId();
+        if (currentTenantId !== tid) return;
+
+        const errorMsg = err.response?.data?.error ?? 'Erro ao buscar respostas rápidas';
+        setError(errorMsg);
+        console.error('❌ [QUICK REPLIES] Erro:', errorMsg);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [search, ordering, tenantId, getCachedData, setCachedData]
+  );
+
   useEffect(() => {
     fetchQuickReplies();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [search, ordering]); // Não incluir fetchQuickReplies nas dependências
+  }, [fetchQuickReplies]);
 
   return {
     quickReplies,

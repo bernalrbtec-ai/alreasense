@@ -90,7 +90,7 @@ export const useAuthStore = create<AuthState>()(
           const keysToRemove: string[] = []
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
-            if (key && (key.includes('chat') || key.includes('conversation'))) {
+            if (key && (key.includes('chat') || key.includes('conversation') || key.includes('quick_replies'))) {
               keysToRemove.push(key)
             }
           }
@@ -146,7 +146,7 @@ export const useAuthStore = create<AuthState>()(
           const keysToRemove: string[] = []
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i)
-            if (key && (key.includes('auth') || key.includes('chat') || key.includes('conversation'))) {
+            if (key && (key.includes('auth') || key.includes('chat') || key.includes('conversation') || key.includes('quick_replies'))) {
               keysToRemove.push(key)
             }
           }
