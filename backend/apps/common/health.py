@@ -63,45 +63,45 @@ def check_redis():
 
 
 def check_rabbitmq():
-    """Check RabbitMQ connectivity."""
+    """Check RabbitMQ server connectivity (broker), not the campaign consumer."""
     try:
-        from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
-        consumer = get_rabbitmq_consumer()
-        
-        if consumer:
-            # Check if consumer is initialized and has connection
-            has_connection = consumer.connection is not None
-            has_channel = consumer.channel is not None
-            is_running = consumer.running
-            
-            # Count active campaign threads
-            active_threads = len(consumer.consumer_threads) if hasattr(consumer, 'consumer_threads') else 0
-            
-            # Determine status
-            if has_connection and has_channel:
-                status = 'healthy'
-            elif has_connection or has_channel:
-                status = 'degraded'
-            else:
-                status = 'disconnected'
-            
-            return {
-                'status': status,
-                'connection': has_connection,
-                'channel': has_channel,
-                'consumer_running': is_running,
-                'active_campaign_threads': active_threads,
-            }
-        else:
+        rabbitmq_url = getattr(settings, 'RABBITMQ_URL', None)
+        if not rabbitmq_url:
             return {
                 'status': 'not_configured',
-                'error': 'RabbitMQ consumer not available',
+                'message': 'RABBITMQ_URL não configurada',
                 'consumer_running': False,
             }
+        import pika
+        params = pika.URLParameters(rabbitmq_url)
+        params.socket_timeout = 5
+        params.blocked_connection_timeout = 5
+        conn = pika.BlockingConnection(params)
+        conn.close()
+        # Broker is reachable = healthy; consumer info is optional for display
+        consumer_running = False
+        active_threads = 0
+        try:
+            from apps.campaigns.rabbitmq_consumer import get_rabbitmq_consumer
+            c = get_rabbitmq_consumer()
+            if c:
+                consumer_running = getattr(c, 'running', False)
+                active_threads = len(getattr(c, 'consumer_threads', {}) or {})
+        except Exception:
+            pass
+        return {
+            'status': 'healthy',
+            'connection': True,
+            'channel': True,
+            'consumer_running': consumer_running,
+            'active_campaign_threads': active_threads,
+        }
     except Exception as e:
         return {
             'status': 'unhealthy',
-            'error': str(e),
+            'error': str(e)[:150],
+            'connection': False,
+            'channel': False,
             'consumer_running': False,
         }
 
@@ -164,8 +164,19 @@ def check_evolution_api():
         }
 
 
+def _human_size(size_bytes):
+    """Format bytes to human-readable (e.g. 1.5 GB)."""
+    if size_bytes is None or size_bytes < 0:
+        return 'N/A'
+    for unit in ('B', 'KB', 'MB', 'GB', 'TB'):
+        if size_bytes < 1024:
+            return f'{size_bytes:.1f} {unit}' if unit != 'B' else f'{size_bytes} B'
+        size_bytes /= 1024
+    return f'{size_bytes:.1f} PB'
+
+
 def check_minio():
-    """Check MinIO/S3 storage connectivity."""
+    """Check MinIO/S3 storage connectivity and bucket usage."""
     try:
         endpoint = getattr(settings, 'S3_ENDPOINT_URL', None) or ''
         access = getattr(settings, 'S3_ACCESS_KEY', None) or ''
@@ -190,10 +201,28 @@ def check_minio():
             config=Config(signature_version='s3v4', s3={'addressing_style': 'path'})
         )
         client.head_bucket(Bucket=bucket)
-        return {
+
+        # Calcular uso do bucket (soma dos tamanhos; limitado a 50 páginas para não travar)
+        total_bytes = 0
+        try:
+            paginator = client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=bucket, MaxKeys=1000)
+            for i, page in enumerate(pages):
+                if i >= 50:
+                    break
+                for obj in page.get('Contents') or []:
+                    total_bytes += obj.get('Size') or 0
+        except Exception:
+            total_bytes = None
+
+        result = {
             'status': 'healthy',
             'bucket': bucket,
         }
+        if total_bytes is not None:
+            result['bucket_size_bytes'] = total_bytes
+            result['bucket_size_human'] = _human_size(total_bytes)
+        return result
     except Exception as e:
         return {
             'status': 'unhealthy',

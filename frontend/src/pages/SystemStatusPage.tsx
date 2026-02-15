@@ -33,6 +33,8 @@ interface SystemStatus {
   minio?: {
     status: string
     bucket?: string
+    bucket_size_human?: string
+    bucket_size_bytes?: number
     error?: string
   }
   memory?: {
@@ -285,9 +287,12 @@ export default function SystemStatusPage() {
               {getStatusLabel(status?.minio?.status || 'unhealthy')}
             </span>
           </div>
-          {status?.minio && status.minio.status === 'healthy' && status.minio.bucket && (
+          {status?.minio && status.minio.status === 'healthy' && (
             <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
-              <p>Bucket: {status.minio.bucket}</p>
+              {status.minio.bucket && <p>Bucket: {status.minio.bucket}</p>}
+              {status.minio.bucket_size_human && (
+                <p>Espaço utilizado: {status.minio.bucket_size_human}</p>
+              )}
             </div>
           )}
           {status?.minio && status.minio.status === 'unhealthy' && status.minio.error && (
