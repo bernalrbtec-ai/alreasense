@@ -285,10 +285,10 @@ export default function EvolutionConfigPage() {
       {/* Instances List - agrupadas por tenant */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Instâncias ({stats.instances.length})
+          Instâncias ({Array.isArray(stats.instances) ? stats.instances.length : 0})
         </h2>
 
-        {stats.instances.length === 0 ? (
+        {(!Array.isArray(stats.instances) || stats.instances.length === 0) ? (
           <Card className="p-8">
             <div className="text-center">
               <Server className="h-12 w-12 text-gray-400 mx-auto mb-4" />
@@ -300,12 +300,13 @@ export default function EvolutionConfigPage() {
           </Card>
         ) : (
           (() => {
-            const byTenant = stats.instances.reduce<Record<string, InstanceData[]>>((acc, inst) => {
+            const list = Array.isArray(stats.instances) ? stats.instances : []
+            const byTenant = list.reduce<Record<string, InstanceData[]>>((acc, inst) => {
               const key = inst.tenant_name || '(Sem tenant)'
               if (!acc[key]) acc[key] = []
               acc[key].push(inst)
               return acc
-            })
+            }, {})
             const tenantKeys = Object.keys(byTenant).sort((a, b) => {
               if (a === '(Sem tenant)') return 1
               if (b === '(Sem tenant)') return -1
