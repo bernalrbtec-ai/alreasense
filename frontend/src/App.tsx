@@ -26,7 +26,6 @@ const NotificationsPage = lazy(() => import('./pages/NotificationsPage'))
 const ConfigurationsPage = lazyLoadWithRetry(() => import('./pages/ConfigurationsPage'), 3, 1000)
 const ContactsPage = lazy(() => import('./pages/ContactsPage'))
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'))
-const WebhookMonitoringPage = lazy(() => import('./pages/WebhookMonitoringPage'))
 const ServicosPage = lazy(() => import('./pages/ServicosPage'))
 const TestPresencePage = lazy(() => import('./pages/TestPresencePage'))
 const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage'))
@@ -320,11 +319,6 @@ function App() {
                   <Route path="admin/evolution" element={
                     <Suspense fallback={<LoadingSpinner size="lg" />}>
                       <EvolutionConfigPage />
-                    </Suspense>
-                  } />
-                  <Route path="admin/webhook-monitoring" element={
-                    <Suspense fallback={<LoadingSpinner size="lg" />}>
-                      <WebhookMonitoringPage />
                     </Suspense>
                   } />
                   <Route path="admin/servicos" element={
