@@ -50,6 +50,7 @@ LOCAL_APPS = [
     'apps.contacts',
     'apps.campaigns',
     'apps.chat',  # Flow Chat
+    'apps.proxy',  # Rotação de proxies Webshare → Evolution
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -453,6 +454,18 @@ EVOLUTION_API_KEY = config('EVO_API_KEY', default='')
 # Aliases para compatibilidade (caso alguém use os nomes novos)
 EVO_BASE_URL = EVOLUTION_API_URL
 EVO_API_KEY = EVOLUTION_API_KEY
+
+# Proxy rotation (Webshare → Evolution)
+WEBSHARE_API_KEY = config('WEBSHARE_API_KEY', default='')
+WEBSHARE_PROXY_LIMIT = config('WEBSHARE_PROXY_LIMIT', default=100, cast=int)
+PROXY_ROTATION_STRATEGY = config('PROXY_ROTATION_STRATEGY', default='rotate')
+PROXY_ROTATION_RESTART_INSTANCES = config('PROXY_ROTATION_RESTART_INSTANCES', default=True, cast=bool)
+PROXY_ROTATION_WAIT_AFTER_UPDATE_SECONDS = config('PROXY_ROTATION_WAIT_AFTER_UPDATE_SECONDS', default=2, cast=int)
+PROXY_ROTATION_WAIT_SECONDS = config('PROXY_ROTATION_WAIT_SECONDS', default=3, cast=int)
+PROXY_ROTATION_API_KEY = config('PROXY_ROTATION_API_KEY', default='')
+PROXY_NOTIFICATION_ENABLED = config('PROXY_NOTIFICATION_ENABLED', default=False, cast=bool)
+PROXY_NOTIFICATION_INSTANCE = config('PROXY_NOTIFICATION_INSTANCE', default='')
+PROXY_NOTIFICATION_PHONE = config('PROXY_NOTIFICATION_PHONE', default='')
 
 # Base URL for webhooks and callbacks
 BASE_URL = config('BASE_URL', default='https://alreasense-backend-production.up.railway.app')

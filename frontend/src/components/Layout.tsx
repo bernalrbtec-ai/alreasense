@@ -77,6 +77,7 @@ const adminNavigation = [
   { name: 'Status do Sistema', href: '/admin/system', icon: Activity },
   { name: 'Servidor de Instância', href: '/admin/evolution', icon: Server },
   { name: 'Monitoramento Webhooks', href: '/admin/webhook-monitoring', icon: Database },
+  { name: 'Serviços', href: '/admin/servicos', icon: Settings },
 ]
 
 export default function Layout() {

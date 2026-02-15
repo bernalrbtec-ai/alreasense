@@ -27,6 +27,7 @@ const ConfigurationsPage = lazyLoadWithRetry(() => import('./pages/Configuration
 const ContactsPage = lazy(() => import('./pages/ContactsPage'))
 const CampaignsPage = lazy(() => import('./pages/CampaignsPage'))
 const WebhookMonitoringPage = lazy(() => import('./pages/WebhookMonitoringPage'))
+const ServicosPage = lazy(() => import('./pages/ServicosPage'))
 const TestPresencePage = lazy(() => import('./pages/TestPresencePage'))
 const DepartmentsPage = lazy(() => import('./pages/DepartmentsPage'))
 const QuickRepliesPage = lazy(() => import('./pages/QuickRepliesPage'))
@@ -323,6 +324,11 @@ function App() {
                   <Route path="admin/webhook-monitoring" element={
                     <Suspense fallback={<LoadingSpinner size="lg" />}>
                       <WebhookMonitoringPage />
+                    </Suspense>
+                  } />
+                  <Route path="admin/servicos" element={
+                    <Suspense fallback={<LoadingSpinner size="lg" />}>
+                      <ServicosPage />
                     </Suspense>
                   } />
                 </>
