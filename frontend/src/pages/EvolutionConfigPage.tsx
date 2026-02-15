@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Server, CheckCircle, XCircle, AlertCircle, Copy, Check } from 'lucide-react'
+import { RefreshCw, Server, CheckCircle, XCircle, AlertCircle, Copy, Check, X, ChevronRight } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -29,12 +29,15 @@ interface EvolutionStats {
   instances: InstanceData[]
 }
 
+type TenantSummary = { tenantName: string; instances: InstanceData[]; allConnected: boolean }
+
 export default function EvolutionConfigPage() {
   const { user } = useAuthStore()
   const [stats, setStats] = useState<EvolutionStats | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [modalTenant, setModalTenant] = useState<TenantSummary | null>(null)
   const { toast, showToast, hideToast } = useToast()
 
   // ✅ Apenas superuser pode acessar esta página
@@ -282,10 +285,10 @@ export default function EvolutionConfigPage() {
         </div>
       </Card>
 
-      {/* Instances List - agrupadas por tenant */}
+      {/* Cards resumidos por tenant — clique abre modal com detalhes */}
       <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Instâncias ({Array.isArray(stats.instances) ? stats.instances.length : 0})
+        <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+          Por tenant ({Array.isArray(stats.instances) ? stats.instances.length : 0} instâncias)
         </h2>
 
         {(!Array.isArray(stats.instances) || stats.instances.length === 0) ? (
@@ -307,63 +310,133 @@ export default function EvolutionConfigPage() {
               acc[key].push(inst)
               return acc
             }, {})
-            const tenantKeys = Object.keys(byTenant).sort((a, b) => {
-              if (a === '(Sem tenant)') return 1
-              if (b === '(Sem tenant)') return -1
-              return a.localeCompare(b)
-            })
+            const tenantSummaries: TenantSummary[] = Object.keys(byTenant)
+              .sort((a, b) => {
+                if (a === '(Sem tenant)') return 1
+                if (b === '(Sem tenant)') return -1
+                return a.localeCompare(b)
+              })
+              .map((key) => {
+                const instances = byTenant[key]
+                const allConnected = instances.every((i) => i.status === 'connected')
+                return { tenantName: key, instances, allConnected }
+              })
+
             return (
-              <div className="space-y-6">
-                {tenantKeys.map((tenantKey) => (
-                  <div key={tenantKey}>
-                    <h3 className="text-sm font-medium text-gray-700 mb-2">{tenantKey}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                      {byTenant[tenantKey].map((instance, index) => (
-                        <Card
-                          key={`${tenantKey}-${index}`}
-                          className={`p-4 border-l-4 ${
-                            instance.status === 'connected'
-                              ? 'border-l-green-500 bg-green-50 dark:bg-green-950/30'
-                              : 'border-l-red-500 bg-red-50 dark:bg-red-950/30'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
-                                {instance.status === 'connected' ? (
-                                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
-                                ) : (
-                                  <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
-                                )}
-                                <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
-                                  {instance.name}
-                                </h3>
-                              </div>
-                              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
-                              </p>
-                              {instance.phone && (
-                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                                  📱 {instance.phone}
-                                </p>
-                              )}
-                              {instance.proxy && (
-                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
-                                  🔒 Proxy: {instance.proxy}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </Card>
-                      ))}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {tenantSummaries.map((summary) => (
+                  <Card
+                    key={summary.tenantName}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setModalTenant(summary)}
+                    onKeyDown={(e) => e.key === 'Enter' && setModalTenant(summary)}
+                    className={`p-4 border-l-4 cursor-pointer transition hover:shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-accent-500 ${
+                      summary.allConnected
+                        ? 'border-l-green-500 bg-green-50 dark:bg-green-950/30 hover:bg-green-100 dark:hover:bg-green-950/50'
+                        : 'border-l-red-500 bg-red-50 dark:bg-red-950/30 hover:bg-red-100 dark:hover:bg-red-950/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {summary.allConnected ? (
+                            <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                          ) : (
+                            <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                          )}
+                          <span className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                            {summary.tenantName}
+                          </span>
+                        </div>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                          {summary.instances.length} {summary.instances.length === 1 ? 'instância' : 'instâncias'}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                          {summary.allConnected ? 'Todas conectadas' : 'Alguma desconectada'}
+                        </p>
+                      </div>
+                      <ChevronRight className="h-5 w-5 text-gray-400 flex-shrink-0" />
                     </div>
-                  </div>
+                  </Card>
                 ))}
               </div>
             )
           })()
         )}
       </div>
+
+      {/* Modal de detalhes do tenant */}
+      {modalTenant && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
+          onClick={() => setModalTenant(null)}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="modal-tenant-title"
+        >
+          <div
+            className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+              <div className="flex items-center gap-2">
+                {modalTenant.allConnected ? (
+                  <CheckCircle className="h-6 w-6 text-green-600" />
+                ) : (
+                  <XCircle className="h-6 w-6 text-red-600" />
+                )}
+                <h2 id="modal-tenant-title" className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {modalTenant.tenantName}
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setModalTenant(null)}
+                className="p-1 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700"
+                aria-label="Fechar"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                {modalTenant.instances.length} {modalTenant.instances.length === 1 ? 'instância' : 'instâncias'}
+              </p>
+              <div className="space-y-3">
+                {modalTenant.instances.map((instance, index) => (
+                  <Card
+                    key={index}
+                    className={`p-4 border-l-4 ${
+                      instance.status === 'connected'
+                        ? 'border-l-green-500 bg-green-50 dark:bg-green-950/30'
+                        : 'border-l-red-500 bg-red-50 dark:bg-red-950/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {instance.status === 'connected' ? (
+                        <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                      ) : (
+                        <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                      )}
+                      <span className="font-semibold text-gray-900 dark:text-gray-100">{instance.name}</span>
+                    </div>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                      {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
+                    </p>
+                    {instance.phone && (
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">📱 {instance.phone}</p>
+                    )}
+                    {instance.proxy && (
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">🔒 Proxy: {instance.proxy}</p>
+                    )}
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Configuration Note */}
       <Card className="p-4 bg-blue-50 border border-blue-200">
