@@ -78,7 +78,8 @@ function App() {
     }
   }, [token])
 
-  if (isLoading) {
+  // Loading: enquanto verifica auth OU token restaurado sem user (evita flash do dashboard)
+  if (isLoading || (token && !user)) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <LoadingSpinner size="lg" />

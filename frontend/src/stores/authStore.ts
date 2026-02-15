@@ -263,9 +263,14 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'auth-storage',
-      partialize: (state) => ({ 
-        token: state.token,
-        user: state.user 
+      // Só persistir token; não persistir user para evitar flash do dashboard
+      partialize: (state) => ({ token: state.token }),
+      // Merge: ao reidratar, usar só token do storage e ignorar user (dados legados).
+      // Evita flash mesmo para quem já tinha { token, user } no localStorage.
+      merge: (persisted, current) => ({
+        ...current,
+        token: (persisted as { token?: string | null })?.token ?? current.token,
+        user: null, // nunca confiar em user do storage
       }),
     }
   )

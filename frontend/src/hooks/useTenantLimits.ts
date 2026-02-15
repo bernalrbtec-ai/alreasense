@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
+import { useAuthStore } from '../stores/authStore';
 
 export interface TenantLimits {
   plan: {
@@ -67,23 +68,15 @@ export const useTenantLimits = () => {
     }
   };
 
+  const token = useAuthStore((s) => s.token);
+
   useEffect(() => {
-    // Só buscar se houver token de autenticação
-    const authStorage = localStorage.getItem('auth-storage');
-    if (authStorage) {
-      try {
-        const auth = JSON.parse(authStorage);
-        if (auth?.state?.token) {
-          fetchLimits();
-          return;
-        }
-      } catch (e) {
-        console.warn('Erro ao parsear auth-storage:', e);
-      }
+    if (!token) {
+      setLoading(false);
+      return;
     }
-    
-    setLoading(false);
-  }, []);
+    fetchLimits();
+  }, [token]);
 
   return {
     limits,

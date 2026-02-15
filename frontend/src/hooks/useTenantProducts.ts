@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import billingService, { TenantProduct } from '../services/billing';
+import { useAuthStore } from '../stores/authStore';
 
 interface UseTenantProductsReturn {
   products: TenantProduct[];
@@ -51,36 +52,16 @@ export const useTenantProducts = (): UseTenantProductsReturn => {
     }
   };
 
+  const token = useAuthStore((s) => s.token);
+
   useEffect(() => {
-    // Só buscar se houver token de autenticação
-    const authStorage = localStorage.getItem('auth-storage');
-    if (!authStorage) {
-      console.log('⚠️ Sem auth-storage, não buscando produtos');
+    if (!token) {
       setProducts([]);
       setLoading(false);
       return;
     }
-    
-    try {
-      const auth = JSON.parse(authStorage);
-      const token = auth?.state?.token;
-      const user = auth?.state?.user;
-      
-      if (!token || !user) {
-        console.log('⚠️ Token ou user não encontrado no storage');
-        setProducts([]);
-        setLoading(false);
-        return;
-      }
-      
-      console.log('✅ Token encontrado, buscando produtos...');
-      fetchProducts();
-    } catch (e) {
-      console.warn('❌ Erro ao parsear auth-storage:', e);
-      setProducts([]);
-      setLoading(false);
-    }
-  }, []);
+    fetchProducts();
+  }, [token]);
 
   const hasProduct = (productSlug: string): boolean => {
     if (!Array.isArray(products)) return false;
