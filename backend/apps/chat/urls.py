@@ -64,6 +64,7 @@ urlpatterns = [
     path('metrics/messages/', message_metrics, name='chat-metrics-messages'),
     path('metrics/messages/rebuild/', message_metrics_rebuild, name='chat-metrics-messages-rebuild'),
     path('reports/sync/incremental/', reports_sync_incremental, name='reports-sync-incremental'),
+    path('reports/sync/incremental', reports_sync_incremental, name='reports-sync-incremental-no-slash'),
     path('metrics/ping-evolution/', chat_ping_evolution, name='chat-ping-evolution'),
     path('metrics/diagnose-instance-friendly-name/', chat_diagnose_instance_friendly_name, name='chat-diagnose-instance-friendly-name'),
     

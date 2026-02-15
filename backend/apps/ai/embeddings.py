@@ -1,5 +1,5 @@
 """
-Embedding generation for semantic search.
+Embedding generation for semantic search with caching.
 """
 
 import requests
@@ -10,10 +10,50 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Flag para habilitar/desabilitar cache (configurável via settings)
+_EMBEDDING_CACHE_ENABLED = getattr(settings, "AI_EMBEDDING_CACHE_ENABLED", True)
 
-def embed_text(text: str) -> List[float]:
+
+def embed_text(text: str, use_cache: bool = True) -> List[float]:
     """
-    Generate embedding for text using AI service.
+    Generate embedding for text using AI service with caching.
+    
+    Args:
+        text: Text to embed
+        use_cache: Whether to use cache (default: True, respects AI_EMBEDDING_CACHE_ENABLED)
+    
+    Returns:
+        List of float values representing the embedding
+    """
+    if not text or not text.strip():
+        return []
+    
+    # Usar cache se habilitado
+    if use_cache and _EMBEDDING_CACHE_ENABLED:
+        try:
+            from apps.ai.models import MessageEmbedding
+            
+            embedding, was_cached = MessageEmbedding.get_or_create_embedding(
+                text=text,
+                embedding_func=_embed_text_uncached
+            )
+            
+            if was_cached:
+                logger.debug(f"Embedding cache hit for text: {text[:50]}...")
+            
+            return embedding
+        except Exception as e:
+            logger.warning(f"Failed to use embedding cache, falling back to direct: {e}")
+            # Fallback: gerar sem cache
+            return _embed_text_uncached(text)
+    
+    # Gerar sem cache
+    return _embed_text_uncached(text)
+
+
+def _embed_text_uncached(text: str) -> List[float]:
+    """
+    Generate embedding without cache (internal function).
     
     Args:
         text: Text to embed

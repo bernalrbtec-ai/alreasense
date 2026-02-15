@@ -1,4 +1,7 @@
+import hashlib
 from django.db import models
+from django.utils import timezone
+from datetime import timedelta
 
 from apps.tenancy.models import Tenant
 
@@ -247,3 +250,112 @@ class AiTranscriptionDailyMetric(models.Model):
 
     def __str__(self):
         return f"Transcription metrics ({self.tenant_id}) {self.date}"
+
+
+class MessageEmbedding(models.Model):
+    """
+    Cache de embeddings de mensagens para evitar recalcular embeddings do mesmo texto.
+    Usa hash SHA256 do texto normalizado como chave única.
+    """
+
+    text_hash = models.CharField(
+        max_length=64,
+        db_index=True,
+        unique=True,
+        help_text="SHA256 hash do texto normalizado (lowercase, strip)"
+    )
+    text = models.TextField(
+        help_text="Texto original (para debug/verificação)"
+    )
+    embedding = models.JSONField(
+        help_text="Embedding vetorial (lista de floats)"
+    )
+    hit_count = models.IntegerField(
+        default=0,
+        help_text="Quantas vezes este embedding foi usado (cache hits)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_used_at = models.DateTimeField(
+        auto_now=True,
+        help_text="Última vez que este embedding foi usado"
+    )
+    expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Data de expiração (opcional, para limpeza automática)"
+    )
+
+    class Meta:
+        db_table = "ai_message_embedding"
+        indexes = [
+            models.Index(fields=["text_hash"]),
+            models.Index(fields=["created_at"]),
+            models.Index(fields=["expires_at"]),
+        ]
+        ordering = ["-last_used_at"]
+
+    def __str__(self):
+        return f"Embedding: {self.text[:40]}... (hits: {self.hit_count})"
+
+    @staticmethod
+    def normalize_text(text: str) -> str:
+        """Normaliza texto para gerar hash consistente."""
+        if not text:
+            return ""
+        return text.strip().lower()
+
+    @staticmethod
+    def get_text_hash(text: str) -> str:
+        """Gera hash SHA256 do texto normalizado."""
+        normalized = MessageEmbedding.normalize_text(text)
+        return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+    @classmethod
+    def get_or_create_embedding(cls, text: str, embedding_func):
+        """
+        Busca embedding no cache ou cria novo usando embedding_func.
+        
+        Args:
+            text: Texto para gerar embedding
+            embedding_func: Função que gera embedding (ex: embed_text)
+        
+        Returns:
+            tuple: (embedding, was_cached)
+        """
+        if not text or not text.strip():
+            return [], False
+
+        text_hash = cls.get_text_hash(text)
+        
+        # Tentar buscar no cache
+        cached = cls.objects.filter(text_hash=text_hash).first()
+        if cached:
+            # Atualizar contadores
+            cached.hit_count += 1
+            cached.last_used_at = timezone.now()
+            cached.save(update_fields=["hit_count", "last_used_at"])
+            return cached.embedding, True
+        
+        # Gerar novo embedding
+        embedding = embedding_func(text)
+        if not embedding:
+            return [], False
+        
+        # Salvar no cache
+        try:
+            cls.objects.create(
+                text_hash=text_hash,
+                text=text[:1000],  # Limitar tamanho para não exceder limites
+                embedding=embedding,
+                hit_count=1,
+            )
+        except Exception:
+            # Se falhar (ex: race condition), tentar buscar novamente
+            cached = cls.objects.filter(text_hash=text_hash).first()
+            if cached:
+                cached.hit_count += 1
+                cached.last_used_at = timezone.now()
+                cached.save(update_fields=["hit_count", "last_used_at"])
+                return cached.embedding, True
+        
+        return embedding, False

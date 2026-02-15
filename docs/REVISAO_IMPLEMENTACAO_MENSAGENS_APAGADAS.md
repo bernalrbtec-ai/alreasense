@@ -1,10 +1,27 @@
 # Revisão da Implementação: Mensagens Apagadas
 
+> **Status:** Implementado em 10/02/2025  
+> **Documento relacionado:** [IMPLEMENTACAO_FILTRO_MENSAGENS_APAGADAS.md](./IMPLEMENTACAO_FILTRO_MENSAGENS_APAGADAS.md)
+
 ## Visão geral
 
 A implementação cobre os requisitos:
 - **Mostrar** que a mensagem foi apagada: "Mensagem apagada" / "Esta mensagem foi apagada"
 - **Não exibir** o conteúdo em: barra lateral, reply, forward
+
+---
+
+## 📁 Arquivos alterados (referência rápida)
+
+| Camada | Arquivo | Alteração |
+|--------|---------|-----------|
+| Backend | `api/serializers.py` | MessageSerializer mascarar content/attachments; get_last_message filtrar `is_deleted` |
+| Backend | `api/views.py` | last_message_queryset, unread_count, forward_message |
+| Backend | `utils/websocket.py` | last_message e unread_count filtram `is_deleted` |
+| Frontend | `ConversationList.tsx` | Fallback "Mensagem apagada" na lateral |
+| Frontend | `MessageInput.tsx` | Preview e bloqueio de reply |
+| Frontend | `ForwardMessageModal.tsx` | Bloqueio + correção Hooks |
+| Frontend | `MessageContextMenu.tsx` | Ocultar Responder/Encaminhar/Apagar |
 
 ---
 
@@ -68,22 +85,29 @@ A implementação cobre os requisitos:
 
 ---
 
-## 🔍 Pontos para considerar (não obrigatórios)
+## 🔍 Melhorias futuras (opcional)
 
-### 1. Reply via API/WebSocket (tasks.py, consumers_v2.py)
-- O backend aceita `reply_to` sem verificar se a mensagem está apagada.
-- O frontend bloqueia isso; um cliente malicioso poderia enviar `reply_to` para mensagem apagada.
-- **Risco:** baixo; comportamento estranho, mas sem impacto grave.
-- **Sugestão:** adicionar validação opcional: se `reply_to` apontar para mensagem com `is_deleted=True`, ignorar ou retornar erro.
+| Item | Onde | Prioridade | Esforço |
+|------|------|------------|---------|
+| Validar `reply_to` em tasks.py e consumers_v2.py | Backend | Baixa | ~30 min |
+| Filtrar MessageViewSet por `is_deleted` | Backend | Verificar uso externo antes | Variável |
+| WebSocket handler no frontend para atualizar `last_message` ao apagar | useTenantSocket.ts | Baixa (backend já filtra) | ~1 h |
 
-### 2. Preview no ForwardMessageModal
-- O preview do modal usa `message.content`; com mensagem apagada o modal é fechado imediatamente, então o preview não chega a ser exibido.
-- Se o bug de Hooks for corrigido, o fluxo continua correto: o early return evita mostrar o preview.
+**Notas:**
+- Ordenação da lista usa `last_message_at` da conversa; ao apagar a última msg, a conversa mantém posição — OK.
+- Preview do ForwardMessageModal: mensagem apagada → modal fecha imediatamente; preview não é exibido.
 
-### 3. Ordenação da lista de conversas
-- A ordenação usa `last_message_at` da conversa, não da última mensagem não apagada.
-- Se a última mensagem for apagada, a conversa continua na mesma posição, o que costuma ser o esperado.
-- **Status:** OK.
+---
+
+## ⚠️ Riscos de deploy (resumo)
+
+| Item | Risco |
+|------|-------|
+| Filtros last_message / unread_count | Médio — contagem pode mudar; lateral pode mostrar msg anterior |
+| Integrações (n8n, API forward) | Baixo — forward retorna 400 para msg apagada |
+| Migrações | Garantir migration `is_deleted` aplicada |
+
+Recomendação: testar em staging; validar cenários de mensagem apagada antes de produção.
 
 ---
 
@@ -102,4 +126,7 @@ A implementação cobre os requisitos:
 
 ## Conclusão
 
-Implementação concluída. ForwardMessageModal corrigido.
+Implementação concluída. Requisitos atendidos:
+- Usuário sabe que a mensagem foi apagada (indicador em todos os pontos)
+- Conteúdo não é exibido em lateral, reply nem forward
+- Ações bloqueadas (responder, encaminhar) em mensagens apagadas
