@@ -11,7 +11,9 @@ import { useAuthStore } from '../stores/authStore'
 interface InstanceData {
   name: string
   status: 'connected' | 'disconnected'
-  raw_status: string
+  tenant_name?: string | null
+  phone?: string | null
+  proxy?: string | null
 }
 
 interface EvolutionStats {
@@ -280,7 +282,7 @@ export default function EvolutionConfigPage() {
         </div>
       </Card>
 
-      {/* Instances List */}
+      {/* Instances List - agrupadas por tenant */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Instâncias ({stats.instances.length})
@@ -297,39 +299,68 @@ export default function EvolutionConfigPage() {
             </div>
           </Card>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {stats.instances.map((instance, index) => (
-              <Card
-                key={index}
-                className={`p-4 border-l-4 ${
-                  instance.status === 'connected'
-                    ? 'border-l-green-500 bg-green-50'
-                    : 'border-l-red-500 bg-red-50'
-                }`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      {instance.status === 'connected' ? (
-                        <CheckCircle className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <XCircle className="h-5 w-5 text-red-600" />
-                      )}
-                      <h3 className="font-semibold text-gray-900">
-                        {instance.name}
-                      </h3>
+          (() => {
+            const byTenant = stats.instances.reduce<Record<string, InstanceData[]>>((acc, inst) => {
+              const key = inst.tenant_name || '(Sem tenant)'
+              if (!acc[key]) acc[key] = []
+              acc[key].push(inst)
+              return acc
+            })
+            const tenantKeys = Object.keys(byTenant).sort((a, b) => {
+              if (a === '(Sem tenant)') return 1
+              if (b === '(Sem tenant)') return -1
+              return a.localeCompare(b)
+            })
+            return (
+              <div className="space-y-6">
+                {tenantKeys.map((tenantKey) => (
+                  <div key={tenantKey}>
+                    <h3 className="text-sm font-medium text-gray-700 mb-2">{tenantKey}</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {byTenant[tenantKey].map((instance, index) => (
+                        <Card
+                          key={`${tenantKey}-${index}`}
+                          className={`p-4 border-l-4 ${
+                            instance.status === 'connected'
+                              ? 'border-l-green-500 bg-green-50 dark:bg-green-950/30'
+                              : 'border-l-red-500 bg-red-50 dark:bg-red-950/30'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                {instance.status === 'connected' ? (
+                                  <CheckCircle className="h-5 w-5 text-green-600 flex-shrink-0" />
+                                ) : (
+                                  <XCircle className="h-5 w-5 text-red-600 flex-shrink-0" />
+                                )}
+                                <h3 className="font-semibold text-gray-900 dark:text-gray-100 truncate">
+                                  {instance.name}
+                                </h3>
+                              </div>
+                              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
+                              </p>
+                              {instance.phone && (
+                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                  📱 {instance.phone}
+                                </p>
+                              )}
+                              {instance.proxy && (
+                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-0.5">
+                                  🔒 Proxy: {instance.proxy}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </Card>
+                      ))}
                     </div>
-                    <p className="text-sm text-gray-600 mt-1">
-                      Status: {instance.status === 'connected' ? 'Conectada' : 'Desconectada'}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Raw: {instance.raw_status}
-                    </p>
                   </div>
-                </div>
-              </Card>
-            ))}
-          </div>
+                ))}
+              </div>
+            )
+          })()
         )}
       </div>
 

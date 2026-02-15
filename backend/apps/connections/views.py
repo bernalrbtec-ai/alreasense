@@ -1,4 +1,5 @@
 import requests
+from django.db.models import Q
 from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -93,11 +94,29 @@ def evolution_config(request):
             
             connection_status = 'active'
             
-            # Processar cada instância (Evolution API v2: name, profileName, connectionStatus na raiz)
+            # Mapear Evolution instance id/name -> tenant_name (WhatsAppInstance no nosso banco)
+            evo_ids = []
+            for inst in instances:
+                if isinstance(inst, dict):
+                    for key in ('id', 'name'):
+                        val = inst.get(key)
+                        if val and isinstance(val, str):
+                            evo_ids.append(val.strip())
+            from apps.notifications.models import WhatsAppInstance
+            tenant_by_evo_id = {}
+            if evo_ids:
+                for wa in WhatsAppInstance.objects.filter(
+                    Q(instance_name__in=evo_ids) | Q(evolution_instance_name__in=evo_ids)
+                ).select_related('tenant'):
+                    name = (wa.tenant.name if wa.tenant else None) or ''
+                    tenant_by_evo_id[wa.instance_name] = name
+                    if wa.evolution_instance_name:
+                        tenant_by_evo_id[wa.evolution_instance_name] = name
+            
+            # Processar cada instância (Evolution API v2: profileName, connectionStatus, ownerJid, Proxy)
             for inst in instances:
                 if not isinstance(inst, dict):
                     continue
-                # v2: profileName (nome legível), name (id interno), connectionStatus ("open" = conectado)
                 instance_name = (
                     inst.get('profileName') or
                     inst.get('instance', {}).get('instanceName') or
@@ -113,10 +132,27 @@ def evolution_config(request):
                 )
                 is_connected = str(instance_status).lower() == 'open'
                 
+                # Telefone: ownerJid ex. "5517982020123@s.whatsapp.net"
+                owner_jid = inst.get('ownerJid') or ''
+                phone = (owner_jid.split('@')[0] or '').strip() if isinstance(owner_jid, str) else ''
+                
+                # Proxy: Evolution retorna Proxy { enabled, host, port }
+                proxy_label = None
+                proxy_obj = inst.get('Proxy') if isinstance(inst.get('Proxy'), dict) else None
+                if proxy_obj and proxy_obj.get('enabled') and proxy_obj.get('host'):
+                    port = proxy_obj.get('port') or 80
+                    proxy_label = f"{proxy_obj['host']}:{port}"
+                
+                # Tenant (nosso cadastro)
+                evo_id = inst.get('id') or inst.get('name') or ''
+                tenant_name = tenant_by_evo_id.get(evo_id, '') if evo_id else ''
+                
                 instances_data.append({
                     'name': instance_name if isinstance(instance_name, str) else str(instance_name),
                     'status': 'connected' if is_connected else 'disconnected',
-                    'raw_status': str(instance_status),
+                    'tenant_name': tenant_name or None,
+                    'phone': phone or None,
+                    'proxy': proxy_label,
                 })
                 
                 stats['total'] += 1
