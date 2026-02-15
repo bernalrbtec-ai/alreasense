@@ -1,5 +1,6 @@
 import requests
 from django.db.models import Q
+from django.db.models.functions import Lower
 from rest_framework import status, generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, IsAdminUser
@@ -95,23 +96,38 @@ def evolution_config(request):
             connection_status = 'active'
             
             # Mapear Evolution instance id/name -> tenant_name (WhatsAppInstance no nosso banco)
-            evo_ids = []
+            evo_ids_raw = []
             for inst in instances:
                 if isinstance(inst, dict):
                     for key in ('id', 'name'):
                         val = inst.get(key)
                         if val and isinstance(val, str):
-                            evo_ids.append(val.strip())
+                            evo_ids_raw.append(val.strip())
+            evo_ids_lower = list({s.lower() for s in evo_ids_raw if s})
             from apps.notifications.models import WhatsAppInstance
             tenant_by_evo_id = {}
-            if evo_ids:
-                for wa in WhatsAppInstance.objects.filter(
-                    Q(instance_name__in=evo_ids) | Q(evolution_instance_name__in=evo_ids)
+            if evo_ids_lower:
+                for wa in WhatsAppInstance.objects.annotate(
+                    inst_lower=Lower('instance_name'),
+                    evo_lower=Lower('evolution_instance_name'),
+                ).filter(
+                    Q(inst_lower__in=evo_ids_lower) | Q(evo_lower__in=evo_ids_lower)
                 ).select_related('tenant'):
                     name = (wa.tenant.name if wa.tenant else None) or ''
-                    tenant_by_evo_id[wa.instance_name] = name
+                    if wa.instance_name:
+                        tenant_by_evo_id[wa.instance_name.lower()] = name
                     if wa.evolution_instance_name:
-                        tenant_by_evo_id[wa.evolution_instance_name] = name
+                        tenant_by_evo_id[wa.evolution_instance_name.lower()] = name
+            # Fallback: mapa telefone -> tenant (todas as instâncias com phone_number)
+            tenant_by_phone = {}
+            for wa in WhatsAppInstance.objects.filter(
+                phone_number__isnull=False
+            ).exclude(phone_number='').select_related('tenant').only('phone_number', 'tenant__name'):
+                name = (wa.tenant.name if wa.tenant else None) or ''
+                if name:
+                    phone_clean = ''.join(c for c in (wa.phone_number or '') if c.isdigit())
+                    if phone_clean:
+                        tenant_by_phone[phone_clean] = name
             
             # Processar cada instância (Evolution API v2: profileName, connectionStatus, ownerJid, Proxy)
             for inst in instances:
@@ -135,6 +151,7 @@ def evolution_config(request):
                 # Telefone: ownerJid ex. "5517982020123@s.whatsapp.net"
                 owner_jid = inst.get('ownerJid') or ''
                 phone = (owner_jid.split('@')[0] or '').strip() if isinstance(owner_jid, str) else ''
+                phone_clean = ''.join(c for c in phone if c.isdigit()) if phone else ''
                 
                 # Proxy: Evolution retorna Proxy { enabled, host, port }
                 proxy_label = None
@@ -143,9 +160,12 @@ def evolution_config(request):
                     port = proxy_obj.get('port') or 80
                     proxy_label = f"{proxy_obj['host']}:{port}"
                 
-                # Tenant (nosso cadastro)
+                # Tenant (nosso cadastro): por UUID (case-insensitive) ou fallback por telefone
                 evo_id = inst.get('id') or inst.get('name') or ''
-                tenant_name = tenant_by_evo_id.get(evo_id, '') if evo_id else ''
+                evo_id_key = (evo_id.strip().lower()) if isinstance(evo_id, str) else ''
+                tenant_name = tenant_by_evo_id.get(evo_id_key, '') if evo_id_key else ''
+                if not tenant_name and phone_clean:
+                    tenant_name = tenant_by_phone.get(phone_clean, '')
                 
                 instances_data.append({
                     'name': instance_name if isinstance(instance_name, str) else str(instance_name),
