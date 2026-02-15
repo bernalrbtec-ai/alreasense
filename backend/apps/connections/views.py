@@ -85,26 +85,40 @@ def evolution_config(request):
         
         if response.status_code == 200:
             instances = response.json()
+            if not isinstance(instances, list):
+                instances = getattr(instances, 'data', instances) or []
+                if not isinstance(instances, list):
+                    instances = []
             logger.info(f"✅ [EVOLUTION CONFIG] {len(instances)} instâncias encontradas")
             
             connection_status = 'active'
             
-            # Processar cada instância
+            # Processar cada instância (Evolution API v2: name, profileName, connectionStatus na raiz)
             for inst in instances:
-                # Evolution API retorna: instanceName, status, etc
-                instance_name = inst.get('instance', {}).get('instanceName', 'Unknown')
-                instance_status = inst.get('instance', {}).get('status', 'unknown')
-                
-                # Status pode ser: "open" (conectado), "close" (desconectado), etc
-                is_connected = instance_status == 'open'
+                if not isinstance(inst, dict):
+                    continue
+                # v2: profileName (nome legível), name (id interno), connectionStatus ("open" = conectado)
+                instance_name = (
+                    inst.get('profileName') or
+                    inst.get('instance', {}).get('instanceName') or
+                    inst.get('instanceName') or
+                    inst.get('name') or
+                    'Unknown'
+                )
+                instance_status = (
+                    inst.get('connectionStatus') or
+                    inst.get('instance', {}).get('status') or
+                    inst.get('status') or
+                    'unknown'
+                )
+                is_connected = str(instance_status).lower() == 'open'
                 
                 instances_data.append({
-                    'name': instance_name,
+                    'name': instance_name if isinstance(instance_name, str) else str(instance_name),
                     'status': 'connected' if is_connected else 'disconnected',
-                    'raw_status': instance_status,
+                    'raw_status': str(instance_status),
                 })
                 
-                # Atualizar estatísticas
                 stats['total'] += 1
                 if is_connected:
                     stats['connected'] += 1
