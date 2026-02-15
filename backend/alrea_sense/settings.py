@@ -430,10 +430,21 @@ STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 # AI/N8N
 N8N_AI_WEBHOOK = config('N8N_AI_WEBHOOK', default='')
 N8N_AUDIO_WEBHOOK = config('N8N_AUDIO_WEBHOOK', default='')
+
+# Reports sync (incremental metrics - n8n/cron)
+REPORTS_SYNC_API_KEY = config('REPORTS_SYNC_API_KEY', default='')
 N8N_TRIAGE_WEBHOOK = config('N8N_TRIAGE_WEBHOOK', default='')
 N8N_MODELS_WEBHOOK = config('N8N_MODELS_WEBHOOK', default='')
 AI_MODEL_NAME = config('AI_MODEL_NAME', default='qwen-local')
 AI_EMBEDDING_MODEL = config('AI_EMBEDDING_MODEL', default='qwen-mini-embeddings')
+
+# AI Cache Configuration (Otimização de uso de IA)
+AI_EMBEDDING_CACHE_ENABLED = config('AI_EMBEDDING_CACHE_ENABLED', default=True, cast=bool)
+AI_RESPONSE_CACHE_ENABLED = config('AI_RESPONSE_CACHE_ENABLED', default=True, cast=bool)
+AI_RESPONSE_CACHE_TTL = config('AI_RESPONSE_CACHE_TTL', default=3600, cast=int)  # 1 hora
+AI_RAG_CACHE_ENABLED = config('AI_RAG_CACHE_ENABLED', default=True, cast=bool)
+AI_RAG_CACHE_TTL = config('AI_RAG_CACHE_TTL', default=3600, cast=int)  # 1 hora
+AI_INTERACTION_LOGGING_ENABLED = config('AI_INTERACTION_LOGGING_ENABLED', default=True, cast=bool)
 
 # Evolution API (Consolidated)
 # ✅ Usando nomes que já existem no Railway

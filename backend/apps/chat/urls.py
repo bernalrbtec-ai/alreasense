@@ -15,6 +15,7 @@ from apps.chat.api.views import (
     ConfirmUploadView,
 )
 from apps.chat.api.views_metrics import message_metrics, message_metrics_rebuild
+from apps.chat.api.views_reports_sync import reports_sync_incremental
 from apps.chat.api.views_business_hours import (
     BusinessHoursViewSet,
     AfterHoursMessageViewSet,
@@ -62,6 +63,7 @@ urlpatterns = [
     path('metrics/overview/', chat_metrics_overview, name='chat-metrics-overview'),
     path('metrics/messages/', message_metrics, name='chat-metrics-messages'),
     path('metrics/messages/rebuild/', message_metrics_rebuild, name='chat-metrics-messages-rebuild'),
+    path('reports/sync/incremental/', reports_sync_incremental, name='reports-sync-incremental'),
     path('metrics/ping-evolution/', chat_ping_evolution, name='chat-ping-evolution'),
     path('metrics/diagnose-instance-friendly-name/', chat_diagnose_instance_friendly_name, name='chat-diagnose-instance-friendly-name'),
     
