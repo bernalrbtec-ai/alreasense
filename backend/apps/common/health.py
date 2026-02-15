@@ -53,6 +53,7 @@ def check_redis():
             'status': 'healthy',
             'connected_clients': info.get('connected_clients', 0),
             'used_memory_human': info.get('used_memory_human', 'N/A'),
+            'memory_usage': info.get('used_memory_human', 'N/A'),
         }
     except Exception as e:
         return {
@@ -106,52 +107,42 @@ def check_rabbitmq():
 
 
 def check_evolution_api():
-    """Check Evolution API connectivity and registered instances."""
+    """Check Evolution API connectivity and registered instances (WhatsAppInstance = cadastradas no Sense)."""
     try:
-        from apps.connections.models import EvolutionConnection
-        
-        # Count instances registered in our database
-        all_connections = EvolutionConnection.objects.all()
-        total_count = all_connections.count()
-        active_count = all_connections.filter(status='active', is_active=True).count()
-        inactive_count = all_connections.filter(status='inactive').count()
-        
-        # Try to check external API connectivity using registered connections
+        from apps.notifications.models import WhatsAppInstance
+
+        # Instâncias cadastradas no Sense (WhatsAppInstance)
+        total_count = WhatsAppInstance.objects.count()
+        active_count = WhatsAppInstance.objects.filter(is_active=True).count()
+        inactive_count = total_count - active_count
+
         api_status = 'disconnected'
         external_count = 0
-        
+
         try:
-            # ✅ REFATORADO: Usar configuração do .env (não do banco)
-            from django.conf import settings
-            
-            evolution_url = settings.EVOLUTION_API_URL
-            evolution_key = settings.EVOLUTION_API_KEY
-            
-            if evolution_url and evolution_key:
+            evolution_url = getattr(settings, 'EVOLUTION_API_URL', None) or getattr(settings, 'EVO_BASE_URL', '')
+            evolution_key = getattr(settings, 'EVOLUTION_API_KEY', None) or getattr(settings, 'EVO_API_KEY', '')
+
+            if evolution_url and evolution_key and 'SEU_' not in str(evolution_key):
                 headers = {
                     'apikey': evolution_key,
                     'Content-Type': 'application/json'
                 }
-                
-                # Test connectivity with Evolution API
                 test_url = f"{evolution_url.rstrip('/')}/instance/fetchInstances"
                 response = requests.get(test_url, headers=headers, timeout=3)
-                
+
                 if response.status_code == 200:
-                    external_instances = response.json()
+                    data = response.json()
+                    external_count = len(data) if isinstance(data, list) else 0
                     api_status = 'connected'
-                    external_count = len(external_instances)
                 else:
                     api_status = 'error'
-                    external_count = 0
             else:
                 api_status = 'no_active_connection'
-                external_count = 0
-                
+
         except Exception:
             api_status = 'disconnected'
-            external_count = 0
-        
+
         return {
             'status': api_status,
             'registered_instances': {
@@ -162,18 +153,51 @@ def check_evolution_api():
             'external_api_instances': external_count,
             'api_connectivity': api_status
         }
-            
+
     except Exception as e:
         return {
             'status': 'error',
             'error': str(e)[:100],
-            'registered_instances': {
-                'total': 0,
-                'active': 0,
-                'inactive': 0,
-            },
+            'registered_instances': {'total': 0, 'active': 0, 'inactive': 0},
             'external_api_instances': 0,
             'api_connectivity': 'error'
+        }
+
+
+def check_minio():
+    """Check MinIO/S3 storage connectivity."""
+    try:
+        endpoint = getattr(settings, 'S3_ENDPOINT_URL', None) or ''
+        access = getattr(settings, 'S3_ACCESS_KEY', None) or ''
+        secret = getattr(settings, 'S3_SECRET_KEY', None) or ''
+        bucket = getattr(settings, 'S3_BUCKET', '') or ''
+
+        if not endpoint or not access or not secret or not bucket:
+            return {
+                'status': 'not_configured',
+                'message': 'MinIO/S3 não configurado (S3_ENDPOINT_URL, S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET)'
+            }
+
+        import boto3
+        from botocore.config import Config
+
+        client = boto3.client(
+            's3',
+            endpoint_url=endpoint,
+            aws_access_key_id=access,
+            aws_secret_access_key=secret,
+            region_name=getattr(settings, 'S3_REGION', 'us-east-1'),
+            config=Config(signature_version='s3v4', s3={'addressing_style': 'path'})
+        )
+        client.head_bucket(Bucket=bucket)
+        return {
+            'status': 'healthy',
+            'bucket': bucket,
+        }
+    except Exception as e:
+        return {
+            'status': 'unhealthy',
+            'error': str(e)[:150]
         }
 
 
@@ -183,24 +207,29 @@ def get_system_health():
     redis_status = check_redis()
     rabbitmq_status = check_rabbitmq()
     evolution_status = check_evolution_api()
-    
-    # Overall status is healthy only if all services are healthy
-    overall_healthy = all([
-        db_status.get('status') == 'healthy',
-        rabbitmq_status.get('status') == 'healthy',
-    ])
-    
+    minio_status = check_minio()
+
+    # Status geral: saudável só se DB, Redis e RabbitMQ estiverem ok (MinIO opcional)
+    critical_ok = (
+        db_status.get('status') == 'healthy'
+        and redis_status.get('status') == 'healthy'
+        and rabbitmq_status.get('status') == 'healthy'
+    )
+    overall_healthy = critical_ok
+
     return {
         'status': 'healthy' if overall_healthy else 'degraded',
         'database': db_status,
         'redis': redis_status,
         'rabbitmq': rabbitmq_status,
         'evolution_api': evolution_status,
+        'minio': minio_status,
         'services': {
             'database': db_status.get('status'),
             'redis': redis_status.get('status'),
             'rabbitmq': rabbitmq_status.get('status'),
             'evolution_api': evolution_status.get('status'),
+            'minio': minio_status.get('status'),
         }
     }
 

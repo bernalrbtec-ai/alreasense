@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { RefreshCw, Database, Server, Activity, HardDrive, MessageSquare } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { RefreshCw, Database, Server, Activity, MessageSquare, Rabbit, Box, ExternalLink } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
@@ -8,40 +9,37 @@ import { api } from '../lib/api'
 interface SystemStatus {
   status: string
   database: {
-    status: 'healthy' | 'unhealthy'
+    status: string
     connection_count?: number
     database_size?: string
   }
   redis: {
-    status: 'healthy' | 'unhealthy'
+    status: string
     memory_usage?: string
     connected_clients?: number
   }
-  celery: {
-    status: 'healthy' | 'unhealthy'
-    active_tasks?: number
-    processed_tasks?: number
-  }
-  disk: {
-    total?: string
-    used?: string
-    free?: string
-    percent?: number
-  }
-  memory: {
-    total?: string
-    used?: string
-    free?: string
-    percent?: number
+  rabbitmq: {
+    status: string
+    connection?: boolean
+    channel?: boolean
+    consumer_running?: boolean
+    active_campaign_threads?: number
   }
   evolution_api?: {
-    status: 'active' | 'inactive' | 'error'
-    instance_count?: number
-    registered_instances?: {
-      total: number
-      active: number
-      inactive: number
-    }
+    status: string
+    registered_instances?: { total: number; active: number; inactive: number }
+    external_api_instances?: number
+  }
+  minio?: {
+    status: string
+    bucket?: string
+    error?: string
+  }
+  memory?: {
+    total?: string
+    used?: string
+    free?: string
+    percent?: number
   }
 }
 
@@ -71,27 +69,43 @@ export default function SystemStatusPage() {
         response: error.response?.data,
         status: error.response?.status,
       })
-      // Set default error status
       setStatus({
-        status: 'error',
+        status: 'degraded',
         database: { status: 'unhealthy' },
         redis: { status: 'unhealthy' },
-        celery: { status: 'unhealthy' },
+        rabbitmq: { status: 'unhealthy' },
       })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const getStatusColor = (status: string) => {
-    return status === 'healthy' ? 'text-green-600' : 'text-red-600'
+  const getStatusColor = (s: string) => {
+    if (s === 'healthy') return 'text-green-600'
+    if (s === 'not_configured') return 'text-gray-500'
+    if (s === 'degraded') return 'text-yellow-600'
+    return 'text-red-600'
   }
 
-  const getStatusBadge = (status: string) => {
-    return status === 'healthy' 
-      ? 'bg-green-100 text-green-800' 
-      : 'bg-red-100 text-red-800'
+  const getStatusBadge = (s: string) => {
+    if (s === 'healthy') return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400'
+    if (s === 'not_configured') return 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'
+    if (s === 'degraded') return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
   }
+
+  const getStatusLabel = (s: string) => {
+    if (s === 'healthy') return 'Online'
+    if (s === 'not_configured') return 'Não configurado'
+    if (s === 'degraded') return 'Degradado'
+    return 'Offline'
+  }
+
+  const evolutionStatusDisplay = status?.evolution_api?.status
+  const evolutionLabel =
+    evolutionStatusDisplay === 'connected' ? 'Conectado' :
+    evolutionStatusDisplay === 'no_active_connection' ? 'Inativo' :
+    evolutionStatusDisplay === 'error' || evolutionStatusDisplay === 'disconnected' ? 'Erro' : 'Erro'
 
   if (isLoading && !status) {
     return (
@@ -129,7 +143,7 @@ export default function SystemStatusPage() {
               <p className="text-sm text-gray-500">Alrea Sense Platform</p>
             </div>
           </div>
-          <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${getStatusBadge(status?.status || 'unhealthy')}`}>
+          <span className={`inline-flex items-center rounded-full px-3 py-1 text-sm font-medium ${getStatusBadge(status?.status || 'degraded')}`}>
             {status?.status === 'healthy' ? 'Saudável' : 'Com problemas'}
           </span>
         </div>
@@ -148,7 +162,7 @@ export default function SystemStatusPage() {
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.database?.status || 'unhealthy')}`}>
-              {status?.database?.status === 'healthy' ? 'Online' : 'Offline'}
+              {getStatusLabel(status?.database?.status || 'unhealthy')}
             </span>
           </div>
           {status?.database && (
@@ -174,7 +188,7 @@ export default function SystemStatusPage() {
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.redis?.status || 'unhealthy')}`}>
-              {status?.redis?.status === 'healthy' ? 'Online' : 'Offline'}
+              {getStatusLabel(status?.redis?.status || 'unhealthy')}
             </span>
           </div>
           {status?.redis && (
@@ -189,28 +203,26 @@ export default function SystemStatusPage() {
           )}
         </Card>
 
-        {/* Celery */}
+        {/* RabbitMQ */}
         <Card className="p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <Activity className={`h-8 w-8 ${getStatusColor(status?.celery?.status || 'unhealthy')}`} />
+              <Rabbit className={`h-8 w-8 ${getStatusColor(status?.rabbitmq?.status || 'unhealthy')}`} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Celery</h3>
-                <p className="text-sm text-gray-500">Task Queue</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">RabbitMQ</h3>
+                <p className="text-sm text-gray-500">Message Broker / Campanhas</p>
               </div>
             </div>
-            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.celery?.status || 'unhealthy')}`}>
-              {status?.celery?.status === 'healthy' ? 'Online' : 'Offline'}
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.rabbitmq?.status || 'unhealthy')}`}>
+              {getStatusLabel(status?.rabbitmq?.status || 'unhealthy')}
             </span>
           </div>
-          {status?.celery && (
-            <div className="mt-4 space-y-2 text-sm text-gray-600">
-              {status.celery.active_tasks !== undefined && (
-                <p>Tarefas ativas: {status.celery.active_tasks}</p>
-              )}
-              {status.celery.processed_tasks !== undefined && (
-                <p>Tarefas processadas: {status.celery.processed_tasks}</p>
-              )}
+          {status?.rabbitmq && status.rabbitmq.status !== 'not_configured' && (
+            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+              {status.rabbitmq.connection !== undefined && <p>Conexão: {status.rabbitmq.connection ? 'Sim' : 'Não'}</p>}
+              {status.rabbitmq.channel !== undefined && <p>Canal: {status.rabbitmq.channel ? 'Ok' : 'Não'}</p>}
+              {status.rabbitmq.consumer_running !== undefined && <p>Consumer: {status.rabbitmq.consumer_running ? 'Rodando' : 'Parado'}</p>}
+              {status.rabbitmq.active_campaign_threads !== undefined && <p>Threads de campanha: {status.rabbitmq.active_campaign_threads}</p>}
             </div>
           )}
         </Card>
@@ -220,70 +232,66 @@ export default function SystemStatusPage() {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
               <MessageSquare className={`h-8 w-8 ${
-                status?.evolution_api?.status === 'active' ? 'text-green-600' : 
-                status?.evolution_api?.status === 'inactive' ? 'text-gray-400' : 
+                evolutionStatusDisplay === 'connected' ? 'text-green-600' :
+                evolutionStatusDisplay === 'no_active_connection' ? 'text-gray-400' :
                 'text-red-600'
               }`} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Evolution API</h3>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Evolution API</h3>
                 <p className="text-sm text-gray-500">WhatsApp Integration</p>
               </div>
             </div>
             <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-              status?.evolution_api?.status === 'active' ? 'bg-green-100 text-green-800' : 
-              status?.evolution_api?.status === 'inactive' ? 'bg-gray-100 text-gray-800' : 
-              'bg-red-100 text-red-800'
+              evolutionStatusDisplay === 'connected' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' :
+              evolutionStatusDisplay === 'no_active_connection' ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300' :
+              'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
             }`}>
-              {status?.evolution_api?.status === 'active' ? 'Conectado' : 
-               status?.evolution_api?.status === 'inactive' ? 'Inativo' : 
-               'Erro'}
+              {evolutionLabel}
             </span>
           </div>
           {status?.evolution_api && (
-            <div className="mt-4 space-y-2 text-sm text-gray-600">
-              {status.evolution_api.instance_count !== undefined && (
-                <p>Total de instâncias no Evo: {status.evolution_api.instance_count}</p>
-              )}
+            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
               {status.evolution_api.registered_instances && (
                 <>
-                  <p className="font-medium text-blue-700">Instâncias cadastradas no Sense:</p>
+                  <p className="font-medium text-gray-700 dark:text-gray-300">Instâncias cadastradas no Sense (WhatsAppInstance):</p>
                   <div className="ml-4 space-y-1">
-                    <p>📊 Total: {status.evolution_api.registered_instances.total}</p>
-                    <p>🟢 Ativas: {status.evolution_api.registered_instances.active}</p>
-                    <p>⚪ Inativas: {status.evolution_api.registered_instances.inactive}</p>
+                    <p>Total: {status.evolution_api.registered_instances.total}</p>
+                    <p>Ativas: {status.evolution_api.registered_instances.active}</p>
+                    <p>Inativas: {status.evolution_api.registered_instances.inactive}</p>
                   </div>
                 </>
               )}
+              {status.evolution_api.external_api_instances !== undefined && (
+                <p className="font-medium text-gray-700 dark:text-gray-300 mt-2">Instâncias na Evolution API: {status.evolution_api.external_api_instances}</p>
+              )}
+              <Link to="/admin/evolution" className="inline-flex items-center gap-1 text-accent-600 hover:text-accent-700 text-sm font-medium mt-2">
+                Ver instâncias <ExternalLink className="h-3.5 w-3.5" />
+              </Link>
             </div>
           )}
         </Card>
 
-        {/* Disk */}
+        {/* MinIO */}
         <Card className="p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-3">
-              <HardDrive className="h-8 w-8 text-blue-600" />
+              <Box className={`h-8 w-8 ${getStatusColor(status?.minio?.status || 'unhealthy')}`} />
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Disco</h3>
-                <p className="text-sm text-gray-500">Armazenamento</p>
+                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">MinIO</h3>
+                <p className="text-sm text-gray-500">Object Storage (S3)</p>
               </div>
             </div>
+            <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${getStatusBadge(status?.minio?.status || 'unhealthy')}`}>
+              {getStatusLabel(status?.minio?.status || 'unhealthy')}
+            </span>
           </div>
-          {status?.disk && (
-            <div className="mt-4 space-y-2">
-              <div className="flex justify-between text-sm text-gray-600">
-                <span>Total: {status.disk.total || 'N/A'}</span>
-                <span>Usado: {status.disk.used || 'N/A'}</span>
-              </div>
-              {status.disk.percent !== undefined && (
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div 
-                    className={`h-2 rounded-full ${status.disk.percent > 90 ? 'bg-red-600' : status.disk.percent > 70 ? 'bg-yellow-600' : 'bg-green-600'}`}
-                    style={{ width: `${status.disk.percent}%` }}
-                  />
-                </div>
-              )}
+          {status?.minio && status.minio.status === 'healthy' && status.minio.bucket && (
+            <div className="mt-4 space-y-2 text-sm text-gray-600 dark:text-gray-400">
+              <p>Bucket: {status.minio.bucket}</p>
             </div>
+          )}
+          {status?.minio && status.minio.status === 'unhealthy' && status.minio.error && (
+            <p className="mt-4 text-sm text-red-600 dark:text-red-400">{status.minio.error}</p>
           )}
         </Card>
       </div>
