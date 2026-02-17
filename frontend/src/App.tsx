@@ -15,6 +15,7 @@ const CampaignLogsPage = lazy(() => import('./pages/CampaignLogsPage'))
 const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'))
 const ExperimentsPage = lazy(() => import('./pages/ExperimentsPage'))
 const BillingPage = lazy(() => import('./pages/BillingPage'))
+const CompanyProfilePage = lazy(() => import('./pages/CompanyProfilePage'))
 const TenantsPage = lazy(() => import('./pages/TenantsPage'))
 const ProductsPage = lazy(() => import('./pages/ProductsPage'))
 const PlansPage = lazy(() => import('./pages/PlansPage'))
@@ -167,6 +168,11 @@ function App() {
               <Route path="billing" element={
                 <Suspense fallback={<LoadingSpinner size="lg" />}>
                   <BillingPage />
+                </Suspense>
+              } />
+              <Route path="billing/company" element={
+                <Suspense fallback={<LoadingSpinner size="lg" />}>
+                  <CompanyProfilePage />
                 </Suspense>
               } />
               <Route path="profile" element={

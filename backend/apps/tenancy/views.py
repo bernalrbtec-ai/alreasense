@@ -2,16 +2,29 @@
 Views para gerenciamento de tenants
 """
 
+import logging
+import os
+import uuid
+from django.conf import settings
+from django.core.files.base import ContentFile
+from django.core.files.storage import default_storage
 from rest_framework import viewsets, status
-from rest_framework.decorators import action
+from rest_framework.decorators import action, api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model
-from .models import Tenant
-from .serializers import TenantSerializer
+from .models import Tenant, TenantCompanyProfile
+from .serializers import TenantSerializer, TenantCompanyProfileSerializer
 from apps.common.decorators import require_product
+from apps.common.permissions import IsTenantMember, IsAdminUser
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
+
+# Logo: 500 KB, PNG/JPEG/WebP
+LOGO_MAX_BYTES = 500 * 1024
+LOGO_ALLOWED_EXTENSIONS = {'.png', '.jpg', '.jpeg', '.webp'}
+LOGO_ALLOWED_CONTENT_TYPES = {'image/png', 'image/jpeg', 'image/jpg', 'image/webp'}
 
 
 class TenantViewSet(viewsets.ModelViewSet):
@@ -453,3 +466,109 @@ class TenantViewSet(viewsets.ModelViewSet):
         }
         
         return Response(metrics)
+
+
+# ---------------------------------------------------------------------------
+# Company Profile (Dados da Empresa) - Fase 1
+# ---------------------------------------------------------------------------
+
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def company_profile(request):
+    """GET/PUT perfil da empresa do tenant atual."""
+    tenant = request.user.tenant
+    if not tenant:
+        return Response({'error': 'Tenant não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        try:
+            profile = TenantCompanyProfile.objects.get(tenant=tenant)
+        except TenantCompanyProfile.DoesNotExist:
+            return Response({
+                'id': None, 'razao_social': None, 'cnpj': None, 'endereco': None,
+                'endereco_latitude': None, 'endereco_longitude': None,
+                'telefone': None, 'email_principal': None, 'ramo_atuacao': None,
+                'data_fundacao': None, 'missao': None, 'sobre_empresa': None,
+                'produtos_servicos': None, 'logo_url': None, 'created_at': None, 'updated_at': None,
+            })
+        serializer = TenantCompanyProfileSerializer(profile)
+        return Response(serializer.data)
+
+    # PUT
+    try:
+        profile = TenantCompanyProfile.objects.get(tenant=tenant)
+    except TenantCompanyProfile.DoesNotExist:
+        profile = TenantCompanyProfile(tenant=tenant)
+
+    serializer = TenantCompanyProfileSerializer(profile, data=request.data, partial=True)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    serializer.save()
+    # Sync chunk para pgvector (n8n) em background – Fase 2
+    from apps.tenancy.rag_sync import sync_company_chunk_async
+    sync_company_chunk_async(tenant.id)
+    return Response(serializer.data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def company_profile_upload_logo(request):
+    """Upload de logo da empresa. Máx 500KB, PNG/JPEG/WebP."""
+    tenant = request.user.tenant
+    if not tenant:
+        return Response({'error': 'Tenant não encontrado'}, status=status.HTTP_404_NOT_FOUND)
+
+    if 'logo' not in request.FILES:
+        return Response(
+            {'error': 'Nenhum arquivo enviado. Use o campo "logo".'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    logo_file = request.FILES['logo']
+
+    if logo_file.size > LOGO_MAX_BYTES:
+        return Response(
+            {'error': f'Arquivo muito grande. Máximo {LOGO_MAX_BYTES // 1024} KB.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    ext = os.path.splitext(logo_file.name)[-1].lower()
+    if ext not in LOGO_ALLOWED_EXTENSIONS:
+        return Response(
+            {'error': 'Formato inválido. Use PNG, JPEG ou WebP.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    ct = (logo_file.content_type or '').lower()
+    if ct not in LOGO_ALLOWED_CONTENT_TYPES:
+        return Response(
+            {'error': 'Tipo de arquivo inválido.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        safe_ext = '.webp' if ext == '.webp' else ('.png' if 'png' in ct else '.jpg')
+        filename = f"company_logos/{tenant.id}/logo_{uuid.uuid4().hex[:8]}{safe_ext}"
+        file_path = default_storage.save(filename, ContentFile(logo_file.read()))
+
+        # URL pública (MEDIA_URL + path)
+        logo_url = request.build_absolute_uri(settings.MEDIA_URL + file_path)
+
+        profile, _ = TenantCompanyProfile.objects.get_or_create(
+            tenant=tenant,
+            defaults={},
+        )
+        profile.logo_url = logo_url
+        profile.save(update_fields=['logo_url', 'updated_at'])
+
+        # Sync chunk para pgvector (logo incluído) – Fase 2
+        from apps.tenancy.rag_sync import sync_company_chunk_async
+        sync_company_chunk_async(tenant.id)
+
+        return Response({'logo_url': logo_url})
+    except Exception as e:
+        logger.exception("company_profile_upload_logo failed: %s", e)
+        return Response(
+            {'error': f'Erro ao salvar logo: {str(e)}'},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )

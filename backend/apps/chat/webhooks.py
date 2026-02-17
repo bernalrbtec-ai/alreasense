@@ -2829,24 +2829,8 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
             except Exception as e:
                 logger.error(f"❌ [WELCOME MENU] Erro ao processar resposta do menu: {e}", exc_info=True)
 
-            # Secretária IA: só disparar quando houver conteúdo para o agente (não disparar para áudio antes da transcrição)
-            try:
-                conversation.refresh_from_db()
-                # Áudio: secretária será disparada pelo worker de transcrição após concluir
-                if message_type == 'audioMessage':
-                    logger.info(
-                        "[SECRETARY] Áudio recebido: aguardando transcrição para disparar secretária (conv=%s)",
-                        conversation.id,
-                    )
-                else:
-                    logger.info(
-                        "[SECRETARY] Verificando: conversation_id=%s department_id=%s status=%s",
-                        conversation.id, conversation.department_id, conversation.status,
-                    )
-                    from apps.ai.secretary_service import dispatch_secretary_async
-                    dispatch_secretary_async(conversation, message)
-            except Exception as e:
-                logger.warning(f"⚠️ [SECRETARY] Dispatch falhou: {e}", exc_info=True)
+            # BIA (Secretária IA): desativada – em reconstrução (Fase 0 do plano RAG BIA).
+            # Será reativada na Fase 5 com nova arquitetura (pgvector na infra n8n).
         else:
             logger.info(f"ℹ️ [BUSINESS HOURS] Mensagem é {direction}, não verifica horário de atendimento")
         

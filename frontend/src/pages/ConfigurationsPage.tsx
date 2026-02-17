@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { 
   Settings, 
   Server, 
@@ -326,18 +326,6 @@ export default function ConfigurationsPage() {
   const [secretaryProfileLoading, setSecretaryProfileLoading] = useState(false)
   const [secretaryProfileSaving, setSecretaryProfileSaving] = useState(false)
   const [secretaryProfileErrors, setSecretaryProfileErrors] = useState<Record<string, string>>({})
-  const [isSecretaryModalOpen, setIsSecretaryModalOpen] = useState(false)
-  const [secretaryWizardStep, setSecretaryWizardStep] = useState(1)
-  const [secretaryFormData, setSecretaryFormData] = useState<{
-    empresa?: string
-    missao?: string
-    endereco?: string
-    telefone?: string
-    email?: string
-    ramo?: string
-    servicos?: string
-  }>({})
-  const [secretaryRagPreview, setSecretaryRagPreview] = useState<string>('')
   const [audioTestLoading, setAudioTestLoading] = useState(false)
   const [isAudioRecording, setIsAudioRecording] = useState(false)
   const [audioRecordingTime, setAudioRecordingTime] = useState(0)
@@ -1388,158 +1376,7 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const mapFormDataToStructured = (formData: Record<string, unknown> | null | undefined): typeof secretaryFormData => {
-    // Helper para extrair string de forma segura
-    const getString = (value: unknown, fallback = ''): string => {
-      if (typeof value === 'string') return value.trim()
-      if (value === null || value === undefined) return fallback
-      return String(value).trim() || fallback
-    }
-    
-    // Se não há form_data, retornar objeto vazio com todos os campos
-    if (!formData || typeof formData !== 'object' || Array.isArray(formData)) {
-      return {
-        empresa: '',
-        missao: '',
-        endereco: '',
-        telefone: '',
-        email: '',
-        ramo: '',
-        servicos: '',
-      }
-    }
-    
-    // Mapear campos do form_data para os campos estruturados do formulário
-    // Aceita múltiplos nomes possíveis (incluindo os que vêm do backend)
-    return {
-      empresa: getString(
-        formData.empresa || 
-        formData.company_name || 
-        formData.nome || 
-        formData.nome_empresa
-      ),
-      missao: getString(
-        formData.missao || 
-        formData.mission || 
-        formData.sobre || 
-        formData.descricao
-      ),
-      endereco: getString(
-        formData.endereco || 
-        formData.address || 
-        formData.endereco_completo
-      ),
-      telefone: getString(
-        formData.telefone || 
-        formData.phone
-      ),
-      email: getString(
-        formData.email || 
-        formData.email_contato
-      ),
-      ramo: getString(
-        formData.ramo || 
-        formData.ramo_atuacao || 
-        formData.area || 
-        formData.business_area
-      ),
-      servicos: getString(
-        formData.servicos || 
-        formData.services || 
-        formData.produtos || 
-        formData.servicos_produtos
-      ),
-    }
-  }
-
-  // ✅ NOVO: Converte dados estruturados (português) para formato do backend (inglês)
-  const mapStructuredToFormData = (structuredData: typeof secretaryFormData): Record<string, string> => {
-    const backendFormData: Record<string, string> = {}
-    
-    // Log detalhado ANTES de processar
-    console.log('[SECRETARY MAP] Dados estruturados recebidos (ANTES):', structuredData)
-    console.log('[SECRETARY MAP] Email raw:', structuredData.email, '| Email trimmed:', structuredData.email?.trim())
-    console.log('[SECRETARY MAP] Ramo raw:', structuredData.ramo, '| Ramo trimmed:', structuredData.ramo?.trim())
-    
-    // Mapear campos do formulário (português) para formato do backend (inglês)
-    // ✅ CORREÇÃO: Incluir TODOS os campos, mesmo vazios, para manter estrutura consistente
-    // Campos obrigatórios/principais: sempre incluir se tiver valor
-    if (structuredData.empresa?.trim()) {
-      backendFormData.company_name = structuredData.empresa.trim()
-    }
-    if (structuredData.missao?.trim()) {
-      backendFormData.mission = structuredData.missao.trim()
-    }
-    if (structuredData.endereco?.trim()) {
-      backendFormData.address = structuredData.endereco.trim()
-    }
-    if (structuredData.telefone?.trim()) {
-      backendFormData.phone = structuredData.telefone.trim()
-    }
-    if (structuredData.servicos?.trim()) {
-      backendFormData.services = structuredData.servicos.trim()
-    }
-    
-    // ✅ CORREÇÃO CRÍTICA: email e business_area devem ser incluídos se preenchidos
-    // Verificar se os campos existem e têm valor
-    const emailValue = structuredData.email?.trim()
-    const ramoValue = structuredData.ramo?.trim()
-    
-    console.log('[SECRETARY MAP] Verificando email:', {
-      exists: structuredData.email !== undefined,
-      value: structuredData.email,
-      trimmed: emailValue,
-      willInclude: !!emailValue
-    })
-    console.log('[SECRETARY MAP] Verificando ramo:', {
-      exists: structuredData.ramo !== undefined,
-      value: structuredData.ramo,
-      trimmed: ramoValue,
-      willInclude: !!ramoValue
-    })
-    
-    if (emailValue) {
-      backendFormData.email = emailValue
-      console.log('[SECRETARY MAP] ✅ Email incluído:', emailValue)
-    } else {
-      console.log('[SECRETARY MAP] ❌ Email NÃO incluído (vazio ou undefined)')
-    }
-    
-    if (ramoValue) {
-      backendFormData.business_area = ramoValue
-      console.log('[SECRETARY MAP] ✅ Ramo incluído:', ramoValue)
-    } else {
-      console.log('[SECRETARY MAP] ❌ Ramo NÃO incluído (vazio ou undefined)')
-    }
-    
-    // Log para debug
-    console.log('[SECRETARY MAP] Dados convertidos para backend:', backendFormData)
-    console.log('[SECRETARY MAP] Campos incluídos:', Object.keys(backendFormData))
-    
-    return backendFormData
-  }
-
-  const generateRagPreview = (formData: typeof secretaryFormData) => {
-    const parts: string[] = []
-    if (formData.empresa) parts.push(`Empresa: ${formData.empresa}`)
-    if (formData.missao) parts.push(`Missão: ${formData.missao}`)
-    if (formData.endereco) parts.push(`Endereço: ${formData.endereco}`)
-    if (formData.telefone) parts.push(`Telefone: ${formData.telefone}`)
-    if (formData.email) parts.push(`Email: ${formData.email}`)
-    if (formData.ramo) parts.push(`Ramo de atuação: ${formData.ramo}`)
-    if (formData.servicos) parts.push(`Serviços: ${formData.servicos}`)
-    
-    if (departments && departments.length > 0) {
-      parts.push('\nDepartamentos disponíveis:')
-      departments.forEach(dept => {
-        parts.push(`- ${dept.name}`)
-      })
-    }
-    
-    return parts.join('\n') || 'Nenhum dado configurado ainda.'
-  }
-
-  const handleSaveSecretaryProfile = async (fromModal = false) => {
+  const handleSaveSecretaryProfile = async () => {
     if (!secretaryProfile) return
     const errors: Record<string, string> = {}
     if (secretaryProfile.inbox_idle_minutes < 0 || secretaryProfile.inbox_idle_minutes > 1440) {
@@ -1569,138 +1406,10 @@ export default function ConfigurationsPage() {
           is_active: savedProfile.is_active
         })
         setSecretaryProfile(savedProfile)
-        
-        // ✅ NOVO: Se estava no modal, atualizar também o secretaryFormData para manter sincronizado
-        if (fromModal) {
-          const updatedStructuredData = mapFormDataToStructured(savedProfile.form_data)
-          console.log('[SECRETARY SAVE] Dados estruturados atualizados:', updatedStructuredData)
-          setSecretaryFormData(updatedStructuredData)
-        }
       }
       
       setSecretaryProfileErrors({})
       updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
-      
-      if (fromModal) {
-        setIsSecretaryModalOpen(false)
-        // ✅ NOVO: Recarregar dados do servidor após salvar para garantir sincronização completa
-        // Pequeno delay para garantir que o backend processou completamente
-        setTimeout(() => {
-          fetchSecretaryProfile()
-        }, 500)
-        if (secretaryProfile.is_active && aiSettings?.secretary_enabled) {
-          showSuccessToast('A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.')
-        }
-      }
-    } catch (error: any) {
-      const apiErrors = error.response?.data?.errors || {}
-      if (apiErrors && typeof apiErrors === 'object') {
-        setSecretaryProfileErrors(apiErrors)
-      }
-      updateToastError(toastId, 'salvar', 'Perfil da Secretária', error)
-    } finally {
-      setSecretaryProfileSaving(false)
-    }
-  }
-
-  const handleSecretaryWizardNext = () => {
-    if (secretaryWizardStep === 1) {
-      // Validar dados básicos antes de avançar
-      if (!secretaryFormData.empresa?.trim()) {
-        showErrorToast('Preencha pelo menos o nome da empresa')
-        return
-      }
-      // Atualizar preview ao avançar
-      setSecretaryRagPreview(generateRagPreview(secretaryFormData))
-    } else if (secretaryWizardStep === 2) {
-      // Atualizar preview antes da revisão
-      setSecretaryRagPreview(generateRagPreview(secretaryFormData))
-    }
-    if (secretaryWizardStep < 3) {
-      setSecretaryWizardStep(secretaryWizardStep + 1)
-    }
-  }
-
-  const handleSecretaryWizardPrev = () => {
-    if (secretaryWizardStep > 1) {
-      setSecretaryWizardStep(secretaryWizardStep - 1)
-    }
-  }
-
-  const handleSecretaryModalSave = async () => {
-    if (!secretaryProfile) return
-    
-    // ✅ LOG CRÍTICO: Verificar estado ANTES de converter
-    console.log('[SECRETARY MODAL SAVE] ⚠️ Estado ANTES da conversão:')
-    console.log('[SECRETARY MODAL SAVE] secretaryFormData completo:', JSON.stringify(secretaryFormData, null, 2))
-    console.log('[SECRETARY MODAL SAVE] Email no estado:', secretaryFormData.email, '| Tipo:', typeof secretaryFormData.email)
-    console.log('[SECRETARY MODAL SAVE] Ramo no estado:', secretaryFormData.ramo, '| Tipo:', typeof secretaryFormData.ramo)
-    
-    // ✅ CORREÇÃO: Converter dados estruturados (português) para formato do backend (inglês)
-    const backendFormData = mapStructuredToFormData(secretaryFormData)
-    
-    // Log detalhado antes de salvar
-    console.log('[SECRETARY MODAL SAVE] Dados do formulário (português):', secretaryFormData)
-    console.log('[SECRETARY MODAL SAVE] Dados convertidos (inglês):', backendFormData)
-    console.log('[SECRETARY MODAL SAVE] Campos que serão salvos:', Object.keys(backendFormData))
-    console.log('[SECRETARY MODAL SAVE] ⚠️ Email incluído?', backendFormData.hasOwnProperty('email'), '| Valor:', backendFormData.email)
-    console.log('[SECRETARY MODAL SAVE] ⚠️ Business_area incluído?', backendFormData.hasOwnProperty('business_area'), '| Valor:', backendFormData.business_area)
-    
-    // ✅ CORREÇÃO CRÍTICA: Criar perfil atualizado e salvar diretamente, sem depender do estado React
-    const updatedProfile = {
-      ...secretaryProfile,
-      form_data: backendFormData
-    }
-    console.log('[SECRETARY MODAL SAVE] ⚠️ updatedProfile.form_data:', updatedProfile.form_data)
-    
-    // Salvar diretamente usando o objeto atualizado, não o estado
-    const errors: Record<string, string> = {}
-    if (updatedProfile.inbox_idle_minutes < 0 || updatedProfile.inbox_idle_minutes > 1440) {
-      errors.inbox_idle_minutes = 'Valor entre 0 e 1440.'
-    }
-    setSecretaryProfileErrors(errors)
-    if (Object.keys(errors).length > 0) return
-    
-    const toastId = showLoadingToast('salvar', 'Perfil da Secretária')
-    try {
-      setSecretaryProfileSaving(true)
-      console.log('[SECRETARY MODAL SAVE] ⚠️ Enviando para API:', updatedProfile)
-      const response = await api.put('/ai/secretary/profile/', updatedProfile)
-      
-      // ✅ CORREÇÃO: Atualizar com os dados retornados do servidor (garante sincronização)
-      if (response.data) {
-        const savedProfile = {
-          form_data: response.data?.form_data ?? {},
-          prompt: response.data?.prompt ?? '',
-          signature_name: response.data?.signature_name ?? '',
-          use_memory: response.data?.use_memory ?? true,
-          is_active: response.data?.is_active ?? false,
-          inbox_idle_minutes: response.data?.inbox_idle_minutes ?? 0,
-        }
-        console.log('[SECRETARY MODAL SAVE] Dados retornados do servidor:', {
-          form_data_keys: Object.keys(savedProfile.form_data),
-          form_data: savedProfile.form_data,
-          is_active: savedProfile.is_active
-        })
-        setSecretaryProfile(savedProfile)
-        
-        // ✅ NOVO: Atualizar também o secretaryFormData para manter sincronizado
-        const updatedStructuredData = mapFormDataToStructured(savedProfile.form_data)
-        console.log('[SECRETARY MODAL SAVE] Dados estruturados atualizados:', updatedStructuredData)
-        setSecretaryFormData(updatedStructuredData)
-      }
-      
-      setSecretaryProfileErrors({})
-      updateToastSuccess(toastId, 'salvar', 'Perfil da Secretária')
-      
-      setIsSecretaryModalOpen(false)
-      // ✅ NOVO: Recarregar dados do servidor após salvar para garantir sincronização completa
-      setTimeout(() => {
-        fetchSecretaryProfile()
-      }, 500)
-      if (updatedProfile.is_active && aiSettings?.secretary_enabled) {
-        showSuccessToast('A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.')
-      }
     } catch (error: any) {
       const apiErrors = error.response?.data?.errors || {}
       if (apiErrors && typeof apiErrors === 'object') {
@@ -2512,13 +2221,13 @@ export default function ConfigurationsPage() {
                 </div>
               </Card>
 
-              {/* Secretária IA (Bia) */}
+              {/* Secretária IA (Bia) – simplificado (Fase 0: formulário de dados da empresa em Planos > Dados da Empresa) */}
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-medium text-gray-900 mb-1">Secretária IA (Bia)</h3>
                     <p className="text-sm text-gray-600">
-                      Configure a secretária virtual para atender conversas do Inbox automaticamente.
+                      Ativar ou desativar a secretária virtual. Configure os dados da empresa em Planos.
                     </p>
                   </div>
                   {secretaryProfileLoading || secretaryProfile === null ? (
@@ -2530,58 +2239,80 @@ export default function ConfigurationsPage() {
                           Ativa
                         </span>
                       )}
-                      <Button
-                        onClick={() => {
-                          // Mapear form_data para campos estruturados
-                          const structuredData = mapFormDataToStructured(secretaryProfile.form_data)
-                          console.log('[SECRETARY MODAL] Form data original:', secretaryProfile.form_data)
-                          console.log('[SECRETARY MODAL] Form data mapeado:', structuredData)
-                          setSecretaryFormData(structuredData)
-                          
-                          // Gerar preview inicial
-                          setSecretaryRagPreview(generateRagPreview(structuredData))
-                          
-                          // Resetar wizard para etapa 1
-                          setSecretaryWizardStep(1)
-                          
-                          // Abrir modal
-                          setIsSecretaryModalOpen(true)
-                        }}
-                        variant="outline"
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        {secretaryProfile.is_active ? 'Editar' : 'Configurar'}
-                      </Button>
+                      <Link to="/billing/company">
+                        <Button variant="outline">
+                          <Edit className="h-4 w-4 mr-2" />
+                          Editar dados da empresa
+                        </Button>
+                      </Link>
                     </div>
                   )}
                 </div>
                 {secretaryProfile && !secretaryProfileLoading && (
-                  <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="mt-4 space-y-4">
+                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                       <div>
-                        <span className="text-gray-600">Nome:</span>
-                        <span className="ml-2 font-medium">{secretaryProfile.signature_name || 'Bia'}</span>
+                        <Label className="text-base font-semibold">Ativar BIA</Label>
+                        <p className="text-sm text-gray-600 mt-1">
+                          A secretária responderá em conversas do Inbox quando habilitada.
+                        </p>
+                      </div>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={secretaryProfile.is_active}
+                          onChange={(e) => {
+                            setSecretaryProfile({ ...secretaryProfile, is_active: e.target.checked })
+                            handleSaveSecretaryProfile()
+                          }}
+                          className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <Label htmlFor="secretary_signature_name">Nome da Secretária</Label>
+                        <Input
+                          id="secretary_signature_name"
+                          value={secretaryProfile.signature_name || ''}
+                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
+                          placeholder="Bia"
+                          className="mt-1"
+                        />
                       </div>
                       <div>
-                        <span className="text-gray-600">Memória:</span>
-                        <span className="ml-2 font-medium">{secretaryProfile.use_memory ? 'Ativada' : 'Desativada'}</span>
+                        <Label htmlFor="secretary_inbox_idle_minutes">Fechar Inbox sem resposta (min)</Label>
+                        <Input
+                          id="secretary_inbox_idle_minutes"
+                          type="number"
+                          min={0}
+                          max={1440}
+                          value={secretaryProfile.inbox_idle_minutes ?? 0}
+                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
+                          className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
+                        />
+                        {secretaryProfileErrors.inbox_idle_minutes && (
+                          <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
+                        )}
                       </div>
-                      <div>
-                        <span className="text-gray-600">Timeout Inbox:</span>
-                        <span className="ml-2 font-medium">
-                          {secretaryProfile.inbox_idle_minutes > 0 
-                            ? `${secretaryProfile.inbox_idle_minutes} min` 
-                            : 'Desativado'}
-                        </span>
+                      <div className="flex items-center pt-6">
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={secretaryProfile.use_memory}
+                            onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
+                            className="rounded border-gray-300"
+                          />
+                          <span className="text-sm">Usar memória por contato</span>
+                        </label>
                       </div>
-                      <div>
-                        <span className="text-gray-600">Dados empresa:</span>
-                        <span className="ml-2 font-medium">
-                          {secretaryProfile.form_data && Object.keys(secretaryProfile.form_data).length > 0 
-                            ? `${Object.keys(secretaryProfile.form_data).length} campos` 
-                            : 'Não configurado'}
-                        </span>
-                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={() => handleSaveSecretaryProfile()} disabled={secretaryProfileSaving}>
+                        <Save className="h-4 w-4 mr-2" />
+                        {secretaryProfileSaving ? 'Salvando...' : 'Salvar'}
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -4222,352 +3953,7 @@ export default function ConfigurationsPage() {
         </div>
       )}
 
-      {/* Modal Secretária IA - Wizard */}
-      {isSecretaryModalOpen && secretaryProfile && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-          <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-xl">
-            {/* Header */}
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between z-10">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <Sparkles className="h-6 w-6 text-blue-600" />
-                  Configurar Secretária IA (Bia)
-                </h2>
-                <p className="text-sm text-gray-600 mt-1">
-                  Configure os dados da empresa e o comportamento da secretária virtual
-                </p>
-              </div>
-              <button
-                onClick={() => setIsSecretaryModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X className="h-6 w-6" />
-              </button>
-            </div>
-
-            {/* Steps indicator */}
-            <div className="px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                {[1, 2, 3].map((step) => (
-                  <div key={step} className="flex items-center flex-1">
-                    <div className="flex flex-col items-center flex-1">
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-colors ${
-                          secretaryWizardStep === step
-                            ? 'bg-blue-600 text-white'
-                            : secretaryWizardStep > step
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 text-gray-600'
-                        }`}
-                      >
-                        {secretaryWizardStep > step ? <Check className="h-5 w-5" /> : step}
-                      </div>
-                      <span className={`text-xs mt-2 font-medium ${
-                        secretaryWizardStep === step ? 'text-blue-600' : 'text-gray-500'
-                      }`}>
-                        {step === 1 ? 'Dados da Empresa' : step === 2 ? 'Configurações' : 'Revisão'}
-                      </span>
-                    </div>
-                    {step < 3 && (
-                      <div
-                        className={`h-1 flex-1 mx-2 rounded ${
-                          secretaryWizardStep > step ? 'bg-green-500' : 'bg-gray-200'
-                        }`}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Content */}
-            <div className="p-6">
-              {/* Etapa 1: Dados da Empresa */}
-              {secretaryWizardStep === 1 && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Informações da Empresa</h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      Preencha os dados que a secretária usará para responder aos clientes. Essas informações serão usadas como contexto RAG.
-                    </p>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="empresa">Nome da Empresa *</Label>
-                      <Input
-                        id="empresa"
-                        value={secretaryFormData.empresa || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, empresa: e.target.value })}
-                        placeholder="Ex: Minha Empresa Ltda"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="ramo">Ramo de Atuação</Label>
-                      <Input
-                        id="ramo"
-                        value={secretaryFormData.ramo || ''}
-                        onChange={(e) => {
-                          const newValue = e.target.value
-                          console.log('[SECRETARY INPUT] Ramo alterado:', newValue)
-                          setSecretaryFormData({ ...secretaryFormData, ramo: newValue })
-                        }}
-                        placeholder="Ex: Tecnologia, Varejo, Serviços"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="telefone">Telefone</Label>
-                      <Input
-                        id="telefone"
-                        value={secretaryFormData.telefone || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, telefone: e.target.value })}
-                        placeholder="(00) 00000-0000"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={secretaryFormData.email || ''}
-                        onChange={(e) => {
-                          const newValue = e.target.value
-                          console.log('[SECRETARY INPUT] Email alterado:', newValue)
-                          setSecretaryFormData({ ...secretaryFormData, email: newValue })
-                        }}
-                        placeholder="contato@empresa.com"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="endereco">Endereço</Label>
-                      <Input
-                        id="endereco"
-                        value={secretaryFormData.endereco || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, endereco: e.target.value })}
-                        placeholder="Rua, número, bairro, cidade - UF"
-                        className="mt-1"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="missao">Missão / Sobre a Empresa</Label>
-                      <textarea
-                        id="missao"
-                        value={secretaryFormData.missao || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, missao: e.target.value })}
-                        rows={3}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="Descreva brevemente a missão e o propósito da empresa..."
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <Label htmlFor="servicos">Serviços / Produtos Oferecidos</Label>
-                      <textarea
-                        id="servicos"
-                        value={secretaryFormData.servicos || ''}
-                        onChange={(e) => setSecretaryFormData({ ...secretaryFormData, servicos: e.target.value })}
-                        rows={3}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="Liste os principais serviços ou produtos oferecidos..."
-                      />
-                    </div>
-                  </div>
-                  
-                  <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <div className="flex items-start gap-3">
-                      <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                      <div className="flex-1">
-                        <p className="text-sm text-blue-800">
-                          <strong>Horário de atendimento:</strong> O sistema consulta automaticamente os horários configurados na aba "Horários de Atendimento" desta página. A secretária receberá essa informação automaticamente e informará aos clientes quando estiver fora do horário.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Etapa 2: Configurações Avançadas */}
-              {secretaryWizardStep === 2 && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Configurações da Secretária</h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      Personalize o comportamento e o tom da secretária virtual.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="secretary_signature_name_modal">Nome da Secretária</Label>
-                      <Input
-                        id="secretary_signature_name_modal"
-                        value={secretaryProfile.signature_name}
-                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, signature_name: e.target.value })}
-                        placeholder="Bia"
-                        className="mt-1"
-                      />
-                      <p className="text-xs text-gray-500 mt-1">Nome usado nas assinaturas das mensagens.</p>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <Label className="text-base font-semibold">Usar memória por contato</Label>
-                        <p className="text-sm text-gray-600 mt-1">
-                          A secretária lembra do histórico com cada cliente nos últimos 12 meses, apenas dentro da sua empresa.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={secretaryProfile.use_memory}
-                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, use_memory: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="secretary_inbox_idle_minutes_modal">Fechar Inbox sem resposta (minutos)</Label>
-                      <Input
-                        id="secretary_inbox_idle_minutes_modal"
-                        type="number"
-                        min={0}
-                        max={1440}
-                        value={secretaryProfile.inbox_idle_minutes}
-                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, inbox_idle_minutes: Number(e.target.value) || 0 })}
-                        className={`mt-1 ${secretaryProfileErrors.inbox_idle_minutes ? 'border-red-500' : ''}`}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">0 = desativado. Máx. 1440 (24h).</p>
-                      {secretaryProfileErrors.inbox_idle_minutes && (
-                        <p className="text-xs text-red-600 mt-1">{secretaryProfileErrors.inbox_idle_minutes}</p>
-                      )}
-                    </div>
-
-                    <div>
-                      <Label htmlFor="secretary_prompt_modal">Prompt Personalizado (Opcional)</Label>
-                      <textarea
-                        id="secretary_prompt_modal"
-                        value={secretaryProfile.prompt}
-                        onChange={(e) => setSecretaryProfile({ ...secretaryProfile, prompt: e.target.value })}
-                        rows={10}
-                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm font-mono text-xs"
-                        placeholder="Deixe vazio para usar o prompt padrão. Ou personalize as instruções de tom, regras e formato da secretária."
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Instruções de tom, regras e formato. Vazio = usa o padrão do sistema.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Etapa 3: Revisão e Preview */}
-              {secretaryWizardStep === 3 && (
-                <div className="space-y-6">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Revisão e Preview</h3>
-                    <p className="text-sm text-gray-600 mb-6">
-                      Revise as configurações e veja o preview do contexto que será usado pela secretária.
-                    </p>
-                  </div>
-
-                  <div className="space-y-4">
-                    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <Info className="h-5 w-5 text-blue-600 mt-0.5" />
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-blue-900 mb-2">Preview do Contexto RAG</h4>
-                          <p className="text-sm text-blue-800 mb-3">
-                            Este texto será usado como contexto para as respostas da secretária:
-                          </p>
-                          <div className="bg-white p-4 rounded border border-blue-200 max-h-64 overflow-y-auto">
-                            <pre className="text-xs text-gray-700 whitespace-pre-wrap font-sans">
-                              {secretaryRagPreview}
-                            </pre>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4 p-4 bg-gray-50 rounded-lg">
-                      <div>
-                        <span className="text-sm text-gray-600">Nome:</span>
-                        <span className="ml-2 font-medium">{secretaryProfile.signature_name || 'Bia'}</span>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-600">Memória:</span>
-                        <span className="ml-2 font-medium">{secretaryProfile.use_memory ? 'Ativada' : 'Desativada'}</span>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-600">Timeout Inbox:</span>
-                        <span className="ml-2 font-medium">
-                          {secretaryProfile.inbox_idle_minutes > 0 
-                            ? `${secretaryProfile.inbox_idle_minutes} min` 
-                            : 'Desativado'}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-sm text-gray-600">Prompt:</span>
-                        <span className="ml-2 font-medium">
-                          {secretaryProfile.prompt?.trim() ? 'Personalizado' : 'Padrão'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
-                      <div>
-                        <Label className="text-base font-semibold">Ativar Secretária</Label>
-                        <p className="text-sm text-gray-600 mt-1">
-                          A secretária responderá automaticamente em conversas do Inbox com base nos dados cadastrados.
-                        </p>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={secretaryProfile.is_active}
-                          onChange={(e) => setSecretaryProfile({ ...secretaryProfile, is_active: e.target.checked })}
-                          className="sr-only peer"
-                        />
-                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="sticky bottom-0 bg-gray-50 border-t border-gray-200 px-6 py-4 flex items-center justify-between">
-              <Button
-                variant="outline"
-                onClick={secretaryWizardStep === 1 ? () => setIsSecretaryModalOpen(false) : handleSecretaryWizardPrev}
-                disabled={secretaryProfileSaving}
-              >
-                <ChevronLeft className="h-4 w-4 mr-2" />
-                {secretaryWizardStep === 1 ? 'Cancelar' : 'Voltar'}
-              </Button>
-              
-              <div className="flex gap-3">
-                {secretaryWizardStep < 3 ? (
-                  <Button onClick={handleSecretaryWizardNext}>
-                    Próximo
-                    <ChevronRight className="h-4 w-4 ml-2" />
-                  </Button>
-                ) : (
-                  <Button onClick={handleSecretaryModalSave} disabled={secretaryProfileSaving}>
-                    <Save className="h-4 w-4 mr-2" />
-                    {secretaryProfileSaving ? 'Salvando...' : 'Salvar e Ativar'}
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Modal Secretária IA - Wizard removido (Fase 0 - dados da empresa em Planos > Dados da Empresa) */}
     </div>
   )
 }

@@ -463,32 +463,8 @@ def _transcription_worker(
                 _broadcast_attachment_update(attachment, message, str(tenant_id))
                 logger.info("Audio transcription stored for attachment %s", attachment_id)
 
-                # Disparar secretária IA após transcrição concluída (Inbox: só envia para o agente com texto pronto)
-                if conversation and message and transcript_text:
-                    try:
-                        from apps.ai.models import TenantAiSettings, TenantSecretaryProfile
-                        from apps.ai.secretary_service import dispatch_secretary_async
-                        settings_obj = TenantAiSettings.objects.filter(tenant=tenant).first()
-                        profile = TenantSecretaryProfile.objects.filter(tenant=tenant).first()
-                        if (
-                            settings_obj
-                            and getattr(settings_obj, "secretary_enabled", False)
-                            and profile
-                            and profile.is_active
-                            and conversation.department_id is None
-                        ):
-                            dispatch_secretary_async(conversation, message)
-                            logger.info(
-                                "[SECRETARY] Disparado após transcrição (conv=%s, msg=%s)",
-                                conversation.id,
-                                message.id,
-                            )
-                    except Exception as sec_exc:
-                        logger.warning(
-                            "Secretary dispatch after transcription failed: %s",
-                            sec_exc,
-                            exc_info=True,
-                        )
+                # BIA (Secretária IA): desativada – em reconstrução (Fase 0 do plano RAG BIA).
+                # Será reativada na Fase 5 com nova arquitetura.
                 return
             except Exception as exc:
                 logger.error("Failed to run audio transcription attempt %s: %s", current_attempt, exc, exc_info=True)

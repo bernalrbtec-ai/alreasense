@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { Card } from '../components/ui/Card'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
+import { Button } from '../components/ui/Button'
 import { api } from '../lib/api'
 import { useAuthStore } from '../stores/authStore'
 import { 
@@ -11,7 +13,9 @@ import {
   Users,
   MessageSquare,
   FlaskConical,
-  Crown
+  Crown,
+  Building2,
+  ChevronRight
 } from 'lucide-react'
 
 interface PlanProduct {
@@ -129,6 +133,29 @@ export default function BillingPage() {
           Confira os detalhes do seu plano atual e recursos disponíveis
         </p>
       </div>
+
+      {/* Dados da Empresa - sempre visível */}
+      {tenant && (
+        <Card className="p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold mb-1 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-blue-600" />
+                Dados da Empresa
+              </h3>
+              <p className="text-sm text-gray-600">
+                Razão social, CNPJ, endereço e produtos. Usado para cobrança e contexto da BIA.
+              </p>
+            </div>
+            <Link to="/billing/company">
+              <Button variant="outline" size="sm">
+                Editar
+                <ChevronRight className="h-4 w-4 ml-1" />
+              </Button>
+            </Link>
+          </div>
+        </Card>
+      )}
 
       {tenant && tenant.current_plan ? (
         <>

@@ -431,6 +431,8 @@ STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 # AI/N8N
 N8N_AI_WEBHOOK = config('N8N_AI_WEBHOOK', default='')
 N8N_AUDIO_WEBHOOK = config('N8N_AUDIO_WEBHOOK', default='')
+N8N_RAG_WEBHOOK_URL = config('N8N_RAG_WEBHOOK_URL', default='')
+N8N_SUMMARIZE_WEBHOOK_URL = config('N8N_SUMMARIZE_WEBHOOK_URL', default='')
 
 # Reports sync (incremental metrics - n8n/cron)
 REPORTS_SYNC_API_KEY = config('REPORTS_SYNC_API_KEY', default='')

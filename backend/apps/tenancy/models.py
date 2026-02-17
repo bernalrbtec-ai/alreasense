@@ -3,6 +3,48 @@ from django.db import models
 from django.utils import timezone
 
 
+class TenantCompanyProfile(models.Model):
+    """
+    Perfil da empresa por tenant (dados para cobrança, faturamento e BIA).
+    Tabela criada via SQL direto – ver docs/sql/tenancy_company_profile.sql
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.OneToOneField(
+        'Tenant',
+        on_delete=models.CASCADE,
+        related_name='company_profile',
+        db_column='tenant_id',
+    )
+    razao_social = models.CharField(max_length=200, blank=True, null=True)
+    cnpj = models.CharField(max_length=18, blank=True, null=True)
+    endereco = models.TextField(blank=True, null=True)
+    endereco_latitude = models.DecimalField(
+        max_digits=10, decimal_places=7, blank=True, null=True
+    )
+    endereco_longitude = models.DecimalField(
+        max_digits=10, decimal_places=7, blank=True, null=True
+    )
+    telefone = models.CharField(max_length=20, blank=True, null=True)
+    email_principal = models.EmailField(max_length=254, blank=True, null=True)
+    ramo_atuacao = models.CharField(max_length=100, blank=True, null=True)
+    data_fundacao = models.DateField(blank=True, null=True)
+    missao = models.TextField(blank=True, null=True)
+    sobre_empresa = models.TextField(blank=True, null=True)
+    produtos_servicos = models.TextField(blank=True, null=True)
+    logo_url = models.URLField(max_length=500, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'tenancy_company_profile'
+        managed = False  # Tabela criada via SQL direto
+        verbose_name = 'Perfil da Empresa'
+        verbose_name_plural = 'Perfis de Empresas'
+
+    def __str__(self):
+        return f"{self.razao_social or 'Sem nome'} ({self.tenant.name})"
+
+
 class Tenant(models.Model):
     """Tenant model for multi-tenancy with product support."""
     

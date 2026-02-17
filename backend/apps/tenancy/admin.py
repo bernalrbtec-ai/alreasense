@@ -1,8 +1,16 @@
 from django.contrib import admin
 from django.contrib.auth import get_user_model
-from .models import Tenant
+from .models import Tenant, TenantCompanyProfile
 
 User = get_user_model()
+
+
+@admin.register(TenantCompanyProfile)
+class TenantCompanyProfileAdmin(admin.ModelAdmin):
+    list_display = ['tenant', 'razao_social', 'cnpj', 'updated_at']
+    search_fields = ['razao_social', 'cnpj']
+    raw_id_fields = ['tenant']
+    readonly_fields = ['id', 'created_at', 'updated_at']
 
 
 class TenantUserInline(admin.TabularInline):

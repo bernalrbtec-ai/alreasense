@@ -3,8 +3,23 @@ Serializers para o app tenancy
 """
 
 from rest_framework import serializers
-from .models import Tenant
+from .models import Tenant, TenantCompanyProfile
 from apps.billing.serializers import PlanSerializer
+
+
+class TenantCompanyProfileSerializer(serializers.ModelSerializer):
+    """Serializer para TenantCompanyProfile (dados da empresa)."""
+
+    class Meta:
+        model = TenantCompanyProfile
+        fields = [
+            'id', 'razao_social', 'cnpj', 'endereco',
+            'endereco_latitude', 'endereco_longitude',
+            'telefone', 'email_principal', 'ramo_atuacao',
+            'data_fundacao', 'missao', 'sobre_empresa', 'produtos_servicos',
+            'logo_url', 'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class TenantSerializer(serializers.ModelSerializer):

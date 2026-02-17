@@ -885,16 +885,7 @@ def secretary_profile(request):
         len(str(profile.form_data)) if profile.form_data else 0
     )
 
-    # Ao ativar, atualizar RAG em background (embedding + upsert source=secretary)
-    if profile.is_active and profile.form_data:
-        import threading
-        def _run_upsert():
-            try:
-                from apps.ai.secretary_service import upsert_secretary_rag_for_tenant
-                upsert_secretary_rag_for_tenant(str(tenant.id))
-            except Exception as e:
-                logger.warning("Secretary RAG upsert after profile save failed: %s", e, exc_info=True)
-        threading.Thread(target=_run_upsert, daemon=True).start()
+    # RAG upsert desativado – BIA em reconstrução (Fase 0). Será reativado na Fase 5 via pgvector na infra n8n.
 
     return Response({
         "form_data": profile.form_data,
