@@ -11,9 +11,23 @@ import { Label } from '../components/ui/Label'
 import LoadingSpinner from '../components/ui/LoadingSpinner'
 import { api } from '../lib/api'
 import { showSuccessToast, showErrorToast } from '../lib/toastHelper'
-import { Building2, ArrowLeft, Save, Upload, X } from 'lucide-react'
+import { Building2, ArrowLeft, Save, Upload, X, Search } from 'lucide-react'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const LOGO_MAX_KB = 500
+
+/** Extrai apenas dígitos do documento */
+function digitsOnly(s: string): string {
+  return (s || '').replace(/\D/g, '')
+}
+
+/** Detecta tipo: 11 dígitos = CPF, 14 = CNPJ */
+function detectTipoPessoa(doc: string): 'PF' | 'PJ' | null {
+  const d = digitsOnly(doc)
+  if (d.length === 11) return 'PF'
+  if (d.length === 14) return 'PJ'
+  return null
+}
 const LOGO_MAX_BYTES = LOGO_MAX_KB * 1024
 const LOGO_ACCEPT = 'image/png,image/jpeg,image/jpg,image/webp'
 
@@ -21,6 +35,9 @@ interface CompanyProfile {
   id: string | null
   razao_social: string | null
   cnpj: string | null
+  tipo_pessoa: 'PF' | 'PJ' | null
+  documento: string | null
+  nome_fantasia: string | null
   endereco: string | null
   endereco_latitude: number | null
   endereco_longitude: number | null
@@ -40,6 +57,9 @@ const emptyProfile: CompanyProfile = {
   id: null,
   razao_social: null,
   cnpj: null,
+  tipo_pessoa: null,
+  documento: null,
+  nome_fantasia: null,
   endereco: null,
   endereco_latitude: null,
   endereco_longitude: null,
@@ -65,7 +85,22 @@ export default function CompanyProfilePage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [uploadingLogo, setUploadingLogo] = useState(false)
+  const [lookupLoading, setLookupLoading] = useState(false)
+  const [lookupData, setLookupData] = useState<{
+    razao_social: string | null
+    nome_fantasia: string | null
+    documento: string
+    tipo_pessoa: string
+    endereco: string | null
+    telefone: string | null
+    email_principal: string | null
+    data_fundacao: string | null
+  } | null>(null)
+  const [showReplaceModal, setShowReplaceModal] = useState(false)
   const logoInputRef = useRef<HTMLInputElement>(null)
+
+  const docDigits = digitsOnly(profile.documento ?? '')
+  const canLookupCnpj = docDigits.length === 14
 
   useEffect(() => {
     fetchProfile()
@@ -76,10 +111,15 @@ export default function CompanyProfilePage() {
       setLoading(true)
       const res = await api.get('/tenants/company-profile/')
       const data = res.data || {}
+      const doc = data.documento ?? (data.cnpj ? digitsOnly(data.cnpj) : null)
+      const tipo = data.tipo_pessoa ?? (doc && doc.length === 14 ? 'PJ' : doc && doc.length === 11 ? 'PF' : null)
       setProfile({
         id: data.id ?? null,
         razao_social: data.razao_social ?? null,
         cnpj: data.cnpj ?? null,
+        tipo_pessoa: tipo,
+        documento: doc,
+        nome_fantasia: data.nome_fantasia ?? null,
         endereco: data.endereco ?? null,
         endereco_latitude: data.endereco_latitude != null ? Number(data.endereco_latitude) : null,
         endereco_longitude: data.endereco_longitude != null ? Number(data.endereco_longitude) : null,
@@ -103,7 +143,14 @@ export default function CompanyProfilePage() {
   }
 
   const handleChange = (field: keyof CompanyProfile, value: string | number | null) => {
-    setProfile((p) => ({ ...p, [field]: value || null }))
+    setProfile((p) => {
+      const next = { ...p, [field]: value ?? null }
+      if (field === 'documento' && typeof value === 'string') {
+        const t = detectTipoPessoa(value)
+        if (t) next.tipo_pessoa = t
+      }
+      return next
+    })
   }
 
   const handleSave = async () => {
@@ -112,6 +159,9 @@ export default function CompanyProfilePage() {
       const payload: Record<string, unknown> = {
         razao_social: profile.razao_social || null,
         cnpj: profile.cnpj || null,
+        tipo_pessoa: profile.tipo_pessoa || null,
+        documento: profile.documento || null,
+        nome_fantasia: profile.nome_fantasia || null,
         endereco: profile.endereco || null,
         endereco_latitude: profile.endereco_latitude ?? null,
         endereco_longitude: profile.endereco_longitude ?? null,
@@ -170,6 +220,57 @@ export default function CompanyProfilePage() {
     showSuccessToast('Clique em Salvar para confirmar a remoção da logo')
   }
 
+  const handleLookupCnpj = async () => {
+    if (!canLookupCnpj) return
+    try {
+      setLookupLoading(true)
+      setLookupData(null)
+      const res = await api.get(`/tenants/company-profile/lookup-cnpj/${docDigits}/`)
+      const d = res.data
+      setLookupData({
+        razao_social: d.razao_social ?? null,
+        nome_fantasia: d.nome_fantasia ?? null,
+        documento: d.documento ?? docDigits,
+        tipo_pessoa: d.tipo_pessoa ?? 'PJ',
+        endereco: d.endereco ?? null,
+        telefone: d.telefone ?? null,
+        email_principal: d.email_principal ?? null,
+        data_fundacao: d.data_fundacao ?? null,
+      })
+      setShowReplaceModal(true)
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      const msg = err.response?.data?.error ?? 'CNPJ não encontrado'
+      showErrorToast(msg)
+    } finally {
+      setLookupLoading(false)
+    }
+  }
+
+  const handleReplaceWithLookup = () => {
+    if (!lookupData) return
+    setProfile((p) => ({
+      ...p,
+      razao_social: lookupData.razao_social ?? p.razao_social,
+      nome_fantasia: lookupData.nome_fantasia ?? p.nome_fantasia,
+      documento: lookupData.documento,
+      tipo_pessoa: lookupData.tipo_pessoa as 'PF' | 'PJ',
+      cnpj: lookupData.documento,
+      endereco: lookupData.endereco ?? p.endereco,
+      telefone: lookupData.telefone ?? p.telefone,
+      email_principal: lookupData.email_principal ?? p.email_principal,
+      data_fundacao: lookupData.data_fundacao ?? p.data_fundacao,
+    }))
+    setShowReplaceModal(false)
+    setLookupData(null)
+    showSuccessToast('Dados preenchidos. Clique em Salvar para confirmar.')
+  }
+
+  const handleCancelReplace = () => {
+    setShowReplaceModal(false)
+    setLookupData(null)
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center min-h-[400px]">
@@ -209,14 +310,38 @@ export default function CompanyProfilePage() {
               />
             </div>
             <div>
-              <Label htmlFor="cnpj">CNPJ</Label>
+              <Label htmlFor="nome_fantasia">Nome Fantasia</Label>
               <Input
-                id="cnpj"
-                value={toFormValue(profile.cnpj)}
-                onChange={(e) => handleChange('cnpj', e.target.value)}
-                placeholder="00.000.000/0001-00"
+                id="nome_fantasia"
+                value={toFormValue(profile.nome_fantasia)}
+                onChange={(e) => handleChange('nome_fantasia', e.target.value)}
+                placeholder="Nome fantasia (opcional)"
               />
             </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-end">
+            <div className="flex-1">
+              <Label htmlFor="documento">Documento (CPF ou CNPJ)</Label>
+              <Input
+                id="documento"
+                value={toFormValue(profile.documento ?? profile.cnpj)}
+                onChange={(e) => handleChange('documento', e.target.value)}
+                placeholder="00.000.000/0001-00 ou 000.000.000-00"
+              />
+            </div>
+            {canLookupCnpj && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleLookupCnpj}
+                disabled={lookupLoading}
+                className="shrink-0"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                {lookupLoading ? 'Buscando...' : 'Buscar por CNPJ'}
+              </Button>
+            )}
           </div>
 
           <div>
@@ -408,6 +533,17 @@ export default function CompanyProfilePage() {
           </Button>
         </div>
       </Card>
+
+      <ConfirmDialog
+        show={showReplaceModal}
+        title="Dados encontrados"
+        message="Deseja substituir os campos da empresa pelos dados da Receita Federal?"
+        confirmText="Sim"
+        cancelText="Não"
+        variant="info"
+        onConfirm={handleReplaceWithLookup}
+        onCancel={handleCancelReplace}
+      />
     </div>
   )
 }

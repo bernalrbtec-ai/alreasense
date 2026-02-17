@@ -4,7 +4,9 @@ Views para gerenciamento de tenants
 
 import logging
 import os
+import re
 import uuid
+import requests
 from django.conf import settings
 from django.core.files.base import ContentFile
 from django.core.files.storage import default_storage
@@ -485,8 +487,9 @@ def company_profile(request):
             profile = TenantCompanyProfile.objects.get(tenant=tenant)
         except TenantCompanyProfile.DoesNotExist:
             return Response({
-                'id': None, 'razao_social': None, 'cnpj': None, 'endereco': None,
-                'endereco_latitude': None, 'endereco_longitude': None,
+                'id': None, 'razao_social': None, 'cnpj': None,
+                'tipo_pessoa': None, 'documento': None, 'nome_fantasia': None,
+                'endereco': None, 'endereco_latitude': None, 'endereco_longitude': None,
                 'telefone': None, 'email_principal': None, 'ramo_atuacao': None,
                 'data_fundacao': None, 'missao': None, 'sobre_empresa': None,
                 'produtos_servicos': None, 'logo_url': None, 'created_at': None, 'updated_at': None,
@@ -572,3 +575,75 @@ def company_profile_upload_logo(request):
             {'error': f'Erro ao salvar logo: {str(e)}'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated, IsTenantMember, IsAdminUser])
+def company_profile_lookup_cnpj(request, cnpj: str):
+    """Busca dados do CNPJ na BrasilAPI e retorna mapeados para o formulário."""
+    digits = re.sub(r'\D', '', cnpj)
+    if len(digits) != 14:
+        return Response(
+            {'error': 'CNPJ deve ter 14 dígitos.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    try:
+        resp = requests.get(
+            f"https://brasilapi.com.br/api/cnpj/v1/{digits}",
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as e:
+        logger.warning("BrasilAPI lookup failed for cnpj %s: %s", digits, e)
+        return Response(
+            {'error': 'CNPJ não encontrado ou serviço temporariamente indisponível.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    # Montar endereço: logradouro, numero, complemento, bairro, municipio - UF, CEP
+    addr_parts = []
+    if data.get('logradouro'):
+        addr_parts.append(data['logradouro'])
+    if data.get('numero') and str(data['numero']).strip():
+        addr_parts.append(str(data['numero']))
+    if data.get('complemento') and str(data['complemento']).strip():
+        addr_parts.append(str(data['complemento']))
+    if data.get('bairro'):
+        addr_parts.append(data['bairro'])
+    city_uf = []
+    if data.get('municipio'):
+        city_uf.append(data['municipio'])
+    if data.get('uf'):
+        city_uf.append(data['uf'])
+    if city_uf:
+        addr_parts.append(' - '.join(city_uf))
+    if data.get('cep'):
+        addr_parts.append(f"CEP {data['cep']}")
+    endereco = ', '.join(addr_parts) if addr_parts else None
+
+    # Telefone: ddd_telefone_1 ou ddd_fax
+    telefone = None
+    if data.get('ddd_telefone_1'):
+        dd = str(data.get('ddd_telefone_1', ''))
+        if len(dd) >= 10:
+            telefone = dd
+        elif data.get('ddd_fax'):
+            telefone = str(data['ddd_fax'])
+
+    data_inicio = data.get('data_inicio_atividade')
+    if data_inicio and len(str(data_inicio)) >= 10:
+        data_fundacao = str(data_inicio)[:10]
+    else:
+        data_fundacao = None
+
+    return Response({
+        'razao_social': data.get('razao_social') or None,
+        'nome_fantasia': data.get('nome_fantasia') or None,
+        'documento': digits,
+        'tipo_pessoa': 'PJ',
+        'endereco': endereco,
+        'telefone': telefone,
+        'email_principal': data.get('email') or None,
+        'data_fundacao': data_fundacao,
+    })

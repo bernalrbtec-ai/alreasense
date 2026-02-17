@@ -16,7 +16,10 @@ class TenantCompanyProfile(models.Model):
         db_column='tenant_id',
     )
     razao_social = models.CharField(max_length=200, blank=True, null=True)
-    cnpj = models.CharField(max_length=18, blank=True, null=True)
+    cnpj = models.CharField(max_length=18, blank=True, null=True)  # legado; preferir documento+tipo_pessoa
+    tipo_pessoa = models.CharField(max_length=2, blank=True, default='PJ')  # PF ou PJ
+    documento = models.CharField(max_length=18, blank=True, null=True)  # CPF ou CNPJ (só dígitos)
+    nome_fantasia = models.CharField(max_length=200, blank=True, null=True)
     endereco = models.TextField(blank=True, null=True)
     endereco_latitude = models.DecimalField(
         max_digits=10, decimal_places=7, blank=True, null=True

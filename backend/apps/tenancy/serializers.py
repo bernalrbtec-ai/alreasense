@@ -13,7 +13,7 @@ class TenantCompanyProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = TenantCompanyProfile
         fields = [
-            'id', 'razao_social', 'cnpj', 'endereco',
+            'id', 'razao_social', 'cnpj', 'tipo_pessoa', 'documento', 'nome_fantasia', 'endereco',
             'endereco_latitude', 'endereco_longitude',
             'telefone', 'email_principal', 'ramo_atuacao',
             'data_fundacao', 'missao', 'sobre_empresa', 'produtos_servicos',

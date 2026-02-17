@@ -29,7 +29,13 @@ def _build_company_chunk(profile: TenantCompanyProfile) -> str:
     parts = []
     if profile.razao_social:
         parts.append(f"Empresa: {profile.razao_social}")
-    if profile.cnpj:
+    if profile.nome_fantasia:
+        parts.append(f"Nome fantasia: {profile.nome_fantasia}")
+    # documento + tipo_pessoa têm prioridade; cnpj como fallback legado
+    if profile.documento and profile.tipo_pessoa:
+        label = "CNPJ" if profile.tipo_pessoa == "PJ" else "CPF"
+        parts.append(f"{label}: {profile.documento}")
+    elif profile.cnpj:
         parts.append(f"CNPJ: {profile.cnpj}")
     if profile.endereco:
         addr = f"Endereço: {profile.endereco}"
