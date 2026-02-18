@@ -1191,7 +1191,7 @@ export function MessageList() {
         />
       )}
 
-      {/* Modal para adicionar contato compartilhado */}
+      {/* Modal para adicionar contato compartilhado - z-[9999] para aparecer acima do chat */}
       {showContactModal && contactToAdd && (
         <ContactModal
           isOpen={showContactModal}
@@ -1201,6 +1201,7 @@ export function MessageList() {
           }}
           initialName={contactToAdd.name}
           initialPhone={contactToAdd.phone}
+          overlayClassName="z-[9999]"
           onSuccess={() => {
             setShowContactModal(false);
             setContactToAdd(null);

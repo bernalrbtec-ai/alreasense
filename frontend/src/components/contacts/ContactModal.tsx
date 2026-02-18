@@ -48,6 +48,8 @@ interface ContactModalProps {
   initialPhone?: string
   initialName?: string
   onSuccess?: () => void
+  /** Classe extra para o overlay (ex: z-[9999] para aparecer acima do chat) */
+  overlayClassName?: string
 }
 
 export default function ContactModal({
@@ -56,7 +58,8 @@ export default function ContactModal({
   contact,
   initialPhone = '',
   initialName = '',
-  onSuccess
+  onSuccess,
+  overlayClassName
 }: ContactModalProps) {
   const [formData, setFormData] = useState({
     name: '',
@@ -216,7 +219,7 @@ export default function ContactModal({
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className={`fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 ${overlayClassName ?? ''}`.trim()}>
       <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">

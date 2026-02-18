@@ -24,10 +24,19 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
   let name = contactData?.name || contactData?.display_name || '';
   
   // Se não tem dados no metadata, tentar extrair do conteúdo
-  if (!name && !phone && content) {
-    const match = content.match(/Compartilhou contato:\s*(.+)/i);
+  // O backend pode não preencher contact_message em alguns formatos de webhook
+  if ((!phone || !name) && content) {
+    const match = content.match(/Compartilhou contato:\s*(.+)/i) || content.match(/📇\s*(.+)/i);
     if (match) {
-      name = match[1].trim();
+      const extracted = match[1].trim();
+      const digitsOnly = extracted.replace(/\D/g, '');
+      // Se parece com telefone (10+ dígitos), usar como phone
+      if (digitsOnly.length >= 10) {
+        if (!phone) phone = extracted;
+      } else if (extracted.length > 0) {
+        // Caso contrário, usar como nome
+        if (!name) name = extracted;
+      }
     }
   }
   
@@ -230,8 +239,8 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
               </button>
             )}
             
-            {/* Só mostrar "Adicionar" se contato não existir */}
-            {!isCheckingContact && !contactExists && cleanPhoneForSearch && (
+            {/* Mostrar "Adicionar" se contato não existir - mesmo sem telefone (usuário preenche no modal) */}
+            {!isCheckingContact && !contactExists && (
               <button
                 onClick={handleAddContact}
                 className="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors shadow-sm hover:shadow-md"
