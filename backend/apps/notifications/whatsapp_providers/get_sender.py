@@ -21,8 +21,10 @@ def get_sender(instance: Optional[WhatsAppInstance]) -> Optional[WhatsAppSenderB
     """
     if not instance:
         return None
+    # Tratar integration_type None como Evolution (linhas antigas antes da coluna Meta)
+    integration_type = getattr(instance, 'integration_type', None) or WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
     try:
-        if instance.integration_type == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+        if integration_type == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
             if not (instance.phone_number_id and instance.access_token):
                 logger.warning(
                     "get_sender: instância meta_cloud sem phone_number_id ou access_token (instance_id=%s)",
@@ -35,9 +37,11 @@ def get_sender(instance: Optional[WhatsAppInstance]) -> Optional[WhatsAppSenderB
                 instance.integration_type or "unknown",
             )
             return MetaCloudProvider(instance)
-        if instance.integration_type == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION or not instance.integration_type:
-            # default ou evolution
-            if not (instance.api_url and instance.instance_name):
+        if integration_type == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
+            # default ou evolution (aceitar instance_name ou evolution_instance_name)
+            api_url = getattr(instance, 'api_url', None)
+            name = (getattr(instance, 'instance_name', None) or '').strip() or (getattr(instance, 'evolution_instance_name', None) or '').strip()
+            if not (api_url and name):
                 logger.warning(
                     "get_sender: instância evolution sem api_url ou instance_name (instance_id=%s)",
                     instance.id,

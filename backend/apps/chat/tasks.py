@@ -664,12 +664,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         inst_name = (message.conversation.instance_name or '').strip()
         if inst_name:
             # Lookup por instance_name / evolution_instance_name (Evolution)
+            # Não exigir status='active' para não falhar em instâncias com status 'inactive' em produção
             instance = await database_sync_to_async(
                 lambda: WhatsAppInstance.objects.filter(
                     Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name),
                     tenant=message.conversation.tenant,
                     is_active=True,
-                    status='active',
                 ).first()
             )()
             # Se instance_name é só dígitos (numérico), pode ser phone_number_id da Meta
@@ -680,7 +680,6 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
                         tenant=message.conversation.tenant,
                         is_active=True,
-                        status='active',
                     ).first()
                 )()
         if not instance:

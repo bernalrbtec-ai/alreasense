@@ -17,7 +17,10 @@ class EvolutionProvider(WhatsAppSenderBase):
     """Provider que usa Evolution API para envio."""
 
     def __init__(self, instance: WhatsAppInstance):
-        if not instance or instance.integration_type != WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
+        if not instance:
+            raise ValueError("EvolutionProvider requer instância")
+        it = getattr(instance, 'integration_type', None)
+        if it and it != WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
             raise ValueError("EvolutionProvider requer integration_type=evolution")
         self.instance = instance
         self._base_url = (instance.api_url or '').rstrip('/')
