@@ -342,15 +342,16 @@ export function MessageList() {
         setIsLoading(true);
         setVisibleMessages(new Set()); // Reset visibilidade ao trocar conversa
         
-        // ✅ CORREÇÃO: Se conversa é muito nova (< 5s), aguardar um pouco antes de buscar
-        // Isso evita erro 404 quando conversa ainda está sendo criada no backend
+        // ✅ CORREÇÃO: Se conversa é muito nova (< 1.5s), aguardar um pouco antes de buscar
+        // Isso evita erro 404 quando conversa ainda está sendo criada no backend (reduzido de 5s para 1.5s - UX)
+        const NEW_CONVERSATION_MAX_WAIT_SEC = 1.5;
         if (activeConversation.created_at && retryCount === 0) {
           const createdDate = new Date(activeConversation.created_at);
           const now = new Date();
           const ageInSeconds = (now.getTime() - createdDate.getTime()) / 1000;
           
-          if (ageInSeconds < 5) {
-            const waitTime = (5 - ageInSeconds) * 1000; // Aguardar até completar 5s
+          if (ageInSeconds < NEW_CONVERSATION_MAX_WAIT_SEC) {
+            const waitTime = (NEW_CONVERSATION_MAX_WAIT_SEC - ageInSeconds) * 1000;
             console.log(`⏳ [MessageList] Conversa muito nova (${Math.round(ageInSeconds)}s), aguardando ${Math.round(waitTime)}ms antes de buscar mensagens...`);
             await new Promise(resolve => setTimeout(resolve, waitTime));
           }
@@ -460,8 +461,8 @@ export function MessageList() {
             retryTimeoutsRef.current.forEach(t => clearTimeout(t));
             retryTimeoutsRef.current = [];
             
-            // ✅ MELHORIA: Fazer retries com intervalos crescentes e timeout máximo
-            const retryDelays = [1000, 2000, 3000]; // 1s, 2s, 3s (reduzido de 4 para 3 tentativas)
+            // ✅ MELHORIA: Fazer retries com intervalos crescentes (2 tentativas para conversa vazia - UX)
+            const retryDelays = [1000, 2000]; // 1s, 2s
             
             retryDelays.forEach((delay, index) => {
               const timeoutId = setTimeout(async () => {

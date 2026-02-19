@@ -117,7 +117,7 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
   // Abrir conversa dentro da aplicação
   const handleStartConversation = async () => {
     if (!cleanPhoneForSearch) {
-      showErrorToast('Telefone inválido');
+      showErrorToast('iniciar', 'Conversa', { message: 'Telefone inválido' });
       return;
     }
     
@@ -139,41 +139,48 @@ export function SharedContactCard({ contactData, content, onAddContact }: Shared
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
-        // ✅ CORREÇÃO CRÍTICA: Usar endpoint /start/ que verifica se conversa já existe
-        // Isso evita erro de duplicate key e garante que conversas existentes sejam reabertas
         const { activeDepartment } = useChatStore.getState();
         const departmentId = activeDepartment && activeDepartment.id !== 'inbox' && activeDepartment.id !== 'my_conversations'
           ? activeDepartment.id
           : undefined;
-        
+
         console.log('🆕 [SHARED CONTACT] Criando nova conversa via /start/...', {
           contact_phone: normalizedPhone,
           contact_name: name,
           department: departmentId || 'Nenhum (Inbox)'
         });
-        
+
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: name,
           ...(departmentId && { department: departmentId })
         });
         conversation = createResponse.data.conversation || createResponse.data;
-        
-        // ✅ IMPORTANTE: Adicionar ao store para aparecer na lista
+
         addConversation(conversation);
         console.log('✅ [SHARED CONTACT] Conversa criada/atualizada:', conversation.id);
       }
-      
-      // Navegar para o chat e selecionar a conversa
-      setActiveConversation(conversation);
-      
-      // Se não estiver na página de chat, navegar
-      if (window.location.pathname !== '/chat') {
-        navigate('/chat');
+
+      try {
+        setActiveConversation(conversation);
+        if (window.location.pathname !== '/chat') {
+          navigate('/chat');
+        }
+      } catch (e) {
+        console.error('Erro ao selecionar conversa:', e);
       }
     } catch (error: any) {
+      const convFromError = error?.response?.data?.conversation ?? (error?.response?.data?.id ? error.response.data : null);
+      if (convFromError?.id) {
+        addConversation(convFromError);
+        setActiveConversation(convFromError);
+        if (window.location.pathname !== '/chat') {
+          navigate('/chat');
+        }
+        return;
+      }
       console.error('Erro ao iniciar conversa:', error);
-      showErrorToast(error.response?.data?.detail || 'Erro ao iniciar conversa');
+      showErrorToast('iniciar', 'Conversa', error);
     }
   };
   
