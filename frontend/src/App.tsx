@@ -41,6 +41,7 @@ const BillingApiTemplatesPage = lazy(() => import('./pages/BillingApiTemplatesPa
 const BillingApiCampaignsPage = lazy(() => import('./pages/BillingApiCampaignsPage'))
 const IntegracaoPage = lazy(() => import('./pages/IntegracaoPage'))
 const ReportsPage = lazy(() => import('./pages/ReportsPage'))
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'))
 
 // Components
 import Layout from './components/Layout'
@@ -98,6 +99,22 @@ function App() {
             </Suspense>
           }
         />
+        <Route
+          path="/privacy"
+          element={
+            <Suspense fallback={<LoadingSpinner size="lg" />}>
+              <PrivacyPolicyPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/politica-de-privacidade"
+          element={
+            <Suspense fallback={<LoadingSpinner size="lg" />}>
+              <PrivacyPolicyPage />
+            </Suspense>
+          }
+        />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
@@ -122,6 +139,23 @@ function App() {
         }}
       />
       <Routes>
+        {/* Páginas públicas (sem Layout) */}
+        <Route
+          path="/privacy"
+          element={
+            <Suspense fallback={<LoadingSpinner size="lg" />}>
+              <PrivacyPolicyPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/politica-de-privacidade"
+          element={
+            <Suspense fallback={<LoadingSpinner size="lg" />}>
+              <PrivacyPolicyPage />
+            </Suspense>
+          }
+        />
         {/* Todas as rotas - COM Layout */}
         <Route path="/" element={<Layout />}>
           {/* ✅ Agente: Redirecionar para /chat se tentar acessar outras rotas */}

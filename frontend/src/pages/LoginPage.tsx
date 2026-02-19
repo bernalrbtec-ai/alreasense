@@ -29,7 +29,9 @@ export default function LoginPage() {
       await login(email, password)
       // O redirecionamento será feito pelo useEffect quando user for atualizado
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Erro ao fazer login')
+      const status = err.response?.status
+      const isCredentialError = status === 400 || status === 401 || status === 403
+      setError(isCredentialError ? 'Usuário ou senha incorretos. Tente novamente.' : 'Erro ao fazer login. Tente novamente.')
     }
   }
 
