@@ -624,10 +624,12 @@ export default function ConfigurationsPage() {
     }
   }
 
-  const fetchInstances = async () => {
+  const fetchInstances = async (forceRefresh = false) => {
     try {
-      const response = await api.get('/notifications/whatsapp-instances/')
-      // O backend já filtra por tenant automaticamente
+      const url = forceRefresh
+        ? '/notifications/whatsapp-instances/?_refresh=true'
+        : '/notifications/whatsapp-instances/'
+      const response = await api.get(url)
       setInstances(response.data.results || response.data)
     } catch (error) {
       console.error('Error fetching instances:', error)
@@ -686,17 +688,24 @@ export default function ConfigurationsPage() {
     try {
       await api.post('/notifications/whatsapp-instances/', payload)
       updateToastSuccess(toastId, 'criar', 'Instância')
-      
-      // Atualizar lista de instâncias E limites
+
+      // Forçar refresh da lista para evitar cache e garantir que a nova instância apareça
       await Promise.all([
-        fetchInstances(),
+        fetchInstances(true),
         limits?.refetch?.()
       ])
-      
+
       handleCloseInstanceModal()
     } catch (error: any) {
       console.error('Error creating instance:', error)
-      updateToastError(toastId, 'criar', 'Instância', error)
+      // Se o servidor retornar 500 com HTML, mostrar mensagem amigável em vez do corpo da página
+      const errPayload =
+        error?.response?.status === 500 &&
+        typeof error?.response?.data === 'string' &&
+        (error.response.data.includes('<!') || error.response.data.includes('<html'))
+          ? { message: 'Erro no servidor (500). Tente novamente ou contacte o suporte.' }
+          : error
+      updateToastError(toastId, 'criar', 'Instância', errPayload)
     }
   }
 

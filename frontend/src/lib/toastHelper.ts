@@ -84,7 +84,12 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
   }
   
   console.log(`📝 Mensagem extraída:`, errorMessage)
-  
+
+  // Resposta 500 em HTML: não exibir o HTML no toast
+  if (typeof errorMessage === 'string' && (errorMessage.includes('<!') || errorMessage.includes('<html'))) {
+    errorMessage = 'Erro no servidor (500). Tente novamente ou contacte o suporte.'
+  }
+
   // Fallback se ainda estiver vazio
   // ✅ CORREÇÃO: Garantir que errorMessage seja string antes de chamar trim()
   if (!errorMessage || (typeof errorMessage === 'string' && errorMessage.trim() === '') || typeof errorMessage !== 'string') {
@@ -212,7 +217,12 @@ export function updateToastError(toastId: string | number, action: Action, entit
   } else if (error?.toString) {
     errorMessage = error.toString()
   }
-  
+
+  // Resposta 500 em HTML: não exibir o HTML no toast
+  if (typeof errorMessage === 'string' && (errorMessage.includes('<!') || errorMessage.includes('<html'))) {
+    errorMessage = 'Erro no servidor (500). Tente novamente ou contacte o suporte.'
+  }
+
   // Fallback se ainda estiver vazio
   // ✅ CORREÇÃO: Garantir que errorMessage seja string antes de chamar trim()
   if (!errorMessage || (typeof errorMessage === 'string' && errorMessage.trim() === '') || typeof errorMessage !== 'string') {
