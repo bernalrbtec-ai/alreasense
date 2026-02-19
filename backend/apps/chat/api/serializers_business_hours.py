@@ -36,7 +36,7 @@ class BusinessHoursSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 
 class AfterHoursMessageSerializer(serializers.ModelSerializer):
@@ -62,7 +62,7 @@ class AfterHoursMessageSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 
 
 class AfterHoursTaskConfigSerializer(serializers.ModelSerializer):
@@ -101,5 +101,5 @@ class AfterHoursTaskConfigSerializer(serializers.ModelSerializer):
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at']
 

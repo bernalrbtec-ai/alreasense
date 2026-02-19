@@ -2132,7 +2132,7 @@ export default function ConfigurationsPage() {
                               size="sm"
                               onClick={() => handleCheckStatus(instance)}
                               disabled={checkingStatusId === instance.id}
-                              title="Atualizar status (sincronizar com Evolution)"
+                              title="Atualizar status (sincronizar com API não oficial)"
                             >
                               <RefreshCw className={`h-4 w-4 ${checkingStatusId === instance.id ? 'animate-spin' : ''}`} />
                             </Button>
@@ -3143,13 +3143,13 @@ export default function ConfigurationsPage() {
                         onChange={(e) => setInstanceFormData({ ...instanceFormData, integration_type: e.target.value })}
                         className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                       >
-                        <option value={INTEGRATION_EVOLUTION}>Evolution (QR Code)</option>
+                        <option value={INTEGRATION_EVOLUTION}>API não oficial (QR Code)</option>
                         <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
                       </select>
                       <p className="mt-1 text-xs text-gray-500">
                         {instanceFormData.integration_type === INTEGRATION_META_CLOUD
                           ? 'Conexão via WhatsApp Cloud API. Requer Phone Number ID e Access Token.'
-                          : 'Conexão via Evolution. Após salvar, use Gerar QR Code para conectar.'}
+                          : 'Conexão via API não oficial. Após salvar, use Gerar QR Code para conectar.'}
                       </p>
                     </div>
 

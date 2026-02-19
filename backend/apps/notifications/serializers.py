@@ -19,7 +19,7 @@ class NotificationTemplateSerializer(serializers.ModelSerializer):
             'is_active', 'is_global',
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant', 'created_by', 'created_at', 'updated_at']
     
     def get_created_by_name(self, obj):
         if obj.created_by:
@@ -66,7 +66,7 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
         read_only_fields = [
-            'id', 'status', 'qr_code', 'last_check', 'last_error',
+            'id', 'tenant', 'created_by', 'status', 'qr_code', 'last_check', 'last_error',
             'health_score', 'msgs_sent_today', 'msgs_delivered_today', 'msgs_read_today', 'msgs_failed_today',
             'consecutive_errors', 'last_success_at',
             'created_at', 'updated_at'
@@ -129,7 +129,7 @@ class WhatsAppTemplateSerializer(serializers.ModelSerializer):
             'meta_status', 'meta_status_updated_at',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'meta_status', 'meta_status_updated_at']
+        read_only_fields = ['id', 'tenant', 'created_at', 'updated_at', 'meta_status', 'meta_status_updated_at']
         extra_kwargs = {
             'wa_instance': {'required': False, 'allow_null': True},
         }
@@ -229,7 +229,7 @@ class SMTPConfigSerializer(serializers.ModelSerializer):
             'last_test', 'last_test_status', 'last_test_status_display', 'last_test_error',
             'created_at', 'updated_at', 'created_by', 'created_by_name'
         ]
-        read_only_fields = ['id', 'last_test', 'last_test_status', 'last_test_error', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'tenant', 'created_by', 'last_test', 'last_test_status', 'last_test_error', 'created_at', 'updated_at']
         extra_kwargs = {
             'password': {'write_only': True}  # Don't expose password in responses
         }

@@ -649,13 +649,13 @@ export default function ConnectionsPage() {
                   onChange={(e) => setInstanceForm({ ...instanceForm, integration_type: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
-                  <option value={INTEGRATION_EVOLUTION}>Evolution (QR Code)</option>
+                  <option value={INTEGRATION_EVOLUTION}>API não oficial (QR Code)</option>
                   <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
                   {instanceForm.integration_type === INTEGRATION_META_CLOUD
                     ? 'Conexão via WhatsApp Cloud API (Meta). Requer Phone Number ID e Access Token.'
-                    : 'Conexão via Evolution API. Após salvar, use "Gerar QR Code" para conectar.'}
+                    : 'Conexão via API não oficial. Após salvar, use "Gerar QR Code" para conectar.'}
                 </p>
               </div>
 
