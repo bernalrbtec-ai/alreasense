@@ -20,7 +20,7 @@ export function useWebSocket() {
     // Detectar URL base do WebSocket baseado no ambiente
     const isProduction = window.location.hostname !== 'localhost'
     const WS_BASE_URL = isProduction 
-      ? `wss://${window.location.hostname.replace('alreasense-production', 'alreasense-backend-production')}`
+      ? `wss://${window.location.hostname.replace('alreasense-production.', 'alreasense-backend-production.').replace('alreasense-staging.', 'alreasense-backend-staging.')}`
       : (import.meta as any).env.VITE_WS_BASE_URL || 'ws://localhost:8000'
     const wsUrl = `${WS_BASE_URL}/ws/tenant/${tenantId}/`
     

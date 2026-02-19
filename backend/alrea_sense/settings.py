@@ -19,7 +19,7 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-build-time-only-do-no
 # ✅ IMPROVEMENT: DEBUG should default to False for security
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,alreasense-production.up.railway.app,alreasense-backend-production.up.railway.app').split(',')
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1,alreasense-production.up.railway.app,alreasense-backend-production.up.railway.app,.railway.app').split(',')
 
 # Application definition
 DJANGO_APPS = [
@@ -596,7 +596,8 @@ S3_REGION = config('S3_REGION', default='us-east-1')
 # FLOW CHAT - Attachments Config (centralizado)
 # ============================
 ATTACHMENTS_MAX_SIZE_MB = config('ATTACHMENTS_MAX_SIZE_MB', default=50, cast=int)
-ATTACHMENTS_ALLOWED_MIME = config('ATTACHMENTS_ALLOWED_MIME', default='image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+# Word: .docx e .doc (application/msword) para permitir envio pelo chat
+ATTACHMENTS_ALLOWED_MIME = config('ATTACHMENTS_ALLOWED_MIME', default='image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 S3_UPLOAD_URL_EXPIRES = config('S3_UPLOAD_URL_EXPIRES', default=300, cast=int)
 S3_DOWNLOAD_URL_EXPIRES = config('S3_DOWNLOAD_URL_EXPIRES', default=900, cast=int)
 ATTACHMENTS_REDIS_TTL_DAYS = config('ATTACHMENTS_REDIS_TTL_DAYS', default=30, cast=int)

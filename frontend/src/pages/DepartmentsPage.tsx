@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Building2, Plus, Pencil, Trash2, Users } from 'lucide-react';
 import axios from 'axios';
 import { toast } from 'sonner';
+import { getApiBaseUrl } from '@/lib/api';
 
 interface Department {
   id: string;
@@ -26,7 +27,7 @@ export default function DepartmentsPage() {
     transfer_message: ''
   });
 
-  const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const API_URL = import.meta.env.VITE_API_URL || getApiBaseUrl();
 
   useEffect(() => {
     fetchDepartments();

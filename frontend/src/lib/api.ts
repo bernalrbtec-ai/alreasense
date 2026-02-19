@@ -1,6 +1,17 @@
 import axios from 'axios'
 
-const API_BASE_URL = (import.meta as any).env.VITE_API_BASE_URL || 'http://localhost:8000'
+export function getApiBaseUrl(): string {
+  const fromEnv = (import.meta as any).env.VITE_API_BASE_URL
+  if (fromEnv) return fromEnv
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    if (h.includes('alreasense-staging.')) return 'https://alreasense-backend-staging.up.railway.app'
+    if (h.includes('alreasense-production.')) return 'https://alreasense-backend-production.up.railway.app'
+  }
+  return 'http://localhost:8000'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 const isDevelopment = (import.meta as any).env.DEV
 
 // Logger helper - só loga em desenvolvimento

@@ -10,7 +10,16 @@ import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getDisplayName } from '../utils/phoneFormatter';
 
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'wss://alreasense-backend-production.up.railway.app';
+function getWsBaseUrl(): string {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
+  if (typeof window !== 'undefined') {
+    const h = window.location.hostname
+    if (h.includes('alreasense-staging.')) return 'wss://alreasense-backend-staging.up.railway.app'
+    if (h.includes('alreasense-production.')) return 'wss://alreasense-backend-production.up.railway.app'
+  }
+  return 'ws://localhost:8000'
+}
+const WS_BASE_URL = getWsBaseUrl();
 
 // ✅ SINGLETON global para WebSocket do tenant - garante apenas UMA conexão
 // Isso previne múltiplas conexões quando useTenantSocket é chamado várias vezes
