@@ -15,6 +15,7 @@ import { useAuthStore } from '@/stores/authStore';
 
 function getWsBaseUrl(): string {
   if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL
+  if (import.meta.env.VITE_WS_BASE_URL) return import.meta.env.VITE_WS_BASE_URL
   if (typeof window !== 'undefined') {
     const h = window.location.hostname
     if (h.includes('alreasense-staging.')) return 'wss://alreasense-backend-staging.up.railway.app'
