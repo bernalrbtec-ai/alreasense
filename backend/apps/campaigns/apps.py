@@ -640,27 +640,23 @@ class CampaignsConfig(AppConfig):
                         logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma instância WhatsApp ativa para tenant {task.tenant_id}')
                         return notification_sent  # Retornar status do WebSocket
                     
-                    # ✅ MELHORIA: Usar api_url e api_key da instância diretamente
-                    base_url = instance.api_url
-                    api_key = instance.api_key
-                    
-                    if not base_url or not api_key:
-                        # Fallback: buscar EvolutionConnection
-                        connection = EvolutionConnection.objects.filter(
-                            tenant=task.tenant,
-                            is_active=True
-                        ).first()
-                        
-                        if connection:
-                            base_url = connection.base_url
-                            api_key = connection.api_key
-                        else:
-                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma conexão Evolution configurada para tenant {task.tenant_id}')
-                            return notification_sent
-                    
-                    if not base_url or not api_key:
-                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] API URL ou API Key não configurados')
+                    from apps.notifications.whatsapp_providers import get_sender
+                    from apps.notifications.models import WhatsAppInstance, WhatsAppTemplate
+                    from django.db.models import Q
+                    sender = get_sender(instance)
+                    if not sender:
+                        logger.warning(f'⚠️ [TASK NOTIFICATIONS] Provider não disponível para instância (tenant {task.tenant_id})')
                         return notification_sent
+                    is_meta = getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
+                    wa_template = None
+                    if is_meta:
+                        wa_template = WhatsAppTemplate.objects.filter(
+                            tenant=instance.tenant,
+                            is_active=True,
+                        ).filter(Q(wa_instance=instance) | Q(wa_instance__isnull=True)).order_by('name').first()
+                        if not wa_template:
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Instância Meta sem template ativo (tenant {task.tenant_id}); pulando envio')
+                            return notification_sent
                     
                     # ✅ MELHORIA: Normalizar telefone do usuário (formato E.164) com validação
                     phone = user.phone.strip()
@@ -739,40 +735,32 @@ class CampaignsConfig(AppConfig):
                     
                     message_text += f"\n\nAcesse o sistema para mais detalhes."
                     
-                    # ✅ MELHORIA: Usar instance_name da instância e base_url normalizado
-                    base_url = base_url.rstrip('/')
-                    url = f"{base_url}/message/sendText/{instance.instance_name}"
-                    headers = {
-                        'apikey': api_key,
-                        'Content-Type': 'application/json'
-                    }
-                    payload = {
-                        'number': phone_clean,
-                        'text': message_text
-                    }
-                    
                     logger.info(f'📤 [TASK NOTIFICATIONS] Enviando WhatsApp para {phone_clean} (usuário: {user.email})')
-                    logger.info(f'   URL: {url}')
                     logger.info(f'   Instância: {instance.instance_name}')
                     logger.info(f'   Tipo: {"Lembrete" if is_reminder else "Compromisso chegando"}')
                     
-                    # ✅ MELHORIA: Retry em caso de falha
                     max_retries = 2
                     for attempt in range(max_retries):
                         try:
-                            response = requests.post(url, json=payload, headers=headers, timeout=10)
-                            
-                            if response.status_code in [200, 201]:
+                            if is_meta and wa_template:
+                                params = list(wa_template.body_parameters_default) if wa_template.body_parameters_default else [message_text]
+                                ok, resp = sender.send_template(
+                                    phone_clean,
+                                    wa_template.template_id,
+                                    wa_template.language_code or 'pt_BR',
+                                    params,
+                                )
+                            else:
+                                ok, resp = sender.send_text(phone_clean, message_text)
+                            if ok:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado com sucesso para {phone_clean} (usuário: {user.email}, ID: {user.id})')
                                 notification_sent = True
                                 break
-                            else:
-                                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
-                                if attempt < max_retries - 1:
-                                    time.sleep(2)  # Aguardar 2 segundos antes de tentar novamente
-                                
-                        except requests.exceptions.RequestException as e:
-                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Erro de conexão ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {e}')
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {resp.get("error", resp)}')
+                            if attempt < max_retries - 1:
+                                time.sleep(2)
+                        except Exception as e:
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Erro ao enviar WhatsApp (tentativa {attempt + 1}/{max_retries}): {e}')
                             if attempt < max_retries - 1:
                                 time.sleep(2)
                     
@@ -822,25 +810,10 @@ class CampaignsConfig(AppConfig):
                 logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma instância WhatsApp ativa para notificar contatos do tenant {task.tenant_id}')
                 return False
             
-            # Buscar servidor Evolution
-            base_url = instance.api_url
-            api_key = instance.api_key
-            
-            if not base_url or not api_key:
-                connection = EvolutionConnection.objects.filter(
-                    tenant=task.tenant,
-                    is_active=True
-                ).first()
-                
-                if connection:
-                    base_url = connection.base_url
-                    api_key = connection.api_key
-                else:
-                    logger.warning(f'⚠️ [TASK NOTIFICATIONS] Nenhuma conexão Evolution configurada para notificar contatos do tenant {task.tenant_id}')
-                    return False
-            
-            if not base_url or not api_key:
-                logger.warning(f'⚠️ [TASK NOTIFICATIONS] API URL ou API Key não configurados para notificar contatos')
+            from apps.notifications.whatsapp_providers import get_sender
+            sender = get_sender(instance)
+            if not sender:
+                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Provider não disponível para instância (tenant {task.tenant_id})')
                 return False
             
             # Formatar mensagem para contatos
@@ -881,14 +854,6 @@ class CampaignsConfig(AppConfig):
             
             message_text += f"\nAguardamos você!"
             
-            # Notificar cada contato relacionado
-            base_url = base_url.rstrip('/')
-            url = f"{base_url}/message/sendText/{instance.instance_name}"
-            headers = {
-                'apikey': api_key,
-                'Content-Type': 'application/json'
-            }
-            
             for contact in task.related_contacts.all():
                 # ✅ CORREÇÃO: Verificar se contato já foi notificado neste ciclo
                 if contact.id in contacts_notified_set:
@@ -924,37 +889,24 @@ class CampaignsConfig(AppConfig):
                         logger.warning(f'⚠️ [TASK NOTIFICATIONS] Telefone em formato inválido para contato {contact.name}: {phone_clean}')
                         continue
                     
-                    # Personalizar mensagem com nome do contato
                     personalized_message = message_text.replace('Olá!', f'Olá, {contact.name}!')
-                    
-                    payload = {
-                        'number': phone_clean,
-                        'text': personalized_message
-                    }
-                    
                     logger.info(f'📤 [TASK NOTIFICATIONS] Enviando WhatsApp para contato {contact.name} ({phone_clean})')
-                    
-                    # Retry em caso de falha
                     max_retries = 2
                     contact_notified = False
                     for attempt in range(max_retries):
                         try:
-                            response = requests.post(url, json=payload, headers=headers, timeout=10)
-                            
-                            if response.status_code in [200, 201]:
+                            ok, resp = sender.send_text(phone_clean, personalized_message)
+                            if ok:
                                 logger.info(f'✅ [TASK NOTIFICATIONS] WhatsApp enviado para contato {contact.name} ({phone_clean})')
                                 contact_notified = True
                                 contacts_notified = True
-                                # ✅ CORREÇÃO: Adicionar contato ao set para evitar duplicação no mesmo ciclo
                                 contacts_notified_set.add(contact.id)
                                 break
-                            else:
-                                logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {response.status_code} - {response.text[:200]}')
-                                if attempt < max_retries - 1:
-                                    time.sleep(2)
-                                
-                        except requests.exceptions.RequestException as e:
-                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Erro de conexão ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {e}')
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Falha ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {resp.get("error", resp)}')
+                            if attempt < max_retries - 1:
+                                time.sleep(2)
+                        except Exception as e:
+                            logger.warning(f'⚠️ [TASK NOTIFICATIONS] Erro ao enviar WhatsApp para contato {contact.name} (tentativa {attempt + 1}/{max_retries}): {e}')
                             if attempt < max_retries - 1:
                                 time.sleep(2)
                     

@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, 
+    NotificationTemplate, WhatsAppInstance, WhatsAppTemplate, NotificationLog, SMTPConfig,
     WhatsAppConnectionLog, UserNotificationPreferences, DepartmentNotificationPreferences
 )
 
@@ -47,11 +47,17 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
     created_by_name = serializers.SerializerMethodField()
     tenant_name = serializers.SerializerMethodField()
     status_display = serializers.CharField(source='get_status_display', read_only=True)
+    integration_type_display = serializers.CharField(source='get_integration_type_display', read_only=True)
+    # Access token: aceitar no write; no read retornar apenas se está preenchido (mascarado)
+    access_token_set = serializers.SerializerMethodField(read_only=True)
     
     class Meta:
         model = WhatsAppInstance
         fields = [
             'id', 'tenant', 'tenant_name', 'friendly_name', 'instance_name',
+            'integration_type', 'integration_type_display',
+            'phone_number_id', 'access_token', 'access_token_set',
+            'business_account_id', 'app_id', 'access_token_expires_at',
             'api_url', 'api_key', 'phone_number', 'qr_code', 'qr_code_expires_at',
             'connection_state', 'status', 'status_display', 'last_check', 'last_error',
             'is_active', 'is_default', 'default_department',
@@ -67,8 +73,12 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
         ]
         extra_kwargs = {
             'api_key': {'required': False, 'allow_blank': True},
-            'instance_name': {'required': False},  # Gerado automaticamente se não fornecido
-            'evolution_instance_name': {'required': False}  # Gerado automaticamente
+            'instance_name': {'required': False},
+            'evolution_instance_name': {'required': False},
+            'access_token': {'write_only': True, 'required': False, 'allow_blank': True},
+            'phone_number_id': {'required': False, 'allow_blank': True},
+            'business_account_id': {'required': False, 'allow_blank': True},
+            'app_id': {'required': False, 'allow_blank': True},
         }
     
     def get_created_by_name(self, obj):
@@ -79,25 +89,49 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
     def get_tenant_name(self, obj):
         return obj.tenant.name if obj.tenant else 'Global'
     
+    def get_access_token_set(self, obj):
+        return bool(obj.access_token)
+    
     def create(self, validated_data):
-        # Set created_by from request user
         request = self.context.get('request')
         if request and request.user:
             validated_data['created_by'] = request.user
-            # Set tenant from user if not provided
             if not validated_data.get('tenant'):
                 validated_data['tenant'] = request.user.tenant
         
-        # Gerar instance_name se não fornecido (UUID único)
-        if not validated_data.get('instance_name'):
-            import uuid
-            validated_data['instance_name'] = str(uuid.uuid4())
-        
-        # Gerar evolution_instance_name se não fornecido
-        if not validated_data.get('evolution_instance_name'):
-            validated_data['evolution_instance_name'] = validated_data['instance_name']
+        integration_type = validated_data.get('integration_type') or WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION
+        if integration_type == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            phone_number_id = (validated_data.get('phone_number_id') or '').strip()
+            if phone_number_id:
+                validated_data['instance_name'] = phone_number_id
+                validated_data['evolution_instance_name'] = ''
+            if not validated_data.get('instance_name'):
+                validated_data['instance_name'] = phone_number_id or str(__import__('uuid').uuid4())
+        else:
+            if not validated_data.get('instance_name'):
+                import uuid
+                validated_data['instance_name'] = str(uuid.uuid4())
+            if not validated_data.get('evolution_instance_name'):
+                validated_data['evolution_instance_name'] = validated_data['instance_name']
         
         return super().create(validated_data)
+
+
+class WhatsAppTemplateSerializer(serializers.ModelSerializer):
+    """Serializer for WhatsAppTemplate (Meta Cloud API templates for 24h window)."""
+    wa_instance_name = serializers.CharField(source='wa_instance.friendly_name', read_only=True, allow_null=True)
+
+    class Meta:
+        model = WhatsAppTemplate
+        fields = [
+            'id', 'tenant', 'name', 'template_id', 'language_code',
+            'body_parameters_default', 'is_active', 'wa_instance', 'wa_instance_name',
+            'created_at', 'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+        extra_kwargs = {
+            'wa_instance': {'required': False, 'allow_null': True},
+        }
 
 
 class WhatsAppConnectionLogSerializer(serializers.ModelSerializer):

@@ -457,6 +457,10 @@ EVOLUTION_API_KEY = config('EVO_API_KEY', default='')
 EVO_BASE_URL = EVOLUTION_API_URL
 EVO_API_KEY = EVOLUTION_API_KEY
 
+# WhatsApp Cloud API (Meta) - webhook verification e assinatura
+WHATSAPP_CLOUD_VERIFY_TOKEN = config('WHATSAPP_CLOUD_VERIFY_TOKEN', default='')
+WHATSAPP_CLOUD_APP_SECRET = config('WHATSAPP_CLOUD_APP_SECRET', default='')
+
 # Proxy rotation (Webshare → Evolution)
 WEBSHARE_API_KEY = config('WEBSHARE_API_KEY', default='')
 WEBSHARE_PROXY_LIMIT = config('WEBSHARE_PROXY_LIMIT', default=100, cast=int)

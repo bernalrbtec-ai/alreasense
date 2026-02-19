@@ -133,16 +133,15 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
   const hasAttachments = message.attachments && message.attachments.length > 0;
   
   // ✅ NOVO: Verificar se mensagem pode ser editada
+  // Fase 7: API oficial Meta não suporta edição de mensagem — ocultar opção para conversas Meta
   const canEdit = (() => {
+    if (activeConversation?.integration_type === 'meta_cloud') return false;
     // Apenas mensagens enviadas (outgoing)
     if (message.direction !== 'outgoing') return false;
-    
     // Deve ter message_id (foi enviada com sucesso)
     if (!message.message_id) return false;
-    
     // Não pode ter anexos
     if (hasAttachments) return false;
-    
     // Deve ter menos de 15 minutos desde o envio
     if (message.created_at) {
       const createdDate = new Date(message.created_at);
@@ -150,7 +149,6 @@ export function MessageContextMenu({ message, position, onClose, onShowInfo, onS
       const minutesSinceSent = (now.getTime() - createdDate.getTime()) / (1000 * 60);
       if (minutesSinceSent > 15) return false;
     }
-    
     return true;
   })();
   

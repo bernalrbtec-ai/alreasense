@@ -10,6 +10,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from apps.common.health import get_system_health
 from apps.connections import webhook_views
+from apps.connections.meta_webhook import meta_webhook_view
 
 @csrf_exempt
 @require_http_methods(["GET"])
@@ -43,6 +44,9 @@ urlpatterns = [
     # Webhook Evolution - rotas diretas (com e sem barra final)
     path('webhooks/evolution/', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct-slash'),
     path('webhooks/evolution', webhook_views.EvolutionWebhookView.as_view(), name='evolution-webhook-direct'),
+    # Webhook Meta (WhatsApp Cloud API)
+    path('webhooks/meta/', meta_webhook_view, name='meta-webhook'),
+    path('webhooks/meta', meta_webhook_view, name='meta-webhook-no-slash'),
 ]
 
 # Serve static and media files

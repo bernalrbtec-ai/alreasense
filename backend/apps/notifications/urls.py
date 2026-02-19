@@ -3,6 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     NotificationTemplateViewSet,
     WhatsAppInstanceViewSet,
+    WhatsAppTemplateViewSet,
     NotificationLogViewSet,
     SMTPConfigViewSet,
     UserNotificationPreferencesViewSet,
@@ -12,6 +13,7 @@ from .views import (
 router = DefaultRouter()
 router.register(r'templates', NotificationTemplateViewSet, basename='notification-template')
 router.register(r'whatsapp-instances', WhatsAppInstanceViewSet, basename='whatsapp-instance')
+router.register(r'whatsapp-templates', WhatsAppTemplateViewSet, basename='whatsapp-template')
 router.register(r'smtp-configs', SMTPConfigViewSet, basename='smtp-config')
 router.register(r'logs', NotificationLogViewSet, basename='notification-log')
 # Sistema de Notificações Personalizadas

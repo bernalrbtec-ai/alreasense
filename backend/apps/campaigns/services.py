@@ -334,67 +334,78 @@ class CampaignSender:
             # Marcar tempo inicial
             start_time = time.time()
             
-            # ENVIO REAL VIA EVOLUTION API
-            import requests
-            
-            # Preparar número (remover + e formatar)
+            # Envio via provider (Evolution ou Meta Cloud)
+            from apps.notifications.whatsapp_providers import get_sender
+            from apps.notifications.models import WhatsAppInstance, WhatsAppTemplate
+            from django.db.models import Q
+
             phone = contact.phone.replace('+', '').replace('-', '').replace(' ', '')
             if not phone.startswith('55'):
                 phone = f'55{phone}'
-            
-            # Substituir variáveis na mensagem usando MessageVariableService
-            logger.info(f"📝 [VARIÁVEIS] Template original: {message.content[:100]}...")
+
             message_text = MessageVariableService.render_message(
                 template=message.content,
                 contact=contact
             )
             logger.info(f"✅ [VARIÁVEIS] Mensagem renderizada: {message_text[:100]}...")
-            
-            # ✅ Enviar via Evolution API com RETRY e BACKOFF
-            url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
-            headers = {
-                'apikey': instance.api_key,
-                'Content-Type': 'application/json'
-            }
-            payload = {
-                'number': phone,
-                'text': message_text
-            }
-            
-            # ✅ RETRY com backoff exponencial
+
+            is_meta = getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
+            if is_meta:
+                wa_template = WhatsAppTemplate.objects.filter(
+                    tenant=instance.tenant,
+                    is_active=True,
+                ).filter(Q(wa_instance=instance) | Q(wa_instance__isnull=True)).order_by('name').first()
+                if not wa_template:
+                    raise ValueError(
+                        "Campanhas com instância API Meta exigem um template aprovado. "
+                        "Cadastre um template em Notificações > Templates WhatsApp."
+                    )
+
             max_retries = 3
-            base_delay = 1  # 1 segundo base
-            
+            base_delay = 1
+            ok = False
+            response_data = {}
             for attempt in range(max_retries + 1):
-                try:
-                    response = requests.post(url, json=payload, headers=headers, timeout=10)
-                    response.raise_for_status()
-                    break  # Sucesso, sair do loop
-                    
-                except requests.exceptions.RequestException as e:
-                    if attempt == max_retries:
-                        # Última tentativa falhou, re-raise
-                        raise e
-                    
-                    # Calcular delay com backoff exponencial
-                    delay = base_delay * (2 ** attempt)
-                    print(f"⚠️ [RETRY] Tentativa {attempt + 1}/{max_retries + 1} falhou: {str(e)}")
-                    print(f"⏳ [RETRY] Aguardando {delay}s antes da próxima tentativa...")
-                    time.sleep(delay)
-                    
-                    # ✅ Tentar instância alternativa se disponível
-                    if attempt == 1:  # Na segunda tentativa
+                sender = get_sender(instance)
+                if not sender:
+                    if attempt == 0:
+                        raise ValueError(f"Provider não disponível para instância {instance.friendly_name}")
+                    if attempt == 1:
                         alt_instance = self.rotation_service.select_next_instance()
                         if alt_instance and alt_instance.id != instance.id:
-                            print(f"🔄 [RETRY] Tentando instância alternativa: {alt_instance.friendly_name}")
                             instance = alt_instance
-                            url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
-                            headers['apikey'] = instance.api_key
-            
-            response_data = response.json()
-            # Salvar ID da mensagem do WhatsApp se disponível
-            if 'key' in response_data and 'id' in response_data['key']:
-                campaign_contact.whatsapp_message_id = response_data['key']['id']
+                            continue
+                    raise ValueError("Nenhuma instância com provider disponível")
+                if is_meta:
+                    params = list(wa_template.body_parameters_default) if wa_template.body_parameters_default else [message_text]
+                    ok, response_data = sender.send_template(
+                        phone,
+                        wa_template.template_id,
+                        wa_template.language_code or 'pt_BR',
+                        params,
+                    )
+                else:
+                    ok, response_data = sender.send_text(phone, message_text)
+                if ok:
+                    break
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** attempt)
+                    logger.warning("⚠️ [RETRY] Tentativa %s/%s falhou, aguardando %ss", attempt + 1, max_retries + 1, delay)
+                    time.sleep(delay)
+                    if attempt == 1:
+                        alt_instance = self.rotation_service.select_next_instance()
+                        if alt_instance and alt_instance.id != instance.id:
+                            instance = alt_instance
+            if not ok:
+                raise RuntimeError(response_data.get('error', str(response_data))[:500])
+
+            message_id = (response_data.get('key') or {}).get('id') or response_data.get('messageId')
+            if not message_id and response_data.get('messages'):
+                msg_list = response_data.get('messages') or []
+                if msg_list and isinstance(msg_list[0], dict):
+                    message_id = msg_list[0].get('id')
+            if message_id:
+                campaign_contact.whatsapp_message_id = message_id
             
             # Calcular duração
             duration_ms = int((time.time() - start_time) * 1000)
@@ -625,22 +636,24 @@ class CampaignSender:
             else:
                 status_parts.append("conn_nao_disponivel")
             
-            # ✅ HEALTH CHECK via API (apenas para informação visual)
-            try:
-                import requests
-                health_url = f"{instance.api_url}/instance/connectionState/{instance.instance_name}"
-                headers = {'apikey': instance.api_key}
-                
-                response = requests.get(health_url, headers=headers, timeout=3)
-                if response.status_code == 200:
-                    data = response.json()
-                    state = data.get('state')
-                    status_parts.append(f"api_{state}")
-                else:
-                    status_parts.append(f"api_erro_{response.status_code}")
-                    
-            except Exception as e:
-                status_parts.append(f"api_timeout")
+            # ✅ HEALTH CHECK via API (apenas Evolution; Meta não usa connectionState)
+            from apps.notifications.models import WhatsAppInstance
+            if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+                status_parts.append("api_meta")
+            else:
+                try:
+                    import requests
+                    health_url = f"{instance.api_url}/instance/connectionState/{instance.instance_name}"
+                    headers = {'apikey': instance.api_key}
+                    response = requests.get(health_url, headers=headers, timeout=3)
+                    if response.status_code == 200:
+                        data = response.json()
+                        state = data.get('state')
+                        status_parts.append(f"api_{state}")
+                    else:
+                        status_parts.append(f"api_erro_{response.status_code}")
+                except Exception:
+                    status_parts.append("api_timeout")
             
             return " | ".join(status_parts)
             

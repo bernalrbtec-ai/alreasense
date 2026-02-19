@@ -658,8 +658,10 @@ class RabbitMQConsumer:
     async def _send_typing_presence(self, instance, contact_phone, typing_seconds):
         """Envia status 'digitando' antes da mensagem para parecer mais humano"""
         try:
-            # ✅ CORREÇÃO: Usar mesmo padrão do chat - instance.api_key or evolution_server.api_key
-            # ✅ CORREÇÃO: Usar sync_to_async para buscar EvolutionConnection em contexto async
+            from apps.notifications.models import WhatsAppInstance
+            if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+                await asyncio.sleep(typing_seconds)
+                return
             from apps.connections.models import EvolutionConnection
             from asgiref.sync import sync_to_async
             
@@ -848,83 +850,70 @@ class RabbitMQConsumer:
                 message_text = await self._replace_variables(message.content, contact_obj)
                 
                 # Preparar dados da mensagem
-                message_data = {
-                    "number": contact_phone,
-                    "text": message_text,
-                    "instance": instance.instance_name
-                }
-                
-                # ✅ CORREÇÃO: Usar mesmo padrão do chat - instance.api_key or evolution_server.api_key
-                # ✅ CORREÇÃO: Usar sync_to_async para buscar EvolutionConnection em contexto async
-                from apps.connections.models import EvolutionConnection
+                from apps.notifications.whatsapp_providers import get_sender
+                from apps.notifications.models import WhatsAppInstance, WhatsAppTemplate
+                from django.db.models import Q
                 from asgiref.sync import sync_to_async
-                
-                @sync_to_async
-                def get_evolution_server():
-                    return EvolutionConnection.objects.filter(is_active=True).first()
-                
-                evolution_server = await get_evolution_server()
-                api_key = instance.api_key or (evolution_server.api_key if evolution_server else None)
-                
-                if not api_key:
-                    logger.error(f"❌ [AIO-PIKA] Nenhuma API key disponível para instância {instance.instance_name}")
-                    logger.error(f"   Instance API Key: {instance.api_key}")
-                    logger.error(f"   Evolution Server API Key: {evolution_server.api_key if evolution_server else 'N/A'}")
-                    raise Exception(f"API key não configurada para instância {instance.instance_name}")
-                
-                # Enviar via Evolution API
-                url = f"{instance.api_url}/message/sendText/{instance.instance_name}"
-                headers = {
-                    "Content-Type": "application/json",
-                    "apikey": api_key  # ✅ CREDENCIAL USADA: instance.api_key ou EVOLUTION_API_KEY global como fallback
-                }
-                
-                # Usar requests de forma assíncrona
+
+                sender = await sync_to_async(get_sender)(instance)
+                if not sender:
+                    logger.error(f"❌ [AIO-PIKA] get_sender retornou None para instância {instance.instance_name}")
+                    raise Exception(f"Provider não disponível para instância {instance.instance_name}")
+
+                is_meta = getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD
+                if is_meta:
+                    wa_template = await sync_to_async(
+                        lambda: WhatsAppTemplate.objects.filter(
+                            tenant=instance.tenant,
+                            is_active=True,
+                        ).filter(Q(wa_instance=instance) | Q(wa_instance__isnull=True)).order_by('name').first()
+                    )()
+                    if not wa_template:
+                        raise Exception(
+                            "Campanhas com instância API Meta exigem um template aprovado. "
+                            "Cadastre um template em Notificações > Templates WhatsApp."
+                        )
+
+                def do_send():
+                    if is_meta:
+                        params = list(wa_template.body_parameters_default) if wa_template.body_parameters_default else [message_text]
+                        return sender.send_template(
+                            contact_phone,
+                            wa_template.template_id,
+                            wa_template.language_code or 'pt_BR',
+                            params,
+                        )
+                    return sender.send_text(contact_phone, message_text)
+
                 loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: requests.post(url, json=message_data, headers=headers, timeout=30)
-                )
-                
-                # ✅ Aceitar status 200 (OK) e 201 (Created) como sucesso
-                if response.status_code in [200, 201]:
-                    response_data = response.json()
-                    # Evolution API pode retornar 'sent' ou 'key' (ambos indicam sucesso)
-                    if response_data.get('sent') or response_data.get('key'):
-                        logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact_phone} (tentativa {attempt})")
-                        
-                        # Salvar message_id (pode estar em 'messageId' ou 'key.id')
-                        message_id = response_data.get('messageId')
-                        if not message_id and response_data.get('key'):
-                            message_id = response_data['key'].get('id')
-                        
-                        # ✅ CORREÇÃO CRÍTICA: Criar log ANTES de salvar message_id para evitar race condition
-                        # O log precisa existir quando o webhook chegar
-                        await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
-                        
-                        if message_id:
-                            @sync_to_async
-                            def save_message_id():
-                                contact.whatsapp_message_id = message_id
-                                contact.status = 'sent'  # ✅ Marcar como 'sent' após envio bem-sucedido
-                                contact.sent_at = contact.sent_at or timezone.now()  # ✅ Garantir sent_at
-                                contact.save(update_fields=['whatsapp_message_id', 'status', 'sent_at'])
-                                logger.info(f"✅ [AIO-PIKA] whatsapp_message_id salvo: {message_id} para contact {contact.id}")
-                            
-                            await save_message_id()
-                            
-                            # ✅ NOVO: Criar mensagem no chat para aparecer na conversa
-                            await self._create_chat_message(campaign, contact, instance, message_text, message_id, contact_phone)
-                        else:
-                            logger.warning(f"⚠️ [AIO-PIKA] message_id não encontrado na resposta para {contact_phone}")
-                            logger.warning(f"   Response data: {response_data}")
-                        
-                        # ✅ CORREÇÃO CRÍTICA: Calcular próximo disparo DEPOIS do envio bem-sucedido
-                        # Usar tempo real decorrido (process_start_time) para calcular countdown preciso
-                        process_elapsed_time = time.time() - process_start_time
-                        
+                ok, response_data = await loop.run_in_executor(None, do_send)
+
+                if ok:
+                    logger.info(f"✅ [AIO-PIKA] Mensagem enviada com sucesso para {contact_phone} (tentativa {attempt})")
+                    message_id = response_data.get('messageId') or (response_data.get('key') or {}).get('id')
+                    if not message_id and response_data.get('messages'):
+                        msg_list = response_data.get('messages') or []
+                        if msg_list and isinstance(msg_list[0], dict):
+                            message_id = msg_list[0].get('id')
+                    # ✅ CORREÇÃO CRÍTICA: Criar log ANTES de salvar message_id para evitar race condition
+                    await self._log_message_sent(campaign, contact, instance, message_id, contact_phone, message_text)
+                    if message_id:
                         @sync_to_async
-                        def update_next_contact_info():
+                        def save_message_id():
+                            contact.whatsapp_message_id = message_id
+                            contact.status = 'sent'
+                            contact.sent_at = contact.sent_at or timezone.now()
+                            contact.save(update_fields=['whatsapp_message_id', 'status', 'sent_at'])
+                            logger.info(f"✅ [AIO-PIKA] whatsapp_message_id salvo: {message_id} para contact {contact.id}")
+                        await save_message_id()
+                        await self._create_chat_message(campaign, contact, instance, message_text, message_id, contact_phone)
+                    else:
+                        logger.warning(f"⚠️ [AIO-PIKA] message_id não encontrado na resposta para {contact_phone}")
+                        logger.warning(f"   Response data: {response_data}")
+                    # ✅ CORREÇÃO CRÍTICA: Calcular próximo disparo DEPOIS do envio bem-sucedido
+                    process_elapsed_time = time.time() - process_start_time
+                    @sync_to_async
+                    def update_next_contact_info():
                             import random
                             from django.utils import timezone
                             from datetime import timedelta
@@ -1026,78 +1015,27 @@ class RabbitMQConsumer:
                                     rotation_logger.info(f"📡 [WEBSOCKET] Broadcast enviado: próximo contato atualizado para campanha {campaign.id}")
                             except Exception as e:
                                 rotation_logger.error(f"❌ [WEBSOCKET] Erro ao enviar broadcast: {e}", exc_info=True)
-                        
-                        await update_next_contact_info()
-                        logger.info(f"✅ [AIO-PIKA] Próximo contato atualizado com sucesso")
-                        
-                        # ✅ Log já foi criado ANTES de salvar message_id para evitar race condition
-                        
-                        return True
-                    else:
-                        # ✅ MELHORIA: Extrair informações detalhadas do erro
-                        error_msg = self._extract_error_message(response_data, response.status_code)
-                        logger.error(f"❌ [AIO-PIKA] API retornou erro (tentativa {attempt}): {error_msg}")
-                        
-                        # Verificar se é erro de instância inativa
-                        if 'instance' in error_msg.lower() or 'disconnected' in error_msg.lower():
-                            await self._auto_pause_campaign(campaign, f"instância desconectada: {error_msg}")
-                            return False
-                        
-                        # Tentar novamente se não for erro de instância
-                        if attempt < max_retries:
-                            delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
-                            logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
-                            await asyncio.sleep(delay)
-                            continue
-                        else:
-                            # Log de falha final com detalhes completos
-                            await self._log_message_failed(
-                                campaign, contact, instance, error_msg, contact_phone,
-                                request_data=message_data,
-                                response_data=response_data,
-                                http_status=response.status_code
-                            )
-                            return False
+                    await update_next_contact_info()
+                    logger.info(f"✅ [AIO-PIKA] Próximo contato atualizado com sucesso")
+                    return True
                 else:
-                    # ✅ MELHORIA: Capturar resposta completa mesmo em caso de erro HTTP
-                    # Logar resposta raw ANTES de tentar parse para diagnóstico
-                    response_text = response.text if hasattr(response, 'text') else str(response.content) if hasattr(response, 'content') else 'N/A'
-                    logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} - Resposta raw: {response_text[:500]}")
-                    
-                    error_response_data = {}
-                    try:
-                        if response_text and response_text.strip():
-                            error_response_data = response.json()
-                            logger.debug(f"🔍 [AIO-PIKA] Resposta JSON parseada: {error_response_data}")
-                    except Exception as json_error:
-                        # Se não for JSON, salvar como texto
-                        logger.warning(f"⚠️ [AIO-PIKA] Resposta não é JSON válido: {json_error}")
-                        error_response_data = {'raw_response': response_text[:1000]}  # Aumentar limite para 1000 chars
-                    
-                    # Extrair mensagem de erro descritiva
-                    error_msg = self._extract_error_message(error_response_data, response.status_code, response_text)
-                    logger.error(f"❌ [AIO-PIKA] Erro HTTP {response.status_code} (tentativa {attempt}): {error_msg}")
-                    
-                    # Verificar se é erro de instância inativa (500 pode indicar instância offline)
-                    if response.status_code == 500:
-                        await self._auto_pause_campaign(campaign, "instância retornou erro 500")
+                    error_msg = response_data.get('error', str(response_data))[:200]
+                    logger.error(f"❌ [AIO-PIKA] Provider retornou erro (tentativa {attempt}): {error_msg}")
+                    if 'instance' in error_msg.lower() or 'disconnected' in error_msg.lower():
+                        await self._auto_pause_campaign(campaign, f"instância desconectada: {error_msg}")
                         return False
-                    
-                    # Tentar novamente se não for erro crítico
                     if attempt < max_retries:
-                        delay = base_delay * (2 ** (attempt - 1))  # 2s, 4s
+                        delay = base_delay * (2 ** (attempt - 1))
                         logger.info(f"⏳ [AIO-PIKA] Tentando novamente em {delay}s...")
                         await asyncio.sleep(delay)
                         continue
-                    else:
-                        # Log de falha final com detalhes completos
-                        await self._log_message_failed(
-                            campaign, contact, instance, error_msg, contact_phone,
-                            request_data=message_data,
-                            response_data=error_response_data,
-                            http_status=response.status_code
-                        )
-                        return False
+                    await self._log_message_failed(
+                        campaign, contact, instance, error_msg, contact_phone,
+                        request_data={'text': message_text},
+                        response_data=response_data,
+                        http_status=response_data.get('status_code')
+                    )
+                    return False
 
             except Exception as e:
                 logger.error(f"❌ [AIO-PIKA] Erro ao enviar mensagem WhatsApp (tentativa {attempt}): {e}")

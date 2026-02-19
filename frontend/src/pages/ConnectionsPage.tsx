@@ -9,7 +9,10 @@ import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+
+const INTEGRATION_EVOLUTION = 'evolution'
+const INTEGRATION_META_CLOUD = 'meta_cloud'
 
 interface WhatsAppInstance {
   id: string
@@ -24,6 +27,11 @@ interface WhatsAppInstance {
   qr_code?: string
   qr_code_expires_at?: string
   api_key?: string
+  integration_type?: string
+  integration_type_display?: string
+  phone_number_id?: string
+  access_token_set?: boolean
+  business_account_id?: string
 }
 
 export default function ConnectionsPage() {
@@ -41,6 +49,7 @@ export default function ConnectionsPage() {
   const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
   const [testPhone, setTestPhone] = useState('')
   const [isSendingTest, setIsSendingTest] = useState(false)
+  const [isValidatingMeta, setIsValidatingMeta] = useState(false)
   
   // Função para formatar telefone
   const formatPhone = (phone: string) => {
@@ -61,12 +70,15 @@ export default function ConnectionsPage() {
     return `+${numbers}`
   }
   
-  // Form data para WhatsApp Instance
   const [instanceForm, setInstanceForm] = useState({
     friendly_name: '',
     phone_number: '',
     is_default: false,
     default_department: null as string | null,
+    integration_type: INTEGRATION_EVOLUTION as string,
+    phone_number_id: '',
+    access_token: '',
+    business_account_id: '',
   })
   
   // Lista de departamentos para o select
@@ -114,20 +126,38 @@ export default function ConnectionsPage() {
   // ==================== WhatsApp Instance Functions ====================
   
   const handleSaveInstance = async () => {
-    // Validação dos campos obrigatórios
     if (!instanceForm.friendly_name.trim()) {
       showToast('❌ Nome amigável é obrigatório', 'error')
       return
     }
+    const isMeta = instanceForm.integration_type === INTEGRATION_META_CLOUD
+    if (isMeta) {
+      if (!(instanceForm.phone_number_id || '').trim()) {
+        showToast('❌ Phone Number ID é obrigatório para API Meta', 'error')
+        return
+      }
+      if (!(instanceForm.access_token || '').trim() && !(editingInstance && (editingInstance as any).access_token_set)) {
+        showToast('❌ Access Token é obrigatório para API Meta', 'error')
+        return
+      }
+    }
 
     setIsSaving(true)
     try {
-      // Preparar dados para envio
-      const instanceData = {
-        ...instanceForm,
-        instance_name: crypto.randomUUID(), // Gerar UUID automaticamente
-        // api_url será obtido do servidor Evolution global configurado no backend
-        // Não enviar api_url nem api_key - backend gerencia isso
+      const instanceData: Record<string, unknown> = {
+        friendly_name: instanceForm.friendly_name.trim(),
+        phone_number: (instanceForm.phone_number || '').trim() || null,
+        is_default: instanceForm.is_default,
+        default_department: instanceForm.default_department || null,
+        integration_type: instanceForm.integration_type,
+      }
+      if (isMeta) {
+        instanceData.phone_number_id = (instanceForm.phone_number_id || '').trim()
+        if ((instanceForm.access_token || '').trim()) instanceData.access_token = instanceForm.access_token.trim()
+        if ((instanceForm.business_account_id || '').trim()) instanceData.business_account_id = instanceForm.business_account_id.trim()
+        // instance_name é definido no backend a partir de phone_number_id
+      } else {
+        if (!editingInstance) instanceData.instance_name = crypto.randomUUID()
       }
 
       if (editingInstance) {
@@ -140,12 +170,15 @@ export default function ConnectionsPage() {
         showToast('✅ Instância WhatsApp criada com sucesso!', 'success')
       }
       
-      // Limpar formulário e fechar modal
       setInstanceForm({
         friendly_name: '',
         phone_number: '',
         is_default: false,
         default_department: null,
+        integration_type: INTEGRATION_EVOLUTION,
+        phone_number_id: '',
+        access_token: '',
+        business_account_id: '',
       })
       setEditingInstance(null)
       setShowInstanceModal(false)
@@ -157,15 +190,19 @@ export default function ConnectionsPage() {
     } catch (error: any) {
       console.error('❌ Erro ao salvar instância:', error)
       if (error.response?.data) {
-        // Mostrar erros específicos do backend
         const errors = error.response.data
-        let errorMessage = '❌ Erro ao salvar: '
-        Object.keys(errors).forEach(field => {
-          if (Array.isArray(errors[field])) {
-            errorMessage += `${field}: ${errors[field][0]} `
-          }
-        })
-        showToast(errorMessage, 'error')
+        const errMsg = errors.error || (typeof errors.detail === 'string' ? errors.detail : '')
+        if (errMsg) {
+          showToast(`❌ ${errMsg}`, 'error')
+        } else {
+          let errorMessage = '❌ Erro ao salvar: '
+          Object.keys(errors).forEach(field => {
+            if (Array.isArray(errors[field])) {
+              errorMessage += `${field}: ${errors[field][0]} `
+            }
+          })
+          showToast(errorMessage, 'error')
+        }
       } else {
         showToast(`❌ Erro ao salvar: ${error.message}`, 'error')
       }
@@ -201,6 +238,10 @@ export default function ConnectionsPage() {
       phone_number: instance.phone_number || '',
       is_default: instance.is_default,
       default_department: (instance as any).default_department || null,
+      integration_type: instance.integration_type || INTEGRATION_EVOLUTION,
+      phone_number_id: instance.phone_number_id || '',
+      access_token: '', // nunca enviado no GET; preencher só se usuário alterar
+      business_account_id: instance.business_account_id || '',
     })
     setEditingInstance(instance)
     setShowInstanceModal(true)
@@ -294,6 +335,24 @@ export default function ConnectionsPage() {
     )
   }
 
+  const handleValidateMeta = async (instance: WhatsAppInstance) => {
+    if (instance.integration_type !== INTEGRATION_META_CLOUD) return
+    setIsValidatingMeta(true)
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/validate_meta/`)
+      if (response.data.success) {
+        showToast('✅ ' + (response.data.message || 'Token e Phone Number ID válidos'), 'success')
+      } else {
+        showToast(`❌ ${response.data.error || 'Falha na validação'}`, 'error')
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.error || error.message
+      showToast(`❌ Validar Meta: ${msg}`, 'error')
+    } finally {
+      setIsValidatingMeta(false)
+    }
+  }
+
   const handleCheckStatus = async (instance: WhatsAppInstance) => {
     try {
       const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
@@ -377,14 +436,22 @@ export default function ConnectionsPage() {
               <div className="flex items-center justify-between mb-1.5">
                 <h3 className="font-semibold text-gray-900 text-sm">{instance.friendly_name}</h3>
                 <div className="flex items-center gap-1 flex-shrink-0">
+                  {instance.integration_type === INTEGRATION_META_CLOUD && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800">
+                      API Meta
+                    </span>
+                  )}
                   <span className={`inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium ${
-                    instance.connection_state === 'open' 
-                      ? 'bg-green-100 text-green-800' 
+                    instance.integration_type === INTEGRATION_META_CLOUD
+                      ? 'bg-green-100 text-green-800'
+                      : instance.connection_state === 'open'
+                      ? 'bg-green-100 text-green-800'
                       : instance.connection_state === 'connecting'
                       ? 'bg-yellow-100 text-yellow-800'
                       : 'bg-red-100 text-red-800'
                   }`}>
-                    {instance.connection_state === 'open' ? 'Conectado' : 
+                    {instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' :
+                     instance.connection_state === 'open' ? 'Conectado' :
                      instance.connection_state === 'connecting' ? 'Conectando' : 'Desconectado'}
                   </span>
                   {instance.is_default && (
@@ -399,6 +466,9 @@ export default function ConnectionsPage() {
               <div className="space-y-1">
                 {instance.phone_number && (
                   <p className="text-xs text-gray-600">📱 {formatPhone(instance.phone_number)}</p>
+                )}
+                {instance.integration_type === INTEGRATION_META_CLOUD && instance.phone_number_id && (
+                  <p className="text-xs text-gray-600 font-mono">ID: {instance.phone_number_id}</p>
                 )}
                 {instance.api_key && (
                   <div className="flex items-center gap-1">
@@ -426,58 +496,84 @@ export default function ConnectionsPage() {
                     </button>
                   </div>
                 )}
-                {!instance.api_key && instance.instance_name && (
+                {!instance.api_key && instance.instance_name && instance.integration_type !== INTEGRATION_META_CLOUD && (
                   <p className="text-xs text-gray-400 italic">API Key será gerada ao conectar</p>
                 )}
               </div>
-              <div className="mt-2 flex gap-1">
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => handleGenerateQR(instance)}
-                  disabled={isGeneratingQR}
-                  className="text-accent-600 hover:text-accent-700 hover:bg-accent-50"
-                  title="Gerar QR Code"
-                >
-                  <QrCode className="h-3 w-3" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => handleCheckStatus(instance)}
-                  className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                  title="Verificar Status"
-                >
-                  <Check className="h-3 w-3" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => handleOpenTestModal(instance)}
-                  disabled={instance.connection_state !== 'open'}
-                  className={`${
-                    instance.connection_state === 'open' 
-                      ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
-                      : 'text-gray-300 cursor-not-allowed'
-                  }`}
-                  title={instance.connection_state === 'open' ? 'Enviar Mensagem de Teste' : 'Conecte a instância primeiro'}
-                >
-                  <MessageSquare className="h-3 w-3" />
-                </Button>
-                <Button 
-                  variant="ghost" 
-                  size="sm"
-                  onClick={() => handleDisconnect(instance)}
-                  disabled={instance.connection_state !== 'open'}
-                  className={`${
-                    instance.connection_state === 'open' 
-                      ? 'text-orange-600 hover:text-orange-700 hover:bg-orange-50' 
-                      : 'text-gray-300 cursor-not-allowed'
-                  }`}
-                  title={instance.connection_state === 'open' ? 'Desconectar' : 'Instância não conectada'}
-                >
-                  <WifiOff className="h-3 w-3" />
-                </Button>
+              <div className="mt-2 flex gap-1 flex-wrap">
+                {instance.integration_type === INTEGRATION_META_CLOUD ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleValidateMeta(instance)}
+                      disabled={isValidatingMeta}
+                      className="text-indigo-600 hover:text-indigo-700 hover:bg-indigo-50"
+                      title="Validar token e Phone Number ID"
+                    >
+                      <ShieldCheck className="h-3 w-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleOpenTestModal(instance)}
+                      className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                      title="Enviar Mensagem de Teste"
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleGenerateQR(instance)}
+                      disabled={isGeneratingQR}
+                      className="text-accent-600 hover:text-accent-700 hover:bg-accent-50"
+                      title="Gerar QR Code"
+                    >
+                      <QrCode className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleCheckStatus(instance)}
+                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                      title="Verificar Status"
+                    >
+                      <Check className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleOpenTestModal(instance)}
+                      disabled={instance.connection_state !== 'open'}
+                      className={`${
+                        instance.connection_state === 'open' 
+                          ? 'text-blue-600 hover:text-blue-700 hover:bg-blue-50' 
+                          : 'text-gray-300 cursor-not-allowed'
+                      }`}
+                      title={instance.connection_state === 'open' ? 'Enviar Mensagem de Teste' : 'Conecte a instância primeiro'}
+                    >
+                      <MessageSquare className="h-3 w-3" />
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => handleDisconnect(instance)}
+                      disabled={instance.connection_state !== 'open'}
+                      className={`${
+                        instance.connection_state === 'open' 
+                          ? 'text-orange-600 hover:text-orange-700 hover:bg-orange-50' 
+                          : 'text-gray-300 cursor-not-allowed'
+                      }`}
+                      title={instance.connection_state === 'open' ? 'Desconectar' : 'Instância não conectada'}
+                    >
+                      <WifiOff className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
                 <Button 
                   variant="ghost" 
                   size="sm"
@@ -533,6 +629,10 @@ export default function ConnectionsPage() {
                     phone_number: '',
                     is_default: false,
                     default_department: null,
+                    integration_type: INTEGRATION_EVOLUTION,
+                    phone_number_id: '',
+                    access_token: '',
+                    business_account_id: '',
                   })
                 }}
               >
@@ -541,6 +641,24 @@ export default function ConnectionsPage() {
             </div>
             
             <div className="space-y-4">
+              <div>
+                <Label htmlFor="integration_type">Tipo de conexão</Label>
+                <select
+                  id="integration_type"
+                  value={instanceForm.integration_type}
+                  onChange={(e) => setInstanceForm({ ...instanceForm, integration_type: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value={INTEGRATION_EVOLUTION}>Evolution (QR Code)</option>
+                  <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  {instanceForm.integration_type === INTEGRATION_META_CLOUD
+                    ? 'Conexão via WhatsApp Cloud API (Meta). Requer Phone Number ID e Access Token.'
+                    : 'Conexão via Evolution API. Após salvar, use "Gerar QR Code" para conectar.'}
+                </p>
+              </div>
+
               <div>
                 <Label htmlFor="friendly_name">Nome Amigável *</Label>
                 <Input
@@ -552,17 +670,65 @@ export default function ConnectionsPage() {
                 />
                 <p className="text-xs text-gray-500 mt-1">Nome amigável para identificar esta instância</p>
               </div>
-              
-              <div>
-                <Label htmlFor="phone_number">Número de Telefone</Label>
-                <Input
-                  id="phone_number"
-                  value={instanceForm.phone_number}
-                  onChange={(e) => setInstanceForm({ ...instanceForm, phone_number: e.target.value })}
-                  placeholder="Ex: 5517991234567"
-                />
-                <p className="text-xs text-gray-500 mt-1">Número do WhatsApp (opcional, será preenchido automaticamente ao conectar)</p>
-              </div>
+
+              {instanceForm.integration_type === INTEGRATION_META_CLOUD ? (
+                <>
+                  <div>
+                    <Label htmlFor="phone_number_id">Phone Number ID *</Label>
+                    <Input
+                      id="phone_number_id"
+                      value={instanceForm.phone_number_id}
+                      onChange={(e) => setInstanceForm({ ...instanceForm, phone_number_id: e.target.value })}
+                      placeholder="ID do número no Meta Business"
+                      disabled={!!editingInstance}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">ID do número de telefone no Meta (não alterável após criar)</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="access_token">Access Token *</Label>
+                    <Input
+                      id="access_token"
+                      type="password"
+                      value={instanceForm.access_token}
+                      onChange={(e) => setInstanceForm({ ...instanceForm, access_token: e.target.value })}
+                      placeholder={editingInstance && (editingInstance as any).access_token_set ? '•••••••• (deixe em branco para manter)' : 'Token permanente do Meta'}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Token do app no Meta for Developers. Ao editar, preencha só se for trocar.</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="business_account_id">Business Account ID (opcional)</Label>
+                    <Input
+                      id="business_account_id"
+                      value={instanceForm.business_account_id}
+                      onChange={(e) => setInstanceForm({ ...instanceForm, business_account_id: e.target.value })}
+                      placeholder="ID da conta Business"
+                    />
+                  </div>
+                  <div className="bg-indigo-50 p-3 rounded-lg">
+                    <p className="text-sm text-indigo-800">
+                      <strong>API Meta:</strong> Configure o webhook no Meta Business Suite apontando para a URL do seu servidor.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div>
+                    <Label htmlFor="phone_number">Número de Telefone</Label>
+                    <Input
+                      id="phone_number"
+                      value={instanceForm.phone_number}
+                      onChange={(e) => setInstanceForm({ ...instanceForm, phone_number: e.target.value })}
+                      placeholder="Ex: 5517991234567"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Número do WhatsApp (opcional, será preenchido automaticamente ao conectar)</p>
+                  </div>
+                  <div className="bg-blue-50 p-3 rounded-lg">
+                    <p className="text-sm text-blue-800">
+                      <strong>Dica:</strong> Após salvar, use &quot;Gerar QR Code&quot; para conectar a instância ao WhatsApp.
+                    </p>
+                  </div>
+                </>
+              )}
               
               <div>
                 <Label htmlFor="default_department">Departamento Padrão</Label>
@@ -596,12 +762,6 @@ export default function ConnectionsPage() {
                   Definir como instância padrão
                 </Label>
               </div>
-              
-              <div className="bg-blue-50 p-3 rounded-lg">
-                <p className="text-sm text-blue-800">
-                  <strong>Dica:</strong> Após salvar, use "Gerar QR Code" para conectar a instância ao WhatsApp.
-                </p>
-              </div>
             </div>
             
             <div className="flex gap-2 justify-end mt-6">
@@ -615,6 +775,10 @@ export default function ConnectionsPage() {
                     phone_number: '',
                     is_default: false,
                     default_department: null,
+                    integration_type: INTEGRATION_EVOLUTION,
+                    phone_number_id: '',
+                    access_token: '',
+                    business_account_id: '',
                   })
                 }}
               >

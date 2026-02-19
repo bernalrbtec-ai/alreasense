@@ -7,12 +7,13 @@ from django.contrib.auth import get_user_model
 from django.db import models
 
 from .models import (
-    NotificationTemplate, WhatsAppInstance, NotificationLog, SMTPConfig, 
+    NotificationTemplate, WhatsAppInstance, WhatsAppTemplate, NotificationLog, SMTPConfig,
     WhatsAppConnectionLog, UserNotificationPreferences, DepartmentNotificationPreferences
 )
 from .serializers import (
     NotificationTemplateSerializer,
     WhatsAppInstanceSerializer,
+    WhatsAppTemplateSerializer,
     NotificationLogSerializer,
     SendNotificationSerializer,
     SMTPConfigSerializer,
@@ -341,70 +342,78 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'])
     def send_test(self, request, pk=None):
-        """Send a test message."""
+        """Send a test message via provider (Evolution or Meta)."""
         instance = self.get_object()
         phone = request.data.get('phone')
         message = request.data.get('message', 'Teste de notificação do Alrea Sense')
-        
         if not phone:
+            return Response({'success': False, 'error': 'Número de telefone obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.notifications.whatsapp_providers import get_sender
+        sender = get_sender(instance)
+        if not sender:
             return Response({
                 'success': False,
-                'error': 'Número de telefone obrigatório'
+                'error': 'Provider não disponível para esta instância (verifique Phone Number ID e Access Token para Meta)'
             }, status=status.HTTP_400_BAD_REQUEST)
-        
         try:
-            import requests
-            from apps.connections.models import EvolutionConnection
-            
-            # Buscar servidor Evolution global
-            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-            if not evolution_server or not evolution_server.base_url or not evolution_server.api_key:
-                return Response({
-                    'success': False,
-                    'error': 'Servidor Evolution não configurado'
-                }, status=status.HTTP_400_BAD_REQUEST)
-            
-            api_url = evolution_server.base_url
-            
-            # Para ENVIAR mensagens: usar API key específica da instância se disponível, senão API Master
-            api_key_to_use = instance.api_key or evolution_server.api_key
-            
-            response = requests.post(
-                f"{api_url}/message/sendText/{instance.instance_name}",
-                headers={'apikey': api_key_to_use},  # API específica > API Master
-                json={
-                    'number': phone,
-                    'text': message
-                },
-                timeout=10
-            )
-            
-            if response.status_code == 200 or response.status_code == 201:
+            ok, data = sender.send_text(phone.strip(), message)
+            if ok:
+                return Response({'success': True, 'message': 'Mensagem de teste enviada com sucesso', 'data': data})
+            return Response({
+                'success': False,
+                'error': data.get('error', str(data))[:500]
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    
+    @action(detail=True, methods=['post'])
+    def validate_meta(self, request, pk=None):
+        """Valida Phone Number ID e Access Token da instância Meta (chamada à Graph API)."""
+        instance = self.get_object()
+        if getattr(instance, 'integration_type', None) != WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            return Response({
+                'success': False,
+                'error': 'Esta instância não é do tipo API oficial Meta'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        phone_number_id = (instance.phone_number_id or '').strip()
+        access_token = (instance.access_token or '').strip()
+        if not phone_number_id or not access_token:
+            return Response({
+                'success': False,
+                'error': 'Phone Number ID e Access Token são obrigatórios'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        import requests
+        url = f"https://graph.facebook.com/v21.0/{phone_number_id}"
+        try:
+            r = requests.get(url, headers={'Authorization': f'Bearer {access_token}'}, timeout=10)
+            data = r.json() if r.text else {}
+            if r.status_code == 200:
                 return Response({
                     'success': True,
-                    'message': 'Mensagem de teste enviada com sucesso',
-                    'data': response.json()
+                    'message': 'Token e Phone Number ID válidos',
+                    'data': data
                 })
-            else:
-                return Response({
-                    'success': False,
-                    'error': f'Erro ao enviar: {response.text}'
-                }, status=status.HTTP_400_BAD_REQUEST)
-        
-        except Exception as e:
+            err = data.get('error', {})
+            msg = err.get('message', r.text or 'Erro desconhecido')
             return Response({
                 'success': False,
-                'error': str(e)
-            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                'error': msg,
+                'code': err.get('code')
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except requests.RequestException as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
     
     @action(detail=True, methods=['post'])
     def generate_qr(self, request, pk=None):
-        """Generate QR code for connection."""
+        """Generate QR code for connection (Evolution only; Meta no-op)."""
         instance = self.get_object()
-        
+        if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            return Response({
+                'success': False,
+                'error': 'Instância API oficial Meta não usa QR Code. Use o botão Validar para testar token.'
+            }, status=status.HTTP_400_BAD_REQUEST)
         try:
             qr_code = instance.generate_qr_code()
-            
             if qr_code:
                 return Response({
                     'success': True,
@@ -486,6 +495,22 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
                 'success': False,
                 'error': str(e)
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
+    """ViewSet for WhatsAppTemplate (templates Meta para janela 24h)."""
+    serializer_class = WhatsAppTemplateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        if not user.tenant:
+            return WhatsAppTemplate.objects.none()
+        qs = WhatsAppTemplate.objects.filter(tenant=user.tenant).select_related('tenant', 'wa_instance')
+        wa_instance_id = self.request.query_params.get('wa_instance')
+        if wa_instance_id:
+            qs = qs.filter(models.Q(wa_instance_id=wa_instance_id) | models.Q(wa_instance__isnull=True))
+        return qs.order_by('name')
 
 
 class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):

@@ -3909,6 +3909,14 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
                 Q(instance_name=conversation.instance_name.strip()) | Q(evolution_instance_name=conversation.instance_name.strip()),
                 tenant=conversation.tenant, is_active=True, status='active'
             ).first()
+        if not wa_instance and conversation.instance_name and str(conversation.instance_name).strip().isdigit():
+            wa_instance = WhatsAppInstance.objects.filter(
+                phone_number_id=str(conversation.instance_name).strip(),
+                integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+                tenant=conversation.tenant,
+                is_active=True,
+                status='active',
+            ).first()
         if not wa_instance:
             wa_instance = WhatsAppInstance.objects.filter(
                 tenant=conversation.tenant,
@@ -3920,8 +3928,26 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
             logger.warning(f"⚠️ [READ RECEIPT] Nenhuma instância WhatsApp ativa para tenant {conversation.tenant.name}")
             return False
         
-        # ✅ CORREÇÃO CRÍTICA: Verificar connection_state antes de enviar
-        # Se a instância está "connecting", a Evolution API retornará erro 500
+        # Fase 7: Instância Meta → usar provider mark_as_read (Graph API)
+        if getattr(wa_instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            if not message.message_id:
+                logger.warning(f"⚠️ [READ RECEIPT] Meta: mensagem sem message_id (wamid), pulando")
+                return False
+            from apps.notifications.whatsapp_providers import get_sender
+            sender = get_sender(wa_instance)
+            if not sender:
+                logger.warning(f"⚠️ [READ RECEIPT] Meta: provider não disponível para instância {wa_instance.id}")
+                return False
+            try:
+                ok, _ = sender.mark_as_read(message.message_id)
+                if ok:
+                    logger.info("✅ [READ RECEIPT] Meta: confirmação de leitura enviada")
+                return ok
+            except Exception as e:
+                logger.warning(f"⚠️ [READ RECEIPT] Meta: erro ao marcar como lida: {e}")
+                return False
+        
+        # Evolution: verificar connection_state antes de enviar
         if wa_instance.connection_state not in ('open', 'connected'):
             logger.warning(
                 f"⚠️ [READ RECEIPT] Instância não conectada (state: {wa_instance.connection_state}). "

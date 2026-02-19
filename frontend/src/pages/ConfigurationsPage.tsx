@@ -35,7 +35,8 @@ import {
   ChevronLeft,
   FileText,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  ShieldCheck
 } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Card } from '../components/ui/Card'
@@ -50,6 +51,9 @@ import { DepartmentsManager } from '../components/team/DepartmentsManager'
 import { UsersManager } from '../components/team/UsersManager'
 import { NotificationSettings } from '../modules/notifications/components/NotificationSettings'
 
+const INTEGRATION_EVOLUTION = 'evolution'
+const INTEGRATION_META_CLOUD = 'meta_cloud'
+
 interface WhatsAppInstance {
   id: string
   friendly_name: string
@@ -62,6 +66,10 @@ interface WhatsAppInstance {
   connection_state: string
   qr_code?: string
   qr_code_expires_at?: string
+  integration_type?: string
+  phone_number_id?: string
+  access_token_set?: boolean
+  business_account_id?: string
 }
 
 interface Plan {
@@ -259,7 +267,11 @@ export default function ConfigurationsPage() {
   const [editingInstance, setEditingInstance] = useState<WhatsAppInstance | null>(null)
   const [instanceFormData, setInstanceFormData] = useState({
     friendly_name: '',
-    default_department: null as string | null
+    default_department: null as string | null,
+    integration_type: INTEGRATION_EVOLUTION as string,
+    phone_number_id: '',
+    access_token: '',
+    business_account_id: '',
   })
   const [departments, setDepartments] = useState<Array<{id: string, name: string, color?: string}>>([])
   const [qrCodeInstance, setQrCodeInstance] = useState<WhatsAppInstance | null>(null)
@@ -267,6 +279,7 @@ export default function ConfigurationsPage() {
   const [testInstance, setTestInstance] = useState<WhatsAppInstance | null>(null)
   const [testPhoneNumber, setTestPhoneNumber] = useState('')
   const [checkingStatusId, setCheckingStatusId] = useState<string | null>(null)
+  const [isValidatingMetaId, setIsValidatingMetaId] = useState<string | null>(null)
   
   // Estados para SMTP
   const [smtpConfigs, setSmtpConfigs] = useState<SMTPConfig[]>([])
@@ -489,10 +502,36 @@ export default function ConfigurationsPage() {
 
   // Funções para instâncias WhatsApp (replicadas do NotificationsPage)
   const handleCreateInstance = async () => {
+    if (!instanceFormData.friendly_name?.trim()) {
+      showErrorToast('salvar', 'Instância', { message: 'Nome da instância é obrigatório' })
+      return
+    }
+    const isMeta = instanceFormData.integration_type === INTEGRATION_META_CLOUD
+    if (isMeta) {
+      if (!(instanceFormData.phone_number_id || '').trim()) {
+        showErrorToast('salvar', 'Instância', { message: 'Phone Number ID é obrigatório para API Meta' })
+        return
+      }
+      if (!(instanceFormData.access_token || '').trim()) {
+        showErrorToast('salvar', 'Instância', { message: 'Access Token é obrigatório para API Meta' })
+        return
+      }
+    }
     const toastId = showLoadingToast('criar', 'Instância')
-    
+    const payload: Record<string, unknown> = {
+      friendly_name: instanceFormData.friendly_name.trim(),
+      default_department: instanceFormData.default_department || null,
+      integration_type: instanceFormData.integration_type,
+    }
+    if (isMeta) {
+      payload.phone_number_id = (instanceFormData.phone_number_id || '').trim()
+      payload.access_token = (instanceFormData.access_token || '').trim()
+      if ((instanceFormData.business_account_id || '').trim()) payload.business_account_id = instanceFormData.business_account_id.trim()
+    } else {
+      payload.instance_name = crypto.randomUUID()
+    }
     try {
-      await api.post('/notifications/whatsapp-instances/', instanceFormData)
+      await api.post('/notifications/whatsapp-instances/', payload)
       updateToastSuccess(toastId, 'criar', 'Instância')
       
       // Atualizar lista de instâncias E limites
@@ -510,11 +549,23 @@ export default function ConfigurationsPage() {
 
   const handleUpdateInstance = async () => {
     if (!editingInstance) return
-    
+    if (!instanceFormData.friendly_name?.trim()) {
+      showErrorToast('atualizar', 'Instância', { message: 'Nome da instância é obrigatório' })
+      return
+    }
+    const isMeta = instanceFormData.integration_type === INTEGRATION_META_CLOUD
+    const payload: Record<string, unknown> = {
+      friendly_name: instanceFormData.friendly_name.trim(),
+      default_department: instanceFormData.default_department || null,
+      integration_type: instanceFormData.integration_type,
+    }
+    if (isMeta) {
+      if ((instanceFormData.access_token || '').trim()) payload.access_token = instanceFormData.access_token.trim()
+      if ((instanceFormData.business_account_id || '').trim()) payload.business_account_id = instanceFormData.business_account_id.trim()
+    }
     const toastId = showLoadingToast('atualizar', 'Instância')
-    
     try {
-      await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceFormData)
+      await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, payload)
       updateToastSuccess(toastId, 'atualizar', 'Instância')
       
       await fetchInstances()
@@ -529,9 +580,30 @@ export default function ConfigurationsPage() {
     setEditingInstance(instance)
     setInstanceFormData({
       friendly_name: instance.friendly_name,
-      default_department: instance.default_department || null
+      default_department: instance.default_department || null,
+      integration_type: instance.integration_type || INTEGRATION_EVOLUTION,
+      phone_number_id: instance.phone_number_id || '',
+      access_token: '',
+      business_account_id: instance.business_account_id || '',
     })
     setIsInstanceModalOpen(true)
+  }
+
+  const handleValidateMeta = async (instance: WhatsAppInstance) => {
+    if (instance.integration_type !== INTEGRATION_META_CLOUD) return
+    setIsValidatingMetaId(instance.id)
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/validate_meta/`)
+      if (response.data?.success) {
+        showSuccessToast('validar', 'API Meta')
+      } else {
+        showErrorToast('validar', 'API Meta', { message: response.data?.error || 'Falha na validação' })
+      }
+    } catch (error: any) {
+      showErrorToast('validar', 'API Meta', error)
+    } finally {
+      setIsValidatingMetaId(null)
+    }
   }
 
   const handleDeleteInstance = async (id: string) => {
@@ -739,7 +811,14 @@ export default function ConfigurationsPage() {
   const handleCloseInstanceModal = () => {
     setIsInstanceModalOpen(false)
     setEditingInstance(null)
-    setInstanceFormData({ friendly_name: '', default_department: null })
+    setInstanceFormData({
+      friendly_name: '',
+      default_department: null,
+      integration_type: INTEGRATION_EVOLUTION,
+      phone_number_id: '',
+      access_token: '',
+      business_account_id: '',
+    })
   }
 
   const handleCloseSmtpModal = () => {
@@ -1810,18 +1889,26 @@ export default function ConfigurationsPage() {
                       <div className="flex-1">
                         <div className="flex items-center mb-2">
                           <h4 className="font-medium text-gray-900">{instance.friendly_name}</h4>
-                          <span className={`ml-3 px-2 py-1 text-xs font-medium rounded-full ${getConnectionStatusColor(instance.connection_state)}`}>
-                            {getConnectionStatusText(instance.connection_state)}
+                          {instance.integration_type === INTEGRATION_META_CLOUD && (
+                            <span className="ml-2 px-2 py-1 text-xs font-medium rounded-full bg-indigo-100 text-indigo-800">API Meta</span>
+                          )}
+                          <span className={`ml-3 px-2 py-1 text-xs font-medium rounded-full ${
+                            instance.integration_type === INTEGRATION_META_CLOUD ? 'text-green-600 bg-green-100' : getConnectionStatusColor(instance.connection_state)
+                          }`}>
+                            {instance.integration_type === INTEGRATION_META_CLOUD ? 'Conectado' : getConnectionStatusText(instance.connection_state)}
                           </span>
                         </div>
                         <div className="flex items-center space-x-4 text-sm text-gray-600">
+                          {instance.integration_type === INTEGRATION_META_CLOUD && instance.phone_number_id && (
+                            <div className="flex items-center font-mono text-xs">{instance.phone_number_id}</div>
+                          )}
                           {instance.phone_number && (
                             <div className="flex items-center">
                               <Phone className="h-4 w-4 mr-1" />
                               {instance.phone_number}
                             </div>
                           )}
-                          {showApiKeys && (
+                          {showApiKeys && instance.integration_type !== INTEGRATION_META_CLOUD && (
                             <div className="flex items-center">
                               <Key className="h-4 w-4 mr-1" />
                               {instance.instance_name}
@@ -1829,46 +1916,69 @@ export default function ConfigurationsPage() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleCheckStatus(instance)}
-                          disabled={checkingStatusId === instance.id}
-                          title="Atualizar status (sincronizar com Evolution)"
-                        >
-                          <RefreshCw className={`h-4 w-4 ${checkingStatusId === instance.id ? 'animate-spin' : ''}`} />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleGenerateQR(instance)}
-                          title="Gerar/Atualizar QR Code"
-                        >
-                          <QrCode className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setTestInstance(instance)
-                            setTestPhoneNumber('')
-                          }}
-                          disabled={instance.connection_state !== 'open'}
-                          title="Enviar Mensagem de Teste"
-                          className="text-blue-600 hover:text-blue-700"
-                        >
-                          <Send className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleDisconnect(instance)}
-                          disabled={instance.connection_state !== 'open'}
-                          title="Desconectar Instância"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
+                      <div className="flex items-center space-x-2 flex-wrap">
+                        {instance.integration_type === INTEGRATION_META_CLOUD ? (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleValidateMeta(instance)}
+                              disabled={isValidatingMetaId === instance.id}
+                              title="Validar token e Phone Number ID"
+                              className="text-indigo-600 hover:text-indigo-700"
+                            >
+                              <ShieldCheck className={`h-4 w-4 ${isValidatingMetaId === instance.id ? 'animate-pulse' : ''}`} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setTestInstance(instance); setTestPhoneNumber('') }}
+                              title="Enviar Mensagem de Teste"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleCheckStatus(instance)}
+                              disabled={checkingStatusId === instance.id}
+                              title="Atualizar status (sincronizar com Evolution)"
+                            >
+                              <RefreshCw className={`h-4 w-4 ${checkingStatusId === instance.id ? 'animate-spin' : ''}`} />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleGenerateQR(instance)}
+                              title="Gerar/Atualizar QR Code"
+                            >
+                              <QrCode className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setTestInstance(instance); setTestPhoneNumber('') }}
+                              disabled={instance.connection_state !== 'open'}
+                              title="Enviar Mensagem de Teste"
+                              className="text-blue-600 hover:text-blue-700"
+                            >
+                              <Send className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDisconnect(instance)}
+                              disabled={instance.connection_state !== 'open'}
+                              title="Desconectar Instância"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </>
+                        )}
                         <Button
                           variant="outline"
                           size="sm"
@@ -2748,6 +2858,26 @@ export default function ConfigurationsPage() {
                   
                   <div className="space-y-4">
                     <div>
+                      <label htmlFor="integration_type" className="block text-sm font-medium text-gray-700">
+                        Tipo de conexão
+                      </label>
+                      <select
+                        id="integration_type"
+                        value={instanceFormData.integration_type}
+                        onChange={(e) => setInstanceFormData({ ...instanceFormData, integration_type: e.target.value })}
+                        className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                      >
+                        <option value={INTEGRATION_EVOLUTION}>Evolution (QR Code)</option>
+                        <option value={INTEGRATION_META_CLOUD}>API oficial Meta</option>
+                      </select>
+                      <p className="mt-1 text-xs text-gray-500">
+                        {instanceFormData.integration_type === INTEGRATION_META_CLOUD
+                          ? 'Conexão via WhatsApp Cloud API. Requer Phone Number ID e Access Token.'
+                          : 'Conexão via Evolution. Após salvar, use Gerar QR Code para conectar.'}
+                      </p>
+                    </div>
+
+                    <div>
                       <label htmlFor="friendly_name" className="block text-sm font-medium text-gray-700">
                         Nome da Instância *
                       </label>
@@ -2764,6 +2894,61 @@ export default function ConfigurationsPage() {
                         Nome de exibição para identificar esta instância
                       </p>
                     </div>
+
+                    {instanceFormData.integration_type === INTEGRATION_META_CLOUD ? (
+                      <>
+                        <div>
+                          <label htmlFor="phone_number_id" className="block text-sm font-medium text-gray-700">
+                            Phone Number ID *
+                          </label>
+                          <input
+                            type="text"
+                            id="phone_number_id"
+                            value={instanceFormData.phone_number_id}
+                            onChange={(e) => setInstanceFormData({ ...instanceFormData, phone_number_id: e.target.value })}
+                            disabled={!!editingInstance}
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            placeholder="ID do número no Meta Business"
+                          />
+                          <p className="mt-1 text-xs text-gray-500">ID do número no Meta (não alterável após criar)</p>
+                        </div>
+                        <div>
+                          <label htmlFor="access_token" className="block text-sm font-medium text-gray-700">
+                            Access Token *
+                          </label>
+                          <input
+                            type="password"
+                            id="access_token"
+                            value={instanceFormData.access_token}
+                            onChange={(e) => setInstanceFormData({ ...instanceFormData, access_token: e.target.value })}
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            placeholder={editingInstance && (editingInstance as any).access_token_set ? '•••• (deixe em branco para manter)' : 'Token permanente do Meta'}
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="business_account_id" className="block text-sm font-medium text-gray-700">
+                            Business Account ID (opcional)
+                          </label>
+                          <input
+                            type="text"
+                            id="business_account_id"
+                            value={instanceFormData.business_account_id}
+                            onChange={(e) => setInstanceFormData({ ...instanceFormData, business_account_id: e.target.value })}
+                            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                            placeholder="ID da conta Business"
+                          />
+                        </div>
+                        <div className="bg-indigo-50 p-4 rounded-lg">
+                          <p className="text-sm text-indigo-700">Configure o webhook no Meta Business Suite apontando para a URL do seu servidor.</p>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <p className="text-sm text-blue-700">
+                          ℹ️ O identificador único e o telefone serão preenchidos automaticamente após conectar o WhatsApp via QR Code.
+                        </p>
+                      </div>
+                    )}
 
                     <div>
                       <label htmlFor="default_department" className="block text-sm font-medium text-gray-700">
@@ -2784,12 +2969,6 @@ export default function ConfigurationsPage() {
                       </select>
                       <p className="mt-1 text-xs text-gray-500">
                         Novas conversas desta instância irão automaticamente para este departamento. Deixe em branco para ir para Inbox.
-                      </p>
-                    </div>
-
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <p className="text-sm text-blue-700">
-                        ℹ️ O identificador único e o telefone serão preenchidos automaticamente após conectar o WhatsApp via QR Code.
                       </p>
                     </div>
                   </div>

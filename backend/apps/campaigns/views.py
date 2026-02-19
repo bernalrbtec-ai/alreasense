@@ -742,50 +742,24 @@ class CampaignNotificationViewSet(viewsets.ReadOnlyModelViewSet):
             )
     
     def send_reply_via_evolution(self, notification, message):
-        """Enviar resposta via Evolution API"""
+        """Enviar resposta via provider (Evolution ou Meta Cloud)."""
         try:
-            import requests
-            from apps.connections.models import EvolutionConnection
-            
-            # notification.instance já é WhatsAppInstance
+            from apps.notifications.whatsapp_providers import get_sender
+
             wa_instance = notification.instance
-            
             if not wa_instance or not wa_instance.is_active:
                 return False
-            
-            # Buscar servidor Evolution para fallback de configs
-            evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
-            if not evolution_server:
+
+            sender = get_sender(wa_instance)
+            if not sender:
                 return False
-            
-            # Preparar dados para envio
-            payload = {
-                "number": notification.contact.phone,
-                "text": message
-            }
-            
-            # Usar config da instância ou fallback do servidor
-            api_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-            api_key = wa_instance.api_key or evolution_server.api_key
-            instance_name = wa_instance.instance_name  # UUID da instância
-            
-            headers = {
-                "Content-Type": "application/json",
-                "apikey": api_key
-            }
-            
-            # URL da Evolution API com UUID correto
-            url = f"{api_url}/message/sendText/{instance_name}"
-            
-            # Fazer requisição
-            response = requests.post(url, json=payload, headers=headers, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                return True
-            else:
+
+            phone = (notification.contact.phone or "").strip()
+            if not phone:
                 return False
-                
-        except Exception as e:
+
+            ok, _ = sender.send_text(phone, message)
+            return ok
+        except Exception:
             return False
 

@@ -432,6 +432,48 @@ class WhatsAppInstance(models.Model):
         help_text="Nome da instância no Evolution (geralmente igual a instance_name)"
     )
     
+    # Meta Cloud API (WhatsApp Cloud API) - quando integration_type == 'meta_cloud'
+    INTEGRATION_TYPE_EVOLUTION = 'evolution'
+    INTEGRATION_TYPE_META_CLOUD = 'meta_cloud'
+    INTEGRATION_TYPE_CHOICES = [
+        (INTEGRATION_TYPE_EVOLUTION, 'Evolution (QR)'),
+        (INTEGRATION_TYPE_META_CLOUD, 'API oficial Meta'),
+    ]
+    integration_type = models.CharField(
+        max_length=20,
+        choices=INTEGRATION_TYPE_CHOICES,
+        default=INTEGRATION_TYPE_EVOLUTION,
+        help_text="Evolution (QR) ou API oficial Meta (Cloud API)"
+    )
+    phone_number_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Meta Phone Number ID (só para integration_type=meta_cloud)"
+    )
+    access_token = models.TextField(
+        blank=True,
+        null=True,
+        help_text="Meta permanent/system user token (só para meta_cloud)"
+    )
+    business_account_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Meta WABA ID (opcional)"
+    )
+    app_id = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Meta App ID (opcional)"
+    )
+    access_token_expires_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Expiração do token Meta (se aplicável)"
+    )
+    
     # Health Tracking para Campanhas
     health_score = models.IntegerField(
         default=100,
@@ -500,6 +542,8 @@ class WhatsAppInstance(models.Model):
     
     def generate_qr_code(self):
         """Generate QR code for connection."""
+        if getattr(self, 'integration_type', None) == self.INTEGRATION_TYPE_META_CLOUD:
+            return None  # no-op para API oficial Meta (sem QR)
         import requests
         from django.utils import timezone
         from datetime import timedelta
@@ -747,6 +791,8 @@ class WhatsAppInstance(models.Model):
         Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
         Usa /instance/fetchInstances para obter TODOS os dados de uma vez.
         """
+        if getattr(self, 'integration_type', None) == self.INTEGRATION_TYPE_META_CLOUD:
+            return True  # no-op para API oficial Meta (conexão é sempre via token)
         import requests
         from apps.connections.models import EvolutionConnection
         
@@ -880,6 +926,8 @@ class WhatsAppInstance(models.Model):
         Disconnect the instance.
         Usa API MASTER para operações admin (padrão whatsapp-orchestrator).
         """
+        if getattr(self, 'integration_type', None) == self.INTEGRATION_TYPE_META_CLOUD:
+            return True  # no-op para API oficial Meta
         import requests
         from apps.connections.models import EvolutionConnection
         
@@ -1115,6 +1163,76 @@ class WhatsAppInstance(models.Model):
             self.is_healthy and
             self.msgs_sent_today < daily_limit
         )
+
+
+class WhatsAppTemplate(models.Model):
+    """
+    Template de mensagem WhatsApp (Meta Cloud API).
+    Usado para envio fora da janela de 24h (apenas mensagens inbound do contato renovam a janela).
+    """
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant,
+        on_delete=models.CASCADE,
+        related_name='whatsapp_templates',
+        verbose_name='Tenant',
+    )
+    # Instância opcional: se preenchido, template disponível só para essa instância (Meta)
+    wa_instance = models.ForeignKey(
+        WhatsAppInstance,
+        on_delete=models.CASCADE,
+        related_name='templates',
+        null=True,
+        blank=True,
+        verbose_name='Instância WhatsApp',
+        help_text='Opcional. Se vazio, template disponível para qualquer instância Meta do tenant.',
+    )
+    name = models.CharField(
+        max_length=255,
+        verbose_name='Nome (exibição)',
+        help_text='Nome amigável para identificar o template no sistema',
+    )
+    template_id = models.CharField(
+        max_length=100,
+        db_index=True,
+        verbose_name='ID do template na Meta',
+        help_text='Nome do template aprovado no Meta Business (ex: hello_world, nome_da_sua_empresa)',
+    )
+    language_code = models.CharField(
+        max_length=10,
+        default='pt_BR',
+        verbose_name='Código do idioma',
+        help_text='Código do idioma do template (ex: pt_BR, en_US)',
+    )
+    # Parâmetros do body: lista de textos na ordem (ex: ["{{1}}", "{{2}}"] substituídos pelo Meta)
+    body_parameters_default = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name='Parâmetros padrão do body',
+        help_text='Lista de valores padrão para variáveis do body (ex: ["Olá", "João"])',
+    )
+    is_active = models.BooleanField(
+        default=True,
+        db_index=True,
+        verbose_name='Ativo',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'notifications_whatsapp_template'
+        verbose_name = 'Template WhatsApp'
+        verbose_name_plural = 'Templates WhatsApp'
+        ordering = ['name']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['tenant', 'template_id', 'language_code'],
+                name='notifications_wa_template_tenant_id_lang_uniq',
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.template_id})"
 
 
 class WhatsAppConnectionLog(models.Model):

@@ -3700,58 +3700,69 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         )
         if department_changed and conversation.department:
             try:
-                import httpx
+                from django.db.models import Q
                 from apps.notifications.models import WhatsAppInstance
-                from apps.connections.models import EvolutionConnection
+                from apps.notifications.whatsapp_providers import get_sender
                 
-                # Buscar instância WhatsApp ativa
-                wa_instance = WhatsAppInstance.objects.filter(
-                    tenant=user.tenant,
-                    is_active=True,
-                    status='active'
-                ).first()
+                # Lookup unificado: instance_name da conversa (Evolution) ou phone_number_id quando numérico (Meta)
+                wa_instance = None
+                inst_name = (conversation.instance_name or '').strip()
+                if inst_name:
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name),
+                        tenant=user.tenant,
+                        is_active=True,
+                        status='active',
+                    ).first()
+                    if not wa_instance and inst_name.isdigit():
+                        wa_instance = WhatsAppInstance.objects.filter(
+                            phone_number_id=inst_name,
+                            integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+                            tenant=user.tenant,
+                            is_active=True,
+                            status='active',
+                        ).first()
+                if not wa_instance:
+                    wa_instance = WhatsAppInstance.objects.filter(
+                        tenant=user.tenant,
+                        is_active=True,
+                        status='active',
+                    ).first()
                 
-                # Buscar servidor Evolution
-                evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
+                transfer_message_text = (conversation.department.transfer_message or "").strip()
+                if not transfer_message_text:
+                    transfer_message_text = (
+                        f"Sua conversa foi transferida para o departamento {conversation.department.name}. "
+                        "Em breve você será atendido."
+                    )
                 
-                if wa_instance and evolution_server:
-                    base_url = (wa_instance.api_url or evolution_server.base_url).rstrip('/')
-                    api_key = wa_instance.api_key or evolution_server.api_key
-                    instance_name = wa_instance.instance_name
-                    
-                    # Mensagem de transferência: usar transfer_message do departamento ou padrão
-                    transfer_message_text = (conversation.department.transfer_message or "").strip()
-                    if not transfer_message_text:
-                        transfer_message_text = (
-                            f"Sua conversa foi transferida para o departamento {conversation.department.name}. "
-                            "Em breve você será atendido."
-                        )
-                    
-                    # Enviar via Evolution API
-                    with httpx.Client(timeout=10.0) as client:
-                        response = client.post(
-                            f"{base_url}/message/sendText/{instance_name}",
-                            json={
-                                'number': conversation.contact_phone.replace('@g.us', '').replace('@s.whatsapp.net', ''),
-                                'text': transfer_message_text
-                            },
-                            headers={'apikey': api_key, 'Content-Type': 'application/json'}
-                        )
-                        
-                        if response.status_code in [200, 201]:
+                sender = get_sender(wa_instance)
+                if sender and wa_instance:
+                    to_phone = (conversation.contact_phone or '').replace('@g.us', '').replace('@s.whatsapp.net', '').strip()
+                    if to_phone:
+                        ok, resp = sender.send_text(to_phone, transfer_message_text)
+                        if ok:
                             logger.info(
-                                f"✅ [TRANSFER] Mensagem automática enviada para {conversation.contact_phone} "
-                                f"(departamento: {conversation.department.name})"
+                                "✅ [TRANSFER] Mensagem automática enviada (provider=%s) para %s departamento=%s",
+                                getattr(wa_instance, 'integration_type', 'evolution'),
+                                conversation.contact_phone,
+                                conversation.department.name,
                             )
                         else:
                             logger.warning(
-                                f"⚠️ [TRANSFER] Erro ao enviar mensagem automática: {response.status_code}"
+                                "⚠️ [TRANSFER] Erro ao enviar mensagem automática: %s",
+                                resp.get('error', resp),
                             )
                 else:
-                    logger.warning(
-                        f"⚠️ [TRANSFER] Instância WhatsApp ou Evolution não encontrada - "
-                        f"mensagem automática não enviada"
-                    )
+                    if not wa_instance:
+                        logger.warning(
+                            "⚠️ [TRANSFER] Instância WhatsApp não encontrada - mensagem automática não enviada"
+                        )
+                    else:
+                        logger.warning(
+                            "⚠️ [TRANSFER] get_sender retornou None (instance_id=%s) - mensagem automática não enviada",
+                            wa_instance.id,
+                        )
             except Exception as e:
                 logger.error(
                     f"❌ [TRANSFER] Erro ao enviar mensagem automática: {e}",

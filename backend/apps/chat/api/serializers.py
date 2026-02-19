@@ -652,6 +652,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     department_name = serializers.SerializerMethodField()  # ✅ FIX: Mudado para SerializerMethodField para tratar null
     contact_tags = serializers.SerializerMethodField()
     instance_friendly_name = serializers.SerializerMethodField()
+    integration_type = serializers.SerializerMethodField()  # Fase 7: 'evolution' | 'meta_cloud' para desabilitar edição no frontend
     
     # ✅ FIX: Garantir que department sempre retorne como UUID string (ou null)
     department = serializers.PrimaryKeyRelatedField(
@@ -670,6 +671,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tenant', 'department', 'department_name',
             'contact_phone', 'contact_name', 'profile_pic_url', 'instance_name', 'instance_friendly_name',
+            'integration_type',
             'assigned_to', 'assigned_to_data',
             'status', 'last_message_at', 'metadata', 'participants',
             'participants_data', 'created_at', 'updated_at',
@@ -678,8 +680,9 @@ class ConversationSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = [
             'id', 'tenant', 'created_at', 'updated_at', 'last_message_at',
-            'unread_count', 'assigned_to_data', 'participants_data', 'department_name', 
-            'profile_pic_url', 'instance_name', 'instance_friendly_name', 'contact_tags'
+            'unread_count', 'assigned_to_data', 'participants_data', 'department_name',
+            'profile_pic_url', 'instance_name', 'instance_friendly_name', 'contact_tags',
+            'integration_type',
         ]
     
     def get_participants_data(self, obj):
@@ -750,6 +753,25 @@ class ConversationSerializer(serializers.ModelSerializer):
             cache.set(cache_key, friendly_name, 300)
         
         return friendly_name
+    
+    def get_integration_type(self, obj):
+        """Fase 7: Retorna 'meta_cloud' ou 'evolution' para o frontend (edição desabilitada para Meta)."""
+        if not obj.instance_name:
+            return 'evolution'
+        from apps.notifications.models import WhatsAppInstance
+        inst_name = str(obj.instance_name).strip()
+        if inst_name.isdigit():
+            wa = WhatsAppInstance.objects.filter(
+                phone_number_id=inst_name,
+                tenant=obj.tenant,
+                integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+            ).values('integration_type').first()
+            return (wa or {}).get('integration_type') or 'evolution'
+        wa = WhatsAppInstance.objects.filter(
+            models.Q(instance_name=inst_name) | models.Q(evolution_instance_name=inst_name),
+            tenant=obj.tenant,
+        ).values('integration_type').first()
+        return (wa or {}).get('integration_type') or 'evolution'
     
     def get_contact_tags(self, obj):
         """Busca as tags do contato pelo telefone (com cache)."""

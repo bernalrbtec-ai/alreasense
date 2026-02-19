@@ -36,15 +36,23 @@ export function FileUploader({
 }: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tipos de arquivo permitidos
+  // Tipos de arquivo permitidos (MIME + extensões para o file picker mostrar Word/Excel)
   const allowedTypes = [
     'image/*',
     'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // DOCX
-    'application/msword', // DOC
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // XLSX
-    'application/vnd.ms-excel', // XLS
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+    'application/msword', // .doc
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+    'application/vnd.ms-excel', // .xls
   ];
+  const acceptAttr = [
+    ...allowedTypes,
+    '.doc',
+    '.docx',
+    '.xls',
+    '.xlsx',
+    '.pdf',
+  ].join(',');
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,7 +88,7 @@ export function FileUploader({
       <input
         ref={fileInputRef}
         type="file"
-        accept={allowedTypes.join(',')}
+        accept={acceptAttr}
         onChange={handleFileSelect}
         className="hidden"
         disabled={disabled || externalIsUploading}

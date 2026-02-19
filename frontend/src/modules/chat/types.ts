@@ -34,6 +34,8 @@ export interface Conversation {
   profile_pic_url?: string | null;
   instance_name?: string;
   instance_friendly_name?: string;
+  /** Fase 7: 'evolution' | 'meta_cloud' — API Meta não suporta edição de mensagem */
+  integration_type?: 'evolution' | 'meta_cloud';
   assigned_to?: string;
   assigned_to_data?: User;
   status: 'pending' | 'open' | 'closed';

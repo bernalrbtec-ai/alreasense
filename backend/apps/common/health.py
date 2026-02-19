@@ -115,6 +115,11 @@ def check_evolution_api():
         total_count = WhatsAppInstance.objects.count()
         active_count = WhatsAppInstance.objects.filter(is_active=True).count()
         inactive_count = total_count - active_count
+        # Apenas Evolution para comparação com external_api_instances (API Evolution)
+        evolution_count = WhatsAppInstance.objects.filter(
+            is_active=True,
+            integration_type=WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION,
+        ).count()
 
         api_status = 'disconnected'
         external_count = 0
@@ -149,6 +154,7 @@ def check_evolution_api():
                 'total': total_count,
                 'active': active_count,
                 'inactive': inactive_count,
+                'evolution': evolution_count,
             },
             'external_api_instances': external_count,
             'api_connectivity': api_status

@@ -8,7 +8,7 @@
 
 import { toast } from 'sonner'
 
-type Action = 'criar' | 'atualizar' | 'excluir' | 'salvar' | 'carregar' | 'importar' | 'exportar' | 'conectar' | 'desconectar' | 'testar' | 'buscar' | 'iniciar' | 'pausar' | 'retomar' | 'cancelar' | 'duplicar'
+type Action = 'criar' | 'atualizar' | 'excluir' | 'salvar' | 'carregar' | 'importar' | 'exportar' | 'conectar' | 'desconectar' | 'testar' | 'buscar' | 'iniciar' | 'pausar' | 'retomar' | 'cancelar' | 'duplicar' | 'validar'
 type Entity = string // 'Cliente', 'Produto', 'Contato', 'Instância', etc
 
 /**
@@ -32,6 +32,7 @@ export function showSuccessToast(action: Action, entity: Entity) {
     retomar: `✅ ${entity} retomado com sucesso!`,
     cancelar: `✅ ${entity} cancelado com sucesso!`,
     duplicar: `✅ ${entity} duplicado com sucesso!`,
+    validar: `✅ ${entity} validado com sucesso!`,
   }
 
   toast.success(messages[action] || `✅ ${action} realizado com sucesso!`)
@@ -110,6 +111,7 @@ export function showErrorToast(action: Action, entity: Entity, error?: any) {
     retomar: `Erro ao retomar ${entity}`,
     cancelar: `Erro ao cancelar ${entity}`,
     duplicar: `Erro ao duplicar ${entity}`,
+    validar: `Erro ao validar ${entity}`,
   }
 
   const baseMessage = baseMessages[action] || `Erro ao ${action} ${entity}`

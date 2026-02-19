@@ -33,6 +33,7 @@ from django.core.cache import cache
 from django.utils import timezone
 from django.db import IntegrityError
 from apps.chat.webhooks import send_read_receipt
+from apps.notifications.whatsapp_providers import get_sender
 from apps.chat.utils.instance_state import (
     should_defer_instance,
     InstanceTemporarilyUnavailable,
@@ -43,6 +44,18 @@ from apps.chat.utils.metrics import record_latency, record_error
 logger = logging.getLogger(__name__)
 send_logger = logging.getLogger("flow.chat.send")
 read_logger = logging.getLogger("flow.chat.read")
+
+
+def _extract_provider_message_id(data: Optional[Dict[str, Any]], provider_kind: str = 'evolution') -> Optional[str]:
+    """Extrai message_id da resposta do provider (Evolution ou Meta)."""
+    if not data:
+        return None
+    if provider_kind == 'meta':
+        messages = data.get('messages') or []
+        if messages and isinstance(messages[0], dict):
+            return messages[0].get('id')
+        return None
+    return extract_evolution_message_id(data)
 
 
 def extract_evolution_message_id(data: Optional[Dict[str, Any]]) -> Optional[str]:
@@ -648,16 +661,28 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         
         from django.db.models import Q
         instance = None
-        if message.conversation.instance_name and str(message.conversation.instance_name).strip():
+        inst_name = (message.conversation.instance_name or '').strip()
+        if inst_name:
+            # Lookup por instance_name / evolution_instance_name (Evolution)
             instance = await database_sync_to_async(
                 lambda: WhatsAppInstance.objects.filter(
-                    Q(instance_name=message.conversation.instance_name.strip())
-                    | Q(evolution_instance_name=message.conversation.instance_name.strip()),
+                    Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name),
                     tenant=message.conversation.tenant,
                     is_active=True,
                     status='active',
                 ).first()
             )()
+            # Se instance_name é só dígitos (numérico), pode ser phone_number_id da Meta
+            if not instance and inst_name.isdigit():
+                instance = await database_sync_to_async(
+                    lambda: WhatsAppInstance.objects.filter(
+                        phone_number_id=inst_name,
+                        integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+                        tenant=message.conversation.tenant,
+                        is_active=True,
+                        status='active',
+                    ).first()
+                )()
         if not instance:
             instance = await database_sync_to_async(
                 WhatsAppInstance.objects.filter(
@@ -681,7 +706,11 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             instance.api_url,
         )
 
-        defer, state_info = should_defer_instance(instance.instance_name)
+        # Meta Cloud: não usa EvolutionConnection/QR; não defer por estado
+        if getattr(instance, 'integration_type', None) != WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            defer, state_info = should_defer_instance(instance.instance_name)
+        else:
+            defer, state_info = False, None
         if defer:
             wait_seconds = compute_backoff(retry_count)
             log.warning(
@@ -694,9 +723,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             raise InstanceTemporarilyUnavailable(instance.instance_name, (state_info.raw if state_info else {}), wait_seconds)
 
         # ✅ CORREÇÃO: Verificação mais tolerante de connection_state
-        # Aceita estados transitórios (connecting) se forem recentes (< 5s)
-        # Isso evita reagendar mensagens quando a instância está apenas fazendo transição rápida
-        connection_state = instance.connection_state
+        # Meta Cloud: não usa connection_state Evolution; aceitar sempre
+        connection_state = None if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD else instance.connection_state
         if connection_state:
             # Estados aceitos imediatamente
             if connection_state in ('open', 'connected', 'active'):
@@ -1067,7 +1095,167 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 MessageAttachment.objects.filter(message=message)
             )
         
-        # Envia via Evolution API
+        # Envio via provider (Evolution ou Meta Cloud) quando disponível
+        sender = await database_sync_to_async(get_sender)(instance)
+        provider_kind = 'meta' if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD else 'evolution'
+        if sender:
+            from django.db import close_old_connections
+            location_data = (message.metadata or {}).get('location_message', {})
+            loc_lat, loc_lng = location_data.get('latitude'), location_data.get('longitude')
+            quoted_content = None
+            if original_message:
+                quoted_content = (original_message.content or '').strip() or None
+                if not quoted_content and getattr(original_message, 'attachments', None):
+                    atts = list(original_message.attachments.all()) if hasattr(original_message.attachments, 'all') else []
+                    if atts:
+                        quoted_content = '📎 Anexo'
+            try:
+                last_ok = False
+                last_data = {}
+                if loc_lat is not None and loc_lng is not None and not attachment_urls:
+                    last_ok, last_data = await asyncio.to_thread(
+                        sender.send_location,
+                        recipient_value,
+                        float(loc_lat),
+                        float(loc_lng),
+                        location_data.get('name') or 'Localização',
+                        location_data.get('address') or '',
+                        quoted_message_id,
+                        quoted_remote_jid=quoted_remote_jid,
+                        quoted_message_content=quoted_content,
+                        quoted_from_me=bool(original_message and original_message.direction == 'outgoing'),
+                        quoted_participant=quoted_participant,
+                    )
+                elif attachment_urls and attachments_list:
+                    for idx, url in enumerate(attachment_urls):
+                        att = attachments_list[idx] if idx < len(attachments_list) else None
+                        mime = att.mime_type if att else 'application/octet-stream'
+                        fname = att.original_filename if att else 'file'
+                        final_url = (att.short_url or url) if att else url
+                        if mime.startswith('audio/'):
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_audio_ptt,
+                                recipient_value,
+                                final_url,
+                                quoted_message_id,
+                                quoted_remote_jid=quoted_remote_jid,
+                                quoted_message_content=quoted_content,
+                                quoted_from_me=bool(original_message and original_message.direction == 'outgoing'),
+                                quoted_participant=quoted_participant,
+                            )
+                        else:
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_media,
+                                recipient_value,
+                                final_url,
+                                mime,
+                                content_for_send if not idx else None,
+                                fname,
+                                quoted_message_id,
+                                quoted_remote_jid=quoted_remote_jid,
+                                quoted_message_content=quoted_content,
+                                quoted_from_me=bool(original_message and original_message.direction == 'outgoing'),
+                                quoted_participant=quoted_participant,
+                            )
+                        if not last_ok:
+                            break
+                else:
+                    # Texto puro (sem anexo nem localização)
+                    # Meta: fora da janela 24h só pode enviar por template
+                    if provider_kind == 'meta':
+                        from apps.chat.whatsapp_24h import is_within_24h_window
+                        within_24h = await database_sync_to_async(is_within_24h_window)(conversation)
+                        if not within_24h:
+                            meta = message.metadata or {}
+                            wa_template_id = meta.get('wa_template_id')
+                            if not wa_template_id:
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='failed', error_message='Fora da janela 24h. Selecione um template aprovado para enviar.')
+                                log.warning(
+                                    "❌ [CHAT ENVIO] Meta: fora da janela 24h sem template | conversation_id=%s",
+                                    str(conversation.id),
+                                )
+                                return
+                            from apps.notifications.models import WhatsAppTemplate
+                            wa_template = await database_sync_to_async(
+                                WhatsAppTemplate.objects.filter(
+                                    id=wa_template_id,
+                                    tenant_id=conversation.tenant_id,
+                                    is_active=True,
+                                ).first
+                            )()
+                            if not wa_template:
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='failed', error_message='Template não encontrado ou inativo.')
+                                return
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_template,
+                                recipient_value,
+                                wa_template.template_id,
+                                wa_template.language_code or 'pt_BR',
+                                wa_template.body_parameters_default or [],
+                            )
+                        else:
+                            last_ok, last_data = await asyncio.to_thread(
+                                sender.send_text,
+                                recipient_value,
+                                content_for_send or '',
+                                quoted_message_id,
+                            )
+                    else:
+                        last_ok, last_data = await asyncio.to_thread(
+                            sender.send_text,
+                            recipient_value,
+                            content_for_send or '',
+                            quoted_message_id,
+                        )
+                if last_ok:
+                    evo_id = _extract_provider_message_id(last_data, provider_kind)
+                    if evo_id:
+                        close_old_connections()
+                        await database_sync_to_async(
+                            Message.objects.filter(id=message.id).update
+                        )(message_id=evo_id)
+                    close_old_connections()
+                    await database_sync_to_async(
+                        Message.objects.filter(id=message.id).update
+                    )(status='sent', evolution_status='sent')
+                    from apps.chat.utils.websocket import broadcast_conversation_updated, broadcast_message_received
+                    msg_obj = await database_sync_to_async(
+                        Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
+                    )(id=message.id)
+                    broadcast_message_received(msg_obj)
+                    await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
+                    log.info("✅ [CHAT ENVIO] Mensagem enviada via provider (provider=%s)", provider_kind)
+                    return
+                err = last_data.get('error', '') or str(last_data)
+                close_old_connections()
+                await database_sync_to_async(
+                    Message.objects.filter(id=message.id).update
+                )(status='failed', error_message=err[:500])
+                log.warning("❌ [CHAT ENVIO] Provider retornou falha (provider=%s): %s", provider_kind, err[:200])
+                return
+            except Exception as e:
+                log.exception("❌ [CHAT ENVIO] Erro ao enviar via provider: %s", e)
+                close_old_connections()
+                await database_sync_to_async(
+                    Message.objects.filter(id=message.id).update
+                )(status='failed', error_message=str(e)[:500])
+                return
+        
+        # Meta sem provider válido: não usar Evolution
+        if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            close_old_connections()
+            await database_sync_to_async(
+                Message.objects.filter(id=message.id).update
+            )(status='failed', error_message='Instância Meta sem phone_number_id/access_token válidos')
+            return
+        
+        # Envia via Evolution API (path legado quando get_sender não usado)
         async with httpx.AsyncClient(timeout=30.0) as client:
             base_url = instance.api_url.rstrip('/')
             
