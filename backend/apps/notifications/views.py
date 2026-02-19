@@ -372,7 +372,11 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
         try:
             logger.info("send_test: enviando via provider instance_id=%s", str(instance.id))
-            ok, data = sender.send_text(phone.strip(), message)
+            # Meta: fora da janela 24h só aceita template; usar hello_world para teste (igual ao curl que funciona)
+            if integration_type == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD and hasattr(sender, 'send_template'):
+                ok, data = sender.send_template(phone.strip(), 'hello_world', 'en_US', [])
+            else:
+                ok, data = sender.send_text(phone.strip(), message)
             if ok:
                 logger.info("send_test: mensagem enviada com sucesso instance_id=%s", str(instance.id))
                 return Response({'success': True, 'message': 'Mensagem de teste enviada com sucesso', 'data': data})
