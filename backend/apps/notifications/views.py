@@ -549,6 +549,12 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
     serializer_class = WhatsAppTemplateSerializer
     permission_classes = [IsAuthenticated]
 
+    def perform_create(self, serializer):
+        if not self.request.user.tenant:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError({'tenant': 'Usuário sem tenant. Não é possível criar template.'})
+        serializer.save(tenant=self.request.user.tenant)
+
     def get_queryset(self):
         user = self.request.user
         if not user.tenant:

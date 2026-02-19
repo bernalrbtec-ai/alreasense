@@ -531,8 +531,21 @@ export default function ConfigurationsPage() {
       closeMetaTemplateModal()
       fetchMetaTemplates()
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { template_id?: string[]; detail?: string } } })?.response?.data
-      const message = msg?.template_id?.[0] || msg?.detail || 'Erro ao salvar template. Verifique se já não existe um template com o mesmo ID e idioma.'
+      const data = (err as { response?: { data?: Record<string, unknown>; status?: number } })?.response?.data
+      let message: string
+      if (data && typeof data === 'object') {
+        if (typeof (data as { detail?: string }).detail === 'string') message = (data as { detail: string }).detail
+        else if (Array.isArray((data as { template_id?: string[] }).template_id)) message = (data as { template_id: string[] }).template_id[0]
+        else if (Array.isArray((data as { tenant?: string[] }).tenant)) message = (data as { tenant: string[] }).tenant[0]
+        else if (typeof (data as { error?: string }).error === 'string') message = (data as { error: string }).error
+        else {
+          const firstKey = Object.keys(data)[0]
+          const firstVal = firstKey ? (data as Record<string, unknown>)[firstKey] : undefined
+          message = Array.isArray(firstVal) ? String(firstVal[0]) : String(firstVal ?? 'Erro ao salvar template.')
+        }
+      } else {
+        message = 'Erro ao salvar template. Verifique se já não existe um template com o mesmo ID e idioma.'
+      }
       updateToastError(toastId, editingMetaTemplate ? 'atualizar' : 'criar', 'Template', { message })
     }
   }
