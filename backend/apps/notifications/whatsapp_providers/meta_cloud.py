@@ -80,7 +80,14 @@ class MetaCloudProvider(WhatsAppSenderBase):
     ) -> Tuple[bool, Dict[str, Any]]:
         to = self._to_phone(phone)
         if not to:
+            logger.warning("Meta send_text: phone vazio instance_id=%s", str(self.instance.id))
             return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}
+        logger.info(
+            "Meta send_text: enviando para to=%s*** instance_id=%s phone_number_id=%s",
+            to[:4] if len(to) >= 4 else to,
+            str(self.instance.id),
+            self._phone_number_id,
+        )
         payload = {
             'messaging_product': 'whatsapp',
             'recipient_type': 'individual',

@@ -1,3 +1,4 @@
+import logging
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -5,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.pagination import PageNumberPagination
 from django.contrib.auth import get_user_model
 from django.db import models
+
+logger = logging.getLogger(__name__)
 
 from .models import (
     NotificationTemplate, WhatsAppInstance, WhatsAppTemplate, NotificationLog, SMTPConfig,
@@ -346,24 +349,41 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         instance = self.get_object()
         phone = request.data.get('phone')
         message = request.data.get('message', 'Teste de notificação do Alrea Sense')
+        integration_type = getattr(instance, 'integration_type', None) or 'evolution'
+        logger.info(
+            "send_test: instance_id=%s integration_type=%s phone=%s",
+            str(instance.id),
+            integration_type,
+            (phone or '')[:4] + '***' if phone and len(phone) > 4 else (phone or ''),
+        )
         if not phone:
             return Response({'success': False, 'error': 'Número de telefone obrigatório'}, status=status.HTTP_400_BAD_REQUEST)
         from apps.notifications.whatsapp_providers import get_sender
         sender = get_sender(instance)
         if not sender:
+            logger.warning(
+                "send_test: provider não disponível instance_id=%s integration_type=%s (verifique Meta: phone_number_id e access_token)",
+                str(instance.id),
+                integration_type,
+            )
             return Response({
                 'success': False,
                 'error': 'Provider não disponível para esta instância (verifique Phone Number ID e Access Token para Meta)'
             }, status=status.HTTP_400_BAD_REQUEST)
         try:
+            logger.info("send_test: enviando via provider instance_id=%s", str(instance.id))
             ok, data = sender.send_text(phone.strip(), message)
             if ok:
+                logger.info("send_test: mensagem enviada com sucesso instance_id=%s", str(instance.id))
                 return Response({'success': True, 'message': 'Mensagem de teste enviada com sucesso', 'data': data})
+            err = data.get('error', str(data))[:500]
+            logger.warning("send_test: falha no envio instance_id=%s error=%s", str(instance.id), err)
             return Response({
                 'success': False,
-                'error': data.get('error', str(data))[:500]
+                'error': err
             }, status=status.HTTP_400_BAD_REQUEST)
         except Exception as e:
+            logger.exception("send_test: exceção instance_id=%s: %s", str(instance.id), e)
             return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
     @action(detail=True, methods=['post'])
