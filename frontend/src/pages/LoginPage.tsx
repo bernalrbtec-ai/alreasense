@@ -31,7 +31,11 @@ export default function LoginPage() {
     } catch (err: any) {
       const status = err.response?.status
       const isCredentialError = status === 400 || status === 401 || status === 403
-      setError(isCredentialError ? 'Usuário ou senha incorretos. Tente novamente.' : 'Erro ao fazer login. Tente novamente.')
+      setError(
+        isCredentialError
+          ? 'Usuário ou senha incorretos. Tente novamente.'
+          : 'Erro ao fazer login. Tente novamente.'
+      )
     }
   }
 
@@ -51,6 +55,15 @@ export default function LoginPage() {
           <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Alrea Sense</h1>
         </div>
 
+        {error && (
+          <div
+            role="alert"
+            className="rounded-lg border border-red-300 dark:border-red-700 bg-red-50 dark:bg-red-900/30 text-red-800 dark:text-red-200 px-4 py-3 text-sm font-medium shadow-sm"
+          >
+            {error}
+          </div>
+        )}
+
         <Card>
           <CardHeader>
             <CardTitle>Entrar</CardTitle>
@@ -60,12 +73,6 @@ export default function LoginPage() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
-              {error && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded">
-                  {error}
-                </div>
-              )}
-
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Email
