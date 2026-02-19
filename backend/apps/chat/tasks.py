@@ -1227,7 +1227,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     msg_obj = await database_sync_to_async(
                         Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
                     )(id=message.id)
-                    broadcast_message_received(msg_obj)
+                    await database_sync_to_async(broadcast_message_received)(msg_obj)
                     await database_sync_to_async(broadcast_conversation_updated)(message.conversation, message_id=str(message.id))
                     log.info("✅ [CHAT ENVIO] Mensagem enviada via provider (provider=%s)", provider_kind)
                     return
@@ -1309,7 +1309,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         msg_obj = await database_sync_to_async(
                             Message.objects.select_related('conversation', 'sender').prefetch_related('attachments').get
                         )(id=message.id)
-                        broadcast_message_received(msg_obj)
+                        await database_sync_to_async(broadcast_message_received)(msg_obj)
                         return
                     else:
                         err_text = resp.text[:500] if resp.text else ''

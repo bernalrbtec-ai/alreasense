@@ -521,6 +521,29 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             }, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _fetch_meta_message_templates(waba_id, access_token, timeout=15):
+    """
+    Chama GET /{WABA_ID}/message_templates na Graph API.
+    Retorna (ok: bool, data: list, error: str|None).
+    """
+    import requests
+    url = f"https://graph.facebook.com/v21.0/{waba_id}/message_templates"
+    headers = {'Authorization': f'Bearer {access_token}'}
+    try:
+        r = requests.get(url, headers=headers, timeout=timeout)
+        data = r.json() if r.text else {}
+        if r.status_code in (200, 201):
+            items = data.get('data') if isinstance(data.get('data'), list) else []
+            return True, items, None
+        err = data.get('error', {})
+        msg = err.get('message', r.text or 'Erro desconhecido')
+        if r.status_code in (401, 403):
+            return False, [], f'Sem permissão: {msg}'
+        return False, [], msg
+    except requests.RequestException as e:
+        return False, [], str(e)
+
+
 class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for WhatsAppTemplate (templates Meta para janela 24h)."""
     serializer_class = WhatsAppTemplateSerializer
@@ -535,6 +558,65 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
         if wa_instance_id:
             qs = qs.filter(models.Q(wa_instance_id=wa_instance_id) | models.Q(wa_instance__isnull=True))
         return qs.order_by('name')
+
+    @action(detail=False, methods=['post'])
+    def sync_meta_status(self, request):
+        """
+        Sincroniza meta_status e meta_status_updated_at com a API da Meta (GET message_templates por WABA).
+        Só atualiza registros onde wa_instance é null ou igual à instância cujo WABA foi consultado.
+        Retorna 200 com resumo: { "synced_instances": int, "errors": [str] }.
+        """
+        from django.utils import timezone
+        user = request.user
+        if not user.tenant:
+            return Response(
+                {'synced_instances': 0, 'errors': ['Usuário sem tenant']},
+                status=status.HTTP_200_OK,
+            )
+        instances = WhatsAppInstance.objects.filter(
+            tenant=user.tenant,
+            integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+        ).exclude(
+            models.Q(business_account_id='') | models.Q(business_account_id__isnull=True)
+        ).exclude(
+            models.Q(access_token='') | models.Q(access_token__isnull=True)
+        )
+        synced = 0
+        errors = []
+        now = timezone.now()
+        for instance in instances:
+            waba_id = (instance.business_account_id or '').strip()
+            token = (instance.access_token or '').strip()
+            if not waba_id or not token:
+                continue
+            ok, items, err_msg = _fetch_meta_message_templates(waba_id, token)
+            if not ok:
+                errors.append(f'{instance.friendly_name or instance.id}: {err_msg or "Erro desconhecido"}')
+                continue
+            synced += 1
+            for item in items:
+                name = item.get('name') or item.get('template_id')
+                lang = item.get('language')
+                if not name:
+                    continue
+                if isinstance(lang, dict):
+                    lang = lang.get('code') or lang.get('language', '')
+                raw_status = item.get('status', '')
+                meta_status_val = (raw_status or '').strip().lower() or 'unknown'
+                if meta_status_val not in ('approved', 'pending', 'rejected', 'limited', 'disabled', 'unknown', 'sync_error'):
+                    meta_status_val = 'unknown'
+                qs = WhatsAppTemplate.objects.filter(
+                    tenant=user.tenant,
+                    template_id=name,
+                    language_code=(lang or ''),
+                ).filter(
+                    models.Q(wa_instance__isnull=True) | models.Q(wa_instance_id=instance.id)
+                )
+                qs.update(meta_status=meta_status_val, meta_status_updated_at=now)
+        return Response(
+            {'synced_instances': synced, 'errors': errors},
+            status=status.HTTP_200_OK,
+        )
 
 
 class NotificationLogViewSet(viewsets.ReadOnlyModelViewSet):

@@ -1216,6 +1216,20 @@ class WhatsAppTemplate(models.Model):
         db_index=True,
         verbose_name='Ativo',
     )
+    # Status na Meta (sincronizado via GET message_templates); null = nunca sincronizado
+    meta_status = models.CharField(
+        max_length=20,
+        null=True,
+        blank=True,
+        db_index=True,
+        verbose_name='Status na Meta',
+        help_text='approved, pending, rejected, limited, disabled, unknown, sync_error',
+    )
+    meta_status_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name='Última verificação do status na Meta',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

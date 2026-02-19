@@ -126,9 +126,10 @@ class WhatsAppTemplateSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tenant', 'name', 'template_id', 'language_code',
             'body_parameters_default', 'is_active', 'wa_instance', 'wa_instance_name',
+            'meta_status', 'meta_status_updated_at',
             'created_at', 'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'meta_status', 'meta_status_updated_at']
         extra_kwargs = {
             'wa_instance': {'required': False, 'allow_null': True},
         }

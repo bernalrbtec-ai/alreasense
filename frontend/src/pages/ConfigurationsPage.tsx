@@ -50,6 +50,7 @@ import { useTenantLimits } from '../hooks/useTenantLimits'
 import { DepartmentsManager } from '../components/team/DepartmentsManager'
 import { UsersManager } from '../components/team/UsersManager'
 import { NotificationSettings } from '../modules/notifications/components/NotificationSettings'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 const INTEGRATION_EVOLUTION = 'evolution'
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -235,6 +236,22 @@ interface GatewayAuditItem {
   created_at: string
 }
 
+interface MetaWhatsAppTemplate {
+  id: string
+  tenant: string
+  name: string
+  template_id: string
+  language_code: string
+  body_parameters_default: string[]
+  is_active: boolean
+  wa_instance: string | null
+  wa_instance_name: string | null
+  meta_status: string | null
+  meta_status_updated_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 const DAYS = [
   { key: 'monday', label: 'Segunda-feira', short: 'Seg' },
   { key: 'tuesday', label: 'Terça-feira', short: 'Ter' },
@@ -258,7 +275,7 @@ const DEFAULT_AI_MODELS: string[] = []
 export default function ConfigurationsPage() {
   const { user } = useAuthStore()
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
+  const [activeTab, setActiveTab] = useState<'instances' | 'smtp' | 'plan' | 'team' | 'notifications' | 'meta' | 'business-hours' | 'welcome-menu' | 'ai'>('instances')
   const [isLoading, setIsLoading] = useState(true)
   
   // Estados para instâncias WhatsApp
@@ -379,6 +396,22 @@ export default function ConfigurationsPage() {
   const [gatewayAuditCount, setGatewayAuditCount] = useState(0)
   const gatewayAuditLimit = 20
 
+  // Estados para aba META (templates WhatsApp)
+  const [metaTemplates, setMetaTemplates] = useState<MetaWhatsAppTemplate[]>([])
+  const [metaTemplatesLoading, setMetaTemplatesLoading] = useState(false)
+  const [isMetaTemplateModalOpen, setIsMetaTemplateModalOpen] = useState(false)
+  const [editingMetaTemplate, setEditingMetaTemplate] = useState<MetaWhatsAppTemplate | null>(null)
+  const [metaTemplateToDelete, setMetaTemplateToDelete] = useState<MetaWhatsAppTemplate | null>(null)
+  const [metaSyncLoading, setMetaSyncLoading] = useState(false)
+  const [metaTemplateFormData, setMetaTemplateFormData] = useState({
+    name: '',
+    template_id: '',
+    language_code: 'pt_BR',
+    body_parameters_default: [] as string[],
+    wa_instance: null as string | null,
+    is_active: true,
+  })
+
   const loadGatewayAudit = async (options?: { offset?: number }) => {
     try {
       setGatewayAuditLoading(true)
@@ -423,6 +456,123 @@ export default function ConfigurationsPage() {
     }
   }
 
+  const fetchMetaTemplates = async () => {
+    try {
+      setMetaTemplatesLoading(true)
+      const response = await api.get('/notifications/whatsapp-templates/')
+      setMetaTemplates(response.data.results || response.data || [])
+    } catch (error) {
+      console.error('Erro ao carregar templates Meta:', error)
+      showErrorToast('carregar', 'Templates', { message: 'Falha ao carregar templates' })
+    } finally {
+      setMetaTemplatesLoading(false)
+    }
+  }
+
+  const metaInstances = instances.filter((i: WhatsAppInstance) => i.integration_type === INTEGRATION_META_CLOUD)
+  const hasMetaInstanceWithWaba = metaInstances.some((i: WhatsAppInstance) => !!(i.business_account_id || '').trim())
+
+  const openMetaTemplateModal = (template?: MetaWhatsAppTemplate | null) => {
+    if (template) {
+      setEditingMetaTemplate(template)
+      setMetaTemplateFormData({
+        name: template.name,
+        template_id: template.template_id,
+        language_code: template.language_code || 'pt_BR',
+        body_parameters_default: Array.isArray(template.body_parameters_default) ? template.body_parameters_default : [],
+        wa_instance: template.wa_instance || null,
+        is_active: template.is_active,
+      })
+    } else {
+      setEditingMetaTemplate(null)
+      setMetaTemplateFormData({
+        name: '',
+        template_id: '',
+        language_code: 'pt_BR',
+        body_parameters_default: [],
+        wa_instance: null,
+        is_active: true,
+      })
+    }
+    setIsMetaTemplateModalOpen(true)
+  }
+
+  const closeMetaTemplateModal = () => {
+    setIsMetaTemplateModalOpen(false)
+    setEditingMetaTemplate(null)
+  }
+
+  const saveMetaTemplate = async () => {
+    if (!metaTemplateFormData.name?.trim()) {
+      showErrorToast('salvar', 'Template', { message: 'Nome é obrigatório' })
+      return
+    }
+    if (!metaTemplateFormData.template_id?.trim()) {
+      showErrorToast('salvar', 'Template', { message: 'ID do template na Meta é obrigatório' })
+      return
+    }
+    const toastId = showLoadingToast(editingMetaTemplate ? 'atualizar' : 'criar', 'Template')
+    try {
+      const payload = {
+        name: metaTemplateFormData.name.trim(),
+        template_id: metaTemplateFormData.template_id.trim(),
+        language_code: metaTemplateFormData.language_code || 'pt_BR',
+        body_parameters_default: metaTemplateFormData.body_parameters_default || [],
+        wa_instance: metaTemplateFormData.wa_instance || null,
+        is_active: metaTemplateFormData.is_active,
+      }
+      if (editingMetaTemplate) {
+        await api.patch(`/notifications/whatsapp-templates/${editingMetaTemplate.id}/`, payload)
+        updateToastSuccess(toastId, 'atualizar', 'Template')
+      } else {
+        await api.post('/notifications/whatsapp-templates/', payload)
+        updateToastSuccess(toastId, 'criar', 'Template')
+      }
+      closeMetaTemplateModal()
+      fetchMetaTemplates()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { template_id?: string[]; detail?: string } } })?.response?.data
+      const message = msg?.template_id?.[0] || msg?.detail || 'Erro ao salvar template. Verifique se já não existe um template com o mesmo ID e idioma.'
+      updateToastError(toastId, editingMetaTemplate ? 'atualizar' : 'criar', 'Template', { message })
+    }
+  }
+
+  const deleteMetaTemplate = async () => {
+    if (!metaTemplateToDelete) return
+    const toastId = showLoadingToast('excluir', 'Template')
+    try {
+      await api.delete(`/notifications/whatsapp-templates/${metaTemplateToDelete.id}/`)
+      updateToastSuccess(toastId, 'excluir', 'Template')
+      setMetaTemplateToDelete(null)
+      fetchMetaTemplates()
+    } catch (error) {
+      updateToastError(toastId, 'excluir', 'Template')
+      setMetaTemplateToDelete(null)
+    }
+  }
+
+  const syncMetaStatus = async () => {
+    setMetaSyncLoading(true)
+    try {
+      const response = await api.post('/notifications/whatsapp-templates/sync_meta_status/')
+      const data = response.data || {}
+      const synced = data.synced_instances ?? 0
+      const errors = data.errors || []
+      if (errors.length > 0) {
+        showErrorToast('sincronizar', 'Status Meta', { message: errors.join('; ') })
+      } else if (synced === 0 && !hasMetaInstanceWithWaba) {
+        showErrorToast('sincronizar', 'Status Meta', { message: 'Configure o ID da conta Business nas instâncias WhatsApp (tipo Meta) para sincronizar.' })
+      } else {
+        showSuccessToast('sincronizar', 'Status Meta')
+      }
+      fetchMetaTemplates()
+    } catch (error) {
+      showErrorToast('sincronizar', 'Status Meta', { message: 'Falha ao sincronizar' })
+    } finally {
+      setMetaSyncLoading(false)
+    }
+  }
+
   useEffect(() => {
     fetchData()
     fetchDepartments()
@@ -438,6 +588,9 @@ export default function ConfigurationsPage() {
       fetchSecretaryProfile()
       setGatewayAuditOffset(0)
       loadGatewayAudit({ offset: 0 })
+    }
+    if (activeTab === 'meta') {
+      fetchMetaTemplates()
     }
   }, [activeTab, selectedBusinessHoursDept, user?.is_admin])
   
@@ -1773,6 +1926,17 @@ export default function ConfigurationsPage() {
             Notificações
           </button>
           <button
+            onClick={() => setActiveTab('meta')}
+            className={`py-2 px-1 border-b-2 font-medium text-sm ${
+              activeTab === 'meta'
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+            }`}
+          >
+            <FileText className="h-4 w-4 inline mr-2" />
+            META
+          </button>
+          <button
             onClick={() => setActiveTab('business-hours')}
             className={`py-2 px-1 border-b-2 font-medium text-sm ${
               activeTab === 'business-hours'
@@ -2125,6 +2289,96 @@ export default function ConfigurationsPage() {
 
       {activeTab === 'notifications' && (
         <NotificationSettings />
+      )}
+
+      {activeTab === 'meta' && (
+        <div className="space-y-6">
+          <Card className="p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-1">Templates WhatsApp (Meta)</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              Usados para primeira mensagem ou envio fora da janela de 24h. Crie e aprove o template no Meta Business Manager antes de cadastrar aqui.
+            </p>
+            <div className="flex flex-wrap gap-2 mb-4">
+              <Button
+                onClick={syncMetaStatus}
+                disabled={metaSyncLoading || !hasMetaInstanceWithWaba}
+                variant="outline"
+              >
+                {metaSyncLoading ? <RefreshCw className="h-4 w-4 animate-spin mr-2" /> : null}
+                Atualizar status da Meta
+              </Button>
+              {!hasMetaInstanceWithWaba && (
+                <span className="text-sm text-amber-600">
+                  Configure o ID da conta Business nas instâncias WhatsApp (tipo Meta) para sincronizar o status.
+                </span>
+              )}
+              <Button onClick={() => openMetaTemplateModal(null)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Novo template
+              </Button>
+            </div>
+            {metaTemplatesLoading ? (
+              <LoadingSpinner />
+            ) : metaTemplates.length === 0 ? (
+              <p className="text-gray-500">Nenhum template cadastrado. Clique em Novo template para adicionar.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Nome</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">ID (Meta)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Idioma</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Status (Meta)</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Última verificação</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Instância</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Ativo</th>
+                      <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {metaTemplates.map((t) => (
+                      <tr key={t.id}>
+                        <td className="px-4 py-2 text-sm text-gray-900">{t.name}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{t.template_id}</td>
+                        <td className="px-4 py-2 text-sm text-gray-600">{t.language_code}</td>
+                        <td className="px-4 py-2 text-sm">
+                          {t.meta_status === 'approved' && 'Aprovado'}
+                          {t.meta_status === 'pending' && 'Pendente'}
+                          {t.meta_status === 'rejected' && 'Rejeitado'}
+                          {t.meta_status === 'limited' && 'Limitado'}
+                          {t.meta_status === 'disabled' && 'Desativado'}
+                          {t.meta_status === 'sync_error' && 'Erro ao sincronizar'}
+                          {(!t.meta_status || t.meta_status === 'unknown') && 'Não verificado'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500">
+                          {t.meta_status_updated_at
+                            ? new Date(t.meta_status_updated_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
+                            : '-'}
+                        </td>
+                        <td className="px-4 py-2 text-sm text-gray-500">{t.wa_instance_name || 'Qualquer'}</td>
+                        <td className="px-4 py-2 text-sm">{t.is_active ? 'Sim' : 'Não'}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Button variant="outline" size="sm" onClick={() => openMetaTemplateModal(t)} className="mr-1">
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setMetaTemplateToDelete(t)}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
       {activeTab === 'ai' && user?.is_admin && (
@@ -4131,6 +4385,109 @@ export default function ConfigurationsPage() {
           )}
         </div>
       )}
+
+      {/* Modal Template META (criar/editar) */}
+      {isMetaTemplateModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {editingMetaTemplate ? 'Editar Template WhatsApp (Meta)' : 'Novo Template WhatsApp (Meta)'}
+              </h3>
+              <p className="text-sm text-gray-500 mb-4">
+                Crie e submeta o template no Meta Business Manager para aprovação antes de cadastrar aqui. Só templates aprovados podem ser usados para primeira mensagem ou fora da janela de 24h.
+              </p>
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="meta_template_name">Nome (exibição)</Label>
+                  <Input
+                    id="meta_template_name"
+                    value={metaTemplateFormData.name}
+                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, name: e.target.value })}
+                    placeholder="Ex: Saudação inicial"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="meta_template_id">ID do template na Meta</Label>
+                  <Input
+                    id="meta_template_id"
+                    value={metaTemplateFormData.template_id}
+                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, template_id: e.target.value })}
+                    placeholder="Ex: hello_world"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Igual ao nome do template no Meta Business (ex.: hello_world)</p>
+                </div>
+                <div>
+                  <Label htmlFor="meta_template_lang">Código do idioma</Label>
+                  <Input
+                    id="meta_template_lang"
+                    value={metaTemplateFormData.language_code}
+                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, language_code: e.target.value })}
+                    placeholder="pt_BR"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="meta_template_params">Parâmetros padrão do body (JSON array, opcional)</Label>
+                  <Input
+                    id="meta_template_params"
+                    value={JSON.stringify(metaTemplateFormData.body_parameters_default || [])}
+                    onChange={(e) => {
+                      const raw = e.target.value || '[]'
+                      try {
+                        const parsed = JSON.parse(raw)
+                        setMetaTemplateFormData({ ...metaTemplateFormData, body_parameters_default: Array.isArray(parsed) ? parsed : [] })
+                      } catch {
+                        // mantém valor anterior se JSON inválido
+                      }
+                    }}
+                    placeholder='["Olá", "João"]'
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="meta_template_instance">Instância WhatsApp (opcional)</Label>
+                  <select
+                    id="meta_template_instance"
+                    className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                    value={metaTemplateFormData.wa_instance || ''}
+                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, wa_instance: e.target.value || null })}
+                  >
+                    <option value="">Qualquer instância Meta</option>
+                    {metaInstances.map((inst: WhatsAppInstance) => (
+                      <option key={inst.id} value={inst.id}>{inst.friendly_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <label className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    checked={metaTemplateFormData.is_active}
+                    onChange={(e) => setMetaTemplateFormData({ ...metaTemplateFormData, is_active: e.target.checked })}
+                    className="w-4 h-4 rounded border-gray-300"
+                  />
+                  <span className="text-sm">Ativo</span>
+                </label>
+              </div>
+              <div className="flex justify-end gap-2 mt-6">
+                <Button variant="outline" onClick={closeMetaTemplateModal}>Cancelar</Button>
+                <Button onClick={saveMetaTemplate}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {editingMetaTemplate ? 'Salvar' : 'Criar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <ConfirmDialog
+        show={!!metaTemplateToDelete}
+        title="Excluir template"
+        message={metaTemplateToDelete ? `Excluir o template "${metaTemplateToDelete.name}"? Esta ação não pode ser desfeita.` : ''}
+        confirmText="Excluir"
+        variant="danger"
+        onConfirm={deleteMetaTemplate}
+        onCancel={() => setMetaTemplateToDelete(null)}
+      />
 
       {/* Modal Secretária IA - Wizard removido (Fase 0 - dados da empresa em Planos > Dados da Empresa) */}
     </div>
