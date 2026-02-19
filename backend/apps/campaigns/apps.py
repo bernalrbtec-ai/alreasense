@@ -1463,23 +1463,19 @@ class CampaignsConfig(AppConfig):
                     status__in=['pending', 'in_progress']
                 )
             
-            # Limitar quantidade de tarefas do dia
-            tasks_today = tasks_today[:preferences.max_tasks_per_notification]
-            
-            # ✅ NOVO: Agrupar pendências por departamento
+            # ✅ Agrupar por status a partir do queryset ANTES de qualquer slice (Django não permite .filter() após slice)
             from collections import defaultdict
             pending_by_department = defaultdict(list)
             for task in pending_tasks_no_date:
                 dept_name = task.department.name if task.department else 'Sem Departamento'
                 pending_by_department[dept_name].append(task)
             
-            # Agrupar por status (incluindo pendências sem data)
             tasks_by_status = {
                 'pending': list(tasks_today.filter(status='pending')[:10]),
                 'in_progress': list(tasks_today.filter(status='in_progress')[:10]),
                 'completed': list(tasks_today.filter(status='completed')[:10]),
                 'overdue': list(overdue_tasks[:10]),
-                'pending_no_date': dict(pending_by_department),  # ✅ NOVO: Pendências agrupadas por departamento
+                'pending_no_date': dict(pending_by_department),
             }
             
             # ✅ VALIDAÇÃO: Verificar se há tarefas para notificar
