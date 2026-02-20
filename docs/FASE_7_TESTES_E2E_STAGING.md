@@ -1,6 +1,6 @@
-# Fase 7 – Testes E2E e Staging (Evolution + Meta)
+# Fase 7 – Checklist de validação (Evolution + Meta)
 
-Checklist para validar a Fase 7 e o fluxo completo no staging.
+Use este checklist para validar read receipt Meta, edição desabilitada para Meta e fluxo geral em produção (ou qualquer ambiente).
 
 ## 1. Read receipt (mark as read) – Meta
 
@@ -12,10 +12,10 @@ Checklist para validar a Fase 7 e o fluxo completo no staging.
 ## 2. Edição de mensagem desabilitada – Meta
 
 - [ ] **Conversa Meta:** Abrir conversa de instância com integração “API oficial Meta”; clicar com o botão direito em uma mensagem **enviada por nós** (outgoing).
-- [ ] **Menu de contexto:** A opção **“Editar”** não deve aparecer (ou deve estar desabilitada).
+- [ ] **Menu de contexto:** A opção **“Editar”** não deve aparecer.
 - [ ] **Conversa Evolution:** Em conversa Evolution, a opção **“Editar”** deve aparecer para mensagens enviadas (dentro do prazo e sem anexo).
 
-## 3. Testes gerais no staging
+## 3. Testes gerais
 
 - [ ] **Conexões:** Criar/editar instância Evolution (QR) e instância Meta (Phone Number ID + Token); Validar Meta.
 - [ ] **Recebimento:** Enviar mensagem do celular para o número Meta; verificar que a mensagem aparece no chat e que a conversa usa `integration_type: 'meta_cloud'` (ex.: na resposta da API de conversas).
@@ -23,7 +23,8 @@ Checklist para validar a Fase 7 e o fluxo completo no staging.
 - [ ] **Campanhas:** Campanha com instância Meta exige template; enviar campanha e confirmar uso de template.
 - [ ] **Read receipt:** Conferir ✓✓ azul para Evolution e para Meta após abrir a conversa.
 
-## 4. Observações
+## 4. Produção
 
-- **Token Meta:** Em staging, usar System User (token permanente) para evitar expiração em 24h (ver `docs/STAGING_RAILWAY.md`).
-- **Webhook:** URL do webhook Meta deve estar configurada no Meta Business Suite e apontando para o servidor de staging.
+- **Webhook Meta:** Configure `WHATSAPP_CLOUD_VERIFY_TOKEN` e `WHATSAPP_CLOUD_APP_SECRET` no ambiente. Sem `WHATSAPP_CLOUD_APP_SECRET`, POSTs com assinatura são rejeitados (segurança).
+- **Token Meta:** Use System User (token permanente) quando possível para evitar expiração.
+- **URL do webhook:** Configure no Meta Business Suite a URL do webhook apontando para o seu servidor.

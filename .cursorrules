@@ -20,6 +20,13 @@ Leia SEMPRE antes de fazer mudanças:
 
 ## 📦 REGRAS DE MIGRATIONS E DATABASE (CRÍTICO)
 
+### 🚫 NÃO GERAR MIGRATIONS — SEMPRE SCRIPT SQL
+
+- **NUNCA** crie arquivos de migration Django (`makemigrations` / arquivos em `*/migrations/*.py`) para alterações de schema.
+- **SEMPRE** entregue um **script SQL** para o desenvolvedor aplicar manualmente no banco (ex.: em `docs/` com nome descritivo, ex. `SQL_MIGRATION_*.sql` ou em documento `docs/SQL_MIGRATIONS_*.md`).
+- O script SQL deve ser idempotente quando fizer sentido (ex.: `ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`).
+- Se for necessário documentar o estado do modelo Django sem migration, use `SeparateDatabaseAndState` apenas quando combinado com script SQL fornecido ao usuário; o fluxo padrão é: **apenas script SQL, sem novos arquivos de migration**.
+
 ### ✅ SEMPRE FAÇA ISSO:
 
 1. **SEMPRE verifique migrations existentes antes de criar novas**
@@ -58,19 +65,20 @@ Leia SEMPRE antes de fazer mudanças:
 
 ### ❌ NUNCA FAÇA ISSO:
 
-1. **NUNCA crie migrations sem verificar as existentes**
+1. **NUNCA crie novas migrations Django** para alterações de schema — entregue script SQL para aplicação manual (ver regra acima).
+2. **NUNCA crie migrations sem verificar as existentes**
    ```python
    # ❌ ERRADO - Criar 0002 sem verificar se já existe 0010
    # Causa: Conflicting migrations detected
    ```
 
-2. **NUNCA delete migrations que já foram aplicadas em produção**
+3. **NUNCA delete migrations que já foram aplicadas em produção**
    ```bash
    # ❌ ERRADO - Delete migration já aplicada
    # Causa: Inconsistência de estado do banco
    ```
 
-3. **NUNCA faça migrations que conectam a serviços externos**
+4. **NUNCA faça migrations que conectam a serviços externos**
    ```python
    # ❌ ERRADO - Conectar Redis/RabbitMQ no import
    redis_client = redis.Redis.from_url(...)  # Quebra collectstatic
@@ -82,7 +90,7 @@ Leia SEMPRE antes de fazer mudanças:
        return settings._redis_client
    ```
 
-4. **NUNCA use `python manage.py migrate` no Dockerfile**
+5. **NUNCA use `python manage.py migrate` no Dockerfile**
    ```dockerfile
    # ❌ ERRADO - Migrations no build time
    RUN python manage.py migrate

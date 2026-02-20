@@ -3947,11 +3947,13 @@ def send_read_receipt(conversation: Conversation, message: Message, max_retries:
                 logger.warning(f"⚠️ [READ RECEIPT] Meta: erro ao marcar como lida: {e}")
                 return False
         
-        # Evolution: verificar connection_state antes de enviar
-        if wa_instance.connection_state not in ('open', 'connected'):
+        # Evolution: verificar connection_state antes de enviar (None = tentar mesmo assim)
+        connection_state = getattr(wa_instance, 'connection_state', None)
+        if connection_state is not None and connection_state not in ('open', 'connected'):
             logger.warning(
-                f"⚠️ [READ RECEIPT] Instância não conectada (state: {wa_instance.connection_state}). "
-                f"Pulando read receipt para mensagem {message.id}"
+                "⚠️ [READ RECEIPT] Instância não conectada (state: %s). Pulando read receipt para mensagem %s",
+                connection_state,
+                message.id,
             )
             return False
         

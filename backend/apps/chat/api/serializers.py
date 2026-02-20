@@ -758,20 +758,28 @@ class ConversationSerializer(serializers.ModelSerializer):
         """Fase 7: Retorna 'meta_cloud' ou 'evolution' para o frontend (edição desabilitada para Meta)."""
         if not obj.instance_name:
             return 'evolution'
+        from django.core.cache import cache
         from apps.notifications.models import WhatsAppInstance
         inst_name = str(obj.instance_name).strip()
+        cache_key = f"conv_integration_type:{obj.tenant_id}:{inst_name}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return cached
         if inst_name.isdigit():
             wa = WhatsAppInstance.objects.filter(
                 phone_number_id=inst_name,
                 tenant=obj.tenant,
                 integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
             ).values('integration_type').first()
-            return (wa or {}).get('integration_type') or 'evolution'
-        wa = WhatsAppInstance.objects.filter(
-            models.Q(instance_name=inst_name) | models.Q(evolution_instance_name=inst_name),
-            tenant=obj.tenant,
-        ).values('integration_type').first()
-        return (wa or {}).get('integration_type') or 'evolution'
+            value = (wa or {}).get('integration_type') or 'evolution'
+        else:
+            wa = WhatsAppInstance.objects.filter(
+                models.Q(instance_name=inst_name) | models.Q(evolution_instance_name=inst_name),
+                tenant=obj.tenant,
+            ).values('integration_type').first()
+            value = (wa or {}).get('integration_type') or 'evolution'
+        cache.set(cache_key, value, 120)
+        return value
     
     def get_contact_tags(self, obj):
         """Busca as tags do contato pelo telefone (com cache)."""

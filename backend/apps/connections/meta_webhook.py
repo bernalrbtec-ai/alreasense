@@ -45,12 +45,16 @@ def get_whatsapp_instance_for_meta(phone_number_id: str):
 
 
 def _verify_meta_signature(payload_body: bytes, signature_header: str) -> bool:
-    """Valida X-Hub-Signature-256 (HMAC SHA256)."""
-    app_secret = getattr(settings, 'WHATSAPP_CLOUD_APP_SECRET', None)
-    if not app_secret:
-        logger.warning("[META WEBHOOK] WHATSAPP_CLOUD_APP_SECRET não configurado; assinatura não verificada")
-        return True
+    """Valida X-Hub-Signature-256 (HMAC SHA256). Em produção, APP_SECRET deve estar configurado."""
+    app_secret = getattr(settings, 'WHATSAPP_CLOUD_APP_SECRET', None) or ''
+    app_secret = (app_secret or '').strip()
     if not signature_header or not signature_header.startswith('sha256='):
+        return False
+    if not app_secret:
+        logger.error(
+            "[META WEBHOOK] WHATSAPP_CLOUD_APP_SECRET não configurado; "
+            "rejeitando POST com assinatura (configure em produção)"
+        )
         return False
     expected = signature_header.split('sha256=')[-1].strip().lower()
     computed = hmac.new(

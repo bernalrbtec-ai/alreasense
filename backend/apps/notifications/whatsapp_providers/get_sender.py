@@ -31,10 +31,9 @@ def get_sender(instance: Optional[WhatsAppInstance]) -> Optional[WhatsAppSenderB
                     instance.id,
                 )
                 return None
-            logger.info(
-                "get_sender: provider=meta instance_id=%s integration_type=%s",
+            logger.debug(
+                "get_sender: provider=meta instance_id=%s",
                 instance.id,
-                instance.integration_type or "unknown",
             )
             return MetaCloudProvider(instance)
         if integration_type == WhatsAppInstance.INTEGRATION_TYPE_EVOLUTION:
@@ -47,10 +46,9 @@ def get_sender(instance: Optional[WhatsAppInstance]) -> Optional[WhatsAppSenderB
                     instance.id,
                 )
                 return None
-            logger.info(
-                "get_sender: provider=evolution instance_id=%s integration_type=%s",
+            logger.debug(
+                "get_sender: provider=evolution instance_id=%s",
                 instance.id,
-                instance.integration_type or "evolution",
             )
             return EvolutionProvider(instance)
     except ValueError as e:
