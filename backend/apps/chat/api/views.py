@@ -1857,10 +1857,11 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
         # Isso garante que last_message seja None (não undefined) quando não há mensagens
         # Para conversas novas sem mensagens, last_message_list será [] e serializer retornará None
         from django.db.models import Prefetch
+        from apps.chat.models import Message as MessageModel
         conversation_with_prefetch = Conversation.objects.prefetch_related(
             Prefetch(
                 'messages',
-                queryset=Message.objects.select_related('sender', 'conversation')
+                queryset=MessageModel.objects.select_related('sender', 'conversation')
                     .prefetch_related('attachments')
                     .order_by('-created_at')[:1],
                 to_attr='last_message_list'
