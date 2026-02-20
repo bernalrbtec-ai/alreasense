@@ -1,22 +1,18 @@
 /**
  * FileUploader - Componente para enviar anexos (imagem, PDF, DOC, Excel)
- * 
- * Funcionalidades:
- * - Seleciona arquivo via input
- * - Mostra thumbnail responsivo antes de enviar
- * - Faz upload via presigned URL (S3)
- * - Confirma upload no backend
- * - Integrado com MessageInput
+ *
+ * Suporta seleção de um ou vários arquivos (máx. ATTACHMENTS_MAX_FILES).
  */
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useRef, useCallback } from 'react';
 import { Paperclip } from 'lucide-react';
-import { api } from '@/lib/api';
 import { toast } from 'sonner';
+
+const ATTACHMENTS_MAX_FILES = 10;
 
 interface FileUploaderProps {
   conversationId: string;
-  selectedFile: File | null;
-  onFileSelect: (file: File | null) => void;
+  selectedFiles: File[];
+  onFileSelect: (files: File[]) => void;
   onUpload: (file: File) => Promise<void>;
   onUploadComplete?: () => void;
   onUploadError?: (error: string) => void;
@@ -24,26 +20,25 @@ interface FileUploaderProps {
   isUploading?: boolean;
 }
 
-export function FileUploader({ 
+export function FileUploader({
   conversationId,
-  selectedFile,
+  selectedFiles,
   onFileSelect,
   onUpload,
   onUploadComplete,
   onUploadError,
   disabled = false,
-  isUploading: externalIsUploading = false
+  isUploading: externalIsUploading = false,
 }: FileUploaderProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Tipos de arquivo permitidos (MIME + extensões para o file picker mostrar Word/Excel)
   const allowedTypes = [
     'image/*',
     'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
-    'application/msword', // .doc
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
-    'application/vnd.ms-excel', // .xls
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
   ];
   const acceptAttr = [
     ...allowedTypes,
@@ -54,29 +49,39 @@ export function FileUploader({
     '.pdf',
   ].join(',');
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const fileList = e.target.files;
+      if (!fileList?.length) return;
 
-    // ✅ FIX: Usar utilitários centralizados para validação
-    import('../utils/messageUtils').then(({ validateFileSize, validateFileType }) => {
-      // Validar tamanho (50MB)
-      const sizeValidation = validateFileSize(file, 50);
-      if (!sizeValidation.valid) {
-        toast.error(sizeValidation.error || 'Arquivo muito grande. Máximo: 50MB');
-        return;
-      }
-
-      // Validar tipo
-      const typeValidation = validateFileType(file, allowedTypes);
-      if (!typeValidation.valid) {
-        toast.error(typeValidation.error || 'Tipo de arquivo não permitido');
-        return;
-      }
-
-      onFileSelect(file);
-    });
-  }, [onFileSelect, allowedTypes]);
+      import('../utils/messageUtils').then(({ validateFileSize, validateFileType }) => {
+        const files = Array.from(fileList);
+        const valid: File[] = [];
+        for (const file of files) {
+          const sizeValidation = validateFileSize(file, 50);
+          if (!sizeValidation.valid) {
+            toast.error(sizeValidation.error ?? 'Arquivo muito grande. Máximo: 50MB');
+            e.target.value = '';
+            return;
+          }
+          const typeValidation = validateFileType(file, allowedTypes);
+          if (!typeValidation.valid) {
+            toast.error(typeValidation.error ?? 'Tipo de arquivo não permitido');
+            e.target.value = '';
+            return;
+          }
+          valid.push(file);
+        }
+        const toAdd = valid.slice(0, ATTACHMENTS_MAX_FILES);
+        if (valid.length > ATTACHMENTS_MAX_FILES) {
+          toast.info(`Máximo ${ATTACHMENTS_MAX_FILES} arquivos. Foram adicionados os primeiros ${ATTACHMENTS_MAX_FILES}.`);
+        }
+        onFileSelect(toAdd);
+        e.target.value = '';
+      });
+    },
+    [onFileSelect, allowedTypes]
+  );
 
   const handleButtonClick = () => {
     if (disabled || externalIsUploading) return;
@@ -89,6 +94,7 @@ export function FileUploader({
         ref={fileInputRef}
         type="file"
         accept={acceptAttr}
+        multiple
         onChange={handleFileSelect}
         className="hidden"
         disabled={disabled || externalIsUploading}

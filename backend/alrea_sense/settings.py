@@ -600,6 +600,7 @@ S3_REGION = config('S3_REGION', default='us-east-1')
 # FLOW CHAT - Attachments Config (centralizado)
 # ============================
 ATTACHMENTS_MAX_SIZE_MB = config('ATTACHMENTS_MAX_SIZE_MB', default=50, cast=int)
+ATTACHMENTS_MAX_FILES_PER_MESSAGE = config('ATTACHMENTS_MAX_FILES_PER_MESSAGE', default=10, cast=int)
 # Word: .docx e .doc (application/msword) para permitir envio pelo chat
 ATTACHMENTS_ALLOWED_MIME = config('ATTACHMENTS_ALLOWED_MIME', default='image/*,video/*,audio/*,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/msword,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 S3_UPLOAD_URL_EXPIRES = config('S3_UPLOAD_URL_EXPIRES', default=300, cast=int)

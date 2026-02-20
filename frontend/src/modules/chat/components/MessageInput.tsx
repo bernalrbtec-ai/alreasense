@@ -32,8 +32,9 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const MAX_FILES = 10;
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const emojiPickerRef = useRef<HTMLDivElement>(null);
   
@@ -177,14 +178,16 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
             return;
           }
 
-          // Se já houver um arquivo selecionado, substituir
-          if (selectedFile) {
-            toast.info('Imagem anterior substituída', { duration: 2000 });
-          }
+          // Adicionar à lista (respeitando limite)
+          setSelectedFiles(prev => {
+            const next = [...prev, file];
+            if (next.length > MAX_FILES) {
+              toast.info(`Máximo ${MAX_FILES} arquivos. A imagem foi adicionada.`, { duration: 2000 });
+              return next.slice(0, MAX_FILES);
+            }
+            return next;
+          });
 
-          // Adicionar imagem como arquivo selecionado
-          setSelectedFile(file);
-          
           toast.success('Imagem colada! Clique em enviar para anexar.', {
             duration: 3000,
             position: 'bottom-right'
@@ -197,7 +200,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         return; // Processar apenas a primeira imagem encontrada
       }
     }
-  }, [selectedFile]);
+  }, [MAX_FILES]);
 
   const handleMessageChange = useCallback((value: string) => {
     if (isGroupInputBlocked) {
@@ -228,15 +231,13 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   }, [isConnected, sendTyping, isGroupInputBlocked]);
 
   const handleSend = async () => {
-    // Validar condições: precisa ter texto OU arquivo selecionado
     const hasText = message.trim().length > 0;
-    const hasFile = selectedFile !== null;
-    
-    if (isGroupInputBlocked || (!hasText && !hasFile) || !activeConversation || sending || !isConnected || uploadingFile) {
+    const hasFiles = selectedFiles.length > 0;
+
+    if (isGroupInputBlocked || (!hasText && !hasFiles) || !activeConversation || sending || !isConnected || uploadingFile) {
       return;
     }
 
-    // Bloquear envio de reply para mensagem apagada
     if (replyToMessage?.is_deleted) {
       toast.error('Não é possível responder a uma mensagem que foi apagada');
       clearReply();
@@ -245,68 +246,42 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
 
     try {
       setSending(true);
-      
-      // Parar "digitando" antes de enviar
       sendTyping(false);
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+      if (hasFiles) {
+        if (selectedFiles.length === 1) {
+          await handleFileUpload(selectedFiles[0]);
+        } else {
+          await handleBatchUpload(selectedFiles, hasText ? message.trim() : '');
+        }
+        setSelectedFiles([]);
+        if (replyToMessage) clearReply();
+        if (hasText) {
+          setMessage('');
+          setMentions([]);
+          if (conversationId) messageByConversationRef.current.delete(conversationId);
+        }
+        if (!hasText) {
+          console.log('✅ [SEND] Apenas arquivo(s) enviado(s)');
+        }
+        return;
       }
 
-      // 1️⃣ Se houver arquivo selecionado, enviar primeiro
-      if (selectedFile) {
-        console.log('📤 [SEND] Enviando arquivo primeiro:', selectedFile.name);
-        await handleFileUpload(selectedFile);
-        // ✅ Arquivo será limpo automaticamente no handleFileUpload após sucesso
-      }
-
-      // 2️⃣ Se houver texto, enviar mensagem
       if (hasText) {
         const replyToId = replyToMessage?.id;
-        // ✅ LOG CRÍTICO: Verificar se reply_to está sendo passado
-        console.log('📤 [MESSAGE INPUT] Preparando envio de mensagem:');
-        console.log('   Content:', message.trim().substring(0, 50));
-        console.log('   replyToMessage:', replyToMessage);
-        console.log('   replyToId:', replyToId);
-        console.log('   includeSignature:', includeSignature);
-        
-        // ✅ NOVO: Detectar @everyone no texto (case-insensitive)
         const messageText = message.trim();
         const hasEveryone = /@everyone\b/i.test(messageText);
-        
-        // ✅ NOVO: Enviar mentions apenas se for grupo e tiver menções OU @everyone
         const mentionsToSend = activeConversation?.conversation_type === 'group' && (mentions.length > 0 || hasEveryone) ? mentions : undefined;
         const mentionEveryone = activeConversation?.conversation_type === 'group' && hasEveryone;
-        
-        console.log('   mentionsToSend:', mentionsToSend);
-        console.log('   mentionEveryone:', mentionEveryone);
-        const success = sendMessage(message.trim(), includeSignature, false, replyToId, mentionsToSend, mentionEveryone);
-        console.log('📤 [MESSAGE INPUT] Resultado do sendMessage:', success);
-        
+        const success = sendMessage(messageText, includeSignature, false, replyToId, mentionsToSend, mentionEveryone);
         if (success) {
           setMessage('');
-          setMentions([]); // ✅ Limpar mentions após enviar
-          // ✅ NOVO: Limpar texto salvo para esta conversa (já foi enviado)
-          if (conversationId) {
-            messageByConversationRef.current.delete(conversationId);
-            console.log('🗑️ [MessageInput] Texto salvo removido após envio para conversa:', conversationId);
-          }
-          // ✅ Limpar reply após enviar mensagem
-          if (replyToMessage) {
-            clearReply();
-          }
-          // ✅ Removido toast "Mensagem enviada" - desnecessário e polui a interface
+          setMentions([]);
+          if (conversationId) messageByConversationRef.current.delete(conversationId);
+          if (replyToMessage) clearReply();
         } else {
-          toast.error('Erro ao enviar mensagem. WebSocket desconectado.', {
-            duration: 4000,
-            position: 'bottom-right'
-          });
-        }
-      } else if (selectedFile) {
-        // Se só tinha arquivo (sem texto), toast já foi mostrado no handleFileUpload
-        console.log('✅ [SEND] Apenas arquivo enviado');
-        // ✅ Limpar reply após enviar arquivo também
-        if (replyToMessage) {
-          clearReply();
+          toast.error('Erro ao enviar mensagem. WebSocket desconectado.', { duration: 4000, position: 'bottom-right' });
         }
       }
     } catch (error: any) {
@@ -318,12 +293,9 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    // ✅ Enter = enviar mensagem
-    // ✅ Shift+Enter = nova linha
     const hasText = message.trim().length > 0;
-    const hasFile = selectedFile !== null;
-    
-      if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFile)) {
+    const hasFiles = selectedFiles.length > 0;
+    if (e.key === 'Enter' && !e.shiftKey && (hasText || hasFiles)) {
       // Verificar se não está dentro de um MentionInput com sugestões abertas
       const target = e.target as HTMLElement;
       const isMentionInput = target.closest('[data-mention-input]');
@@ -440,27 +412,14 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         file_size: file.size,
       });
 
-      // ✅ CRÍTICO: Adicionar mensagem ao store imediatamente (evita "imagem não aparece na 1ª vez")
       if (confirmData?.message) {
         const msg = { ...confirmData.message };
-        if (!msg.conversation_id && activeConversation?.id) {
-          msg.conversation_id = activeConversation.id;
-        }
+        if (!msg.conversation_id && activeConversation?.id) msg.conversation_id = activeConversation.id;
         addMessage(msg);
       }
 
-      console.log('✅ [FILE] Arquivo enviado com sucesso!');
-
-      toast.success('Arquivo enviado!', {
-        duration: 2000,
-        position: 'bottom-right'
-      });
-
-      // ✅ IMPORTANTE: Limpar arquivo após upload bem-sucedido
-      // Isso garante que o card desapareça mesmo quando chamado via handleSend
-      if (selectedFile === file) {
-        setSelectedFile(null);
-      }
+      toast.success('Arquivo enviado!', { duration: 2000, position: 'bottom-right' });
+      setSelectedFiles(prev => prev.filter(f => f !== file));
     } catch (error: any) {
       console.error('❌ [FILE] Erro ao enviar arquivo:', error);
       const errorMsg = error.response?.data?.error || error.message || 'Erro ao enviar arquivo';
@@ -470,8 +429,67 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
     }
   };
 
-  const handleRemoveFile = () => {
-    setSelectedFile(null);
+  const handleBatchUpload = async (files: File[], contentText: string) => {
+    if (!files.length || !activeConversation || uploadingFile) return;
+
+    setUploadingFile(true);
+    try {
+      const presignedResponses = await Promise.all(
+        files.map(f =>
+          api.post('/chat/upload-presigned-url/', {
+            conversation_id: activeConversation.id,
+            filename: f.name,
+            content_type: f.type,
+            file_size: f.size,
+          }).then(r => ({ file: f, data: r.data }))
+        )
+      );
+
+      await Promise.all(
+        presignedResponses.map(({ file, data }) =>
+          new Promise<void>((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.addEventListener('load', () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Upload ${xhr.status}`))));
+            xhr.addEventListener('error', () => reject(new Error('Erro de rede')));
+            xhr.open('PUT', data.upload_url);
+            xhr.setRequestHeader('Content-Type', file.type);
+            xhr.send(file);
+          })
+        )
+      );
+
+      const items = presignedResponses.map(({ file, data }) => ({
+        attachment_id: data.attachment_id,
+        s3_key: data.s3_key,
+        filename: file.name,
+        content_type: file.type,
+        file_size: file.size,
+      }));
+
+      const { data: confirmData } = await api.post('/chat/confirm-upload-batch/', {
+        conversation_id: activeConversation.id,
+        items,
+        content: contentText,
+      });
+
+      if (confirmData?.message) {
+        const msg = { ...confirmData.message };
+        if (!msg.conversation_id && activeConversation?.id) msg.conversation_id = activeConversation.id;
+        addMessage(msg);
+      }
+
+      toast.success('Arquivos enviados!', { duration: 2000, position: 'bottom-right' });
+    } catch (error: any) {
+      console.error('❌ [BATCH] Erro:', error);
+      const errMsg = error.response?.data?.error || error.message || 'Erro ao enviar arquivos';
+      toast.error(errMsg);
+    } finally {
+      setUploadingFile(false);
+    }
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   if (!activeConversation) {
@@ -517,14 +535,17 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       )}
 
       {/* Thumbnail preview acima do input */}
-      {selectedFile && (
-        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700">
-          <AttachmentThumbnail
-            file={selectedFile}
-            onRemove={handleRemoveFile}
-            onUpload={handleFileUpload}
-            isUploading={uploadingFile}
-          />
+      {selectedFiles.length > 0 && (
+        <div className="px-4 pt-2 pb-1 bg-[#f0f2f5] dark:bg-gray-800 border-t border-gray-300 dark:border-gray-700 flex flex-wrap gap-2">
+          {selectedFiles.map((file, i) => (
+            <AttachmentThumbnail
+              key={`${file.name}-${file.size}-${i}`}
+              file={file}
+              onRemove={() => handleRemoveFile(i)}
+              onUpload={handleFileUpload}
+              isUploading={uploadingFile}
+            />
+          ))}
         </div>
       )}
 
@@ -561,13 +582,10 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       <div className="relative">
         <FileUploader
           conversationId={activeConversation.id}
-          selectedFile={selectedFile}
-          onFileSelect={setSelectedFile}
+          selectedFiles={selectedFiles}
+          onFileSelect={(files) => setSelectedFiles(prev => [...prev, ...files].slice(0, MAX_FILES))}
           onUpload={handleFileUpload}
-          onUploadComplete={() => {
-            console.log('✅ Arquivo enviado! WebSocket vai atualizar UI');
-            setSelectedFile(null);
-          }}
+          onUploadComplete={() => setSelectedFiles([])}
           disabled={sending || !isConnected || isGroupInputBlocked}
           isUploading={uploadingFile}
         />
@@ -649,11 +667,11 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       {/* Send button */}
       <button
         onClick={handleSend}
-        disabled={isGroupInputBlocked || (!message.trim() && !selectedFile) || sending || !isConnected || uploadingFile}
+        disabled={isGroupInputBlocked || (!message.trim() && selectedFiles.length === 0) || sending || !isConnected || uploadingFile}
         className={`
           p-2 rounded-full transition-all duration-150 flex-shrink-0
           shadow-md hover:shadow-lg active:scale-95
-          ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked
+          ${(message.trim() || selectedFiles.length > 0) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked
             ? 'bg-[#00a884] hover:bg-[#008f6f]'
             : 'bg-gray-300 cursor-not-allowed opacity-50'
           }
@@ -661,16 +679,16 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         title={
           isGroupInputBlocked
             ? "Instância removida do grupo"
-            : !isConnected 
-            ? "Conectando..." 
-            : uploadingFile 
-            ? "Enviando arquivo..." 
-            : (message.trim() || selectedFile) 
-            ? "Enviar" 
+            : !isConnected
+            ? "Conectando..."
+            : uploadingFile
+            ? "Enviando arquivo..."
+            : (message.trim() || selectedFiles.length > 0)
+            ? "Enviar"
             : "Digite uma mensagem ou selecione um arquivo"
         }
       >
-        <Send className={`w-6 h-6 ${(message.trim() || selectedFile) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
+        <Send className={`w-6 h-6 ${(message.trim() || selectedFiles.length > 0) && !sending && !uploadingFile && isConnected && !isGroupInputBlocked ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`} />
       </button>
       </div>
     </div>

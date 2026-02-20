@@ -15,6 +15,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 import time
@@ -5484,6 +5485,213 @@ class ConfirmUploadView(APIView):
                 {'error': f'Erro ao confirmar upload: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class ConfirmUploadBatchView(APIView):
+    """
+    Confirma upload de múltiplos arquivos: cria uma Message com N MessageAttachments
+    e enfileira envio para Evolution API (uma task).
+    """
+    permission_classes = [IsAuthenticated, CanAccessChat]
+
+    def post(self, request):
+        import logging
+        from django.utils import timezone
+        from datetime import timedelta
+        from apps.chat.utils.s3 import S3Manager
+        from apps.chat.models import Conversation, Message, MessageAttachment
+        from apps.chat.api.serializers import MessageSerializer, MessageAttachmentSerializer
+        from django.conf import settings
+        from apps.chat.utils.audio_converter import (
+            should_convert_audio,
+            convert_ogg_to_mp3,
+            get_converted_filename,
+        )
+
+        logger = logging.getLogger(__name__)
+
+        conversation_id = request.data.get('conversation_id')
+        items = request.data.get('items')
+        content = request.data.get('content', '') or ''
+
+        if not conversation_id or not items or not isinstance(items, list):
+            return Response(
+                {'error': 'conversation_id e items (lista) são obrigatórios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        max_files = int(getattr(settings, 'ATTACHMENTS_MAX_FILES_PER_MESSAGE', 10))
+        if len(items) < 1:
+            return Response(
+                {'error': 'items não pode ser vazio'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if len(items) > max_files:
+            return Response(
+                {'error': f'Máximo de {max_files} arquivos por mensagem'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        max_size = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024
+        allowed_mime = getattr(settings, 'ATTACHMENTS_ALLOWED_MIME', '')
+        allowed_list = [m.strip() for m in allowed_mime.split(',') if m.strip()] if allowed_mime else []
+
+        def mime_ok(m):
+            if not allowed_list:
+                return True
+            return any(
+                (a.endswith('/*') and m.startswith(a[:-1])) or (a == m)
+                for a in allowed_list
+            )
+
+        try:
+            conversation = Conversation.objects.get(
+                id=conversation_id,
+                tenant=request.user.tenant
+            )
+        except Conversation.DoesNotExist:
+            return Response(
+                {'error': 'Conversa não encontrada'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        processed = []
+        s3_manager = S3Manager()
+        expires_download = int(getattr(settings, 'S3_DOWNLOAD_URL_EXPIRES', 900))
+
+        for idx, it in enumerate(items):
+            if not isinstance(it, dict):
+                return Response(
+                    {'error': f'item[{idx}] deve ser um objeto'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            aid = it.get('attachment_id')
+            s3_key = it.get('s3_key')
+            filename = it.get('filename')
+            content_type = it.get('content_type')
+            file_size = it.get('file_size', 0)
+
+            if not all([aid, s3_key, filename, content_type]):
+                return Response(
+                    {'error': f'item[{idx}]: attachment_id, s3_key, filename e content_type são obrigatórios'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if file_size > max_size:
+                return Response(
+                    {'error': f'item[{idx}] {filename}: arquivo muito grande. Máximo: {max_size // (1024*1024)}MB'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            if allowed_list and not mime_ok(content_type):
+                return Response(
+                    {'error': f'item[{idx}] tipo de arquivo não permitido'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            if should_convert_audio(content_type, filename):
+                try:
+                    success, ogg_data, msg = s3_manager.download_from_s3(s3_key)
+                    if not success:
+                        raise Exception(msg)
+                    source_format = "webm" if ("webm" in content_type.lower() or filename.lower().endswith(".webm")) else "ogg"
+                    success, mp3_data, msg = convert_ogg_to_mp3(ogg_data, source_format=source_format)
+                    if success:
+                        mp3_key = s3_key.replace('.ogg', '.mp3').replace('.webm', '.mp3')
+                        ok, err = s3_manager.upload_to_s3(mp3_data, mp3_key, 'audio/mpeg')
+                        if ok:
+                            s3_manager.delete_from_s3(s3_key)
+                            s3_key = mp3_key
+                            content_type = 'audio/mpeg'
+                            filename = get_converted_filename(filename)
+                            file_size = len(mp3_data)
+                except Exception as conv_err:
+                    logger.warning(f"Batch item[{idx}] conversão áudio: {conv_err}")
+
+            evolution_url = s3_manager.generate_presigned_url(
+                s3_key, expiration=expires_download, http_method='GET'
+            )
+            if not evolution_url:
+                return Response(
+                    {'error': f'Não foi possível gerar URL para item[{idx}]'},
+                    status=status.HTTP_500_INTERNAL_SERVER_ERROR
+                )
+            file_url = s3_manager.get_public_url(s3_key)
+            processed.append({
+                'attachment_id': aid,
+                's3_key': s3_key,
+                'filename': filename,
+                'content_type': content_type,
+                'file_size': file_size,
+                'evolution_url': evolution_url,
+                'file_url': file_url,
+            })
+
+        evolution_urls = [p['evolution_url'] for p in processed]
+
+        try:
+            with transaction.atomic():
+                message = Message.objects.create(
+                    conversation=conversation,
+                    sender=request.user,
+                    content=content,
+                    direction='outgoing',
+                    status='pending',
+                    is_internal=False,
+                    metadata={'attachment_urls': evolution_urls},
+                )
+                attachments_created = []
+                for p in processed:
+                    att = MessageAttachment(
+                        id=p['attachment_id'],
+                        message=message,
+                        tenant=request.user.tenant,
+                        original_filename=p['filename'],
+                        mime_type=p['content_type'],
+                        file_path=p['s3_key'],
+                        file_url=p['file_url'],
+                        storage_type='s3',
+                        size_bytes=p['file_size'],
+                        expires_at=timezone.now() + timedelta(days=365),
+                        processing_status='pending',
+                    )
+                    att.save()
+                    attachments_created.append(att)
+        except Exception as e:
+            logger.error(f"❌ [UPLOAD BATCH] Erro ao criar mensagem/anexos: {e}", exc_info=True)
+            return Response(
+                {'error': f'Erro ao confirmar upload em lote: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        for att in attachments_created:
+            if att.mime_type.startswith('audio/'):
+                try:
+                    from apps.ai.triage_service import dispatch_transcription_async
+                    dispatch_transcription_async(
+                        tenant_id=str(request.user.tenant.id),
+                        attachment_id=str(att.id),
+                        message_id=str(message.id),
+                        conversation_id=str(conversation.id),
+                        direction='outgoing',
+                        source='outgoing_upload',
+                    )
+                except Exception as ai_err:
+                    logger.error(f"❌ [TRANSCRIPTION] Batch attachment {att.id}: {ai_err}", exc_info=True)
+
+        from apps.chat.tasks import send_message_to_evolution
+        send_message_to_evolution.delay(str(message.id))
+
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'chat_tenant_{request.user.tenant.id}',
+            {'type': 'chat_message', 'message': MessageSerializer(message).data}
+        )
+
+        return Response({
+            'message': MessageSerializer(message).data,
+            'attachments': [MessageAttachmentSerializer(a).data for a in attachments_created],
+        }, status=status.HTTP_201_CREATED)
 
 
 class MessageAttachmentViewSet(viewsets.ReadOnlyModelViewSet):

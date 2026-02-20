@@ -1092,7 +1092,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             from django.db import close_old_connections
             close_old_connections()
             attachments_list = await database_sync_to_async(list)(
-                MessageAttachment.objects.filter(message=message)
+                MessageAttachment.objects.filter(message=message).order_by('created_at')
             )
         
         # Envio via provider (Evolution ou Meta Cloud) quando disponível

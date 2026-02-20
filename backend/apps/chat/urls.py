@@ -13,6 +13,7 @@ from apps.chat.api.views import (
     chat_diagnose_instance_friendly_name,
     UploadPresignedUrlView,
     ConfirmUploadView,
+    ConfirmUploadBatchView,
 )
 from apps.chat.api.views_metrics import message_metrics, message_metrics_rebuild
 from apps.chat.api.views_reports_sync import reports_sync_incremental
@@ -45,6 +46,8 @@ urlpatterns = [
     path('upload-presigned-url', UploadPresignedUrlView.as_view(), name='message-upload-presigned-url-no-slash'),
     path('confirm-upload/', ConfirmUploadView.as_view(), name='message-confirm-upload'),
     path('confirm-upload', ConfirmUploadView.as_view(), name='message-confirm-upload-no-slash'),
+    path('confirm-upload-batch/', ConfirmUploadBatchView.as_view(), name='message-confirm-upload-batch'),
+    path('confirm-upload-batch', ConfirmUploadBatchView.as_view(), name='message-confirm-upload-batch-no-slash'),
     
     # REST API (router deve vir depois das rotas customizadas)
     path('', include(router.urls)),
