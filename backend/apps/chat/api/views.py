@@ -377,6 +377,31 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 department__isnull=True  # ← CRÍTICO: Apenas conversas SEM departamento no Inbox
             )
         
+        # ✅ MULTI-INSTÂNCIA: Filtrar por instância quando informado (ex: modal Nova Conversa "Enviar por").
+        # Parâmetro opcional: só quem envia "instance" ou "instance_id" recebe filtro; demais listagens inalteradas.
+        instance_param = (self.request.query_params.get('instance') or self.request.query_params.get('instance_id') or '').strip()
+        if instance_param and user.tenant:
+            wa = WhatsAppInstance.objects.filter(
+                id=instance_param,
+                tenant=user.tenant,
+                is_active=True
+            ).values_list('instance_name', 'evolution_instance_name').first()
+            if wa:
+                name1 = (wa[0] or '').strip()
+                name2 = (wa[1] or '').strip()
+                if name1 or name2:
+                    q_instance = Q()
+                    if name1:
+                        q_instance |= Q(instance_name__iexact=name1) | Q(instance_name=name1)
+                    if name2 and name2 != name1:
+                        q_instance |= Q(instance_name__iexact=name2) | Q(instance_name=name2)
+                    if q_instance:
+                        queryset = queryset.filter(q_instance)
+            else:
+                # Instância não encontrada (UUID inválido ou de outro tenant): não retornar conversas de outras instâncias.
+                # O cliente fará POST /start/ com instance_id e o backend resolve lá.
+                queryset = queryset.none()
+        
         # ✅ SEGURANÇA: Feature flag - se desabilitado, usar comportamento atual
         from django.conf import settings
         if not settings.ENABLE_MY_CONVERSATIONS:

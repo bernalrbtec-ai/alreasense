@@ -174,9 +174,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       const isGroup = isGroupIdentifier(contact.phone);
       const normalizedPhone = isGroup ? normalizeGroupId(contact.phone) : normalizePhone(contact.phone);
       
-      // Verificar se conversa já existe
+      // Verificar se conversa já existe (filtrar pela instância selecionada para abrir/enviar pela correta)
+      const listParams: Record<string, string> = { search: normalizedPhone };
+      if (selectedInstanceId) listParams.instance = selectedInstanceId;
       const response = await api.get('/chat/conversations/', {
-        params: { search: normalizedPhone }
+        params: listParams
       });
       
       const conversations = response.data.results || response.data || [];
@@ -284,9 +286,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       setIsCreating(true);
       const normalizedPhone = normalizePhone(phoneInput);
       
-      // Verificar se conversa já existe
+      // Verificar se conversa já existe (filtrar pela instância selecionada)
+      const listParams: Record<string, string> = { search: normalizedPhone };
+      if (selectedInstanceId) listParams.instance = selectedInstanceId;
       const response = await api.get('/chat/conversations/', {
-        params: { search: normalizedPhone }
+        params: listParams
       });
       
       const conversations = response.data.results || response.data || [];
