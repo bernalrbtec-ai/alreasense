@@ -889,6 +889,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         # ✅ NOVO: Buscar message_id da Evolution da mensagem original (se reply_to existe)
         quoted_message_id = None
         quoted_remote_jid = None
+        quoted_participant = None  # participant da mensagem citada (grupos/Evolution); sempre definido para evitar UnboundLocalError
         original_message = None  # ✅ Definir no escopo externo para uso posterior
         if reply_to_uuid:
             logger.critical(f"🔍 [CHAT ENVIO] ====== BUSCANDO MENSAGEM ORIGINAL PARA REPLY ======")
@@ -1176,6 +1177,15 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     "❌ [CHAT ENVIO] Meta: fora da janela 24h sem template | conversation_id=%s",
                                     str(conversation.id),
                                 )
+                                return
+                            try:
+                                import uuid
+                                uuid.UUID(str(wa_template_id))
+                            except (ValueError, TypeError):
+                                close_old_connections()
+                                await database_sync_to_async(
+                                    Message.objects.filter(id=message.id).update
+                                )(status='failed', error_message='Template inválido (ID inválido).')
                                 return
                             from apps.notifications.models import WhatsAppTemplate
                             wa_template = await database_sync_to_async(
