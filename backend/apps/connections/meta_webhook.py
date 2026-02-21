@@ -93,11 +93,17 @@ def meta_webhook_view(request):
             return HttpResponse(status=200)
 
         data = json.loads(body) if body else {}
-        if data.get('object') != 'whatsapp_business_account':
+        obj = data.get('object', '')
+        entries = data.get('entry') or []
+        logger.info(
+            "[META WEBHOOK] Webhook recebido da Meta object=%s entries=%s",
+            obj,
+            len(entries),
+        )
+        if obj != 'whatsapp_business_account':
             logger.info("[META WEBHOOK] object não é whatsapp_business_account, ignorando")
             return HttpResponse(status=200)
 
-        entries = data.get('entry') or []
         for entry in entries:
             for change in entry.get('changes') or []:
                 value = change.get('value') or {}

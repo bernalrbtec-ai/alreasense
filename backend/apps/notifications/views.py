@@ -108,6 +108,12 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             logger.warning(f"⚠️ [INSTANCES] Usuário {user.email} sem tenant, retornando queryset vazio")
             return WhatsAppInstance.objects.none()
         
+        # ✅ CORREÇÃO: Em ações de detalhe (retrieve/update/delete), não usar cache para evitar
+        # "No WhatsAppInstance matches the given query" ao editar instância cujo ID não está no cache.
+        if self.kwargs.get('pk'):
+            queryset = WhatsAppInstance.objects.filter(tenant=user.tenant).select_related('tenant', 'created_by')
+            return queryset
+        
         # ✅ MELHORIA: Verificar se é uma requisição GET após POST/PATCH/DELETE
         # Se sim, sempre buscar do banco para garantir dados atualizados
         force_refresh = self.request.GET.get('_refresh', 'false').lower() == 'true'
