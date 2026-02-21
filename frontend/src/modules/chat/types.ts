@@ -36,6 +36,8 @@ export interface Conversation {
   instance_friendly_name?: string;
   /** Fase 7: 'evolution' | 'meta_cloud' — API Meta não suporta edição de mensagem */
   integration_type?: 'evolution' | 'meta_cloud';
+  /** Meta: true quando fora da janela 24h — obrigatório enviar por template */
+  requires_template_to_message?: boolean;
   assigned_to?: string;
   assigned_to_data?: User;
   status: 'pending' | 'open' | 'closed';

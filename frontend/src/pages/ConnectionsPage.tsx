@@ -9,7 +9,7 @@ import { useToast } from '../hooks/useToast'
 import { useConfirm } from '../hooks/useConfirm'
 import { api } from '../lib/api'
 import { formatDate } from '../lib/utils'
-import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck } from 'lucide-react'
+import { WifiOff, Edit, Trash2, QrCode, MessageSquare, X as XIcon, Check, Eye, EyeOff, ShieldCheck, FileDown } from 'lucide-react'
 
 const INTEGRATION_EVOLUTION = 'evolution'
 const INTEGRATION_META_CLOUD = 'meta_cloud'
@@ -50,6 +50,10 @@ export default function ConnectionsPage() {
   const [testPhone, setTestPhone] = useState('')
   const [isSendingTest, setIsSendingTest] = useState(false)
   const [isValidatingMeta, setIsValidatingMeta] = useState(false)
+  const [importingTemplatesId, setImportingTemplatesId] = useState<string | null>(null)
+  const [metaValidationOk, setMetaValidationOk] = useState(false)
+  const [showImportTemplatesModal, setShowImportTemplatesModal] = useState(false)
+  const [importTemplatesAfterSave, setImportTemplatesAfterSave] = useState(false)
   
   // Função para formatar telefone
   const formatPhone = (phone: string) => {
@@ -140,9 +144,14 @@ export default function ConnectionsPage() {
         showToast('❌ Access Token é obrigatório para API Meta', 'error')
         return
       }
+      if (!metaValidationOk) {
+        showToast('❌ Valide o token (botão Validar) antes de salvar', 'error')
+        return
+      }
     }
 
     setIsSaving(true)
+    const shouldImportTemplates = isMeta && importTemplatesAfterSave
     try {
       const instanceData: Record<string, unknown> = {
         friendly_name: instanceForm.friendly_name.trim(),
@@ -155,19 +164,19 @@ export default function ConnectionsPage() {
         instanceData.phone_number_id = (instanceForm.phone_number_id || '').trim()
         if ((instanceForm.access_token || '').trim()) instanceData.access_token = instanceForm.access_token.trim()
         if ((instanceForm.business_account_id || '').trim()) instanceData.business_account_id = instanceForm.business_account_id.trim()
-        // instance_name é definido no backend a partir de phone_number_id
       } else {
         if (!editingInstance) instanceData.instance_name = crypto.randomUUID()
       }
 
+      let savedInstanceId: string | null = null
       if (editingInstance) {
-        // Editar instância existente
-        const response = await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceData)
+        await api.patch(`/notifications/whatsapp-instances/${editingInstance.id}/`, instanceData)
         showToast('✅ Instância WhatsApp atualizada com sucesso!', 'success')
+        savedInstanceId = editingInstance.id
       } else {
-        // Criar nova instância
         const response = await api.post('/notifications/whatsapp-instances/', instanceData)
         showToast('✅ Instância WhatsApp criada com sucesso!', 'success')
+        savedInstanceId = response.data?.id ?? response.data?.data?.id ?? null
       }
       
       setInstanceForm({
@@ -182,10 +191,22 @@ export default function ConnectionsPage() {
       })
       setEditingInstance(null)
       setShowInstanceModal(false)
+      setMetaValidationOk(false)
+      setImportTemplatesAfterSave(false)
       
-      // ✅ MELHORIA: Aguardar um pouco e forçar refresh para garantir dados atualizados
-      await new Promise(resolve => setTimeout(resolve, 300)) // 300ms de delay
-      await fetchData(true) // Forçar refresh
+      if (shouldImportTemplates && savedInstanceId) {
+        try {
+          const imp = await api.post(`/notifications/whatsapp-instances/${savedInstanceId}/import-templates/`)
+          if (imp.data?.success) {
+            showToast('✅ ' + (imp.data.message || 'Templates importados da Meta.'), 'success')
+          }
+        } catch (e: any) {
+          showToast('❌ Importar templates: ' + (e.response?.data?.error || e.message), 'error')
+        }
+      }
+      
+      await new Promise(resolve => setTimeout(resolve, 300))
+      await fetchData(true)
       
     } catch (error: any) {
       console.error('❌ Erro ao salvar instância:', error)
@@ -240,10 +261,12 @@ export default function ConnectionsPage() {
       default_department: (instance as any).default_department || null,
       integration_type: instance.integration_type || INTEGRATION_EVOLUTION,
       phone_number_id: instance.phone_number_id || '',
-      access_token: '', // nunca enviado no GET; preencher só se usuário alterar
+      access_token: '',
       business_account_id: instance.business_account_id || '',
     })
     setEditingInstance(instance)
+    setMetaValidationOk(false)
+    setImportTemplatesAfterSave(false)
     setShowInstanceModal(true)
   }
 
@@ -353,6 +376,60 @@ export default function ConnectionsPage() {
     }
   }
 
+  const handleValidateMetaInModal = async () => {
+    const isMeta = instanceForm.integration_type === INTEGRATION_META_CLOUD
+    if (!isMeta) return
+    const phoneNumberId = (instanceForm.phone_number_id || '').trim()
+    const token = (instanceForm.access_token || '').trim()
+    if (!phoneNumberId) {
+      showToast('❌ Preencha o Phone Number ID', 'error')
+      return
+    }
+    const useSavedToken = !!editingInstance && !token && (editingInstance as any).access_token_set
+    if (!token && !useSavedToken) {
+      showToast('❌ Preencha o Access Token', 'error')
+      return
+    }
+    setIsValidatingMeta(true)
+    try {
+      const url = useSavedToken
+        ? `/notifications/whatsapp-instances/${editingInstance!.id}/validate_meta/`
+        : '/notifications/whatsapp-instances/validate-meta-credentials/'
+      const payload = useSavedToken ? {} : { phone_number_id: phoneNumberId, access_token: token }
+      const response = await api.post(url, payload)
+      if (response.data.success) {
+        setMetaValidationOk(true)
+        setShowImportTemplatesModal(true)
+        showToast('✅ ' + (response.data.message || 'Token válido'), 'success')
+      } else {
+        showToast(`❌ ${response.data.error || 'Falha na validação'}`, 'error')
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.error || error.message
+      showToast(`❌ Validar: ${msg}`, 'error')
+    } finally {
+      setIsValidatingMeta(false)
+    }
+  }
+
+  const handleImportTemplates = async (instance: WhatsAppInstance) => {
+    if (instance.integration_type !== INTEGRATION_META_CLOUD) return
+    setImportingTemplatesId(instance.id)
+    try {
+      const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/import-templates/`)
+      if (response.data.success) {
+        showToast('✅ ' + (response.data.message || 'Templates importados da Meta.'), 'success')
+      } else {
+        showToast(`❌ ${response.data.error || 'Falha ao importar templates'}`, 'error')
+      }
+    } catch (error: any) {
+      const msg = error.response?.data?.error || error.message
+      showToast(`❌ Importar templates: ${msg}`, 'error')
+    } finally {
+      setImportingTemplatesId(null)
+    }
+  }
+
   const handleCheckStatus = async (instance: WhatsAppInstance) => {
     try {
       const response = await api.post(`/notifications/whatsapp-instances/${instance.id}/check_status/`)
@@ -414,7 +491,23 @@ export default function ConnectionsPage() {
             Gerencie suas instâncias WhatsApp conectadas
           </p>
         </div>
-        <Button onClick={() => setShowInstanceModal(true)}>
+        <Button onClick={() => {
+          setEditingInstance(null)
+          setMetaValidationOk(false)
+          setImportTemplatesAfterSave(false)
+          setShowImportTemplatesModal(false)
+          setInstanceForm({
+            friendly_name: '',
+            phone_number: '',
+            is_default: false,
+            default_department: null,
+            integration_type: INTEGRATION_EVOLUTION,
+            phone_number_id: '',
+            access_token: '',
+            business_account_id: '',
+          })
+          setShowInstanceModal(true)
+        }}>
           <MessageSquare className="h-4 w-4 mr-2" />
           Nova Instância WhatsApp
         </Button>
@@ -516,6 +609,20 @@ export default function ConnectionsPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      onClick={() => handleImportTemplates(instance)}
+                      disabled={importingTemplatesId === instance.id}
+                      className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                      title="Importar templates da Meta (para envio fora da janela 24h)"
+                    >
+                      {importingTemplatesId === instance.id ? (
+                        <span className="animate-spin inline-block h-3 w-3 border-2 border-emerald-600 border-t-transparent rounded-full" />
+                      ) : (
+                        <FileDown className="h-3 w-3" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => handleOpenTestModal(instance)}
                       className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                       title="Enviar Mensagem de Teste"
@@ -598,7 +705,23 @@ export default function ConnectionsPage() {
               <CardContent className="text-center py-12">
                 <MessageSquare className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <p className="text-gray-500 mb-4">Nenhuma instância WhatsApp configurada</p>
-                <Button onClick={() => setShowInstanceModal(true)}>
+                <Button onClick={() => {
+                  setEditingInstance(null)
+                  setMetaValidationOk(false)
+                  setImportTemplatesAfterSave(false)
+                  setShowImportTemplatesModal(false)
+                  setInstanceForm({
+                    friendly_name: '',
+                    phone_number: '',
+                    is_default: false,
+                    default_department: null,
+                    integration_type: INTEGRATION_EVOLUTION,
+                    phone_number_id: '',
+                    access_token: '',
+                    business_account_id: '',
+                  })
+                  setShowInstanceModal(true)
+                }}>
                   <MessageSquare className="h-4 w-4 mr-2" />
                   Adicionar Primeira Instância
                 </Button>
@@ -624,6 +747,9 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setShowInstanceModal(false)
                   setEditingInstance(null)
+                  setMetaValidationOk(false)
+                  setImportTemplatesAfterSave(false)
+                  setShowImportTemplatesModal(false)
                   setInstanceForm({
                     friendly_name: '',
                     phone_number: '',
@@ -646,7 +772,11 @@ export default function ConnectionsPage() {
                 <select
                   id="integration_type"
                   value={instanceForm.integration_type}
-                  onChange={(e) => setInstanceForm({ ...instanceForm, integration_type: e.target.value })}
+                  onChange={(e) => {
+                    setInstanceForm({ ...instanceForm, integration_type: e.target.value })
+                    setMetaValidationOk(false)
+                    setImportTemplatesAfterSave(false)
+                  }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value={INTEGRATION_EVOLUTION}>API não oficial (QR Code)</option>
@@ -678,7 +808,10 @@ export default function ConnectionsPage() {
                     <Input
                       id="phone_number_id"
                       value={instanceForm.phone_number_id}
-                      onChange={(e) => setInstanceForm({ ...instanceForm, phone_number_id: e.target.value })}
+                      onChange={(e) => {
+                        setInstanceForm({ ...instanceForm, phone_number_id: e.target.value })
+                        setMetaValidationOk(false)
+                      }}
                       placeholder="ID do número no Meta Business"
                       disabled={!!editingInstance}
                     />
@@ -690,11 +823,39 @@ export default function ConnectionsPage() {
                       id="access_token"
                       type="password"
                       value={instanceForm.access_token}
-                      onChange={(e) => setInstanceForm({ ...instanceForm, access_token: e.target.value })}
+                      onChange={(e) => {
+                        setInstanceForm({ ...instanceForm, access_token: e.target.value })
+                        setMetaValidationOk(false)
+                      }}
                       placeholder={editingInstance && (editingInstance as any).access_token_set ? '•••••••• (deixe em branco para manter)' : 'Token permanente do Meta'}
                     />
                     <p className="text-xs text-gray-500 mt-1">Token do app no Meta for Developers. Ao editar, preencha só se for trocar.</p>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleValidateMetaInModal}
+                      disabled={isValidatingMeta}
+                      className="text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                    >
+                      {isValidatingMeta ? (
+                        <span className="animate-spin inline-block h-3 w-3 border-2 border-indigo-600 border-t-transparent rounded-full" />
+                      ) : (
+                        <ShieldCheck className="h-3 w-3 mr-1" />
+                      )}
+                      {isValidatingMeta ? 'Validando...' : 'Validar token'}
+                    </Button>
+                    {metaValidationOk && (
+                      <span className="text-sm text-green-600">✓ Validado</span>
+                    )}
+                  </div>
+                  {instanceForm.integration_type === INTEGRATION_META_CLOUD && !metaValidationOk && (
+                    <p className="text-xs text-amber-600 bg-amber-50 px-2 py-1 rounded">
+                      Valide o token antes de salvar para evitar erros.
+                    </p>
+                  )}
                   <div>
                     <Label htmlFor="business_account_id">Business Account ID (opcional)</Label>
                     <Input
@@ -770,6 +931,9 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setShowInstanceModal(false)
                   setEditingInstance(null)
+                  setMetaValidationOk(false)
+                  setImportTemplatesAfterSave(false)
+                  setShowImportTemplatesModal(false)
                   setInstanceForm({
                     friendly_name: '',
                     phone_number: '',
@@ -786,9 +950,42 @@ export default function ConnectionsPage() {
               </Button>
               <Button
                 onClick={handleSaveInstance}
-                disabled={isSaving}
+                disabled={
+                  isSaving ||
+                  (instanceForm.integration_type === INTEGRATION_META_CLOUD && !metaValidationOk)
+                }
               >
                 {isSaving ? 'Salvando...' : 'Salvar Instância'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Importar templates após validação OK */}
+      {showImportTemplatesModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Validação OK</h3>
+            <p className="text-gray-600 text-sm mb-4">
+              Deseja importar os templates da Meta agora? Eles ficarão disponíveis para envio fora da janela de 24h.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowImportTemplatesModal(false)
+                }}
+              >
+                Não
+              </Button>
+              <Button
+                onClick={() => {
+                  setImportTemplatesAfterSave(true)
+                  setShowImportTemplatesModal(false)
+                }}
+              >
+                Sim, importar
               </Button>
             </div>
           </div>

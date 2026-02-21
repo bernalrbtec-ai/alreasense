@@ -671,7 +671,7 @@ class ConversationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'tenant', 'department', 'department_name',
             'contact_phone', 'contact_name', 'profile_pic_url', 'instance_name', 'instance_friendly_name',
-            'integration_type',
+            'integration_type', 'requires_template_to_message',
             'assigned_to', 'assigned_to_data',
             'status', 'last_message_at', 'metadata', 'participants',
             'participants_data', 'created_at', 'updated_at',
@@ -682,8 +682,20 @@ class ConversationSerializer(serializers.ModelSerializer):
             'id', 'tenant', 'created_at', 'updated_at', 'last_message_at',
             'unread_count', 'assigned_to_data', 'participants_data', 'department_name',
             'profile_pic_url', 'instance_name', 'instance_friendly_name', 'contact_tags',
-            'integration_type',
+            'integration_type', 'requires_template_to_message',
         ]
+    
+    def get_requires_template_to_message(self, obj):
+        """True quando a conversa é Meta e está fora da janela de 24h (obrigatório usar template)."""
+        if not obj:
+            return False
+        try:
+            if self.get_integration_type(obj) != 'meta_cloud':
+                return False
+            from apps.chat.whatsapp_24h import is_within_24h_window
+            return not is_within_24h_window(obj)
+        except Exception:
+            return False
     
     def get_participants_data(self, obj):
         """Retorna os participantes da conversa."""

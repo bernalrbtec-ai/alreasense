@@ -1201,12 +1201,15 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     Message.objects.filter(id=message.id).update
                                 )(status='failed', error_message='Template não encontrado ou inativo.')
                                 return
+                            body_params = meta.get('body_parameters')
+                            if not isinstance(body_params, (list, tuple)):
+                                body_params = wa_template.body_parameters_default or []
                             last_ok, last_data = await asyncio.to_thread(
                                 sender.send_template,
                                 recipient_value,
                                 wa_template.template_id,
                                 wa_template.language_code or 'pt_BR',
-                                wa_template.body_parameters_default or [],
+                                list(body_params),
                             )
                         else:
                             last_ok, last_data = await asyncio.to_thread(

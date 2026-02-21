@@ -374,6 +374,28 @@ class ChatWebSocketManager {
   }
 
   /**
+   * Envia mensagem por template (Meta: fora da janela 24h).
+   */
+  public sendChatMessageAsTemplate(conversationId: string, waTemplateId: string, bodyParameters: string[] = []): boolean {
+    const targetConversationId = conversationId || this.currentConversationId;
+    if (!targetConversationId) {
+      console.error('❌ [MANAGER] Nenhuma conversa ativa');
+      return false;
+    }
+    const params = Array.isArray(bodyParameters) ? bodyParameters : [];
+    const payload: any = {
+      type: 'send_message',
+      conversation_id: targetConversationId,
+      content: '',
+      include_signature: false,
+      is_internal: false,
+      wa_template_id: waTemplateId,
+      template_body_parameters: params,
+    };
+    return this.sendMessage(payload);
+  }
+
+  /**
    * Envia evento de digitação
    */
   public sendTyping(isTyping: boolean): void {

@@ -291,14 +291,18 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
         reply_to = data.get('reply_to')  # ✅ NOVO: ID da mensagem sendo respondida
         mentions = data.get('mentions', [])  # ✅ NOVO: Lista de números mencionados
         mention_everyone = data.get('mention_everyone', False)  # ✅ NOVO: Flag para @everyone
+        wa_template_id = data.get('wa_template_id')  # ✅ Meta 24h: envio por template
+        template_body_parameters = data.get('template_body_parameters', data.get('body_parameters', []))
         
         # ✅ LOG CRÍTICO: Confirmar conversation_id que será usado
         logger.critical(f"✅ [CHAT WS V2] conversation_id validado: {conversation_id}")
-        logger.critical(f"   content: {content[:50]}...")
+        logger.critical(f"   content: {content[:50] if content else '(template)'}...")
         logger.critical(f"   reply_to recebido: {reply_to}")
         logger.critical(f"   mentions: {mentions}")
+        if wa_template_id:
+            logger.critical(f"   wa_template_id: {wa_template_id} (Meta 24h)")
         
-        if not content and not attachment_urls:
+        if not content and not attachment_urls and not wa_template_id:
             await self.send(text_data=json.dumps({
                 'type': 'error',
                 'message': 'Mensagem vazia'
@@ -314,7 +318,9 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             include_signature=include_signature,
             reply_to=reply_to,  # ✅ NOVO: Passar reply_to
             mentions=mentions,  # ✅ NOVO: Passar mentions
-            mention_everyone=mention_everyone  # ✅ NOVO: Passar mention_everyone
+            mention_everyone=mention_everyone,  # ✅ NOVO: Passar mention_everyone
+            wa_template_id=wa_template_id,  # ✅ Meta 24h: envio por template
+            template_body_parameters=template_body_parameters,
         )
         
         if not message:
@@ -668,11 +674,12 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
             return False
     
     @database_sync_to_async
-    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False):
+    def create_message(self, conversation_id, content, is_internal, attachment_urls, include_signature=True, reply_to=None, mentions=None, mention_everyone=False, wa_template_id=None, template_body_parameters=None):
         """
         Cria mensagem no banco.
         
         ✅ SEGURANÇA CRÍTICA: Valida que conversation existe e pertence ao tenant do usuário
+        ✅ Meta 24h: wa_template_id e template_body_parameters vão no metadata para envio por template.
         """
         from apps.chat.models import Message, Conversation
         
@@ -826,6 +833,14 @@ class ChatConsumerV2(AsyncWebsocketConsumer):
                     
                     metadata['mentions'] = processed_mentions
                     logger.info(f"✅ [CHAT WS V2] {len(processed_mentions)} menção(ões) processadas e adicionadas ao metadata")
+            
+            # ✅ Meta 24h: template para envio fora da janela
+            if wa_template_id:
+                metadata['wa_template_id'] = str(wa_template_id)
+                if template_body_parameters is not None:
+                    metadata['body_parameters'] = list(template_body_parameters) if isinstance(template_body_parameters, (list, tuple)) else []
+                if not content:
+                    content = "[Mensagem de template]"
             
             message = Message.objects.create(
                 conversation=conversation,

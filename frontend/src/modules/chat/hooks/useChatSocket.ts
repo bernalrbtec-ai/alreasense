@@ -361,8 +361,14 @@ export function useChatSocket(conversationId?: string) {
     chatWebSocketManager.markAsSeen(messageId);
   }, [isConnected]);
 
+  const sendMessageAsTemplate = useCallback((conversationId: string, waTemplateId: string, bodyParameters: string[] = []): boolean => {
+    if (!isConnected) return false;
+    return chatWebSocketManager.sendChatMessageAsTemplate(conversationId, waTemplateId, bodyParameters);
+  }, [isConnected]);
+
   return {
     sendMessage,
+    sendMessageAsTemplate,
     sendTyping,
     markAsSeen,
     isConnected,

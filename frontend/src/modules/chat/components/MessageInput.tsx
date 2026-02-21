@@ -2,7 +2,7 @@
  * Campo de input de mensagens - Estilo WhatsApp Web
  */
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Send, Smile, PenTool, Reply, X } from 'lucide-react';
+import { Send, Smile, PenTool, Reply, X, FileText } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { toast } from 'sonner';
 import { VoiceRecorder } from './VoiceRecorder';
@@ -11,17 +11,19 @@ import { FileUploader } from './FileUploader';
 import { AttachmentThumbnail } from './AttachmentThumbnail';
 import { MentionInput } from './MentionInput';
 import { QuickRepliesButton } from './QuickRepliesButton';
+import { TemplatePickerModal } from './TemplatePickerModal';
 import { api } from '@/lib/api';
 
 interface MessageInputProps {
   sendMessage: (content: string, includeSignature?: boolean, isInternal?: boolean, replyToMessageId?: string, mentions?: string[], mentionEveryone?: boolean) => boolean;
+  sendMessageAsTemplate?: (conversationId: string, waTemplateId: string, bodyParameters: string[]) => boolean;
   sendTyping: (isTyping: boolean) => void;
   isConnected: boolean;
   conversationId?: string;
   conversationType?: 'individual' | 'group' | 'broadcast';
 }
 
-export function MessageInput({ sendMessage, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
+export function MessageInput({ sendMessage, sendMessageAsTemplate, sendTyping, isConnected, conversationId: propConversationId, conversationType: propConversationType }: MessageInputProps) {
   const { activeConversation, replyToMessage, clearReply, addMessage } = useChatStore();
   // ✅ CORREÇÃO CRÍTICA: Usar props se disponíveis, senão usar do store com validação
   const conversationId = propConversationId || activeConversation?.id;
@@ -32,6 +34,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   const [sending, setSending] = useState(false);
   const [includeSignature, setIncludeSignature] = useState(true); // ✅ Assinatura habilitada por padrão
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
   const MAX_FILES = 10;
@@ -235,6 +238,15 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
     const hasFiles = selectedFiles.length > 0;
 
     if (isGroupInputBlocked || (!hasText && !hasFiles) || !activeConversation || sending || !isConnected || uploadingFile) {
+      return;
+    }
+
+    // Meta fora da janela 24h: orientar a usar o botão Template (não abrir modal ao enviar)
+    if (activeConversation?.requires_template_to_message && (hasText || hasFiles)) {
+      toast.info('Fora da janela 24h. Use o botão "Template" ao lado para enviar uma mensagem.', {
+        duration: 5000,
+        position: 'bottom-right',
+      });
       return;
     }
 
@@ -497,6 +509,7 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
   }
 
   return (
+    <>
     <div className="relative">
       {/* ✅ NOVO: Preview de mensagem respondida */}
       {replyToMessage && (
@@ -577,6 +590,18 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
         onSelect={handleQuickReplySelect}
         disabled={sending || !isConnected || isGroupInputBlocked}
       />
+
+      {/* Botão Template (Meta: fora da janela 24h) */}
+      {activeConversation?.requires_template_to_message && sendMessageAsTemplate && (
+        <button
+          type="button"
+          onClick={() => setShowTemplateModal(true)}
+          className="p-2 rounded-full flex-shrink-0 text-indigo-600 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 dark:text-indigo-400"
+          title="Enviar por template (fora da janela 24h)"
+        >
+          <FileText className="w-5 h-5" />
+        </button>
+      )}
 
       {/* File Uploader */}
       <div className="relative">
@@ -692,5 +717,20 @@ export function MessageInput({ sendMessage, sendTyping, isConnected, conversatio
       </button>
       </div>
     </div>
+
+    {conversationId && (
+      <TemplatePickerModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        conversationId={conversationId}
+        onSelectTemplate={(templateId, bodyParams) => {
+          if (sendMessageAsTemplate) {
+            sendMessageAsTemplate(conversationId, templateId, bodyParams);
+            setShowTemplateModal(false);
+          }
+        }}
+      />
+    )}
+    </>
   );
 }

@@ -60,11 +60,6 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
     fetchInstances();
   }, [isOpen]);
 
-  // ✅ DEBUG: Log quando isOpen muda
-  useEffect(() => {
-    console.log('🔄 [NEW CONVERSATION MODAL] isOpen mudou:', isOpen);
-  }, [isOpen]);
-
   // Detectar se query é telefone ou nome
   const isPhoneQuery = useCallback((query: string): boolean => {
     // Remove espaços, parênteses, hífens e outros caracteres
@@ -205,11 +200,6 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           ? activeDepartment.id
           : undefined;
         
-        console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/...', {
-          contact_phone: normalizedPhone,
-          contact_name: contact.name,
-          department: departmentId || 'Nenhum (Inbox)'
-        });
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: contact.name,
@@ -222,34 +212,19 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           const convDepartmentId = typeof conversation.department === 'string'
             ? conversation.department
             : conversation.department?.id || null;
-          const convDepartmentName = conversation.department?.name || 'Nenhum (Inbox)';
-          console.log('✅ [NEW CONVERSATION] Conversa criada:', {
-            id: conversation.id,
-            name: conversation.contact_name,
-            phone: conversation.contact_phone,
-            department: convDepartmentName,
-            departmentId: convDepartmentId,
-            status: conversation.status,
-            activeDepartmentId: activeDepartment?.id,
-            activeDepartmentName: activeDepartment?.name || 'Nenhum'
-          });
           const { setActiveDepartment } = useChatStore.getState();
           if (convDepartmentId && activeDepartment?.id !== convDepartmentId) {
-            console.log('🔄 [NEW CONVERSATION] Ajustando activeDepartment para corresponder à conversa criada');
             const { departments } = useChatStore.getState();
             const matchingDept = departments.find(d => d.id === convDepartmentId);
             if (matchingDept) {
               setActiveDepartment(matchingDept);
-              console.log(`✅ [NEW CONVERSATION] activeDepartment atualizado para: ${matchingDept.name}`);
             } else {
               console.warn(`⚠️ [NEW CONVERSATION] Departamento ${convDepartmentId} não encontrado no store`);
             }
           } else if (!convDepartmentId && activeDepartment?.id !== 'inbox') {
-            console.log('🔄 [NEW CONVERSATION] Conversa criada no Inbox, ajustando activeDepartment');
             setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as any);
           }
           addConversation(conversation);
-          console.log('✅ [NEW CONVERSATION] Conversa adicionada ao store');
         } catch (e) {
           console.error('Erro ao aplicar conversa (department/store):', e);
           addConversation(conversation);
@@ -257,7 +232,6 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       }
 
       try {
-        console.log('✅ [NEW CONVERSATION] Setando conversa como ativa:', conversation.id);
         setActiveConversation(conversation);
         onClose();
       } catch (e) {
@@ -310,10 +284,6 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           ? activeDepartment.id
           : undefined;
         
-        console.log('🆕 [NEW CONVERSATION] Criando nova conversa via /start/ (telefone direto)...', {
-          contact_phone: normalizedPhone,
-          department: departmentId || 'Nenhum (Inbox)'
-        });
         const createResponse = await api.post('/chat/conversations/start/', {
           contact_phone: normalizedPhone,
           contact_name: normalizedPhone, // Usar telefone como nome se não tiver contato
@@ -326,34 +296,19 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
           const convDepartmentId = typeof conversation.department === 'string'
             ? conversation.department
             : conversation.department?.id || null;
-          const convDepartmentName = conversation.department?.name || 'Nenhum (Inbox)';
-          console.log('✅ [NEW CONVERSATION] Conversa criada:', {
-            id: conversation.id,
-            name: conversation.contact_name,
-            phone: conversation.contact_phone,
-            department: convDepartmentName,
-            departmentId: convDepartmentId,
-            status: conversation.status,
-            activeDepartmentId: activeDepartment?.id,
-            activeDepartmentName: activeDepartment?.name || 'Nenhum'
-          });
           const { setActiveDepartment } = useChatStore.getState();
           if (convDepartmentId && activeDepartment?.id !== convDepartmentId) {
-            console.log('🔄 [NEW CONVERSATION] Ajustando activeDepartment para corresponder à conversa criada');
             const { departments } = useChatStore.getState();
             const matchingDept = departments.find(d => d.id === convDepartmentId);
             if (matchingDept) {
               setActiveDepartment(matchingDept);
-              console.log(`✅ [NEW CONVERSATION] activeDepartment atualizado para: ${matchingDept.name}`);
             } else {
               console.warn(`⚠️ [NEW CONVERSATION] Departamento ${convDepartmentId} não encontrado no store`);
             }
           } else if (!convDepartmentId && activeDepartment?.id !== 'inbox') {
-            console.log('🔄 [NEW CONVERSATION] Conversa criada no Inbox, ajustando activeDepartment');
             setActiveDepartment({ id: 'inbox', name: 'Inbox', color: '#ea580c' } as any);
           }
           addConversation(conversation);
-          console.log('✅ [NEW CONVERSATION] Conversa adicionada ao store');
         } catch (e) {
           console.error('Erro ao aplicar conversa (department/store):', e);
           addConversation(conversation);
@@ -361,7 +316,6 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
       }
 
       try {
-        console.log('✅ [NEW CONVERSATION] Setando conversa como ativa:', conversation.id);
         setActiveConversation(conversation);
         onClose();
       } catch (e) {

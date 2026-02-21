@@ -390,6 +390,46 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             logger.exception("send_test: exceção instance_id=%s: %s", str(instance.id), e)
             return Response({'success': False, 'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+    @action(detail=False, methods=['post'], url_path='validate-meta-credentials')
+    def validate_meta_credentials(self, request):
+        """
+        Valida Phone Number ID e Access Token contra a Meta (sem precisar de instância salva).
+        Body: { "phone_number_id": "...", "access_token": "..." }.
+        Usado no modal de criar/editar instância Meta para obrigar validação antes de salvar.
+        """
+        import requests
+        phone_number_id = (request.data.get('phone_number_id') or '').strip()
+        access_token = (request.data.get('access_token') or '').strip()
+        if not phone_number_id or not access_token:
+            return Response({
+                'success': False,
+                'error': 'Phone Number ID e Access Token são obrigatórios'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        url = f"https://graph.facebook.com/v21.0/{phone_number_id}"
+        try:
+            r = requests.get(url, headers={'Authorization': f'Bearer {access_token}'}, timeout=10)
+            data = r.json() if r.text else {}
+            if r.status_code == 200:
+                return Response({
+                    'success': True,
+                    'message': 'Token e Phone Number ID válidos',
+                    'data': data
+                })
+            err = data.get('error')
+            if isinstance(err, dict):
+                msg = err.get('message', r.text or 'Erro desconhecido')
+                code = err.get('code')
+            else:
+                msg = str(err) if err else (r.text or 'Erro desconhecido')
+                code = None
+            return Response({
+                'success': False,
+                'error': msg[:500] if msg else 'Erro desconhecido',
+                'code': code
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except requests.RequestException as e:
+            return Response({'success': False, 'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+
     @action(detail=True, methods=['post'])
     def validate_meta(self, request, pk=None):
         """Valida Phone Number ID e Access Token da instância Meta (chamada à Graph API)."""
@@ -417,15 +457,99 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
                     'message': 'Token e Phone Number ID válidos',
                     'data': data
                 })
-            err = data.get('error', {})
-            msg = err.get('message', r.text or 'Erro desconhecido')
+            err = data.get('error')
+            if isinstance(err, dict):
+                msg = err.get('message', r.text or 'Erro desconhecido')
+                code = err.get('code')
+            else:
+                msg = str(err) if err else (r.text or 'Erro desconhecido')
+                code = None
             return Response({
                 'success': False,
-                'error': msg,
-                'code': err.get('code')
+                'error': (msg[:500] if msg else 'Erro desconhecido'),
+                'code': code
             }, status=status.HTTP_400_BAD_REQUEST)
         except requests.RequestException as e:
             return Response({'success': False, 'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
+    
+    @action(detail=True, methods=['post'], url_path='import-templates')
+    def import_templates(self, request, pk=None):
+        """
+        Importa templates da Meta (Graph API) para esta instância.
+        Só para instâncias API oficial Meta com business_account_id e access_token.
+        Cria ou atualiza registros em WhatsAppTemplate (tenant + wa_instance).
+        """
+        from django.utils import timezone
+        instance = self.get_object()
+        if getattr(instance, 'integration_type', None) != WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            return Response({
+                'success': False,
+                'error': 'Esta instância não é do tipo API oficial Meta. Apenas instâncias Meta podem importar templates.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        waba_id = (instance.business_account_id or '').strip()
+        token = (instance.access_token or '').strip()
+        if not waba_id or not token:
+            return Response({
+                'success': False,
+                'error': 'Configure o ID da Conta Business (WABA) e o Access Token para importar templates.'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        tenant = request.user.tenant
+        if not tenant:
+            return Response({'success': False, 'error': 'Usuário sem tenant.'}, status=status.HTTP_400_BAD_REQUEST)
+        ok, items, err_msg = _fetch_meta_message_templates(waba_id, token)
+        if not ok:
+            return Response({
+                'success': False,
+                'error': err_msg or 'Erro ao buscar templates na Meta',
+            }, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(items, list):
+            items = []
+        now = timezone.now()
+        created = 0
+        updated = 0
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            name = (item.get('name') or item.get('id') or '').strip()
+            if not name:
+                continue
+            lang = item.get('language')
+            if isinstance(lang, dict):
+                lang = (lang.get('code') or lang.get('language') or '').strip()
+            else:
+                lang = (str(lang) if lang else '').strip()
+            lang = lang or 'pt_BR'
+            raw_status = (item.get('status') or '').strip().lower() or 'unknown'
+            if raw_status not in ('approved', 'pending', 'rejected', 'limited', 'disabled', 'unknown', 'sync_error'):
+                raw_status = 'unknown'
+            obj, was_created = WhatsAppTemplate.objects.get_or_create(
+                tenant=tenant,
+                template_id=name,
+                language_code=lang,
+                defaults={
+                    'name': name,
+                    'wa_instance': instance,
+                    'meta_status': raw_status,
+                    'meta_status_updated_at': now,
+                    'is_active': True,
+                },
+            )
+            if was_created:
+                created += 1
+            else:
+                if obj.wa_instance_id is None or obj.wa_instance_id == instance.id:
+                    obj.meta_status = raw_status
+                    obj.meta_status_updated_at = now
+                    obj.wa_instance = instance
+                    obj.save(update_fields=['meta_status', 'meta_status_updated_at', 'wa_instance'])
+                    updated += 1
+        return Response({
+            'success': True,
+            'created': created,
+            'updated': updated,
+            'total': len(items),
+            'message': f'Importados {created + updated} templates da Meta ({created} novos, {updated} atualizados).',
+        }, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'])
     def generate_qr(self, request, pk=None):
@@ -535,8 +659,11 @@ def _fetch_meta_message_templates(waba_id, access_token, timeout=15):
         if r.status_code in (200, 201):
             items = data.get('data') if isinstance(data.get('data'), list) else []
             return True, items, None
-        err = data.get('error', {})
-        msg = err.get('message', r.text or 'Erro desconhecido')
+        err = data.get('error')
+        if isinstance(err, dict):
+            msg = err.get('message', r.text or 'Erro desconhecido')
+        else:
+            msg = str(err) if err else (r.text or 'Erro desconhecido')
         if r.status_code in (401, 403):
             return False, [], f'Sem permissão: {msg}'
         return False, [], msg
@@ -600,7 +727,11 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
                 errors.append(f'{instance.friendly_name or instance.id}: {err_msg or "Erro desconhecido"}')
                 continue
             synced += 1
+            if not isinstance(items, list):
+                items = []
             for item in items:
+                if not isinstance(item, dict):
+                    continue
                 name = item.get('name') or item.get('template_id')
                 lang = item.get('language')
                 if not name:

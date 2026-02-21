@@ -1167,6 +1167,34 @@ class ConversationViewSet(DepartmentFilterMixin, viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
     
+    @action(detail=True, methods=['get'], url_path='available-templates')
+    def available_templates(self, request, pk=None):
+        """
+        Lista templates WhatsApp disponíveis para esta conversa (Meta, janela 24h).
+        Filtra por tenant e pela instância da conversa (wa_instance ou templates sem instância).
+        """
+        from apps.notifications.models import WhatsAppTemplate
+        from apps.notifications.serializers import WhatsAppTemplateSerializer
+        conversation = self.get_object()
+        if not conversation.instance_name:
+            return Response({'results': []}, status=status.HTTP_200_OK)
+        inst_name = str(conversation.instance_name).strip()
+        wa = WhatsAppInstance.objects.filter(
+            Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name) | Q(phone_number_id=inst_name),
+            tenant=request.user.tenant,
+            is_active=True,
+        ).first()
+        if not wa:
+            return Response({'results': []}, status=status.HTTP_200_OK)
+        templates = WhatsAppTemplate.objects.filter(
+            tenant=request.user.tenant,
+            is_active=True,
+        ).filter(
+            Q(wa_instance_id=wa.id) | Q(wa_instance__isnull=True)
+        ).select_related('wa_instance').order_by('name')
+        serializer = WhatsAppTemplateSerializer(templates, many=True)
+        return Response({'results': serializer.data}, status=status.HTTP_200_OK)
+    
     @action(detail=True, methods=['get'], url_path='group-info')
     def group_info(self, request, pk=None):
         """
