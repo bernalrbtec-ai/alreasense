@@ -117,6 +117,7 @@ def meta_webhook_view(request):
                 phone_number_id = str(phone_number_id)
                 wa_instance = get_whatsapp_instance_for_meta(phone_number_id)
                 if not wa_instance:
+                    _log_meta_instance_diagnostic(phone_number_id)
                     logger.warning(
                         "[META WEBHOOK] Instância não encontrada para phone_number_id=%s (provider=meta)",
                         _mask_phone_id(phone_number_id),
@@ -144,6 +145,35 @@ def _mask_phone_id(pid: str) -> str:
     if not pid or len(pid) <= 4:
         return "***"
     return f"***{pid[-4:]}"
+
+
+def _log_meta_instance_diagnostic(phone_number_id: str) -> None:
+    """
+    Quando a instância não é encontrada, consulta o banco só por phone_number_id + meta_cloud
+    e loga status/is_active para diagnóstico (ex.: status=inactive).
+    """
+    try:
+        candidates = WhatsAppInstance.objects.filter(
+            phone_number_id=str(phone_number_id).strip(),
+            integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+        ).values('id', 'status', 'is_active', 'tenant_id')[:5]
+        candidates = list(candidates)
+        if not candidates:
+            logger.info(
+                "[META WEBHOOK] Diagnóstico: nenhuma instância com phone_number_id=%s e integration_type=meta_cloud no banco",
+                _mask_phone_id(phone_number_id),
+            )
+            return
+        for row in candidates:
+            logger.warning(
+                "[META WEBHOOK] Diagnóstico: instância id=%s tenant_id=%s status=%s is_active=%s (webhook exige status=active e is_active=True)",
+                row['id'],
+                row['tenant_id'],
+                row['status'],
+                row['is_active'],
+            )
+    except Exception as e:
+        logger.debug("[META WEBHOOK] Diagnóstico falhou: %s", e)
     
 
 def _normalize_phone(phone: str) -> str:
