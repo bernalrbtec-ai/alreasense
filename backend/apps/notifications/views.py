@@ -505,9 +505,10 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             return Response({'success': False, 'error': 'Usuário sem tenant.'}, status=status.HTTP_400_BAD_REQUEST)
         ok, items, err_msg = _fetch_meta_message_templates(waba_id, token)
         if not ok:
+            err_display = (err_msg or 'Erro ao buscar templates na Meta')[:500]
             return Response({
                 'success': False,
-                'error': err_msg or 'Erro ao buscar templates na Meta',
+                'error': err_display,
             }, status=status.HTTP_400_BAD_REQUEST)
         if not isinstance(items, list):
             items = []
@@ -655,25 +656,32 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
 def _fetch_meta_message_templates(waba_id, access_token, timeout=15):
     """
     Chama GET /{WABA_ID}/message_templates na Graph API.
+    Segue paging.next até acabar para trazer todos os templates.
     Retorna (ok: bool, data: list, error: str|None).
     """
     import requests
-    url = f"https://graph.facebook.com/v21.0/{waba_id}/message_templates"
+    base_url = f"https://graph.facebook.com/v21.0/{waba_id}/message_templates"
     headers = {'Authorization': f'Bearer {access_token}'}
+    all_items = []
+    url = base_url
     try:
-        r = requests.get(url, headers=headers, timeout=timeout)
-        data = r.json() if r.text else {}
-        if r.status_code in (200, 201):
+        while url:
+            r = requests.get(url, headers=headers, timeout=timeout)
+            data = r.json() if r.text else {}
+            if r.status_code not in (200, 201):
+                err = data.get('error')
+                if isinstance(err, dict):
+                    msg = err.get('message', r.text or 'Erro desconhecido')
+                else:
+                    msg = str(err) if err else (r.text or 'Erro desconhecido')
+                if r.status_code in (401, 403):
+                    return False, [], f'Sem permissão: {msg}'
+                return False, [], msg
             items = data.get('data') if isinstance(data.get('data'), list) else []
-            return True, items, None
-        err = data.get('error')
-        if isinstance(err, dict):
-            msg = err.get('message', r.text or 'Erro desconhecido')
-        else:
-            msg = str(err) if err else (r.text or 'Erro desconhecido')
-        if r.status_code in (401, 403):
-            return False, [], f'Sem permissão: {msg}'
-        return False, [], msg
+            all_items.extend(items)
+            paging = data.get('paging') or {}
+            url = paging.get('next') or None
+        return True, all_items, None
     except requests.RequestException as e:
         return False, [], str(e)
 

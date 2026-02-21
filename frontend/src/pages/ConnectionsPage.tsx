@@ -177,7 +177,8 @@ export default function ConnectionsPage() {
       } else {
         const response = await api.post('/notifications/whatsapp-instances/', instanceData)
         showToast('✅ Instância WhatsApp criada com sucesso!', 'success')
-        savedInstanceId = response.data?.id ?? response.data?.data?.id ?? null
+        const created = response.data?.data ?? response.data
+        savedInstanceId = created?.id ?? response.data?.id ?? null
       }
       
       setInstanceForm({
@@ -200,6 +201,8 @@ export default function ConnectionsPage() {
           const imp = await api.post(`/notifications/whatsapp-instances/${savedInstanceId}/import-templates/`)
           if (imp.data?.success) {
             showToast('✅ ' + (imp.data.message || 'Templates importados da Meta.'), 'success')
+          } else {
+            showToast('❌ ' + (imp.data?.error || 'Falha ao importar templates'), 'error')
           }
         } catch (e: any) {
           showToast('❌ Importar templates: ' + (e.response?.data?.error || e.message), 'error')
@@ -371,7 +374,7 @@ export default function ConnectionsPage() {
       }
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message
-      showToast(`❌ Validar Meta: ${msg}`, 'error')
+      showToast(`❌ Validar token: ${msg}`, 'error')
     } finally {
       setIsValidatingMeta(false)
     }
@@ -407,7 +410,7 @@ export default function ConnectionsPage() {
       }
     } catch (error: any) {
       const msg = error.response?.data?.error || error.message
-      showToast(`❌ Validar: ${msg}`, 'error')
+      showToast(`❌ Validar token: ${msg}`, 'error')
     } finally {
       setIsValidatingMeta(false)
     }
@@ -777,6 +780,7 @@ export default function ConnectionsPage() {
                     setInstanceForm({ ...instanceForm, integration_type: e.target.value })
                     setMetaValidationOk(false)
                     setImportTemplatesAfterSave(false)
+                    setShowImportTemplatesModal(false)
                   }}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
@@ -971,6 +975,11 @@ export default function ConnectionsPage() {
             <p className="text-gray-600 text-sm mb-4">
               Deseja importar os templates da Meta agora? Eles ficarão disponíveis para envio fora da janela de 24h.
             </p>
+            {!(instanceForm.business_account_id || '').trim() && (
+              <p className="text-amber-700 text-xs bg-amber-50 px-2 py-1.5 rounded mb-4">
+                Preencha o Business Account ID (WABA) antes de salvar para que a importação funcione.
+              </p>
+            )}
             <div className="flex gap-2 justify-end">
               <Button
                 variant="outline"
@@ -984,6 +993,7 @@ export default function ConnectionsPage() {
                 onClick={() => {
                   setImportTemplatesAfterSave(true)
                   setShowImportTemplatesModal(false)
+                  showToast('Ao salvar, os templates da Meta serão importados.', 'success')
                 }}
               >
                 Sim, importar
