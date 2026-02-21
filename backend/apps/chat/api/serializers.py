@@ -653,6 +653,7 @@ class ConversationSerializer(serializers.ModelSerializer):
     contact_tags = serializers.SerializerMethodField()
     instance_friendly_name = serializers.SerializerMethodField()
     integration_type = serializers.SerializerMethodField()  # Fase 7: 'evolution' | 'meta_cloud' para desabilitar edição no frontend
+    requires_template_to_message = serializers.SerializerMethodField(read_only=True)  # Meta 24h: True quando fora da janela (obrigatório template)
     
     # ✅ FIX: Garantir que department sempre retorne como UUID string (ou null)
     department = serializers.PrimaryKeyRelatedField(
