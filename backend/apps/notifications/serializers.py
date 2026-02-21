@@ -107,6 +107,7 @@ class WhatsAppInstanceSerializer(serializers.ModelSerializer):
                 validated_data['evolution_instance_name'] = ''
             if not validated_data.get('instance_name'):
                 validated_data['instance_name'] = phone_number_id or str(__import__('uuid').uuid4())
+            validated_data['status'] = 'active'
         else:
             if not validated_data.get('instance_name'):
                 import uuid
@@ -125,7 +126,7 @@ class WhatsAppTemplateSerializer(serializers.ModelSerializer):
         model = WhatsAppTemplate
         fields = [
             'id', 'tenant', 'name', 'template_id', 'language_code',
-            'body_parameters_default', 'is_active', 'wa_instance', 'wa_instance_name',
+            'body', 'body_parameters_default', 'is_active', 'wa_instance', 'wa_instance_name',
             'meta_status', 'meta_status_updated_at',
             'created_at', 'updated_at',
         ]

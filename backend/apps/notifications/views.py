@@ -224,12 +224,18 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
         return instance
     
     def perform_update(self, serializer):
-        """Ao atualizar, invalidar cache."""
+        """Ao atualizar, invalidar cache. Se for Meta e credenciais mudaram, status volta a inactive até validar de novo."""
         from apps.common.cache_manager import CacheManager
         
-        serializer.save()
+        instance = serializer.save()
         
-        # ✅ INVALIDAR CACHE: Limpar cache de instâncias do tenant
+        credenciais_meta = ('phone_number_id', 'access_token')
+        if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            if any(k in serializer.validated_data for k in credenciais_meta):
+                instance.status = 'inactive'
+                instance.connection_state = 'close'
+                instance.save(update_fields=['status', 'connection_state'])
+        
         CacheManager.invalidate_pattern(f"{CacheManager.PREFIX_INSTANCE}:*")
     
     def perform_destroy(self, instance):
@@ -445,7 +451,8 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def validate_meta(self, request, pk=None):
-        """Valida Phone Number ID e Access Token da instância Meta (chamada à Graph API)."""
+        """Valida Phone Number ID e Access Token da instância Meta (chamada à Graph API). Atualiza status, connection_state e last_check."""
+        from django.utils import timezone
         instance = self.get_object()
         if getattr(instance, 'integration_type', None) != WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
             return Response({
@@ -465,6 +472,11 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             r = requests.get(url, headers={'Authorization': f'Bearer {access_token}'}, timeout=10)
             data = r.json() if r.text else {}
             if r.status_code == 200:
+                instance.status = 'active'
+                instance.last_error = ''
+                instance.connection_state = 'open'
+                instance.last_check = timezone.now()
+                instance.save(update_fields=['status', 'last_error', 'connection_state', 'last_check'])
                 return Response({
                     'success': True,
                     'message': 'Token e Phone Number ID válidos',
@@ -477,12 +489,22 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             else:
                 msg = str(err) if err else (r.text or 'Erro desconhecido')
                 code = None
+            instance.status = 'error'
+            instance.last_error = (msg[:500] if msg else 'Erro desconhecido')
+            instance.connection_state = 'close'
+            instance.last_check = timezone.now()
+            instance.save(update_fields=['status', 'last_error', 'connection_state', 'last_check'])
             return Response({
                 'success': False,
                 'error': (msg[:500] if msg else 'Erro desconhecido'),
                 'code': code
             }, status=status.HTTP_400_BAD_REQUEST)
         except requests.RequestException as e:
+            instance.status = 'error'
+            instance.last_error = str(e)[:500]
+            instance.connection_state = 'close'
+            instance.last_check = timezone.now()
+            instance.save(update_fields=['status', 'last_error', 'connection_state', 'last_check'])
             return Response({'success': False, 'error': str(e)}, status=status.HTTP_502_BAD_GATEWAY)
     
     @action(detail=True, methods=['post'], url_path='import-templates')
@@ -536,17 +558,21 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
             raw_status = (item.get('status') or '').strip().lower() or 'unknown'
             if raw_status not in ('approved', 'pending', 'rejected', 'limited', 'disabled', 'unknown', 'sync_error'):
                 raw_status = 'unknown'
+            body_text = _extract_meta_template_body(item)
+            defaults = {
+                'name': name,
+                'wa_instance': instance,
+                'meta_status': raw_status,
+                'meta_status_updated_at': now,
+                'is_active': True,
+            }
+            if body_text:
+                defaults['body'] = body_text
             obj, was_created = WhatsAppTemplate.objects.get_or_create(
                 tenant=tenant,
                 template_id=name,
                 language_code=lang,
-                defaults={
-                    'name': name,
-                    'wa_instance': instance,
-                    'meta_status': raw_status,
-                    'meta_status_updated_at': now,
-                    'is_active': True,
-                },
+                defaults=defaults,
             )
             if was_created:
                 created += 1
@@ -555,7 +581,11 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
                     obj.meta_status = raw_status
                     obj.meta_status_updated_at = now
                     obj.wa_instance = instance
-                    obj.save(update_fields=['meta_status', 'meta_status_updated_at', 'wa_instance'])
+                    update_fields = ['meta_status', 'meta_status_updated_at', 'wa_instance']
+                    if body_text:
+                        obj.body = body_text
+                        update_fields.append('body')
+                    obj.save(update_fields=update_fields)
                     updated += 1
         return Response({
             'success': True,
@@ -692,6 +722,21 @@ def _fetch_meta_message_templates(waba_id, access_token, timeout=15):
         return False, [], str(e)
 
 
+def _extract_meta_template_body(item):
+    """
+    Extrai o texto do body de um item da API Meta message_templates.
+    item.get('components') pode ter entradas com type 'BODY' ou 'body'; retorna '' se não achar.
+    """
+    if not isinstance(item, dict):
+        return ''
+    for c in item.get('components') or []:
+        if not isinstance(c, dict):
+            continue
+        if (c.get('type') or '').strip().upper() == 'BODY':
+            return (c.get('text') or '').strip()
+    return ''
+
+
 class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for WhatsAppTemplate (templates Meta para janela 24h)."""
     serializer_class = WhatsAppTemplateSerializer
@@ -763,6 +808,7 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
                 meta_status_val = (raw_status or '').strip().lower() or 'unknown'
                 if meta_status_val not in ('approved', 'pending', 'rejected', 'limited', 'disabled', 'unknown', 'sync_error'):
                     meta_status_val = 'unknown'
+                body_text = _extract_meta_template_body(item)
                 qs = WhatsAppTemplate.objects.filter(
                     tenant=user.tenant,
                     template_id=name,
@@ -770,7 +816,10 @@ class WhatsAppTemplateViewSet(viewsets.ModelViewSet):
                 ).filter(
                     models.Q(wa_instance__isnull=True) | models.Q(wa_instance_id=instance.id)
                 )
-                qs.update(meta_status=meta_status_val, meta_status_updated_at=now)
+                update_kw = {'meta_status': meta_status_val, 'meta_status_updated_at': now}
+                if body_text:
+                    update_kw['body'] = body_text
+                qs.update(**update_kw)
         return Response(
             {'synced_instances': synced, 'errors': errors},
             status=status.HTTP_200_OK,
