@@ -1204,12 +1204,16 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                             body_params = meta.get('body_parameters')
                             if not isinstance(body_params, (list, tuple)):
                                 body_params = wa_template.body_parameters_default or []
+                            body_params = list(body_params)
+                            # Se o template espera pelo menos 1 parâmetro (ex.: {{1}} = nome) e não foi enviado nenhum, usa o nome do contato
+                            if not body_params and (conversation.contact_name or conversation.contact_phone):
+                                body_params = [str(conversation.contact_name or conversation.contact_phone or 'Cliente').strip() or 'Cliente']
                             last_ok, last_data = await asyncio.to_thread(
                                 sender.send_template,
                                 recipient_value,
                                 wa_template.template_id,
                                 wa_template.language_code or 'pt_BR',
-                                list(body_params),
+                                body_params,
                             )
                         else:
                             last_ok, last_data = await asyncio.to_thread(
