@@ -467,6 +467,7 @@ async def handle_process_incoming_media(
     meta_media_id = meta_media_id or (msg.metadata or {}).get('meta_media_id')
     final_media_url = media_url
     decrypted_data = decrypted_bytes
+    media_download_headers = None  # Para Meta: Bearer no GET da URL de download (lookaside.fbsbx.com exige auth)
 
     # Meta Cloud API: obter URL de download via Graph API (GET /{media-id} com Bearer)
     async def _mark_meta_attachment_failed(reason: str) -> None:
@@ -535,6 +536,7 @@ async def handle_process_incoming_media(
                         return
                     if download_url:
                         final_media_url = download_url
+                        media_download_headers = {"Authorization": f"Bearer {wa_instance.access_token.strip()}"}
                         log.info("✅ [INCOMING MEDIA] Meta: URL de mídia obtida via Graph API")
                         break
                     log.warning("⚠️ [INCOMING MEDIA] Meta: resposta sem campo url: %s", list(data.keys()))
@@ -816,9 +818,10 @@ async def handle_process_incoming_media(
         MAX_SIZE = int(getattr(settings, 'ATTACHMENTS_MAX_SIZE_MB', 50)) * 1024 * 1024  # 50MB padrão
         
         try:
-            # HEAD request para verificar tamanho antes de baixar
+            # HEAD request para verificar tamanho antes de baixar (Meta lookaside exige Authorization)
+            download_headers = media_download_headers or {}
             async with httpx.AsyncClient(timeout=10.0) as client:
-                head_response = await client.head(final_media_url)
+                head_response = await client.head(final_media_url, headers=download_headers)
                 content_length = int(head_response.headers.get('content-length', 0))
                 
                 if content_length > MAX_SIZE:
@@ -850,10 +853,10 @@ async def handle_process_incoming_media(
         
         while retry_count < max_retries:
             try:
-                # 1. Baixar do WhatsApp (ou URL descriptografada do Evolution API)
+                # 1. Baixar do WhatsApp (ou URL da Meta; lookaside.fbsbx.com exige Authorization)
                 async with httpx.AsyncClient(timeout=30.0) as client:
                     logger.info(f"📥 [INCOMING MEDIA] Baixando de: {final_media_url}")
-                    response = await client.get(final_media_url)
+                    response = await client.get(final_media_url, headers=download_headers)
                     response.raise_for_status()
                 
                 # ✅ CRUCIAL: Verificar se response.content é bytes
