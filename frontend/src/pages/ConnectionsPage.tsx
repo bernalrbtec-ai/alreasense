@@ -111,13 +111,14 @@ export default function ConnectionsPage() {
     try {
       setIsLoading(true)
       // ✅ MELHORIA: Adicionar parâmetro _refresh para forçar busca do banco
+      // ✅ CORREÇÃO: page_size alto para trazer todas as instâncias (evita nova instância ir para página 2 e não aparecer)
       const url = forceRefresh
-        ? '/notifications/whatsapp-instances/?_refresh=true'
+        ? '/notifications/whatsapp-instances/?_refresh=true&page_size=100'
         : '/notifications/whatsapp-instances/'
-      
-      const instancesResponse = await api.get(url)
+      const params = forceRefresh ? {} : { params: { page_size: 100 } }
+      const instancesResponse = await api.get(url, params)
       const instances = instancesResponse.data.results || instancesResponse.data
-      setInstances(instances)
+      setInstances(Array.isArray(instances) ? instances : [])
       console.log(`✅ [INSTANCES] Carregadas ${instances.length} instâncias (refresh: ${forceRefresh})`)
     } catch (error) {
       console.error('Failed to fetch instances:', error)

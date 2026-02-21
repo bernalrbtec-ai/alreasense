@@ -31,6 +31,13 @@ from apps.billing.decorators import require_product
 User = get_user_model()
 
 
+class WhatsAppInstancePagination(PageNumberPagination):
+    """Paginação que aceita page_size na query para listar todas as instâncias (ex.: após criar Meta)."""
+    page_size = 50
+    page_size_query_param = 'page_size'
+    max_page_size = 500
+
+
 class NotificationTemplateViewSet(viewsets.ModelViewSet):
     """ViewSet for NotificationTemplate."""
     
@@ -85,7 +92,7 @@ class WhatsAppInstanceViewSet(viewsets.ModelViewSet):
     
     serializer_class = WhatsAppInstanceSerializer
     permission_classes = [IsAuthenticated]
-    pagination_class = PageNumberPagination
+    pagination_class = WhatsAppInstancePagination
     
     def get_queryset(self):
         from apps.common.cache_manager import CacheManager
