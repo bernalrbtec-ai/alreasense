@@ -11,6 +11,7 @@ export interface WhatsAppTemplate {
   name: string;
   template_id: string;
   language_code: string;
+  body?: string;
   body_parameters_default?: string[];
   meta_status?: string;
   wa_instance_name?: string;
@@ -123,6 +124,11 @@ export function TemplatePickerModal({
                         {t.template_id} · {t.language_code}
                         {t.meta_status ? ` · ${t.meta_status}` : ''}
                       </p>
+                      {t.body && (
+                        <p className="text-xs text-gray-600 dark:text-gray-300 mt-1 line-clamp-2 break-words">
+                          {t.body}
+                        </p>
+                      )}
                     </div>
                   </button>
                 </li>

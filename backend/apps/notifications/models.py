@@ -1204,6 +1204,13 @@ class WhatsAppTemplate(models.Model):
         verbose_name='Código do idioma',
         help_text='Código do idioma do template (ex: pt_BR, en_US)',
     )
+    # Texto do body do template (ex.: "Olá {{1}}, seu pedido {{2}}."); preenchido na importação/sync da Meta
+    body = models.TextField(
+        blank=True,
+        default='',
+        verbose_name='Texto do body',
+        help_text='Corpo do template com placeholders {{1}}, {{2}}, etc. (extraído da API Meta).',
+    )
     # Parâmetros do body: lista de textos na ordem (ex: ["{{1}}", "{{2}}"] substituídos pelo Meta)
     body_parameters_default = models.JSONField(
         default=list,
