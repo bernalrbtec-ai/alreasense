@@ -13,17 +13,29 @@ from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from django.views.decorators.csrf import ensure_csrf_cookie
-from django.utils import timezone
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
+from datetime import timedelta
 from django.db import transaction
+from django.utils import timezone as django_timezone
 from apps.notifications.models import WhatsAppInstance
-from apps.chat.models import Conversation, Message
-from apps.chat.utils.websocket import broadcast_conversation_updated, broadcast_message_received
+from apps.chat.models import Conversation, Message, MessageAttachment
+from apps.chat.utils.websocket import (
+    broadcast_conversation_updated,
+    broadcast_message_received,
+    broadcast_message_status_update,
+)
 
 logger = logging.getLogger(__name__)
+
+# Mapeamento status Meta webhook -> nosso Message.status (só para mensagens enviadas por nós)
+META_STATUS_TO_INTERNAL = {
+    'sent': 'sent',
+    'delivered': 'delivered',
+    'read': 'seen',
+}
 
 
 def get_whatsapp_instance_for_meta(phone_number_id: str):
@@ -239,9 +251,9 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
             media = msg.get('image') or msg.get('video') or msg.get('document') or msg.get('audio') or {}
             media_id = media.get('id')
             content = (media.get('caption') or '').strip()
+            mime_type_meta = media.get('mime_type') or ''
             if media_id:
                 metadata_extra['meta_media_id'] = media_id
-            # Mídia: download via Graph API com Bearer (não usar getBase64FromMediaMessage)
         else:
             content = f'[{msg_type}]'
 
@@ -274,12 +286,85 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 except Exception as e:
                     logger.exception("[META WEBHOOK] Erro ao broadcast message_received: %s", e)
             transaction.on_commit(_broadcast_after_commit)
+
+            # Mídia Meta: criar placeholder (se possível) e sempre enfileirar download via Graph API
+            if msg_type in ('image', 'video', 'document', 'audio') and metadata_extra.get('meta_media_id'):
+                media_id = metadata_extra['meta_media_id']
+                mime = (mime_type_meta or '').strip() or {
+                    'image': 'image/jpeg',
+                    'video': 'video/mp4',
+                    'document': 'application/octet-stream',
+                    'audio': 'audio/ogg',
+                }.get(msg_type, 'application/octet-stream')
+                filename = {'image': 'image', 'video': 'video', 'document': 'document', 'audio': 'audio'}.get(msg_type, 'file')
+                try:
+                    MessageAttachment.objects.create(
+                        message=new_msg,
+                        tenant=tenant,
+                        original_filename=filename,
+                        mime_type=mime,
+                        file_path='',
+                        file_url='',
+                        storage_type='s3',
+                        size_bytes=0,
+                        expires_at=django_timezone.now() + timedelta(days=365),
+                        processing_status='processing',
+                        metadata={'meta_media_id': media_id},
+                    )
+                except Exception as e:
+                    logger.exception("[META WEBHOOK] Erro ao criar MessageAttachment (wamid=%s): %s", wamid, e)
+                # Enfileirar mesmo se o placeholder falhou: o worker pode criar o attachment ao concluir o download
+                def _enqueue_meta_media_after_commit():
+                    try:
+                        from apps.chat.tasks import process_incoming_media
+                        process_incoming_media.delay(
+                            tenant_id=str(tenant.id),
+                            message_id=str(new_msg.id),
+                            media_url='',
+                            media_type=msg_type,
+                            meta_media_id=media_id,
+                            mime_type=mime or None,
+                        )
+                        logger.info("[META WEBHOOK] process_incoming_media enfileirado (meta_media_id=%s)", media_id[:24] + "...")
+                    except Exception as e:
+                        logger.exception("[META WEBHOOK] Erro ao enfileirar process_incoming_media: %s", e)
+                transaction.on_commit(_enqueue_meta_media_after_commit)
         except Exception as e:
             logger.exception("[META WEBHOOK] Erro ao criar Message (wamid=%s): %s", wamid, e)
 
     for st in statuses_list:
-        # Status updates (delivered, read, etc.) podem ser mapeados depois para Message.status
-        logger.debug("[META WEBHOOK] Status recebido: %s (provider=meta)", st.get('id'))
+        wamid = st.get('id')
+        meta_status = (st.get('status') or '').strip().lower()
+        if not wamid or not meta_status:
+            continue
+        new_status = META_STATUS_TO_INTERNAL.get(meta_status)
+        if not new_status:
+            logger.debug("[META WEBHOOK] Status ignorado (não mapeado): %s", meta_status)
+            continue
+        try:
+            message = Message.objects.select_related('conversation').filter(message_id=wamid).first()
+            if not message:
+                logger.debug("[META WEBHOOK] Mensagem não encontrada para wamid=%s", wamid[:24] + "...")
+                continue
+            # Só atualizar status de mensagens enviadas por nós (outgoing)
+            if message.direction != 'outgoing':
+                continue
+            # Não rebaixar: se já está seen, não voltar para delivered/sent
+            if message.status == 'seen' and new_status != 'seen':
+                continue
+            if message.status == new_status:
+                continue
+            message.status = new_status
+            message.evolution_status = meta_status
+            message.save(update_fields=['status', 'evolution_status'])
+            broadcast_message_status_update(message)
+            logger.info(
+                "[META WEBHOOK] Status atualizado wamid=%s -> %s (provider=meta)",
+                wamid[:24] + "...",
+                new_status,
+            )
+        except Exception as e:
+            logger.exception("[META WEBHOOK] Erro ao processar status (wamid=%s): %s", wamid[:24] if wamid else "", e)
 
 
 def _get_or_create_conversation_meta(

@@ -104,6 +104,11 @@ class MetaCloudProvider(WhatsAppSenderBase):
         quoted_message_id: Optional[str] = None,
         **kwargs: Any,
     ) -> Tuple[bool, Dict[str, Any]]:
+        """
+        Envia mídia (imagem, vídeo, documento, áudio) via Graph API.
+        Requer que media_url seja uma URL publicamente acessível (a Meta faz GET nela).
+        Para URLs internas, use a Media API da Meta (upload do arquivo e envio por id).
+        """
         to = self._to_phone(phone)
         if not to:
             return False, {'error': 'phone vazio', 'error_code': 'INVALID_PHONE'}

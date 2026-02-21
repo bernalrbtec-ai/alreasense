@@ -210,29 +210,35 @@ def broadcast_message_received(message) -> None:
 def broadcast_message_status_update(message) -> None:
     """
     Broadcast específico para atualização de status de mensagem.
-    
+    Envia para o tenant e para a room da conversa (chat aberto).
     Usado após:
     - Webhook messages.update (sent → delivered → seen)
-    - Status atualizado localmente
-    
-    Args:
-        message: Instância do modelo Message
+    - Status atualizado localmente (Evolution ou Meta)
     """
-    broadcast_to_tenant(
-        tenant_id=str(message.conversation.tenant_id),
-        event_type='message_status_update',
-        data={
-            'message_id': str(message.id),
-            'conversation_id': str(message.conversation_id),
-            'status': message.status,
-            'evolution_status': message.evolution_status
-        }
-    )
-    
-    logger.debug(
-        f"📡 [WEBSOCKET] Status {message.status} broadcast para "
-        f"mensagem {message.id}"
-    )
+    from apps.chat.utils.serialization import convert_uuids_to_str
+
+    data = {
+        'message_id': str(message.id),
+        'conversation_id': str(message.conversation_id),
+        'status': message.status,
+        'evolution_status': message.evolution_status,
+    }
+    data = convert_uuids_to_str(data)
+    payload = {'type': 'message_status_update', **data}
+
+    channel_layer = get_channel_layer()
+    tenant_group = f"chat_tenant_{message.conversation.tenant_id}"
+    room_group_name = f"chat_tenant_{message.conversation.tenant_id}_conversation_{message.conversation_id}"
+    try:
+        async_to_sync(channel_layer.group_send)(tenant_group, payload)
+        async_to_sync(channel_layer.group_send)(room_group_name, payload)
+        logger.debug(
+            "📡 [WEBSOCKET] Status %s broadcast para mensagem %s (tenant + room)",
+            message.status,
+            message.id,
+        )
+    except Exception as e:
+        logger.error("❌ [WEBSOCKET] Erro ao enviar broadcast message_status_update: %s", e, exc_info=True)
 
 
 def broadcast_typing_indicator(conversation_id: str, tenant_id: str, 

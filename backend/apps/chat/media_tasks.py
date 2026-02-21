@@ -394,6 +394,7 @@ async def handle_process_incoming_media(
     retry_count: int = 0,
     mime_type: Optional[str] = None,
     jpeg_thumbnail: dict = None,
+    meta_media_id: Optional[str] = None,
 ):
     """
     Handler: Processa mídia recebida do WhatsApp.
@@ -455,27 +456,124 @@ async def handle_process_incoming_media(
     log.info("📦 [INCOMING MEDIA] Processando %s | message_id=%s tenant=%s retry=%s", media_type, message_id, tenant_id, retry_count)
     log.debug("   🔗 URL original: %s", (media_url or '')[:200])
     log.debug("   📌 instance_name (payload)=%s api_key=%s evolution_api_url=%s", instance_name, bool(api_key), evolution_api_url)
-    log.debug("   📌 message_key=%s decrypted_bytes=%s", message_key, bool(decrypted_bytes))
+    log.debug("   📌 message_key=%s decrypted_bytes=%s meta_media_id=%s", message_key, bool(decrypted_bytes), bool(meta_media_id))
 
-    # ✅ CRÍTICO: Usar instance_name da CONVERSA (instância que realmente recebeu a mensagem)
-    # O payload pode vir com instância errada em tenants multi-instância (ex: fallback retornou C_recepção)
-    instance_name_for_api = instance_name
+    from asgiref.sync import sync_to_async
     try:
-        from asgiref.sync import sync_to_async
-        from apps.chat.models import Message
         msg = await sync_to_async(Message.objects.select_related('conversation').get)(id=message_id)
-        if msg.conversation and msg.conversation.instance_name and msg.conversation.instance_name.strip():
-            instance_name_for_api = msg.conversation.instance_name.strip()
-            if instance_name_for_api != (instance_name or ''):
-                log.warning(
-                    "⚠️ [INCOMING MEDIA] Usando instance da conversa (%s) em vez do payload (%s)",
-                    instance_name_for_api[:8], (instance_name or '')[:8] if instance_name else 'vazio'
-                )
-    except Exception as e:
-        log.debug("   [INCOMING MEDIA] Não foi possível obter instance da conversa: %s. Usando payload.", e)
+    except Message.DoesNotExist:
+        log.error("❌ [INCOMING MEDIA] Mensagem não encontrada: %s", message_id)
+        return
+    meta_media_id = meta_media_id or (msg.metadata or {}).get('meta_media_id')
+    final_media_url = media_url
+    decrypted_data = decrypted_bytes
+
+    # Meta Cloud API: obter URL de download via Graph API (GET /{media-id} com Bearer)
+    async def _mark_meta_attachment_failed(reason: str) -> None:
+        """Marca o placeholder de mídia Meta como falho e registra erro no metadata."""
+        try:
+            from apps.chat.utils.serialization import normalize_metadata
+            attachment = await sync_to_async(
+                lambda: MessageAttachment.objects.filter(
+                    message_id=message_id,
+                    file_url='',
+                    processing_status='processing',
+                ).first()
+            )()
+            if attachment:
+                meta = normalize_metadata(getattr(attachment, 'metadata', None) or {})
+                meta['error'] = reason[:500]
+                attachment.processing_status = 'failed'
+                attachment.metadata = meta
+                await sync_to_async(attachment.save)(update_fields=['metadata', 'processing_status'])
+                log.warning("⚠️ [INCOMING MEDIA] Meta: attachment marcado como failed: %s", reason[:200])
+        except Exception as e:
+            log.exception("❌ [INCOMING MEDIA] Meta: erro ao marcar attachment como failed: %s", e)
+
+    if meta_media_id:
+        from apps.notifications.models import WhatsAppInstance
+        wa_instance = await sync_to_async(
+            lambda: WhatsAppInstance.objects.filter(
+                tenant=msg.conversation.tenant,
+                phone_number_id=str(msg.conversation.instance_name or '').strip(),
+                integration_type=WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD,
+                is_active=True,
+            ).first()
+        )()
+        if not wa_instance or not getattr(wa_instance, 'access_token', None):
+            log.warning("⚠️ [INCOMING MEDIA] Meta: instância ou access_token não encontrado para phone_number_id=%s", (msg.conversation.instance_name or '')[:16])
+            await _mark_meta_attachment_failed("Instância Meta ou access_token não encontrado")
+            return
+        graph_url = f"https://graph.facebook.com/v21.0/{meta_media_id}"
+        meta_max_retries = 3
+        meta_retry_delays = (2.0, 4.0)  # 2s e 4s entre tentativas
+        last_error = None
+        for meta_attempt in range(meta_max_retries):
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    r = await client.get(
+                        graph_url,
+                        headers={"Authorization": f"Bearer {wa_instance.access_token.strip()}"},
+                    )
+                    data = r.json() if r.content else {}
+                    download_url = data.get("url")
+                    if r.status_code >= 400:
+                        if r.status_code >= 500 and meta_attempt < meta_max_retries - 1:
+                            last_error = f"HTTP {r.status_code}: {data.get('error', {}).get('message', r.text or '')[:200]}"
+                            log.warning(
+                                "⚠️ [INCOMING MEDIA] Meta: Graph API %s (tentativa %s/%s), retry em %ss",
+                                r.status_code,
+                                meta_attempt + 1,
+                                meta_max_retries,
+                                meta_retry_delays[meta_attempt],
+                            )
+                            await asyncio.sleep(meta_retry_delays[meta_attempt])
+                            continue
+                        await _mark_meta_attachment_failed(
+                            f"Graph API HTTP {r.status_code}: {(data.get('error') or {}).get('message', r.text or '')[:300]}"
+                        )
+                        return
+                    if download_url:
+                        final_media_url = download_url
+                        log.info("✅ [INCOMING MEDIA] Meta: URL de mídia obtida via Graph API")
+                        break
+                    log.warning("⚠️ [INCOMING MEDIA] Meta: resposta sem campo url: %s", list(data.keys()))
+                    await _mark_meta_attachment_failed("Resposta da Graph API sem campo url")
+                    return
+            except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError) as e:
+                last_error = str(e)
+                if meta_attempt < meta_max_retries - 1:
+                    delay = meta_retry_delays[meta_attempt]
+                    log.warning(
+                        "⚠️ [INCOMING MEDIA] Meta: rede/timeout (tentativa %s/%s): %s; retry em %ss",
+                        meta_attempt + 1,
+                        meta_max_retries,
+                        e,
+                        delay,
+                    )
+                    await asyncio.sleep(delay)
+                else:
+                    log.exception("❌ [INCOMING MEDIA] Meta: erro ao obter URL da mídia após %s tentativas: %s", meta_max_retries, e)
+                    await _mark_meta_attachment_failed(last_error[:500])
+                    return
+            except Exception as e:
+                log.exception("❌ [INCOMING MEDIA] Meta: erro ao obter URL da mídia: %s", e)
+                await _mark_meta_attachment_failed(str(e)[:500])
+                return
+        else:
+            if last_error:
+                await _mark_meta_attachment_failed(last_error[:500])
+            return
+
+    # Usar instance_name da conversa (instância que recebeu a mensagem)
+    instance_name_for_api = instance_name
+    if msg.conversation and msg.conversation.instance_name and str(msg.conversation.instance_name).strip():
+        instance_name_for_api = str(msg.conversation.instance_name).strip()
+        if instance_name_for_api != (instance_name or ''):
+            log.debug("   [INCOMING MEDIA] Usando instance da conversa: %s", instance_name_for_api[:8] + "...")
     instance_name = instance_name_for_api or instance_name
 
-    if instance_name:
+    if instance_name and not meta_media_id:
         defer, state_info = should_defer_instance(instance_name)
         if defer:
             wait_seconds = compute_backoff(retry_count)
@@ -487,13 +585,8 @@ async def handle_process_incoming_media(
                 wait_seconds,
             )
             raise InstanceTemporarilyUnavailable(instance_name, (state_info.raw if state_info else {}), wait_seconds)
-    
-    # ✅ REFATORAÇÃO: Priorizar base64 quando message_key disponível (mais confiável)
-    # Base64 é sempre descriptografado e não depende do MongoDB estar atualizado
-    final_media_url = media_url
-    decrypted_data = decrypted_bytes  # Bytes já descriptografados (se vier do webhook)
-    
-    if instance_name and api_key and evolution_api_url and not decrypted_data:
+
+    if (not meta_media_id) and instance_name and api_key and evolution_api_url and not decrypted_data:
         logger.info(f"🔐 [INCOMING MEDIA] Tentando obter mídia descriptografada do Evolution API...")
         logger.info(f"   📌 [INCOMING MEDIA] Instance: {instance_name}")
         logger.info(f"   📌 [INCOMING MEDIA] Message ID: {message_id}")

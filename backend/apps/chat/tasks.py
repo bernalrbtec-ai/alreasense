@@ -272,9 +272,10 @@ class process_incoming_media:
     @staticmethod
     def delay(tenant_id: str, message_id: str, media_url: str, media_type: str,
               instance_name: str = None, api_key: str = None, evolution_api_url: str = None,
-              message_key: dict = None, mime_type: str = None, jpeg_thumbnail: dict = None):
-        """Enfileira processamento de mídia recebida (RabbitMQ)."""
-        delay_rabbitmq(QUEUE_PROCESS_INCOMING_MEDIA, {
+              message_key: dict = None, mime_type: str = None, jpeg_thumbnail: dict = None,
+              meta_media_id: str = None):
+        """Enfileira processamento de mídia recebida (RabbitMQ). Meta: use meta_media_id; Evolution: use message_key/evolution_api_url."""
+        payload = {
             'tenant_id': tenant_id,
             'message_id': message_id,
             'media_url': media_url,
@@ -284,8 +285,11 @@ class process_incoming_media:
             'evolution_api_url': evolution_api_url,
             'message_key': message_key,
             'mime_type': mime_type,
-            'jpeg_thumbnail': jpeg_thumbnail
-        })
+            'jpeg_thumbnail': jpeg_thumbnail,
+        }
+        if meta_media_id:
+            payload['meta_media_id'] = meta_media_id
+        delay_rabbitmq(QUEUE_PROCESS_INCOMING_MEDIA, payload)
 
 
 class process_uploaded_file:
@@ -355,7 +359,7 @@ def enqueue_mark_as_read(conversation_id: str, message_id: str):
 
 async def send_reaction_to_evolution(message, emoji: str):
     """
-    Envia reação para Evolution API.
+    Envia reação para Evolution API ou Meta Cloud API conforme integration_type da instância.
     
     Args:
         message: Instância do modelo Message (deve ter message_id preenchido)
@@ -366,34 +370,88 @@ async def send_reaction_to_evolution(message, emoji: str):
     """
     from apps.chat.models import Message
     from apps.notifications.models import WhatsAppInstance
+    from apps.notifications.whatsapp_providers import get_sender
     from apps.connections.models import EvolutionConnection
     from channels.db import database_sync_to_async
     from django.db import close_old_connections
+    from django.db.models import Q
     import httpx
     
-    logger.info(f"👍 [REACTION] Enviando reação para Evolution API...")
+    logger.info(f"👍 [REACTION] Enviando reação...")
     logger.info(f"   Message ID interno: {message.id}")
     logger.info(f"   Message ID externo: {message.message_id}")
     logger.info(f"   Emoji: {emoji}")
     
     try:
-        # ✅ CORREÇÃO: Fechar conexões antigas antes de operações de banco
         close_old_connections()
         
-        # Buscar instância WhatsApp ativa
-        instance = await database_sync_to_async(
-            WhatsAppInstance.objects.filter(
-                tenant=message.conversation.tenant,
-                is_active=True,
-                status='active'
-            ).first
-        )()
+        if not message.message_id:
+            logger.error(f"❌ [REACTION] Mensagem {message.id} não tem message_id (não foi enviada pelo sistema)")
+            return False
+        
+        # Buscar instância: preferir a da conversa (instance_name = phone_number_id para Meta)
+        inst_name = (message.conversation.instance_name or '').strip()
+        instance = None
+        if inst_name:
+            instance = await database_sync_to_async(
+                lambda: WhatsAppInstance.objects.filter(
+                    Q(instance_name=inst_name)
+                    | Q(evolution_instance_name=inst_name)
+                    | Q(phone_number_id=inst_name),
+                    tenant=message.conversation.tenant,
+                    is_active=True,
+                    status='active',
+                ).first()
+            )()
+        if not instance:
+            instance = await database_sync_to_async(
+                WhatsAppInstance.objects.filter(
+                    tenant=message.conversation.tenant,
+                    is_active=True,
+                    status='active',
+                ).first
+            )()
         
         if not instance:
             logger.warning(f"⚠️ [REACTION] Nenhuma instância WhatsApp ativa para tenant {message.conversation.tenant.name}")
             return False
         
-        # Buscar servidor Evolution
+        # Meta Cloud: usar provider (send_reaction via Graph API).
+        # Nota: em conversas de grupo, a Meta usa "to" = wa_id do destinatário; contact_phone
+        # pode ser JID do grupo (ex: 123456789-123@g.us). Se reações em grupos Meta falharem,
+        # validar formato do "to" na documentação da Meta.
+        if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            sender = await database_sync_to_async(get_sender)(instance)
+            if not sender:
+                logger.warning(f"⚠️ [REACTION] Meta: provider não disponível para instância {instance.id}")
+                return False
+            phone = message.conversation.contact_phone or ''
+            if '@' in phone:
+                phone = phone.split('@')[0]
+            phone = phone.lstrip('+').strip()
+            if not phone:
+                logger.error(f"❌ [REACTION] Meta: contact_phone vazio")
+                return False
+            if message.conversation.conversation_type == 'group':
+                logger.debug(
+                    "👍 [REACTION] Meta: conversa é grupo; enviando reação com to=%s (validar se Meta aceita)",
+                    _mask_digits(phone) if phone else "vazio",
+                )
+            try:
+                ok, _ = await asyncio.to_thread(
+                    sender.send_reaction,
+                    phone,
+                    message.message_id,
+                    emoji or '',
+                )
+                if ok:
+                    logger.info(f"✅ [REACTION] Reação enviada via Meta Cloud API")
+                return bool(ok)
+            except Exception as e:
+                logger.exception("❌ [REACTION] Meta send_reaction error: %s", e)
+                return False
+        
+        # Evolution: usar Evolution API
         close_old_connections()
         evolution_server = await database_sync_to_async(
             EvolutionConnection.objects.filter(is_active=True).first
@@ -403,7 +461,6 @@ async def send_reaction_to_evolution(message, emoji: str):
             logger.error(f"❌ [REACTION] Configuração da Evolution API não encontrada")
             return False
         
-        # Preparar URL e credenciais
         base_url = (instance.api_url or evolution_server.base_url).rstrip('/')
         api_key = instance.api_key or evolution_server.api_key
         instance_name = instance.instance_name
@@ -3321,6 +3378,11 @@ async def handle_edit_message(message_id: str, new_content: str, edited_by_id: i
             logger.error(f"❌ [EDIT MESSAGE] Nenhuma instância WhatsApp ativa")
             raise ValueError("Nenhuma instância WhatsApp ativa")
         
+        # Meta Cloud API não expõe endpoint de edição de mensagem; apenas Evolution suporta
+        if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            logger.warning(f"⚠️ [EDIT MESSAGE] Edição não suportada para instância Meta (message_id=%s)", message.id)
+            raise ValueError("Edição de mensagem não é suportada para conexão Meta (WhatsApp Cloud API).")
+        
         # Buscar servidor Evolution
         close_old_connections()
         evolution_server = await database_sync_to_async(
@@ -3776,7 +3838,8 @@ async def start_chat_consumers():
                             message_key=message_key_from_payload,
                             retry_count=retry_count,
                             mime_type=payload.get('mime_type'),
-                            jpeg_thumbnail=payload.get('jpeg_thumbnail')
+                            jpeg_thumbnail=payload.get('jpeg_thumbnail'),
+                            meta_media_id=payload.get('meta_media_id'),
                         )
                         logger.info(f"✅ [CHAT CONSUMER] process_incoming_media concluída com sucesso")
                     except InstanceTemporarilyUnavailable as e:

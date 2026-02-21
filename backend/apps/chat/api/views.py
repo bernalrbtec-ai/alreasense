@@ -3987,6 +3987,22 @@ class MessageViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Meta Cloud API não oferece "apagar para todos"; apenas marcar como apagada no chat e broadcast
+        if getattr(instance, 'integration_type', None) == WhatsAppInstance.INTEGRATION_TYPE_META_CLOUD:
+            message.is_deleted = True
+            message.deleted_at = timezone.now()
+            message.save(update_fields=['is_deleted', 'deleted_at'])
+            from apps.chat.utils.websocket import broadcast_message_deleted
+            broadcast_message_deleted(message)
+            logger.info(f"✅ [DELETE MESSAGE] Mensagem marcada como apagada no chat (Meta não suporta apagar no WhatsApp): {message.id}")
+            return Response(
+                {
+                    'status': 'success',
+                    'message': 'Mensagem removida no chat. A Meta não suporta apagar para todos no WhatsApp.',
+                },
+                status=status.HTTP_200_OK,
+            )
+        
         # Buscar servidor Evolution
         evolution_server = EvolutionConnection.objects.filter(is_active=True).first()
         if not evolution_server and not instance.api_url:
