@@ -21,10 +21,11 @@ from datetime import timedelta
 from django.db import transaction
 from django.utils import timezone as django_timezone
 from apps.notifications.models import WhatsAppInstance
-from apps.chat.models import Conversation, Message, MessageAttachment
+from apps.chat.models import Conversation, Message, MessageAttachment, MessageReaction
 from apps.chat.utils.websocket import (
     broadcast_conversation_updated,
     broadcast_message_received,
+    broadcast_message_reaction_update,
     broadcast_message_status_update,
 )
 
@@ -217,19 +218,66 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
         wamid = msg.get('id')
         if not wamid:
             continue
-        # Idempotência: não criar mensagem duplicada
-        if Message.objects.filter(message_id=wamid).exists():
-            logger.info("[META WEBHOOK] Mensagem já existente (wamid=%s), ignorando (provider=meta)", wamid[:20] + "...")
-            continue
-
         from_phone = msg.get('from', '')
         timestamp = msg.get('timestamp')
         msg_type = msg.get('type', 'text')
         contact_name = contacts.get(from_phone) or (msg.get('profile', {}).get('name')) or ''
-
-        # Apenas mensagens recebidas (não from_me; na API Cloud, mensagens recebidas vêm em 'messages')
         normalized_phone = _normalize_phone(from_phone)
         if not normalized_phone:
+            continue
+
+        # Reação: não criar nova Message; criar/atualizar MessageReaction na mensagem original
+        if msg_type == 'reaction':
+            reaction_obj = msg.get('reaction') or {}
+            reaction_message_id = reaction_obj.get('message_id')
+            emoji = (reaction_obj.get('emoji') or '').strip()
+            if not reaction_message_id:
+                logger.warning("[META WEBHOOK] Reação sem message_id, ignorando (wamid=%s)", wamid[:20] + "...")
+                continue
+            original_message = Message.objects.filter(
+                message_id=reaction_message_id,
+                conversation__tenant=tenant,
+            ).select_related('conversation').first()
+            if not original_message:
+                logger.warning(
+                    "[META WEBHOOK] Reação: mensagem original não encontrada message_id=%s (provider=meta)",
+                    reaction_message_id[:24] + "...",
+                )
+                continue
+            try:
+                if not emoji:
+                    deleted = MessageReaction.objects.filter(
+                        message=original_message,
+                        external_sender=normalized_phone,
+                    ).delete()[0]
+                    if deleted:
+                        logger.info(
+                            "[META WEBHOOK] Reação removida message_id=%s external_sender=%s (provider=meta)",
+                            reaction_message_id[:24],
+                            normalized_phone[:16],
+                        )
+                else:
+                    reaction, created = MessageReaction.objects.update_or_create(
+                        message=original_message,
+                        external_sender=normalized_phone,
+                        defaults={'emoji': emoji},
+                    )
+                    logger.info(
+                        "[META WEBHOOK] Reação %s message_id=%s emoji=%s external_sender=%s (provider=meta)",
+                        "criada" if created else "atualizada",
+                        reaction_message_id[:24],
+                        emoji,
+                        normalized_phone[:16],
+                    )
+                original_message = Message.objects.prefetch_related('reactions__user').get(id=original_message.id)
+                broadcast_message_reaction_update(original_message)
+            except Exception as e:
+                logger.exception("[META WEBHOOK] Erro ao processar reação: %s", e)
+            continue
+
+        # Idempotência: não criar mensagem duplicada
+        if Message.objects.filter(message_id=wamid).exists():
+            logger.info("[META WEBHOOK] Mensagem já existente (wamid=%s), ignorando (provider=meta)", wamid[:20] + "...")
             continue
 
         conversation = _get_or_create_conversation_meta(
@@ -274,7 +322,8 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
                 **message_defaults,
             )
             logger.info(
-                "[META WEBHOOK] Message criada conversation_id=%s message_id=%s (provider=meta instance_id=%s)",
+                "[META WEBHOOK] Message criada type=%s conversation_id=%s message_id=%s (provider=meta instance_id=%s)",
+                msg_type,
                 str(conversation.id),
                 wamid[:24],
                 str(wa_instance.id),
