@@ -191,6 +191,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                convPhone === `55${contactPhone}` ||
                convPhone === `+55${contactPhone}`;
       });
+
+      // Garantir que a conversa existente entre no store (ex.: conversa criada pelo webhook Meta)
+      if (conversation) {
+        addConversation(conversation);
+      }
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
@@ -275,6 +280,11 @@ export function NewConversationModal({ isOpen, onClose }: NewConversationModalPr
                convPhone === `55${searchPhone}` ||
                convPhone === `+55${searchPhone}`;
       });
+
+      // Garantir que a conversa existente entre no store (ex.: conversa criada pelo webhook Meta)
+      if (conversation) {
+        addConversation(conversation);
+      }
       
       // Se não encontrou, criar nova conversa
       if (!conversation) {
