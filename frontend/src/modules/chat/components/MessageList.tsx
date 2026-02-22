@@ -37,40 +37,81 @@ const cloneReactions = (reactions?: MessageReaction[] | null): MessageReaction[]
       }))
     : [];
 
+/** Normaliza ID para comparação (string, lowercase, trim) */
+function normalizeMessageId(id: string | undefined | null): string {
+  if (id == null) return '';
+  return String(id).trim().toLowerCase();
+}
+
 /**
  * ✅ NOVO: Componente para preview de mensagem respondida (reply)
- * Busca automaticamente a mensagem original se não estiver na lista
+ * Busca automaticamente a mensagem original se não estiver na lista ou sem conteúdo
  */
 function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Message[] }) {
-  const [repliedMessage, setRepliedMessage] = useState<Message | null>(
-    () => messages.find((messageItem) => messageItem.id === replyToId) || null
-  );
+  const replyIdNorm = normalizeMessageId(replyToId);
+  const [repliedMessage, setRepliedMessage] = useState<Message | null>(() => {
+    const found = messages.find((m) => normalizeMessageId(m.id) === replyIdNorm);
+    return found || null;
+  });
   const [isLoadingOriginal, setIsLoadingOriginal] = useState(false);
+  const [hasFetched, setHasFetched] = useState(false);
   const { addMessage } = useChatStore();
-  
-  // ✅ NOVO: Buscar mensagem original se não estiver na lista
+
+  // Reset quando muda a mensagem sendo respondida (ex.: troca de conversa). Não resetar se id vazio.
   useEffect(() => {
-    if (!repliedMessage && replyToId && !isLoadingOriginal) {
-      setIsLoadingOriginal(true);
-      api.get(`/chat/messages/${replyToId}/`)
-        .then(response => {
-          const originalMsg = response.data;
-          setRepliedMessage(originalMsg);
-          // ✅ Adicionar mensagem original à lista se não estiver presente
-          if (!messages.find((messageItem) => messageItem.id === originalMsg.id)) {
-            addMessage(originalMsg);
-          }
-        })
-        .catch(error => {
-          console.error('❌ [REPLY] Erro ao buscar mensagem original:', error);
-          // Manter repliedMessage como null para mostrar fallback
-        })
-        .finally(() => {
-          setIsLoadingOriginal(false);
-        });
+    if (!replyIdNorm) return;
+    const found = messages.find((m) => normalizeMessageId(m.id) === replyIdNorm);
+    setRepliedMessage(found || null);
+    setHasFetched(false);
+  }, [replyIdNorm]);
+
+  const needsFetch =
+    !isLoadingOriginal &&
+    (!repliedMessage || ((repliedMessage.content == null || repliedMessage.content === '') && !repliedMessage.attachments?.length));
+
+  // Buscar mensagem original se não estiver na lista ou se estiver sem conteúdo (ex.: mensagem vinda do WS sem content)
+  useEffect(() => {
+    if (!needsFetch || hasFetched || !replyToId?.trim()) return;
+    setHasFetched(true);
+    setIsLoadingOriginal(true);
+    api
+      .get(`/chat/messages/${replyToId.trim()}/`)
+      .then((response) => {
+        const originalMsg = response.data;
+        setRepliedMessage(originalMsg);
+        if (!messages.find((m) => normalizeMessageId(m.id) === normalizeMessageId(originalMsg.id))) {
+          addMessage(originalMsg);
+        }
+      })
+      .catch((error) => {
+        console.error('❌ [REPLY] Erro ao buscar mensagem original:', error);
+        setHasFetched(false);
+      })
+      .finally(() => {
+        setIsLoadingOriginal(false);
+      });
+  }, [replyToId, needsFetch, hasFetched, messages, addMessage]);
+
+  // Atualizar repliedMessage quando a lista tiver a mensagem com conteúdo e nós ainda não tivermos conteúdo
+  useEffect(() => {
+    if (!replyIdNorm) return;
+    const hasContent = repliedMessage?.content != null && repliedMessage.content !== '';
+    if (hasContent) return;
+    const fromList = messages.find((m) => normalizeMessageId(m.id) === replyIdNorm);
+    if (fromList && (fromList.content != null && fromList.content !== '' || (fromList.attachments?.length ?? 0) > 0)) {
+      setRepliedMessage(fromList);
     }
-  }, [replyToId, repliedMessage, isLoadingOriginal, messages, addMessage]);
-  
+  }, [messages, replyIdNorm, repliedMessage?.content]);
+
+  // Id vazio: não buscar nem mostrar preview completo (após todos os hooks para não quebrar regras do React)
+  if (!replyIdNorm) {
+    return (
+      <div className="mb-2 pl-3 border-l-4 border-l-gray-400 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
+        <p className="text-xs text-gray-500 dark:text-gray-400">Resposta</p>
+      </div>
+    );
+  }
+
   if (isLoadingOriginal) {
     return (
       <div className="mb-2 pl-3 border-l-4 border-l-gray-300 bg-gray-50 dark:bg-gray-800 rounded-r-lg py-1.5">
@@ -118,9 +159,11 @@ function ReplyPreview({ replyToId, messages }: { replyToId: string; messages: Me
     );
   }
   
-  // ✅ MELHORIA: Função para scroll até mensagem original
+  // Scroll até mensagem original (tentar replyToId e replyIdNorm por diferença de casing no DOM)
   const scrollToOriginal = () => {
-    const originalElement = document.querySelector(`[data-message-id="${replyToId}"]`);
+    const originalElement =
+      document.querySelector<HTMLElement>(`[data-message-id="${replyToId}"]`) ??
+      document.querySelector<HTMLElement>(`[data-message-id="${replyIdNorm}"]`);
     if (originalElement) {
       originalElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
       // Destacar mensagem original brevemente
