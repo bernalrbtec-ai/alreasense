@@ -860,6 +860,7 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
                   attachment.mime_type?.includes('spreadsheet');
   const isPowerPoint = fileExt === 'ppt' || fileExt === 'pptx' || 
                        attachment.mime_type?.includes('presentation');
+  const isZip = fileExt === 'zip' || attachment.mime_type === 'application/zip';
   
   // Cores e estilos baseados no tipo de arquivo (estilo WhatsApp)
   const getDocumentStyle = () => {
@@ -890,6 +891,13 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
         iconColor: 'text-orange-600',
         iconBg: 'bg-orange-100',
         borderColor: 'border-orange-200'
+      };
+    } else if (isZip) {
+      return {
+        bgColor: 'bg-amber-50',
+        iconColor: 'text-amber-600',
+        iconBg: 'bg-amber-100',
+        borderColor: 'border-amber-200'
       };
     } else {
       return {

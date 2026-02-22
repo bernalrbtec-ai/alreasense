@@ -305,9 +305,10 @@ def _process_meta_value(value: dict, wa_instance: WhatsAppInstance, instance_nam
         else:
             content = f'[{msg_type}]'
 
+        # Para mídia sem legenda: não usar placeholder [document]/[image] (evita texto redundante no chat)
         message_defaults = {
             'conversation': conversation,
-            'content': content or f'[{msg_type}]',
+            'content': (content or '') if msg_type in ('image', 'video', 'document', 'audio') else (content or f'[{msg_type}]'),
             'direction': 'incoming',
             'status': 'sent',
             'evolution_status': 'received',

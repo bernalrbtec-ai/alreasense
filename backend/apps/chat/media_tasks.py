@@ -25,6 +25,23 @@ logger = logging.getLogger(__name__)
 media_logger = logging.getLogger("flow.chat.media")
 
 
+def _parse_content_disposition_filename(header_value: Optional[str]) -> Optional[str]:
+    """Extrai filename de Content-Disposition (attachment; filename="x.zip" ou filename*=UTF-8''x.zip)."""
+    if not header_value or not isinstance(header_value, str):
+        return None
+    import re
+    # filename*=UTF-8''encoded_name (RFC 5987)
+    m = re.search(r"filename\*\s*=\s*(?:[^']*')?([^;\s]+)", header_value, re.I)
+    if m:
+        from urllib.parse import unquote
+        return unquote(m.group(1).strip())
+    # filename="name" ou filename=name
+    m = re.search(r'filename\s*=\s*["\']?([^"\';\s]+)["\']?', header_value, re.I)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
 async def handle_fetch_group_info(conversation_id: str, group_jid: str, instance_name: str, api_key: str, base_url: str):
     """
     Handler: Busca informações de grupo (nome, foto, participantes) de forma assíncrona.
@@ -851,6 +868,7 @@ async def handle_process_incoming_media(
             # Se HEAD falhar, continuar e validar após download (fallback)
             logger.warning(f"⚠️ [INCOMING MEDIA] Não foi possível verificar tamanho antes de baixar: {size_check_error}. Validando após download...")
         
+        content_disposition_filename = None
         while retry_count < max_retries:
             try:
                 # 1. Baixar do WhatsApp (ou URL da Meta; lookaside.fbsbx.com exige Authorization)
@@ -871,6 +889,11 @@ async def handle_process_incoming_media(
                         raise ValueError(f"response.content é {type(media_data)}, esperado bytes")
                 
                 content_type = response.headers.get('content-type', 'application/octet-stream')
+                content_disposition_filename = _parse_content_disposition_filename(
+                    response.headers.get('content-disposition')
+                )
+                if content_disposition_filename:
+                    logger.info(f"📎 [INCOMING MEDIA] Nome do arquivo (Content-Disposition): {content_disposition_filename[:80]}")
 
                 # ✅ NORMALIZAÇÃO: Garantir áudio detectado como audio/*
                 if media_type == 'audio' and not content_type.startswith('audio/'):
@@ -1062,7 +1085,12 @@ async def handle_process_incoming_media(
             file_url=''
         ).order_by('-created_at').first())()
         
-        if attachment_placeholder and attachment_placeholder.original_filename:
+        generic_placeholders = ('document', 'image', 'video', 'audio', 'file')
+        if content_disposition_filename:
+            from apps.chat.webhooks import clean_filename
+            filename = clean_filename(content_disposition_filename, message_id=message_id, mime_type=content_type)
+            logger.info(f"✅ [INCOMING MEDIA] Usando nome do Content-Disposition: {filename}")
+        elif attachment_placeholder and attachment_placeholder.original_filename and attachment_placeholder.original_filename not in generic_placeholders:
             filename = attachment_placeholder.original_filename
             logger.info(f"✅ [INCOMING MEDIA] Usando original_filename do attachment: {filename}")
         else:
@@ -1104,7 +1132,9 @@ async def handle_process_incoming_media(
                 'mp3': 'mp3',
                 'pdf': 'pdf',
                 'ogg': 'ogg',
-                'webm': 'webm'
+                'webm': 'webm',
+                'zip': 'zip',
+                'ole': 'bin',  # doc/xls legacy
             }
             detected_ext = format_to_ext.get(detected_format_final)
             if detected_ext:

@@ -1008,7 +1008,8 @@ export function MessageList() {
                 {/* ✅ NOVO: Renderizar menções se houver */}
                 {/* ✅ NOVO: Formatação WhatsApp (negrito, itálico, riscado, monoespaçado) */}
                 {/* ✅ NOVO: Renderizar assinatura 'Nome disse:' como cabeçalho separado */}
-                {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() && 
+                {!messageItem.is_deleted && messageItem.content && messageItem.content.trim() &&
+                 !/^\[(document|image|video|audio)\]$/i.test(messageItem.content.trim()) &&
                  !(messageItem.metadata?.contact_message || messageItem.content?.includes('📇') || messageItem.content?.includes('Compartilhou contato')) &&
                  !messageItem.metadata?.location_message && (
                   <>
