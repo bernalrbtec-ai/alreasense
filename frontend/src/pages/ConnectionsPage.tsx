@@ -97,7 +97,8 @@ export default function ConnectionsPage() {
   const { confirm, showConfirm, hideConfirm, handleConfirm } = useConfirm()
 
   useEffect(() => {
-    fetchData()
+    // Sempre forçar refresh ao abrir a página para ver estado atual (ex.: instância em alerta/desativada)
+    fetchData(true)
     fetchDepartments()
   }, [])
   

@@ -44,6 +44,19 @@ from apps.chat.utils.metrics import record_latency, record_error
 logger = logging.getLogger(__name__)
 send_logger = logging.getLogger("flow.chat.send")
 read_logger = logging.getLogger("flow.chat.read")
+log = send_logger
+
+
+def _broadcast_message_failed(message_id) -> None:
+    """Notifica o frontend que a mensagem falhou (status=failed) para exibir ícone de falha / 'Falhou'."""
+    try:
+        from apps.chat.models import Message
+        from apps.chat.utils.websocket import broadcast_message_status_update
+        msg = Message.objects.select_related('conversation').filter(id=message_id).first()
+        if msg and getattr(msg, 'conversation', None) is not None:
+            broadcast_message_status_update(msg)
+    except Exception as e:
+        log.warning("⚠️ [CHAT ENVIO] Broadcast status failed: %s", e)
 
 
 def _extract_provider_message_id(data: Optional[Dict[str, Any]], provider_kind: str = 'evolution') -> Optional[str]:
@@ -752,6 +765,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
             close_old_connections()
             await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
+            await database_sync_to_async(_broadcast_message_failed)(message.id)
             log.error("❌ Nenhuma instância WhatsApp ativa | tenant=%s", message.conversation.tenant.name)
             return
         
@@ -1230,6 +1244,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 await database_sync_to_async(
                                     Message.objects.filter(id=message.id).update
                                 )(status='failed', error_message='Fora da janela 24h. Selecione um template aprovado para enviar.')
+                                await database_sync_to_async(_broadcast_message_failed)(message.id)
                                 log.warning(
                                     "❌ [CHAT ENVIO] Meta: fora da janela 24h sem template | conversation_id=%s",
                                     str(conversation.id),
@@ -1243,6 +1258,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 await database_sync_to_async(
                                     Message.objects.filter(id=message.id).update
                                 )(status='failed', error_message='Template inválido (ID inválido).')
+                                await database_sync_to_async(_broadcast_message_failed)(message.id)
                                 return
                             from apps.notifications.models import WhatsAppTemplate
                             wa_template = await database_sync_to_async(
@@ -1257,6 +1273,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                 await database_sync_to_async(
                                     Message.objects.filter(id=message.id).update
                                 )(status='failed', error_message='Template não encontrado ou inativo.')
+                                await database_sync_to_async(_broadcast_message_failed)(message.id)
                                 return
                             body_params = meta.get('body_parameters')
                             if not isinstance(body_params, (list, tuple)):
@@ -1311,6 +1328,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     Message.objects.filter(id=message.id).update
                 )(status='failed', error_message=err[:500])
                 log.warning("❌ [CHAT ENVIO] Provider retornou falha (provider=%s): %s", provider_kind, err[:200])
+                await database_sync_to_async(_broadcast_message_failed)(message.id)
                 # Meta: marcar instância em alerta se erro for de token/sessão (usuário vê em Configurações)
                 if provider_kind == 'meta' and instance:
                     try:
@@ -1327,6 +1345,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                 await database_sync_to_async(
                     Message.objects.filter(id=message.id).update
                 )(status='failed', error_message=err_msg)
+                await database_sync_to_async(_broadcast_message_failed)(message.id)
                 if provider_kind == 'meta' and instance:
                     try:
                         await database_sync_to_async(instance.set_meta_token_error_if_applicable)(err_msg)
@@ -1340,6 +1359,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             await database_sync_to_async(
                 Message.objects.filter(id=message.id).update
             )(status='failed', error_message='Instância Meta sem phone_number_id/access_token válidos')
+            await database_sync_to_async(_broadcast_message_failed)(message.id)
             return
         
         # Envia via Evolution API (path legado quando get_sender não usado)
@@ -1406,12 +1426,14 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         await database_sync_to_async(
                             Message.objects.filter(id=message.id).update
                         )(status='failed', error_message=err_text[:500])
+                        await database_sync_to_async(_broadcast_message_failed)(message.id)
                 except Exception as e:
                     log.error(f"❌ [CHAT] Erro ao enviar localização: {e}", exc_info=True)
                     close_old_connections()
                     await database_sync_to_async(
                         Message.objects.filter(id=message.id).update
                     )(status='failed', error_message=str(e)[:500])
+                    await database_sync_to_async(_broadcast_message_failed)(message.id)
                 # ✅ CRÍTICO: Retornar após tentar localização (sucesso ou falha) para não cair no envio de texto
                 return
             
@@ -1813,6 +1835,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                     from django.db import close_old_connections
                     close_old_connections()
                     await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
+                    await database_sync_to_async(_broadcast_message_failed)(message.id)
                     return
                 
                 # ✅ FORMATO CORRETO: Evolution API usa 'text' no root e 'quoted' no root
@@ -2540,6 +2563,7 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                                     from django.db import close_old_connections
                                     close_old_connections()
                                     await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
+                                    await database_sync_to_async(_broadcast_message_failed)(message.id)
                                     logger.error(f"❌ [CHAT ENVIO] Número não existe no WhatsApp: {_mask_remote_jid(number)}")
                                     return  # Não fazer raise, já tratamos o erro
                     except (ValueError, KeyError, TypeError):
@@ -2693,7 +2717,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
             message.status = 'failed'
             message.error_message = str(e)
             await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
-        except:
+            await database_sync_to_async(_broadcast_message_failed)(message_id)
+        except Exception:
             pass
 
 

@@ -627,13 +627,15 @@ export function MessageList() {
   const getStatusIcon = useCallback((status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="w-4 h-4 text-gray-400 animate-pulse" />;
+        return <Clock className="w-4 h-4 text-gray-400 animate-pulse" title="Enviando..." />;
       case 'sent':
-        return <Check className="w-4 h-4 text-gray-400" />;
+        return <Check className="w-4 h-4 text-gray-400" title="Enviada" />;
       case 'delivered':
-        return <CheckCheck className="w-4 h-4 text-gray-500" />;
+        return <CheckCheck className="w-4 h-4 text-gray-500" title="Entregue" />;
       case 'seen':
-        return <CheckCheck className="w-4 h-4 text-blue-500" />;
+        return <CheckCheck className="w-4 h-4 text-blue-500" title="Vista" />;
+      case 'failed':
+        return <AlertCircle className="w-4 h-4 text-red-500" title="Falha no envio" />;
       default:
         return null;
     }
