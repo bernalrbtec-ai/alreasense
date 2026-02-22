@@ -2604,23 +2604,23 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                             quoted_message_id_evolution = matched_message.message_id
                             logger.warning(f"✅ [WEBHOOK REPLY] Usando mensagem mais recente: {_mask_digits(quoted_message_id_evolution)}")
         
-        if quoted_message_id_evolution:
+        if quoted_message_id_evolution and conversation:
             logger.critical(f"💬 [WEBHOOK REPLY] ====== PROCESSANDO REPLY ======")
             logger.critical(f"   quoted_message_id_evolution: {_mask_digits(quoted_message_id_evolution)}")
             logger.critical(f"   Tenant: {tenant.name}")
             
             try:
-                # Buscar mensagem original pelo message_id da Evolution
+                # Buscar mensagem original pelo message_id da Evolution na MESMA conversa
                 logger.critical(f"🔍 [WEBHOOK REPLY] Buscando mensagem original com message_id: {_mask_digits(quoted_message_id_evolution)}")
                 original_message = Message.objects.filter(
                     message_id=quoted_message_id_evolution,
-                    conversation__tenant=tenant
+                    conversation=conversation
                 ).select_related('conversation').first()
                 
                 if original_message:
-                    # Salvar UUID interno da mensagem original no metadata
+                    # Salvar UUID interno da mensagem original no metadata (setdefault garante metadata existe)
                     reply_to_uuid = str(original_message.id)
-                    message_defaults['metadata']['reply_to'] = reply_to_uuid
+                    message_defaults.setdefault('metadata', {})['reply_to'] = reply_to_uuid
                     logger.critical(f"✅ [WEBHOOK REPLY] Mensagem original encontrada!")
                     logger.critical(f"   UUID interno: {reply_to_uuid}")
                     logger.critical(f"   Evolution ID: {_mask_digits(quoted_message_id_evolution)}")
@@ -2641,9 +2641,11 @@ def handle_message_upsert(data, tenant, connection=None, wa_instance=None):
                         logger.warning(f"   - Encontrada em tenant: {msg.conversation.tenant.name} (conversa: {msg.conversation.contact_phone})")
                     
                     # Salvar o message_id da Evolution como fallback (pode ser útil para debug)
-                    message_defaults['metadata']['reply_to_evolution_id'] = quoted_message_id_evolution
+                    message_defaults.setdefault('metadata', {})['reply_to_evolution_id'] = quoted_message_id_evolution
             except Exception as e:
                 logger.error(f"❌ [WEBHOOK REPLY] Erro ao processar quotedMessage: {e}", exc_info=True)
+        elif quoted_message_id_evolution and not conversation:
+            logger.warning(f"⚠️ [WEBHOOK REPLY] Reply ignorado: conversation não definida")
         else:
             logger.debug(f"🔍 [WEBHOOK REPLY] Mensagem NÃO é reply (quoted_message_id_evolution é None)")
         

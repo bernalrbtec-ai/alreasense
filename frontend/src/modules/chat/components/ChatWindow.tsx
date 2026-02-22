@@ -2,7 +2,7 @@
  * Janela de chat principal - Estilo WhatsApp Web
  */
 import React, { useState, useRef, useEffect } from 'react';
-import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, CheckCircle, XCircle, Plus, User, Clock } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Phone, Video, Search, X, ArrowRightLeft, XCircle, Plus, User, Clock } from 'lucide-react';
 import { useChatStore } from '../store/chatStore';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -471,27 +471,6 @@ export function ChatWindow() {
       toast.error(error.response?.data?.error || 'Erro ao iniciar atendimento');
     } finally {
       setLoadingStart(false);
-    }
-  };
-
-  const handleMarkAsResolved = async () => {
-    if (!activeConversation) return;
-    
-    try {
-      await api.patch(`/chat/conversations/${activeConversation.id}/`, {
-        status: 'closed'
-      });
-      toast.success('Conversa marcada como resolvida!', {
-        duration: 2000,
-        position: 'bottom-right'
-      });
-      setShowMenu(false);
-    } catch (error) {
-      console.error('Erro ao marcar como resolvida:', error);
-      toast.error('Erro ao marcar como resolvida', {
-        duration: 4000,
-        position: 'bottom-right'
-      });
     }
   };
 
@@ -965,16 +944,6 @@ export function ChatWindow() {
                   >
                     <ArrowRightLeft className="w-4 h-4" />
                     Transferir conversa
-                  </button>
-                )}
-
-                {(activeConversation?.conversation_type || conversationType) !== 'group' && (
-                  <button
-                    onClick={handleMarkAsResolved}
-                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-3"
-                  >
-                    <CheckCircle className="w-4 h-4" />
-                    Marcar como resolvida
                   </button>
                 )}
 
