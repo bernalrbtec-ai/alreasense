@@ -243,6 +243,14 @@ def broadcast_message_status_update(message) -> None:
         'status': message.status,
         'evolution_status': message.evolution_status,
     }
+    if message.status == 'failed':
+        meta = getattr(message, 'metadata', None) or {}
+        if meta.get('can_use_fallback'):
+            data['send_error_meta'] = {
+                'can_use_fallback': True,
+                'fallback_instance_friendly_name': meta.get('fallback_instance_friendly_name'),
+                'unavailable_instance_friendly_name': meta.get('unavailable_instance_friendly_name'),
+            }
     data = convert_uuids_to_str(data)
     payload = {'type': 'message_status_update', **data}
 

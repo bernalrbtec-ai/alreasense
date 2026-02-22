@@ -156,8 +156,11 @@ async def _process_send_entry(
         )
 
     try:
+        extra = payload.get('extra')
+        if not isinstance(extra, dict):
+            extra = {}
         logger.critical(f"📥 [CHAT STREAM WORKER] Chamando handle_send_message para: {message_id}")
-        await handle_send_message(message_id, retry_count=retry)
+        await handle_send_message(message_id, retry_count=retry, extra=extra)
         await _ack(client, settings.CHAT_STREAM_SEND_NAME, settings.CHAT_STREAM_CONSUMER_GROUP, entry_id)
         update_worker_heartbeat(SEND_QUEUE_KEY, worker_id)
         logger.info("✅ [CHAT STREAM] Envio concluído | message_id=%s (worker=%s)", message_id, worker_id)

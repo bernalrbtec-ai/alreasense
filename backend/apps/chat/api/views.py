@@ -4145,6 +4145,46 @@ class MessageViewSet(viewsets.ModelViewSet):
                 {'error': f'Erro ao apagar mensagem: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+    @action(detail=True, methods=['post'], url_path='retry-send')
+    def retry_send(self, request, pk=None):
+        """
+        Reenviar mensagem que falhou por instância indisponível, usando outra instância (fallback).
+        Body: { "use_fallback": true }
+        Só permitido quando a mensagem está failed e metadata.can_use_fallback é true.
+        """
+        message = self.get_object()
+        user = request.user
+        if message.conversation.tenant_id != user.tenant_id:
+            return Response({'error': 'Mensagem não pertence ao seu tenant'}, status=status.HTTP_403_FORBIDDEN)
+        if message.direction != 'outgoing':
+            return Response({'error': 'Só é possível reenviar mensagens enviadas por você'}, status=status.HTTP_400_BAD_REQUEST)
+        if message.status != 'failed':
+            return Response({'error': 'Mensagem não está em estado de falha'}, status=status.HTTP_400_BAD_REQUEST)
+        meta = message.metadata or {}
+        if not meta.get('can_use_fallback'):
+            return Response(
+                {'error': 'Esta mensagem não pode ser reenviada por outra instância'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        use_fallback_val = request.data.get('use_fallback')
+        if use_fallback_val not in (True, 'true', '1'):
+            return Response({'error': 'Envie use_fallback: true para confirmar'}, status=status.HTTP_400_BAD_REQUEST)
+        from apps.chat.redis_streams import enqueue_send_message
+        from apps.chat.utils.websocket import broadcast_message_status_update
+        meta = (message.metadata or {}).copy()
+        meta.pop('send_error', None)
+        meta.pop('can_use_fallback', None)
+        meta.pop('fallback_instance_friendly_name', None)
+        meta.pop('unavailable_instance_friendly_name', None)
+        message.status = 'pending'
+        message.error_message = ''
+        message.metadata = meta
+        message.save(update_fields=['status', 'error_message', 'metadata'])
+        broadcast_message_status_update(message)
+        enqueue_send_message(str(message.id), retry=0, extra={'use_fallback': True})
+        logger.info("✅ [RETRY SEND] Mensagem %s reenfileirada com use_fallback", message.id)
+        return Response({'success': True, 'message': 'Mensagem reenfileirada para envio por outra instância'}, status=status.HTTP_200_OK)
     
     @action(detail=True, methods=['post'], url_path='edit')
     def edit_message(self, request, pk=None):

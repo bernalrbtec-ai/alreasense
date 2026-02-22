@@ -642,16 +642,12 @@ async def send_reaction_to_evolution(message, emoji: str):
 
 # ========== CONSUMER HANDLERS ==========
 
-async def handle_send_message(message_id: str, retry_count: int = 0):
+async def handle_send_message(message_id: str, retry_count: int = 0, extra: Optional[Dict[str, Any]] = None):
     """
     Handler: Envia mensagem via Evolution API.
     
-    Fluxo:
-    1. Busca mensagem no banco
-    2. Se tiver anexos, envia via /sendFile
-    3. Se tiver apenas texto, envia via /sendText
-    4. Atualiza status da mensagem
-    5. Broadcast via WebSocket
+    extra pode conter use_fallback=True para permitir envio por outra instância quando
+    a instância da conversa está indisponível (usuário confirmou no frontend).
     """
     from apps.chat.models import Message
     from apps.notifications.models import WhatsAppInstance
@@ -731,10 +727,12 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         
         from django.db.models import Q
         instance = None
+        extra = extra if isinstance(extra, dict) else {}
+        use_fallback = extra.get('use_fallback') is True
         inst_name = (message.conversation.instance_name or '').strip()
+        conversation_bound_to_instance = bool(inst_name)
         if inst_name:
             # Lookup por instance_name / evolution_instance_name (Evolution)
-            # Não exigir status='active' para não falhar em instâncias com status 'inactive' em produção
             instance = await database_sync_to_async(
                 lambda: WhatsAppInstance.objects.filter(
                     Q(instance_name=inst_name) | Q(evolution_instance_name=inst_name),
@@ -752,7 +750,8 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
                         is_active=True,
                     ).first()
                 )()
-        if not instance:
+        # Fallback: quando conversa não está vinculada OU usuário confirmou "usar outra instância" (use_fallback)
+        if not instance and (not conversation_bound_to_instance or use_fallback):
             instance = await database_sync_to_async(
                 WhatsAppInstance.objects.filter(
                     tenant=message.conversation.tenant,
@@ -762,11 +761,36 @@ async def handle_send_message(message_id: str, retry_count: int = 0):
         
         if not instance:
             message.status = 'failed'
-            message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
+            if conversation_bound_to_instance:
+                # Verificar se existe outra instância ativa para oferecer fallback ao usuário
+                other_instance = await database_sync_to_async(
+                    WhatsAppInstance.objects.filter(
+                        tenant=message.conversation.tenant,
+                        is_active=True,
+                    ).first
+                )()
+                def _unavailable_friendly(tid, iname):
+                    q = Q(instance_name=iname) | Q(evolution_instance_name=iname)
+                    if iname.isdigit():
+                        q = q | Q(phone_number_id=iname)
+                    return WhatsAppInstance.objects.filter(q, tenant_id=tid).values_list('friendly_name', flat=True).first()
+                unavailable_friendly = await database_sync_to_async(_unavailable_friendly)(message.conversation.tenant_id, inst_name)
+                meta = (message.metadata or {}).copy()
+                meta['send_error'] = 'instance_unavailable'
+                if other_instance:
+                    meta['can_use_fallback'] = True
+                    meta['fallback_instance_friendly_name'] = getattr(other_instance, 'friendly_name', None) or other_instance.instance_name
+                if unavailable_friendly:
+                    meta['unavailable_instance_friendly_name'] = unavailable_friendly
+                message.metadata = meta
+                message.error_message = 'Instância desta conversa está indisponível. Corrija em Configurações.'
+                log.warning("❌ [CHAT ENVIO] Instância da conversa indisponível (instance_name=%s) | tenant=%s", inst_name[:32] if inst_name else '', message.conversation.tenant.name)
+            else:
+                message.error_message = 'Nenhuma instância WhatsApp ativa encontrada'
+                log.error("❌ Nenhuma instância WhatsApp ativa | tenant=%s", message.conversation.tenant.name)
             close_old_connections()
-            await database_sync_to_async(message.save)(update_fields=['status', 'error_message'])
+            await database_sync_to_async(message.save)(update_fields=['status', 'error_message', 'metadata'])
             await database_sync_to_async(_broadcast_message_failed)(message.id)
-            log.error("❌ Nenhuma instância WhatsApp ativa | tenant=%s", message.conversation.tenant.name)
             return
         
         log.debug(

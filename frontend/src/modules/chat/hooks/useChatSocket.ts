@@ -178,7 +178,7 @@ export function useChatSocket(conversationId?: string) {
     const handleStatusUpdate = (data: WebSocketMessage) => {
       if (data.message_id && data.status) {
         console.log(`📊 [HOOK] Status atualizado: ${data.message_id} → ${data.status}`);
-        updateMessageStatus(data.message_id, data.status);
+        updateMessageStatus(data.message_id, data.status, data.send_error_meta);
       }
     };
 

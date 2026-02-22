@@ -133,6 +133,8 @@ export interface WebSocketMessage {
   message?: Message;
   message_id?: string;
   status?: string;
+  /** Quando status=failed e há outra instância disponível para fallback */
+  send_error_meta?: { can_use_fallback?: boolean; fallback_instance_friendly_name?: string; unavailable_instance_friendly_name?: string };
   user_id?: string;
   user_email?: string;
   is_typing?: boolean;

@@ -42,7 +42,7 @@ interface ChatState {
   getMessagesArray: (conversationId?: string) => Message[];
   setMessages: (messages: Message[], conversationId?: string) => void;
   addMessage: (message: Message) => void;
-  updateMessageStatus: (messageId: string, status: string) => void;
+  updateMessageStatus: (messageId: string, status: string, metadataPatch?: Record<string, unknown>) => void;
   updateMessageReactions: (
     messageId: string,
     reactions: Message['reactions'],
@@ -459,16 +459,19 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
   }),
 
-  updateMessageStatus: (messageId, status) => set((state) => {
+  updateMessageStatus: (messageId, status, metadataPatch?: Record<string, unknown>) => set((state) => {
     const message = state.messages.byId[messageId];
     if (!message) return state;
-    
+    const next: { status: string; metadata?: Record<string, unknown> } = { status: status as string };
+    if (metadataPatch && Object.keys(metadataPatch).length > 0) {
+      next.metadata = { ...(message.metadata || {}), ...metadataPatch };
+    }
     return {
       messages: {
         ...state.messages,
         byId: {
           ...state.messages.byId,
-          [messageId]: { ...message, status: status as any }
+          [messageId]: { ...message, ...next }
         }
       }
     };

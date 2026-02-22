@@ -226,6 +226,7 @@ export function MessageList() {
   const [emojiPickerMessage, setEmojiPickerMessage] = useState<Message | null>(null);
   const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
   const [editMessage, setEditMessage] = useState<Message | null>(null);
+  const [retryingMessageId, setRetryingMessageId] = useState<string | null>(null);
   
   console.log('✅ [MessageList] Estados inicializados');
   
@@ -1083,6 +1084,46 @@ export function MessageList() {
                     </span>
                   )}
                 </div>
+                {messageItem.direction === 'outgoing' && messageItem.status === 'failed' && messageItem.metadata?.can_use_fallback && (
+                  <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200/50">
+                    <span className="text-xs text-amber-700 flex-1">
+                      {messageItem.metadata?.unavailable_instance_friendly_name
+                        ? `A instância ${messageItem.metadata.unavailable_instance_friendly_name} está indisponível.`
+                        : 'A instância desta conversa está indisponível.'}
+                      {messageItem.metadata?.fallback_instance_friendly_name
+                        ? ` Enviar por outra instância (ex.: ${messageItem.metadata.fallback_instance_friendly_name})?`
+                        : ' Enviar por outra instância?'}
+                    </span>
+                    <div className="flex gap-1">
+                      <button
+                        type="button"
+                        disabled={retryingMessageId === messageItem.id}
+                        onClick={async () => {
+                          setRetryingMessageId(messageItem.id);
+                          try {
+                            await api.post(`/chat/messages/${messageItem.id}/retry-send/`, { use_fallback: true });
+                            toast.success('Mensagem reenviada por outra instância');
+                          } catch (e: any) {
+                            toast.error(e.response?.data?.error || 'Erro ao reenviar');
+                          } finally {
+                            setRetryingMessageId(null);
+                          }
+                        }}
+                        className="text-xs px-2 py-1 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
+                      >
+                        {retryingMessageId === messageItem.id ? 'Enviando...' : 'Sim'}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={retryingMessageId === messageItem.id}
+                        onClick={() => {}}
+                        className="text-xs px-2 py-1 rounded bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      >
+                        Não
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
               
               {/* ✅ MELHORIA UX: Reações posicionadas como WhatsApp (ao final da mensagem, fora do card, alinhadas) */}
