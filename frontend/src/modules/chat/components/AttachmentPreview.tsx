@@ -913,12 +913,12 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
   
   if (hasError) {
     return (
-      <div className="attachment-preview document max-w-xs rounded-lg border border-red-200 bg-red-50 p-4">
+      <div className="attachment-preview document max-w-[280px] rounded-lg border border-red-200 bg-red-50 p-2.5">
         <div className="flex items-center gap-3 text-red-600">
-          <AlertCircle size={24} />
-          <div>
+          <AlertCircle size={22} className="flex-shrink-0" />
+          <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold">Erro ao processar arquivo</p>
-            <p className="text-xs opacity-80">{metadata.error || 'Não foi possível concluir o processamento do arquivo.'}</p>
+            <p className="text-xs opacity-80 truncate" title={metadata.error}>{metadata.error || 'Não foi possível concluir o processamento.'}</p>
           </div>
         </div>
       </div>
@@ -927,17 +927,17 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
   
   if (isProcessing) {
     return (
-      <div className="attachment-preview document max-w-xs rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <div className="flex flex-col items-center gap-3 text-gray-500">
-          <div className="w-12 h-12 rounded-full border-4 border-gray-200 border-t-gray-400 animate-spin" />
-          {/* ✅ MELHORIA: Mostrar nome do arquivo mesmo durante processamento */}
-          {filename && filename !== 'document' && (
-            <p className="text-sm font-medium text-gray-700 text-center max-w-full truncate px-2" title={filename}>
-              {filename}
-            </p>
-          )}
-          <p className="text-sm font-medium">Processando arquivo...</p>
-          <p className="text-xs text-center opacity-70">Você será notificado automaticamente assim que o download estiver disponível.</p>
+      <div className="attachment-preview document max-w-[280px] rounded-lg border border-gray-200 bg-gray-50 p-2.5">
+        <div className="flex items-center gap-3 text-gray-500">
+          <div className="w-10 h-10 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0">
+            <div className="w-5 h-5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+          </div>
+          <div className="flex-1 min-w-0">
+            {filename && filename !== 'document' && (
+              <p className="text-sm font-medium text-gray-700 truncate" title={filename}>{filename}</p>
+            )}
+            <p className="text-xs text-gray-500">Processando...</p>
+          </div>
         </div>
       </div>
     );
@@ -1135,59 +1135,42 @@ export function AttachmentPreview({ attachment, showAI = false, showTranscriptio
     }
   };
 
+  // Rótulo do tipo (PDF, DOC, ZIP, etc.) estilo WhatsApp
+  const typeLabel = isPDF ? 'PDF' : isWord ? 'DOC' : isExcel ? 'XLS' : isPowerPoint ? 'PPT' : isZip ? 'ZIP' : (fileExt ? fileExt.toUpperCase() : 'Document');
+  const sizeStr = attachment.size_bytes > 0
+    ? formatFileSize(attachment.size_bytes)
+    : (hasValidUrl ? '—' : '—');
+
   return (
-    <div 
-      className={`attachment-preview document ${docStyle.bgColor} rounded-lg border ${docStyle.borderColor} max-w-xs cursor-pointer hover:shadow-md transition-shadow`}
+    <div
+      className={`attachment-preview document ${docStyle.bgColor} rounded-lg border ${docStyle.borderColor} max-w-[280px] cursor-pointer hover:shadow-md transition-shadow p-2.5`}
       onClick={handleDocumentClick}
     >
-      {/* Container vertical estilo WhatsApp */}
-      <div className="flex flex-col items-center p-4">
-        {/* Ícone grande centralizado */}
-        <div className={`w-16 h-16 ${docStyle.iconBg} rounded-lg flex items-center justify-center mb-3`}>
-          <FileText className={docStyle.iconColor} size={40} />
+      <div className="flex items-center gap-3">
+        {/* Ícone pequeno à esquerda */}
+        <div className={`w-10 h-10 ${docStyle.iconBg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+          <FileText className={docStyle.iconColor} size={22} />
         </div>
-        
-        {/* Nome do arquivo */}
-        <p className="text-xs font-medium text-gray-700 mb-1 text-center max-w-full truncate px-2" title={filename}>
-          {filename}
-        </p>
-        
-        {/* Tamanho do arquivo */}
-        <p className="text-xs text-gray-500 mb-3">
-          {attachment.size_bytes > 0 
-            ? formatFileSize(attachment.size_bytes) 
-            : (hasValidUrl 
-                ? formatFileSize(0) // URL válida mas tamanho ainda não disponível
-                : 'Processando...')}
-        </p>
-        
-        {/* Botões de ação */}
-        <div className="flex gap-2 mt-2">
-          {isPDF && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDocumentClick(e);
-              }}
-              className="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1"
-              title="Abrir PDF"
-            >
-              <FileText size={14} />
-              Abrir
-            </button>
-          )}
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleDocumentDownload(e);
-            }}
-            className="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-1"
-            title="Baixar arquivo"
-          >
-            <Download size={14} />
-            Baixar
-          </button>
+        {/* Nome e tipo • tamanho à direita */}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-gray-800 truncate" title={filename}>
+            {filename}
+          </p>
+          <p className="text-xs text-gray-500">
+            {typeLabel} • {sizeStr}
+          </p>
         </div>
+        {/* Botão baixar à direita */}
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            handleDocumentDownload(e);
+          }}
+          className="flex-shrink-0 w-9 h-9 rounded-full bg-white dark:bg-gray-200 border border-gray-200 dark:border-gray-300 flex items-center justify-center text-gray-600 hover:bg-gray-50 transition-colors"
+          title="Baixar arquivo"
+        >
+          <Download size={18} />
+        </button>
       </div>
     </div>
   );
