@@ -574,10 +574,13 @@ export function useTenantSocket() {
             console.log('✅ [TENANT WS] Conversa nova (ainda não no store), adicionando antes da mensagem:', finalMessageConvId);
             addConversation(data.conversation);
             conversationExists = true;
-            
-            // ✅ Auto-abrir conversa se usuário está no chat sem conversa ativa (individual e grupo)
-            const currentPath = window.location.pathname;
-            if (currentPath === '/chat' && !activeConversationId) {
+          }
+
+          // ✅ Auto-abrir conversa quando usuário está no chat sem conversa ativa (ex.: mensagem Meta recebida)
+          const currentPath = window.location.pathname;
+          if (data.conversation && currentPath === '/chat' && !activeConversationId) {
+            const currentUser = useAuthStore.getState().user;
+            if (userCanSeeConversation(data.conversation, currentUser)) {
               setActiveConversation(data.conversation);
             }
           }

@@ -183,6 +183,7 @@ def broadcast_conversation_updated(conversation, request=None, message_id=None) 
 def broadcast_message_received(message) -> None:
     """
     Broadcast específico para quando uma nova mensagem é recebida.
+    Inclui a conversa no payload para o frontend poder adicionar/atualizar e abrir quando apropriado.
     
     Usado após:
     - Webhook messages.upsert
@@ -191,17 +192,36 @@ def broadcast_message_received(message) -> None:
     Args:
         message: Instância do modelo Message
     """
-    from apps.chat.api.serializers import MessageSerializer
+    from apps.chat.api.serializers import MessageSerializer, ConversationSerializer
     
     msg_data = MessageSerializer(message).data
+    conv = message.conversation
+    # Incluir conversa para o frontend adicionar ao store e poder abrir (ex.: conversa nova via webhook Meta)
+    conv_data = None
+    try:
+        # Garantir last_message para o serializer (evita query extra). Restaurar depois para não mutar o modelo.
+        prev_list = getattr(conv, 'last_message_list', None)
+        if not prev_list:
+            conv.last_message_list = [message]
+        try:
+            conv_data = ConversationSerializer(conv).data
+        finally:
+            if not prev_list:
+                conv.last_message_list = prev_list
+    except Exception as e:
+        logger.warning("📡 [WEBSOCKET] Não foi possível serializar conversa em message_received: %s", e)
+    
+    data = {
+        'message': msg_data,
+        'conversation_id': str(conv.id),
+    }
+    if conv_data:
+        data['conversation'] = conv_data
     
     broadcast_to_tenant(
-        tenant_id=str(message.conversation.tenant_id),
+        tenant_id=str(conv.tenant_id),
         event_type='message_received',
-        data={
-            'message': msg_data,
-            'conversation_id': str(message.conversation_id)
-        }
+        data=data,
     )
     
     logger.info(f"📡 [WEBSOCKET] Mensagem {message.id} broadcast para tenant")
