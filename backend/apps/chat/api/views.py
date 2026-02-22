@@ -4573,24 +4573,38 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # ✅ CORREÇÃO CRÍTICA: Buscar número da instância WhatsApp conectada
-        # A reação deve ser criada com external_sender = número da instância, não com user=request.user
-        # Isso garante que aparece como vindo do número da instância (como no WhatsApp)
-        wa_instance = WhatsAppInstance.objects.filter(
-            tenant=request.user.tenant,
-            is_active=True,
-            status='active'
-        ).first()
-        
-        if not wa_instance or not wa_instance.phone_number:
-            logger.warning(f"⚠️ [REACTION] Instância WhatsApp não encontrada - Tenant: {request.user.tenant.id}, is_active=True, status=active")
+        # ✅ Buscar instância: preferir a da conversa (instance_name = phone_number_id para Meta)
+        inst_name = (message.conversation.instance_name or '').strip()
+        wa_instance = None
+        if inst_name:
+            wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=inst_name)
+                | Q(evolution_instance_name=inst_name)
+                | Q(phone_number_id=inst_name),
+                tenant=request.user.tenant,
+                is_active=True,
+                status='active',
+            ).first()
+        if not wa_instance:
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant=request.user.tenant,
+                is_active=True,
+                status='active',
+            ).first()
+        # external_sender: número da instância (Evolution) ou phone_number_id (Meta se phone_number vazio)
+        instance_phone = (getattr(wa_instance, 'phone_number', None) or '').strip() if wa_instance else ''
+        if not instance_phone and wa_instance:
+            instance_phone = (getattr(wa_instance, 'phone_number_id', None) or '').strip()
+        if not wa_instance or not instance_phone:
+            logger.warning(
+                "⚠️ [REACTION] Instância WhatsApp não encontrada ou sem phone - Tenant: %s",
+                request.user.tenant.id,
+            )
             return Response(
                 {'error': 'Instância WhatsApp não encontrada ou não conectada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
-        instance_phone = wa_instance.phone_number
-        logger.info(f"📱 [REACTION] Usando número da instância para reação: {instance_phone}")
+        logger.info(f"📱 [REACTION] Usando instância para reação: {wa_instance.id} external_sender=%s", instance_phone[:16] + "..." if len(instance_phone) > 16 else instance_phone)
         
         # ✅ CORREÇÃO CRÍTICA: Comportamento estilo WhatsApp - substituir reação anterior
         # Buscar reação existente pelo número da instância (não pelo user)
@@ -4827,23 +4841,34 @@ class MessageReactionViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # ✅ CORREÇÃO CRÍTICA: Buscar número da instância WhatsApp conectada
-        # A reação deve ser removida pelo número da instância, não pelo user
-        wa_instance = WhatsAppInstance.objects.filter(
-            tenant=request.user.tenant,
-            is_active=True,
-            status='active'
-        ).first()
-        
-        if not wa_instance or not wa_instance.phone_number:
+        # Buscar instância (mesma lógica que add_reaction: preferir da conversa, aceitar Meta sem phone_number)
+        inst_name = (message.conversation.instance_name or '').strip()
+        wa_instance = None
+        if inst_name:
+            wa_instance = WhatsAppInstance.objects.filter(
+                Q(instance_name=inst_name)
+                | Q(evolution_instance_name=inst_name)
+                | Q(phone_number_id=inst_name),
+                tenant=request.user.tenant,
+                is_active=True,
+                status='active',
+            ).first()
+        if not wa_instance:
+            wa_instance = WhatsAppInstance.objects.filter(
+                tenant=request.user.tenant,
+                is_active=True,
+                status='active',
+            ).first()
+        instance_phone = (getattr(wa_instance, 'phone_number', None) or '').strip() if wa_instance else ''
+        if not instance_phone and wa_instance:
+            instance_phone = (getattr(wa_instance, 'phone_number_id', None) or '').strip()
+        if not wa_instance or not instance_phone:
             return Response(
                 {'error': 'Instância WhatsApp não encontrada ou não conectada'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        instance_phone = wa_instance.phone_number
-        
-        # Remover reação (se existir) - buscar pelo número da instância
+        # Remover reação (se existir) - buscar pelo número/ID da instância (external_sender)
         try:
             reaction = MessageReaction.objects.get(
                 message=message,
