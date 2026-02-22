@@ -101,6 +101,21 @@ export default function ConnectionsPage() {
     fetchData(true)
     fetchDepartments()
   }, [])
+
+  // Refetch ao voltar para a aba; abortar se o componente desmontar para evitar setState após unmount
+  useEffect(() => {
+    let ac: AbortController | null = null
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      ac = new AbortController()
+      fetchData(true, ac.signal).catch(() => {})
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      ac?.abort()
+    }
+  }, [])
   
   const fetchDepartments = async () => {
     try {
@@ -112,23 +127,23 @@ export default function ConnectionsPage() {
     }
   }
 
-  const fetchData = async (forceRefresh = false) => {
+  const fetchData = async (forceRefresh = false, signal?: AbortSignal) => {
     try {
       setIsLoading(true)
-      // ✅ MELHORIA: Adicionar parâmetro _refresh para forçar busca do banco
-      // ✅ CORREÇÃO: page_size alto para trazer todas as instâncias (evita nova instância ir para página 2 e não aparecer)
       const url = forceRefresh
         ? '/notifications/whatsapp-instances/?_refresh=true&page_size=100'
         : '/notifications/whatsapp-instances/'
       const params = forceRefresh ? {} : { params: { page_size: 100 } }
-      const instancesResponse = await api.get(url, params)
+      const instancesResponse = await api.get(url, { ...params, signal })
+      if (signal?.aborted) return
       const instances = instancesResponse.data.results || instancesResponse.data
       setInstances(Array.isArray(instances) ? instances : [])
       console.log(`✅ [INSTANCES] Carregadas ${instances.length} instâncias (refresh: ${forceRefresh})`)
     } catch (error) {
+      if (signal?.aborted) return
       console.error('Failed to fetch instances:', error)
     } finally {
-      setIsLoading(false)
+      if (!signal?.aborted) setIsLoading(false)
     }
   }
 
@@ -382,6 +397,8 @@ export default function ConnectionsPage() {
       showToast(`❌ Validar token: ${msg}`, 'error')
     } finally {
       setIsValidatingMeta(false)
+      // Refetch em background para card mostrar Indisponível se falhou; sem await para não misturar toast de rede com validação
+      fetchData(true).catch(() => {})
     }
   }
 
@@ -418,6 +435,7 @@ export default function ConnectionsPage() {
       showToast(`❌ Validar token: ${msg}`, 'error')
     } finally {
       setIsValidatingMeta(false)
+      if (useSavedToken && editingInstance) fetchData(true).catch(() => {})
     }
   }
 
